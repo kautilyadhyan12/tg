@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE STEP-11 RE-SMOKE PASSES ON THE SHIPPING BYTES — THE HELD-APPLICATION
+      CARD IS DONE AND ITS `OWED.md` LINE TICKS. DECISIONS :25707. Run by Kd at
+      the browser, 2026-08-30. No src, test, harness or migration file touched.
+
+  1. **BOTH GATES ARE NOW MET, which is what a tick requires** (:14147, :14840):
+     a review round with ZERO Critical/High (:25567) AND Kd's browser. Commits
+     named on the line: `1b1de15` (:25092), `14487cf` (:25450), `c49251f`.
+  2. **ONE STEP, NOT THE SHEET, AND THE SCOPE IS ARGUED RATHER THAN ASSUMED.**
+     Round 1 changed ONE expression in `ApplicationsQueue.jsx`; round 2 changed
+     no `src/` file. So that row is the only ✅ the diff could reach. The other
+     twelve steps stand on their run against `1b1de15` (:25326) — an argument,
+     not a second run, and it is written down as one.
+  3. **THE PART TO KEEP: WHY THE PASS ATTRIBUTES TO THE FIX.** A ✅ reading "the
+     countdown is gone" is normally satisfied by a screen that drew NOTHING
+     (:24893 §1, :25326 §2). This one is not: it requires the OTHER half of the
+     same grey line PRESENT ("Waiting ‹N› days"), an empty queue renders no
+     section at all, pre-fix bytes print BOTH halves joined by ` · `, and C's row
+     carries a real future `expires_at` (2026-09-13) so the absence cannot be an
+     innocent `null`. Three wrong reasons, each closed by something observable.
+  4. **THE EVIDENCE IS THE RIGHT KIND, and that is not automatic** (:23535):
+     step 11 contains NO command of mine — it is wholly Kd at a screen — so his
+     word is complete evidence for it. A pass is per step, never per message.
+
+PROVE: **No suite run and none owed** — no src, test, harness or migration file
+       is touched by this commit. The card's own figures stay at :25450 and
+       :25567 (web 1385/1385, C131 RED, the date proof both ways).
+       · triggers rebuilt **705 from 195 of 333**, --check clean
+       · check-decisions-index **243 pointers, 916 headings**
+       · check-harnesses 25 scripts parse.
+
+FILES: DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md (generated) ·
+       OWED.md · HANDOFF.md. **No code file at all.**
+
+OPEN:  **THE CARD IS CLOSED. Nothing on it is owed.** Still outstanding and NOT
+       this card's: round 1's deferred Low (the sweep's two held counts taken
+       outside one transaction — log-only, unreachable until payments exist, its
+       own `OWED.md` line plus the pointer on Paddle's); reviving a held request
+       when the gym pays (the payment card); the 14-day archive;
+       `check-harnesses.mjs`'s anchor guard; the five multi-match anchors;
+       `JoinGymPanel`'s stale file header.
+       **CI HAS NOT SEEN ANY OF THIS: `1b1de15`, `453495e`, `14487cf`, `c49251f`
+       and this commit are all LOCAL. The last pushed commit is `e8aff34`
+       (success).** Pushing is Kd's call and has not been asked for.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+```
+
+```
 TASK: THE HELD APPLICATION, T3 ROUND 2 (diff-only) + FIX ROUND. ZERO
       Critical/High — THE PACKET SHIPS. DECISIONS :25567. Reviews `14487cf`
       (:25450) in a fresh chat; both Lows fixed here, logged in BACKLOG.md.

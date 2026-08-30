@@ -5147,11 +5147,29 @@ file and is stated so nobody reads these as lower priority than they are.
       HELD and the waiting person is told the truth.** That build is the next
       line below; **this one now ticks only when that ships**, because the
       applicant's own screen is the half that still says nothing.
-- [ ] 🟡 **A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD NOTHING, AND THEIR
-      REQUEST DIES ANYWAY AFTER 14 DAYS — KD RULED THE FIX 2026-08-29 (DECISIONS
-      :24141 §1): *"hold their request and tell them the truth."* This is CARD B
-      of a split he approved, and card A (the console's screens) went first at
-      his choice.**
+- [x] 🟡 **DONE 2026-08-30 — commits `1b1de15` (built, DECISIONS :25092),
+      `14487cf` (T3 round 1's Critical/High, :25450) and `c49251f` (T3 round 2,
+      :25567). BOTH GATES MET: a review round with ZERO Critical/High, and Kd's
+      browser.** Smoke 13/13 on 2026-08-30 (:25326) plus **the step-11 re-smoke
+      on the shipping bytes, reported PASS by Kd the same day** — owed because
+      round 1's fix changed a screen he had already signed off, on a line the
+      original run's ✅ never named.
+      **THE RE-SMOKE ATTRIBUTES TO THE FIX RATHER THAN MERELY CO-OCCURRING WITH
+      IT, which is :25326 §2's rule applied to the step that closes this line.**
+      Its ✅ requires the OTHER half of the same grey line to be PRESENT —
+      *"Waiting ‹N› days"* under C's name — so an empty queue draws no section at
+      all and fails it, and pre-fix bytes would print both halves. The countdown
+      being absent **while its own line is on screen** is reachable only through
+      `readOnly ? null : expiresInLabel(…)`. C's row also carries a real future
+      `expires_at` (2026-09-13, :25326 round log), so the absence cannot be an
+      innocent `null`. **And the step is wholly Kd's action, no command of mine
+      inside it, so his word is the right evidence for it** (:23535's standing
+      rule that a pass is per step and never per message).
+      ~~🟡 **A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD NOTHING, AND THEIR
+      REQUEST DIES ANYWAY AFTER 14 DAYS**~~ — KD RULED THE FIX 2026-08-29
+      (DECISIONS :24141 §1): *"hold their request and tell them the truth."* This
+      was CARD B of a split he approved, and card A (the console's screens) went
+      first at his choice.
       **HE RULED THE OTHER WAY FIRST AND REVERSED HIMSELF ONE MESSAGE LATER, and
       the reason is the part to keep.** The first ruling was that the join door
       REFUSES a lapsed gym outright ("i say yes"). He then asked the question the

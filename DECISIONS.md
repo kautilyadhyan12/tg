@@ -25703,3 +25703,67 @@ again.
   local only, and CI has not seen them. **"Pushed" is not "green", and neither is
   "committed".**
 - **No api file is touched, so no api suite is owed.**
+
+## 2026-08-30 — THE STEP-11 RE-SMOKE PASSES ON THE SHIPPING BYTES, AND THE HELD-APPLICATION LINE TICKS — the step isolates the fix rather than merely co-occurring with it, and that is the only reason one step could stand in for a sheet
+
+**Read before ticking an `OWED.md` line on an operator's one-word "pass", before
+re-smoking ONE step instead of a sheet, before designing a smoke step for a fix
+that REMOVES something from a screen, and before citing the held-application card
+as verified.**
+
+Kd ran step 11 of `RUNBOOK/smoke-held-application.md` at the browser on
+2026-08-30 and reported **PASS**. That was the last gate on the card; the line
+ticks on this commit, naming `1b1de15` (:25092), `14487cf` (:25450) and `c49251f`
+(:25567).
+
+### 1. WHY ONE STEP AND NOT THE SHEET, stated rather than assumed
+
+The full sheet passed 13/13 on `1b1de15` (:25326). Round 1's fix changed **one
+expression** in `ApplicationsQueue.jsx` — `readOnly ? null : expiresInLabel(…)` —
+and round 2 changed **no `src/` file at all**. Nothing else on any smoked screen
+moved, so the only step whose ✅ the fix could have altered is the one that draws
+that row. **A re-smoke is scoped by what the diff can reach, and that is a claim
+to be made explicitly rather than a convenience**: :14956's re-smoke exists
+because a fix landed under a step that had already passed, and the cost of
+getting the scope wrong is a tick resting on bytes nobody looked at.
+
+### 2. THE STEP ISOLATES THE FIX, WHICH IS THE PART THAT MAKES THE PASS WORTH ANYTHING
+
+**A ✅ that reads "the countdown is gone" is satisfied by a screen that drew
+nothing at all** — :24893 §1's "both greyed out is satisfied by both missing",
+and the shape :25326 §2 caught when one sweep's `expired: 0` had two possible
+causes. Step 11's ✅ is not that shape, and it is worth saying why:
+
+- It requires the **other half of the same grey line to be PRESENT** — *"Waiting
+  ‹N› days"* under C's name. An empty queue renders no section at all
+  (`items.length === 0 && pendingCount === 0` returns `null`), so absence fails
+  the step rather than passing it.
+- **Pre-fix bytes print BOTH halves** of that line, joined by ` · `. So "the
+  waiting figure is there and the deadline is not" is reachable through exactly
+  one code path, and it is the one this card added.
+- C's row carries a **real future `expires_at`** — 2026-09-13, read from the
+  database at :25326's round log — so the missing countdown cannot be an innocent
+  `null` from `expiresInLabel`'s own guard.
+
+**Three ways it could have passed for a wrong reason, each closed by something
+observable rather than by argument.**
+
+### 3. THE EVIDENCE IS THE RIGHT KIND FOR THIS STEP, and that is not automatic
+
+:23535's standing rule is that a step whose action is MINE is not passed by the
+operator saying so — it is passed when I have run it and read the output, and a
+pass is **per step, never per message**. Step 11 has **no command in it**: it is
+wholly Kd at a screen, opening the console as the manager account and reading one
+row. So his word is the correct and complete evidence for it, and the rule is
+satisfied rather than waived.
+
+### Round log
+
+**No file was run and none is owed** — no `src`, test, harness or migration file
+is touched by this commit. The card's own PROVE figures are at :25450 and :25567.
+
+**WHAT THIS PASS DOES NOT COVER, so nobody quotes it as more:** the other twelve
+steps stand on their 2026-08-30 run against `1b1de15` (:25326), not against the
+shipping bytes; §1 is the argument that the diff could not reach them, and it is
+an argument, not a second run. The applicant's OWN screen (step 6) was never
+touched by either round.

@@ -906,6 +906,26 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25707** — 2026-08-30 — **THE STEP-11 RE-SMOKE PASSES ON THE SHIPPING BYTES,
+  AND THE HELD-APPLICATION LINE TICKS.** **Read before ticking an `OWED.md` line
+  on an operator's one-word "pass", before re-smoking ONE step instead of a
+  sheet, before designing a smoke step for a fix that REMOVES something from a
+  screen, and before citing the held-application card as verified.** Kd ran step
+  11 at the browser and reported PASS; it was the card's last gate, closing
+  `1b1de15` (:25092) + `14487cf` (:25450) + `c49251f` (:25567). **ONE STEP AND
+  NOT THE SHEET, and the scope is argued rather than assumed**: round 1 changed
+  one expression in `ApplicationsQueue.jsx` and round 2 changed no `src/` file,
+  so that row is the only ✅ the diff could reach (:14956's re-smoke is the cost
+  of getting this wrong). **THE PART TO KEEP IS WHY THE PASS ATTRIBUTES TO THE
+  FIX**: a ✅ reading *"the countdown is gone"* is normally satisfied by a screen
+  that drew nothing (:24893 §1; :25326 §2), and this one is not — it requires the
+  OTHER half of the same grey line to be PRESENT (*"Waiting ‹N› days"*), an empty
+  queue renders no section at all, pre-fix bytes print BOTH halves, and C's row
+  carries a real future `expires_at` so the absence cannot be an innocent `null`.
+  **Three wrong reasons, each closed by something observable.** And the step
+  carries **no command of mine**, so Kd's word is complete evidence for it —
+  :23535's rule satisfied rather than waived.
+
 - **:25567** — 2026-08-30 — **THE HELD APPLICATION, T3 ROUND 2 (diff-only): ZERO
   Critical/High, THE PACKET SHIPS.** **Read before asserting a dated string in
   any web test, before restoring a file with `git checkout --` and calling the
