@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE HELD APPLICATION, T3 ROUND 2 (diff-only) + FIX ROUND. ZERO
+      Critical/High — THE PACKET SHIPS. DECISIONS :25567. Reviews `14487cf`
+      (:25450) in a fresh chat; both Lows fixed here, logged in BACKLOG.md.
+
+  1. **LOW-1 — A TEST WHOSE EXPECTED STRING DEPENDED ON THE MORNING IT RAN.**
+     `APPLICANT.expiresAt` is 10 Sep, so from that date BOTH fixtures take the
+     `Due to expire` branch, the paying-gym control's `getByText` throws on the
+     pair, and the suite goes red ELEVEN DAYS after the commit for a calendar
+     reason. Reproduced under a machine clock at 2026-09-11, not reasoned.
+  2. **THE CRASH IS THE SMALLER HALF, AND IT IS WHY THE FIX DIFFERS FROM THE ONE
+     THE REVIEW SUGGESTED.** Scoping that assertion to its row stops the throw
+     and leaves the case GREEN while *"in BOTH directions"* — its own name —
+     has silently stopped being true: two identical rows also satisfy a count of
+     2. :4856 — **the FIXTURE is part of the claim.**
+  3. **THE IDIOM WAS ALREADY IN THE REPO, ABOUT THIS SAME COUNTDOWN.**
+     `joinGym.render.test.jsx` and `console.render.test.jsx` both stand the
+     clock; this file was the only one asserting the countdown that did not, and
+     its own comment reasoned it correctly for the PAST date and never applied
+     the mirror to the future one four lines up. `standAt(NOW)`,
+     `shouldAdvanceTime` load-bearing, `useRealTimers()` UNCONDITIONALLY in
+     `afterEach`. Both branches now named by string.
+  4. **LOW-2 — `queryByText` ON A TWO-ROW SCREEN THROWS BEFORE IT CAN RETURN
+     NULL**, so C131 went red as an opaque `Found multiple elements` instead of
+     as the assertion — right cause, wrong sentence. Now
+     `queryAllByText(…)`/`toHaveLength(0)` (:1620's `xpBar()`).
+  5. **`git checkout --` IS NOT A BYTE-EXACT RESTORE ON THIS MACHINE, AND THE
+     TELL IS THE DANGEROUS PART** (:25567 §3). `core.autocrlf=true` rewrote
+     15344 → 15673 bytes, 0 → 329 CR bytes, different sha256 — **while `git
+     status` said CLEAN and `git diff` was EMPTY.** Restore from the blob
+     (`git show HEAD:<file> > <file>`), verify with `sha256sum`.
+  6. **REVIEW VERIFIED BEFORE ACTED ON** (:23928): its sha `f81200f7…5b8e9`, its
+     :1620 citation and its six line references all checked against source. Its
+     suggested `.closest('.rounded-2xl')` selector was declined — a Tailwind
+     utility class is not a handle (:11757 L2's shape).
+
+PROVE: web **1385/1385, 50 files, exit 0** (unchanged vs :25450 — no test added)
+       · the changed file **30/30 exit 0** · **DATE PROOF BOTH WAYS in throwaway
+       copies under a stood-up MACHINE clock**: pre-fix at 2026-09-11 RED exit 1
+       (`getMultipleElementsFoundError`), fixed at that instant 2 passed exit 0,
+       fixed at 2031-03-04 2 passed exit 0; copies deleted, tree verified ·
+       **C131 RED, control GREEN first through the same path, 1 of 151, harness
+       printed "NOT A FULL SWEEP", restore byte-exact** · eslint
+       --max-warnings=0 exit 0 on the one changed file · triggers rebuilt **701
+       from 194 of 332**, --check clean · check-decisions-index **242 pointers,
+       911 headings** · check-harnesses 25 scripts.
+       **CI READ, NOT ASSUMED (:25008): last PUSHED commit `e8aff34` = success;
+       `1b1de15`, `453495e`, `14487cf` are LOCAL ONLY and CI has not seen them.**
+       **No api file touched, so no api suite owed.**
+
+FILES: apps/web/src/pages/console/readOnlyConsole.render.test.jsx (the ONLY
+       code file) · DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md
+       (generated) · OWED.md · BACKLOG.md · HANDOFF.md. **No src/, no migration,
+       no api change, no harness change.**
+
+OPEN:  **THE STEP-11 RE-SMOKE IS THE ONLY GATE LEFT** on `OWED.md`'s
+       held-application line — one step, not the sheet, on the SHIPPING bytes
+       (:14956, :15198). The review gate is met; the browser gate is not.
+       Round 1's deferred Low (the sweep's two held counts outside one
+       transaction) stays deferred, with its `OWED.md` line and the pointer on
+       Paddle's.
+       **Five other web test files hold a date three days out (`2026-09-02`);
+       measured, none is affected** — two never read the countdown, the third
+       stands its clock. Reported, not touched (R1.1).
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+       Carried unchanged: `check-harnesses.mjs`'s anchor guard, the five
+       multi-match anchors, `JoinGymPanel`'s stale header, the 14-day archive.
+```
+
+```
 TASK: THE HELD APPLICATION, T3 ROUND 1 + FIX ROUND. ONE Critical/High — THE
       PACKET DOES NOT SHIP THIS ROUND. DECISIONS :25450. Reviews `1b1de15`
       (:25092) in a fresh chat; fixes committed here.

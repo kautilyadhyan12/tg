@@ -5226,6 +5226,17 @@ file and is stated so nobody reads these as lower priority than they are.
       **the third recurrence** of a literal count over a shared database (:23535,
       :24559 Low-5, :24893 §2). Nothing ticks that the browser has not seen, and
       nothing ticks that a review has not seen either.
+      **THE REVIEW GATE IS NOW MET AND THE BROWSER GATE IS NOT.** T3 round 1
+      (2026-08-30, DECISIONS :25450) found ONE Critical/High — the applicant
+      countdown left on the lapsed gym's own queue — and round 2 (diff-only,
+      DECISIONS :25567) found **ZERO Critical/High, so the packet SHIPS**; its two
+      Low were both fixed in the round and logged in `BACKLOG.md`. **THE ONLY GATE
+      LEFT IS A RE-SMOKE OF STEP 11 ALONE**, not the whole sheet: round 1's fix
+      changed a screen Kd had already signed off, and the run that signed it off
+      could not have seen that row — step 11's ✅ named the sentence and the two
+      greyed buttons and never the countdown line between them. **This line ticks
+      when Kd has run step 11 on the SHIPPING bytes** (:14956, :15198 — nothing
+      ticks that the browser has not seen on the bytes that ship).
 - [x] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
       NEVER FIX — deferred 2026-08-29 from this card's T3 round 1 (Low-6) to the
       READ-ONLY CONSOLE'S WEB HALF, which is the next card and owns this file.**

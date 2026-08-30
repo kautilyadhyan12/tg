@@ -25563,3 +25563,143 @@ signed it off could not see this row. Not the whole sheet; one screen.
 
 **ROUND 2 IS DIFF-ONLY** (:5348 rule 2): the countdown fix, its two tests, C131,
 and step 11.
+
+## 2026-08-30 — THE HELD APPLICATION, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — two Low, both in the new test, and the one that matters was a test with a date eleven days out that would have gone on passing while it stopped checking half of what it claimed
+
+**Read before asserting a dated string in any web test, before restoring a file
+with `git checkout --` and calling the restore byte-exact, before quoting a clean
+`git status` as evidence about a file's BYTES, before using `queryByText` on a
+screen that draws more than one row, and before taking a review's suggested fix
+as the whole of its finding.**
+
+Reviews `14487cf` (:25450) in a fresh chat, diff-only (:5348 rule 2). **ZERO
+Critical/High ⇒ the packet SHIPS.** Both Lows were FIXED in the round and logged
+in `BACKLOG.md`; neither bought another round (:5348 rule 1). **Escape hatch NOT
+armed** — round 1 was a Critical in this subsystem and round 2 is not, so the
+two-rounds-running trigger does not fire.
+
+### 1. LOW-1 — A TEST WHOSE EXPECTED STRING DEPENDED ON THE MORNING IT RAN, AND THE CRASH WAS THE SMALLER HALF
+
+`readOnlyConsole.render.test.jsx` asserts the applicant countdown **on the real
+clock**. `APPLICANT.expiresAt` is `2026-09-10T09:00:00.000Z`, so from 10
+September `expiresInLabel` returns `Due to expire` for **both** fixtures, the
+positive control's `getByText(/due to expire/i)` throws on the pair, and the
+suite goes red eleven days after the commit for a calendar reason.
+
+**REPRODUCED RATHER THAN REASONED, in a throwaway copy with the MACHINE clock
+stood at 2026-09-11:** `getMultipleElementsFoundError` at the
+`getByText(/due to expire/i)` line, `1 failed | 1 passed | 28 skipped`.
+
+**THE PART THE REVIEW'S OWN SUGGESTED FIX WOULD HAVE LEFT BEHIND, and it is why
+the fix here is different.** Scoping that one assertion to its row stops the throw
+and **leaves the test green while its stated subject is gone**: the lapsed case is
+named *"in BOTH directions"* and its comment says both branches are on screen at
+once, and from 10 September both rows take the SAME branch.
+`getAllByText(…).length === 2` is satisfied by two identical rows, so **nothing
+would have gone red when the claim stopped being true.** :4856's standing lesson —
+*a test is a claim, and the FIXTURE is part of the claim.*
+
+**THE REPO HAD ALREADY WRITTEN THE ANSWER DOWN, ABOUT THIS SAME COUNTDOWN.**
+`joinGym.render.test.jsx`: *"A test whose expected string depends on the day it
+runs is one that will fail some morning for a reason nobody can find."* Both files
+that assert this countdown — that one and `console.render.test.jsx` — stand the
+clock at a fixed instant; the new file is the only one that did not, and its own
+`OVERDUE_APPLICANT` comment reasoned the case correctly for the PAST date (*"past
+has to be past for good"*) and never applied the mirror to the future one four
+lines above it. **Half an argument, carried over.**
+
+**THE FIX IS THAT IDIOM AND NOT A THIRD MECHANISM** (:11757 L8's rule):
+`standAt(NOW)` as the first statement of each of the two countdown cases, `NOW =
+2026-08-30T09:30:00.000Z`, and `vi.useRealTimers()` **unconditionally in
+`afterEach`** because a failing assertion never reaches the end of its own body
+(`console.render.test.jsx`'s round-3 Low-4, copied rather than re-derived).
+`shouldAdvanceTime: true` is load-bearing — `findBy*` and `waitFor` poll on real
+timers, and joinGym's own first draft hung on a frozen clock.
+
+**THE INSTANT IS THE DAY THE CASES WERE WRITTEN**, so every assertion keeps
+exactly the meaning it was verified to have rather than acquiring a new one, and
+**both branches are now named** (`due to expire` AND `expires in 11 days`) so the
+count of 2 can no longer be satisfied by two rows saying the same thing. 09:30Z is
+15:00 in the suite's pinned zone, nowhere near the local midnight a calendar-day
+count turns on.
+
+### 2. LOW-2 — THE GUARD WAS REAL AND ITS RED DID NOT NAME THE GUARANTEE
+
+With two applicants on screen,
+`expect(screen.queryByText(ANY_COUNTDOWN)).toBeNull()` can never produce the
+failure it is written for: the singular query **throws on a pair before it can
+return anything**. C131 — the permanent guard that restores the unconditional
+countdown — therefore went red as `Found multiple elements`, an opaque DOM error,
+rather than as the assertion. It failed for the right cause and said the wrong
+thing. Now `queryAllByText(…)` with `toHaveLength(0)`, which is :1620's `xpBar()`
+lesson: **a failure has to name what broke.** Proven by applying C131 by hand and
+reading the message: `AssertionError: expected [ <div …(2)></div>, <div
+…(2)></div> ] to have a length of +0 but got 2`.
+
+### 3. THE INSTRUMENT FINDING IS MINE AND IT IS THE ONE TO KEEP: `git checkout --` IS NOT A BYTE-EXACT RESTORE ON THIS MACHINE
+
+Restoring `ApplicationsQueue.jsx` after that hand-applied mutant with `git
+checkout -- <file>` returned a **different file**: `core.autocrlf=true` rewrote
+every ending, **15344 → 15673 bytes, 0 → 329 CR bytes**, sha256 `f81200f7…` →
+`797bedf2…`. The harness's own restore is byte-exact and was proven so in the same
+session — the sha before the hand-mutation equalled the `HEAD` blob, with
+`mutate-console.mjs` having just run C131.
+
+**THE DANGEROUS PART IS THE TELL, NOT THE REWRITE.** `git status` reported the
+file **CLEAN** and `git diff` was **EMPTY**, because git normalises on the way in
+— so the instrument a chat naturally reaches for to confirm a restore says
+"restored" about a file whose bytes it has just changed. **A clean `git status` is
+a claim about CONTENT AFTER NORMALISATION and never about bytes** — :19803's rule
+(*a "restore verified byte-exact" line is evidence about FILES and nothing else*)
+arriving from the opposite direction, and :25092 §5's `withEolOf` trap one level
+up: the harnesses already know this repo mixes LF and CRLF files, and
+`mutate-console.mjs`'s target here is LF.
+
+**STANDING, and it is one command:** restore from the blob — `git show HEAD:<file>
+> <file>` — never `git checkout --`, whenever a byte-exact claim is about to be
+made, and verify it with `sha256sum`, never with `git status`. Left in the state
+it started in: on disk sha256 `f81200f7…5b8e9`, and the index reconciled so the
+staged blob equals `HEAD`'s (`2cae91db`), which is what makes `git status` honest
+again.
+
+### 4. WHAT THIS ROUND DID NOT DO
+
+- **No `src/` file was touched.** The countdown fix, C131 and the smoke sheet are
+  round 1's and are unchanged; this round is two test-file findings.
+- **Round 1's deferred Low stays deferred** — the sweep's two held counts taken
+  outside one transaction, log-only and unreachable today, with its own `OWED.md`
+  line and the pointer on Paddle's. Not re-litigated here.
+- **The step-11 re-smoke is still owed** and is now the ONLY gate left on the
+  card's `OWED.md` line: the review gate is met, the browser gate is not, and
+  :14956 and :15198 both say nothing ticks that the browser has not seen **on the
+  shipping bytes**.
+- **Five other web test files hold a date three days out** (`2026-09-02`).
+  Measured rather than assumed: none is affected — `orgsApi.test.js` and
+  `gymMembershipView.test.js` never read the countdown, and
+  `joinGym.render.test.jsx` stands its clock. Reported in one line and not touched
+  (R1.1).
+
+### Round log
+
+**PROVE — every figure naming what it ran against.**
+
+- **`readOnlyConsole.render.test.jsx` 30/30, exit 0** on the final bytes — the
+  same 30 as :25450, since two cases were rewritten in place and one assertion
+  added inside an existing one.
+- **Web suite 1385 passed / 1385, 50 files, exit 0** — unchanged against
+  :25450's figure, which is the expected result for a round that adds no test.
+- **THE DATE PROOF, BOTH DIRECTIONS, in throwaway copies under a stood-up MACHINE
+  clock:** pre-fix at `2026-09-11` → **RED, exit 1**, with
+  `getMultipleElementsFoundError`; fixed at the same instant → **2 passed, exit
+  0**; fixed again at **`2031-03-04`** → **2 passed, exit 0**. Copies deleted and
+  the tree verified afterwards.
+- **C131 through the harness: RED, control GREEN first through the same path, 1 of
+  151, printed by the harness as `THIS IS NOT A FULL SWEEP`, restore verified
+  byte-exact.** Its failure message was then re-read by hand to prove Low-2's fix,
+  and the file restored from the blob afterwards (§3).
+- `eslint --max-warnings=0` **exit 0 with no output** on the one changed file.
+- **CI, read rather than assumed** (:25008): the last PUSHED commit `e8aff34` is
+  **success**; the three commits since — `1b1de15`, `453495e`, `14487cf` — are
+  local only, and CI has not seen them. **"Pushed" is not "green", and neither is
+  "committed".**
+- **No api file is touched, so no api suite is owed.**

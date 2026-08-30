@@ -145,10 +145,44 @@ const CODE = {
   joined: 4,
 };
 
+/** **THE CLOCK STANDS STILL FOR THE TWO COUNTDOWN CASES BELOW — T3 ROUND 2,
+ *  Low-1.** Both fixtures carry fixed deadline strings, so on the real clock the
+ *  BRANCH each one takes depends on the morning the suite runs. `APPLICANT`'s
+ *  10 September deadline read `Expires in 11 days` on the day it was written and
+ *  reads `Due to expire` from 10 September onwards — at which point both rows say
+ *  the same thing, the positive control's `getByText(/due to expire/i)` throws on
+ *  the pair, and the "BOTH DIRECTIONS" the lapsed case is named for quietly stops
+ *  being true without anything going red.
+ *
+ *  **`joinGym.render.test.jsx` wrote this lesson down first, about this same
+ *  countdown**: *"A test whose expected string depends on the day it runs is one
+ *  that will fail some morning for a reason nobody can find."* This file asserts
+ *  that countdown and did not apply it. Same helper as that file and as
+ *  `console.render.test.jsx`, deliberately, rather than a third mechanism.
+ *
+ *  **`shouldAdvanceTime` is load-bearing, not decoration**: `findBy*` and
+ *  `waitFor` poll on real timers, so a frozen clock hangs them until the suite's
+ *  own timeout.
+ *
+ *  **THE INSTANT IS THE DAY THE TWO CASES WERE WRITTEN**, so every assertion in
+ *  them keeps exactly the meaning it was verified to have — `Waiting 3 days` and
+ *  `Waiting 60 days`, `Expires in 11 days` and `Due to expire` — permanently,
+ *  instead of for eleven more days. 09:30Z is 15:00 in the zone the suite pins
+ *  (`vitest.config.js`, Asia/Kolkata), nowhere near the local midnight a
+ *  calendar-day count turns on. */
+const NOW = new Date('2026-08-30T09:30:00.000Z');
+const standAt = (when) => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(when);
+};
+
 const APPLICANT = {
   id: 'app-1',
   displayName: 'Priya Sharma',
   appliedAt: '2026-08-27T09:00:00.000Z',
+  // 14 days after `appliedAt`, which is the server's own rule for this column,
+  // and AHEAD of `NOW` — so this row takes `Expires in N days` while the row
+  // below takes the other branch.
   expiresAt: '2026-09-10T09:00:00.000Z',
   nudgedAt: null,
   gymNotifiedAt: null,
@@ -158,12 +192,20 @@ const APPLICANT = {
  *  `expiresInLabel` returns its other branch — `Due to expire` rather than
  *  `Expires in N days`.
  *
- *  **It is a FIXED PAST DATE on purpose.** The suite runs on the real clock (no
- *  fake timers anywhere in this file), so "past" has to be past for good; a date
- *  computed from `Date.now()` would make the fixture and its subject share a
- *  source, which proves only that the source is self-consistent (:3610's
- *  standing lesson). This is also the state Kd's own smoke left the database in
- *  — C pending with the deadline nearly a month gone (:25326 round log). */
+ *  **It is a FIXED PAST DATE on purpose**, 14 days after its own `appliedAt`
+ *  like every real row. A date computed from `Date.now()` would make the fixture
+ *  and its subject share a source, which proves only that the source is
+ *  self-consistent (:3610's standing lesson). This is also the state Kd's own
+ *  smoke left the database in — C pending with the deadline nearly a month gone
+ *  (:25326 round log).
+ *
+ *  **THE SENTENCE THAT USED TO SIT HERE — "the suite runs on the real clock (no
+ *  fake timers anywhere in this file), so past has to be past for good" — WAS
+ *  TRUE WHEN WRITTEN AND IS NOT NOW** (T3 round 2, Low-1). The two countdown
+ *  cases stand the clock at `NOW`. Worth leaving the correction rather than a
+ *  silent rewrite: that sentence reasoned correctly about THIS date and never
+ *  applied the mirror of it to the FUTURE one above, which is the whole of what
+ *  the round found. */
 const OVERDUE_APPLICANT = {
   id: 'app-2',
   displayName: 'Sunil Menon',
@@ -283,6 +325,12 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   setCurrentUserId(null);
+  // **UNCONDITIONAL, AND NEVER AS A TEST'S LAST STATEMENT.** A failing assertion
+  // never reaches the end of its own body, so a red countdown case would leave
+  // every case after it frozen at `NOW` — a flake generator inside the fix for a
+  // flake. `console.render.test.jsx` learned this as its round-3 Low-4 and the
+  // placement is copied rather than re-derived.
+  vi.useRealTimers();
 });
 
 // ── §4.2's banner ───────────────────────────────────────────────────────────
@@ -429,6 +477,7 @@ describe('the waiting queue', () => {
     // defect was one expression covering them both and a fixture with only a
     // future date would leave `Due to expire` unobserved — which is the row Kd's
     // smoke actually produced.
+    standAt(NOW);
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     orgService.getApplications.mockResolvedValue({
       data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
@@ -439,7 +488,13 @@ describe('the waiting queue', () => {
     // hide them. The countdown is the only thing that goes.
     expect(await screen.findByText('Priya Sharma')).toBeTruthy();
     expect(screen.getByText('Sunil Menon')).toBeTruthy();
-    expect(screen.queryByText(ANY_COUNTDOWN)).toBeNull();
+    // **`queryAllByText`, NOT `queryByText` — T3 round 2, Low-2.** With two
+    // people on screen the singular form THROWS on a pair before it can return
+    // anything, so C131 — the mutant that puts the countdown back — went red as
+    // an opaque DOM error instead of as this assertion. It failed for the right
+    // cause and said the wrong thing, which is :1620's `xpBar()` lesson: a
+    // failure has to name what broke.
+    expect(screen.queryAllByText(ANY_COUNTDOWN)).toHaveLength(0);
     // **AND THE HONEST CLOCK STAYS.** How long somebody has been waiting is true
     // whatever the plan is doing, so a fix that blanked the whole line would
     // pass the assertion above while destroying something true — this is what
@@ -451,6 +506,7 @@ describe('the waiting queue', () => {
     // Without this, a component that never printed a deadline at all would
     // satisfy the test above completely (:7104's PG1 — a guard has two failure
     // directions and a door that is simply shut passes the half you checked).
+    standAt(NOW);
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
     orgService.getApplications.mockResolvedValue({
       data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
@@ -458,9 +514,13 @@ describe('the waiting queue', () => {
     renderConsole(Members, '/console/iron-house/members');
 
     await screen.findByText('Priya Sharma');
-    // The overdue row's branch is pinned by name, since it is the one a date
-    // change can never move.
+    // **BOTH BRANCHES ARE NAMED, and that is the half the count below cannot
+    // see** — two rows reading `Due to expire` also satisfy a length of 2, which
+    // is exactly the state the real clock would have produced from 10 September
+    // (T3 round 2, Low-1). Each of these is a single match only because the
+    // clock stands at `NOW`.
     expect(screen.getByText(/due to expire/i)).toBeTruthy();
+    expect(screen.getByText(/expires in 11 days/i)).toBeTruthy();
     expect(screen.getAllByText(ANY_COUNTDOWN).length).toBe(2);
   });
 

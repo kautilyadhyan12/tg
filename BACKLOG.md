@@ -2710,3 +2710,58 @@ appears in neither file: it is fixed or it holds the packet) and **one Low**.
       was "log the minor finding"** (2026-08-30), and widening an approved plan
       mid-round is the drift R1.1/S4 exist to stop. Reported to him in the round
       summary so he can overrule.
+
+## THE HELD APPLICATION (Card B) — T3 ROUND 2 (2026-08-30, DECISIONS :25567)
+
+Round 2 is diff-only and found **ZERO Critical/High — the packet SHIPS** (:5348
+rule 1). **Two Low, both FIXED in the round**, neither buying another one. Both
+are in the test written by round 1; no `src/` file was touched.
+
+- [x] **LOW-1 · A TEST WHOSE EXPECTED STRING DEPENDED ON THE MORNING IT RAN, AND
+      THE CRASH WAS THE SMALLER HALF.** `readOnlyConsole.render.test.jsx` asserts
+      the applicant countdown on the REAL clock. `APPLICANT.expiresAt` is
+      `2026-09-10T09:00:00.000Z`, so from 10 September `expiresInLabel` returns
+      `Due to expire` for BOTH fixtures, the positive control's
+      `getByText(/due to expire/i)` throws on the pair, and the suite goes red
+      eleven days after the commit for a calendar reason rather than a product
+      one. **Reproduced rather than reasoned**, in a throwaway copy with the
+      machine clock stood at `2026-09-11`: `getMultipleElementsFoundError`,
+      `1 failed | 1 passed | 28 skipped`.
+      **THE HALF THE REVIEW'S SUGGESTED FIX WOULD HAVE LEFT BEHIND.** Scoping
+      that one assertion to its row stops the throw and leaves the case GREEN
+      while the thing it is named for is gone: the lapsed case is *"in BOTH
+      DIRECTIONS"* and its comment says both branches are on screen at once, and
+      from 10 September both rows take the SAME branch — `getAllByText(…).length
+      === 2` is satisfied by two identical rows, so nothing would have gone red
+      when the claim stopped being true (:4856 — *a test is a claim, and the
+      FIXTURE is part of the claim*).
+      **FIXED WITH THE IDIOM THIS REPO HAD ALREADY WRITTEN DOWN ABOUT THIS SAME
+      COUNTDOWN, not a third mechanism** (:11757 L8): `standAt(NOW)` first in
+      each of the two countdown cases, `NOW = 2026-08-30T09:30:00.000Z` (the day
+      they were written, so every assertion keeps the meaning it was verified to
+      have), `shouldAdvanceTime: true` because `findBy*` and `waitFor` poll on
+      real timers, and `vi.useRealTimers()` **unconditionally in `afterEach`**
+      because a failing assertion never reaches the end of its own body
+      (`console.render.test.jsx`'s round-3 Low-4). Both branches are now named by
+      string — `due to expire` AND `expires in 11 days` — so the count of 2
+      cannot be satisfied by two rows saying the same thing.
+      **PROVEN BOTH DIRECTIONS:** pre-fix at `2026-09-11` RED exit 1; fixed at
+      that instant 2 passed exit 0; fixed at `2031-03-04` 2 passed exit 0.
+- [x] **LOW-2 · THE GUARD WAS REAL AND ITS RED DID NOT NAME THE GUARANTEE.** With
+      two applicants on screen, `expect(screen.queryByText(ANY_COUNTDOWN)).toBeNull()`
+      can never produce the failure it is written for — the singular query THROWS
+      on a pair before it can return anything. So C131, the permanent guard that
+      restores the unconditional countdown, went red as `Found multiple elements`,
+      an opaque DOM error, instead of as the assertion: right cause, wrong
+      sentence. Now `queryAllByText(…)` with `toHaveLength(0)`, which is :1620's
+      `xpBar()` lesson — a failure has to name what broke. **Proven by applying
+      C131 by hand and reading the message**: `AssertionError: expected [ <div
+      …(2)></div>, <div …(2)></div> ] to have a length of +0 but got 2`.
+
+**NOT A FINDING OF THE REVIEW BUT FOUND WHILE DISCHARGING IT, and recorded at
+DECISIONS :25567 §3 because it is the reusable part of the round:
+`git checkout -- <file>` IS NOT A BYTE-EXACT RESTORE on this machine.**
+`core.autocrlf=true` rewrote every ending — 15344 → 15673 bytes, 0 → 329 CR
+bytes, a different sha256 — **while `git status` reported the file CLEAN and
+`git diff` was EMPTY.** Restore from the blob (`git show HEAD:<file> > <file>`)
+and verify with `sha256sum`, never with `git status`.

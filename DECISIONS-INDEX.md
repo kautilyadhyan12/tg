@@ -906,6 +906,41 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25567** — 2026-08-30 — **THE HELD APPLICATION, T3 ROUND 2 (diff-only): ZERO
+  Critical/High, THE PACKET SHIPS.** **Read before asserting a dated string in
+  any web test, before restoring a file with `git checkout --` and calling the
+  restore byte-exact, before quoting a clean `git status` as evidence about a
+  file's BYTES, before using `queryByText` on a screen that draws more than one
+  row, and before taking a review's suggested fix as the whole of its finding.**
+  Two Low, both FIXED in the round and logged in `BACKLOG.md`; neither bought
+  another round. **Escape hatch NOT armed** (round 1 was a Critical here, round 2
+  is not). **LOW-1: a test whose expected string depended on the morning it ran**
+  — `APPLICANT.expiresAt` is 10 September, so from that date BOTH fixtures take
+  the `Due to expire` branch, the positive control's `getByText` throws on the
+  pair, and the suite goes red eleven days after the commit for a calendar
+  reason. **Reproduced under a machine clock stood at 2026-09-11, not reasoned.**
+  **THE CRASH IS THE SMALLER HALF and it is why the fix differs from the one the
+  review suggested**: scoping that assertion to its row stops the throw and
+  leaves the case green while *"in BOTH directions"* — its own name — has
+  silently stopped being true, since two identical rows also satisfy a count of
+  2 (:4856: *the FIXTURE is part of the claim*). Fixed with the idiom the repo
+  had already written down about this same countdown in
+  `joinGym.render.test.jsx` (*"a test whose expected string depends on the day it
+  runs will fail some morning for a reason nobody can find"*) and
+  `console.render.test.jsx` — `standAt(NOW)`, `shouldAdvanceTime` load-bearing,
+  `vi.useRealTimers()` **unconditionally in `afterEach`** — plus both branches
+  now named by string. **LOW-2: `queryByText` on a two-row screen THROWS before
+  it can return null**, so C131 went red as an opaque `Found multiple elements`
+  rather than as the assertion; now `queryAllByText(…)`/`toHaveLength(0)`
+  (:1620's `xpBar()` lesson — a failure has to name what broke). **§3 IS THE
+  INSTRUMENT FINDING AND IS MINE: `git checkout --` IS NOT A BYTE-EXACT RESTORE
+  ON THIS MACHINE** — `core.autocrlf=true` rewrote 15344 → 15673 bytes, 0 → 329
+  CR bytes, a different sha256 — **while `git status` said CLEAN and `git diff`
+  was EMPTY**, so the tell a chat reaches for reports "restored" about a file it
+  just changed. Standing: restore from the blob (`git show HEAD:<file> >
+  <file>`) and verify with `sha256sum`, never with `git status`. **The step-11
+  re-smoke is now the ONLY gate left on the card's `OWED.md` line.**
+
 - **:25450** — 2026-08-30 — **THE HELD APPLICATION, T3 ROUND 1: ONE
   Critical/High, THE PACKET DOES NOT SHIP.** **Read before drawing a deadline,
   countdown or expiry date on ANY surface, before claiming a copy change is
