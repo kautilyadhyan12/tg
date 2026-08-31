@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **910 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **913 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 892 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 902 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,860 lines, MEASURED 2026-08-31 (fourth measurement that
+**ALWAYS-READ TOTAL: 1,873 lines, MEASURED 2026-08-31 (fifth measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -967,6 +967,16 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   attendance · staff marking somebody present · the member's own history ·
   streaks/badges · QR validity and rotation) — **all of it goes to Kd at the
   card's plan gate as options, never as a chat's default (R0.2).**
+  **ADDENDUM `:26558`, same session — KD: THE SCANNER IS FOR THE MOBILE APP, NOT
+  THE BROWSER.** *"well scanner is for mobile app not for browser"*. **Read
+  before building any QR/barcode reader, before adding a camera dependency to
+  `apps/web`, and before promising a member any in-app scan on the web.** Built
+  natively with Android (stage 6) and iOS; **it blocks nothing, because the QR is
+  a LINK** — the phone's own camera opens the confirm screen, so the web card
+  still ships both ruled ways in. Own `OWED.md` line. **The chat had verified
+  `useCamera.js` already opens the camera and called the reader a small addition
+  — right about the cost, wrong about the surface. STANDING: "we could build it
+  here" is not a reason to; check which surface OWNS the capability first.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

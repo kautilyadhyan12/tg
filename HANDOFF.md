@@ -1,6 +1,38 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE IN-APP SCANNER IS A MOBILE-APP FEATURE. DECISIONS :26558
+      (addendum inside :26469). Records only; no src, test, harness or
+      migration file is touched.
+
+  1. *"well scanner is for mobile app not for browser"* — the QR reader is built
+     natively with Android (stage 6 of :19016) and again for iOS. **It is NOT in
+     the web attendance card.** Own `OWED.md` line, this commit.
+  2. **IT BLOCKS NOTHING BECAUSE THE QR IS A LINK**: the phone's own camera
+     opens the confirm screen, and the manual button is the other way in, so the
+     web card still ships both of :26469 §1.4's ruled paths.
+  3. **THE CHAT WAS RIGHT ABOUT THE COST AND WRONG ABOUT THE SURFACE** — it had
+     verified `apps/web/src/hooks/useCamera.js` already opens the phone camera.
+     **STANDING: "we could build it here" is not a reason to build it here.**
+  4. **NEXT: the attendance card's PLAN GATE** — Card A (recording attendance)
+     is with Kd for approval.
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **734 triggers from 201 of 339 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **248 pointers
+       resolve (247 on a heading, 1 deliberate mid-entry), 953 headings**.
+       Always-read RE-MEASURED: triggers **913** + §1 **902** + §2 **58** =
+       **1,873**.
+
+FILES: `DECISIONS.md` (+1 `###` addendum) · `DECISIONS-INDEX.md` (addendum noted
+       on :26469's line + header counts) · `DECISIONS-TRIGGERS.md` (rebuilt) ·
+       `OWED.md` (+1 line for the mobile scanner) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. `d72131a`,
+       `3954edb` and this commit are LOCAL; CI has seen none of them.
+```
+
+```
 TASK: KD RULES THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS — the door check-in is
       built FIRST. DECISIONS :26469. Records only; no src, test, harness or
       migration file is touched.

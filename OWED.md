@@ -7533,6 +7533,19 @@ file and is stated so nobody reads these as lower priority than they are.
       an attendance · whether staff can mark somebody present · what a member
       sees of their own attendance · whether attendance feeds streaks or badges ·
       QR validity and rotation.
+- [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
+      ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
+      is for mobile app not for browser"*. **Read before building any QR/barcode
+      reader, before adding a camera dependency to `apps/web`, and before
+      promising a member any in-app scan on the web.** Built natively with
+      Android (stage 6 of :19016's order) and again for iOS, where a scanner is
+      a platform component rather than a decoder we ship. **BLOCKS NOTHING: the
+      QR is a LINK** — a member on the web points their phone's own camera at
+      the poster and lands on the confirm screen, or taps the manual button, so
+      the web attendance card ships both of :26469 §1.4's ways in without it.
+      The chat had verified that `apps/web/src/hooks/useCamera.js` already opens
+      the phone camera and recommended the reader as a small addition; correct
+      about the cost, wrong about the surface.
 - [ ] 🟡 **CLASSES, SCHEDULES AND COACH INSTRUCTION SLOTS (booking).** Zero spec
       hits for `booking`, `schedule` or `check-in`. **The largest single new piece
       on this list**, and the thing gyms actually pay competitors for.

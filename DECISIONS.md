@@ -26554,3 +26554,31 @@ attendance history · whether attendance feeds streaks or badges · how long a Q
 stays valid and whether it rotates. **All of it is the attendance card's plan
 gate, and it goes to Kd as options with a recommendation, never as a chat's
 silent default (R0.2).**
+
+### 7 · ADDENDUM, same session — KD: THE SCANNER BELONGS TO THE MOBILE APP, NOT THE BROWSER
+
+*"well scanner is for mobile app not for browser"*, answering a chat that had
+priced an in-browser QR reader and recommended building it into the web card.
+
+**Read before building any QR/barcode reader, before adding a camera dependency
+to `apps/web`, and before promising a member any in-app scan on the web.**
+
+**THE RULING:** the in-app scanner is built with the **Android app (stage 6 of
+:19016's order)** and again for iOS, natively, where a scanner is a platform
+component rather than a decoder somebody has to ship. **It is NOT in the web
+attendance card.** Own `OWED.md` line, added in this commit (the deferral rule).
+
+**NOTHING IS BLOCKED BY THIS AND THAT IS WHY IT COSTS NOTHING:** the QR is a
+LINK. A member on the web points their phone's own camera at the poster, which
+opens the app on the confirm screen — no decoder of ours in the path — or taps
+the manual button if the gym allows it. **The web card ships with the same two
+ways in that :26469 §1.4 ruled; only OUR scanner moves.**
+
+**The chat's answer was technically right and aimed at the wrong product.** It
+had verified that `apps/web/src/hooks/useCamera.js` already opens the phone
+camera and concluded the reader was a small addition — true, and beside the
+point: Kd is building a phone app where this is free, and a browser decoder
+would be a dependency plus a permission prompt plus a fallback path, all to
+duplicate something the phone already does. **STANDING: "we could build it here"
+is not a reason to build it here — check which surface OWNS the capability
+first.**
