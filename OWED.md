@@ -5059,9 +5059,16 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] 🟡 **THE LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — the third
       step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
       (:23711) and shown to him in one line, not deferred quietly.**
-      **BUILT 2026-08-31 (DECISIONS :25771) AND THIS LINE DOES NOT TICK: the
-      SMOKE is written and UNRUN, and T3 is UNRUN.** Those two are all that is
-      left on it.
+      **BUILT 2026-08-31 (DECISIONS :25771) AND THIS LINE DOES NOT TICK:** ~~the
+      SMOKE is written and UNRUN, and T3 is UNRUN. Those two are all that is
+      left on it.~~ **THE SMOKE PASSED 8 OF 9 on 2026-08-31 (DECISIONS `:26012`),
+      run by Kd on `be03891`, with STEP 6 STRUCK — it asked the owner to inspect
+      a console the owner cannot reach (the unskippable subscribe prompt,
+      :22215/:22697), about a change no screen makes (no web file reads
+      `org.status`, :25771 §6), so its ✅ had no observable subject. The claim it
+      carried — a closure deletes nothing — was checked from the ROWS instead.
+      T3 IS UNRUN AND IS NOW THE ONLY THING LEFT ON THIS LINE**; a passing smoke
+      is not a review (:14147, :14840).
       **KD RULED FOUR MONTHS, NOT THE SPEC'S FOURTEEN DAYS** — *"i think after 4
       months of inactivity shut down the gym"* — which is :22215 §6's *"do not
       shorten or lengthen it without asking"* being asked and answered. Part 3

@@ -1,6 +1,73 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FOUR-MONTH CLOSURE'S SMOKE PASSES 8 OF 9 AND THE NINTH IS STRUCK.
+      DECISIONS :26012. Run by Kd at the browser on `be03891` (:25771), local
+      Postgres, every `src` file byte-identical to HEAD. No src, test, harness
+      or migration file is touched by this commit.
+
+  1. **THE LINE DOES NOT TICK. T3 IS UNRUN** and a passing smoke is not a review
+     (:14147, :14840). `t3-gym-archive-r1.diff` + `t3-gym-archive-r1-PROMPT.md`
+     are at the repo root, ready for a FRESH chat.
+  2. **THE ROUND TRIP IS SETTLED**: trial ended → four months jumped → gym
+     `archived` with its `org.archived` audit row (`via: archive_sweep`) → **a
+     real person refused at the join door** → re-opened by command with
+     `archived_at` KEPT → **the same person, same code, let back in, held
+     request intact** → the sweep run again reporting `archived: 0`. Steps 5 and
+     8 are the pair that makes the refusal mean something (:25707's shape).
+  3. **NOTHING DELETED BY THE CLOSURE, READ FROM ROWS** after step 4 — one
+     member, one staff row, the join code present, one application pending.
+     **That is now the ONLY evidence for it**, because the step that would have
+     shown it on a screen is the struck one.
+  4. **WHY STEP 6 IS STRUCK — two independent reasons, both knowable before the
+     sheet was written. (a)** An owner of a plan-less gym cannot reach the
+     console at all: `planPromptFor` returns an arm and `ConsoleLayout` draws
+     the unskippable subscribe modal over every `/console/:slug` route (:22215,
+     :22697) — **already recorded at :24893 §5 and :25326 §4 and not applied.**
+     **(b)** No web file reads `org.status` (:25771 §6, re-grepped), so a lapsed
+     gym and an archived one draw identically and the ✅ passes whether or not
+     the code under test ran — :25326 §1's no-observable-subject shape,
+     :21751's step that cannot fail. Kd: *"we ARE DOING THE SAME TESTES OVER AND
+     OVER"*. **STANDING: name what on the screen would be DIFFERENT had the code
+     not run; if nothing, it is a "does not cover" line, not a step.**
+  5. **A LITERAL COUNT IN A SHEET, FOURTH RECURRENCE** (:23535, :24559 Low-5,
+     :24893 §2, :25326 §2): step 4 promised `archived: 1`. It read 1 and was
+     right only because the rows were read first — 1 of 109 gyms could move.
+     Step 4's ✅ now names the condition; step 3's already did, which is the tell
+     that the rule was applied by hand at one row and not by rule at the next.
+
+PROVE: **No suite was run and none is owed** — no `src`, test, harness or
+       migration file is touched. Record guards only: `check-decisions-index`,
+       `build-decisions-triggers --check`, `check-harnesses` (outputs in the
+       commit message / :26012's round log). **Docker is not running in this
+       session, so no row was re-read: every figure is the RUN's, reported at
+       the time.** The two repo claims in item 4 WERE re-verified this session
+       by reading `billingView.js:441-447`, `ConsoleLayout.jsx:318` (the
+       `<PlanModal>` render, a sibling of `<main>`; `:298` is only the comment
+       above it and was the first citation here) and by re-grepping `.status`
+       across the console's web files — 23 hits, every one `subscription.status`
+       or the org-store snapshot, none of them `org.status`.
+
+FILES: DECISIONS.md · DECISIONS-INDEX.md (new §1B line + a stale-half note on
+       :25771's §1 line) · DECISIONS-TRIGGERS.md (rebuilt) · OWED.md (updated,
+       NOT ticked) · HANDOFF.md · RUNBOOK/smoke-gym-archive.md (status line,
+       step 6 struck, step 4's ✅, the handshake shape, the "does not cover"
+       list). **No src file at all.**
+
+OPEN:  **T3 IS THE ONLY GATE LEFT ON THE CARD.** The T3 diff at the repo root is
+       `git show be03891` and therefore carries the PRE-RUN sheet; the prompt
+       already tells the reviewer so and names the strike. **Once the sheet fix
+       is committed, regenerate the diff so the review runs on shipping bytes.**
+       **CI: READ, NOT ASSUMED (:25008).** `origin/web-repoint` is `a501198` and
+       the branch is AHEAD 1, so `1b1de15`, `453495e`, `14487cf`, `c49251f` and
+       `a501198` are all PUSHED and CI is **GREEN on the tip** — run
+       `33327115123`, head `a5011984`, conclusion `success`,
+       2026-08-30T18:06:30Z. **`be03891` and this commit are the ONLY local ones,
+       and CI has not seen either.** Pushing is Kd's call.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+```
+
+```
 TASK: A LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — KD'S RULING
       REPLACES THE SPEC'S 14 DAYS, AND THE WRITER FINALLY EXISTS.
       DECISIONS :25771. The third and last piece of :22215 §5 step 1.

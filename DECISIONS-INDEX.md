@@ -4,15 +4,22 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **853 lines** (~630 at the
-   2026-08-28 split). §1 is *"before you do this, read that"*, harvested
-   verbatim from the rulings' own `Read before …` sentences. §2 lists every
-   ruling that declares no trigger, by pointer and title, so a blank search is
-   visibly *"nothing declared itself"* and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 797 lines** (~680 at the split).
+1. **`DECISIONS-TRIGGERS.md`** — generated, **895 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29). §1 is *"before you do this, read
+   that"*, harvested verbatim from the rulings' own `Read before …` sentences.
+   §2 lists every ruling that declares no trigger, by pointer and title, so a
+   blank search is visibly *"nothing declared itself"* and never *"nothing binds
+   me"*.
+2. **§1 below — STANDING RULES. 821 lines** (~680 at the split; 797 on
+   2026-08-29).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,708 lines, MEASURED 2026-08-29 and not estimated.**
+**ALWAYS-READ TOTAL: 1,774 lines, MEASURED 2026-08-31 and not estimated.**
+**RE-MEASURED ON A COMMIT THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
+two days without a restructure.** The trigger below says to re-measure "whenever
+this file is restructured" — that was too narrow, and 2026-08-29's own figures
+had drifted the same way it warns about. **Re-measure whenever you add a line
+here.**
 **These three figures are re-measured whenever this file is restructured, and
 the reason is that they had drifted badly**: they read *"~630"* and *"~680"*
 while §1 had reached **1,310** — nearly DOUBLE its post-split size, two days
@@ -885,6 +892,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   one stays on the payment card's line. **`archived_at` deliberately SURVIVES a
   restore** — it is what stops the next night's run closing the gym straight back
   down. Card record, both tools' runs and the full PROVE at `:25771`.
+  **ITS CLOSING LINE — *"the smoke is UNRUN and T3 is UNRUN"* — IS HALF STALE:
+  the smoke RAN 2026-08-31 and passed 8 of 9 with step 6 struck (`:26012`). T3 is
+  still unrun and the `OWED.md` line still does not tick.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
@@ -926,6 +936,38 @@ byte-identical (**670 triggers from 187 of 325 rulings, before and after**).
 deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
+
+- **:26012** — 2026-08-31 — **THE FOUR-MONTH CLOSURE'S SMOKE PASSES 8 OF 9, AND
+  THE NINTH IS STRUCK.** **Read before writing a smoke step for a change no
+  screen shows, before putting the OWNER of a plan-less gym in front of its
+  console in any sheet, before writing a literal `archived:` count into a smoke
+  sheet, and before citing the four-month closure as verified — this run does NOT
+  tick its `OWED.md` line, T3 is unrun.** Kd's run on `be03891` (:25771), local
+  Postgres, every `src` file byte-identical to HEAD.
+  **SETTLED, and it is the whole round trip**: trial ended → four months jumped →
+  gym `archived` with its `org.archived` audit row → **a real person refused at
+  the join door** → re-opened by command with `archived_at` KEPT → **the same
+  person, the same code, let back in with their held request intact** → the
+  sweep run again reporting `archived: 0`. Steps 5 and 8 are the pair that makes
+  the refusal mean something (:25707's shape). **Nothing was deleted by the
+  closure, READ FROM ROWS** — one member, one staff row, the join code present,
+  one application pending — which is now the ONLY evidence for that claim,
+  because the step that would have shown it on a screen is the struck one.
+  **THE STRIKE, two independent reasons, either alone enough. (a) The owner
+  cannot get there**: an owner holds `billing.manage`, so on a plan-less gym
+  `planPromptFor` returns an arm and `ConsoleLayout` draws the unskippable
+  subscribe modal over every `/console/:slug` route (:22215, :22697) — **a fact
+  :24893 §5 and :25326 §4 had both already recorded, and the sheet's author did
+  not apply.** **(b) The screen would not answer the question anyway**: no web
+  file reads `org.status` (:25771 §6), so a lapsed gym and an archived one draw
+  identically and the ✅ is satisfied whether or not the code under test ran —
+  :25326 §1's no-observable-subject shape and :21751's step that cannot fail,
+  with Kd's words on it (*"we ARE DOING THE SAME TESTES OVER AND OVER"*).
+  **GENERALISATION: before writing a step, name what on that screen would be
+  DIFFERENT had the code not run; if nothing would be, it belongs in the "does
+  not cover" list.** **A LITERAL COUNT FOR THE FOURTH TIME** — step 4 promised
+  `archived: 1` (:23535, :24559 Low-5, :24893 §2, :25326 §2); it read 1, and was
+  right only because the rows were read first (1 of 109 gyms could move).
 
 - **:25707** — 2026-08-30 — **THE STEP-11 RE-SMOKE PASSES ON THE SHIPPING BYTES,
   AND THE HELD-APPLICATION LINE TICKS.** **Read before ticking an `OWED.md` line

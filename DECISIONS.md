@@ -26008,3 +26008,211 @@ and `0015` were hand-written for the same reason and left no snapshot either;
 
 **NOTHING TICKS: the smoke (`RUNBOOK/smoke-gym-archive.md`, 9 steps) is UNRUN and
 T3 is UNRUN.**
+
+## 2026-08-31 — THE FOUR-MONTH CLOSURE'S SMOKE PASSES 8 OF 9, AND THE NINTH IS STRUCK: it asked the OWNER to inspect a console the owner cannot reach, about a change no screen makes
+
+**Read before writing a smoke step for a change no screen shows, before putting
+the OWNER of a plan-less gym in front of its console in any sheet, before writing
+a literal `archived:` count into a smoke sheet, and before citing the four-month
+closure as verified — this run does NOT tick its `OWED.md` line.**
+
+Run 2026-08-31 by Kd at the browser on `be03891` (:25771), against a fresh API
+and `vite` on the local Postgres, every `src` file byte-identical to HEAD
+(`git status` carries only the unrelated ` M CLAUDE.md` that has been out since
+:24893). `RUNBOOK/smoke-gym-archive.md`, 9 steps: **eight passed and step 6 is
+STRUCK.** **The line does NOT tick — T3 is unrun, and a passing smoke is not a
+review** (:14147, :14840).
+
+### 1. WHAT THE RUN SETTLED, AND IT IS THE WHOLE ROUND TRIP
+
+A gym created on a US trial, its trial ended by command, four months jumped, the
+gym CLOSED, a real person refused at the door, the gym RE-OPENED by command, the
+same person let back in, and the nightly job run again changing nothing. Each of
+those had a row behind it as well as a screen: `newgym` on `org_b1_us_m` ending
+2026-09-30 → `expired` → `archived` with `archived_at` 2027-02-10 and an
+`org.archived` audit row naming `via: archive_sweep` → `active` again with
+**`archived_at` KEPT** → a second identical sweep reporting `archived: 0`.
+
+**Steps 5 and 8 are the pair, and this is the run that earned the argument the
+sheet made before it.** A ✅ reading *"the gym is refused"* is satisfied by a join
+screen that refuses everybody; step 8 is the same screen, the same code and the
+same person a minute later, getting in — which a broken screen cannot do
+(:25707's shape). It also showed the held request still sitting there, so the
+re-opening did not cost the applicant their place.
+
+**NOTHING WAS DELETED BY THE CLOSURE, read from rows after step 4 rather than
+inferred from the screen**: one member, one staff row, the join code still
+present, one application still pending. That is :25771 §6's *"nothing is deleted
+and nothing is hidden"* observed instead of asserted — and it is now the only
+evidence for that claim on this card, because the step that was going to show it
+on a screen is the struck one.
+
+### 2. THE FINDING: STEP 6 HAD NO OBSERVABLE SUBJECT, AND IT IS STRUCK FOR TWO INDEPENDENT REASONS
+
+Step 6 asked the OWNER to press F5 and look at the whole console — roster, join
+code, staff, the red banner above them — as proof that a closure takes nothing
+away.
+
+**(a) THE OWNER CANNOT GET THERE.** An owner holds `billing.manage`, and on a gym
+with no live plan `planPromptFor` returns an arm, so `ConsoleLayout` draws the
+unskippable subscribe modal over every `/console/:slug` route (:22215, :22697).
+Verified in the source this session rather than recalled:
+`apps/web/src/pages/console/billingView.js:441-447` is the arm, and
+`apps/web/src/components/console/ConsoleLayout.jsx:318` is where `<PlanModal>` is
+drawn — a sibling of `<main>`, so it covers every child route. (`:298` was cited
+here first and is only the COMMENT explaining `planPromptFor`; the claim was
+right and the line number pointed at prose. Corrected in both copies.)
+**This repo had already
+written that fact down twice — :24893 §5 and :25326 §4 both say in as many words
+that the owner meets the unskippable prompt — and the sheet's author did not
+apply it.** A fact recorded in two card records is not yet a fact that reaches
+the next sheet; only a `Read before …` phrase does that, which is what this
+entry's own opening sentence is for.
+
+**(b) EVEN IF THEY COULD, THE SCREEN WOULD NOT ANSWER THE QUESTION.** No web file
+reads `org.status` (:25771 §6, re-grepped this session across
+`apps/web/src/pages/console` and `components/console`: every `.status` hit is
+`subscription.status`, the org-store `snapshot.status`, or a `Promise.allSettled`
+result). **So the console draws identically for a lapsed gym and an archived one,
+and step 6's ✅ is satisfied whether or not the code under test ever ran.** That
+is :25326 §1's shape in a different instrument — there a smoke step's fixture
+left a rule no observable subject, here the step's SUBJECT is a screen the change
+does not touch — and it is :21751's step-that-cannot-fail, with Kd's own words on
+it: ***"we ARE DOING THE SAME TESTES OVER AND OVER"***.
+
+**THE STRIKE TAKES NOTHING AWAY FROM THE CARD.** What step 6 claimed — the gym
+keeps its people, its code and its staff — is TRUE and is held by the rows in §1
+and by `orgs.archiveSweep.test.ts`. What is struck is the idea that a human
+looking at that screen adds evidence. **A ✅ that a broken build and a correct
+build both satisfy is not weak evidence; it is none.**
+
+**THE GENERALISATION, and it is cheap to apply: before a step is written, name
+the thing on that screen that would be DIFFERENT if the code under test had not
+run.** If nothing would be, the step belongs in the sheet's *"does not cover"*
+list, not in its table. This card's entire user-visible change is one sentence on
+the join door (*"That gym is no longer active."*) — and the run put a real person
+in front of it twice, appearing and then gone, which is why 8 of 9 is a stronger
+result than 9 of 9 would have been.
+
+### 3. A LITERAL COUNT IN A SMOKE SHEET, FOR THE FOURTH TIME
+
+Step 4's ✅ promised a literal **`archived: 1`**. **A count over a shared database
+is never a constant** — :23535 (`expired: 2` where the sheet said 1), :24559
+Low-5, :24893 §2, :25326 §2, and now this. It happened to read 1, and it was
+right for the right reason anyway: the rows were read before the command ran and
+said that **1 of the 109 gyms in that database could move, and only that one**
+(:23535's method). Step 3's ✅ in the SAME sheet was already written
+self-describing — *"1 (or however many live trials this local database has)"* —
+so the rule was applied at one row by hand and not at the next, which is the tell
+that it was habit rather than rule. Step 4's ✅ is corrected to name the condition
+instead of the number.
+
+### 4. WHAT THIS PASS DOES NOT COVER, repeated because a tick invites over-reading (:5200, :14840)
+
+- **The closed gym's console, seen by a human** — struck, §2. It rests on the
+  rows read at the run and on the suite.
+- The sheet's own list, unchanged: **a PAYING gym never being closed** (no way to
+  pay yet; mutant O168) · **the four months being four and not three** (a browser
+  cannot wait; fixed-date test + O171) · **a gym closed while still on a plan**
+  (unreachable until the admin panel's suspend button; O174) · **what a MEMBER
+  sees** (nothing changes for them at closure).
+- **T3.** Unrun, and it is the only gate left on the card.
+
+### Round log
+
+**Provenance, stated because it bounds everything above: this is Kd's run and my
+record of it.** Docker Desktop is not running in this session, so no row was
+re-read while writing this — every figure here is the run's, reported at the
+time, not a fresh measurement. The two claims I did re-verify are the two in §2,
+both by reading source in this session, because both are statements about the
+repo rather than about the run.
+
+Dates used: command A `--now=2026-10-05T10:00:00Z` (trial sweep, `expired: 1`,
+predicted from the rows — `p24-gym` null-dated and `p25b-gym` `active` were both
+correctly untouched, and `newgym` became the only row in the database carrying an
+`ended_at`) · command B `--now=2027-02-10T10:00:00Z` (`archived: 1`, exit 0) ·
+command C `--gym=newgym` (restored, `archived_at` kept) · command B again,
+unchanged (`archived: 0`).
+
+Step 8's rows: still exactly one pending application and no new row created, so
+re-applying with the same code did not duplicate the person's request.
+
+**No suite was run and none is owed** — no `src`, test, harness or migration file
+is touched by this commit. Changed: `DECISIONS.md`, `DECISIONS-INDEX.md` (this
+entry's §1B line, a note on :25771's §1 line that its closing *"the smoke is
+UNRUN"* is now half stale, **and the always-read counts in its own header, which
+had drifted +66 lines in two days — 853/797 → 895/821, total 1,708 → 1,774,
+re-measured with the command the header itself carries; correction (3) below**),
+`DECISIONS-TRIGGERS.md` (rebuilt: **716 triggers from
+197 of 335 rulings**, `--check` clean), `OWED.md` (updated and deliberately NOT
+ticked), `HANDOFF.md`, and `RUNBOOK/smoke-gym-archive.md` — the status line, the
+strike, step 4's ✅, the block-and-handshake shape at the top, a *"does not
+cover"* line for the console nobody looked at, and a half-sentence on step 9
+saying why ITS literal `archived: 0` is an invariant rather than a count (same
+command, same instant, so step 4 already took everything that could move).
+`check-decisions-index`: **245 pointers resolve, 930 headings**;
+`check-harnesses`: **25 scripts parse**.
+`CLAUDE.md`'s pre-existing uncommitted edit is deliberately left out, as before.
+
+**TWO CORRECTIONS MADE BEFORE THIS ENTRY WAS COMMITTED, BOTH TO THIS ENTRY'S OWN
+COMMIT, BOTH FOUND BY A SECOND CHAT RE-VERIFYING INHERITED WORK (S5).**
+
+**(1) THE `HANDOFF` BLOCK WAS FALSE ABOUT CI, AND IT IS :25008's LESSON RUNNING
+BACKWARDS.** It first read *"CI HAS NOT SEEN ANY OF THIS. Last pushed commit is
+still `e8aff34`; `1b1de15`, `453495e`, `14487cf`, `c49251f`, `a501198`, `be03891`
+and this one are LOCAL."* **Both halves were wrong and neither had been measured.
+Measured this session:** `origin/web-repoint` is `a501198`, the branch is **ahead
+1**, and CI ran **GREEN** on that tip — run `33327115123`, head `a5011984`,
+conclusion `success`, 2026-08-30T18:06:30Z, from `gh run list --branch
+web-repoint --json databaseId,headSha,conclusion,createdAt`. Only `be03891` and
+this commit are local. **:25008's standing sentence — *"after any push, read the
+run's verdict and report it; never write 'pushed' as if it were 'green'"* — was
+written against a chat that assumed GREEN. This one assumed RED-or-absent, which
+is the same defect with the sign flipped: THE GATE WAS NOT READ.** An assumption
+that under-claims feels safe and is not — it is what would have had Kd pushing
+"for the first time" a branch CI had already passed, and it hid that `be03891` is
+the ONE commit needing a gate. **A correction is a claim and takes the same
+evidence as the thing it corrects (:8707), so every figure above is a command's
+output, not a re-reading of the sentence being fixed.**
+
+**The same stale characterisation is already committed one entry back and cannot
+be edited out of an append-only record:** `:25976` (inside `:25771`) says *"the
+five commits since the last pushed one (`--log-opts e8aff34..HEAD`)"*, written
+2026-08-31 01:59 IST, by which time `a501198` had been pushed some two hours
+earlier. **The gitleaks claim it supports is UNHARMED — `e8aff34..HEAD` is a
+SUPERSET of `a501198..HEAD`, so a clean scan over the wider range stays clean
+over the narrower** — but do not read that line as a statement about what is
+pushed. Corrected here rather than there, and named in all the copies this commit
+owns (:20587).
+
+**(2) A CITATION POINTED AT PROSE.** §2(a) cited
+`ConsoleLayout.jsx:298` for *"draws the unskippable subscribe modal"*. **Line 298
+is the COMMENT explaining `planPromptFor`; the modal is drawn at `:318`**, where
+`<PlanModal>` sits as a sibling of `<main>` and so covers every child route. The
+claim was true and its evidence pointed at a sentence about the code rather than
+the code — the weakest kind of citation to leave for a chat a trigger sends here,
+since a comment can outlive what it describes (:13247's shape). Fixed in this
+entry and in the `HANDOFF` block, the two copies that carry it.
+
+**(3) THE INDEX'S OWN HEADER HAD DRIFTED AGAIN, AND IT IS THE HAZARD THAT HEADER
+EXISTS TO WARN ABOUT.** It read *"`DECISIONS-TRIGGERS.md` 853 lines · §1 797
+lines · ALWAYS-READ TOTAL 1,708, MEASURED 2026-08-29"*. **Re-measured 2026-08-31
+with the command the header itself prints: 895 · 821 · 58 = 1,774 — +66 lines in
+two days.** The header's own paragraph says drifted figures are *"how the last
+two instruments grew past the point of being readable"* (:22497), and :24813 made
+*"quoting an always-read count from this file's header"* a trigger for exactly
+this reason. **The instruction was too narrow and is widened in place: it said
+re-measure "whenever this file is RESTRUCTURED", and this drift came from
+APPENDING — which is what the file does every day and a restructure is not.
+Re-measure whenever you add a line.** §2 was and is 58.
+
+**RE-VERIFIED THIS SESSION, not inherited:** the three record guards all pass
+with the figures quoted above (`check-harnesses` 25, `check-decisions-index` 245
+pointers / 930 headings, `build-decisions-triggers --check` up to date, 716
+triggers from 197 of 335 rulings) · `git status` carries **no `src`, test, tool
+or migration change at all**, and `git diff be03891 -- apps packages tools` is
+EMPTY, so the sheet fix ships on bytes identical to the reviewed commit
+(:25567 — a clean `git status` is evidence about the tree, and this is the diff
+itself) · §2(b)'s `org.status` claim re-grepped across
+`apps/web/src/pages/console` and `components/console`: **23 `.status` hits, every
+one `subscription.status` or the org-store snapshot, none `org.status`.**
