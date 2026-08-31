@@ -26620,3 +26620,63 @@ ships **defaulting ON**, and turning it off says plainly that scanning arrives
 with the phone app. The `method` column still records `manual` now and `qr`
 later, because "the gym sees which is which" is the ruling and the history has to
 start somewhere.
+
+## 2026-08-31 — KD ADDS OPENING HOURS: a gym declares the SESSIONS it is open for, many per day, or says it is open 24 hours — and attendance is stamped with the session it fell in
+
+**Read before building attendance, before building the console's Overview
+numbers, before touching a gym's Settings screen, before designing classes or
+booking, and before treating a join code's "Morning Batch" label as a time.**
+Records only; no code changed by this entry.
+
+### 1 · WHAT HE ASKED FOR
+
+*"a gym can set time like we are open from 6 to 7 am in morning 2 to 3 pm in
+midday and 4 to 9 pm on evennng or 24 hour open cvan se time (its like adding
+session time fore this session etc if not 24 hour open and a day can have many
+session)"*
+
+**THE RULING: a gym declares when it is open, as SESSIONS. A day can hold many.
+"Open 24 hours" is one of the answers, not a special case somebody has to fake
+with a 00:00–23:59 row.** Zero spec hits for opening hours anywhere in
+`docs/spec/` or `OWED.md` (grepped this session) — **genuinely new, like
+attendance was.**
+
+### 2 · IT GOES BEFORE ATTENDANCE, AND THAT IS THE ONLY SEQUENCING POINT
+
+An attendance stamped with the session it fell in ("30 came to the morning
+session") is the number a gym owner actually wants, and **a session cannot be
+attached to an attendance that was recorded before sessions existed** — the
+definitions move, so a later back-fill would be guesswork. Sessions are a
+Settings screen and a small table; attendance is the bigger card. **Order:
+sessions → attendance → the Overview numbers.**
+
+### 3 · A SESSION IS NOT A JOIN-CODE LABEL, AND THE TWO MUST NOT BE CONFLATED
+
+Part 3 §2.1 already ships *"Morning Batch"* as an example **join-code label**,
+which is a **group tag on a membership** — who somebody belongs to, permanently.
+A session is a **time window the gym is open**. A member of the "Morning Batch"
+code can walk in at 7pm; a session says whether the door was open. **Anything
+that reads one as the other produces a number nobody can defend.**
+
+### 4 · THE CALLS I AM MAKING RATHER THAN ASKING (R0.2 does not cover routine shape)
+
+1. **Hours are per weekday**, because gyms differ on Sunday. "Same every day" is
+   the same values repeated, so nothing is lost by building the general form.
+2. **A session may carry an optional NAME** ("Morning", "Ladies' hour") and
+   **carries NO capacity** — capacity is booking, which is its own card and the
+   largest single item on the gym list.
+3. **Sessions are in the gym's own time zone**, the rule already settled for the
+   nightly numbers (:26469 §5).
+4. **Attendance outside opening hours is RECORDED AND MARKED, never refused.**
+   A gym that forgot to update its hours must not lock its own members out, and
+   a marked row tells the owner something true. (:5807's shape: refusing would
+   show a member something false about their own gym.)
+5. **24-hour is a FLAG on the gym, not a fake session**, so every reader asks one
+   question instead of pattern-matching a time range.
+
+### 5 · WHAT IS NOT RULED AND GOES TO THE PLAN GATE
+
+Whether MEMBERS see the hours (recommendation: yes, on their gym card — a member
+who cannot see when their gym opens is the obvious first complaint) · holidays
+and one-off closures · whether a session later becomes a bookable class ·
+whether staff hours differ from opening hours.

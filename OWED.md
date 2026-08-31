@@ -7513,6 +7513,29 @@ file and is stated so nobody reads these as lower priority than they are.
       Do not resurrect it.
 - [ ] 🟡 **GYM SETS ITS OWN PRICING, OFFERS AND FREE PROMOTIONS.** Zero spec hits.
       Rides along with the Connect work — same build, same card family.
+- [ ] 🟡 **A GYM CANNOT SAY WHEN IT IS OPEN — opening hours as SESSIONS,
+      Kd's requirement 2026-08-31 (DECISIONS :26624).** *"a gym can set time
+      like we are open from 6 to 7 am … 2 to 3 pm … 4 to 9 pm … or 24 hour
+      open … a day can have many session"*. **Zero spec hits for opening hours
+      anywhere in `docs/spec/` or this file** (grep-verified before adding) —
+      genuinely new, as attendance was. **Read before building attendance,
+      before the Overview numbers, before touching Settings, before designing
+      classes or booking, and before treating a join code's "Morning Batch"
+      label as a time.**
+      **THIS IS THE NEXT CARD, AHEAD OF ATTENDANCE**, because an attendance is
+      stamped with the session it fell in and a session cannot be attached to an
+      attendance recorded before sessions existed — definitions move, so a
+      back-fill is guesswork. Order: **sessions → attendance → numbers.**
+      **A SESSION IS NOT A GROUP TAG:** Part 3 §2.1's *"Morning Batch"* join-code
+      label says who a member belongs to, permanently; a session says when the
+      door is open, and a "Morning Batch" member can walk in at 7pm.
+      **RULED SHAPE (chat's calls at :26624 §4, stated not asked):** per weekday
+      · optional session name · **no capacity** (that is the booking card) · the
+      gym's own time zone · **attendance outside hours is recorded and MARKED,
+      never refused** · **24-hour is a flag on the gym, not a fake 00:00–23:59
+      row.** **UNRULED, to the plan gate:** whether members see the hours
+      (recommended yes) · holidays and one-off closures · whether a session
+      becomes a bookable class · staff hours vs opening hours.
 - [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:

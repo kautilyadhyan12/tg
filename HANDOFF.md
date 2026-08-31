@@ -1,6 +1,43 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD ADDS OPENING HOURS AS SESSIONS, AND THEY GO BEFORE ATTENDANCE.
+      DECISIONS :26624. Records only; no src, test, harness or migration file
+      is touched.
+
+  1. **A gym declares the SESSIONS it is open for — many per day — or says it
+     is open 24 HOURS.** Zero spec hits for opening hours anywhere
+     (grep-verified): genuinely new, as attendance was.
+  2. **ORDER: sessions → attendance → numbers.** An attendance is stamped with
+     the session it fell in, and a session cannot be attached to an attendance
+     recorded before sessions existed — definitions move, so a back-fill is
+     guesswork.
+  3. **A SESSION IS NOT A JOIN-CODE LABEL.** §2.1's "Morning Batch" is a group
+     tag on a MEMBERSHIP; a session is a window the door is open. A "Morning
+     Batch" member can walk in at 7pm.
+  4. **CHAT'S CALLS, stated not asked** (:26624 §4): per weekday · optional name ·
+     no capacity (that is booking) · the gym's time zone · attendance outside
+     hours RECORDED AND MARKED, never refused · 24-hour is a FLAG, not a fake
+     00:00–23:59 row.
+  5. **NEXT: the sessions card's PLAN GATE**, carrying §5's four unruled points.
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **742 triggers from 203 of 341 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **249 pointers
+       resolve (248 on a heading, 1 deliberate mid-entry), 960 headings**.
+       Always-read RE-MEASURED: triggers **921** + §1 **945** + §2 **58** =
+       **1,924**.
+
+FILES: `DECISIONS.md` (+1 entry) · `DECISIONS-INDEX.md` (§1 line + header
+       counts) · `DECISIONS-TRIGGERS.md` (rebuilt) · `OWED.md` (+1 line, filed
+       above the attendance line it now precedes) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. `d72131a`,
+       `3954edb`, `cf8decd`, `d9ab038` and this commit are LOCAL; CI has seen
+       none of them.
+```
+
+```
 TASK: KD RULES THE SCAN PATH OFF THE WEB ENTIRELY — attendance on the web is
       MANUAL ONLY. DECISIONS :26586 (addendum 2 inside :26469). Records only;
       no src, test, harness or migration file is touched.

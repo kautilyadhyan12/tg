@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **916 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **921 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 919 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 945 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,893 lines, MEASURED 2026-08-31 (sixth measurement that
+**ALWAYS-READ TOTAL: 1,924 lines, MEASURED 2026-08-31 (seventh measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -994,6 +994,32 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **CONSEQUENCE, the chat's call not a question: the manual switch ships
   defaulting ON**, because turning it off today would leave a gym with no way to
   mark attendance at all; `method` still records `manual` now and `qr` later.
+
+- **:26624** — 2026-08-31 — **KD ADDS OPENING HOURS: a gym declares the SESSIONS
+  it is open for, many per day, or says it is open 24 HOURS — and attendance is
+  stamped with the session it fell in.** **Read before building attendance,
+  before building the console's Overview numbers, before touching a gym's
+  Settings screen, before designing classes or booking, and before treating a
+  join code's "Morning Batch" label as a time.** His words: *"a gym can set time
+  like we are open from 6 to 7 am in morning 2 to 3 pm in midday and 4 to 9 pm on
+  evennng or 24 hour open … a day can have many session"*. **Zero spec hits for
+  opening hours anywhere** (grepped) — genuinely new, as attendance was.
+  **SEQUENCING, and it is the only hard part: sessions → attendance → the
+  numbers**, because a session cannot be attached to an attendance recorded
+  before sessions existed and the definitions move, so a back-fill would be
+  guesswork. **A SESSION IS NOT A JOIN-CODE LABEL:** §2.1's *"Morning Batch"* is
+  a **group tag on a membership** (who you belong to, permanently); a session is
+  **a window the gym is open**. A "Morning Batch" member can walk in at 7pm, and
+  anything reading one as the other produces a number nobody can defend.
+  **CHAT'S CALLS, not questions:** hours are **per weekday** · a session may carry
+  an optional NAME and **no capacity** (capacity is the booking card) · sessions
+  are in the **gym's own time zone** (:26469 §5) · **attendance outside hours is
+  RECORDED AND MARKED, never refused** (a gym that forgot to update its hours
+  must not lock its members out) · **24-hour is a FLAG on the gym, not a fake
+  00:00–23:59 row.** **NOT RULED, to the plan gate:** whether members see the
+  hours (recommended: yes, on their gym card) · holidays and one-off closures ·
+  whether a session later becomes a bookable class · staff hours vs opening
+  hours.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
