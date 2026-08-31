@@ -26465,3 +26465,92 @@ needs the email sender that today logs and returns · the §4.0 wizard's five
 missing steps · the Reports section · a gym's profile page of its facilities
 (:18128). **Leaderboard (P4.x), the Billing tab and real payment (stage 8) are
 placed later by his own order and are not gym-stage cards.**
+
+## 2026-08-31 — KD RULES THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS: the door check-in is built FIRST, "trained anywhere" is never shown, and attendance has TWO ways in with the gym able to tell them apart
+
+**Read before building the console's Overview numbers or the nightly rollup,
+before drawing ANY figure on a gym-facing screen, before building attendance /
+QR check-in, before showing a gym anything a member did away from it, and before
+telling Kd the app "cannot know" something that is simply not built yet.**
+Records only; no code changed by this entry.
+
+### 1 · WHAT HE RULED, IN ORDER
+
+Asked to approve the Overview-numbers card (the first gym feature after :26385),
+he made four calls:
+
+1. **NO AVERAGE FORM SCORE ON THE SCREEN** — *"average form score not needed"*.
+   Part 3 §4.1's KPI row names four tiles; **three ship.** Nothing is removed:
+   the tile was never built, and `org_daily_stats.avg_form_score` /
+   `scored_sets` are still WRITTEN by the nightly job, because the column exists,
+   costs one expression, and a history nobody recorded cannot be recovered later.
+   **The no-removal rule is untouched — this is scope on a new screen, ruled by
+   Kd, and the number keeps accruing behind it.**
+2. **A GYM'S NUMBERS COUNT PEOPLE WHO CAME TO THE GYM** — *"A workout counts for
+   a gym only if the person was a member that day and was present in the gym"*.
+   §2.1's membership-interval rule STANDS and gains a second condition.
+3. **"TRAINED ANYWHERE" IS NOT SHOWN** — *"'trained anywhere' should not be
+   showed"*, rejecting the chat's offer to display both counts side by side.
+   **The gym sees attendance and what was trained AT the gym. Nothing else.**
+4. **ATTENDANCE IS BUILT FIRST, AND IT HAS TWO WAYS IN.** He chose the
+   recommended arm: a member marks attendance by **scanning the gym's QR** or by
+   **tapping it manually in the app**; **the gym can tell which is which**; and
+   **the owner can switch the manual option off in Settings.**
+
+### 2 · THE CORRECTION HE MADE, AND IT IS THE PART TO KEEP
+
+Told that "present in the gym" was unknowable, he answered: *"a user when
+arrives at the gym gives a attandance can have many option scan the qr generated
+by gym or give attandance manulay in app from this can now if a user has comed to
+gym or not what even are you saying?"*
+
+**He was right and the sentence was wrong in a way that matters.** The chat had
+measured the CODE — no check-in table, no location on a workout, both
+grep-verified and both true — and then reported a fact about today's schema as a
+property of the product. **A statement about what is BUILT is not a statement
+about what is POSSIBLE**, and to the person deciding what to build next they read
+as opposite answers. **STANDING: when a measurement says "there is no such
+column", the honest report is "nothing records this yet — here is what would" —
+never "the app cannot know".** The same sentence would have killed the feature if
+he had believed it.
+
+### 3 · IT IS NOT A RE-SEQUENCING, AND THE RECORD ALREADY SAID SO
+
+**:17366 §6's Kd-ruled six-wave order puts "QR attendance + manual mark" in WAVE
+1 (Foundations), beside image storage and announcements** — so attendance before
+the numbers is what that ruling already said, and the chat proposing the numbers
+first had not read it. **:26385's own lesson, one day old, recurring: the next
+card is the next feature of the stage, and the record usually already names it.**
+:17765 also binds the shape: **the console exists on web AND in the phone app
+with EVERY feature in both** — for attendance the gym only has to DISPLAY a QR
+and SEE who came, both of which work on a laptop, while the MEMBER scans with
+their phone.
+
+### 4 · THE HONESTY PROBLEM HE SOLVED HIMSELF, AND WHAT IT COSTS
+
+A QR scan proves somebody stood at the door. **A manual tap proves nothing — it
+can be sent from home.** Rather than pick one, he took both plus a distinction:
+the gym SEES which is which and can turn manual OFF. **Consequence to build
+correctly: the two ways must be stored as different things from day one** — a
+single "attended" boolean would throw away the only thing that makes the number
+trustworthy, and no later card can recover it. Gyms that care get honest numbers;
+a gym with a broken QR poster is not stuck.
+
+### 5 · THE ANSWERED QUESTION, RECORDED SO IT IS NOT ASKED AGAIN
+
+*"does this time zone is picked automatically or the user have to select
+manully"* — **automatic, with a manual override.** `NewGym.jsx` prefills the
+zone from `detectTimezone()` (the device's own zone) into a ~400-entry dropdown
+and the owner may change it; Settings' gym-details panel edits it afterwards
+(:19366, :20075). So a US owner signing up in New York gets `America/New_York`
+without doing anything, and **every gym's day is closed in its own zone** — which
+is what makes a US gym and an Assam gym both correct in one nightly run.
+
+### 6 · WHAT IS NOT RULED, AND MUST NOT BE INVENTED
+
+How a workout LINKS to an attendance (same day? within N hours of the scan?) ·
+whether staff can mark somebody present · what a member sees of their own
+attendance history · whether attendance feeds streaks or badges · how long a QR
+stays valid and whether it rotates. **All of it is the attendance card's plan
+gate, and it goes to Kd as options with a recommendation, never as a chat's
+silent default (R0.2).**

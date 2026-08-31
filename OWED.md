@@ -7210,6 +7210,16 @@ file and is stated so nobody reads these as lower priority than they are.
       says nothing about activity. **Closed by the rollup card**, which owes the
       nightly worker keyed on `gyms.timezone` (§3.2) before any of these tiles
       can be honest. The at-risk nudge also needs push, which does not exist.
+      **AMENDED 2026-08-31 BY KD (DECISIONS :26469) — THREE THINGS, and they
+      change what this line owes.** (a) **The average-form-score tile is NOT
+      built** — *"average form score not needed"*; the nightly job still WRITES
+      `avg_form_score`/`scored_sets`, because an unrecorded history cannot be
+      recovered, so this is scope on a new screen and not a removal. (b) **Every
+      figure counts only people who were PRESENT AT THE GYM** — §2.1's membership
+      interval plus an attendance row — so **this line is BLOCKED on the
+      attendance card** and cannot start before it. (c) **A "trained anywhere"
+      count is NEVER shown**; the chat's offer to display both was rejected.
+      `org_daily_stats` still has no writer as of this line.
 - [ ] 🟡 **THE §4.0 WIZARD IS ONE STEP OF SIX: size/plan/trial, logo upload,
       team invites and the QR poster PDF are all UNBUILT (deferred with the
       console screen, 2026-08-18).** Built: step 1 (name · city · org type ·
@@ -7508,6 +7518,21 @@ file and is stated so nobody reads these as lower priority than they are.
       `attendance` or `check-in`** — but the mechanism is half-designed already:
       Part 6 §2 has QR posters and an `aihg://org/join?code=` deep link for
       JOINING. Attendance is the same scan with a different action.
+      **⬆️ PROMOTED TO THE NEXT CARD, 2026-08-31 (DECISIONS :26469), and it is
+      where :17366 §6's wave 1 always had it.** Kd ruled the gym's Overview
+      numbers count *"present in the gym"*, so nothing on that screen can be
+      built until attendance exists. **RULED SHAPE, all four his:** two ways in —
+      **scan the gym's QR or mark it manually in the app** — **the gym SEES which
+      is which**, and **the owner can switch the manual option OFF in Settings**.
+      **Store the two as DIFFERENT THINGS from day one**: a manual tap can come
+      from home, so a single "attended" boolean throws away the only thing that
+      makes the number trustworthy, and no later card can recover it.
+      **:17765 binds the surface** — the gym DISPLAYS a QR and SEES who came
+      (both work on a laptop), the MEMBER scans with their phone.
+      **UNRULED and owed to the plan gate (:26469 §6):** how a workout links to
+      an attendance · whether staff can mark somebody present · what a member
+      sees of their own attendance · whether attendance feeds streaks or badges ·
+      QR validity and rotation.
 - [ ] 🟡 **CLASSES, SCHEDULES AND COACH INSTRUCTION SLOTS (booking).** Zero spec
       hits for `booking`, `schedule` or `check-in`. **The largest single new piece
       on this list**, and the thing gyms actually pay competitors for.

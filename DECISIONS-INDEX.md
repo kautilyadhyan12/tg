@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **905 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 then 901 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **910 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 855 lines** (~680 at the split; 797 on
-   2026-08-29; 821 then 828 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 892 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,818 lines, MEASURED 2026-08-31 (third measurement that
+**ALWAYS-READ TOTAL: 1,860 lines, MEASURED 2026-08-31 (fourth measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -930,6 +930,43 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   the next card is the next feature of THAT STAGE, not the highest-priority item
   in the file — markers order work WITHIN a stage, never the stages.** §5 carries
   what is measurably left in the gym stage.
+- **:26469** — 2026-08-31 — **KD RULES THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS:
+  the door check-in is built FIRST, "trained anywhere" is NEVER shown, and
+  attendance has TWO ways in with the gym able to tell them apart.** **Read
+  before building the console's Overview numbers or the nightly rollup, before
+  drawing ANY figure on a gym-facing screen, before building attendance / QR
+  check-in, before showing a gym anything a member did away from it, and before
+  telling Kd the app "cannot know" something that is simply not built yet.**
+  **FOUR CALLS:** (1) *"average form score not needed"* — §4.1's KPI row ships
+  THREE tiles, and **nothing is removed**: the tile was never built and
+  `org_daily_stats.avg_form_score`/`scored_sets` are still written nightly,
+  because a history nobody recorded cannot be recovered. (2) *"A workout counts
+  for a gym only if the person was a member that day **and was present in the
+  gym**"* — §2.1's membership interval STANDS and gains a second condition.
+  (3) *"'trained anywhere' should not be showed"* — the offer to show both counts
+  was REJECTED; the gym sees attendance and what was trained AT the gym, nothing
+  else. (4) **Attendance is built BEFORE the numbers, with TWO ways in — scan the
+  gym's QR or tap it manually — the gym SEES which is which, and the owner can
+  switch manual OFF in Settings.** **BUILD CONSEQUENCE: the two ways are stored
+  as DIFFERENT THINGS from day one; a single "attended" boolean throws away the
+  only thing that makes the number trustworthy and no later card recovers it.**
+  **THE CORRECTION IS THE PART TO KEEP: the chat measured the code — no check-in
+  table, no location on a workout, both grep-verified and true — then reported it
+  as *"the app cannot know"*, and he caught it.** **STANDING: "there is no such
+  column" is reported as *"nothing records this yet — here is what would"*, never
+  as a property of the product; to the person choosing the next card those are
+  opposite answers.** **NOT A RE-SEQUENCING: :17366 §6's wave 1 already listed
+  "QR attendance + manual mark"**, so the record named this card before the chat
+  proposed the other one — :26385's lesson recurring one day later. :17765 binds
+  the shape (every console feature on web AND phone; the gym only DISPLAYS a QR
+  and SEES who came). **ALSO ANSWERED, so it is not asked again: a gym's time
+  zone is AUTOMATIC with a manual override** — `NewGym.jsx` prefills
+  `detectTimezone()` into the dropdown, Settings edits it after (:19366, :20075),
+  which is why one nightly run closes a US gym's day and an Assam gym's day each
+  in its own zone. **§6 lists what is NOT ruled** (how a workout links to an
+  attendance · staff marking somebody present · the member's own history ·
+  streaks/badges · QR validity and rotation) — **all of it goes to Kd at the
+  card's plan gate as options, never as a chat's default (R0.2).**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

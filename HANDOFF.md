@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS — the door check-in is
+      built FIRST. DECISIONS :26469. Records only; no src, test, harness or
+      migration file is touched.
+
+  1. **FOUR KD CALLS.** No average-form-score tile (the nightly job still WRITES
+     the column). Every gym figure counts only people PRESENT AT THE GYM. A
+     "trained anywhere" count is NEVER shown. Attendance has TWO ways in — scan
+     the gym's QR or mark it manually — the gym SEES which is which, and the
+     owner can switch manual OFF in Settings.
+  2. **STORE THE TWO WAYS AS DIFFERENT THINGS FROM DAY ONE.** A manual tap can
+     come from home; one "attended" boolean throws away the only thing that
+     makes the number trustworthy and no later card recovers it.
+  3. **THE CHAT'S ERROR, RECORDED:** it measured the code (no check-in table, no
+     location on a workout — both grep-verified and true) and reported it as
+     "the app cannot know". **"There is no such column" is reported as "nothing
+     records this yet — here is what would".**
+  4. **NOT A RE-SEQUENCING:** :17366 §6's wave 1 already listed "QR attendance +
+     manual mark". The record named this card before the chat proposed another.
+  5. **NEXT: the attendance card's PLAN GATE**, which owes Kd options on the
+     five unruled points at :26469 §6.
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **731 triggers from 200 of 338 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **248 pointers
+       resolve (247 on a heading, 1 deliberate mid-entry), 952 headings**.
+       Always-read RE-MEASURED: triggers **910** + §1 **892** + §2 **58** =
+       **1,860**.
+
+FILES: `DECISIONS.md` (+1 entry) · `DECISIONS-INDEX.md` (§1 line + header
+       counts) · `DECISIONS-TRIGGERS.md` (rebuilt) · `OWED.md` (attendance line
+       promoted and given its ruled shape; the Overview-numbers line amended and
+       marked BLOCKED on attendance) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. `d72131a` and
+       this commit are LOCAL; CI has seen neither.
+```
+
+```
 TASK: KD RULES THE ADMIN PANEL IS BUILT LAST, AND THE GYM STAGE IS FINISHED
       FEATURE BY FEATURE. DECISIONS :26385. Records only — no src, test,
       harness or migration file is touched.
