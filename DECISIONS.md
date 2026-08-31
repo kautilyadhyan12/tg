@@ -26582,3 +26582,41 @@ would be a dependency plus a permission prompt plus a fallback path, all to
 duplicate something the phone already does. **STANDING: "we could build it here"
 is not a reason to build it here — check which surface OWNS the capability
 first.**
+
+### 8 · ADDENDUM 2, same session — KD: THE SCAN PATH LEAVES THE WEB ENTIRELY. ON WEB, ATTENDANCE IS MANUAL AND ONLY MANUAL
+
+*"well i said drop the scan part completely from web men , it will be only
+manual if user uses web which the user is not going to do"*, correcting a chat
+that had kept the QR as a LINK on the web after §7 moved our scanner to the
+phone.
+
+**Read before building attendance on the web, before putting a QR poster,
+attendance deep link or scan-confirm screen anywhere in `apps/web`, and before
+designing ANY member feature for the web on the assumption that members are
+there.**
+
+**THE RULING:** the entire scan path — the reader (§7), the poster, the link and
+its confirm screen — is a **PHONE APP** feature. **The web attendance card ships
+ONE way in: the member taps "I'm here".** Nothing on the web draws or consumes a
+QR.
+
+**HIS REASON IS A PRODUCT FACT AND IS BIGGER THAN THIS CARD: members are not
+going to use the web.** The web member app is what exists TODAY because the phone
+app is stage 6 — it is not where the audience will be. **:9604 already ruled the
+mobile app is the product; this applies it to a build decision**, and it should
+be applied to every member-facing web card that follows: build what the web can
+honestly do, and stop spending web effort on paths the phone will own.
+
+**THE CHAT'S ERROR, and it is the same one twice in a row.** §7 moved the
+DECODER and kept the link, reasoning the phone's own camera would open it — true,
+and still the wrong surface. **A ruling that says "this belongs to the phone"
+covers the whole path, not the one component that was named.** The tell was
+there: a QR nothing in the product can scan is a poster on a wall.
+
+**CONSEQUENCE I OWE HIM AT THE SCREEN, and it is my call rather than a
+question:** :26469 §1.4's switch — the owner turning the manual option OFF —
+would today leave a gym with **no way to mark attendance at all**. So the switch
+ships **defaulting ON**, and turning it off says plainly that scanning arrives
+with the phone app. The `method` column still records `manual` now and `qr`
+later, because "the gym sees which is which" is the ruling and the history has to
+start somewhere.

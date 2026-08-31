@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **913 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **916 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 902 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 919 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,873 lines, MEASURED 2026-08-31 (fifth measurement that
+**ALWAYS-READ TOTAL: 1,893 lines, MEASURED 2026-08-31 (sixth measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -977,6 +977,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   `useCamera.js` already opens the camera and called the reader a small addition
   — right about the cost, wrong about the surface. STANDING: "we could build it
   here" is not a reason to; check which surface OWNS the capability first.**
+  **ADDENDUM 2 `:26586`, same session — KD: THE SCAN PATH LEAVES THE WEB
+  ENTIRELY.** *"well i said drop the scan part completely from web men , it will
+  be only manual if user uses web which the user is not going to do"*. **Read
+  before building attendance on the web, before putting a QR poster, attendance
+  deep link or scan-confirm screen anywhere in `apps/web`, and before designing
+  ANY member feature for the web on the assumption that members are there.**
+  **The reader, the poster, the link and its confirm screen are ALL phone-app
+  work; the web card ships ONE way in — the member taps "I'm here".** **HIS
+  REASON OUTLIVES THE CARD: members are not going to use the web** — it exists
+  today only because the phone app is stage 6, which applies :9604's "the mobile
+  app is the product" to every member-facing web card that follows. **THE CHAT
+  MADE THE SAME ERROR TWICE: §7 moved the decoder and KEPT the link. A ruling
+  that says "this belongs to the phone" covers the whole PATH, not the one
+  component named** — a QR nothing in the product can scan is a poster on a wall.
+  **CONSEQUENCE, the chat's call not a question: the manual switch ships
+  defaulting ON**, because turning it off today would leave a gym with no way to
+  mark attendance at all; `method` still records `manual` now and `qr` later.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

@@ -1,6 +1,41 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE SCAN PATH OFF THE WEB ENTIRELY — attendance on the web is
+      MANUAL ONLY. DECISIONS :26586 (addendum 2 inside :26469). Records only;
+      no src, test, harness or migration file is touched.
+
+  1. *"drop the scan part completely from web men , it will be only manual if
+     user uses web which the user is not going to do"*. **The reader, the
+     poster, the link and its confirm screen are ALL phone-app work.** The web
+     attendance card ships ONE way in: the member taps "I'm here".
+  2. **HIS REASON OUTLIVES THE CARD: members are not going to use the web.**
+     Apply it to every member-facing web card that follows (:9604's "the mobile
+     app is the product", applied to a build decision).
+  3. **THE SAME ERROR TWICE: :26558 moved the DECODER and kept the LINK.** A
+     ruling that says "this belongs to the phone" covers the whole PATH, not the
+     component that was named.
+  4. **CHAT'S CALL, not a question: the manual switch ships defaulting ON** —
+     off would today leave a gym with no way to mark attendance at all.
+     `method` still records `manual` now, `qr` later.
+  5. **NEXT: Card A (recording attendance) is with Kd for approval.**
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **737 triggers from 202 of 340 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **248 pointers
+       resolve (247 on a heading, 1 deliberate mid-entry), 954 headings**.
+       Always-read RE-MEASURED: triggers **916** + §1 **919** + §2 **58** =
+       **1,893**.
+
+FILES: `DECISIONS.md` (+1 `###` addendum) · `DECISIONS-INDEX.md` (addendum 2 on
+       :26469's line + header counts) · `DECISIONS-TRIGGERS.md` (rebuilt) ·
+       `OWED.md` (the scanner line's web half superseded) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. `d72131a`,
+       `3954edb`, `cf8decd` and this commit are LOCAL; CI has seen none.
+```
+
+```
 TASK: KD RULES THE IN-APP SCANNER IS A MOBILE-APP FEATURE. DECISIONS :26558
       (addendum inside :26469). Records only; no src, test, harness or
       migration file is touched.

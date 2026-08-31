@@ -7543,6 +7543,14 @@ file and is stated so nobody reads these as lower priority than they are.
       QR is a LINK** — a member on the web points their phone's own camera at
       the poster and lands on the confirm screen, or taps the manual button, so
       the web attendance card ships both of :26469 §1.4's ways in without it.
+      **SUPERSEDED SAME SESSION BY :26586 — THE WHOLE SCAN PATH LEAVES THE WEB,
+      not just the reader:** the poster, the link and its confirm screen are
+      phone-app work too, and **the web card ships ONE way in, the manual tap.**
+      Kd: *"drop the scan part completely from web men , it will be only manual
+      if user uses web which the user is not going to do"*. The sentence above
+      about the phone's own camera opening the confirm screen is kept because it
+      is what this line claimed when it was written, and it is exactly the half
+      measure he corrected.
       The chat had verified that `apps/web/src/hooks/useCamera.js` already opens
       the phone camera and recommended the reader as a small addition; correct
       about the cost, wrong about the surface.
