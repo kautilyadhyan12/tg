@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE ADMIN PANEL IS BUILT LAST, AND THE GYM STAGE IS FINISHED
+      FEATURE BY FEATURE. DECISIONS :26385. Records only — no src, test,
+      harness or migration file is touched.
+
+  1. **THE RULING.** Asked what to build next, this chat recommended the admin
+     panel's first slice on the strength of its 🔴 line and :19016 §4. Kd
+     overturned it: *"own control panel needs to be built last it controls all
+     the application not only gyms , there are many features planned for the
+     gym part why not built them one by one and complete the gym section so
+     that we can move to the next phase?"*
+  2. **:19016 §4 IS SUPERSEDED ON TIMING ONLY.** Where the panel lives, its
+     :17765 exemption and its eventual contents all stand. The `OWED.md` 🔴 line
+     stays OPEN and unstruck, now carrying the schedule.
+  3. **A 🔴 MEANS "BLOCKS THE CUTOVER", NEVER "BUILD IT NEXT."** That
+     conflation is what produced the overturned recommendation, in the same
+     message that quoted :19016 §1's continuity rule.
+  4. **NEXT CARD IS A GYM FEATURE, NOT AN OPERATOR TOOL.** :26385 §5 carries
+     what is measurably left in the gym stage, read out of the repo this
+     session.
+
+PROVE: **No suite was run and none is owed** — no `src`, test, harness or
+       migration file is touched. Record guards only:
+       `build-decisions-triggers` **726 triggers from 199 of 337 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **247 pointers
+       resolve (246 on a heading, 1 deliberate mid-entry), 945 headings**.
+       Always-read RE-MEASURED per the maintenance rule: triggers **905** +
+       §1 **855** + §2 **58** = **1,818**.
+
+FILES: `DECISIONS.md` (+1 entry) · `DECISIONS-INDEX.md` (§1 line + header
+       counts) · `DECISIONS-TRIGGERS.md` (rebuilt) · `OWED.md` (the admin-panel
+       line gains its schedule; nothing ticked, nothing struck) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+       `origin/web-repoint` was `01999dc` at session start with everything
+       pushed; this commit is LOCAL until Kd pushes.
+```
+
+```
 TASK: THE FOUR-MONTH CLOSURE, T3 ROUND 1 — ZERO Critical/High, THE PACKET SHIPS,
       EIGHT LOW ALL FIXED, AND THE `OWED.md` LINE TICKS. DECISIONS :26220.
       Reviews `be03891` (:25771) + `db61a84` (:26012, the smoke record, which

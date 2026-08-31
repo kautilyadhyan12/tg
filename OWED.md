@@ -6854,6 +6854,18 @@ file and is stated so nobody reads these as lower priority than they are.
       review. **Read before building any operator tool, before adding an
       `admin` role anywhere, and before putting an internal control on the gym
       console or in a phone app.**
+      **⏳ SCHEDULED LAST BY KD, 2026-08-31 (DECISIONS :26385) — *"own control
+      panel needs to be built last it controls all the application not only
+      gyms"*.** This line is NOT struck and NOT ticked: the panel is still owed
+      in full. What changed is WHEN — it is built after the application it
+      controls exists, and **it is not a gym-stage card.** :19016 §4's
+      "first slice" is superseded ON TIMING ONLY; everything that entry says
+      about where the panel lives and what it must hold still stands. **The 🔴
+      here means "blocks the cutover", never "build it next" — a chat that reads
+      it as a queue position is repeating the recommendation Kd overturned.**
+      Until it exists, a fraudulent gym is stopped by hand in the database and a
+      closed gym is re-opened by `apps/api/tools/gym-restore.ts` (:25771), both
+      accepted by him on the record.
       **THE SPEC ALREADY SPECIFIES IT AND SAYS WHERE IT LIVES** (grep-verified,
       not recalled): `03-part3-org-console.md:60` — *"Kd (internal) | `admin` |
       lives on the separate admin panel (v1 §6.1, Part 2 §9.4), **not** in this

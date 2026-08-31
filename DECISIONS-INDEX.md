@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **901 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **905 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 then 901 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 828 lines** (~680 at the split; 797 on
-   2026-08-29; 821 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 855 lines** (~680 at the split; 797 on
+   2026-08-29; 821 then 828 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,787 lines, MEASURED 2026-08-31 (second measurement that
+**ALWAYS-READ TOTAL: 1,818 lines, MEASURED 2026-08-31 (third measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -903,6 +903,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   recorded AFTER the last closure re-arms the clock**, Kd ruling the fix. The
   restore still survives the next night, which is what §3.3 was protecting; what
   changed is that a gym which lapses AGAIN can be closed again.
+- **:26385** — 2026-08-31 — **KD RULES THE ADMIN PANEL IS BUILT LAST, BECAUSE IT
+  CONTROLS THE WHOLE APPLICATION AND NOT ONLY GYMS — and the gym stage is
+  finished FEATURE BY FEATURE.** **Read before proposing ANY next card, before
+  proposing the admin panel or any operator/internal tool as a near-term card,
+  before quoting :19016 §4's "first slice" as scheduled work, and before treating
+  a 🔴 marker as an argument for building something NOW.** His words: *"own
+  control panel needs to be built last it controls all the application not only
+  gyms , there are many features planned for the gym part why not built them one
+  by one and complete the gym section so that we can move to the next phase?"*
+  **SUPERSEDES :19016 §4 ON TIMING ONLY** — that ruling chose an admin tool over
+  a deferral when the alternative was parking four gym items until stage 8; the
+  surface is now placed last. **§5's WHERE (a separate web surface, never in a
+  phone app), its :17765 exemption and its eventual contents are untouched.**
+  **The `OWED.md` 🔴 line stays OPEN and is NOT struck** — it is scheduled, and
+  **a 🔴 means "blocks the cutover", never "build it next"**, which is the
+  conflation that produced the overturned recommendation. **COST HE ACCEPTED,
+  stated before he ruled:** a fraudulent gym can be stopped only by hand in the
+  database, and a closed gym re-opened only by `tools/gym-restore.ts` (:25771) —
+  operator actions at a scale of a handful of gyms. **THE PROCESS LESSON IS THE
+  CHAT'S: it quoted :19016 §1's "continuity of thread beats severity ranking" and
+  broke it in the same message** — the plan-lifecycle chain had closed, its next
+  link (payment) is stage 8, and the chat reached for the biggest 🔴 instead of
+  the next gym feature. **An operator tool ABOUT gyms is not a gym feature; the
+  person it serves is Kd, not a gym.** **STANDING: when a stage's thread ends,
+  the next card is the next feature of THAT STAGE, not the highest-priority item
+  in the file — markers order work WITHIN a stage, never the stages.** §5 carries
+  what is measurably left in the gym stage.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

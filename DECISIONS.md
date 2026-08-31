@@ -26381,3 +26381,87 @@ is not the mistake it catches. Both now say what they must be relative to today.
 **NO ROUND 2 IS OWED**: zero Critical/High ships the packet and a Low buys no
 round (:5348 rule 1). **The `OWED.md` line TICKS on this commit** — both gates are
 now met, a browser (:26012) and a review round with no Critical/High.
+
+## 2026-08-31 — KD RULES THE ADMIN PANEL IS BUILT LAST, BECAUSE IT CONTROLS THE WHOLE APPLICATION AND NOT ONLY GYMS — and the gym stage is finished FEATURE BY FEATURE before anything moves on
+
+**Read before proposing ANY next card, before proposing the admin panel or any
+operator/internal tool as a near-term card, before quoting :19016 §4's "first
+slice" as scheduled work, and before treating a 🔴 marker as an argument for
+building something NOW.** Records only; no code changed by this entry.
+
+### 1 · THE RULING, IN HIS WORDS
+
+Asked what to build next, the chat recommended the admin panel's first slice
+(suspend/close a gym · mark a gym as paid) on the strength of its 🔴 line and
+:19016 §4. He answered:
+
+*"own control panel needs to be built last it controls all the application not
+only gyms , there are many features planned for the gym part why not built them
+one by one and complete the gym section so that we can move to the next phase ?"*
+
+**TWO RULINGS, both standing.** (a) **The admin panel is built LAST**, after the
+application it controls exists — it is not a gym card and must not be scheduled
+as one. (b) **The gym stage is completed feature by feature**, in his own
+:19016 order, before the next stage begins.
+
+### 2 · WHAT THIS CHANGES IN THE RECORD
+
+**:19016 §4 is SUPERSEDED ON TIMING, not on substance.** That entry's ruling —
+that the four money-dependent gym items get an admin TOOL rather than a deferral
+— was made when the alternative on the table was parking those items until
+stage 8. It scheduled a "first slice" as near-term work. **Kd has now placed the
+whole surface last.** Everything :19016 §5 says about WHERE the panel lives (a
+separate web surface, never inside a phone app), WHY it is exempt from :17765,
+and WHAT it must eventually hold (DPDP, ban, breakglass, margin, cost) is
+untouched and stands.
+
+**The `OWED.md` line stays 🔴 and stays OPEN.** It is not struck — nothing here
+says it will never be built (:456's test). It is SCHEDULED, and its line now
+carries the schedule. **A 🔴 marker means "blocks the cutover", never "build it
+next"** — that conflation is what produced the recommendation this ruling
+overturned.
+
+### 3 · THE COST HE ACCEPTED, STATED BEFORE HE RULED AND RESTATED HERE
+
+Until the panel exists: **a gym Kd believes is fraudulent can be stopped only by
+editing the database by hand**, and **a gym closed by the four-month sweep is
+re-opened only by a chat running `apps/api/tools/gym-restore.ts`** (:25771 — the
+way back is a command, and he ruled knowing it). Both are operator actions at a
+scale of a handful of gyms, which is why they can wait; neither is a user-facing
+gap.
+
+### 4 · THE PROCESS LESSON, AND IT IS THE CHAT'S
+
+**Continuity of thread beats severity ranking (:19016 §1) — and the chat that
+quoted that rule then broke it in the same message.** The plan-lifecycle chain
+had just closed (trial → expiry → forced prompt → read-only console → held
+application → four-month closure), the chat correctly found that its next link
+is real payment and that payment is stage 8, and then reached for **the biggest
+🔴 it could find** rather than the next feature of the thing being built. That is
+the identical shape of the drift Kd corrected on 2026-08-25 (*"we were doing the
+gym part and all of sudden going to camera"*), one level subtler: **an operator
+tool ABOUT gyms is not a gym feature**, because the person it serves is Kd and
+not a gym.
+
+**STANDING: when a stage's current thread ends, the next card is the next
+feature of THAT STAGE — not the highest-priority item in the file.** The
+priority markers order work WITHIN a stage; they never re-order the stages.
+
+### 5 · WHAT IS ACTUALLY LEFT IN THE GYM STAGE, MEASURED THIS SESSION
+
+Read out of the repo, not recalled — `ls apps/` returns `api` and `web` only;
+the console's screens are `Overview`, `Members`, `Settings`, `ApplicationsQueue`
+and `NewGym` (`ls apps/web/src/pages/console/`); `org_daily_stats` is grepped in
+`apps/api/src` and has **no writer and no reader** outside its own schema file
+and a privacy comment; `Members.jsx`'s own comment names the §4.3 columns it
+does not serve.
+
+The owner-facing gaps, which are the candidates for the cards after this one:
+the Overview's numbers (Part 3 §4.1's tiles and 8-week chart, blocked on the
+nightly rollup that would write `org_daily_stats`) · the Members screen's real
+columns and the §2.2 actions with no routes (RESTORE a removed member, CSV
+export, nudges) · nobody being told when a gym confirms or removes them, which
+needs the email sender that today logs and returns · the §4.0 wizard's five
+missing steps · the Reports section · a gym's profile page of its facilities
+(:18128). **Leaderboard (P4.x), the Billing tab and real payment (stage 8) are
+placed later by his own order and are not gym-stage cards.**
