@@ -702,10 +702,19 @@ const GYM_NOT_ON_PLAN_MESSAGE = "This gym needs a plan before anything here can 
  *
  *  **It is `startGymTrial`'s existing sentence, hoisted rather than re-worded**,
  *  so the two doors that refuse a closed gym to its own STAFF say one thing.
- *  The applicant-facing pair (`applyByCode`, `confirmApplication`) keep *"That
- *  gym is no longer active"* on purpose: a different audience, who is not staff
- *  of this gym and is owed the effect rather than our vocabulary (:25092 §1(d)'s
- *  boundary).
+ *  **`applyByCode` keeps *"That gym is no longer active"* on purpose**: a
+ *  different audience — somebody who is not staff of this gym and is owed the
+ *  effect rather than our vocabulary (:25092 §1(d)'s boundary).
+ *
+ *  **`confirmApplication`'s copy of that sentence is NOT the applicant's, and
+ *  the comment here said it was until T3 round 1 (2026-08-31).**
+ *  `confirmOrgApplication` runs behind THIS gate holding `members.confirm`, so
+ *  its caller is the front desk of this gym, not somebody at the door — half of
+ *  the "different audience" justification did not hold for half of the pair it
+ *  named. The branch itself is unaffected and is not reachable anyway: the plan
+ *  check below answers before the repo is asked. It stays because the repo's
+ *  outcome union is shared with `reject` and a door that can return a state has
+ *  to say what it means; what was wrong was the reason written above it.
  *
  *  Complete without a button, like every other refusal on this console: a closed
  *  gym is re-opened by an operator (`tools/gym-restore.ts`) or by paying, and

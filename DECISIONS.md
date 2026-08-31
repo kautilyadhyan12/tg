@@ -26216,3 +26216,168 @@ EMPTY, so the sheet fix ships on bytes identical to the reviewed commit
 itself) · §2(b)'s `org.status` claim re-grepped across
 `apps/web/src/pages/console` and `components/console`: **23 `.status` hits, every
 one `subscription.status` or the org-store snapshot, none `org.status`.**
+
+## 2026-08-31 — THE FOUR-MONTH CLOSURE, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — and two of the eight Lows were conditions the statement did not have
+
+**Read before trusting `archived_at IS NULL` to mean *"an operator has overruled
+this closure"*, before doing calendar-month arithmetic in SQL anywhere in this
+repo, before quoting a sweep suite as covering the configuration production
+actually runs, before writing a `not.toBeNull()` assertion whose message names an
+instant, and before believing a `-t` filtered run about a test you have just
+written.**
+
+Reviews `be03891` (:25771) plus the smoke-record commit (:26012). Fresh chat,
+round 1, so no diff-only scope applies. **ZERO Critical/High, so the packet SHIPS
+(:5348 rule 1); EIGHT Low, ALL FIXED here, logged in `BACKLOG.md`, and none of
+them bought another round.** The reviewer ran the static half without Docker and
+then re-ran everything with it, which turned five of its eight findings from
+arguments into measurements and **corrected one of its own claims**: L-5 first
+read *"the production configuration might never fire"* and reduced, once run, to
+*"it fires; nothing guards it"*.
+
+### 1. THE ONE THAT WAS A DESIGN DEFECT — `archived_at IS NULL` IS PERMANENT IMMUNITY, NOT "RECENTLY RESTORED"
+
+`archived_at` has exactly one writer (this sweep) and nothing anywhere clears it,
+so the condition :25771 §3.3 describes as *"an operator's hand overrides the
+machine"* actually says **"an operator overruled a closure ONCE, so this gym is
+outside the policy for the rest of its life"**. The reviewer ran the future this
+card's own comments promise — close, restore, a new plan ending a month after the
+restore, five more months of silence — and measured `archived: 0`, with
+`archived_at` still holding the first closure.
+
+**Reachable today only mildly** (an operator restores the wrong gym and can never
+re-close it; there is no per-gym archive tool) **and badly the day either promised
+card lands**: `archiveSweep.ts` and `repo.ts` both say the payment path will
+re-open gyms, and :19016's admin slice writes the same `archived` for fraud. A gym
+that pays, lapses and sits dead for a year would then never be closed, silently.
+
+**KD RULED THE FIX.** Asked in five lines whether a re-opened gym should be
+closable again, he answered *"yes"*. The condition is now `archived_at IS NULL OR
+EXISTS (an ending recorded after that closure)`: a restore still survives the next
+night, because the ending it was closed FOR is older than the closure, and a NEW
+ending re-arms the clock. **`ANY` ending here against the `max` ending in the
+comparison below it is deliberate and the file says why** — below, the question is
+how long ago the gym went dark, so only the newest ending can answer it; here it
+is whether anything has ended since we last closed this gym, and one such row
+settles it.
+
+Guarded by **O177** (deletes the new half — permanent immunity returns) beside
+**O172** (deletes the whole condition — the machine overrules the operator), and
+by a test with an ending on BOTH sides of the closure, which is the only fixture
+that can tell the two statements apart.
+
+### 2. max() SKIPS NULLS, WHICH IS O169's HARM THROUGH A DIFFERENT DOOR
+
+A gym carrying an old stamped row plus a NEWER row nobody dated reads the OLD date
+and is closed on the spot. Unreachable today — `trialSweep.ts` is the only writer
+of `ended_at`, and `startGymTrial` refuses a gym a second subscription — so the
+whole guarantee rested on a sentence in a comment, which is what :14493's Low-2 is
+about. Now `NOT EXISTS (an undated ending that is not live)`, phrased as
+NOT-IN-the-live-set rather than IN a list of ended statuses, so a status added
+later meaning "over" is covered without anybody remembering this line. Mutant
+**O178**.
+
+### 3. THE FOUR MONTHS WERE COUNTED IN WHATEVER TIME ZONE THE DATABASE SESSION CARRIED
+
+`${now}::timestamptz - (4 * INTERVAL '1 month')` is calendar arithmetic, and
+Postgres does it in the session `TimeZone` GUC. **Nothing in this repo sets one** —
+`app.ts`, `worker.ts`, `db/index.ts`, `db/seed.ts` and every tool build the client
+without it — so it is whatever the server was configured with. On a DST-observing
+zone the January-to-May span moves by an hour: the reviewer computed the boundary
+test's own instants under `America/New_York` and `Europe/London` and the *"one
+minute short of four months"* assertion goes RED. The behaviour cost is an hour
+inside a 24-hour cadence; the real cost is a suite going red on a
+differently-configured database for a reason no comment explains. Now a round trip
+through UTC — to a plain timestamp, calendar maths there, back to an instant.
+
+**DELIBERATELY NOT MUTATED, and the harness table says so**: the subject is a
+session setting no test here can vary per suite, so a reverting mutant would come
+back ALIVE meaning *"this session is UTC"* rather than *"nothing guards this"* —
+an unkillable mutant is worse than none (:6277).
+
+### 4. THE CONFIGURATION PRODUCTION RUNS WAS EXERCISED BY NOTHING, IN ALL THREE SWEEPS
+
+`worker.ts` calls `archiveLapsedGyms({ sql, log })` with no `gymIds`; every test
+went through a helper that always passes some. So if `${scope}::uuid[] IS NULL`
+ever stopped short-circuiting, **the nightly job would become a permanent silent
+no-op and the whole suite would stay green** — a clean `archived: 0` in the log
+every morning, for ever. `orgs.sweep.test.ts` and `orgs.trialSweep.test.ts` share
+the hole; this is the first test in the repo to close it, and their own lines are
+owed.
+
+**WHAT MAKES IT SAFE ON A SHARED DATABASE IS THAT THE CLOCK RUNS BACKWARDS.** The
+suite's note 2 forbids an unscoped run at a FUTURE instant and is right — that
+closes every lapsed gym the four concurrent suites own, mid-assertion. At the year
+2000 the threshold is February 2000, and the only row that can meet it is the one
+the test just wrote: every `ended_at` any suite or the seed can produce is years
+later. The count is asserted as "at least one" and never as a literal, because a
+count over a shared database is not a constant (:25326 §2). Mutant **O181** deletes
+the short-circuit and turns exactly that test red while every scoped test stays
+green.
+
+### 5. TWO MUTANTS WERE ALIVE, AND BOTH WERE CLAIMS NOTHING OBSERVED
+
+- **The closure's stamp.** `archived_at = ${now}` → `now()` left the suite GREEN:
+  the assertion was `.not.toBeNull()` under a message reading *"the closure stamps
+  when it happened"*. The same diff had upgraded the TRIAL sweep's stamp to an
+  exact instant with a comment explaining why exactness matters, and gave its own
+  the weaker form. Now `toBe(at.getTime())` in three places, and it is
+  load-bearing rather than tidy: §1's re-arm compares this column against
+  `ended_at`, so a stamp from the wall clock re-arms gyms nobody swept. Mutant
+  **O179**.
+- **The order of the two console refusals.** Swapping them left
+  `orgs.routes.test.ts` GREEN at 146/146, because the only test that reached the
+  guard used a gym that was archived AND paying — which answers `org_archived`
+  whichever check runs first. **That is a state no gym is in and this sweep never
+  produces**: every gym it closes has no live plan, and the order is the entire
+  reason staff keep reading the sentence their own console already shows them. A
+  second case (archived AND plan-less ⇒ `gym_not_on_plan`) closes it. Mutant
+  **O180**.
+
+### 6. A TEST THAT PASSES UNDER `-t` AND FAILS IN ITS OWN FILE
+
+The new routes test called `lapsableGym("order")`, and a test 34 lines below it
+had used that tag since the read-only console card. The tag builds the fixture's
+email addresses, so the second one to run registers a duplicate and takes a 400
+from a helper 6,000 lines away. **`-t "cites the PLAN"` passed it; the full file
+failed it.** Recorded because the rename is not the interesting half: **a scoped
+run is evidence about a test's SUBJECT and never about that test's fit with its
+file**, and this repo runs `-t` filters constantly — every mutant is one.
+
+### 7. THE SMOKE SHEET'S TWO
+
+Step 3's *"expired: 1"* is satisfied whether or not this card's `ended_at` line
+exists, and step 4 is what makes the stamp observable — so step 4's ✅ now says
+what a missing gym most likely means, rather than leaving an operator with two
+halves and no way to tell which broke. And its two absolute dates (`2026-10-05`,
+`2027-02-10`) are correct only relative to the day they were written: run in 2027
+they print `0` twice and the year guard stays silent, because a date in the PAST
+is not the mistake it catches. Both now say what they must be relative to today.
+
+### Round log
+
+**PROVE, every figure naming what it ran against. ALL LOCAL** (`localhost:5433`,
+`test:local` — :13659):
+
+- `orgs.archiveSweep` **16/16 exit 0** (13 + 3 new) · with `orgs.trialSweep`
+  **25/25 exit 0** · `orgs.routes` **147/147 exit 0** in 300.4 s (146 + 1 new) ·
+  **full api suite 680/680 across 47 files, exit 0** (676 + 4), quoted as the run
+  it was and never as the suite's state (:13746, and the Appendix's documented
+  flake).
+- **SWEEP, a stated SUBSET of 181: O168–O181, 14 RED, 0 ALIVE, 0 never ran** —
+  **run TWICE, the second time on the shipping bytes** after a one-character
+  comment edit (this entry's own pointer), because "the bytes that were audited"
+  is a claim this repo has had to correct before (:25707). All twelve control
+  filters GREEN and tallying first, restores sha256-verified after every mutant,
+  **315 then 318 gym + subscription rows fingerprinted — the table grows as
+  concurrent suites build their own gyms — with no unattributed changes either
+  time.** Five rows are new (O177–O181) and two were RE-AIMED (O170, O172)
+  because the fix moved the lines they pointed at — both proven by watching them
+  go RED after the move, never by reading the anchor, since :13336's C/H-2 was a
+  re-aim that silently matched nothing.
+- `tsc --noEmit` exit 0 · `eslint --max-warnings=0` exit 0 on all four changed
+  TypeScript files · `node --check` on the harness · the three record guards.
+
+**NO ROUND 2 IS OWED**: zero Critical/High ships the packet and a Low buys no
+round (:5348 rule 1). **The `OWED.md` line TICKS on this commit** — both gates are
+now met, a browser (:26012) and a review round with no Critical/High.

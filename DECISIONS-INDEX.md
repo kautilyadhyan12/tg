@@ -4,22 +4,23 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **895 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29). §1 is *"before you do this, read
-   that"*, harvested verbatim from the rulings' own `Read before …` sentences.
-   §2 lists every ruling that declares no trigger, by pointer and title, so a
-   blank search is visibly *"nothing declared itself"* and never *"nothing binds
-   me"*.
-2. **§1 below — STANDING RULES. 821 lines** (~680 at the split; 797 on
-   2026-08-29).
+1. **`DECISIONS-TRIGGERS.md`** — generated, **901 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 earlier on 2026-08-31). §1 is
+   *"before you do this, read that"*, harvested verbatim from the rulings' own
+   `Read before …` sentences. §2 lists every ruling that declares no trigger, by
+   pointer and title, so a blank search is visibly *"nothing declared itself"*
+   and never *"nothing binds me"*.
+2. **§1 below — STANDING RULES. 828 lines** (~680 at the split; 797 on
+   2026-08-29; 821 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,774 lines, MEASURED 2026-08-31 and not estimated.**
-**RE-MEASURED ON A COMMIT THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
-two days without a restructure.** The trigger below says to re-measure "whenever
-this file is restructured" — that was too narrow, and 2026-08-29's own figures
-had drifted the same way it warns about. **Re-measure whenever you add a line
-here.**
+**ALWAYS-READ TOTAL: 1,787 lines, MEASURED 2026-08-31 (second measurement that
+day) and not estimated.**
+**RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
+two days, then +13 more in one afternoon, with no restructure anywhere near
+it.** The trigger below says to re-measure "whenever this file is restructured" —
+that was too narrow, and 2026-08-29's own figures had drifted the same way it
+warns about. **Re-measure whenever you add a line here.**
 **These three figures are re-measured whenever this file is restructured, and
 the reason is that they had drifted badly**: they read *"~630"* and *"~680"*
 while §1 had reached **1,310** — nearly DOUBLE its post-split size, two days
@@ -892,9 +893,16 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   one stays on the payment card's line. **`archived_at` deliberately SURVIVES a
   restore** — it is what stops the next night's run closing the gym straight back
   down. Card record, both tools' runs and the full PROVE at `:25771`.
-  **ITS CLOSING LINE — *"the smoke is UNRUN and T3 is UNRUN"* — IS HALF STALE:
-  the smoke RAN 2026-08-31 and passed 8 of 9 with step 6 struck (`:26012`). T3 is
-  still unrun and the `OWED.md` line still does not tick.**
+  **ITS CLOSING LINE — *"the smoke is UNRUN and T3 is UNRUN"* — IS NOW SPENT:
+  the smoke RAN 2026-08-31 and passed 8 of 9 with step 6 struck (`:26012`), T3
+  ROUND 1 ran the same day with ZERO Critical/High (`:26220`), and the `OWED.md`
+  line TICKS.**
+  ⚠️ **AND §3.3 IS SUPERSEDED IN PART BY THAT ROUND: the condition is no longer
+  `archived_at IS NULL` alone.** A bare NULL test is PERMANENT immunity rather
+  than *"an operator has overruled this closure"* — measured — so **an ending
+  recorded AFTER the last closure re-arms the clock**, Kd ruling the fix. The
+  restore still survives the next night, which is what §3.3 was protecting; what
+  changed is that a gym which lapses AGAIN can be closed again.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
@@ -937,8 +945,40 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:26220** — 2026-08-31 — **THE FOUR-MONTH CLOSURE, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS — and two of the eight Lows were conditions the
+  statement did not have.** **Read before trusting `archived_at IS NULL` to mean
+  "an operator has overruled this closure", before doing calendar-month
+  arithmetic in SQL anywhere in this repo, before quoting a sweep suite as
+  covering the configuration production actually runs, and before believing a
+  `-t` filtered run about a test you have just written.** Reviews `be03891`
+  (:25771) and `:26012`. **All eight Low FIXED in the round, logged in
+  `BACKLOG.md`, none buying another round; the `OWED.md` line TICKS.**
+  **THE DESIGN DEFECT, and KD RULED THE FIX ("yes"): `archived_at IS NULL` is
+  PERMANENT immunity, not "recently restored"** — nothing ever clears the column,
+  so one hand-restore puts a gym outside the policy for life, which bites the day
+  the payment card or the admin panel re-opens gyms. Now `IS NULL OR EXISTS (an
+  ending after that closure)`; the restore still survives the next night, a NEW
+  ending re-arms the clock. Supersedes :25771 §3.3 in part. **O177** beside O172.
+  **AND max() SKIPS NULLS** — an old stamped row plus a newer undated one is
+  measured from the OLD one (O169's harm through a different door); guarded now
+  rather than promised in a comment (**O178**).
+  **THE FOUR MONTHS WERE COUNTED IN THE SESSION'S TIME ZONE** — nothing in this
+  repo sets one — so a DST zone moves the boundary an hour and turns the boundary
+  test RED on a differently-configured database. UTC round trip; deliberately NOT
+  mutated, because the subject is a session setting no test can vary.
+  **TWO MUTANTS WERE ALIVE and both were claims nothing observed**: the closure's
+  stamp (`not.toBeNull()` under a message naming the instant — `now()` left the
+  suite green, **O179**) and the ORDER of the two console refusals (the only test
+  reaching that guard used a gym archived AND paying, which answers the same
+  either way — **O180**). **The unscoped configuration `worker.ts` actually runs
+  was exercised by NOTHING, in all three sweeps** (**O181**); the new test is safe
+  on a shared database only because its clock runs BACKWARDS, to the year 2000.
+
 - **:26012** — 2026-08-31 — **THE FOUR-MONTH CLOSURE'S SMOKE PASSES 8 OF 9, AND
-  THE NINTH IS STRUCK.** **Read before writing a smoke step for a change no
+  THE NINTH IS STRUCK.** ⚠️ **ITS "T3 is unrun" IS SPENT: T3 ROUND 1 ran the same
+  day with ZERO Critical/High (`:26220`) and the `OWED.md` line TICKS.** Everything
+  else here stands. **Read before writing a smoke step for a change no
   screen shows, before putting the OWNER of a plan-less gym in front of its
   console in any sheet, before writing a literal `archived:` count into a smoke
   sheet, and before citing the four-month closure as verified — this run does NOT

@@ -53,14 +53,26 @@
 // `tools/gym-restore.ts`, by hand, until the payment card exists; that card owes
 // the automatic half and its `OWED.md` line says so.
 //
-// **A GYM RE-OPENED BY HAND IS NEVER CLOSED AGAIN BY THIS JOB**, and that is the
-// `archived_at IS NULL` condition rather than an accident. Without it, restoring
-// a gym whose plan ended five months ago would last exactly one night: the next
-// run would see no live plan and an old date and close it again. `archived_at`
-// therefore means "the last time this gym was closed" and survives the restore,
-// while `status` means "is it closed now" — an operator's hand overrides the
-// machine, which is the right direction when the machine can only close and the
-// hand can only open.
+// **A GYM RE-OPENED BY HAND IS NEVER CLOSED AGAIN FOR THE ENDING IT WAS CLOSED
+// FOR**, and that is the `archived_at` condition rather than an accident.
+// Without it, restoring a gym whose plan ended five months ago would last
+// exactly one night: the next run would see no live plan and an old date and
+// close it again. `archived_at` therefore means "the last time this gym was
+// closed" and survives the restore, while `status` means "is it closed now" —
+// an operator's hand overrides the machine, which is the right direction when
+// the machine can only close and the hand can only open.
+//
+// **BUT THE HAND ONLY OVERRULES THE MACHINE UNTIL THE GYM LAPSES AGAIN, and
+// that half was missing until T3 round 1 (2026-08-31, DECISIONS :26220).** A
+// bare `archived_at IS NULL` does not say *"an operator has overruled this
+// closure"*; it says *"an operator overruled a closure once, so this gym is
+// outside the policy for the rest of its life"*. Measured on the future the
+// paragraph above promises: close a gym, re-open it, let it take a plan that
+// ends a month later, wait five more months — and it is never closed again,
+// silently, with nothing on any screen to say so. So the condition is
+// `archived_at IS NULL` **OR something has ended since that closure**: the
+// restore still survives the next night, because the ending it was closed for
+// is older than the closure, and a NEW ending re-arms the clock.
 //
 // **NO `lockOrgRow`, and the race that leaves is named rather than left to be
 // found.** This is a check-then-act: the WHERE asks whether a gym has a live
@@ -182,7 +194,28 @@ export async function archiveLapsedGyms(
         -- the rule out loud and costs nothing. trialSweep.ts's
         -- "trial_ends_at IS NOT NULL" is the same shape, and its header is
         -- explicit that a restatement must not be sold as the enforcement.
-        AND g.archived_at IS NULL
+        --
+        -- THE SECOND HALF IS WHAT KEEPS THE FIRST FROM BEING PERMANENT IMMUNITY
+        -- (T3 round 1, 2026-08-31). Alone, the NULL test reads "an operator
+        -- overruled a closure ONCE, so this gym is outside the policy for
+        -- ever" — a gym re-opened by hand, later on a plan, later lapsed again
+        -- and dead for another four months is never closed, and no test or
+        -- mutant could see it. So an ending recorded AFTER the last closure
+        -- re-arms the clock.
+        --
+        -- ANY ending here, the LATEST one below, and the difference is
+        -- deliberate. Below the question is how long ago this gym went dark, so
+        -- only the newest ending can answer it. Here the question is whether
+        -- anything at all has ended since we last closed the gym, and one such
+        -- row settles it — if any ending is later than archived_at then the
+        -- newest one is too.
+        AND (
+          g.archived_at IS NULL
+          OR EXISTS (
+            SELECT 1 FROM subscriptions s4
+            WHERE s4.owner_type = 'gym' AND s4.owner_id = g.id
+              AND s4.ended_at > g.archived_at)
+        )
         AND (${scope}::uuid[] IS NULL OR g.id = ANY(${scope}::uuid[]))
         -- A GYM ON A PLAN IS NOT THIS JOB'S BUSINESS, WHATEVER ITS OLD DATES
         -- SAY. §4.1's three granting statuses, the set gymHasLivePlan,
@@ -199,6 +232,28 @@ export async function archiveLapsedGyms(
           SELECT 1 FROM subscriptions s
           WHERE s.owner_type = 'gym' AND s.owner_id = g.id
             AND s.status IN ('trialing','active','past_due'))
+        -- AN ENDING NOBODY DATED IS NOT AN ENDING WE MAY COUNT FROM, and this
+        -- is max()'s blind spot rather than a second rule (T3 round 1,
+        -- 2026-08-31). max() SKIPS NULLS: a gym carrying an old stamped row
+        -- plus a NEWER row whose writer forgot the stamp reads the OLD date and
+        -- is closed on the spot — O169's harm arriving through a NULL instead
+        -- of through min(). It is unreachable today (trialSweep.ts is the only
+        -- writer of ended_at, and startGymTrial refuses a gym a second
+        -- subscription), and the contract is stated in the migration and in the
+        -- schema — which is exactly the kind of guarantee :14493's Low-2 says a
+        -- comment cannot hold. A row nobody dated means "we do not know when
+        -- this ended", which is already the answer this statement gives a gym
+        -- whose only ended row carries no stamp.
+        --
+        -- NOT IN the live set, rather than IN a list of ended statuses: a LIVE
+        -- row legitimately carries no ending (it has not ended), and a status
+        -- added later that means "over" is covered without anybody remembering
+        -- this line.
+        AND NOT EXISTS (
+          SELECT 1 FROM subscriptions s3
+          WHERE s3.owner_type = 'gym' AND s3.owner_id = g.id
+            AND s3.ended_at IS NULL
+            AND s3.status NOT IN ('trialing','active','past_due'))
         -- THE LATEST ENDING, NEVER ANY ENDING. max() is the whole difference
         -- between "this gym has been off a plan for four months" and "this gym
         -- once had something end four months ago" — a gym that trialled in
@@ -210,10 +265,21 @@ export async function archiveLapsedGyms(
         -- expired before migration 0016 existed, and a NULL comparison is not
         -- true — so both are left alone by the shape of the question rather than
         -- by a special case. Do not wrap this in coalesce.
+        --
+        -- THE FOUR MONTHS ARE COUNTED IN UTC AND NOT IN WHATEVER ZONE THE
+        -- DATABASE SESSION HAPPENS TO CARRY (T3 round 1, 2026-08-31). Adding
+        -- or subtracting a MONTH from a timestamptz is calendar arithmetic, and
+        -- Postgres does it in the session TimeZone — nothing in this repo sets
+        -- one, so it is whatever the server was configured with. On a
+        -- DST-observing zone the January-to-May span moves by an hour, which is
+        -- nothing to a gym and enough to turn the boundary test red on a
+        -- differently-configured database. The round trip through UTC pins it:
+        -- to a plain timestamp, calendar maths there, back to an instant.
         AND (
           SELECT max(s2.ended_at) FROM subscriptions s2
           WHERE s2.owner_type = 'gym' AND s2.owner_id = g.id
-        ) <= ${now}::timestamptz - (${ARCHIVE_AFTER_MONTHS} * INTERVAL '1 month')
+        ) <= ((${now}::timestamptz AT TIME ZONE 'UTC')
+              - (${ARCHIVE_AFTER_MONTHS} * INTERVAL '1 month')) AT TIME ZONE 'UTC'
       RETURNING g.id`;
     // Part 3 §3.3: every mutating call writes `audit_log`. Like both other
     // sweeps this is a mutation with NO ACTOR — nobody chose it — so the actor

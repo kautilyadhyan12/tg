@@ -83,7 +83,7 @@ Restart the API without those settings to get your usual data back.
 | 1 | **Owner's browser.** Sign up a brand-new account, create a gym (country **United States**), and press **"Start your 30-day free trial"** on the pop-up. Then open the gym and **write down the last part of the address bar** — `/console/`**`something-like-this`**. You need that name in step 7. | The gym's page shows **"Free trial"** and an **"Ends …"** date about a month away. |
 | 2 | **Joiner's browser (private window).** Sign up a second account, go to **Join a gym**, and type the gym's join code. | The request goes in, and the card says somebody at the gym confirms new members — **"one tap at the front desk"**. |
 | 3 | **(chat)** End the trial: run **command A** below with a date about **35 days from today**. | It prints `trial expiry finished` and **`expired:` 1** (or however many live trials this local database has). |
-| 4 | **(chat)** Now jump four more months: run **command B** with a date about **five months** from today — later than command A's by more than four months. | It prints `gym archive sweep finished` and **one for each gym in this database whose plan ended more than four months before that date — your gym is one of them.** (Never a fixed number: the count is a property of a shared database, and every sheet that has written one has been wrong — :25326 §2. The chat reads the rows first and says what to expect before running it.) |
+| 4 | **(chat)** Now jump four more months: run **command B** with a date about **five months** from today — later than command A's by more than four months. | It prints `gym archive sweep finished` and **one for each gym in this database whose plan ended more than four months before that date — your gym is one of them.** (Never a fixed number: the count is a property of a shared database, and every sheet that has written one has been wrong — :25326 §2. The chat reads the rows first and says what to expect before running it.) **If your gym is NOT among them, the likeliest cause is that step 3 ended the trial without recording WHEN it ended** — that stamp is the whole hinge between the two commands, and step 3's own line cannot show it, because a trial expires with or without it. The other likely cause is a stale date: see the note under the commands. |
 | 5 | **Joiner's browser.** Press **F5**, then try the same join code again. | **"That gym is no longer active."** — that sentence, on the join screen. This is the closure, seen by a real person. |
 | 6 | ~~**Owner's browser.** Press **F5** and look at the whole console — Overview, Members, and the join code.~~ **STRUCK 2026-08-31 — DO NOT RUN IT. It cannot be done and it would prove nothing if it could; see "Why step 6 is struck" under this table.** | ~~Everything is still there: the roster, the join code, the staff list, under the red "This gym has no plan" line.~~ **That claim is TRUE and is checked another way — the chat reads the rows after step 4 (member, staff, join code, waiting request all still there) and `orgs.archiveSweep.test.ts` holds it.** |
 | 7 | **(chat)** Re-open the gym: run **command C** with the name from step 1. | It prints **`gym re-opened`**. |
@@ -149,6 +149,16 @@ written where you can read it before pressing enter.
 **Both dates must be inside a year from today** — the tools refuse a date further
 out than that, because a mistyped year is the mistake they cannot otherwise
 catch.
+
+⚠️ **THE TWO DATES ABOVE ARE WRITTEN FOR A RUN ON 2026-08-31 AND GO STALE
+SILENTLY — CHECK THEM BEFORE YOU START** (T3 round 1). What each one has to be,
+whatever today is: **A is roughly a month ahead of today** (past the trial's own
+end date, which is 30 days after step 1), and **B is more than four months after
+A, and still inside a year from today.** Run them unchanged in 2027 and A ends no
+trial and B has a date in the past — **both print `0` and neither says why**, and
+the year guard stays silent because a date in the past is not the mistake it
+catches. **So a `0` at step 3 or step 4 usually means a stale date here, not a
+broken sweep.**
 
 ---
 

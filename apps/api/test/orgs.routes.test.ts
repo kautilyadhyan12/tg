@@ -6304,6 +6304,38 @@ d("orgs routes (real Postgres)", () => {
     ).toBe("org_archived");
   });
 
+  /** **THE ORDER OF THE TWO REFUSALS, WHICH WAS PINNED BY NOTHING** until T3
+   *  round 1 (2026-08-31) went looking for it. The comment on
+   *  `requireWritablePrivilege` calls that order an information boundary and the
+   *  only reason the new refusal is invisible to real staff today — and the test
+   *  above cannot observe it, because its gym is archived AND on a live plan, so
+   *  it answers `org_archived` whichever check runs first.
+   *
+   *  **THIS IS THE STATE EVERY GYM THE SWEEP CLOSES IS ACTUALLY IN**: no live
+   *  plan and archived. Staff of such a gym must keep reading the sentence their
+   *  own console is already showing them (`READ_ONLY_NOTE`, built from
+   *  `GYM_NOT_ON_PLAN_MESSAGE`); reversed, one refusal would carry two different
+   *  sentences depending on which door produced it, and after this card ships
+   *  real gyms will be here. `expireGym` rather than `lapseGym` for :21580's
+   *  reason — the row stays, which is what the sweep leaves behind. */
+  it("a CLOSED gym with no plan cites the PLAN, not the closure", { timeout: 90_000 }, async () => {
+    // A tag no other test uses: `lapsableGym` builds its accounts from it, and
+    // two tests sharing one tag means the second one's register call is a
+    // duplicate email. The first full-file run of this test failed exactly
+    // there — invisibly under a `-t` filter, which passed.
+    const g = await lapsableGym("closednoplan");
+    await expireGym(g.gymId);
+    await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${g.gymId}`;
+
+    const refused = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.owner.cookies });
+
+    expect(refused.statusCode, "still one 409, whichever check speaks").toBe(409);
+    expect(
+      (JSON.parse(refused.body) as { error: string }).error,
+      "the plan check answers first, so staff read the sentence their screen shows",
+    ).toBe("gym_not_on_plan");
+  });
+
   it("READS and the pay path keep working on a gym with no plan — it is read-ONLY", { timeout: 90_000 }, async () => {
     const g = await lapsableGym("reads");
     await lapseGym(g.gymId);

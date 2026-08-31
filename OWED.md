@@ -5056,10 +5056,23 @@ file and is stated so nobody reads these as lower priority than they are.
       the first time and now needs THREE accounts, not two** — the third only
       ever types the join code and is left waiting, so the queue step has
       somebody in it instead of asking Kd to improvise mid-run.
-- [ ] 🟡 **THE LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — the third
+- [x] 🟡 **THE LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — the third
       step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
       (:23711) and shown to him in one line, not deferred quietly.**
-      **BUILT 2026-08-31 (DECISIONS :25771) AND THIS LINE DOES NOT TICK:** ~~the
+      **DONE 2026-08-31. Both gates met: the SMOKE passed 8 of 9 at the browser
+      (`:26012`) and T3 ROUND 1 found ZERO Critical/High (`:26220`).** Commits
+      `be03891` (the card), `db61a84` (the smoke record) and this one (the
+      round's eight Low fixes). **THE ROUND CHANGED THE RULE IN ONE PLACE AND KD
+      RULED IT: a gym re-opened by hand is no longer immune for ever** —
+      `archived_at IS NULL` alone meant exactly that, so an ending recorded after
+      the last closure now re-arms the four months. The restore still survives the
+      next night, which is all :25771 §3.3 was protecting. Also fixed in the
+      round: `max(ended_at)` blind to a newer undated ending, calendar months
+      counted in the database session's time zone, the closure's stamp and the
+      order of the two console refusals both unobserved (two ALIVE mutants), the
+      unscoped configuration `worker.ts` runs exercised by nothing, and two smoke
+      sheet clauses. Nine mutants became fourteen (O168–O181), all RED.
+      ~~**BUILT 2026-08-31 (DECISIONS :25771) AND THIS LINE DOES NOT TICK:** the
       SMOKE is written and UNRUN, and T3 is UNRUN. Those two are all that is
       left on it.~~ **THE SMOKE PASSED 8 OF 9 on 2026-08-31 (DECISIONS `:26012`),
       run by Kd on `be03891`, with STEP 6 STRUCK — it asked the owner to inspect
@@ -5067,8 +5080,9 @@ file and is stated so nobody reads these as lower priority than they are.
       :22215/:22697), about a change no screen makes (no web file reads
       `org.status`, :25771 §6), so its ✅ had no observable subject. The claim it
       carried — a closure deletes nothing — was checked from the ROWS instead.
-      T3 IS UNRUN AND IS NOW THE ONLY THING LEFT ON THIS LINE**; a passing smoke
-      is not a review (:14147, :14840).
+      ~~T3 IS UNRUN AND IS NOW THE ONLY THING LEFT ON THIS LINE~~** — it RAN the
+      same day (`:26220`); a passing smoke is not a review (:14147, :14840), and
+      this line waited for both.
       **KD RULED FOUR MONTHS, NOT THE SPEC'S FOURTEEN DAYS** — *"i think after 4
       months of inactivity shut down the gym"* — which is :22215 §6's *"do not
       shorten or lengthen it without asking"* being asked and answered. Part 3
@@ -5092,6 +5106,20 @@ file and is stated so nobody reads these as lower priority than they are.
       **THE AUTOMATIC WAY BACK IS NOT BUILT AND CANNOT BE** — see the payment
       card's line below; `tools/gym-restore.ts` is the hand operation until then,
       and Kd ruled the four months knowing it.
+- [ ] ⚪ **THE OTHER TWO SWEEPS ARE STILL NEVER RUN IN THE CONFIGURATION
+      PRODUCTION USES — found by T3 round 1 on the archive sweep (`:26220` §4)
+      and fixed THERE only.**
+      `orgs.sweep.test.ts` and `orgs.trialSweep.test.ts` both drive their sweep
+      through a helper that always passes `gymIds`; `worker.ts` passes none. So
+      if either statement's `${scope}::uuid[] IS NULL` short-circuit broke, that
+      nightly job would become a **permanent silent no-op** — a clean `expired: 0`
+      in the log every morning — with every test in both files still green.
+      **The archive sweep's own hole is CLOSED** (a test at a year-2000 clock,
+      plus mutant O181), and **the same shape works for both siblings**: run
+      unscoped at an instant far enough in the PAST that only the test's own
+      fixture can be inside the window, assert "at least one" and never a
+      literal. Left undone here because a fix round contains only the fix
+      (:5348 rule 6) and neither file is in this card's diff.
 - [ ] ⚪ **A GYM THAT NEVER SUBSCRIBED AT ALL IS NEVER CLOSED — a decision made
       at :25771 §3, not an oversight, and Kd has not ruled on it.**
       The archive sweep counts four months from the day a plan ENDED, so a gym

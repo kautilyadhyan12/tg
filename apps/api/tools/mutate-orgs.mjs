@@ -2092,6 +2092,18 @@ const MUTANTS = [
   // restatement has NO OBSERVABLE SUBJECT and would come back ALIVE for a true
   // reason (:12343's shape, and the same call `trialSweep.ts` made about
   // `owner_type = 'gym'`).
+  //
+  // ALSO DELIBERATELY NOT MUTATED, added at T3 round 1 (2026-08-31): the UTC
+  // round trip around the month arithmetic. Its subject is the DATABASE
+  // SESSION'S TimeZone, which no test in this repo sets and vitest cannot vary
+  // per suite, so reverting it would come back ALIVE against a UTC session and
+  // the ALIVE would mean "the session is UTC here", not "nothing guards this".
+  // A mutant that cannot be killed for a true reason is worse than no mutant
+  // (:6277's shape) — the guard is the comment on the line plus this note.
+  //
+  // O177/O178/O181 were added by that same round: the first two run conditions
+  // it FOUND MISSING, and the third runs the nightly job's own configuration
+  // selecting nothing at all.
   {
     id: 'O168',
     target: 'archiveSweep',
@@ -2116,8 +2128,13 @@ const MUTANTS = [
     suite: ARCHIVE_SWEEP_SUITE,
     why: 'THE COMPARISON INVERTED: a gym is closed the DAY its plan ends and a gym that has been gone for a year is never closed — the promise broken in both directions at once, which is O141 on the trial sweep arriving at its sibling',
     expect: 'the window is four months, to the minute',
-    from: '        ) <= ${now}::timestamptz',
-    to: '        ) >= ${now}::timestamptz',
+    // RE-AIMED AT T3 ROUND 1 (2026-08-31): the comparison gained the UTC round
+    // trip, so the old anchor matched nothing. The pre-check would have aborted
+    // the whole sweep rather than reporting a false verdict, which is :13336's
+    // lesson working — but a re-aim is still a claim, and this one was proven by
+    // watching the row go RED after the move, not by reading it.
+    from: '        ) <= ((${now}::timestamptz',
+    to: '        ) >= ((${now}::timestamptz',
   },
   {
     id: 'O171',
@@ -2134,8 +2151,38 @@ const MUTANTS = [
     suite: ARCHIVE_SWEEP_SUITE,
     why: "THE OPERATOR IS OVERRULED BY THE MACHINE: the sweep stops asking whether this gym has been closed before, so a gym re-opened by hand is closed again the very next night — the plan still ended five months ago. Today `tools/gym-restore.ts` is the ONLY way back from `archived` (nothing in the product can put a gym on a plan), so a restore that lasts one night is no way back at all",
     expect: 'not closed again the next night',
-    from: '        AND g.archived_at IS NULL\n',
+    // RE-AIMED AT T3 ROUND 1 (2026-08-31), same reason as O170: the condition
+    // grew its second half, so the one-line anchor stopped matching. This row
+    // still deletes the WHOLE condition; O177 below deletes only the new half.
+    from: "        AND (\n          g.archived_at IS NULL\n          OR EXISTS (\n            SELECT 1 FROM subscriptions s4\n            WHERE s4.owner_type = 'gym' AND s4.owner_id = g.id\n              AND s4.ended_at > g.archived_at)\n        )\n",
     to: '',
+  },
+  {
+    id: 'O177',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "A RESTORE BECOMES PERMANENT IMMUNITY: without the re-arming half, `archived_at IS NULL` stops meaning \"an operator has overruled this closure\" and starts meaning \"an operator overruled a closure once, so this gym is outside the policy for ever\". A gym re-opened by hand, later on a plan, later lapsed again and dead another four months is never closed — silently, and it is the state every gym reaches the day the payment card re-opens gyms automatically. This is the defect T3 round 1 found in the shipped statement, and this row is what stops it coming back",
+    expect: 'closed again if its NEXT plan',
+    from: "\n          OR EXISTS (\n            SELECT 1 FROM subscriptions s4\n            WHERE s4.owner_type = 'gym' AND s4.owner_id = g.id\n              AND s4.ended_at > g.archived_at)",
+    to: '',
+  },
+  {
+    id: 'O178',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "AN UNDATED ENDING IS COUNTED FROM THE WRONG DATE: max() skips NULLs, so a gym carrying an old stamped row plus a newer row nobody dated is measured from the OLD one and closed on the spot. It is O169's harm arriving through a NULL instead of through min(), and the only thing standing between the product and it — before T3 round 1 — was a sentence in a comment saying the writer always stamps",
+    expect: 'newest ending was never dated',
+    from: "        AND NOT EXISTS (\n          SELECT 1 FROM subscriptions s3\n          WHERE s3.owner_type = 'gym' AND s3.owner_id = g.id\n            AND s3.ended_at IS NULL\n            AND s3.status NOT IN ('trialing','active','past_due'))\n",
+    to: '',
+  },
+  {
+    id: 'O179',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "THE CLOSURE IS STAMPED WITH THE WALL CLOCK INSTEAD OF THE RUN'S: `archived_at` stops recording the instant the sweep decided and records whenever the statement happened to execute. It was ALIVE when T3 round 1 ran it — the suite asserted only that the column was not null — and it is not cosmetic now: the re-arm condition compares this column against `ended_at`, so a stamp from the wrong clock re-arms gyms nobody swept, and `tools/gym-restore.ts` answers an owner's \"when did my gym close?\" out of it",
+    expect: 'is closed four months later',
+    from: "SET status = 'archived', archived_at = ${now}",
+    to: "SET status = 'archived', archived_at = now()",
   },
   {
     id: 'O173',
@@ -2190,6 +2237,23 @@ const MUTANTS = [
     expect: 'not closed again the next night',
     from: "      UPDATE gyms SET status = 'active'",
     to: "      UPDATE gyms SET status = 'active', archived_at = NULL",
+  },
+  {
+    id: 'O180',
+    target: 'service',
+    why: "THE TWO REFUSALS SWAP, AND STAFF OF A CLOSED GYM ARE TOLD SOMETHING THEIR OWN SCREEN CONTRADICTS: the archived check answers first, so every gym this sweep closes — no live plan AND archived — replies `org_archived` while its console goes on showing the read-only banner built from `GYM_NOT_ON_PLAN_MESSAGE`. The order is the load-bearing half of that guard and the whole reason the new refusal is invisible today; before T3 round 1 nothing observed it, because the only test in the suite that reached the guard used a gym that was archived AND paying, which answers the same either way",
+    expect: 'cites the PLAN, not the closure',
+    from: '  const authorised = await requirePrivilege(deps, gymId, userId, privilege);\n  if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {',
+    to: '  const authorised = await requirePrivilege(deps, gymId, userId, privilege);\n  if (authorised.org.status !== "active") {\n    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);\n  }\n  if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {',
+  },
+  {
+    id: 'O181',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "THE NIGHTLY JOB BECOMES A PERMANENT SILENT NO-OP: the IS NULL short-circuit goes, so an unscoped run compares every gym against `ANY(NULL)`, matches nothing and closes nothing — for ever, at 04:30, with a clean log line saying `archived: 0` every morning. Every OTHER test in the suite passes a scope and would stay green, which is exactly why the test this row is aimed at had to be written: `worker.ts` is the only caller that passes none",
+    expect: 'with no scope at all, still selects',
+    from: '        AND (${scope}::uuid[] IS NULL OR g.id = ANY(${scope}::uuid[]))',
+    to: '        AND (g.id = ANY(${scope}::uuid[]))',
   },
 ];
 

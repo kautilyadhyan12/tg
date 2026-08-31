@@ -2765,3 +2765,112 @@ DECISIONS :25567 §3 because it is the reusable part of the round:
 bytes, a different sha256 — **while `git status` reported the file CLEAN and
 `git diff` was EMPTY.** Restore from the blob (`git show HEAD:<file> > <file>`)
 and verify with `sha256sum`, never with `git status`.
+
+## THE FOUR-MONTH CLOSURE — T3 ROUND 1 (2026-08-31, DECISIONS :26220)
+
+Round 1 found **ZERO Critical/High — the packet SHIPS** (:5348 rule 1) and
+**EIGHT Low, ALL FIXED in the round**, none of them buying another. The reviewer
+re-ran its static findings against a real database once Docker was up, which
+turned five of the eight into measurements and corrected one of its own claims
+(L-5, below).
+
+- [x] **LOW-1 · `archived_at IS NULL` WAS PERMANENT IMMUNITY, NOT "RECENTLY
+      RESTORED" — the one finding that was a design defect rather than an
+      instrument one.** The column has one writer and nothing ever clears it, so
+      a gym re-opened by hand is outside the closure policy **for the rest of its
+      life**, not until it next lapses. **Measured, not argued**: close → restore
+      → a new plan ending a month after the restore → sweep five months later →
+      `archived: 0`, `archived_at` still holding the first closure. Mildly
+      reachable today (an operator restores the wrong gym and cannot re-close it)
+      and badly the day either promised card lands — `archiveSweep.ts` and
+      `repo.ts` both say the payment path will re-open gyms, and :19016's admin
+      slice writes the same status for fraud. **PUT TO KD, WHO RULED THE FIX
+      ("yes")**, because it changes what a closure means rather than how it is
+      written: `archived_at IS NULL OR EXISTS (an ending recorded after that
+      closure)`. The restore still survives the next night — the ending it was
+      closed FOR is older than the closure — and a NEW ending re-arms the clock.
+      Guarded by **O177** (deletes the new half) beside **O172** (deletes the
+      whole condition), and by a test carrying an ending on BOTH sides of the
+      closure, which is the only fixture that can tell the two statements apart.
+- [x] **LOW-2 · `max(ended_at)` IS BLIND TO A NEWER ENDING NOBODY DATED.**
+      `max()` skips NULLs, so a gym with an old stamped row plus a newer undated
+      one is measured from the OLD date and closed immediately — O169's harm
+      arriving through a NULL instead of through `min`. Unreachable today
+      (`trialSweep.ts` is the only writer of `ended_at` and always stamps;
+      `startGymTrial` refuses a second subscription), which is exactly the
+      position :14493's Low-2 describes: a guarantee held by a sentence in a
+      comment. Now `NOT EXISTS (an undated ending that is not live)`, written as
+      NOT-IN-the-live-set rather than IN a list of ended statuses so a later
+      status meaning "over" needs nobody to remember this line. Mutant **O178**.
+- [x] **LOW-3 · THE FOUR MONTHS WERE CALENDAR ARITHMETIC IN THE DATABASE
+      SESSION'S TIME ZONE, WHICH NOTHING IN THIS REPO SETS.** `${now}::timestamptz
+      - (4 * INTERVAL '1 month')` is evaluated in the session `TimeZone` GUC, and
+      no `postgres()` call in `app.ts`, `worker.ts`, `db/index.ts`, `db/seed.ts`
+      or any tool passes one. Under `America/New_York` or `Europe/London` the
+      January-to-May span moves by an hour and the boundary test's *"one minute
+      short"* assertion goes RED. Behaviour cost: an hour inside a 24-hour
+      cadence. Real cost: a suite that goes red on a differently-configured
+      database for a reason no comment explains. Fixed with a round trip through
+      UTC. **Deliberately NOT given a mutant**, and the harness table says why:
+      the subject is a session setting no test here can vary, so a reverting row
+      would come back ALIVE meaning "this session is UTC" (:6277).
+- [x] **LOW-4 · A COMMENT THAT WAS FACTUALLY WRONG ABOUT WHO READS A SENTENCE.**
+      `service.ts`'s note on `GYM_ARCHIVED_MESSAGE` justified keeping two
+      different refusals by audience — *"the applicant-facing pair (`applyByCode`,
+      `confirmApplication`)"* — but `confirmOrgApplication` runs behind
+      `requireWritablePrivilege` with `members.confirm`, so its caller is the
+      front desk of that gym, not somebody at the door. Half the justification
+      did not hold for half the pair it named. The code is unaffected (that branch
+      is unreachable — the plan check answers first), but a wrong reason is
+      inherited by every chat that reads it. Re-worded to name the real
+      distinction and to say why the branch stays.
+- [x] **LOW-5 · THE CONFIGURATION PRODUCTION ACTUALLY RUNS WAS EXERCISED BY
+      NOTHING — and the review corrected its own first version of this.** Round 1
+      first reported it as *"the unscoped branch might never fire"* and, once
+      Docker was up, ran it: it fires, it moved exactly one row, and the finding
+      reduced to *"nothing guards it"*. Every test drove `sweepAt`, which always
+      passes `gymIds`; `worker.ts` passes none, so a broken
+      `${scope}::uuid[] IS NULL` short-circuit would make the nightly job a
+      permanent silent no-op with the suite still green. Closed with a test that
+      calls `archiveLapsedGyms({ sql, log })` **at a year-2000 clock** — safe on a
+      shared database precisely because it runs BACKWARDS, where the only row
+      inside the window is the one it just wrote — asserting "at least one" and
+      never a literal (:25326 §2). Mutant **O181**. **Both sibling sweeps still
+      have the hole and it is on `OWED.md`**, not fixed here, because a fix round
+      contains only the fix (:5348 rule 6).
+- [x] **LOW-6 · THE SMOKE SHEET COULD NOT TELL AN OPERATOR WHICH HALF BROKE.**
+      Step 3's `expired: 1` is satisfied whether or not this card's `ended_at`
+      line exists — step 4 is what makes the stamp observable — so an operator
+      who saw `archived: 0` had two candidates and no way to choose. Step 4's ✅
+      now names the likeliest cause.
+- [x] **LOW-7 · THE SHEET'S TWO ABSOLUTE DATES GO STALE SILENTLY.**
+      `--now=2026-10-05` and `--now=2027-02-10` are correct only relative to
+      2026-08-31. Run in 2027, command A ends no trial and command B has a date in
+      the past: **both print `0` and neither says why**, and the year guard stays
+      silent because a date in the PAST is not the mistake it catches. A note now
+      says what each date must be relative to today, and that a `0` at step 3 or 4
+      usually means a stale date rather than a broken sweep.
+- [x] **LOW-8 · A TEST WHOSE MESSAGE CLAIMED AN INSTANT AND WHOSE ASSERTION
+      CHECKED A PRESENCE — one of the round's two ALIVE mutants.**
+      `expect(gym.archived, "the closure stamps when it happened").not.toBeNull()`
+      stayed green when `archived_at = ${now}` became `now()`. The same diff had
+      upgraded the TRIAL sweep's stamp to an exact instant with a comment
+      explaining why, and gave its own the weaker form. Now `toBe(at.getTime())`
+      in three places — and it stopped being cosmetic the moment LOW-1's re-arm
+      began comparing that column against `ended_at`. Mutant **O179**.
+
+**THE ROUND'S SECOND ALIVE MUTANT IS NOT A LOW AND IS RECORDED HERE ONLY SO THE
+COUNT ADDS UP**: swapping the two console refusals left `orgs.routes.test.ts`
+green at 146/146. It came from rule 4 (tests that stay green when the thing they
+claim to check is broken) rather than from the findings list, and it is fixed
+with the same weight as one — a second case (archived AND plan-less ⇒
+`gym_not_on_plan`) plus mutant **O180**.
+
+**AND ONE DEFECT FOUND WHILE DISCHARGING THE ROUND, recorded at DECISIONS
+:26220 §6 because it is the reusable part:** the new routes test passed under
+`-t "cites the PLAN"` and FAILED in its own file. It had taken a
+`lapsableGym("order")` tag another test 34 lines below already used, and the tag
+builds the fixture's email addresses, so the second registration was a duplicate
+and returned a 400 from a helper 6,000 lines away. **A scoped run is evidence
+about a test's subject, never about that test's fit with its file** — and every
+mutant in this repo runs under exactly such a filter.

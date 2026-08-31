@@ -9,12 +9,22 @@
 //      SAME path `tools/archive-sweep.ts` uses during the smoke, so what these
 //      assertions exercise is the code an operator will run.
 //
-//   2. **EVERY SWEEP IS SCOPED TO ITS OWN GYMS.** The `archsweep-t-` namespace
-//      bounds the FIXTURES and does nothing whatever about the SWEEP, which is
-//      table-wide by nature. `vitest.config.ts` runs four suites at once against
-//      one database and other suites keep gyms of their own — an unscoped run at
-//      a future `now` from here would close every gym in the database that has
-//      ever lapsed. `sweep.ts`'s T3 round 1 Low-4, inherited twice now.
+//   2. **EVERY SWEEP IS SCOPED TO ITS OWN GYMS, WITH ONE DELIBERATE
+//      EXCEPTION.** The `archsweep-t-` namespace bounds the FIXTURES and does
+//      nothing whatever about the SWEEP, which is table-wide by nature.
+//      `vitest.config.ts` runs four suites at once against one database and
+//      other suites keep gyms of their own — an unscoped run at a future `now`
+//      from here would close every gym in the database that has ever lapsed.
+//      `sweep.ts`'s T3 round 1 Low-4, inherited twice now.
+//
+//      **THE EXCEPTION IS THE ONE TEST THAT DRIVES PRODUCTION'S OWN
+//      CONFIGURATION** — no `gymIds`, because that is what `worker.ts` passes —
+//      and it is safe because its clock runs BACKWARDS. At the year 2000 the
+//      only row inside the window is the one that test just wrote; every
+//      `ended_at` any suite or the seed can produce is years later. Added at T3
+//      round 1 (2026-08-31): until then nothing proved the unscoped branch
+//      selects anything at all, so the nightly job could have become a silent
+//      no-op with every test here still green.
 //
 //   3. **ONE TEST WALKS THE WHOLE PRODUCT PATH** — a real owner taps the real
 //      trial button, the real trial sweep ends it, and the archive sweep closes
@@ -256,14 +266,24 @@ d("gym archive sweep (real Postgres)", () => {
       trialEnded.getTime(),
     );
 
-    const result = await sweepAt(new Date(addMonths(trialEnded, 4).getTime() + DAY_MS), [
-      org.org.id,
-    ]);
+    const at = new Date(addMonths(trialEnded, 4).getTime() + DAY_MS);
+    const result = await sweepAt(at, [org.org.id]);
 
     expect(result.archived).toBe(1);
     const gym = await readGym(org.org.id);
     expect(gym.status).toBe("archived");
-    expect(gym.archived, "the closure stamps when it happened").not.toBeNull();
+    // THE INSTANT, NOT MERELY A VALUE. This read `.not.toBeNull()` under a
+    // message claiming the stamp says WHEN, and T3 round 1 measured what that
+    // was worth: replacing `archived_at = ${now}` with `now()` left the whole
+    // suite green. The same diff had already upgraded the trial sweep's stamp
+    // assertion to an exact instant for exactly this reason (:5105 — a fix is
+    // not pinned by the test written beside it unless that test can fail).
+    // It is load-bearing now as well as honest: the re-arm condition compares
+    // this column against `ended_at`, so a stamp taken from the wall clock
+    // instead of the run's would re-arm gyms nobody swept.
+    expect(gym.archived?.getTime(), "the closure stamps the instant it happened").toBe(
+      at.getTime(),
+    );
   });
 
   /** THE OTHER DIRECTION, and it is not optional: a sweep that closes every gym
@@ -379,6 +399,29 @@ d("gym archive sweep (real Postgres)", () => {
     expect((await readGym(org.org.id)).status).toBe("active");
   });
 
+  /** **THE SAME RULE WHEN AN OLDER ROW IS STANDING NEXT TO IT — max() SKIPS
+   *  NULLS**, which is the crack the test above cannot see. A gym with a dated
+   *  row from a year ago plus an undated one that ended last week reads the OLD
+   *  date and is closed on the spot: O169's harm, arriving through a NULL
+   *  instead of through `min`. Found by T3 round 1 (2026-08-31) as a forward
+   *  risk — `trialSweep.ts` is the only writer of `ended_at` today and it always
+   *  stamps — and the guard exists because "the writer always stamps" is a
+   *  contract living in a comment, which is what :14493's Low-2 is about.
+   *
+   *  The partner assertion is the test above and the whole rest of this file: a
+   *  guard that refused every gym with any undated row would pass this one and
+   *  close nothing, so what makes it real is that everything else still closes. */
+  test("a gym whose newest ending was never dated is left alone", async () => {
+    const org = await makeOrg(owner().cookies);
+    await putSubscription(org.org.id, "expired", new Date(Date.now() - 400 * DAY_MS));
+    await putSubscription(org.org.id, "canceled", null);
+
+    const result = await sweepAt(new Date(), [org.org.id]);
+
+    expect(result.archived, "an ending nobody dated is not an ending to count from").toBe(0);
+    expect((await readGym(org.org.id)).status).toBe("active");
+  });
+
   /** THE SCOPE PREDICATE IS REAL, and this is the test that says so. Two gyms,
    *  both four months lapsed, one named — the unnamed one must survive. Without
    *  this, an `inScope` that silently matched everything would pass every other
@@ -398,6 +441,39 @@ d("gym archive sweep (real Postgres)", () => {
     expect((await readGym(bystander.org.id)).status, "an unnamed gym keeps its console").toBe(
       "active",
     );
+  });
+
+  /** **THE CONFIGURATION PRODUCTION ACTUALLY RUNS, WHICH EVERY OTHER TEST HERE
+   *  AVOIDS.** `worker.ts` calls `archiveLapsedGyms({ sql, log })` with no
+   *  `gymIds` at all; every other test in this file goes through `sweepAt`,
+   *  which always passes some. So until T3 round 1 (2026-08-31) nothing
+   *  anywhere proved the unscoped branch selects a row — if
+   *  `${scope}::uuid[] IS NULL` ever stopped short-circuiting, the nightly job
+   *  would become a permanent silent no-op and this suite would stay green.
+   *  Both sibling sweeps share the hole; this is the first test in the repo to
+   *  close it.
+   *
+   *  **AND IT IS SAFE ON A SHARED DATABASE, WHICH IS THE ONLY REASON IT CAN
+   *  EXIST — the clock runs BACKWARDS, not forwards.** Note 2 at the top of this
+   *  file forbids an unscoped run at a FUTURE instant, and it is right: that
+   *  closes every gym in the database that has ever lapsed, including the trial
+   *  sweep's mid-assertion. At the year 2000 the threshold is February 2000, and
+   *  the only row that can meet it is the one this test just wrote — every
+   *  `ended_at` any suite or the seed can produce is 2025 or later. The count is
+   *  asserted as "at least one" and never as a literal, because a count over a
+   *  database four suites share is not a constant (:25326 §2). */
+  test("the nightly job's own configuration, with no scope at all, still selects", async () => {
+    const org = await makeOrg(owner().cookies);
+    const ended = new Date("2000-01-01T00:00:00Z");
+    await putSubscription(org.org.id, "expired", ended);
+
+    const result = await archiveLapsedGyms(
+      { sql, log },
+      { now: new Date("2000-06-01T00:00:00Z") },
+    );
+
+    expect(result.archived, "an unscoped run reaches rows at all").toBeGreaterThanOrEqual(1);
+    expect((await readGym(org.org.id)).status, "and this gym is one of them").toBe("archived");
   });
 
   // ── THE RECORD, THE RETRY, AND THE WAY BACK ─────────────────────────────────
@@ -471,12 +547,69 @@ d("gym archive sweep (real Postgres)", () => {
     expect(restored.kind).toBe("restored");
     const reopened = await readGym(org.org.id);
     expect(reopened.status).toBe("active");
-    expect(reopened.archived, "the closure date survives the restore — it is the memory").not.toBeNull();
+    // The INSTANT, for the reason the end-to-end test above gives: this column
+    // is now compared against `ended_at` by the re-arm condition, so "some
+    // date" is not what the restore has to survive with — it is this one.
+    expect(
+      reopened.archived?.getTime(),
+      "the closure date survives the restore — it is the memory",
+    ).toBe(at.getTime());
 
     const nextNight = await sweepAt(new Date(at.getTime() + DAY_MS), [org.org.id]);
 
     expect(nextNight.archived, "the machine must not undo the operator").toBe(0);
     expect((await readGym(org.org.id)).status).toBe("active");
+  });
+
+  /** **AND THE HAND ONLY OVERRULES THE MACHINE UNTIL THE GYM LAPSES AGAIN** —
+   *  the other half of the condition above, added at T3 round 1 (2026-08-31)
+   *  after a review measured the future this file's header promises: with
+   *  `archived_at IS NULL` alone, a gym that has EVER been re-opened is outside
+   *  the policy for the rest of its life. Close it, re-open it, let it take a
+   *  plan that ends a month later, wait five more months — never closed again,
+   *  and no test or mutant could see it.
+   *
+   *  It is the test the pair above cannot be: there the restore must SURVIVE,
+   *  here it must EXPIRE, and only a fixture with an ending on BOTH sides of the
+   *  closure can tell those two statements apart. The re-arming ending is the
+   *  one the payment card writes the day it exists (:25771 §4), which is why
+   *  this is not hypothetical. */
+  test("a gym re-opened by hand is closed again if its NEXT plan also ends", async () => {
+    const org = await makeOrg(owner().cookies);
+    const firstEnded = new Date();
+    await putSubscription(org.org.id, "expired", firstEnded);
+    const closedAt = new Date(addMonths(firstEnded, 4).getTime() + DAY_MS);
+
+    expect((await sweepAt(closedAt, [org.org.id])).archived).toBe(1);
+
+    const restored = await restoreGym(sql, {
+      gymId: org.org.id,
+      actorUserId: null,
+      via: "gym_restore_tool",
+    });
+    expect(restored.kind).toBe("restored");
+
+    // A second life: a plan that starts after the re-opening and ends a month
+    // later. Nothing in the product can write it yet — that is the payment
+    // card's job — so it is inserted the way every other fixture here is.
+    const secondEnded = new Date(closedAt.getTime() + 30 * DAY_MS);
+    await putSubscription(org.org.id, "canceled", secondEnded);
+
+    // Three months after the SECOND ending, nothing happens: the clock restarted
+    // rather than continuing from wherever it was.
+    expect(
+      (await sweepAt(addMonths(secondEnded, 3), [org.org.id])).archived,
+      "the new clock is four months long too, not what is left of an old one",
+    ).toBe(0);
+    expect((await readGym(org.org.id)).status).toBe("active");
+
+    const again = new Date(addMonths(secondEnded, 4).getTime() + DAY_MS);
+    expect((await sweepAt(again, [org.org.id])).archived, "and then it closes").toBe(1);
+    const closedTwice = await readGym(org.org.id);
+    expect(closedTwice.status).toBe("archived");
+    expect(closedTwice.archived?.getTime(), "the stamp moves to the second closure").toBe(
+      again.getTime(),
+    );
   });
 
   /** THE RESTORE'S OTHER TWO ANSWERS. Neither is an error and neither is a

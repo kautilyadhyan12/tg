@@ -1,6 +1,72 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FOUR-MONTH CLOSURE, T3 ROUND 1 — ZERO Critical/High, THE PACKET SHIPS,
+      EIGHT LOW ALL FIXED, AND THE `OWED.md` LINE TICKS. DECISIONS :26220.
+      Reviews `be03891` (:25771) + `db61a84` (:26012, the smoke record, which
+      this session committed before touching any code).
+
+  1. **THE CARD IS DONE.** Both gates are met — Kd's browser (8 of 9, step 6
+     struck) and a review round with no Critical/High. No round 2 is owed: a Low
+     buys no round (:5348 rule 1), and every Low is fixed here anyway.
+  2. **ONE FINDING WAS A DESIGN DEFECT AND KD RULED THE FIX ("yes").**
+     `archived_at IS NULL` was PERMANENT immunity, not "recently restored" —
+     nothing ever clears the column, so one hand-restore put a gym outside the
+     policy for life. It bites the day the payment card or :19016's admin panel
+     re-opens a gym. Now `IS NULL OR EXISTS (an ending after that closure)`: the
+     restore still survives the next night, a NEW ending re-arms the clock.
+     **:25771 §3.3 is superseded in part and its index line says so.**
+  3. **THREE MORE IN THE STATEMENT:** `max(ended_at)` blind to a newer UNDATED
+     ending (O169's harm through a NULL); the four months counted in the DB
+     session's TimeZone, which nothing in this repo sets (a DST zone turns the
+     boundary test red); and the unscoped configuration `worker.ts` actually runs
+     exercised by NO test in any of the three sweeps.
+  4. **TWO MUTANTS WERE ALIVE, both claims nothing observed**: the closure's
+     stamp (`not.toBeNull()` under a message naming the instant) and the ORDER of
+     the two console refusals (the only test reaching that guard used a gym
+     archived AND paying — a state no gym is ever in). Both now pinned, O179 and
+     O180.
+  5. **A TEST THAT PASSED UNDER `-t` AND FAILED IN ITS OWN FILE** — a
+     `lapsableGym` tag another test already owned, so the second registration was
+     a duplicate email. **A scoped run is evidence about a test's SUBJECT, never
+     about its fit with its file**, and every mutant here runs under such a
+     filter (:26220 §6).
+
+PROVE: **ALL LOCAL** (`localhost:5433`, `test:local`): `orgs.archiveSweep`
+       **16/16 exit 0** (13+3) · with `orgs.trialSweep` **25/25 exit 0** ·
+       `orgs.routes` **147/147 exit 0** (146+1, 300.4 s) · **full api suite
+       680/680 across 47 files, exit 0** (676+4), quoted as the run it was and
+       never as the suite's state (:13746) · **SWEEP a stated SUBSET of 181:
+       O168–O181, 14 RED, 0 ALIVE, 0 never ran**, RUN TWICE and the second time
+       on the shipping bytes, twelve controls GREEN and tallying first, restores
+       sha256-verified, **315 then 318 gym + subscription rows fingerprinted, no
+       unattributed changes either time** · `tsc` exit 0 · eslint
+       `--max-warnings=0` exit 0 on all four changed TS files · `node --check` on
+       the harness · `check-decisions-index` **246 pointers, 939 headings** ·
+       triggers rebuilt **722 from 198 of 336** · `check-harnesses` **25**.
+       **O170 and O172 were RE-AIMED** (the fix moved their lines) and both were
+       proven by watching them go RED after the move, never by reading the anchor
+       — :13336's C/H-2 is a re-aim that silently matched nothing.
+
+FILES: `apps/api/src/modules/orgs/archiveSweep.ts` (the two conditions + the UTC
+       round trip + its header) · `service.ts` (one comment, no behaviour) ·
+       `test/orgs.archiveSweep.test.ts` (+3 tests, 2 assertions strengthened) ·
+       `test/orgs.routes.test.ts` (+1 test) · `tools/mutate-orgs.mjs` (+5 rows,
+       2 re-aimed) · `RUNBOOK/smoke-gym-archive.md` (steps 4 and the commands'
+       date note) · `DECISIONS.md` · `DECISIONS-INDEX.md` (new §1B line, notes on
+       :25771 and :26012, header counts re-measured 901/828/58 = **1,787**) ·
+       `DECISIONS-TRIGGERS.md` (rebuilt) · `OWED.md` (**TICKED**, plus one new ⚪
+       for the two sibling sweeps' untested unscoped path) · `BACKLOG.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **CI: READ, NOT ASSUMED (:25008).** `origin/web-repoint` was `a501198`
+       at session start with CI GREEN on that tip (run `33327115123`,
+       2026-08-30T18:06:30Z, per :26012). **`be03891`, `db61a84` and this commit
+       are LOCAL and CI has seen none of them.** Pushing is Kd's call.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+```
+
+```
 TASK: THE FOUR-MONTH CLOSURE'S SMOKE PASSES 8 OF 9 AND THE NINTH IS STRUCK.
       DECISIONS :26012. Run by Kd at the browser on `be03891` (:25771), local
       Postgres, every `src` file byte-identical to HEAD. No src, test, harness
