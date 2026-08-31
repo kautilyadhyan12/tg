@@ -26732,3 +26732,43 @@ and building a second way to say it would let a gym's two answers disagree.**
 it:** an attendance on a closed day is still RECORDED AND MARKED, never refused
 (§4.4's rule, unchanged) — a gym that closed at short notice and a member who
 came anyway are both real, and the honest row is the one that says so.
+
+### 7 · ADDENDUM 2, same session — NO WEEKDAY IS SPECIAL, AND "NOBODY HAS SET HOURS YET" IS NOT "CLOSED"
+
+*"but sundays can be open if gym wants"*, after the chat used *"closed on
+Sunday"* as its worked example twice.
+
+**Read before drawing opening hours on any screen, before writing any default,
+seed or placeholder for a gym's hours, and before using a weekday as an example
+in copy Kd will read.**
+
+**1. THE CLARIFICATION: no weekday is special and none is closed by default.**
+Every day of the week is set by the gym, independently, to whatever it wants —
+a gym open only on Sunday is as expressible as one closed only on Sunday.
+Nothing in the design privileges any day. **Kd was reading the chat's example as
+a rule, which is a fair reading of it having been repeated in both the ruling
+summary and the plan.** Nothing was built wrong; the EXAMPLE was wrong, and an
+example a beginner reads as a default is a defect in the explanation (Part 0.5
+K2/K6).
+
+**2. THE REAL GAP IT EXPOSED, and it is mine to fix in the card: "no hours set"
+and "closed" are DIFFERENT and both would render identically.** A gym that has
+never opened the Settings section has no session rows — which is exactly what a
+genuinely closed day looks like. **A member's card printing "Closed" for a gym
+that simply has not filled the form in shows a user something FALSE, which is
+:5807 Critical/High on its face**, and it would hit EVERY existing gym the day
+this ships, because none of them has hours.
+
+**THE CALL, stated not asked:** the gym carries an explicit *"hours not set
+yet"* state, distinct from any pattern.
+- **Until a gym sets its hours, members are told nothing about opening times** —
+  no "Closed", no invented default. The gym's own Settings shows the section
+  waiting to be filled.
+- **Once a gym HAS set its hours, a weekday with no sessions means CLOSED that
+  day** and says so, because now the gym has actually told us.
+- **No default hours are ever invented for a gym**, at creation or in a
+  migration. A guessed 9-to-5 on a member's screen is the same false sentence
+  with more confidence.
+
+**This is the :8267/:8343 empty-state class** — *"an empty page under the wrong
+sentence"* — arriving in a new feature before it shipped rather than after.

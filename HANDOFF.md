@@ -1,6 +1,42 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: NO WEEKDAY IS SPECIAL, AND "NOBODY HAS SET HOURS YET" IS NOT "CLOSED".
+      DECISIONS :26736 (addendum 2 inside :26624). Records only; no src, test,
+      harness or migration file is touched.
+
+  1. *"but sundays can be open if gym wants"* — after the chat used "closed on
+     Sunday" as its worked example twice. **Nothing was built wrong; the EXAMPLE
+     was, and an example a beginner reads as a default is a defect in the
+     explanation** (Part 0.5 K2/K6).
+  2. **THE GAP IT EXPOSED IS REAL AND IS IN THIS CARD: "no hours set" and
+     "closed" would render IDENTICALLY.** A gym that never opened the section has
+     no session rows — exactly like a genuinely closed day — so a member card
+     saying "Closed" for a gym that has not filled the form in is **:5807
+     Critical/High**, and it would hit EVERY existing gym on day one.
+  3. **CHAT'S CALL: an explicit "hours not set yet" state.** Members are told
+     nothing about opening times until a gym sets them; a weekday with no
+     sessions means closed only AFTER it has; **no default hours are ever
+     invented, at creation or in a migration** (a guessed 9-to-5 is the same
+     false sentence with more confidence).
+  4. The :8267/:8343 empty-state class, caught BEFORE shipping for once.
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **748 triggers from 205 of 343 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **249 pointers
+       resolve (248 on a heading, 1 deliberate mid-entry), 962 headings**.
+       Always-read RE-MEASURED: triggers **927** + §1 **984** + §2 **58** =
+       **1,969**.
+
+FILES: `DECISIONS.md` (+1 `###` addendum) · `DECISIONS-INDEX.md` (addendum 2 on
+       :26624's line + header counts) · `DECISIONS-TRIGGERS.md` (rebuilt) ·
+       `OWED.md` (the sessions line carries the empty state) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. Six commits
+       (`d72131a` … `30fa171`) and this one are LOCAL; CI has seen none.
+```
+
+```
 TASK: KD DROPS SESSION NAMES, PUTS THE HOURS IN FRONT OF MEMBERS, AND ADDS
       ONE-OFF CLOSURES. DECISIONS :26684 (addendum inside :26624). Records
       only; no src, test, harness or migration file is touched.

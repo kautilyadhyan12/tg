@@ -7549,6 +7549,15 @@ file and is stated so nobody reads these as lower priority than they are.
       Holi"*) · dated so they expire by themselves · removable · dates in the
       gym's own zone. **An attendance on a closed day is recorded and MARKED,
       never refused.**
+      **AND :26736, same session — NO WEEKDAY IS SPECIAL** (*"but sundays can be
+      open if gym wants"*; the chat's repeated "closed on Sunday" example read
+      as a rule). **The gap it exposed is real and is IN THIS CARD: "no hours
+      set" and "closed" would render identically**, so a member card saying
+      "Closed" for a gym that never filled the form in is :5807 Critical/High
+      and would hit EVERY existing gym on day one. **An explicit "hours not set
+      yet" state**: members are told nothing about opening times until a gym
+      sets them, a weekday with no sessions means closed only AFTER it has, and
+      **no default hours are ever invented at creation or in a migration.**
 - [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:

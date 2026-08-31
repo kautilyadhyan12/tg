@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **924 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **927 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 967 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 984 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,949 lines, MEASURED 2026-08-31 (eighth measurement that
+**ALWAYS-READ TOTAL: 1,969 lines, MEASURED 2026-08-31 (ninth measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -1042,6 +1042,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **removed**, restoring the pattern · **dates are the GYM's dates in its own
   zone** (trap #8, on a member-visible surface). **FOR THE ATTENDANCE CARD: an
   attendance on a CLOSED day is still recorded and MARKED, never refused.**
+  **ADDENDUM 2 `:26736`, same session — NO WEEKDAY IS SPECIAL, AND "NOBODY HAS
+  SET HOURS YET" IS NOT "CLOSED".** *"but sundays can be open if gym wants"*,
+  after the chat used *"closed on Sunday"* as its example twice. **Read before
+  drawing opening hours on any screen, before writing any default, seed or
+  placeholder for a gym's hours, and before using a weekday as an example in
+  copy Kd will read.** **Nothing was built wrong — the EXAMPLE was, and an
+  example a beginner reads as a default is a defect in the explanation.** **THE
+  REAL GAP IT EXPOSED IS THE PART TO KEEP: "no hours set" and "closed" are
+  different and would render IDENTICALLY** — a gym that never opened the section
+  has no session rows, exactly like a genuinely closed day, so a member card
+  printing "Closed" for a gym that has not filled the form in is **:5807
+  Critical/High**, and it would hit EVERY existing gym on the day this ships.
+  **CHAT'S CALL: an explicit "hours not set yet" state** — until a gym sets
+  hours, members are told NOTHING about opening times (no "Closed", no invented
+  default); once it HAS, a weekday with no sessions means closed and says so;
+  **no default hours are ever invented, at creation or in a migration.** The
+  :8267/:8343 empty-state class, caught before shipping rather than after.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
