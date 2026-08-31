@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD DROPS SESSION NAMES, PUTS THE HOURS IN FRONT OF MEMBERS, AND ADDS
+      ONE-OFF CLOSURES. DECISIONS :26684 (addendum inside :26624). Records
+      only; no src, test, harness or migration file is touched.
+
+  1. **NO SESSION NAMES** — *"not neeeded"*. Struck before it was built. A
+     session is a time range and nothing else, and it must not return later as a
+     carrier for what a closure or a group tag should say (:8771's precedent —
+     no `OWED.md` line, nothing to build).
+  2. **MEMBERS SEE THE HOURS** — *"yes can see"*. Ships in the SAME card, on the
+     member's gym card.
+  3. **ONE-OFF CLOSURES** — *"we are close today … like sunday etc"*. **THE TWO
+     MECHANISMS MUST NOT MERGE: "closed every Sunday" IS the weekly pattern (no
+     sessions that weekday); "closed today" is a DATED override that wins over
+     it.** A recurring closed day needs no feature, and a second way to say it
+     lets a gym's two answers disagree.
+  4. **CHAT'S CALLS:** whole-day closures · an optional short note shown to
+     members (*"Closed today — Holi"*), which is NOT the struck session name
+     returning · dated so they expire themselves · removable · the gym's own
+     zone (trap #8, now on a member-visible surface).
+  5. **FOR THE ATTENDANCE CARD: an attendance on a CLOSED day is recorded and
+     MARKED, never refused.**
+
+PROVE: **No suite was run and none is owed** — records only. Guards:
+       `build-decisions-triggers` **745 triggers from 204 of 342 rulings, 138
+       declare none, 0 unparsed** · `check-decisions-index` **249 pointers
+       resolve (248 on a heading, 1 deliberate mid-entry), 961 headings**.
+       Always-read RE-MEASURED: triggers **924** + §1 **967** + §2 **58** =
+       **1,949**.
+
+FILES: `DECISIONS.md` (+1 `###` addendum) · `DECISIONS-INDEX.md` (addendum on
+       :26624's line + header counts) · `DECISIONS-TRIGGERS.md` (rebuilt) ·
+       `OWED.md` (the sessions line's unruled list answered) · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is still out. Five commits
+       (`d72131a` … `d8d6856`) and this one are LOCAL; CI has seen none.
+```
+
+```
 TASK: KD ADDS OPENING HOURS AS SESSIONS, AND THEY GO BEFORE ATTENDANCE.
       DECISIONS :26624. Records only; no src, test, harness or migration file
       is touched.

@@ -26680,3 +26680,55 @@ Whether MEMBERS see the hours (recommendation: yes, on their gym card — a memb
 who cannot see when their gym opens is the obvious first complaint) · holidays
 and one-off closures · whether a session later becomes a bookable class ·
 whether staff hours differ from opening hours.
+
+### 6 · ADDENDUM, same session — KD DROPS SESSION NAMES, PUTS THE HOURS IN FRONT OF MEMBERS, AND ADDS ONE-OFF CLOSURES
+
+*"optional name like 'Morning' or 'Ladies' hour'.not neeeded"* · *"yes can
+see"* · *"als gym can update like we are close today etc like sunday etc have
+option"*.
+
+**Read before building the sessions card, before drawing opening hours on ANY
+member-facing surface, and before adding a name, label or capacity to a
+session.**
+
+**1. NO SESSION NAMES.** §4.2's optional name is struck before it was built — a
+session is a time range and nothing else. **Do not re-propose it**, and do not
+reach for it later as a way to express something a closure or a group tag should
+carry (:8771's precedent: a struck item, no `OWED.md` line, nothing to build).
+
+**2. MEMBERS SEE THE HOURS.** The recommendation at §5 is ruled IN and ships in
+the same card, on the member's gym card. This is the first member-facing thing
+the sessions feature touches, so the §2.4 org-visibility boundary is read the
+other way for once: the gym is publishing to its members, not reading them.
+
+**3. A GYM CAN SAY IT IS CLOSED TODAY, ON TOP OF ITS WEEKLY PATTERN.** Two
+different mechanisms, and conflating them is the trap:
+
+| | What it is | How it is expressed |
+|---|---|---|
+| **Closed every Sunday** | the weekly pattern | that weekday simply has NO sessions |
+| **Closed today / on a date** | a one-off override | a dated closure row that WINS over the pattern |
+
+**A recurring closed day needs no feature — it is the absence of sessions —
+and building a second way to say it would let a gym's two answers disagree.**
+
+**MY CALLS, stated rather than asked (routine shape, R0.2 untouched):**
+- **A closure is a WHOLE day.** Cancelling one session of a day is a different
+  question and is not in this card.
+- **A closure carries an optional short note** shown to members (*"Closed today
+  — Holi"*), because a closure with no reason is the first thing a member asks
+  the front desk. **This is not the session name returning**: it is on the
+  exception, where a human explanation is the whole point, and it never names a
+  time window.
+- **Closures are DATED, so they expire by themselves** — nothing has to be
+  turned back on, which is the failure mode of a "we are closed" toggle.
+- **A closure can be removed** (marked by mistake), and removing it restores the
+  pattern.
+- **Dates are the GYM's dates**, in its own time zone (:26469 §5) — "today" for a
+  gym in Assam is not "today" in UTC, and this is trap #8 on a member-visible
+  surface.
+
+**WHAT THIS COSTS ATTENDANCE, recorded now so the next card does not rediscover
+it:** an attendance on a closed day is still RECORDED AND MARKED, never refused
+(§4.4's rule, unchanged) — a gym that closed at short notice and a member who
+came anyway are both real, and the honest row is the one that says so.

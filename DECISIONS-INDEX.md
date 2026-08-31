@@ -4,17 +4,17 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **921 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **924 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 earlier on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 945 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 967 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,924 lines, MEASURED 2026-08-31 (seventh measurement that
+**ALWAYS-READ TOTAL: 1,949 lines, MEASURED 2026-08-31 (eighth measurement that
 day) and not estimated.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
@@ -1020,6 +1020,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   hours (recommended: yes, on their gym card) · holidays and one-off closures ·
   whether a session later becomes a bookable class · staff hours vs opening
   hours.
+  **ADDENDUM `:26684`, same session — KD ANSWERED THREE OF THOSE AND DROPPED A
+  FOURTH THING.** **Read before building the sessions card, before drawing
+  opening hours on ANY member-facing surface, and before adding a name, label or
+  capacity to a session.** **(1) NO SESSION NAMES** — *"not neeeded"*; struck
+  before it was built, a session is a time range and nothing else, and it must
+  not return later as a way to carry what a closure or a group tag should say
+  (:8771's precedent — no `OWED.md` line, nothing to build). **(2) MEMBERS SEE
+  THE HOURS** — *"yes can see"*; ships in the SAME card, on the member's gym
+  card. **(3) ONE-OFF CLOSURES** — *"gym can update like we are close today etc
+  like sunday etc have option"*. **THE TRAP IS CONFLATING TWO MECHANISMS:
+  "closed every Sunday" is the WEEKLY PATTERN — that weekday simply has no
+  sessions — while "closed today" is a DATED override that WINS over the
+  pattern. A recurring closed day needs no feature, and a second way to say it
+  would let a gym's two answers disagree.** **CHAT'S CALLS: a closure is a WHOLE
+  day** (cancelling one session is a different question, not in this card) · it
+  **carries an optional short note** shown to members (*"Closed today — Holi"*),
+  which is NOT the struck session name returning — it sits on the exception,
+  where the explanation is the point · **closures are DATED so they expire by
+  themselves** (the failure mode of a "we are closed" toggle) · a closure can be
+  **removed**, restoring the pattern · **dates are the GYM's dates in its own
+  zone** (trap #8, on a member-visible surface). **FOR THE ATTENDANCE CARD: an
+  attendance on a CLOSED day is still recorded and MARKED, never refused.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

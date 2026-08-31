@@ -7536,6 +7536,19 @@ file and is stated so nobody reads these as lower priority than they are.
       row.** **UNRULED, to the plan gate:** whether members see the hours
       (recommended yes) · holidays and one-off closures · whether a session
       becomes a bookable class · staff hours vs opening hours.
+      **THREE OF THOSE ANSWERED SAME SESSION (:26684):** **no session names**
+      (*"not neeeded"* — struck before it was built; a session is a time range
+      and nothing else, and it must not return as a carrier for anything else) ·
+      **members SEE the hours** (*"yes can see"*), in the SAME card, on their gym
+      card · **one-off closures** (*"we are close today"*). **THE TWO
+      MECHANISMS MUST NOT MERGE: "closed every Sunday" is the weekly pattern —
+      that weekday has NO sessions — while "closed today" is a DATED override
+      that wins over it.** A recurring closed day needs no feature; a second way
+      to say it lets a gym's two answers disagree. **Chat's calls:** whole-day
+      closures only · an optional short note shown to members (*"Closed today —
+      Holi"*) · dated so they expire by themselves · removable · dates in the
+      gym's own zone. **An attendance on a closed day is recorded and MARKED,
+      never refused.**
 - [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:
