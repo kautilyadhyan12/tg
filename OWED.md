@@ -7676,10 +7676,38 @@ file and is stated so nobody reads these as lower priority than they are.
       makes the number trustworthy, and no later card can recover it.
       **:17765 binds the surface** — the gym DISPLAYS a QR and SEES who came
       (both work on a laptop), the MEMBER scans with their phone.
-      **UNRULED and owed to the plan gate (:26469 §6):** how a workout links to
+      ~~**UNRULED and owed to the plan gate (:26469 §6):** how a workout links to
       an attendance · whether staff can mark somebody present · what a member
       sees of their own attendance · whether attendance feeds streaks or badges ·
-      QR validity and rotation.
+      QR validity and rotation.~~
+      **FOUR OF THE FIVE WERE PUT TO KD AT THE GATE AND ANSWERED, 2026-09-01
+      (DECISIONS :27900):** staff marking somebody present is **NOT NOW** — only
+      the member marks, and `marked_by_user_id` is stored separately from
+      `user_id` from day one so a front-desk button later ADDS a value rather
+      than rewriting history (:26469 §4's own argument, applied) · a member
+      **DOES** see their own attendance history · **ATTENDANCE FEEDS STREAKS**,
+      *against* the recommendation to defer it · and QR validity/rotation left
+      the web entirely at :26586 and is the phone app's.
+      **THE STREAK ANSWER CARRIES A BUILD REQUIREMENT, not just a yes: the
+      STREAK's day list becomes workout days ∪ attendance days and the XP
+      total's does NOT.** They share ONE list today
+      (`gamification/repo.ts:136`, `SELECT DISTINCT … FROM workouts`, replayed
+      by `onWorkoutSynced` for the streak and by `recomputeXp` for XP), so a
+      one-line union pays XP for a button tap, silently, to everybody. **Kd
+      ruled streaks; he did not rule XP.**
+      **⚠️ STILL OWED, and it moves rather than closing: HOW A WORKOUT LINKS TO
+      AN ATTENDANCE.** Deliberately NOT put to Kd at this gate — it needs no
+      column in the attendance card (the link is a rollup-time join on the gym's
+      day) and it is the Overview-numbers card that cannot be built without it.
+      **It goes to THAT card's plan gate, as options with a recommendation,
+      never as a chat's default (R0.2).**
+      **THE BUILD PLAN IS WRITTEN AND UNAPPROVED: `CARD-gym-attendance.md`**
+      (2026-09-01). **NOTHING IS BUILT.** Two things it leaves for Kd at the gate
+      rather than assuming: whether a visit is **one per DAY** (recommended, cost
+      stated — a member who comes morning and evening is counted once) and
+      whether a member of a **LAPSED** gym can still mark attendance
+      (recommended yes; refusing would show a member something false about their
+      own gym, :5807).
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

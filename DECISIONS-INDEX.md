@@ -4,24 +4,33 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **961 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **975 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 997 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
+2. **§1 below — STANDING RULES. 1,042 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,016 lines, MEASURED 2026-09-01 (seventh measurement that
-day) and not estimated** (961 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
-all SEVEN of that day's records — the server card, its T3 round, the web card,
-Kd's five screen changes, his four corrections, his smoke declaration and the web
-half's T3 round 1 — went to §1B, where
-:24813 sends every card record, so the whole growth is the thirty-two
-trigger phrases their seven `Read before …` sentences produced. **That is the split working exactly
-as ruled: seven full entries added, and the always-read cost is thirty-two lines.**
+**ALWAYS-READ TOTAL: 2,075 lines, MEASURED 2026-09-01 (eighth measurement that
+day) and not estimated** (975 + 1,042 + 58). **§1 MOVED FOR THE FIRST TIME THAT
+DAY, AND THE REASON IS THE TEST OF THE SPLIT: the eight records before it were
+CARD records and went to §1B, where :24813 sends them; the ninth is a KD RULING
+(:27900) and rulings belong here.** Its 45 lines are what the always-read cost of
+a ruling looks like — the earlier eight cost thirty-two lines between them, all
+of it trigger phrases. **That is the split working as ruled, in both directions:
+a card record is a pointer, a ruling is read.**
+~~**§1 AND §2 HAVE NOT MOVED ALL DAY**: all SEVEN of that day's records — the
+server card, its T3 round, the web card, Kd's five screen changes, his four
+corrections, his smoke declaration and the web half's T3 round 1 — went to §1B,
+where :24813 sends every card record, so the whole growth is the thirty-two
+trigger phrases their seven `Read before …` sentences produced. **That is the
+split working exactly as ruled: seven full entries added, and the always-read
+cost is thirty-two lines.**~~ **— spent the moment a ruling arrived, and left
+struck rather than deleted because the sentence is only true of card records and
+did not say so.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1078,6 +1087,51 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   (K7). **STANDING: an approval covers what was ON SCREEN when it was given, and
   when the next instruction could mean either, the reversible move is to write
   the document.** `CARD-gym-hours.md` is that document.
+- **:27900** — 2026-09-01 — **KD ANSWERS THE ATTENDANCE CARD'S FOUR OPEN
+  QUESTIONS AND OVERRULES THE RECOMMENDATION ON STREAKS: COMING TO THE GYM KEEPS
+  ONE ALIVE.** The :26469 §6 gate, held. **Read before building attendance,
+  before adding any reader or writer of `gym_attendance`, before touching
+  `getActivityDays` or anything that replays a streak, before paying XP for
+  anything that is not a workout, and before assuming a "not yet" recommendation
+  was accepted.** **THREE TAKEN, ONE OVERRULED:** staff marking somebody present
+  is **not now** (only the member) · a member **does** see their own attendance
+  history · the finished opening-hours work was saved and uploaded · and
+  **attendance FEEDS STREAKS**, against the recommendation to defer it.
+  **THE OVERRULE'S LESSON IS THE RECOMMENDATION'S EVIDENCE, NOT ITS CONCLUSION:**
+  it argued that feeding visits in *"would change numbers people have already
+  earned"* — **a claim about DATA, made without measuring the data.** Measured
+  afterwards: `getActivityDays` is `SELECT DISTINCT … FROM workouts`
+  (`gamification/repo.ts:136`), `onWorkoutSynced` REPLAYS the streak and
+  `recomputeXp` the lifetime XP from that one list — and **there are zero
+  attendance rows, so nobody's streak, badge or XP moves on the day this ships.**
+  **STANDING: "this would change numbers people already have" takes V1 like any
+  other claim.**
+  **WHAT THE RULING REQUIRES, so a one-line union does not ship: the STREAK's day
+  list becomes workout days ∪ attendance days; the XP total's does NOT.** Two
+  functions. **Kd ruled streaks and did not rule XP, and they share one list
+  today** — a single union pays XP for a button tap, silently, to everybody, and
+  levels somebody up without training, contradicting the very distinction his
+  manual-versus-QR ruling rests on. **Mutate the union and watch an XP test go
+  red; if only a streak test moves, the split is a comment.** The 🔥 badges
+  becoming reachable by attendance (`badges.ts:42-45`) IS the ruling, not a leak.
+  **THE DAY HAS TWO OWNERS AND THEY DISAGREE — chat's call, stated not asked: the
+  streak takes the attendance's stored GYM-day as-is rather than re-bucketing it
+  in the user's zone**, because `users.timezone` is captured nowhere (:618, still
+  owed) so every user buckets as UTC, and a 9pm visit in Assam is the NEXT UTC
+  day. Re-bucketing would credit a day the member never saw. **A deliberate
+  inconsistency with the workout path, to be commented where it is written.**
+  **`marked_by_user_id` is stored separately from `user_id` from day one**, today
+  always equal, so a front-desk button later ADDS a value rather than rewriting
+  history — :26469 §4's own argument about `method`, applied to the question he
+  answered. **No `OWED.md` line for staff marking: it was answered, not
+  deferred.** **THE FIFTH :26469 §6 QUESTION — how a workout LINKS to an
+  attendance — WAS DELIBERATELY NOT PUT TO HIM** and the departure is declared:
+  it needs no column here (a rollup-time join on the gym's day), and it goes to
+  the Overview-numbers card's gate. **NOTHING IS BUILT** —
+  `CARD-gym-attendance.md` is written and UNAPPROVED, and it leaves two things
+  for Kd at the gate rather than assuming them: one-visit-per-DAY (recommended,
+  cost stated) and whether a LAPSED gym's member can still mark attendance
+  (recommended yes, :5807).
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

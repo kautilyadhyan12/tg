@@ -1,6 +1,52 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OPENING-HOURS WORK IS COMMITTED AND PUSHED, CI IS GREEN, AND KD
+      ANSWERED THE ATTENDANCE GATE'S FOUR QUESTIONS. DECISIONS :27900.
+      `CARD-gym-attendance.md` is WRITTEN and UNAPPROVED. NOTHING IS BUILT.
+
+  1. **NEXT: KD APPROVES OR CORRECTS `CARD-gym-attendance.md`, then §4a (the
+     server half) is one chat.** The card leaves TWO things for him at that
+     gate rather than assuming them — one visit per DAY (recommended, cost
+     stated) and whether a LAPSED gym's member can still mark attendance
+     (recommended yes). Do not start §4a without an approval that was given
+     with the card ON SCREEN (:26777).
+  2. **THE STREAK ANSWER IS THE DANGEROUS ONE AND IT IS NOT A ONE-LINE UNION.**
+     The streak and the lifetime XP total are BOTH replayed from
+     `getActivityDays` (`gamification/repo.ts:136`, workouts only). Kd ruled
+     STREAKS, not XP. Two functions, and a test that goes RED when the split
+     is collapsed — :27900 §3.
+  3. **THE PREVIOUS HANDOFF BLOCK WAS WRONG AND THE REPO SAID SO (S1).** It
+     claimed thirteen unpushed commits and `origin/web-repoint` at `01999dc`;
+     origin was `eb89f8c` and HEAD was SIX ahead. **A HANDOFF block is hearsay
+     the moment the next push lands — measure, never quote it.**
+  4. **CI IS GREEN ON `abd0d8f`, ALL FIVE JOBS** (run `33519240308`) — the
+     first time any of the opening-hours work has been checked by anything.
+  5. **THE 26 UNOBSERVED SMOKE STEPS ARE UNCHANGED.** Committing and pushing
+     them proves nothing about a browser; :27415 still governs that sheet.
+
+PROVE: No `src`, test, harness or migration file is touched by the RECORDS half
+       of this session. Before the commit, on its exact bytes: web **1471/1471**
+       across 53 files exit 0 · `@app/shared` typecheck exit 0 · `api` typecheck
+       exit 0 · `check-harnesses` **25 scripts parse** · `check-decisions-index`
+       **258 pointers, 1025 headings** · triggers `--check` clean.
+       After the records edits: `check-decisions-index` **259 pointers resolve,
+       1032 headings** · triggers rebuilt, `--check` clean (**796 from 216 of
+       354 rulings**) · `check-harnesses` **25 scripts parse**.
+       **NOT RUN AND NOT CLAIMED: the api DB-backed suites** (no `apps/api/src`
+       file touched) **and any mutation sweep.**
+
+FILES: commit `abd0d8f` — the 18 opening-hours files. Then records only:
+       `CARD-gym-attendance.md` (new) · `DECISIONS.md` · `DECISIONS-INDEX.md`
+       (the ruling goes to §1, not §1B — always-read 2,016 → 2,075 lines,
+       re-measured) · `DECISIONS-TRIGGERS.md` · `OWED.md` · `HANDOFF.md`.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
+       **STILL OWED and moved rather than closed: how a workout LINKS to an
+       attendance** — it goes to the Overview-numbers card's gate, not this one.
+```
+
+```
 TASK: SMOKE STEP 22b — RUN, PASSED, AND THE OPENING-HOURS LINE TICKS.
       DECISIONS :27810. `CARD-gym-hours.md` is DONE.
 

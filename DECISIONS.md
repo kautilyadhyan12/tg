@@ -27896,3 +27896,130 @@ card's PROVE figures are at :27468 and :27659 and are not restated here.
 **The servers this run used were LOCAL and are named so nobody assumes otherwise**
 — api on `localhost:3000` against `localhost:5433` (the sheet's own S3 command,
 not `--env-file=.env`), web on `localhost:5173`, both started for this run.
+
+## 2026-09-01 — KD ANSWERS THE ATTENDANCE CARD'S FOUR OPEN QUESTIONS, AND OVERRULES THE RECOMMENDATION ON STREAKS: COMING TO THE GYM KEEPS ONE ALIVE
+
+**Read before building attendance, before adding any reader or writer of
+`gym_attendance`, before touching `getActivityDays` or anything that replays a
+streak, before paying XP for anything that is not a workout, and before assuming
+a "not yet" recommendation was accepted.**
+Records only; no code changed by this entry. `CARD-gym-attendance.md` is the
+build plan written from it and is UNAPPROVED.
+
+:26469 §6 ruled that the attendance card's unruled questions *"goes to Kd as
+options with a recommendation, never as a chat's silent default (R0.2)"*. This is
+that gate. Four were put to him, each with a recommendation. **He took three and
+overruled one.**
+
+### 1 · THE FOUR, AND WHICH WAY EACH WENT
+
+| Question | Recommendation | Kd |
+|---|---|---|
+| Save and upload the finished opening-hours work first | yes | **yes** |
+| Can gym staff mark a member present | not now — only the member | **not now** |
+| Does a member see their own attendance history | yes | **yes** |
+| Does coming to the gym count towards streaks and badges | **not yet** | **YES — it counts** |
+
+**The fifth question :26469 §6 lists — how a workout LINKS to an attendance — was
+NOT put to him, deliberately, and that is a departure to declare rather than
+hide.** It needs no column in this card: the link is a rollup-time join on the
+gym's day, and the card that needs it is the Overview numbers, next. Putting a
+question to him that changes nothing about the build he is approving would spend
+his attention for nothing (K4). **It stays owed and goes to that card's gate.**
+The sixth, QR validity and rotation, left the web entirely at :26586 and belongs
+to the phone app.
+
+### 2 · THE OVERRULE IS THE PART TO KEEP, AND THE RECOMMENDATION WAS NOT WRONG SO MUCH AS UNMEASURED
+
+The case put to him was that streaks and the 🔥 badges already exist and are
+built on workouts, so feeding gym visits in *"would change numbers people have
+already earned"*. **He ruled the other way, and the measurement taken afterwards
+shows the stated cost does not actually arrive:**
+
+- `apps/api/src/modules/gamification/repo.ts:136` — `getActivityDays` is
+  `SELECT DISTINCT … FROM workouts`, workouts and nothing else.
+- `service.ts:31` — `onWorkoutSynced` REPLAYS the whole streak from that list on
+  every sync, and `recomputeXp` recomputes the lifetime XP total from the same
+  list.
+- **There are zero attendance rows and no attendance table, so on the day this
+  ships NOBODY'S streak, badge or XP moves.** It starts mattering only as people
+  begin tapping in.
+
+**STANDING: "this would change numbers people already have" is a claim about
+DATA, and it takes V1 like any other.** The recommendation was formed from the
+shape of the code rather than from what is in the table, and the honest version of
+it — *"it changes nothing today and grows from here"* — would have been a weaker
+argument for deferring, which is exactly why it should have been measured first.
+
+### 3 · WHAT THE RULING ACTUALLY REQUIRES, SO THE BUILD CANNOT DRIFT
+
+**The streak's day list becomes workout days UNION attendance days. The XP
+total's does NOT.** Two functions, not one: `getStreakDays` for the replay,
+the existing `getActivityDays` for XP.
+
+**KD RULED STREAKS. HE DID NOT RULE XP, AND THE TWO SHARE ONE LIST TODAY**, which
+is the whole hazard: a single-line union pays XP for a button tap, silently, to
+everybody, and levels somebody up without training. That would contradict the
+distinction his own manual-versus-QR ruling is built on — a tap can be sent from
+home. **A reviewer should mutate the union and watch an XP test go red; if only a
+streak test moves, the split is a comment rather than a guarantee.**
+
+**The 🔥 badges become reachable by attendance** (`badges.ts:42-45`,
+`streak_3/7/30/100` off `current_streak`). That is the direct and correct effect
+of the ruling, not a leak.
+
+### 4 · THE DAY HAS TWO OWNERS AND THEY DISAGREE — THE CALL, STATED NOT ASKED
+
+A visit's day is the **GYM's** day (:26469 §5). A streak's day is the **USER's**
+day, and `users.timezone` is captured nowhere (:618, still owed), so in practice
+every user is bucketed as UTC. **A 9pm visit in Assam is the NEXT day in UTC.**
+
+**The streak takes the attendance's stored gym-day as-is rather than re-bucketing
+it.** "The day you went to the gym" is the day both the member and the gym saw on
+screen, and re-bucketing would credit a day the member never saw. **This is a
+deliberate inconsistency with the workout path** and must be commented where it
+is written, not only here.
+
+### 5 · THE ANSWER THAT COSTS NOTHING NOW AND SAVES A REWRITE LATER
+
+"Only the member marks, for now" is built with `marked_by_user_id` stored
+separately from `user_id` **from day one**, today always equal. A front-desk
+button later then ADDS a value rather than rewriting history — **the same
+argument Kd's own :26469 §4 ruling makes about `method`**, applied to the
+question he answered here. No `OWED.md` line is opened for staff marking: it was
+not deferred, it was answered.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full (791 triggers, 215 of 353 rulings) ·
+`DECISIONS-INDEX.md` §1 and §2 in full · `DECISIONS.md` :26385 §5, :26469 with
+addenda :26558/:26586, :26624 with addenda :26684/:26736/:26777, :26812 ·
+`HANDOFF.md`'s top two blocks · `OWED.md`'s hours and attendance lines ·
+`CARD-gym-hours.md` in full as the shape for the new card.
+
+**A HANDOFF CLAIM WAS FALSE AND THE REPO CORRECTED IT (S1).** Its top block said
+*"thirteen local commits `d72131a`..`808c978` that have never been pushed
+(`origin/web-repoint` is still `01999dc`, so CI has seen none of it)"*. Measured:
+`origin/web-repoint` was **`eb89f8c`** and HEAD was **6** commits ahead, not 13.
+Seven had been pushed since that block was written. **A HANDOFF block is a
+snapshot with no guard on it, and it is hearsay the moment the next push lands.**
+
+**PROVE, re-run on the exact bytes before committing the opening-hours work:**
+web **1471/1471** across 53 files, exit 0 · `@app/shared` typecheck exit 0 ·
+`api` typecheck exit 0 · `check-harnesses` **25 scripts parse** ·
+`check-decisions-index` **258 pointers resolve, 1025 headings** ·
+`build-decisions-triggers --check` up to date. **NOT RUN and NOT claimed:** the
+api DB-backed suites (no `apps/api/src` file was touched) and any mutation sweep.
+
+**AND CI IS GREEN ON THE PUSHED COMMIT — the first time any of this work has been
+checked by anything.** Run `33519240308` on `abd0d8f`, all five jobs success:
+engine banned-token grep · drizzle migrations on a Neon branch · typecheck / lint
+/ test · api tests on local Postgres · gitleaks over full history.
+
+**NOTHING IS BUILT.** `CARD-gym-attendance.md` is written and awaits the gate.
+Two things in it are explicitly left for Kd there rather than assumed: whether a
+visit is one-per-DAY (recommended, with its cost stated — a member who comes
+morning and evening counts once) and whether a member of a LAPSED gym can still
+mark attendance (recommended yes; refusing would show a member something false
+about their own gym, :5807).
