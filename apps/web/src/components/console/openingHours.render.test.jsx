@@ -361,6 +361,25 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
     expect(screen.queryByText('4:00 PM – 9:00 PM')).toBeNull();
   });
 
+  it('names the two clocks and shows no sample time beside either', async () => {
+    // Kd, twice. First the switch offered "4:00 PM" and "16:00" — samples
+    // rather than names — and he read it as something other than the 12/24
+    // choice he had asked for. The fix put the name first and kept the sample
+    // in brackets, and he cut those too: *"4:00 16:00 what is this it was just
+    // example for you to understand"*. The example was how he EXPLAINED the
+    // choice to me; it was never meant to be on the screen.
+    //
+    // The assertion is the ABSENCE, because that is the half that keeps being
+    // re-added.
+    orgService.getHours.mockResolvedValue(answer({ mode: 'unset' }));
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+
+    expect(screen.getByLabelText('12-hour')).toBeTruthy();
+    expect(screen.getByLabelText('24-hour')).toBeTruthy();
+    expect(screen.queryByText(/4:00 PM/)).toBeNull();
+    expect(screen.queryByText(/16:00/)).toBeNull();
+  });
   it('saves the clock on its own, through the GYM and not through the hours', async () => {
     // It rides on `PATCH /v1/orgs/:gymId` because a gym that has never set hours
     // cannot send a `PUT /hours` at all — and that gym is exactly the one about

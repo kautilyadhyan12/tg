@@ -112,7 +112,11 @@ function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
   const boxStyle = { ...inputStyle, opacity: disabled ? 0.5 : 1 };
 
   return (
-    <span className="inline-flex items-center gap-1">
+    // `flex-nowrap` and `shrink-0`: the three boxes are ONE control and must
+    // never break across lines. Kd's screen wrapped them one per line — nine
+    // stacked fragments reading `--`, `:`, `--` — because the row had eight
+    // shrinkable children and no widths.
+    <span className="inline-flex flex-nowrap shrink-0 items-center gap-1">
       <select
         value={parts.hour === null ? '' : String(parts.hour)}
         onChange={(e) => {
@@ -123,7 +127,7 @@ function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
         }}
         disabled={disabled}
         aria-label={`${label} hour`}
-        className="rounded-lg px-2 py-1.5 text-sm"
+        className="w-16 rounded-lg px-2 py-1.5 text-sm"
         style={boxStyle}
       >
         <option value="">--</option>
@@ -143,7 +147,7 @@ function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
         onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
         disabled={disabled || endOfDay}
         aria-label={`${label} minute`}
-        className="rounded-lg px-2 py-1.5 text-sm"
+        className="w-16 rounded-lg px-2 py-1.5 text-sm"
         style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
       >
         <option value="">--</option>
@@ -162,7 +166,7 @@ function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
           onChange={(e) => emit({ meridiem: e.target.value === '' ? null : e.target.value })}
           disabled={disabled}
           aria-label={`${label} AM or PM`}
-          className="rounded-lg px-2 py-1.5 text-sm"
+          className="w-20 rounded-lg px-2 py-1.5 text-sm"
           style={boxStyle}
         >
           <option value="">--</option>
@@ -500,7 +504,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                       onChange={() => void changeClock('12h')}
                       disabled={!allowed || readOnly || clockSaving}
                     />
-                    12-hour <span style={{ color: 'rgba(255,255,255,0.45)' }}>(4:00 PM)</span>
+                    12-hour
                   </label>
                   <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
                     <input
@@ -510,7 +514,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                       onChange={() => void changeClock('24h')}
                       disabled={!allowed || readOnly || clockSaving}
                     />
-                    24-hour <span style={{ color: 'rgba(255,255,255,0.45)' }}>(16:00)</span>
+                    24-hour
                   </label>
                 </div>
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
@@ -604,7 +608,11 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                         {isOpen ? (
                           <div className="px-3 pb-3">
                             {sessions.map((session, index) => (
-                              <div key={index} className="flex items-center gap-2 mb-2">
+                              /* `flex-wrap` on the ROW so a narrow screen breaks
+                                 BETWEEN the two times rather than inside one — the
+                                 halves are `shrink-0` above, so a break can only
+                                 happen where it reads properly. */
+                              <div key={index} className="flex flex-wrap items-center gap-2 mb-2">
                                 {/* THE LABEL CARRIES THE SESSION NUMBER, and it
                                     is not cosmetic: a day can hold many, so
                                     without it three controls are indistinguishable

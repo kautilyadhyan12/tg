@@ -11,7 +11,7 @@ has simply not answered yet. Those two states look identical in the database, an
 confusing them would have told every existing gym's members that their gym never
 opens. If step 1 shows the word "Closed" anywhere, stop and say so.
 
-**Time:** about 20 minutes (25 steps). **You need:** the API and the web app running
+**Time:** about 20 minutes (26 steps). **You need:** the API and the web app running
 locally, and **two email addresses** (the second never receives mail).
 
 **Status: NOT YET RUN.**
@@ -55,12 +55,13 @@ start to finish.
 | # | Do this | Expect |
 |---|---|---|
 | 1 | Sign up as **account A**, create a gym (country **United States**), press **"Start your 30-day free trial"** on the pop-up. Copy the join code. Go to **Settings** and find **"When we're open"**. | Under the heading: **"You haven't said when your gym is open. Members aren't shown anything about opening times until you do."** **The word "Closed" must not appear anywhere on this screen.** This is the whole point of step 1 — an unanswered gym says nothing, it does not claim to be shut. |
-| 2 | Click the **"When we're open"** heading to open it. | At the top, **"Which clock do you use?"** offering **12-hour (4:00 PM)** and **24-hour (16:00)**, with **24-hour** already picked. Below it, **Open 24 hours** and **Set opening times** — neither ticked. No days listed. **Save is grey.** |
+| 2 | Click the **"When we're open"** heading to open it. | At the top, **"Which clock do you use?"** offering **12-hour** and **24-hour** — the names only, no sample times beside them — with **24-hour** already picked. Below it, **Open 24 hours** and **Set opening times** — neither ticked. No days listed. **Save is grey.** |
 | 3 | Pick **12-hour**. | It ticks immediately. **There is no Save for this — it saves itself.** Everything on this screen, and on your members' screens, now reads on a 12-hour clock. |
 | 4 | Choose **Open 24 hours**, then press **Save opening times**. | **"Saved."** Close and re-open the section (or press F5): the heading now reads **"Your gym is open 24 hours."** |
-| 5 | Choose **Set opening times**. **Click the word "Monday"** to unfold that day. Press **"Add a time"**. | Each time is **three little boxes — `_ _ : _ _` and AM/PM** — all starting on `--`. **Nothing is typed.** |
+| 5 | Choose **Set opening times**. **Click the word "Monday"** to unfold that day. Press **"Add a time"**. | Each time is **three little boxes — `_ _ : _ _` and AM/PM** — all starting on `--`, **all on ONE line, all the same size**. **Nothing is typed.** |
 | 5b | Set the first row to **6 : 00 AM** to **7 : 00 AM**, one box at a time. | **Each box keeps what you picked** — set the hour, and it stays while you go to the minute. The minute list steps in fives, so **:30 is there**. |
 | 5c | Press **"Add a time"** on Monday again and set **4 : 00 PM** to **9 : 00 PM**. | Monday shows two rows. **This is "many sessions in a day".** Save is now pressable. |
+| 5d | Go back to the top and pick **24-hour**, then look at Monday's rows again. | **The AM/PM boxes go** — they mean nothing on a 24-hour clock — **and the hour and minute boxes do not move or resize.** The times now read 06:00 and 16:00. Switch back to **12-hour** before carrying on. |
 | 6 | Click **Sunday** to unfold it, press **"Add a time"**, set **8 : 00 AM** to **12 : 00 PM**. Press **Save opening times**. | **"Saved."** The summary reads **"Your opening times are set for 2 days a week."** **Sunday is open because you said so** — no weekday is special. |
 | 7 | **THE FOLDING — watch this one.** Monday and Sunday are both unfolded. Now click **Wednesday**. | **Wednesday opens AND Monday and Sunday stay open.** Opening one day must never close another. |
 | 8 | Now click **Monday** again. | **Only Monday folds.** Wednesday and Sunday are still open. Each folded row still shows that day's times, so the whole week is readable without opening anything. |
