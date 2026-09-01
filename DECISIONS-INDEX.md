@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **984 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **990 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,195 lines, MEASURED 2026-09-01 (eleventh measurement that
-day) and not estimated** (984 + 1,153 + 58). **§1 MOVED FOUR TIMES THAT DAY,
+**ALWAYS-READ TOTAL: 2,201 lines, MEASURED 2026-09-01 (twelfth measurement that
+day) and not estimated** (990 + 1,153 + 58). **THE TWELFTH MEASUREMENT IS THE
+REASSURING ONE: the attendance card — a full server half, migration, three
+routes and a new suite — added SIX lines here, all of them trigger phrases,
+because its record is a CARD record and went to §1B where :24813 sends it. The
++179 that day came from four RULINGS, not from the work.** **§1 MOVED FOUR TIMES
+THAT DAY,
 AND THE REASON IS THE TEST OF THE SPLIT: the eight records before it were CARD
 records and went to §1B, where :24813 sends them; the four after are a KD
 RULING (:27900) and its three same-session ADDENDA (:27992, :28055, :28107), and
@@ -1294,6 +1299,49 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:28221** — 2026-09-01 — **ATTENDANCE, SERVER HALF: a member can say "I'm
+  here", the gym can see who came, and the sweep found THREE of my own tests
+  proving less than they claimed plus a mutant that could not die.** **Read
+  before building the attendance web half, before adding any reader or writer of
+  `gym_attendance`, before touching `getStreakDays` or `getActivityDays`, before
+  minting a privilege in this repo, before writing a test whose fixture is one
+  gym or one membership, and before hand-writing a migration.**
+  Migration `0019` · `gyms.manual_attendance_enabled` (default `true`, the
+  ruling not a convenience) · `gym_attendance` with five CHECKs and
+  `UNIQUE (gym_id, user_id, day, slot_key)` · the NINTH privilege
+  `attendance.read` with its DDL CHECK and a backfill onto EVERY role · three
+  routes. **NO SCREEN, NO SMOKE OFFERED, T3 UNRUN.**
+  **`slot_key` MAKES KD'S :27992 RULING AND R3.5 THE SAME MECHANISM** — two
+  sessions are two keys, one session twice is one key, no sessions is a constant
+  key (:28055) — **and its failure direction is SILENT**, so the database
+  re-derives it (`gym_attendance_slot_key_agrees_check`) and answers 23514 rather
+  than letting a constant revert every gym to one visit a day.
+  **THE SWEEP'S FOUR FINDINGS, all in MY tests bar the last:** a cross-tenant
+  test proving a 404 says **nothing** about what an AUTHORISED owner is SHOWN
+  (the summary is a different query from the page — :10182 one level in) · every
+  history fixture used a member of ONE gym, so a gym-id leak had nothing to leak
+  **and the observer is an ordinary member of TWO** · no fixture stood on the
+  session BOUNDARY, and the fixture built to do so had its own wait arithmetic
+  backwards (**a fixture's timing logic is code**) · and **O210 COULD NOT BE
+  KILLED BY ANY HONEST FIXTURE, which was a question about the CODE**:
+  `count(DISTINCT user_id)` and `count(*)` are provably equal per SLOT (the
+  UNIQUE admits one visit per person per slot), the distinction is real only
+  across the DAY, **and that number did not exist** — a screen summing the slot
+  rows would print more people than the gym has members (:5807 through the very
+  feature ruling 12 created). The response now carries `totals`.
+  **MINTING A PRIVILEGE DRIFTED FOUR MUTATION ANCHORS AND MADE A FIFTH
+  AMBIGUOUS**, every one caught by the whole-table pre-check ABORTING — and **the
+  re-anchor nearly made O121 and O134 IDENTICAL, which would have left one
+  guarantee unobserved while both reported RED. A sibling pair re-anchored by
+  PATTERN rather than by MEANING is how two mutants quietly become one.**
+  **`drizzle-kit migrate` PRINTED "applied successfully" AND APPLIED NOTHING** —
+  a hand-written migration needs a hand-written `_journal.json` entry, and its
+  absence is silent and green. Caught only by reading the constraints back
+  (:20222 paying for itself the same session).
+  **AND AN INSTRUMENT CORRECTION: `pnpm --filter api test:local -- <file>`
+  silently runs the WHOLE suite** (pnpm swallows the `--`); drop the `--` to
+  scope it. :8156's trigger has a mirror image — believing a run was FILTERED
+  when it was not.
 - **:27810** — 2026-09-01 — **SMOKE STEP 22b RUNS AND PASSES, THE OPENING-HOURS
   `OWED.md` LINE TICKS — and it is the ONE step of that sheet anybody has ever
   observed.**

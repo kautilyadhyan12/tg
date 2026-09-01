@@ -1,6 +1,9 @@
 # CARD — "I'm here": gym attendance
 
-**Status: WRITTEN, NOT BUILT. Awaiting Kd's approval at the plan gate.**
+**Status: §4a (SERVER HALF) BUILT 2026-09-01 — `DECISIONS.md:28221`. Migration
+`0019` reviewed as SQL by Kd and approved before anything else was written
+(T5/R4.4). §4b (WEB HALF) IS UNBUILT, T3 IS UNRUN, and there is no screen so no
+smoke was offered.**
 Rulings: `DECISIONS.md` :26469 + addenda :26558, :26586 · the hours rulings
 :26624, :26684, :26736 (attendance is stamped with the session it fell in) ·
 **and Kd's answers at this gate on 2026-09-01, across four passes: five

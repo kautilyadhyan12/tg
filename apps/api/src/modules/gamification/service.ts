@@ -36,7 +36,11 @@ export async function onWorkoutSynced(
   const tz = safeTimeZone(timezone);
   const state = await deps.sql.begin(async (tx) => {
     const stored = await repo.getStreakForUpdate(tx, userId); // serializes concurrent syncs
-    const days = await repo.getActivityDays(tx, userId, tz);
+    // `getStreakDays`, NOT `getActivityDays` — Kd ruled gym attendance keeps a
+    // streak alive (:27900 §3). `recomputeXp` below deliberately still reads the
+    // workouts-only list; a reviewer should mutate one into the other and watch
+    // an XP test go red.
+    const days = await repo.getStreakDays(tx, userId, tz);
     const replayed = replayActivityDays(days);
     const after: StreakState = {
       ...replayed,
@@ -100,6 +104,56 @@ export async function onMealLogged(
   // A meal can earn a badge (first_meal, macro_master, photo_meal), whose tier
   // XP is part of the total — recompute so XP stays consistent with awards.
   await recomputeXp(deps, userId, tz);
+}
+
+/** GOING TO THE GYM KEEPS A STREAK ALIVE — Kd, 2026-09-01 (:27900 §3), at the
+ *  attendance card's plan gate, overruling the recommendation to defer it.
+ *
+ *  **A SERVICE INTERFACE, CALLED BY THE ORGS MODULE (R7.1)** — the same seam
+ *  `workouts` and `nutrition` already use. Nothing outside this module reaches
+ *  into gamification's repo or its streak internals.
+ *
+ *  **IT REPLAYS THE STREAK AND AWARDS BADGES, AND IT PAYS NO PER-DAY XP.** The
+ *  replay reads `getStreakDays` (workouts ∪ attendance); `recomputeXp` below
+ *  reads `getActivityDays` (workouts alone), so an attendance-only day extends a
+ *  streak and adds no continuation XP. **The XP that CAN move here is a badge's
+ *  own tier XP** — `streak_3/7/30/100` are reachable by attendance now, which is
+ *  the ruling and not a leak (Kd answered "streaks and badges", and a badge's XP
+ *  is part of the badge). `recomputeXp` runs AFTER the awards for the reason
+ *  every other hook in this file runs it there: badge XP is part of the total.
+ *
+ *  **THE CALLER ONLY CALLS THIS FOR A NEW ROW.** A repeated tap in the same slot
+ *  is idempotent at the database and changes no day, so re-running this would be
+ *  work with no possible effect — and `recomputeXp` takes an advisory lock per
+ *  user, which a member hammering a button should not be able to queue behind.
+ *
+ *  **A FAILURE HERE MUST NOT LOSE THE ATTENDANCE**, which is why the orgs
+ *  service calls it after its own transaction has committed and swallows the
+ *  error the way `nutrition` does: the row is the record, and a streak is
+ *  recomputed from committed history on the next read anyway. */
+export async function onAttendanceMarked(
+  deps: GamificationDeps,
+  userId: string,
+  timezone: string | null,
+): Promise<void> {
+  const tz = safeTimeZone(timezone);
+  const state = await deps.sql.begin(async (tx) => {
+    const stored = await repo.getStreakForUpdate(tx, userId);
+    const days = await repo.getStreakDays(tx, userId, tz);
+    const replayed = replayActivityDays(days);
+    const after: StreakState = {
+      ...replayed,
+      // §3.3: longest is displayed for ever and is never shrunk by a replay over
+      // a history that may have been pruned (retention sweeps, DPDP).
+      longest: Math.max(replayed.longest, stored.longest),
+    };
+    await repo.upsertStreak(tx, userId, after);
+    return after;
+  });
+  const stats = await repo.getStats(deps.sql, userId, tz);
+  const codes = earnedCodes({ ...stats, current_streak: state.current });
+  await repo.awardAchievements(deps.sql, userId, codes);
+  await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
 }
 
 /** Read-side lazy reconciliation (DECISIONS GAP-5): freezes owed for missed

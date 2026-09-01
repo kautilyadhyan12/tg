@@ -86,6 +86,20 @@ export const gyms = pgTable(
      *  answers here. `24h` is the default because it is what every existing
      *  gym's screens already draw, so it changes nothing anybody is looking at. */
     clockFormat: text("clock_format").notNull().default("24h"),
+    /** MAY A MEMBER MARK THEMSELVES PRESENT — Kd :26469 §1.4, *"the owner can
+     *  switch the manual option off in Settings"*.
+     *
+     *  **DEFAULT `true` IS THE RULING, NOT A CONVENIENCE.** :26586 struck the
+     *  whole scan path from the web (*"drop the scan part completely from web
+     *  men"*), so the manual tap is the ONLY way in that exists until the phone
+     *  app ships. A default of `false` would leave every gym unable to record
+     *  anybody at all, on the day this landed, having chosen nothing.
+     *
+     *  **It is what makes the number trustworthy, which is why it exists before
+     *  the thing it switches off.** A manual tap can be sent from home (:26469
+     *  §4); a gym that cares turns this off the day its QR poster goes up, and
+     *  `gym_attendance.method` is what lets it tell the two apart meanwhile. */
+    manualAttendanceEnabled: boolean("manual_attendance_enabled").notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [
@@ -191,6 +205,106 @@ export const gymClosures = pgTable(
       sql`${t.note} IS NULL OR char_length(${t.note}) <= 120`,
     ),
     uniqueIndex("gym_closures_gym_day_uq").on(t.gymId, t.day),
+  ],
+);
+
+/** WHO CAME TO THE GYM — Kd 2026-08-31 (:26469): *"a user when arrives at the
+ *  gym gives a attandance"*, built BEFORE the gym's numbers because a number
+ *  about attendance cannot exist before attendance does.
+ *
+ *  **`day` IS THE GYM'S CALENDAR DAY, STORED AND NEVER RE-DERIVED.** Computed
+ *  once at the tap as `(now() AT TIME ZONE g.timezone)::date`, like
+ *  `gym_closures.day` (:26469 §5, trap #8). **Stored** because a gym may edit
+ *  its zone in Settings afterwards (:19366, :20075) and re-deriving would move
+ *  every past visit to a different day — the day a visit happened is the day the
+ *  gym and the member both saw on screen.
+ *
+ *  **`markedByUserId` IS SEPARATE FROM `userId` AND TODAY THEY ARE ALWAYS
+ *  EQUAL.** Kd answered *"only the member, for now"* at the plan gate (:27900),
+ *  so a front-desk button later ADDS a value rather than rewriting history —
+ *  :26469 §4's own argument about `method`, applied to the question he answered.
+ *  Not a deferral and no `OWED.md` line: staff marking was ANSWERED.
+ *
+ *  **`method` CARRIES `qr` BEFORE ANYTHING CAN WRITE IT, deliberately.** Only
+ *  `manual` is reachable until the phone app ships (:26586). :26469 §4 is
+ *  explicit that the two ways in are stored as DIFFERENT THINGS from day one —
+ *  a single "attended" boolean throws away the only thing that makes the number
+ *  trustworthy, and no later card recovers it.
+ *
+ *  **`hoursStatus` HAS FIVE VALUES BECAUSE FIVE DIFFERENT TRUE THINGS CAN BE
+ *  SAID.** `outside_hours` and `closed_day` are RECORDED AND MARKED, never
+ *  refused (:26624 §4.4, :26684) — a gym that forgot to update its hours must
+ *  not lock its own members out. **`hours_unset` is :26736's third state one
+ *  level in**: "nobody has answered" is not "outside hours", and folding them
+ *  together is the false sentence that ruling exists to prevent.
+ *
+ *  **THE SESSION WINDOW IS COPIED, NOT REFERENCED — no FK to `gymHours`, on
+ *  purpose.** `PUT /hours` replaces the whole week, deleting and re-inserting
+ *  those rows every time an owner edits the timetable, so an FK would dangle or
+ *  cascade a gym's history into nothing. The window is what was TRUE when the
+ *  person walked in and must survive the timetable changing an hour later.
+ *
+ *  **`slotKey` IS KD'S RULING MADE PHYSICAL** (:27992): *"if a member again
+ *  comes in different slot … that also count and owner can see that the member
+ *  attended two times"*. The window (`360-420`) when there is one, the
+ *  `hoursStatus` name otherwise. In the UNIQUE below it gives all three
+ *  behaviours at once: two sessions ⇒ two rows (the ruling) · the same session
+ *  twice ⇒ one row (R3.5 idempotency KEPT, not traded for the ruling) · a gym
+ *  with no sessions ⇒ a constant key ⇒ **one attendance per day, which Kd ruled
+ *  in as many words** (:28055, *"only one time attandance"*).
+ *
+ *  **`gym_attendance_slot_key_agrees_check` GUARDS THE DIRECTION THAT FAILS
+ *  QUIETLY.** A writer that sets `slotKey` to a constant reverts every gym to
+ *  one visit a day with NO error anywhere — the UNIQUE still holds and every
+ *  refusal test still passes. The CHECK ties the key to the columns it must be
+ *  derived from, so that writer gets a 23514 instead of a wrong number
+ *  (:7104's PG1: a rule has two failure directions).
+ *
+ *  **The member's own history needs no index of its own** — the unique index
+ *  leads with `(gym_id, user_id, day)`, which is that read's predicate and its
+ *  ordering. The gym-side "who came today" has `gym_attendance_gym_day_idx`. */
+export const gymAttendance = pgTable(
+  "gym_attendance",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    markedByUserId: uuid("marked_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    day: date("day").notNull(),
+    markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+    method: text("method").notNull(),
+    hoursStatus: text("hours_status").notNull(),
+    sessionOpensMinute: integer("session_opens_minute"),
+    sessionClosesMinute: integer("session_closes_minute"),
+    slotKey: text("slot_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_attendance_method_check", sql`${t.method} IN ('manual','qr')`),
+    check(
+      "gym_attendance_hours_status_check",
+      sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset')`,
+    ),
+    check(
+      "gym_attendance_session_pairing_check",
+      sql`(${t.hoursStatus} = 'in_session' AND ${t.sessionOpensMinute} IS NOT NULL AND ${t.sessionClosesMinute} IS NOT NULL AND ${t.sessionClosesMinute} > ${t.sessionOpensMinute}) OR (${t.hoursStatus} <> 'in_session' AND ${t.sessionOpensMinute} IS NULL AND ${t.sessionClosesMinute} IS NULL)`,
+    ),
+    check(
+      "gym_attendance_session_range_check",
+      sql`(${t.sessionOpensMinute} IS NULL OR ${t.sessionOpensMinute} BETWEEN 0 AND 1439) AND (${t.sessionClosesMinute} IS NULL OR ${t.sessionClosesMinute} BETWEEN 1 AND 1440)`,
+    ),
+    check(
+      "gym_attendance_slot_key_agrees_check",
+      sql`CASE WHEN ${t.hoursStatus} = 'in_session' THEN ${t.slotKey} = ${t.sessionOpensMinute}::text || '-' || ${t.sessionClosesMinute}::text ELSE ${t.slotKey} = ${t.hoursStatus} END`,
+    ),
+    uniqueIndex("gym_attendance_gym_user_day_slot_uq").on(t.gymId, t.userId, t.day, t.slotKey),
+    index("gym_attendance_gym_day_idx").on(t.gymId, t.day, t.markedAt),
   ],
 );
 

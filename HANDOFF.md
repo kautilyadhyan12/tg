@@ -1,6 +1,70 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ATTENDANCE, SERVER HALF — BUILT. DECISIONS :28221.
+      `CARD-gym-attendance.md` §4a is done; §4b (the web half) is UNBUILT.
+
+  1. **NEXT: T3 ON THIS DIFF, IN A FRESH CHAT** (Part I §7(c); a subagent is
+     NOT a T3 — that is a recorded blowup). The ready-to-paste prompt is at the
+     end of the session that built it. AFTER that, §4b is its own chat.
+  2. **NO SCREEN EXISTS, SO NO SMOKE WAS OFFERED.** Nothing to click. Do not
+     invent a step and do not read the absence as an oversight (:26012).
+  3. **THE STREAK SPLIT IS THE MOST DANGEROUS LINE IN THE CARD.**
+     `getStreakDays` = workouts ∪ attendance (Kd ruled it). `getActivityDays` =
+     workouts alone (XP; he did NOT rule it). O215 and O216 hold both
+     directions — collapse them and one of the two goes red. **Do not "tidy"
+     them into one function.**
+  4. **`slot_key` IS THE ONLY LOAD-BEARING COLUMN AND IT FAILS SILENTLY.** A
+     constant reverts every gym to one visit a day with no error; the database
+     CHECK is what turns that into a 23514. O200 is aimed at the ACCEPTING case
+     deliberately.
+  5. **MINTING A PRIVILEGE IS A MIGRATION HERE AND IT DRIFTS MUTATION
+     ANCHORS.** `attendance.read` moved four (O34, O46, O121, O134) and made a
+     fifth ambiguous (O199). All caught by the pre-check. **And my first
+     re-anchor made O121 and O134 identical** — re-anchor a sibling pair by
+     MEANING, never by pattern.
+  6. **`drizzle-kit migrate` SAID "applied successfully" AND RAN NOTHING**: a
+     hand-written migration needs a hand-written `_journal.json` entry. Read the
+     object back out of `pg_catalog` afterwards, always.
+  7. **`pnpm --filter api test:local -- <file>` RUNS THE WHOLE SUITE** — pnpm
+     eats the `--`. Drop it to scope. Every "scoped" figure quoted before I
+     checked was a full run.
+
+PROVE: All LOCAL (`localhost:5433`), all on the final bytes: `orgs.attendance`
+       **23/23** (new) · `orgs.routes` **147/147** · `orgs.hours` **38/38** ·
+       `db.migration` **15/15** · `@app/shared` **51/51** · `tsc --noEmit`
+       exit 0 on `api` and `@app/shared` · `eslint --max-warnings=0` exit 0 on
+       `apps/api/{src,test,tools}` and `packages/shared/{src,test}` ·
+       `check-harnesses` **25 scripts parse** · `check-decisions-index` **260
+       pointers, 1044 headings** · triggers `--check` clean (**811 from 220 of
+       358 rulings**).
+       **SWEEP, a stated SUBSET of 217: 23 mutants · 23 RED · 0 ALIVE · 0 never
+       ran** — the 18 new rows plus the 5 re-anchored ones; controls GREEN and
+       tallied first, restore byte-exact after every mutant. **First run was 15
+       RED / 3 ALIVE and all three survivors were defects in MY tests.**
+       **The boundary test ran THREE times (23/23 each)** — its fixture waits on
+       a clock and one green run of a timing test proves nothing.
+       **THE FULL api SUITE IS DELIBERATELY NOT QUOTED AS A FIGURE:** four full
+       local runs went 741/741 · 3 failures in `catalog.seed.test.ts` · an
+       unrecorded failure · 741/741 — the PRE-EXISTING flake CLAUDE.md and
+       :13746 document. **NOT measured: whether this card's new suite aggravates
+       it. Do not claim it does not.**
+
+FILES: `apps/api/drizzle/0019_gym_attendance.sql` (new) ·
+       `apps/api/drizzle/meta/_journal.json` · `db/schema/tenancy.ts` ·
+       `modules/orgs/{repo,service,routes,schemas}.ts` ·
+       `modules/gamification/{repo,service}.ts` · `packages/shared/src/orgs.ts` ·
+       `apps/api/test/orgs.attendance.test.ts` (new) ·
+       `apps/api/test/{db.migration,orgs.routes}.test.ts` ·
+       `packages/shared/test/schemas.test.ts` · `apps/api/tools/mutate-orgs.mjs`
+       · `CARD-gym-attendance.md` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate, not this one.
+```
+
+```
 TASK: THE OPENING-HOURS WORK IS COMMITTED AND PUSHED, CI IS GREEN, AND KD
       ANSWERED THE ATTENDANCE GATE'S FOUR QUESTIONS. DECISIONS :27900.
       `CARD-gym-attendance.md` is WRITTEN and UNAPPROVED. NOTHING IS BUILT.

@@ -1,6 +1,7 @@
 // P1.1 — schema contract tests (Part 2 §2, v1 §5.3).
 import { describe, expect, it } from "vitest";
 import {
+  ORG_PRIVILEGES,
   KEYPOINT_COUNT,
   KP,
   VISIBILITY_THRESHOLD,
@@ -464,8 +465,18 @@ describe("privileges a newer server knows and this build does not", () => {
     // AND the real newest privilege IS accepted, which is what stops this test
     // passing against a schema frozen at whatever the vocabulary was the day it
     // was written — the failure mode the fixture rename above was a symptom of.
+    //
+    // **DERIVED FROM THE VOCABULARY RATHER THAN NAMED, and the ninth privilege
+    // is why (:28107).** This line said `"billing.manage"` and went on passing
+    // when `attendance.read` was minted — still true, no longer testing what it
+    // claims, which is :5348 rule 4's definition of a liar. Naming the new one
+    // would put the same trap back one card later, exactly as the comment above
+    // says of `UNKNOWN_PRIVILEGE`. New privileges are APPENDED to
+    // `ORG_PRIVILEGES`, so the last entry is the newest by construction.
+    const newestPrivilege = ORG_PRIVILEGES[ORG_PRIVILEGES.length - 1];
+    expect(newestPrivilege).toBeDefined();
     const newest = updateOrgStaffPrivilegesRequestSchema.safeParse({
-      privileges: ["members.read", "billing.manage"],
+      privileges: ["members.read", newestPrivilege],
     });
     expect(newest.success).toBe(true);
   });

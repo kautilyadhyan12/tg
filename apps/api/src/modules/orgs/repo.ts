@@ -15,6 +15,8 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  gymAttendanceHoursStatusSchema,
+  gymAttendanceMethodSchema,
   gymClockFormatSchema,
   gymHoursModeSchema,
   orgApplicationStatusSchema,
@@ -25,6 +27,8 @@ import {
   planIntervalSchema,
 } from "@app/shared";
 import type {
+  GymAttendanceHoursStatus,
+  GymAttendanceMethod,
   GymClockFormat,
   GymHoursMode,
   OrgApplicationStatus,
@@ -54,6 +58,11 @@ export interface OrgRow {
    *  holds this row before it asks for hours and the switch must work on
    *  a gym that has never set any. */
   clockFormat: GymClockFormat;
+  /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4). On the org row for
+   *  `clockFormat`'s reason — the console holds it before it asks for anything
+   *  else, and the member's gym card needs it to decide whether to DRAW the
+   *  "I'm here" button at all. */
+  manualAttendanceEnabled: boolean;
   status: OrgStatus;
 }
 
@@ -161,6 +170,7 @@ interface RawOrg {
   locale: string;
   currency_display: string;
   clock_format: string;
+  manual_attendance_enabled: boolean;
   status: string;
 }
 
@@ -213,6 +223,7 @@ function toOrgRow(raw: RawOrg): OrgRow {
     locale: raw.locale,
     currencyDisplay: raw.currency_display,
     clockFormat: gymClockFormatSchema.parse(raw.clock_format),
+    manualAttendanceEnabled: raw.manual_attendance_enabled,
     status: toOrgStatus(raw.status),
   };
 }
@@ -285,7 +296,7 @@ export async function createOrgAttempt(
                 ${input.orgType}, ${input.timezone}, ${input.locale},
                 ${input.currencyDisplay}, ${input.ownerUserId})
         RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                  currency_display, clock_format, status`;
+                  currency_display, clock_format, manual_attendance_enabled, status`;
       const rawOrg = orgRows[0];
       if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
       const org = toOrgRow(rawOrg);
@@ -380,7 +391,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-           g.locale, g.currency_display, g.clock_format, g.status,
+           g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
@@ -559,7 +570,7 @@ export async function listFormerOrgsForUser(
     SELECT * FROM (
       SELECT DISTINCT ON (m.gym_id)
              g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-             g.locale, g.currency_display, g.clock_format, g.status, m.removed_at
+             g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status, m.removed_at
       FROM gym_members m
       JOIN gyms g ON g.id = m.gym_id
       WHERE m.user_id = ${userId}
@@ -582,7 +593,7 @@ export async function listFormerOrgsForUser(
 export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
   const rows = await sql<RawOrg[]>`
     SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, status
+           currency_display, clock_format, manual_attendance_enabled, status
     FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
   return row === undefined ? null : toOrgRow(row);
@@ -606,6 +617,10 @@ export interface OrgPatch {
    *  currency lock protects — it moves no money and no day boundary — so it
    *  is the one field here a paying gym may always change. */
   clockFormat?: GymClockFormat;
+  /** The owner's attendance switch (:26469 §1.4). Bound by nothing the currency
+   *  lock protects — no money, no day boundary — so like `clockFormat` it is a
+   *  field a paying gym may always change. */
+  manualAttendanceEnabled?: boolean;
 }
 
 export type UpdateOrgOutcome =
@@ -773,6 +788,12 @@ export async function updateOrg(
     if ("clockFormat" in input.patch && input.patch.clockFormat !== before.clockFormat) {
       changed.push("clockFormat");
     }
+    if (
+      "manualAttendanceEnabled" in input.patch &&
+      input.patch.manualAttendanceEnabled !== before.manualAttendanceEnabled
+    ) {
+      changed.push("manualAttendanceEnabled");
+    }
     if (changed.length === 0) return { kind: "unchanged", org: before };
 
     // Written out column by column rather than assembled from a loop over the
@@ -794,10 +815,15 @@ export async function updateOrg(
           "clockFormat" in input.patch
             ? (input.patch.clockFormat ?? before.clockFormat)
             : before.clockFormat
+        },
+        manual_attendance_enabled = ${
+          "manualAttendanceEnabled" in input.patch
+            ? (input.patch.manualAttendanceEnabled ?? before.manualAttendanceEnabled)
+            : before.manualAttendanceEnabled
         }
       WHERE id = ${input.gymId}
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, clock_format, status`;
+                currency_display, clock_format, manual_attendance_enabled, status`;
     const raw = rows[0];
     if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
 
@@ -968,7 +994,7 @@ export async function applyByCode(
   return await sql.begin(async (tx) => {
     const orgRows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, status
+           currency_display, clock_format, manual_attendance_enabled, status
       FROM gyms WHERE id = ${found.gym_id}`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "no_such_code" };
@@ -1334,7 +1360,7 @@ export async function restoreGym(
   return await sql.begin(async (tx) => {
     const rows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-             currency_display, clock_format, status
+             currency_display, clock_format, manual_attendance_enabled, status
       FROM gyms WHERE id = ${input.gymId}
       -- THE LOCK IS ON ITS OWN LINE ON PURPOSE, and not for taste. NO BACKTICKS
       -- IN HERE: one ends the literal, and I incurred that slip twice in this
@@ -1360,7 +1386,7 @@ export async function restoreGym(
       UPDATE gyms SET status = 'active'
       WHERE id = ${input.gymId} AND status = 'archived'
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, clock_format, status`;
+                currency_display, clock_format, manual_attendance_enabled, status`;
     const updatedRaw = updated[0];
     if (updatedRaw === undefined) {
       // Unreachable under the `FOR UPDATE` above, which is exactly why it is
@@ -1741,7 +1767,7 @@ export async function confirmApplication(
 
     const orgRows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, status
+           currency_display, clock_format, manual_attendance_enabled, status
       FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "not_found" };
@@ -1998,6 +2024,7 @@ export async function listApplicationsForUser(
     timezone: string;
     locale: string;
     clock_format: string;
+    manual_attendance_enabled: boolean;
     currency_display: string;
     org_status: string;
     org_can_confirm: boolean;
@@ -2023,6 +2050,7 @@ export async function listApplicationsForUser(
            a.decided_at, a.member_nudged_at,
            g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
            g.timezone, g.locale, g.currency_display, g.clock_format,
+           g.manual_attendance_enabled,
            g.status AS org_status,
            EXISTS (
              SELECT 1 FROM subscriptions s
@@ -2059,6 +2087,7 @@ export async function listApplicationsForUser(
       locale: r.locale,
       currency_display: r.currency_display,
       clock_format: r.clock_format,
+      manual_attendance_enabled: r.manual_attendance_enabled,
       status: r.org_status,
     }),
     application: toApplicationRow({
@@ -3696,4 +3725,553 @@ export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string):
       AND u.status = 'active'
     LIMIT 1`;
   return rows.length > 0;
+}
+
+/* ─────────────────────────── ATTENDANCE ───────────────────────────
+ *
+ *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900, :27992, :28055, :28107).
+ */
+
+export interface GymAttendanceVisitRow {
+  day: string;
+  markedAt: Date;
+  method: GymAttendanceMethod;
+  hoursStatus: GymAttendanceHoursStatus;
+  sessionOpensMinute: number | null;
+  sessionClosesMinute: number | null;
+}
+
+function toAttendanceVisitRow(raw: {
+  day: string;
+  marked_at: Date;
+  method: string;
+  hours_status: string;
+  session_opens_minute: number | null;
+  session_closes_minute: number | null;
+}): GymAttendanceVisitRow {
+  return {
+    day: raw.day,
+    markedAt: raw.marked_at,
+    method: gymAttendanceMethodSchema.parse(raw.method),
+    hoursStatus: gymAttendanceHoursStatusSchema.parse(raw.hours_status),
+    sessionOpensMinute: raw.session_opens_minute,
+    sessionClosesMinute: raw.session_closes_minute,
+  };
+}
+
+/** WHAT THE GYM'S HOURS SAY ABOUT *NOW*, IN THE GYM'S OWN ZONE — the whole
+ *  status decision, in SQL, in one place.
+ *
+ *  **IT IS SQL AND NOT TYPESCRIPT FOR ONE REASON: THE CLOCK.** Every answer here
+ *  is derived from `now()` bucketed by `gyms.timezone`, and a JavaScript
+ *  `new Date()` on the api box would silently use the SERVER's zone — trap #8,
+ *  and the defect :26812 §2a caught in a test that disagreed with the truth for
+ *  only ten hours of every day. The database is the one clock in this system
+ *  that already knows how to stand in the gym's zone.
+ *
+ *  **THE ORDER OF THE BRANCHES IS THE RULING, NOT AN IMPLEMENTATION DETAIL:**
+ *
+ *  1. `unset` FIRST — before the closure, before everything. :26736: a gym that
+ *     has not answered is told NOTHING about opening times, and
+ *     `GymHoursNote.jsx`'s mode gate returns null for `unset` before it ever
+ *     looks at closures. **If this branch came second, a member could be told
+ *     `closed_day` about a gym whose own card shows them nothing** — two
+ *     surfaces disagreeing about one gym, which is what a shared reader exists
+ *     to prevent.
+ *  2. The CLOSURE next: a dated closure WINS over the weekly pattern (:26684
+ *     §3) — including over `open_24h`, which is a pattern like any other.
+ *  3. `open_24h` — nothing to be outside of.
+ *  4. A session containing this minute → `in_session`, carrying its window.
+ *  5. Otherwise `outside_hours`.
+ *
+ *  **`opens <= m AND m < closes` — HALF-OPEN, and the boundary is load-bearing.**
+ *  Sessions may TOUCH (10:00–12:00 beside 12:00–14:00 is legal — `flattenWeek`'s
+ *  rule), so an inclusive upper bound would put the instant of 12:00 in TWO
+ *  sessions and hand `slot_key` two answers for one visit. `LIMIT 1` is a
+ *  backstop and not the guarantee; the guarantee is the overlap check on write.
+ *
+ *  Null for a gym that does not exist, which the service turns into its 404. */
+async function readAttendanceContext(
+  tx: TransactionSql,
+  gymId: string,
+): Promise<{
+  day: string;
+  hoursStatus: GymAttendanceHoursStatus;
+  opensMinute: number | null;
+  closesMinute: number | null;
+  manualEnabled: boolean;
+  timezone: string;
+  clockFormat: GymClockFormat;
+} | null> {
+  const rows = await tx<
+    {
+      day: string;
+      hours_mode: string;
+      manual_attendance_enabled: boolean;
+      timezone: string;
+      clock_format: string;
+      closed: boolean;
+      opens_minute: number | null;
+      closes_minute: number | null;
+    }[]
+  >`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS day,
+           g.hours_mode, g.manual_attendance_enabled, g.timezone, g.clock_format,
+           EXISTS (
+             SELECT 1 FROM gym_closures c
+             WHERE c.gym_id = g.id
+               AND c.day = (now() AT TIME ZONE g.timezone)::date
+           ) AS closed,
+           s.opens_minute, s.closes_minute
+    FROM gyms g
+    LEFT JOIN LATERAL (
+      SELECT h.opens_minute, h.closes_minute
+      FROM gym_hours h
+      WHERE h.gym_id = g.id
+        AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE g.timezone))::int
+        AND h.opens_minute <= (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
+        AND h.closes_minute > (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
+      ORDER BY h.opens_minute
+      LIMIT 1
+    ) s ON true
+    WHERE g.id = ${gymId}`;
+  const row = rows[0];
+  if (row === undefined) return null;
+
+  const mode = gymHoursModeSchema.parse(row.hours_mode);
+  const common = {
+    day: row.day,
+    manualEnabled: row.manual_attendance_enabled,
+    timezone: row.timezone,
+    clockFormat: gymClockFormatSchema.parse(row.clock_format),
+  };
+  if (mode === "unset") {
+    return { ...common, hoursStatus: "hours_unset", opensMinute: null, closesMinute: null };
+  }
+  if (row.closed) {
+    return { ...common, hoursStatus: "closed_day", opensMinute: null, closesMinute: null };
+  }
+  if (mode === "open_24h") {
+    return { ...common, hoursStatus: "open_24h", opensMinute: null, closesMinute: null };
+  }
+  if (row.opens_minute !== null && row.closes_minute !== null) {
+    return {
+      ...common,
+      hoursStatus: "in_session",
+      opensMinute: row.opens_minute,
+      closesMinute: row.closes_minute,
+    };
+  }
+  return { ...common, hoursStatus: "outside_hours", opensMinute: null, closesMinute: null };
+}
+
+/** THE KEY THAT DECIDES WHETHER TWO TAPS ARE ONE VISIT OR TWO — Kd's rulings of
+ *  2026-09-01 (:27992, :28055), and the ONLY place it is derived.
+ *
+ *  The session window when there is one, so a morning and an evening visit are
+ *  different keys and BOTH count; the status name otherwise, so a gym with no
+ *  sessions gets ONE attendance per day. **The database's
+ *  `gym_attendance_slot_key_agrees_check` re-derives exactly this expression and
+ *  refuses a row that disagrees** — so a second writer that "simplifies" this to
+ *  a constant gets a 23514 instead of silently collapsing every gym to one visit
+ *  a day, which is the direction that otherwise fails with no error anywhere. */
+function slotKeyFor(
+  hoursStatus: GymAttendanceHoursStatus,
+  opensMinute: number | null,
+  closesMinute: number | null,
+): string {
+  return hoursStatus === "in_session" && opensMinute !== null && closesMinute !== null
+    ? `${String(opensMinute)}-${String(closesMinute)}`
+    : hoursStatus;
+}
+
+export type MarkAttendanceOutcome =
+  | {
+      kind: "marked";
+      alreadyMarked: boolean;
+      visit: GymAttendanceVisitRow;
+      timezone: string;
+      clockFormat: GymClockFormat;
+    }
+  | { kind: "manual_disabled" }
+  | { kind: "not_found" };
+
+/** RECORD THAT SOMEBODY IS HERE.
+ *
+ *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT DO
+ *  NOTHING` on `(gym_id, user_id, day, slot_key)` is what makes a double-tap
+ *  leave one row, and the read that follows returns whichever row is there — so
+ *  both taps answer 200 with the SAME visit. A service-side "have they already
+ *  marked?" would be a check-then-act with a window in it, on a button a member
+ *  can hit twice in a second.
+ *
+ *  **`alreadyMarked` IS DERIVED FROM WHETHER THE INSERT RETURNED**, never from a
+ *  prior read. It is a display hint and never the record; the record is the
+ *  visit, which is identical either way.
+ *
+ *  **THE MANUAL SWITCH IS CHECKED INSIDE THE TRANSACTION, under the lock the
+ *  gym's own writes take.** An owner switching it off while a member is mid-tap
+ *  is a real race, and that switch is what makes a gym's numbers mean something
+ *  (:26469 §4) — checking it outside the lock would let a tap the owner had just
+ *  forbidden land anyway.
+ *
+ *  **THE STATUS IS FROZEN AT THE MOMENT OF THE TAP.** If the owner edits the
+ *  timetable an hour later this row keeps the label it was given: it describes
+ *  the VISIT and not the current timetable, which is why the window is COPIED
+ *  rather than joined at read time.
+ *
+ *  **NO AUDIT ROW, and that is a decision rather than an omission.** `audit_log`
+ *  records what STAFF did to a gym — every other writer in this module is a
+ *  console action behind a privilege. An attendance is a MEMBER acting on their
+ *  own membership, the row IS the record, and several hundred a day would bury
+ *  the staff actions the log exists to make readable. */
+export async function markGymAttendance(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    markedByUserId: string;
+    method: GymAttendanceMethod;
+  },
+): Promise<MarkAttendanceOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const ctx = await readAttendanceContext(tx, input.gymId);
+    if (ctx === null) return { kind: "not_found" };
+    if (input.method === "manual" && !ctx.manualEnabled) return { kind: "manual_disabled" };
+
+    const slotKey = slotKeyFor(ctx.hoursStatus, ctx.opensMinute, ctx.closesMinute);
+    const inserted = await tx<{ one: number }[]>`
+      INSERT INTO gym_attendance
+        (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+         session_opens_minute, session_closes_minute, slot_key)
+      VALUES (${input.gymId}, ${input.userId}, ${input.markedByUserId}, ${ctx.day}::date,
+              ${input.method}, ${ctx.hoursStatus},
+              ${ctx.opensMinute}, ${ctx.closesMinute}, ${slotKey})
+      ON CONFLICT (gym_id, user_id, day, slot_key) DO NOTHING
+      RETURNING 1 AS one`;
+
+    // Read back rather than trusting the INSERT's RETURNING: on the conflict
+    // path it returns nothing, and the row that IS there is the answer both
+    // callers must receive.
+    const rows = await tx<
+      {
+        day: string;
+        marked_at: Date;
+        method: string;
+        hours_status: string;
+        session_opens_minute: number | null;
+        session_closes_minute: number | null;
+      }[]
+    >`
+      SELECT day::text AS day, marked_at, method, hours_status,
+             session_opens_minute, session_closes_minute
+      FROM gym_attendance
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND day = ${ctx.day}::date AND slot_key = ${slotKey}`;
+    const row = rows[0];
+    // Unreachable: the gym row is locked, so nothing deletes between the upsert
+    // above and this read.
+    if (row === undefined) throw new Error("attendance vanished inside its own transaction");
+
+    return {
+      kind: "marked",
+      alreadyMarked: inserted.length === 0,
+      visit: toAttendanceVisitRow(row),
+      timezone: ctx.timezone,
+      clockFormat: ctx.clockFormat,
+    };
+  });
+}
+
+/** HOW MANY PEOPLE COME BACK IN ONE PAGE, and how many visits one person can
+ *  carry.
+ *
+ *  `ATTENDANCE_PAGE_LIMIT` is mirrored by `gymAttendanceDaySchema.people`'s
+ *  `.max(100)` in `@app/shared`, and `ATTENDANCE_VISITS_PER_PERSON` by
+ *  `gymAttendancePersonSchema.visits`' `.max(24)` — **the pairs move together or
+ *  a legitimate answer becomes a parse failure**, which is a worse outcome than
+ *  the unbounded array they replace (:26947 Low-5's own lesson, applied at
+ *  design time rather than after a review).
+ *
+ *  24 is not arbitrary: sessions never overlap and never wrap past midnight, so
+ *  the finest timetable a gym can express is 24 slots, and one person cannot
+ *  produce more distinct visits in a day than the gym has slots to put them in.
+ *  The four non-session statuses are mutually exclusive with each other and with
+ *  a session on the same tap, so they add nothing to the ceiling. */
+export const ATTENDANCE_PAGE_LIMIT = 100;
+export const ATTENDANCE_VISITS_PER_PERSON = 24;
+
+export interface GymAttendanceSlotCountRow {
+  hoursStatus: GymAttendanceHoursStatus;
+  opensMinute: number | null;
+  closesMinute: number | null;
+  visits: number;
+  people: number;
+}
+
+export interface GymAttendancePersonRow {
+  userId: string;
+  displayName: string;
+  visits: GymAttendanceVisitRow[];
+}
+
+export interface GymAttendanceDayRow {
+  day: string;
+  timezone: string;
+  clockFormat: GymClockFormat;
+  /** THE DAY'S TOTALS, and `people` is the only DISTINCT count in this response
+   *  that cannot be derived from `summary`. Per slot the two are provably equal
+   *  (the UNIQUE admits one visit per person per slot); across the day they
+   *  differ exactly when somebody came twice — the case Kd's ruling 12 created.
+   *  A screen summing the slot rows would print a number bigger than the gym's
+   *  roster, which is why this is computed here. */
+  totals: { visits: number; people: number };
+  summary: GymAttendanceSlotCountRow[];
+  people: GymAttendancePersonRow[];
+  nextCursor: string | null;
+}
+
+/** WHO CAME ON ONE DAY — the gym-side read, and the shape is Kd's ruling 14
+ *  (:27992 §3, *"it might pile up and may be hard to analuse and see"*).
+ *
+ *  **THE SUMMARY IS COUNTED OVER THE WHOLE DAY AND THE PEOPLE ARE A PAGE, and
+ *  the two must never be derived from each other.** A screen that counted the
+ *  page it downloaded would be right on a fixture of six and would report the
+ *  FIRST PAGE on a gym of four hundred — the specific breakage that ruling
+ *  names. So the counts are `GROUP BY` in SQL over every row of the day, and
+ *  `nextCursor` moves the people without moving them.
+ *
+ *  **`visits` AND `people` ARE DIFFERENT NUMBERS AND BOTH ARE SERVED.** They
+ *  differ exactly when somebody came twice — which Kd's ruling 12 made possible
+ *  on purpose — and printing one under the other's label is the :5807 defect
+ *  this card is most likely to ship.
+ *
+ *  **THE PAGE IS BY PERSON, NOT BY VISIT**, so a member who came twice is ONE
+ *  entry with TWO times (ruling 12 at the screen) and a 400-tap day is 300 rows
+ *  rather than 400. Ordered by first arrival then `user_id` — a total order, so
+ *  the cursor cannot skip or repeat somebody when two people arrive in the same
+ *  millisecond (:12227's lesson about a cursor that compares one column).
+ *
+ *  `statuses` narrows to the exceptions an owner goes looking for — outside
+ *  hours, closed day — **without paging through everybody**; it filters the
+ *  PEOPLE and deliberately not the SUMMARY, which always describes the whole
+ *  day. A screen whose totals changed when a filter was applied would be
+ *  answering a different question from the one on the label. */
+export async function getGymAttendanceDay(
+  sql: SqlOrTx,
+  input: {
+    gymId: string;
+    day?: string | undefined;
+    statuses?: readonly GymAttendanceHoursStatus[] | undefined;
+    cursor?: { markedAt: Date; userId: string } | undefined;
+    limit?: number | undefined;
+  },
+): Promise<GymAttendanceDayRow | null> {
+  const gymRows = await sql<
+    { day: string; timezone: string; clock_format: string }[]
+  >`
+    SELECT coalesce(${input.day ?? null}::date, (now() AT TIME ZONE g.timezone)::date)::text AS day,
+           g.timezone, g.clock_format
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
+  const statuses = input.statuses ?? null;
+
+  // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
+  // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
+  const totalsRows = await sql<{ visits: string; people: string }[]>`
+    SELECT count(*) AS visits, count(DISTINCT user_id) AS people
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date`;
+
+  // THE DAY'S SHAPE, over every row of the day — never over the page below.
+  const summary = await sql<
+    {
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+      visits: string;
+      people: string;
+    }[]
+  >`
+    SELECT hours_status, session_opens_minute, session_closes_minute,
+           count(*) AS visits,
+           count(DISTINCT user_id) AS people
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date
+    GROUP BY hours_status, session_opens_minute, session_closes_minute
+    ORDER BY session_opens_minute NULLS LAST, hours_status`;
+
+  /** ONE PAGE OF PEOPLE. The inner select finds WHO, ordered and bounded; the
+   *  outer one fetches every visit belonging to those people, so a person is
+   *  never split across a page boundary — which is what would make "attended
+   *  twice" show as one visit on one page and one on the next. */
+  const people = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      first_marked_at: Date;
+      day: string;
+      marked_at: Date;
+      method: string;
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+    }[]
+  >`
+    WITH page AS (
+      SELECT a.user_id, min(a.marked_at) AS first_marked_at
+      FROM gym_attendance a
+      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
+        AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
+      GROUP BY a.user_id
+      HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
+              OR (min(a.marked_at), a.user_id)
+                 > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
+      ORDER BY first_marked_at, a.user_id
+      LIMIT ${limit}
+    )
+    SELECT p.user_id, u.display_name, p.first_marked_at,
+           a.day::text AS day, a.marked_at, a.method, a.hours_status,
+           a.session_opens_minute, a.session_closes_minute
+    FROM page p
+    JOIN users u ON u.id = p.user_id
+    JOIN gym_attendance a
+      ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
+    ORDER BY p.first_marked_at, p.user_id, a.marked_at`;
+
+  const grouped: GymAttendancePersonRow[] = [];
+  let last: { userId: string; markedAt: Date } | null = null;
+  for (const r of people) {
+    const tail = grouped[grouped.length - 1];
+    if (tail !== undefined && tail.userId === r.user_id) {
+      tail.visits.push(toAttendanceVisitRow(r));
+    } else {
+      grouped.push({
+        userId: r.user_id,
+        displayName: r.display_name,
+        visits: [toAttendanceVisitRow(r)],
+      });
+    }
+    last = { userId: r.user_id, markedAt: r.first_marked_at };
+  }
+
+  return {
+    day: gym.day,
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    totals: {
+      visits: Number(totalsRows[0]?.visits ?? 0),
+      people: Number(totalsRows[0]?.people ?? 0),
+    },
+    summary: summary.map((r) => ({
+      hoursStatus: gymAttendanceHoursStatusSchema.parse(r.hours_status),
+      opensMinute: r.session_opens_minute,
+      closesMinute: r.session_closes_minute,
+      visits: Number(r.visits),
+      people: Number(r.people),
+    })),
+    people: grouped,
+    // A FULL PAGE MEANS THERE MAY BE MORE; a short one is the end. Derived from
+    // the number of PEOPLE, which is what the LIMIT bounded — deriving it from
+    // the row count would page on visits and skip whoever came twice.
+    nextCursor:
+      grouped.length === limit && last !== null
+        ? encodeAttendanceCursor(last.markedAt, last.userId)
+        : null,
+  };
+}
+
+export interface GymAttendanceHistoryRow {
+  timezone: string;
+  clockFormat: GymClockFormat;
+  visits: GymAttendanceVisitRow[];
+  nextCursor: string | null;
+}
+
+/** ONE PERSON'S OWN ATTENDANCE — what a member sees of themselves (Kd, :27900),
+ *  and what an owner sees on picking a name out of the list (:28055).
+ *
+ *  **THE SAME FUNCTION SERVES BOTH, and the caller decides WHOSE.** The service
+ *  passes the caller's own id for a member and the queried id for staff, so
+ *  there is one predicate and one tenancy clause rather than two that could
+ *  drift apart — a second reader of somebody else's attendance is a second place
+ *  to get an IDOR wrong (R3.2, :14401's shape).
+ *
+ *  Newest first: "have I been this week" is the question and its answer is at
+ *  the top. The cursor compares the PAIR `(marked_at, id)` because two visits
+ *  can share a millisecond, and a cursor on one column silently drops rows. */
+export async function getGymAttendanceHistory(
+  sql: SqlOrTx,
+  input: {
+    gymId: string;
+    userId: string;
+    cursor?: { markedAt: Date; id: string } | undefined;
+    limit?: number | undefined;
+  },
+): Promise<GymAttendanceHistoryRow | null> {
+  const gymRows = await sql<{ timezone: string; clock_format: string }[]>`
+    SELECT timezone, clock_format FROM gyms WHERE id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
+  const rows = await sql<
+    {
+      id: string;
+      day: string;
+      marked_at: Date;
+      method: string;
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+    }[]
+  >`
+    SELECT id, day::text AS day, marked_at, method, hours_status,
+           session_opens_minute, session_closes_minute
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
+           OR (marked_at, id) < (${input.cursor?.markedAt ?? null}::timestamptz,
+                                 ${input.cursor?.id ?? null}::uuid))
+    ORDER BY marked_at DESC, id DESC
+    LIMIT ${limit}`;
+
+  const lastRow = rows[rows.length - 1];
+  return {
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    visits: rows.map(toAttendanceVisitRow),
+    nextCursor:
+      rows.length === limit && lastRow !== undefined
+        ? encodeAttendanceCursor(lastRow.marked_at, lastRow.id)
+        : null,
+  };
+}
+
+/** A cursor is an INSTANT AND A UUID, joined by a character neither can contain,
+ *  so parsing it back cannot be ambiguous. It is opaque to the client by
+ *  convention only — it carries nothing secret, and nothing downstream trusts it
+ *  beyond the two parsers below, both of which reject anything they cannot read
+ *  rather than substituting a default (a cursor silently read as "the
+ *  beginning" would re-serve page one for ever). */
+function encodeAttendanceCursor(markedAt: Date, id: string): string {
+  return `${markedAt.toISOString()}|${id}`;
+}
+
+export function parseAttendanceCursor(
+  raw: string,
+): { markedAt: Date; id: string } | null {
+  const bar = raw.indexOf("|");
+  if (bar <= 0) return null;
+  const instant = raw.slice(0, bar);
+  const id = raw.slice(bar + 1);
+  const markedAt = new Date(instant);
+  if (Number.isNaN(markedAt.getTime()) || id === "") return null;
+  return { markedAt, id };
 }

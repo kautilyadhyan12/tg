@@ -13,6 +13,8 @@ import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
   addOrgStaffRequestSchema,
   applicationParamsSchema,
+  attendanceDayQuerySchema,
+  attendanceHistoryQuerySchema,
   closeGymDayRequestSchema,
   closureParamsSchema,
   codeParamsSchema,
@@ -75,6 +77,10 @@ export function registerOrgRoutes(
     sql: deps.sql,
     redis: deps.redis,
     randomBytes: overrides.randomBytes ?? ((n) => randomBytes(n)),
+    // Only the attendance hook uses it: a streak that fails to recompute warns
+    // rather than losing a visit that is already committed (R8.5 — the
+    // alternative is the empty catch that rule forbids).
+    log: app.log,
   };
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -238,6 +244,79 @@ export function registerOrgRoutes(
         params.day,
       );
       return reply.status(200).send(result);
+    },
+  );
+
+  /** "I'M HERE" — Kd ruling 2026-08-31 (:26469), built before the gym's numbers
+   *  because a number about attendance cannot exist before attendance does.
+   *
+   *  **THE BODY IS EMPTY AND THAT IS THE SECURITY DECISION, not a convenience.**
+   *  The server decides the day, the method, the hours status and the slot,
+   *  because every one of them grants something (R3.1) — a client that could
+   *  name its own day could mark itself present for last Tuesday, and one that
+   *  could name its own method could claim it had scanned.
+   *
+   *  **200 AND NOT 201, and it is idempotent on (gym, member, day, slot).** A
+   *  second tap in the same session answers with the FIRST visit (R3.5) —
+   *  "you are marked in" is true either way, and a 201 would claim a creation
+   *  the second call did not make. A tap in a DIFFERENT session that day is a
+   *  new visit and Kd ruled it counts (:27992).
+   *
+   *  POST reaches a browser through a CORS preflight only when it carries a
+   *  content type the simple-request rules exclude; `app.ts` lists POST, which
+   *  every write in this file already depends on, and the SMOKE is what proves
+   *  it in a real browser (Card 4's dead-method bug behind 250 green tests). */
+  app.post("/v1/orgs/:gymId/attendance", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const marked = await service.markOrgAttendance(orgDeps, requireUserId(req), params.gymId);
+    return reply.status(200).send(marked);
+  });
+
+  /** WHO CAME — the console's Attendance section (:28107, a section of its own
+   *  rather than a corner of Settings).
+   *
+   *  `attendance.read`, which every role holds by default and an owner may
+   *  untick per person. **The response is PEOPLE and a per-session SUMMARY, not
+   *  a list of taps** — Kd's ruling 14 in the contract (:27992 §3): a 300-member
+   *  gym running three sessions produces several hundred visits a day, and the
+   *  counts are computed over the WHOLE day in SQL so a screen can never report
+   *  the page it happens to be holding. */
+  app.get("/v1/orgs/:gymId/attendance", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(attendanceDayQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const attendance = await service.getOrgAttendanceDay(
+      orgDeps,
+      requireUserId(req),
+      params.gymId,
+      query,
+    );
+    return reply.status(200).send(attendance);
+  });
+
+  /** ONE PERSON'S OWN ATTENDANCE — a member seeing themselves (:27900), and an
+   *  owner picking a name out of the list above (:28055's `?userId=`).
+   *
+   *  **ONE ROUTE, TWO AUDIENCES, AND THE SERVICE FORKS THE AUTHORISATION.** A
+   *  second route for "somebody else's attendance" would be a second place to
+   *  get an IDOR wrong (R3.2), and everything after the gate is identical. */
+  app.get(
+    "/v1/orgs/:gymId/attendance/history",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const query = parseOr400(attendanceHistoryQuerySchema, req.query, req, reply);
+      if (query === null) return;
+      const attendance = await service.getOrgAttendanceHistory(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        query,
+      );
+      return reply.status(200).send(attendance);
     },
   );
 

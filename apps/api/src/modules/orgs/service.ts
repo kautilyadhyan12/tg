@@ -4,6 +4,8 @@
 import type { Sql } from "postgres";
 import { JOIN_CODE_LENGTH, currencyForCountry } from "@app/shared";
 import { bustEntitlements } from "../entitlements/service.js";
+import { onAttendanceMarked } from "../gamification/service.js";
+import { getUserSyncContext } from "../users/service.js";
 import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./codes.js";
 import * as repo from "./repo.js";
@@ -12,6 +14,9 @@ import {
   OWNER_ONLY_PRIVILEGES,
   ROLE_PRIVILEGES,
   closeGymDayResponseSchema,
+  gymAttendanceDayResponseSchema,
+  gymAttendanceHistoryResponseSchema,
+  markGymAttendanceResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   gymHoursResponseSchema,
@@ -40,6 +45,11 @@ import type {
   AddOrgStaffRequest,
   CloseGymDayRequest,
   CloseGymDayResponse,
+  GymAttendanceDayResponse,
+  GymAttendanceHistoryResponse,
+  GymAttendanceHoursStatus,
+  GymAttendanceVisit,
+  MarkGymAttendanceResponse,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -104,6 +114,15 @@ export interface OrgsDeps {
    *  waiting for a 1-in-a-billion coincidence. Production passes
    *  `crypto.randomBytes`. */
   randomBytes: (n: number) => Uint8Array;
+  /** OPTIONAL, and the one caller that needs it is the attendance hook.
+   *
+   *  A streak that fails to recompute must not lose the attendance (the row IS
+   *  the record), so that failure is caught and WARNED rather than thrown — and
+   *  R8.5 forbids the empty catch that would otherwise be the alternative. It is
+   *  optional because every other function in this module has never needed a
+   *  logger and adding a required field would rewrite every test's deps object
+   *  to buy nothing. */
+  log?: { warn: (obj: Record<string, unknown>, msg: string) => void } | undefined;
 }
 
 /** Part 3 §4.0 step 4 names the first code "Front Desk". */
@@ -127,6 +146,7 @@ function toOrgSummary(org: repo.OrgRow): OrgSummary {
     locale: org.locale,
     currencyDisplay: org.currencyDisplay,
     clockFormat: org.clockFormat,
+    manualAttendanceEnabled: org.manualAttendanceEnabled,
     status: org.status,
   };
 }
@@ -283,6 +303,18 @@ export async function updateOrg(
   // money and no day boundary behind it, so it is the one field on this route
   // a PAYING gym may always change.
   if ("clockFormat" in req && req.clockFormat !== undefined) patch.clockFormat = req.clockFormat;
+  // The owner's attendance switch (:26469 §1.4), and not bound by the currency
+  // lock for `clockFormat`'s reason: no money, no day boundary.
+  //
+  // **THIS LINE IS THE ONE THE FIRST DRAFT FORGOT.** The field was in the
+  // request schema, in `OrgPatch` and in the UPDATE's column list — so it
+  // typechecked, linted and answered 200 — and every switch-off was silently
+  // dropped here, between a contract that accepted it and a writer that could
+  // have stored it. Caught by the switch's own test, which drove the SCREEN's
+  // journey (patch, then try to mark) rather than the field.
+  if ("manualAttendanceEnabled" in req && req.manualAttendanceEnabled !== undefined) {
+    patch.manualAttendanceEnabled = req.manualAttendanceEnabled;
+  }
   if ("country" in req && req.country !== undefined) {
     patch.country = normaliseCountry(req.country);
     patch.currencyDisplay = resolveCurrency(req.country);
@@ -2198,4 +2230,250 @@ export async function removeOrgClosure(
     default:
       return assertNever(outcome);
   }
+}
+
+/* ─────────────────────────── ATTENDANCE ───────────────────────────
+ *
+ *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900, :27992, :28055, :28107).
+ */
+
+function toAttendanceVisit(row: repo.GymAttendanceVisitRow): GymAttendanceVisit {
+  return {
+    day: row.day,
+    markedAt: row.markedAt.toISOString(),
+    method: row.method,
+    hoursStatus: row.hoursStatus,
+    session:
+      row.sessionOpensMinute !== null && row.sessionClosesMinute !== null
+        ? { opensMinute: row.sessionOpensMinute, closesMinute: row.sessionClosesMinute }
+        : null,
+  };
+}
+
+/** THE SENTENCE A MEMBER SEES WHEN THEIR GYM HAS SWITCHED MANUAL MARKING OFF.
+ *
+ *  **It names the phone app because that is the true reason and the true next
+ *  step** (:26586: the scan path is phone-app work). A bare "not allowed" would
+ *  leave a member believing attendance is broken, and the owner who switched it
+ *  off did so expecting scanning to replace it. */
+const MANUAL_ATTENDANCE_OFF_MESSAGE =
+  "This gym doesn't take attendance from the web. Scanning arrives with the phone app.";
+
+/** A PAGE MARKER WE CANNOT READ IS A 400, NEVER A SILENT "START AGAIN".
+ *
+ *  Both attendance reads take a cursor and both must fail the same way: serving
+ *  page one for an unreadable marker is how a client loops for ever, re-fetching
+ *  the same rows and believing it is advancing. One function so the two cannot
+ *  drift into two different answers. */
+function requireAttendanceCursor(
+  raw: string | undefined,
+): { markedAt: Date; id: string } | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = repo.parseAttendanceCursor(raw);
+  if (parsed === null) throw new OrgsError(400, "bad_cursor", "That page marker isn't valid.");
+  return parsed;
+}
+
+/** MARK YOURSELF PRESENT.
+ *
+ *  **THE GATE IS `requireGymAudience` PLUS A LIVE MEMBERSHIP, AND DELIBERATELY
+ *  NOT `requireWritablePrivilege`.** That helper is built for CONSOLE writes by
+ *  STAFF and refuses a gym with no live plan — which would refuse **a lapsed
+ *  gym's own members**, contradicting Kd's answer at the plan gate (:27992) and
+ *  :22215's arm A, where a lapsed gym's members fall back to the free app rather
+ *  than being locked out. The gym still exists, the member still walked in, and
+ *  refusing would tell them something false about their own gym (:5807).
+ *
+ *  **AN ARCHIVED GYM IS DIFFERENT AND DOES REFUSE.** Nothing new happens at a
+ *  closed gym — :25771 stops anybody joining one — so a new attendance row there
+ *  would be a fact about a gym the product has finished with.
+ *
+ *  **STAFF AUTHORITY IS NOT A SUBSTITUTE FOR MEMBERSHIP HERE**, which is the one
+ *  place this differs from every other read in this module. A manager who never
+ *  joined the gym has authority over it and is not a member of it; letting
+ *  authority stand in for membership would put staff into a gym's own attendance
+ *  numbers without anybody deciding that (:14401's ghost rule pointed the other
+ *  way — it is about authority OUTLIVING membership, never replacing it).
+ *
+ *  **NOTHING ON THIS PATH ASKS WHETHER THE MEMBER HAS PAID THE GYM** — Kd,
+ *  2026-09-01: *"if a memebr is not part of the gym or have not paid then gym
+ *  memebr can remove them thas gym responsibility"*. One condition, a live
+ *  membership row, and `members.remove` is the gym's remedy for anybody else. */
+export async function markOrgAttendance(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<MarkGymAttendanceResponse> {
+  const [org, member] = await Promise.all([
+    repo.getOrgById(deps.sql, gymId),
+    repo.isLiveMember(deps.sql, gymId, userId),
+  ]);
+  if (org === null || !member) {
+    throw new OrgsError(404, "org_not_found", "Gym not found.");
+  }
+  if (org.status === "archived") {
+    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
+  }
+
+  const outcome = await repo.markGymAttendance(deps.sql, {
+    gymId,
+    userId,
+    // TODAY ALWAYS THE MEMBER THEMSELVES — Kd answered "only the member, for
+    // now" (:27900). The column is separate so a front-desk button later ADDS a
+    // value rather than rewriting history, and this is the line that would
+    // change, alone.
+    markedByUserId: userId,
+    // `qr` is unreachable until the phone app ships (:26586); it exists in the
+    // vocabulary so the gym can tell the two apart from day one (:26469 §4).
+    method: "manual",
+  });
+
+  switch (outcome.kind) {
+    case "marked":
+      // KD RULED GOING TO THE GYM KEEPS A STREAK ALIVE (:27900 §3). The hook is
+      // a SERVICE INTERFACE (R7.1), the same seam `workouts` and `nutrition`
+      // use; nothing here reaches into gamification's repo.
+      //
+      // **ONLY FOR A NEW ROW.** A repeated tap in the same slot is idempotent at
+      // the database and changes no day, so re-running would be work with no
+      // possible effect — and `recomputeXp` takes a per-user advisory lock a
+      // member hammering a button must not be able to queue behind.
+      //
+      // **AND IT CANNOT LOSE THE ATTENDANCE.** The row is already committed; a
+      // streak is recomputed from committed history on the next read anyway, so
+      // a failure here degrades with a warn rather than turning a recorded visit
+      // into a 500 (`awardMealBadges`' precedent, same shape, same reason).
+      if (!outcome.alreadyMarked) {
+        const ctx = await getUserSyncContext(deps.sql, userId);
+        await onAttendanceMarked({ sql: deps.sql }, userId, ctx.timezone).catch((err: unknown) => {
+          deps.log?.warn(
+            {
+              event: "gamification.attendance_streak_failed",
+              userId,
+              gymId,
+              errName: err instanceof Error ? err.name : typeof err,
+            },
+            "attendance streak recompute failed",
+          );
+        });
+      }
+      return markGymAttendanceResponseSchema.parse({
+        status: "created",
+        alreadyMarked: outcome.alreadyMarked,
+        visit: toAttendanceVisit(outcome.visit),
+        timezone: outcome.timezone,
+        clockFormat: outcome.clockFormat,
+      });
+    case "manual_disabled":
+      throw new OrgsError(409, "manual_attendance_off", MANUAL_ATTENDANCE_OFF_MESSAGE);
+    case "not_found":
+      // Unreachable in practice — the gate above read the org — but a gym
+      // deleted between that read and this write must not surface as a 500.
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** WHO CAME — the console's Attendance section (Kd :28107, its own place in the
+ *  rail rather than a corner of Settings).
+ *
+ *  `attendance.read`, which every role holds by default and an owner may untick
+ *  per person (:28107). **NOT `requireWritablePrivilege`**: this is a READ, and
+ *  §4.2's read-only console keeps answering every read for a gym with no live
+ *  plan (:23711) — a gym that stopped paying still needs to know who is in the
+ *  building. */
+export async function getOrgAttendanceDay(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  query: {
+    day?: string | undefined;
+    statuses?: readonly GymAttendanceHoursStatus[] | undefined;
+    cursor?: string | undefined;
+  },
+): Promise<GymAttendanceDayResponse> {
+  await requirePrivilege(deps, gymId, userId, "attendance.read");
+
+  const cursor = requireAttendanceCursor(query.cursor);
+
+  const row = await repo.getGymAttendanceDay(deps.sql, {
+    gymId,
+    day: query.day === undefined ? undefined : requireCalendarDate(query.day),
+    statuses: query.statuses,
+    cursor: cursor === undefined ? undefined : { markedAt: cursor.markedAt, userId: cursor.id },
+  });
+  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+
+  return gymAttendanceDayResponseSchema.parse({
+    attendance: {
+      day: row.day,
+      timezone: row.timezone,
+      clockFormat: row.clockFormat,
+      totals: row.totals,
+      summary: row.summary.map((s) => ({
+        hoursStatus: s.hoursStatus,
+        session:
+          s.opensMinute !== null && s.closesMinute !== null
+            ? { opensMinute: s.opensMinute, closesMinute: s.closesMinute }
+            : null,
+        visits: s.visits,
+        people: s.people,
+      })),
+      people: row.people.map((p) => ({
+        userId: p.userId,
+        displayName: p.displayName,
+        visits: p.visits.map(toAttendanceVisit),
+      })),
+      nextCursor: row.nextCursor,
+    },
+  });
+}
+
+/** ONE PERSON'S OWN ATTENDANCE.
+ *
+ *  **TWO CALLERS, ONE FUNCTION, AND THE AUTHORISATION IS WHAT DIFFERS.** A
+ *  member reading THEMSELVES needs only to be a live member (Kd, :27900 — they
+ *  see their own history); staff reading SOMEBODY ELSE need `attendance.read`
+ *  (:28055's `?userId=` filter). Splitting these into two routes would be two
+ *  places to get an IDOR wrong (R3.2), so the fork is here, in one `if`, and
+ *  everything after it is identical.
+ *
+ *  **THE SELF CASE IS CHECKED FIRST AND SEPARATELY**, so a member who is not
+ *  staff never reaches the privilege check and never sees a 403 about their own
+ *  attendance. */
+export async function getOrgAttendanceHistory(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  query: { userId?: string | undefined; cursor?: string | undefined },
+): Promise<GymAttendanceHistoryResponse> {
+  const subjectId = query.userId ?? userId;
+  if (subjectId === userId) {
+    const [org, member] = await Promise.all([
+      repo.getOrgById(deps.sql, gymId),
+      repo.isLiveMember(deps.sql, gymId, userId),
+    ]);
+    if (org === null || !member) {
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    }
+  } else {
+    await requirePrivilege(deps, gymId, userId, "attendance.read");
+  }
+
+  const row = await repo.getGymAttendanceHistory(deps.sql, {
+    gymId,
+    userId: subjectId,
+    cursor: requireAttendanceCursor(query.cursor),
+  });
+  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+
+  return gymAttendanceHistoryResponseSchema.parse({
+    attendance: {
+      timezone: row.timezone,
+      clockFormat: row.clockFormat,
+      visits: row.visits.map(toAttendanceVisit),
+      nextCursor: row.nextCursor,
+    },
+  });
 }

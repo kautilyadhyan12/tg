@@ -2,10 +2,19 @@
 // re-exports what the orgs module consumes and adds the one shape that is
 // purely a routing concern (the :gymId path parameter).
 import { z } from "zod";
+// Imported as well as re-exported below: the two query schemas at the foot of
+// this file BUILD on it, and a re-export creates no local binding.
+import { gymAttendanceHoursStatusSchema } from "@app/shared";
 
 export {
   addOrgStaffRequestSchema,
   closeGymDayRequestSchema,
+  gymAttendanceDayResponseSchema,
+  gymAttendanceHistoryResponseSchema,
+  gymAttendanceHoursStatusSchema,
+  gymAttendanceMethodSchema,
+  markGymAttendanceRequestSchema,
+  markGymAttendanceResponseSchema,
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgCodeRequestSchema,
@@ -63,6 +72,11 @@ export { ORG_PRIVILEGES, OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES } from "@app/sha
 export type {
   AddOrgStaffRequest,
   CloseGymDayRequest,
+  GymAttendanceDayResponse,
+  GymAttendanceHistoryResponse,
+  GymAttendanceHoursStatus,
+  GymAttendanceVisit,
+  MarkGymAttendanceResponse,
   CloseGymDayResponse,
   ConfirmApplicationResponse,
   GymClosure,
@@ -125,6 +139,48 @@ export type {
  *  proves less than the code assumes). */
 export const orgParamsSchema = z.object({ gymId: z.string().uuid() }).strict();
 export type OrgParams = z.infer<typeof orgParamsSchema>;
+
+/** WHO CAME, ON WHICH DAY, FILTERED HOW.
+ *
+ *  **Every value here is a STRING on the wire and is parsed into one, never
+ *  coerced from one** (trap #5). `day` is shape-checked only; the SERVICE
+ *  calendar-checks it, exactly as `closureParamsSchema` records — `2026-02-31`
+ *  matches this pattern and is not a day, and Postgres refusing the cast is a
+ *  500 nobody can act on.
+ *
+ *  **`day` ABSENT MEANS THE GYM'S TODAY, decided in SQL from `gyms.timezone`**
+ *  and never here: a default computed in TypeScript would be the API box's
+ *  today, which for a gym in Assam is the wrong day for five and a half hours of
+ *  every one (trap #8).
+ *
+ *  **`status` IS A COMMA-SEPARATED LIST because it filters to the EXCEPTIONS an
+ *  owner goes looking for** — outside hours, closed day — and both at once is
+ *  the useful case (:27992 §3). Empty and absent are the same thing, so a screen
+ *  clearing its filter need not know which to send. */
+export const attendanceDayQuerySchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    status: z
+      .string()
+      .transform((raw) => raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0))
+      .pipe(z.array(gymAttendanceHoursStatusSchema).max(5))
+      .optional(),
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+export type AttendanceDayQuery = z.infer<typeof attendanceDayQuerySchema>;
+
+/** ONE PERSON'S ATTENDANCE. **`userId` absent means the CALLER'S OWN**, which is
+ *  what makes this one route serve both a member reading themselves and staff
+ *  reading somebody else — the service authorises the two differently and
+ *  nothing else about them differs (:28055). */
+export const attendanceHistoryQuerySchema = z
+  .object({
+    userId: z.string().uuid().optional(),
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema>;
 
 /** Both path parameters of the confirm/reject routes. The application id is a
  *  uuid for the same reason `gymId` is: a non-uuid must fail as a 400 at the

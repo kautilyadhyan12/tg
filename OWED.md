@@ -7779,6 +7779,34 @@ file and is stated so nobody reads these as lower priority than they are.
       `legacySeven`, whose arithmetic still passes with nine so **it goes QUIET
       rather than RED** (:5348 rule 4's liar). Named here rather than waited for.
       **NOTHING ON THIS CARD IS NOW OPEN.**
+      **SERVER HALF BUILT 2026-09-01** from `CARD-gym-attendance.md` §4a
+      (`DECISIONS.md:28221`): migration `0019_gym_attendance`
+      (`gyms.manual_attendance_enabled` defaulting to `true` · `gym_attendance`
+      with five CHECKs and `UNIQUE (gym_id, user_id, day, slot_key)` · the NINTH
+      privilege `attendance.read`, its widened DDL CHECK and a backfill onto
+      EVERY role), the contract once in `@app/shared`, and three routes — mark
+      (a live member), the gym's day (`attendance.read`, answering PEOPLE plus a
+      per-session SUMMARY and DAY TOTALS, never a list of taps), and one
+      person's history (self, or `attendance.read` for somebody else) — plus the
+      owner's switch on the existing `PATCH /v1/orgs/:gymId`.
+      **`slot_key` IS WHERE KD'S RULING LIVES**, and the database re-derives it
+      so a later writer setting it to a constant gets a 23514 instead of
+      silently reverting every gym to one visit a day.
+      **STREAKS: `getStreakDays` (workouts ∪ attendance) is a SECOND function
+      beside `getActivityDays` (workouts alone, for XP), and two mutants hold
+      the split in both directions.**
+      ⚠️ **NO SCREEN EXISTS. The web half (§4b) is UNBUILT**, so no member can
+      tap anything and no owner can see a list. **No browser smoke was run and
+      none was offered** — there is nothing to click. **T3 IS UNRUN.** This line
+      does NOT tick.
+      **⚠️ THE WEB HALF MUST NOT COUNT THE DAY IN THE BROWSER, and it is written
+      here because it is Kd's ruling 14 made concrete** (:27992 §3): the response
+      carries `totals` (day-level, with a DISTINCT people count) and `summary`
+      (per session). **A screen summing the per-slot rows double-counts whoever
+      came twice and prints more people than the gym has members** — :5807
+      arriving through the very feature that made returning twice possible. The
+      per-slot `visits` and `people` are provably EQUAL (the UNIQUE admits one
+      visit per person per slot); only the day totals differ.
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

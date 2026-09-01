@@ -1,0 +1,1199 @@
+// ATTENDANCE — routes + repo against REAL Postgres (R9.2). DATABASE_URL-gated.
+// Kd's rulings: :26469 (two ways in, the gym sees which, the owner's switch),
+// :26558/:26586 (the whole scan path is phone-app work; the web has ONE way in),
+// :27900 (only the member marks · a member sees their own history · attendance
+// feeds STREAKS), :27992 (a second visit in a DIFFERENT session counts again ·
+// the app never checks whether a member has paid · the owner's screen must not
+// pile up), :28055 (a gym with no sessions gets ONE attendance per day) and
+// :28107 (`attendance.read`, on for all three roles, untickable by the owner).
+//
+// THE SIX THINGS THIS FILE EXISTS TO PIN, because most of them are guarantees
+// rather than features and would pass silently if they broke:
+//
+//   1. **RULING 12 HAS TWO DIRECTIONS AND BOTH ARE DRIVEN.** A UNIQUE that only
+//      ever REFUSES is satisfied by a door that is simply shut (:19560's O124),
+//      so the accepting case — morning session AND evening session, same person,
+//      same day, TWO rows — is asserted beside the refusing one. The accepting
+//      case is the ruling; the refusing one is R3.5.
+//
+//   2. **`slot_key` IS THE ONLY LOAD-BEARING COLUMN AND IT FAILS QUIETLY.** A
+//      writer that sets it to a constant reverts every gym to one visit a day
+//      with no error anywhere — the UNIQUE still holds and every refusal test
+//      still passes. The database's `gym_attendance_slot_key_agrees_check` is
+//      what turns that into a 23514, and a test drives it directly rather than
+//      trusting the constraint exists.
+//
+//   3. **ALL FIVE `hours_status` VALUES, EACH ON A FIXTURE BUILT TO PRODUCE
+//      IT** — including `hours_unset`, which is :26736's third state one level
+//      in. "Nobody has answered" is not "outside hours", and a reader that
+//      folds them together tells a member something false about a gym that
+//      simply has not filled the form in.
+//
+//   4. **THE GYM'S DAY, NOT THE SERVER'S, ON A PAIR AT OPPOSITE EXTREMES.** One
+//      non-UTC gym is NOT enough and this repo has the scar: :26812 §2(a)'s
+//      zone-deleting mutant survived a single UTC+14 fixture, because its
+//      calendar date differs from UTC's for only fourteen hours of every day.
+//      UTC+14 and UTC-12 are 26 hours apart, so their dates ALWAYS differ and
+//      the server's can match at most one of them, at every instant.
+//
+//   5. **RULING 18 FROM BOTH SIDES.** A `trainer` — the narrowest role — reads
+//      the list BY DEFAULT with no ticks edited, and a staffer the owner has
+//      UNTICKED is refused. A test that only proves the refusal would pass with
+//      the default broken, which is the half Kd actually ruled.
+//
+//   6. **THE STREAK UNION MUST NOT PAY XP.** Kd ruled attendance feeds STREAKS
+//      (:27900 §3); he did not rule that it pays XP, and the two read one
+//      function until this card. An attendance-only day must extend the streak
+//      and leave the lifetime XP total where it was.
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+
+const url = process.env["DATABASE_URL"];
+const d = describe.skipIf(url === undefined || url === "");
+
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+
+const baseEnv = {
+  NODE_ENV: "test",
+  DATABASE_URL: url ?? "",
+  WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "orgatt-test-secret-0123456789abcd", // dummy test value, gitleaks:allow
+  LOG_LEVEL: "error",
+};
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+
+const TEST_TIMEOUT_MS = 30_000;
+const HOOK_TIMEOUT_MS = 60_000;
+
+let ipCounter = 0;
+const nextIp = () =>
+  `10.11.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+
+const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
+  Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+
+/** Same reasoning as the hours suite's: every gym here goes on a live plan
+ *  because a gym without one refuses the console writes these fixtures need.
+ *  `trial_days = 0` keeps it invisible to `startGymTrial`'s lowest-capped query
+ *  so the billing suites' band assertions are undisturbed. */
+const LIVE_PLAN = "zz_att_live";
+
+interface CreatedOrg {
+  org: { id: string; slug: string; name: string; timezone: string };
+  joinCode: { code: string; label: string };
+}
+
+interface Visit {
+  day: string;
+  markedAt: string;
+  method: "manual" | "qr";
+  hoursStatus: "in_session" | "open_24h" | "outside_hours" | "closed_day" | "hours_unset";
+  session: { opensMinute: number; closesMinute: number } | null;
+}
+
+interface AttendanceDay {
+  day: string;
+  timezone: string;
+  clockFormat: "12h" | "24h";
+  totals: { visits: number; people: number };
+  summary: {
+    hoursStatus: Visit["hoursStatus"];
+    session: { opensMinute: number; closesMinute: number } | null;
+    visits: number;
+    people: number;
+  }[];
+  people: { userId: string; displayName: string; visits: Visit[] }[];
+  nextCursor: string | null;
+}
+
+d("gym attendance (real Postgres)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  let app: App | undefined;
+  const api = (): App => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+
+  const cleanup = async () => {
+    const mine = sql`
+      SELECT id FROM gyms
+      WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'orgatt-t-%@example.com')`;
+    const myUsers = sql`SELECT id FROM users WHERE email LIKE 'orgatt-t-%@example.com'`;
+    // The hours suite's order and the hours suite's reason: no cascade on the
+    // actor FKs, so a stray child blocks the parent DELETE with a 23503 naming
+    // nothing useful (:10726 Low-2). `hours_mode` is reset FIRST for the sibling
+    // guarantee `db.migration.test.ts` asserts — no gym holds a non-`unset` mode
+    // without an `org.hours_set` audit row — which would otherwise be false for
+    // the window between deleting this suite's audit rows and its gyms.
+    await sql`UPDATE gyms SET hours_mode = 'unset' WHERE id IN (${mine})`;
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
+    // Attendance rows are deleted by BOTH keys: a member of one of these gyms
+    // may be a user this suite did not create, and a user this suite created may
+    // have marked at a gym it did not create. Either alone leaves a row.
+    await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_attendance WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM gym_hours WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_closures WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM streaks WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM user_achievements WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM user_xp WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM gyms WHERE id IN (${mine})`;
+    await sql`DELETE FROM users WHERE email LIKE 'orgatt-t-%@example.com'`;
+    await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
+  };
+
+  const post = (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
+    api().inject({
+      method: "POST",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies,
+      payload: JSON.stringify(payload),
+    });
+
+  const put = (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
+    api().inject({
+      method: "PUT",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies,
+      payload: JSON.stringify(payload),
+    });
+
+  const patch = (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
+    api().inject({
+      method: "PATCH",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies,
+      payload: JSON.stringify(payload),
+    });
+
+  const get = (path: string, cookies: Record<string, string> = {}) =>
+    api().inject({ method: "GET", url: path, remoteAddress: nextIp(), cookies });
+
+  const makeUser = async (local: string) => {
+    const email = `orgatt-t-${local}@example.com`;
+    const reg = await api().inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ email, password: PASSWORD, displayName: `Att ${local}` }),
+    });
+    expect(reg.statusCode).toBe(201);
+    const { userId } = JSON.parse(reg.body) as { userId: string };
+    const login = await api().inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ email, password: PASSWORD }),
+    });
+    expect(login.statusCode).toBe(200);
+    return { userId, email, cookies: cookieMap(login) };
+  };
+
+  const subscribeGym = async (gymId: string) => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+      VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
+  };
+
+  const makeOrg = async (
+    cookies: Record<string, string>,
+    name: string,
+    timezone = "Asia/Kolkata",
+  ): Promise<CreatedOrg> => {
+    const res = await post("/v1/orgs", { name, city: "Jorhat", country: "IN", timezone }, cookies);
+    expect(res.statusCode).toBe(201);
+    const created = JSON.parse(res.body) as CreatedOrg;
+    await subscribeGym(created.org.id);
+    return created;
+  };
+
+  const joinAsMember = async (
+    memberCookies: Record<string, string>,
+    org: CreatedOrg,
+    staffCookies: Record<string, string>,
+  ) => {
+    const applied = await post("/v1/orgs/join", { code: org.joinCode.code }, memberCookies);
+    expect(applied.statusCode).toBe(200);
+    const body = JSON.parse(applied.body) as { application?: { id: string } };
+    const id = body.application?.id;
+    if (id === undefined) throw new Error("apply returned no application");
+    const confirm = await post(
+      `/v1/orgs/${org.org.id}/applications/${id}/confirm`,
+      {},
+      staffCookies,
+    );
+    expect(confirm.statusCode).toBe(200);
+  };
+
+  const mark = (gymId: string, cookies: Record<string, string>) =>
+    post(`/v1/orgs/${gymId}/attendance`, {}, cookies);
+
+  const readDay = async (
+    gymId: string,
+    cookies: Record<string, string>,
+    query = "",
+  ): Promise<AttendanceDay> => {
+    const res = await get(`/v1/orgs/${gymId}/attendance${query}`, cookies);
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { attendance: AttendanceDay }).attendance;
+  };
+
+  /** THE GYM'S OWN TODAY, ASKED OF THE DATABASE AND NEVER COMPUTED HERE.
+   *
+   *  A `new Date()` in this file would be the TEST RUNNER's clock, which is the
+   *  server's — so an assertion built on it would agree with a broken
+   *  server-zone implementation and disagree with a correct one, for exactly the
+   *  hours the two zones differ. That is :26812 §2(a)'s defect written into the
+   *  oracle instead of the code, which is worse: it cannot be caught by a mutant
+   *  aimed at the code. */
+  const gymToday = async (gymId: string): Promise<string> => {
+    const rows = await sql<{ day: string }[]>`
+      SELECT (now() AT TIME ZONE timezone)::date::text AS day FROM gyms WHERE id = ${gymId}`;
+    const row = rows[0];
+    if (row === undefined) throw new Error("no such gym");
+    return row.day;
+  };
+
+  /** A whole week of sessions that certainly contains this instant, so a fixture
+   *  can produce `in_session` without the suite knowing what time it is. Every
+   *  weekday carries the same pair, and the SECOND session is the one that makes
+   *  ruling 12 testable — two slots the same day, on any day of the week. */
+  const allDaySessions = (
+    first: { opensMinute: number; closesMinute: number },
+    second: { opensMinute: number; closesMinute: number },
+  ) =>
+    [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ weekday, sessions: [first, second] }));
+
+  beforeAll(async () => {
+    await cleanup();
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month',
+              100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      ON CONFLICT (code) DO UPDATE SET active = true`;
+    app = await buildApp(loadConfig(baseEnv));
+    await api().ready();
+  }, HOOK_TIMEOUT_MS);
+
+  afterAll(async () => {
+    await cleanup();
+    await app?.close();
+    await sql.end({ timeout: 5 });
+  }, HOOK_TIMEOUT_MS);
+
+  // -------------------------------------------------------------------------
+  // THE HAPPY PATH, AND THE GYM SEEING WHO CAME
+  // -------------------------------------------------------------------------
+
+  it(
+    "a member marks themselves present and the gym sees them by name",
+    async () => {
+      const owner = await makeUser("h1-owner");
+      const member = await makeUser("h1-member");
+      const org = await makeOrg(owner.cookies, "Happy Path Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const marked = await mark(org.org.id, member.cookies);
+      expect(marked.statusCode).toBe(200);
+      const body = JSON.parse(marked.body) as {
+        status: string;
+        alreadyMarked: boolean;
+        visit: Visit;
+      };
+      expect(body.status).toBe("created");
+      expect(body.alreadyMarked).toBe(false);
+      expect(body.visit.method).toBe("manual");
+      expect(body.visit.day).toBe(await gymToday(org.org.id));
+
+      const day = await readDay(org.org.id, owner.cookies);
+      expect(day.people).toHaveLength(1);
+      expect(day.people[0]?.userId).toBe(member.userId);
+      expect(day.people[0]?.displayName).toBe("Att h1-member");
+      expect(day.people[0]?.visits).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // KD RULING 12 (:27992) — BOTH DIRECTIONS, WHICH IS THE POINT
+  // -------------------------------------------------------------------------
+
+  it(
+    "a second visit in a DIFFERENT session counts again, and the owner sees two times",
+    async () => {
+      const owner = await makeUser("r12-owner");
+      const member = await makeUser("r12-member");
+      const org = await makeOrg(owner.cookies, "Two Slots Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // A week whose every day holds two sessions covering the whole clock, so
+      // whatever time this suite runs, the member is inside the FIRST one.
+      const morning = { opensMinute: 0, closesMinute: 720 };
+      const evening = { opensMinute: 720, closesMinute: 1440 };
+      const set = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        { mode: "scheduled", week: allDaySessions(morning, evening) },
+        owner.cookies,
+      );
+      expect(set.statusCode).toBe(200);
+
+      const first = await mark(org.org.id, member.cookies);
+      expect(first.statusCode).toBe(200);
+      const firstVisit = (JSON.parse(first.body) as { visit: Visit }).visit;
+      expect(firstVisit.hoursStatus).toBe("in_session");
+      expect(firstVisit.session).not.toBeNull();
+
+      // THE SECOND SESSION, forced rather than waited for: the row is written
+      // directly with the OTHER slot's key, which is what a member returning in
+      // the evening produces. Driving it through the route would need the suite
+      // to run twice, twelve hours apart.
+      const otherSlot =
+        firstVisit.session?.opensMinute === morning.opensMinute ? evening : morning;
+      await sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+           session_opens_minute, session_closes_minute, slot_key)
+        VALUES (${org.org.id}, ${member.userId}, ${member.userId},
+                ${firstVisit.day}::date, 'manual', 'in_session',
+                ${otherSlot.opensMinute}, ${otherSlot.closesMinute},
+                ${`${String(otherSlot.opensMinute)}-${String(otherSlot.closesMinute)}`})`;
+
+      const day = await readDay(org.org.id, owner.cookies);
+      // ONE PERSON, TWO TIMES — Kd's own words, and the shape ruling 14 needs.
+      expect(day.people).toHaveLength(1);
+      expect(day.people[0]?.visits).toHaveLength(2);
+      // AND THE TWO SUMMARY NUMBERS DIFFER, which is the only fixture that can
+      // tell them apart: two visits, one person.
+      const inSession = day.summary.filter((s) => s.hoursStatus === "in_session");
+      expect(inSession).toHaveLength(2);
+      expect(inSession.every((s) => s.people === 1)).toBe(true);
+      // **THE DAY'S TOTALS ARE WHERE THE TWO NUMBERS DIVERGE, AND THIS FIXTURE
+      // IS THE ONLY ONE THAT CAN TELL THEM APART.** Two visits, ONE person — a
+      // screen summing the per-slot `people` would print 2 and claim this gym
+      // had two members through the door. Per slot they are provably equal (the
+      // UNIQUE admits one visit per person per slot), which the mutation sweep
+      // proved by surviving a swap of one for the other.
+      expect(day.totals.visits).toBe(2);
+      expect(day.totals.people).toBe(1);
+      expect(day.summary.reduce((n, s) => n + s.people, 0)).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the SAME session tapped twice produces ONE row and answers with the first visit",
+    async () => {
+      const owner = await makeUser("r12b-owner");
+      const member = await makeUser("r12b-member");
+      const org = await makeOrg(owner.cookies, "Double Tap Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const first = await mark(org.org.id, member.cookies);
+      const second = await mark(org.org.id, member.cookies);
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+
+      const a = JSON.parse(first.body) as { alreadyMarked: boolean; visit: Visit };
+      const b = JSON.parse(second.body) as { alreadyMarked: boolean; visit: Visit };
+      expect(a.alreadyMarked).toBe(false);
+      expect(b.alreadyMarked).toBe(true);
+      // The SAME visit, not merely an equal-looking one — the instant is what a
+      // second row would move.
+      expect(b.visit.markedAt).toBe(a.visit.markedAt);
+
+      const rows = await sql<{ n: string }[]>`
+        SELECT count(*) AS n FROM gym_attendance
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      expect(Number(rows[0]?.n)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym with NO sessions gets one attendance per day, however many times somebody taps",
+    async () => {
+      const owner = await makeUser("r15-owner");
+      const member = await makeUser("r15-member");
+      const org = await makeOrg(owner.cookies, "Open All Hours Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      const set = await put(`/v1/orgs/${org.org.id}/hours`, { mode: "open_24h" }, owner.cookies);
+      expect(set.statusCode).toBe(200);
+
+      await mark(org.org.id, member.cookies);
+      await mark(org.org.id, member.cookies);
+      await mark(org.org.id, member.cookies);
+
+      const rows = await sql<{ n: string }[]>`
+        SELECT count(*) AS n FROM gym_attendance
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      // KD: *"only one time attandance"* (:28055). There is nothing to tell two
+      // taps apart at a gym with no sessions, and the remedy is the gym
+      // declaring its sessions — never an invented time window (R0.2).
+      expect(Number(rows[0]?.n)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // THE COLUMN THAT FAILS QUIETLY
+  // -------------------------------------------------------------------------
+
+  it(
+    "the database REFUSES a slot key that does not agree with the session it claims",
+    async () => {
+      const owner = await makeUser("slot-owner");
+      const member = await makeUser("slot-member");
+      const org = await makeOrg(owner.cookies, "Slot Guard Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      const today = await gymToday(org.org.id);
+
+      // A CONSTANT KEY — what a future writer "simplifying" this would produce.
+      // Without the CHECK it inserts happily and every gym silently reverts to
+      // one visit a day, with no error anywhere and every refusal test still
+      // green.
+      await expect(
+        sql`
+          INSERT INTO gym_attendance
+            (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+             session_opens_minute, session_closes_minute, slot_key)
+          VALUES (${org.org.id}, ${member.userId}, ${member.userId}, ${today}::date,
+                  'manual', 'in_session', 360, 420, 'attended')`,
+      ).rejects.toThrow(/gym_attendance_slot_key_agrees_check/);
+
+      // AND THE OTHER DIRECTION: a window kept on a row that is not in a
+      // session. Both are the pairing the reader depends on.
+      await expect(
+        sql`
+          INSERT INTO gym_attendance
+            (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+             session_opens_minute, session_closes_minute, slot_key)
+          VALUES (${org.org.id}, ${member.userId}, ${member.userId}, ${today}::date,
+                  'manual', 'outside_hours', 360, 420, 'outside_hours')`,
+      ).rejects.toThrow(/gym_attendance_session_pairing_check/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // ALL FIVE hours_status VALUES
+  // -------------------------------------------------------------------------
+
+  it(
+    "a gym that has never set hours records `hours_unset`, not `outside_hours`",
+    async () => {
+      const owner = await makeUser("s1-owner");
+      const member = await makeUser("s1-member");
+      const org = await makeOrg(owner.cookies, "Never Answered Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const res = await mark(org.org.id, member.cookies);
+      const visit = (JSON.parse(res.body) as { visit: Visit }).visit;
+      // :26736 ONE LEVEL IN. "Nobody has answered" is not "outside hours", and a
+      // reader that folds them together tells a member something FALSE about a
+      // gym that has simply not filled the form in (:5807).
+      expect(visit.hoursStatus).toBe("hours_unset");
+      expect(visit.session).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a 24-hour gym records `open_24h`, and a dated closure BEATS it",
+    async () => {
+      const owner = await makeUser("s2-owner");
+      const member = await makeUser("s2-member");
+      const other = await makeUser("s2-other");
+      const org = await makeOrg(owner.cookies, "Round The Clock Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await joinAsMember(other.cookies, org, owner.cookies);
+      const set = await put(`/v1/orgs/${org.org.id}/hours`, { mode: "open_24h" }, owner.cookies);
+      expect(set.statusCode).toBe(200);
+
+      const open = await mark(org.org.id, member.cookies);
+      expect((JSON.parse(open.body) as { visit: Visit }).visit.hoursStatus).toBe("open_24h");
+
+      // THE CLOSURE WINS OVER THE PATTERN (:26684 §3) — including over a
+      // 24-hour flag, which is a pattern like any other.
+      const today = await gymToday(org.org.id);
+      const closed = await post(
+        `/v1/orgs/${org.org.id}/closures`,
+        { day: today, note: "Holi" },
+        owner.cookies,
+      );
+      expect(closed.statusCode).toBe(200);
+
+      const afterClose = await mark(org.org.id, other.cookies);
+      const visit = (JSON.parse(afterClose.body) as { visit: Visit }).visit;
+      // AND IT IS RECORDED, NEVER REFUSED (:26624 §4.4, :26684): a member who
+      // turned up on a day the gym shut at short notice is a real thing that
+      // happened, and refusing would show them something false about their gym.
+      expect(afterClose.statusCode).toBe(200);
+      expect(visit.hoursStatus).toBe("closed_day");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a scheduled gym records `in_session` inside its hours and `outside_hours` outside them",
+    async () => {
+      const owner = await makeUser("s3-owner");
+      const inside = await makeUser("s3-in");
+      const outside = await makeUser("s3-out");
+      const org = await makeOrg(owner.cookies, "Timetable Gym");
+      await joinAsMember(inside.cookies, org, owner.cookies);
+      await joinAsMember(outside.cookies, org, owner.cookies);
+
+      // WHOLE-CLOCK SESSIONS: whatever time this runs, the tap is inside one.
+      const setOpen = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        {
+          mode: "scheduled",
+          week: allDaySessions({ opensMinute: 0, closesMinute: 720 }, { opensMinute: 720, closesMinute: 1440 }),
+        },
+        owner.cookies,
+      );
+      expect(setOpen.statusCode).toBe(200);
+      const hit = await mark(org.org.id, inside.cookies);
+      const hitVisit = (JSON.parse(hit.body) as { visit: Visit }).visit;
+      expect(hitVisit.hoursStatus).toBe("in_session");
+      expect(hitVisit.session).not.toBeNull();
+
+      // A WEEK THAT CANNOT CONTAIN NOW: one minute, on every weekday, at the
+      // instant of midnight — `opensMinute: 0, closesMinute: 1` is inside only
+      // during the first minute of a gym's day. That is a 1-in-1440 flake, so
+      // the fixture ALSO asserts the minute it is refusing.
+      const nowMinuteRows = await sql<{ m: number }[]>`
+        SELECT (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int) AS m
+        FROM gyms g WHERE g.id = ${org.org.id}`;
+      const nowMinute = nowMinuteRows[0]?.m ?? 0;
+      // A one-minute window a full twelve hours from now, so it cannot contain
+      // this instant whatever the hour — the fixture's own premise, asserted.
+      const far = (nowMinute + 720) % 1440;
+      expect(far).not.toBe(nowMinute);
+      const setShut = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        {
+          mode: "scheduled",
+          week: [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({
+            weekday,
+            sessions: [{ opensMinute: far, closesMinute: far + 1 }],
+          })),
+        },
+        owner.cookies,
+      );
+      expect(setShut.statusCode).toBe(200);
+      const miss = await mark(org.org.id, outside.cookies);
+      expect(miss.statusCode).toBe(200);
+      expect((JSON.parse(miss.body) as { visit: Visit }).visit.hoursStatus).toBe("outside_hours");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the window a visit carries survives the whole timetable being replaced",
+    async () => {
+      const owner = await makeUser("frz-owner");
+      const member = await makeUser("frz-member");
+      const org = await makeOrg(owner.cookies, "Frozen Window Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      const set = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        {
+          mode: "scheduled",
+          week: allDaySessions({ opensMinute: 0, closesMinute: 1439 }, { opensMinute: 1439, closesMinute: 1440 }),
+        },
+        owner.cookies,
+      );
+      expect(set.statusCode).toBe(200);
+      const before = (JSON.parse((await mark(org.org.id, member.cookies)).body) as { visit: Visit })
+        .visit;
+      expect(before.session).not.toBeNull();
+
+      // REPLACE THE WEEK ENTIRELY — `PUT /hours` deletes and re-inserts every
+      // row, which is exactly why the window is COPIED onto the attendance and
+      // not joined at read time. An FK here would dangle or cascade.
+      const replaced = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        {
+          mode: "scheduled",
+          week: [{ weekday: 1, sessions: [{ opensMinute: 600, closesMinute: 660 }] }],
+        },
+        owner.cookies,
+      );
+      expect(replaced.statusCode).toBe(200);
+
+      const day = await readDay(org.org.id, owner.cookies);
+      expect(day.people[0]?.visits[0]?.session).toEqual(before.session);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // THE GYM'S DAY, ON A PAIR AT OPPOSITE EXTREMES (:26812 §2(a))
+  // -------------------------------------------------------------------------
+
+  it(
+    "the day stored is the GYM's day — proven on a pair 26 hours apart",
+    async () => {
+      const owner = await makeUser("tz-owner");
+      const east = await makeUser("tz-east");
+      const west = await makeUser("tz-west");
+      const eastOrg = await makeOrg(owner.cookies, "East Gym", "Pacific/Kiritimati"); // UTC+14
+      const westOrg = await makeOrg(owner.cookies, "West Gym", "Etc/GMT+12"); // UTC-12
+      await joinAsMember(east.cookies, eastOrg, owner.cookies);
+      await joinAsMember(west.cookies, westOrg, owner.cookies);
+
+      const eastToday = await gymToday(eastOrg.org.id);
+      const westToday = await gymToday(westOrg.org.id);
+      // THE FIXTURE'S OWN PREMISE, ASSERTED RATHER THAN ASSUMED. 26 hours apart
+      // means these two calendar dates ALWAYS differ, so a server-zone
+      // implementation must be wrong for at least one of them at every instant —
+      // which a single non-UTC gym cannot guarantee (:26812 §2(a)).
+      expect(eastToday).not.toBe(westToday);
+
+      const e = (JSON.parse((await mark(eastOrg.org.id, east.cookies)).body) as { visit: Visit })
+        .visit;
+      const w = (JSON.parse((await mark(westOrg.org.id, west.cookies)).body) as { visit: Visit })
+        .visit;
+      expect(e.day).toBe(eastToday);
+      expect(w.day).toBe(westToday);
+      expect(e.day).not.toBe(w.day);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "editing the gym's time zone afterwards does not move a visit that already happened",
+    async () => {
+      const owner = await makeUser("tzmove-owner");
+      const member = await makeUser("tzmove-member");
+      const org = await makeOrg(owner.cookies, "Moving Zone Gym", "Pacific/Kiritimati");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      const before = (JSON.parse((await mark(org.org.id, member.cookies)).body) as { visit: Visit })
+        .visit;
+
+      const moved = await patch(
+        `/v1/orgs/${org.org.id}`,
+        { timezone: "Etc/GMT+12" },
+        owner.cookies,
+      );
+      expect(moved.statusCode).toBe(200);
+      expect(await gymToday(org.org.id)).not.toBe(before.day);
+
+      // THE STORED DAY IS THE DAY BOTH THE MEMBER AND THE GYM SAW ON SCREEN. A
+      // reader that re-derived it would silently move every past visit the day
+      // an owner corrected their zone.
+      const rows = await sql<{ day: string }[]>`
+        SELECT day::text AS day FROM gym_attendance
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      expect(rows[0]?.day).toBe(before.day);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // THE OWNER'S SWITCH (:26469 §1.4)
+  // -------------------------------------------------------------------------
+
+  it(
+    "the owner can switch manual marking off, and it is per-gym",
+    async () => {
+      const owner = await makeUser("sw-owner");
+      const member = await makeUser("sw-member");
+      const orgA = await makeOrg(owner.cookies, "Switch A Gym");
+      const orgB = await makeOrg(owner.cookies, "Switch B Gym");
+      await joinAsMember(member.cookies, orgA, owner.cookies);
+      await joinAsMember(member.cookies, orgB, owner.cookies);
+
+      // ON BY DEFAULT — Kd's ruling, and the reason is that turning it off today
+      // would leave a gym with no way to record anybody at all (:26586).
+      const before = await get("/v1/orgs/mine", owner.cookies);
+      const mineBefore = JSON.parse(before.body) as {
+        orgs: { id: string; manualAttendanceEnabled: boolean }[];
+      };
+      expect(mineBefore.orgs.every((o) => o.manualAttendanceEnabled)).toBe(true);
+
+      const off = await patch(
+        `/v1/orgs/${orgA.org.id}`,
+        { manualAttendanceEnabled: false },
+        owner.cookies,
+      );
+      expect(off.statusCode).toBe(200);
+
+      const refused = await mark(orgA.org.id, member.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect((JSON.parse(refused.body) as { error: string }).error).toBe("manual_attendance_off");
+
+      // PER-GYM: the second gym is untouched, which a single-gym fixture cannot
+      // tell from a global switch.
+      const stillWorks = await mark(orgB.org.id, member.cookies);
+      expect(stillWorks.statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // WHO MAY MARK, AND WHO MAY READ (R9.2 + rulings 13 and 18)
+  // -------------------------------------------------------------------------
+
+  it(
+    "a stranger and a REMOVED member cannot mark; the cross-tenant case is a 404",
+    async () => {
+      const owner = await makeUser("z-owner");
+      const member = await makeUser("z-member");
+      const stranger = await makeUser("z-stranger");
+      const otherOwner = await makeUser("z-other-owner");
+      const org = await makeOrg(owner.cookies, "Guarded Gym");
+      const otherOrg = await makeOrg(otherOwner.cookies, "Other Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const byStranger = await mark(org.org.id, stranger.cookies);
+      expect(byStranger.statusCode).toBe(404);
+
+      // CROSS-TENANT (R9.2): the OTHER gym's owner — staff of a real gym,
+      // holding a real uuid — gets 404 on this one, on the mark AND on both
+      // reads. A 403 would confirm the gym exists.
+      expect((await mark(org.org.id, otherOwner.cookies)).statusCode).toBe(404);
+      expect((await get(`/v1/orgs/${org.org.id}/attendance`, otherOwner.cookies)).statusCode).toBe(
+        404,
+      );
+      expect(
+        (await get(`/v1/orgs/${org.org.id}/attendance/history`, otherOwner.cookies)).statusCode,
+      ).toBe(404);
+      // And the same in the other direction, so the test is not passing because
+      // one of the two gyms is special.
+      expect((await get(`/v1/orgs/${otherOrg.org.id}/attendance`, owner.cookies)).statusCode).toBe(
+        404,
+      );
+
+      // A REMOVED MEMBER, driven through a real removal rather than an absent
+      // row — those are different states and only one of them is this rule.
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+      await sql`
+        UPDATE gym_members SET removed_at = now()
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a TRAINER reads the day by default, and an untoggled staffer is refused",
+    async () => {
+      const owner = await makeUser("p-owner");
+      const trainer = await makeUser("p-trainer");
+      const member = await makeUser("p-member");
+      const org = await makeOrg(owner.cookies, "Privilege Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await mark(org.org.id, member.cookies);
+
+      // A STAFFER MUST BE A MEMBER FIRST — the module's own rule (`not_a_member`
+      // is a 404 on the add), and a fixture that skipped it would be testing a
+      // journey the product does not have.
+      await joinAsMember(trainer.cookies, org, owner.cookies);
+      const added = await post(
+        `/v1/orgs/${org.org.id}/staff`,
+        { email: trainer.email, role: "trainer" },
+        owner.cookies,
+      );
+      expect(added.statusCode).toBe(201);
+
+      // THE HALF KD ACTUALLY RULED: the narrowest role, no ticks edited, reads
+      // the list. A test that only proved the refusal below would pass with this
+      // default broken (:19560's O124 — a rule has two failure directions).
+      const byTrainer = await get(`/v1/orgs/${org.org.id}/attendance`, trainer.cookies);
+      expect(byTrainer.statusCode).toBe(200);
+
+      // AND THE OTHER HALF: "the owner can change it".
+      const ticked = await put(
+        `/v1/orgs/${org.org.id}/staff/${trainer.userId}/privileges`,
+        { privileges: ["members.read", "codes.invite"] },
+        owner.cookies,
+      );
+      expect(ticked.statusCode).toBe(200);
+      const refused = await get(`/v1/orgs/${org.org.id}/attendance`, trainer.cookies);
+      expect(refused.statusCode).toBe(403);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "`attendance.read` round-trips through the DATABASE, not merely the type system",
+    async () => {
+      const owner = await makeUser("db-owner");
+      const staff = await makeUser("db-staff");
+      const org = await makeOrg(owner.cookies, "Round Trip Gym");
+      await joinAsMember(staff.cookies, org, owner.cookies); // staff must be a member first
+      const added = await post(
+        `/v1/orgs/${org.org.id}/staff`,
+        { email: staff.email, role: "manager" },
+        owner.cookies,
+      );
+      expect(added.statusCode).toBe(201);
+
+      // WITHOUT the widened CHECK in migration `0019` this is where the card
+      // fails — everything compiles, every unit test passes, and Postgres
+      // refuses the array. The failure belongs here and not on a screen.
+      const saved = await put(
+        `/v1/orgs/${org.org.id}/staff/${staff.userId}/privileges`,
+        { privileges: ["members.read", "attendance.read"] },
+        owner.cookies,
+      );
+      expect(saved.statusCode).toBe(200);
+      const rows = await sql<{ privileges: string[] }[]>`
+        SELECT privileges FROM gym_staff
+        WHERE gym_id = ${org.org.id} AND user_id = ${staff.userId}`;
+      expect(rows[0]?.privileges).toContain("attendance.read");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a member of a LAPSED gym can still mark; an ARCHIVED gym refuses",
+    async () => {
+      const owner = await makeUser("lapse-owner");
+      const member = await makeUser("lapse-member");
+      const org = await makeOrg(owner.cookies, "Lapsing Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // LAPSED — Kd's answer at the plan gate, and :22215's arm A: a lapsed
+      // gym's members fall back to the free app, never locked out. The gym still
+      // exists and the member still walked in.
+      await sql`
+        UPDATE subscriptions SET status = 'canceled'
+        WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
+      const lapsed = await mark(org.org.id, member.cookies);
+      expect(lapsed.statusCode).toBe(200);
+
+      // ARCHIVED is a different state and DOES refuse: nothing new happens at a
+      // gym the product has finished with (:25771).
+      await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${org.org.id}`;
+      const archived = await mark(org.org.id, member.cookies);
+      expect(archived.statusCode).toBe(409);
+      expect((JSON.parse(archived.body) as { error: string }).error).toBe("org_archived");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "nothing on the path asks whether the member has paid the gym",
+    async () => {
+      // KD, 2026-09-01: *"if a memebr is not part of the gym or have not paid
+      // then gym memebr can remove them thas gym responsibility"*. The ONLY
+      // condition is a live membership row — this test is the guard against a
+      // later chat "improving" the check by adding a dues condition, because
+      // there is no such column to add one from and this asserts the door stays
+      // open to a member the gym has not been paid by.
+      const owner = await makeUser("dues-owner");
+      const member = await makeUser("dues-member");
+      const org = await makeOrg(owner.cookies, "No Dues Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+
+      // The gym's remedy for somebody it does not want is `members.remove`, the
+      // door it already has — and the SAME live-membership check refuses them.
+      const removed = await api().inject({
+        method: "DELETE",
+        url: `/v1/orgs/${org.org.id}/members/${member.userId}`,
+        remoteAddress: nextIp(),
+        cookies: owner.cookies,
+      });
+      expect(removed.statusCode).toBe(200);
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // ONE PERSON'S OWN HISTORY (:27900, :28055)
+  // -------------------------------------------------------------------------
+
+  it(
+    "a member reads their own history, and the ?userId= filter serves only that person",
+    async () => {
+      const owner = await makeUser("hist-owner");
+      const one = await makeUser("hist-one");
+      const two = await makeUser("hist-two");
+      const org = await makeOrg(owner.cookies, "History Gym");
+      await joinAsMember(one.cookies, org, owner.cookies);
+      await joinAsMember(two.cookies, org, owner.cookies);
+      await mark(org.org.id, one.cookies);
+      await mark(org.org.id, two.cookies);
+
+      const mine = await get(`/v1/orgs/${org.org.id}/attendance/history`, one.cookies);
+      expect(mine.statusCode).toBe(200);
+      const mineBody = JSON.parse(mine.body) as { attendance: { visits: Visit[] } };
+      expect(mineBody.attendance.visits).toHaveLength(1);
+
+      // THE FILTER MUST EXCLUDE, and this is the assertion a silently-inert
+      // filter passes without: the OTHER member also attended, so a filter that
+      // does nothing returns two.
+      const filtered = await get(
+        `/v1/orgs/${org.org.id}/attendance/history?userId=${one.userId}`,
+        owner.cookies,
+      );
+      expect(filtered.statusCode).toBe(200);
+      const filteredBody = JSON.parse(filtered.body) as { attendance: { visits: Visit[] } };
+      expect(filteredBody.attendance.visits).toHaveLength(1);
+
+      // A MEMBER CANNOT READ SOMEBODY ELSE'S by naming them — the fork in the
+      // service is authorisation, not convenience.
+      //
+      // **404 AND NOT 403, which is this module's standing convention rather
+      // than this route's choice**: `requirePrivilege` answers 404 for a caller
+      // with no staff row at all, so a signed-in stranger holding a uuid learns
+      // nothing about the gym (:23711 §2(a)'s ordering). A plain member is on
+      // that path — they hold a membership, not authority — so naming somebody
+      // else gets the same answer a stranger gets.
+      const peeked = await get(
+        `/v1/orgs/${org.org.id}/attendance/history?userId=${two.userId}`,
+        one.cookies,
+      );
+      expect(peeked.statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "one gym's day counts only that gym — the summary is scoped, not just the page",
+    async () => {
+      // O208 SURVIVED ITS FIRST RUN AND THIS TEST IS WHY IT NOW DIES. The
+      // cross-tenant test above proves an OUTSIDER gets 404; it says nothing
+      // about what an AUTHORISED owner is shown, and the summary's `WHERE` is a
+      // separate query from the page's. Deleting the gym id from it leaks every
+      // gym's counts into every console — an IDOR that a 404 test structurally
+      // cannot see (:10182's shape: a cross-tenant test that builds ONE tenant).
+      const ownerA = await makeUser("scope-a-owner");
+      const ownerB = await makeUser("scope-b-owner");
+      const memberA = await makeUser("scope-a-member");
+      const memberB1 = await makeUser("scope-b-1");
+      const memberB2 = await makeUser("scope-b-2");
+      const orgA = await makeOrg(ownerA.cookies, "Scope A Gym");
+      const orgB = await makeOrg(ownerB.cookies, "Scope B Gym");
+      await joinAsMember(memberA.cookies, orgA, ownerA.cookies);
+      await joinAsMember(memberB1.cookies, orgB, ownerB.cookies);
+      await joinAsMember(memberB2.cookies, orgB, ownerB.cookies);
+
+      await mark(orgA.org.id, memberA.cookies);
+      await mark(orgB.org.id, memberB1.cookies);
+      await mark(orgB.org.id, memberB2.cookies);
+
+      // The gyms share a timezone, so they share a `day` — which is what makes
+      // the unscoped query able to see across them at all.
+      const day = await readDay(orgA.org.id, ownerA.cookies);
+      expect(day.people).toHaveLength(1);
+      const visits = day.summary.reduce((n, s) => n + s.visits, 0);
+      const people = day.summary.reduce((n, s) => n + s.people, 0);
+      expect(visits).toBe(1);
+      expect(people).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a member's history at one gym does not include their visits to another",
+    async () => {
+      // O209 SURVIVED ITS FIRST RUN AND THIS TEST IS WHY IT NOW DIES. Every
+      // history assertion above used a member of ONE gym, so deleting the gym id
+      // from the predicate changed nothing any of them could see. The person who
+      // exposes it is one who belongs to TWO — and that person is ordinary, not
+      // an edge case: a member of two gyms is exactly who this app is for.
+      const ownerA = await makeUser("hist2-a-owner");
+      const ownerB = await makeUser("hist2-b-owner");
+      const both = await makeUser("hist2-both");
+      const orgA = await makeOrg(ownerA.cookies, "Hist A Gym");
+      const orgB = await makeOrg(ownerB.cookies, "Hist B Gym");
+      await joinAsMember(both.cookies, orgA, ownerA.cookies);
+      await joinAsMember(both.cookies, orgB, ownerB.cookies);
+      await mark(orgA.org.id, both.cookies);
+      await mark(orgB.org.id, both.cookies);
+
+      const atA = await get(`/v1/orgs/${orgA.org.id}/attendance/history`, both.cookies);
+      expect(atA.statusCode).toBe(200);
+      const bodyA = JSON.parse(atA.body) as { attendance: { visits: Visit[] } };
+      expect(bodyA.attendance.visits).toHaveLength(1);
+
+      // AND THE OTHER GYM ANSWERS ITS OWN, so the test is not passing because
+      // one of the two reads is broken in a compensating direction.
+      const atB = await get(`/v1/orgs/${orgB.org.id}/attendance/history`, both.cookies);
+      const bodyB = JSON.parse(atB.body) as { attendance: { visits: Visit[] } };
+      expect(bodyB.attendance.visits).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a visit at the instant a session ENDS belongs to the session that is STARTING",
+    async () => {
+      // O205 SURVIVED ITS FIRST RUN. Every other `in_session` fixture uses
+      // whole-clock windows, so the half-open boundary (`closes > now`, not
+      // `>=`) is never exercised: loosen it and the tap is inside BOTH the
+      // session that just ended and the one starting, `ORDER BY opens_minute
+      // LIMIT 1` silently picks the EARLIER, and the visit is filed against a
+      // session the member was not in. Touching sessions are legal
+      // (`flattenWeek`'s rule), so this is reachable rather than theoretical.
+      //
+      // **THE FIXTURE HAS TO LAND ON THE BOUNDARY MINUTE, WHICH IS THE WHOLE
+      // DIFFICULTY, AND THE WAIT BELOW IS WHAT MAKES IT DETERMINISTIC RATHER
+      // THAN A ONE-IN-1440 FLAKE.** The window is built FROM the gym's current
+      // minute, so if that minute ticks between building it and marking, the
+      // fixture is no longer about a boundary and would fail for a reason that
+      // is not the code's. Starting only when at least fifteen seconds of the
+      // minute remain removes that: the two calls between here and the mark take
+      // milliseconds. It is a real wait and it is bounded by one minute.
+      const owner = await makeUser("bnd-owner");
+      const member = await makeUser("bnd-member");
+      const org = await makeOrg(owner.cookies, "Boundary Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const secondsIn = async () => {
+        const rows = await sql<{ s: number }[]>`
+          SELECT EXTRACT(SECOND FROM (now() AT TIME ZONE g.timezone))::int AS s
+          FROM gyms g WHERE g.id = ${org.org.id}`;
+        return rows[0]?.s ?? 0;
+      };
+      // Wait ONLY when fewer than fifteen seconds of the gym's minute remain,
+      // and then only long enough to reach the next one — at most fifteen
+      // seconds. The first version computed this backwards and slept almost a
+      // full minute to gain fourteen seconds, which blew the timeout: it is the
+      // sleep's LENGTH that is derived from the clock, not its threshold.
+      const secs = await secondsIn();
+      if (secs > 45) await new Promise((r) => setTimeout(r, (61 - secs) * 1000));
+
+      const rows = await sql<{ m: number; d: number }[]>`
+        SELECT (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int) AS m,
+               EXTRACT(ISODOW FROM (now() AT TIME ZONE g.timezone))::int AS d
+        FROM gyms g WHERE g.id = ${org.org.id}`;
+      const nowMinute = rows[0]?.m ?? 0;
+      const weekday = rows[0]?.d ?? 1;
+      // Clamped so the pair stays inside the day at either end; the boundary is
+      // what matters, not the widths.
+      const start = Math.max(0, nowMinute - 60);
+      const end = Math.min(1440, nowMinute + 60);
+      // The premise: the boundary IS the current minute, and both sides are real
+      // windows. Asserted rather than assumed (:26812 §2(a)).
+      expect(nowMinute).toBeGreaterThan(start);
+      expect(end).toBeGreaterThan(nowMinute);
+
+      const set = await put(
+        `/v1/orgs/${org.org.id}/hours`,
+        {
+          mode: "scheduled",
+          week: [
+            {
+              weekday,
+              sessions: [
+                { opensMinute: start, closesMinute: nowMinute },
+                { opensMinute: nowMinute, closesMinute: end },
+              ],
+            },
+          ],
+        },
+        owner.cookies,
+      );
+      expect(set.statusCode).toBe(200);
+
+      const visit = (JSON.parse((await mark(org.org.id, member.cookies)).body) as { visit: Visit })
+        .visit;
+      expect(visit.hoursStatus).toBe("in_session");
+      // THE SESSION THAT IS STARTING, never the one that just ended. Under `>=`
+      // this reads `start` instead.
+      expect(visit.session?.opensMinute).toBe(nowMinute);
+      expect(visit.session?.closesMinute).toBe(end);
+    },
+    60_000,
+  );
+
+  it(
+    "an unreadable page marker is a 400, never a silent page one",
+    async () => {
+      const owner = await makeUser("cur-owner");
+      const org = await makeOrg(owner.cookies, "Cursor Gym");
+      const res = await get(`/v1/orgs/${org.org.id}/attendance?cursor=nonsense`, owner.cookies);
+      expect(res.statusCode).toBe(400);
+      expect((JSON.parse(res.body) as { error: string }).error).toBe("bad_cursor");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // KD RULING 9 (:27900 §3) — STREAKS YES, XP NO
+  // -------------------------------------------------------------------------
+
+  it(
+    "an attendance-only day extends the STREAK and leaves the XP total alone",
+    async () => {
+      const owner = await makeUser("st-owner");
+      const member = await makeUser("st-member");
+      const org = await makeOrg(owner.cookies, "Streak Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const xpBefore = await sql<{ total_xp: number }[]>`
+        SELECT total_xp FROM user_xp WHERE user_id = ${member.userId}`;
+      const streakBefore = await sql<{ current: number }[]>`
+        SELECT current FROM streaks WHERE user_id = ${member.userId}`;
+      expect(streakBefore[0]?.current ?? 0).toBe(0);
+
+      /** YESTERDAY'S VISIT, WRITTEN DIRECTLY, AND THE FIXTURE DOES NOT WORK
+       *  WITHOUT IT — the mutation sweep proved that rather than anybody
+       *  spotting it.
+       *
+       *  The first version marked ONCE and asserted the XP total had not moved.
+       *  **The mutant that unions attendance into the XP list SURVIVED it**,
+       *  because XP is not paid per activity day: `countStreakContinuationDays`
+       *  counts ADJACENT PAIRS, and one day in isolation is no pair. So the
+       *  broken and the correct code both computed zero and the assertion was
+       *  green for a reason that had nothing to do with the guarantee.
+       *
+       *  **A SECOND, CONSECUTIVE DAY IS WHAT MAKES THE TWO ANSWERS DIFFER**:
+       *  yesterday plus today is one adjacent pair, so a leaked union pays
+       *  continuation XP and this test goes red. :26812 §2(b)'s lesson, arriving
+       *  again — aim the fixture at the case the code would get WRONG. */
+      const gymDay = await gymToday(org.org.id);
+      await sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, method, hours_status, slot_key)
+        VALUES (${org.org.id}, ${member.userId}, ${member.userId},
+                (${gymDay}::date - 1), 'manual', 'hours_unset', 'hours_unset')`;
+
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+
+      const streakAfter = await sql<{ current: number; last_activity_date: string | null }[]>`
+        SELECT current, last_activity_date::text AS last_activity_date
+        FROM streaks WHERE user_id = ${member.userId}`;
+      // THE RULING: going to the gym keeps a streak alive — and two consecutive
+      // gym days are a streak of two, which no workout produced.
+      expect(streakAfter[0]?.current).toBe(2);
+      expect(streakAfter[0]?.last_activity_date).toBe(gymDay);
+
+      const xpAfter = await sql<{ total_xp: number }[]>`
+        SELECT total_xp FROM user_xp WHERE user_id = ${member.userId}`;
+      // AND THE LINE KD DID NOT MOVE. `recomputeXp` reads `getActivityDays`
+      // (workouts alone) while the streak reads `getStreakDays` (workouts ∪
+      // attendance). Collapse them into one function and this goes red — which
+      // is the whole reason it exists, because a single union would pay XP for a
+      // button tap, silently, to everybody.
+      expect(xpAfter[0]?.total_xp ?? 0).toBe(xpBefore[0]?.total_xp ?? 0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});

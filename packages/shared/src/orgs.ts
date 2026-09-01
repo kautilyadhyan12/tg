@@ -260,6 +260,22 @@ export const orgSummarySchema = z.object({
    *  all, whose `PUT /hours` would be refused. `.default('24h')` for the
    *  same expand-then-contract reason `country` records above. */
   clockFormat: gymClockFormatSchema.default('24h'),
+  /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4, the owner's switch).
+   *
+   *  On the org row for `clockFormat`'s reason: the console holds this row
+   *  before it asks for anything else, and the member's gym card needs it to
+   *  decide whether to DRAW the "I'm here" button at all — **absent, never
+   *  greyed**, because a dead button with no explanation is the defect :24141
+   *  named.
+   *
+   *  **`.default(true)` mirrors the column's default and matters in the same
+   *  window `country` and `clockFormat` describe**: web newer than api, and a
+   *  REQUIRED field would blank a member's whole gym card rather than hide one
+   *  button. The default must match the DDL's, or a gym that has switched it
+   *  OFF would have the button drawn back on by the older server's silence —
+   *  which is why this is the ONE default here that carries a risk, and why the
+   *  screen re-reads after a failed mark rather than trusting it. */
+  manualAttendanceEnabled: z.boolean().default(true),
   /** WHERE THE GYM IS — ISO 3166-1 alpha-2, and `null` for every gym created
    *  before migration `0014`, because the wizard collected it and the server
    *  threw it away.
@@ -364,6 +380,15 @@ export const updateOrgRequestSchema = z
      *  because a gym that has NOT set hours must still be able to pick its
      *  clock, and that request cannot be built (`unset` is not sendable). */
     clockFormat: gymClockFormatSchema,
+    /** THE OWNER'S ATTENDANCE SWITCH (:26469 §1.4). It rides on this PATCH for
+     *  `clockFormat`'s reason — it is a setting ABOUT the feature rather than a
+     *  use OF it, and :28107 drew exactly that line (*"Settings is where a gym
+     *  CONFIGURES itself; a section is where it WORKS"*), which is why the
+     *  switch stays on Settings while the list of who came moved out.
+     *
+     *  Like `clockFormat` it is bound by nothing the country lock protects: no
+     *  money, no day boundary, no currency. */
+    manualAttendanceEnabled: z.boolean(),
   })
   .partial()
   .strict()
@@ -1288,6 +1313,7 @@ export const ORG_PRIVILEGES = [
   "staff.manage",
   "org.manage",
   "billing.manage",
+  "attendance.read",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1385,7 +1411,32 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  to cover. The asymmetry with `org.manage` is real and is the reason: an owner
  *  ticked down from `org.manage` still holds `staff.manage` and can tick it
  *  straight back, but a gym whose last owner cannot reach billing cannot PAY, and
- *  nothing inside the gym repairs that. */
+ *  nothing inside the gym repairs that.
+ *
+ *  `attendance.read` is "see who came in" — **KD RULING 2026-09-01 (:28107),
+ *  and the ONLY entry in this table granted to all three roles by his explicit
+ *  words**: *"also stafs can see it too default permission owner can change
+ *  it"*. §2.2 has no row for it (the matrix predates attendance existing), so it
+ *  is an ADDITION like `org.manage` — landed on every line rather than the
+ *  owner's, because a gym's front desk is exactly who needs to see who walked
+ *  in.
+ *
+ *  **WHY IT IS NOT `members.read` REUSED, which would have needed no
+ *  migration:** that satisfies the first half of his sentence and BREAKS the
+ *  second. Unticking it to hide attendance from somebody would also take away
+ *  the member list — :13803's precedent (two rows meaning different things get
+ *  different privileges), here pointed the other way: one tick silently
+ *  NARROWING a power it was never about.
+ *
+ *  **The `trainer` line is the one that proves the ruling.** Granted to owner
+ *  and manager only it would look right in every test written by somebody
+ *  thinking about owners — and would be his default, silently not applied to the
+ *  role most likely to be standing at the door.
+ *
+ *  **Absent from `OWNER_ONLY_PRIVILEGES`** — a manager's and a trainer's row
+ *  must be able to carry it, which is the point — **and absent from the api's
+ *  `LAST_OWNER_REQUIRED_PRIVILEGES`**, which guards the two ticks that can
+ *  STRAND a gym; losing a READ strands nobody and is one tick from restored. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1396,9 +1447,17 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "staff.manage",
     "org.manage",
     "billing.manage",
+    "attendance.read",
   ],
-  manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
-  trainer: ["members.read", "codes.invite"],
+  manager: [
+    "members.read",
+    "codes.invite",
+    "codes.manage",
+    "members.confirm",
+    "members.remove",
+    "attendance.read",
+  ],
+  trainer: ["members.read", "codes.invite", "attendance.read"],
 };
 
 /** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
@@ -1703,3 +1762,206 @@ export const removeGymClosureResponseSchema = z.object({
   hours: gymHoursSchema,
 });
 export type RemoveGymClosureResponse = z.infer<typeof removeGymClosureResponseSchema>;
+
+/* ─────────────────────────── ATTENDANCE ───────────────────────────
+ *
+ *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900 + :27992, :28055, :28107).
+ *  A member taps "I'm here"; the gym sees who came.
+ */
+
+/** HOW A VISIT WAS MARKED. **Only `manual` is reachable today** — :26586 struck
+ *  the whole scan path from the web (*"drop the scan part completely from web
+ *  men"*), so `qr` arrives with the phone app.
+ *
+ *  **It is in the contract before anything can write it, deliberately** (:26469
+ *  §4): a manual tap can be sent from home and a scan cannot, the gym SEES which
+ *  is which, and a single "attended" boolean would throw away the only thing
+ *  that makes the number trustworthy — which no later card recovers. */
+export const gymAttendanceMethodSchema = z.enum(["manual", "qr"]);
+export type GymAttendanceMethod = z.infer<typeof gymAttendanceMethodSchema>;
+
+/** WHAT THE GYM'S OPENING HOURS SAID ABOUT THIS VISIT, decided once when it was
+ *  recorded and then FROZEN. If an owner edits the timetable an hour later,
+ *  yesterday's visits keep the labels they were given — the label describes the
+ *  VISIT, never the current timetable.
+ *
+ *  Five values because five different true things can be said, and collapsing
+ *  any pair loses one of them:
+ *
+ *  - `in_session`    — inside one of the gym's sessions; the window travels with
+ *                      it.
+ *  - `open_24h`      — the gym is open 24 hours, so there is nothing to be
+ *                      outside of.
+ *  - `outside_hours` — the gym HAS said when it is open, and this was not then.
+ *  - `closed_day`    — a dated closure covered this day.
+ *  - `hours_unset`   — **the gym has never said when it is open, so NOTHING can
+ *                      be judged.** :26736's third state, one level in: "nobody
+ *                      has answered" is not "outside hours", and folding them
+ *                      together is exactly the false sentence that ruling
+ *                      exists to prevent.
+ *
+ *  **The last three are RECORDED AND MARKED, NEVER REFUSED** (:26624 §4.4,
+ *  :26684). A gym that forgot to update its hours must not lock its own members
+ *  out, and a member who turned up on a day the gym closed at short notice is a
+ *  real thing that happened. */
+export const gymAttendanceHoursStatusSchema = z.enum([
+  "in_session",
+  "open_24h",
+  "outside_hours",
+  "closed_day",
+  "hours_unset",
+]);
+export type GymAttendanceHoursStatus = z.infer<typeof gymAttendanceHoursStatusSchema>;
+
+/** ONE VISIT. `day` is the GYM's date in the GYM's zone (trap #8), which is why
+ *  it travels as `YYYY-MM-DD` and never as an instant; `markedAt` is the
+ *  instant, for the clock time a screen prints.
+ *
+ *  `session` is present exactly when `hoursStatus` is `in_session`, and it is a
+ *  COPY rather than a reference: `PUT /hours` replaces the whole week, so the
+ *  row it came from may not exist by the time anybody reads this. */
+export const gymAttendanceVisitSchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    markedAt: z.string().datetime(),
+    method: gymAttendanceMethodSchema,
+    hoursStatus: gymAttendanceHoursStatusSchema,
+    session: gymSessionSchema.nullable(),
+  })
+  .strict();
+export type GymAttendanceVisit = z.infer<typeof gymAttendanceVisitSchema>;
+
+/** ONE PERSON AND EVERY VISIT THEY MADE ON THE DAY BEING ASKED ABOUT.
+ *
+ *  **THE SHAPE IS KD'S RULING 14 IN THE CONTRACT** (:27992 §3): *"it might pile
+ *  up and may be hard to analuse and see"*. A 300-member gym running three
+ *  sessions produces several hundred visits a day, and a response of one entry
+ *  per TAP hands the screen a list it cannot draw. One entry per PERSON, their
+ *  visits inside it, means **a member who came twice is ONE row with TWO times**
+ *  — which is also exactly what Kd asked to be able to see (:27992 §1) — and a
+ *  400-tap day is 300 rows rather than 400.
+ *
+ *  `visits` is bounded for the same reason `closures` is: it is on a response a
+ *  gym's own members drive, and nothing else caps how many times one person can
+ *  tap in a day. **24 matches `gymDayScheduleSchema.sessions`' bound and for the
+ *  same reason** — sessions never overlap and never wrap, so the finest possible
+ *  timetable is 24 slots, and a person cannot produce more distinct visits in a
+ *  day than the gym has slots to put them in. */
+export const gymAttendancePersonSchema = z
+  .object({
+    userId: z.string().uuid(),
+    displayName: z.string(),
+    visits: z.array(gymAttendanceVisitSchema).min(1).max(24),
+  })
+  .strict();
+export type GymAttendancePerson = z.infer<typeof gymAttendancePersonSchema>;
+
+/** ONE LINE OF THE DAY'S SHAPE — a session (or a non-session state) and how many
+ *  visits landed in it.
+ *
+ *  **THE COUNTS COME FROM THE SERVER, AND THAT IS RULING 14's ONLY LOAD-BEARING
+ *  REQUIREMENT** (:27992 §3). A screen that counts the page it downloaded is
+ *  right on a fixture of six and reports the FIRST PAGE on a gym of four
+ *  hundred. These are counted over the whole day, in SQL, and a client must
+ *  render them rather than derive them. */
+export const gymAttendanceSlotCountSchema = z
+  .object({
+    hoursStatus: gymAttendanceHoursStatusSchema,
+    session: gymSessionSchema.nullable(),
+    visits: z.number().int().min(0),
+    /** DISTINCT PEOPLE, which is NOT `visits` — they differ exactly when
+     *  somebody came twice, and printing one under the other's label is the
+     *  :5807 defect this card is most likely to ship. */
+    people: z.number().int().min(0),
+  })
+  .strict();
+export type GymAttendanceSlotCount = z.infer<typeof gymAttendanceSlotCountSchema>;
+
+/** WHAT `GET /v1/orgs/:gymId/attendance` ANSWERS.
+ *
+ *  `summary` is the whole day; `people` is the page. **They are counted over
+ *  different things on purpose** — the summary must not change when somebody
+ *  turns a page — and a screen drawing the summary from the page would be the
+ *  defect named above.
+ *
+ *  `clockFormat` and `timezone` travel for `gymHoursSchema`'s reason: a minute
+ *  count needs a clock to be read on and a zone to be true in, and the console
+ *  must not draw a gym's own times on a different clock from its hours screen. */
+export const gymAttendanceDaySchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    timezone: z.string().min(1),
+    clockFormat: gymClockFormatSchema.default("24h"),
+    /** THE DAY'S TWO HEADLINE NUMBERS, AND THE ONLY PLACE THE DIFFERENCE
+     *  BETWEEN THEM IS REAL.
+     *
+     *  **Per SLOT, `visits` and `people` are provably equal** — the UNIQUE on
+     *  `(gym, user, day, slot_key)` lets one person hold at most one visit in
+     *  any slot — which the mutation sweep proved by surviving a mutant that
+     *  swapped one for the other. **Across the DAY they diverge exactly when
+     *  somebody came twice**, which Kd's ruling 12 made possible on purpose.
+     *
+     *  So this is served rather than left to the screen: a client summing the
+     *  per-slot rows would count a returning member twice and print a number
+     *  larger than the gym's own roster — :5807 arriving through the feature
+     *  that created the possibility. **`people` here is a DISTINCT count over
+     *  the whole day and cannot be derived from `summary` at all.** */
+    totals: z
+      .object({ visits: z.number().int().min(0), people: z.number().int().min(0) })
+      .strict(),
+    summary: z.array(gymAttendanceSlotCountSchema).max(29),
+    people: z.array(gymAttendancePersonSchema).max(100),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+export type GymAttendanceDay = z.infer<typeof gymAttendanceDaySchema>;
+
+export const gymAttendanceDayResponseSchema = z.object({ attendance: gymAttendanceDaySchema });
+export type GymAttendanceDayResponse = z.infer<typeof gymAttendanceDayResponseSchema>;
+
+/** ONE PERSON'S OWN HISTORY — what a member sees of their own attendance
+ *  (Kd, :27900), and what an owner sees when they pick a name out of the list
+ *  (:28055, the `?userId=` filter on the same route).
+ *
+ *  Newest first: "have I been this week" is the question, and the answer is at
+ *  the top. */
+export const gymAttendanceHistorySchema = z
+  .object({
+    timezone: z.string().min(1),
+    clockFormat: gymClockFormatSchema.default("24h"),
+    visits: z.array(gymAttendanceVisitSchema).max(100),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+export type GymAttendanceHistory = z.infer<typeof gymAttendanceHistorySchema>;
+
+export const gymAttendanceHistoryResponseSchema = z.object({
+  attendance: gymAttendanceHistorySchema,
+});
+export type GymAttendanceHistoryResponse = z.infer<typeof gymAttendanceHistoryResponseSchema>;
+
+/** MARKING YOURSELF PRESENT. **The body is empty and that is deliberate**: the
+ *  server decides the day, the method, the hours status and the slot, because
+ *  every one of them is a value that grants something (R3.1) — a client that
+ *  could name its own day could mark itself present for last Tuesday. */
+export const markGymAttendanceRequestSchema = z.object({}).strict();
+export type MarkGymAttendanceRequest = z.infer<typeof markGymAttendanceRequestSchema>;
+
+/** **`created` IS A STATEMENT ABOUT THE STATE, NOT ABOUT THIS REQUEST** — the
+ *  same wording and the same reason as `removeMemberResponseSchema`. A second
+ *  tap in the same slot answers 200 with the FIRST visit, because "you are
+ *  marked in for this session" is true either way and a double-tap is not an
+ *  error (R3.5).
+ *
+ *  `alreadyMarked` distinguishes the two for a screen that wants to say
+ *  something different — it is a display hint and never the record. */
+export const markGymAttendanceResponseSchema = z
+  .object({
+    status: z.literal("created"),
+    alreadyMarked: z.boolean(),
+    visit: gymAttendanceVisitSchema,
+    timezone: z.string().min(1),
+    clockFormat: gymClockFormatSchema.default("24h"),
+  })
+  .strict();
+export type MarkGymAttendanceResponse = z.infer<typeof markGymAttendanceResponseSchema>;

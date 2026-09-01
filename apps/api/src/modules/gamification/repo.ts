@@ -132,7 +132,13 @@ export async function getXpAccrualCounts(
 
 /** Distinct qualifying-activity days ('YYYY-MM-DD', user TZ) — the §3.5
  *  replay input. Today: workouts; runs/F12 sessions join the UNION when
- *  their modules land. timeZone is safeTimeZone-validated, bound as a value. */
+ *  their modules land. timeZone is safeTimeZone-validated, bound as a value.
+ *
+ *  **THIS IS THE XP LIST AND IT IS DELIBERATELY NOT THE STREAK LIST — read
+ *  `getStreakDays` below before touching either.** Kd ruled on 2026-09-01
+ *  (:27900 §3) that going to the gym keeps a STREAK alive; he did not rule that
+ *  it pays XP, and until that day these two questions shared this one function.
+ *  Merging them back would pay XP for a button tap, silently, to everybody. */
 export async function getActivityDays(
   tx: TransactionSql,
   userId: string,
@@ -141,6 +147,45 @@ export async function getActivityDays(
   const rows = await tx<{ day: string }[]>`
     SELECT DISTINCT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
     FROM workouts WHERE user_id = ${userId} ORDER BY day ASC`;
+  return rows.map((r) => r.day);
+}
+
+/** DAYS THAT KEEP A STREAK ALIVE — workout days UNION gym-attendance days.
+ *
+ *  **KD RULED THIS AND HE RULED ONLY THIS** (:27900 §3, at the attendance card's
+ *  plan gate, overruling the recommendation to defer it): coming to the gym
+ *  keeps a streak alive. **He did not rule that it pays XP, and the two used to
+ *  read one function** — so this exists as a SECOND reader rather than as a
+ *  widened `getActivityDays`, and the difference is pinned by a test rather than
+ *  by this comment. A single union would let somebody level up without
+ *  training, which contradicts the distinction Kd's own manual-versus-QR ruling
+ *  rests on: a tap can be sent from home.
+ *
+ *  **THE ATTENDANCE DAY IS TAKEN AS STORED AND IS NOT RE-BUCKETED, AND THAT IS
+ *  A DELIBERATE INCONSISTENCY WITH THE WORKOUT PATH.** A workout's day is
+ *  computed here in the USER's zone; an attendance's day was computed at the tap
+ *  in the GYM's zone and stored (:26469 §5). Re-bucketing it would credit a day
+ *  the member never saw — `users.timezone` is captured nowhere (:618, still
+ *  owed) so every user buckets as UTC, and a 9pm visit in Assam is the NEXT UTC
+ *  day. **"The day you went to the gym" is the day both the member and the gym
+ *  saw on screen**, so `a.day` is used verbatim and no `AT TIME ZONE` touches
+ *  it. That is why this cannot be one query with a shared expression.
+ *
+ *  The 🔥 badges become reachable by attendance as a direct consequence
+ *  (`badges.ts` fires `streak_3/7/30/100` off `current_streak`). That IS the
+ *  ruling, not a leak. */
+export async function getStreakDays(
+  tx: TransactionSql,
+  userId: string,
+  timeZone: string,
+): Promise<string[]> {
+  const rows = await tx<{ day: string }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId}
+    UNION
+    SELECT day::text AS day
+    FROM gym_attendance WHERE user_id = ${userId}
+    ORDER BY day ASC`;
   return rows.map((r) => r.day);
 }
 

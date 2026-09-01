@@ -672,10 +672,35 @@ d("0001_init on a real database", () => {
       );
     }
 
-    // The seven an owner carried after `0014` and before `0015` — every
-    // ORG_PRIVILEGE except the one this migration mints.
-    const legacySeven = ORG_PRIVILEGES.filter((p) => p !== "billing.manage");
-    expect(legacySeven).toHaveLength(ORG_PRIVILEGES.length - 1);
+    /** The seven an owner carried after `0014` and before `0015`.
+     *
+     *  **WRITTEN OUT RATHER THAN DERIVED FROM `ORG_PRIVILEGES`, and the change
+     *  was made deliberately when the ninth privilege landed (:28107).** The
+     *  derived version — *every privilege except `billing.manage`* — had two
+     *  faults that both grew silently: the fixture row it built became
+     *  HISTORICALLY IMPOSSIBLE (a 2026-08-27 owner could not hold
+     *  `attendance.read`, minted five days later), and its own length assertion
+     *  went on passing because it compared one moving number to another. **A
+     *  variable called `legacySeven` holding eight names is :27659's shape — an
+     *  instrument overstating what it did.**
+     *
+     *  This is a statement about WHAT `0015` FOUND when it ran, which is a fact
+     *  about the past and cannot drift. Every privilege added since is
+     *  irrelevant to it, and the count below is now a real check rather than an
+     *  identity. */
+    const legacySeven = [
+      "members.read",
+      "codes.invite",
+      "codes.manage",
+      "members.confirm",
+      "members.remove",
+      "staff.manage",
+      "org.manage",
+    ] as const;
+    expect(legacySeven).toHaveLength(7);
+    // Every one of them is still a real privilege — the fixture must not drift
+    // into naming something the CHECK would refuse.
+    for (const p of legacySeven) expect(ORG_PRIVILEGES).toContain(p);
 
     await sql
       .begin(async (tx) => {
@@ -842,6 +867,92 @@ d("0001_init on a real database", () => {
       WHERE tablename = 'gym_closures' AND indexname = 'gym_closures_gym_day_uq'`;
     expect(uq[0]?.def).toContain("UNIQUE");
     expect(uq[0]?.def).toMatch(/\(gym_id, day\)/);
+  });
+
+  /** `0019`'s ATTENDANCE CONSTRAINTS, read back off the deployed catalogue like
+   *  `0017`'s (:20222) — never off the `.sql`, which says nothing about a
+   *  database somebody has already touched.
+   *
+   *  **`gym_attendance_slot_key_agrees_check` IS THE ONE THAT MATTERS AND IT IS
+   *  ASSERTED IN BOTH ARMS.** It is what makes Kd's ruling of 2026-09-01
+   *  (:27992 — a second visit in a different session counts again) enforceable
+   *  rather than remembered: a writer that sets `slot_key` to a constant
+   *  silently reverts every gym to one visit a day, the UNIQUE still holding and
+   *  every refusal test still green. A CHECK asserted in one arm only would be
+   *  satisfied by a constraint that had lost the other. */
+  it("0019's attendance constraints exist on the deployed database", async () => {
+    const rows = await sql<{ name: string; def: string }[]>`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'gym_attendance'::regclass
+        AND contype = 'c'
+      ORDER BY conname`;
+    const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
+
+    expect([...byName.keys()].sort()).toEqual([
+      "gym_attendance_hours_status_check",
+      "gym_attendance_method_check",
+      "gym_attendance_session_pairing_check",
+      "gym_attendance_session_range_check",
+      "gym_attendance_slot_key_agrees_check",
+    ]);
+
+    // ALL FIVE STATUSES, by name. A vocabulary that lost one would let a reader
+    // store a state no screen has words for.
+    for (const status of [
+      "in_session",
+      "open_24h",
+      "outside_hours",
+      "closed_day",
+      "hours_unset",
+    ]) {
+      expect(byName.get("gym_attendance_hours_status_check")).toContain(`'${status}'`);
+    }
+    // `qr` is in the vocabulary BEFORE anything can write it (:26469 §4) — the
+    // two ways in are stored as different things from day one, and widening a
+    // CHECK on a live attendance table later is the migration nobody wants.
+    expect(byName.get("gym_attendance_method_check")).toContain("'manual'");
+    expect(byName.get("gym_attendance_method_check")).toContain("'qr'");
+
+    // BOTH ARMS OF THE PAIRING: a window is present exactly when the status is
+    // `in_session`. One arm alone admits a row that claims a session and names
+    // none, which is the reader's whole premise.
+    const pairing = byName.get("gym_attendance_session_pairing_check") ?? "";
+    expect(pairing).toContain("session_opens_minute IS NOT NULL");
+    expect(pairing).toContain("session_opens_minute IS NULL");
+    expect(pairing).toContain("session_closes_minute > session_opens_minute");
+
+    // BOTH BOUNDS ON BOTH ENDS — 0017's Low-8 lesson, applied to the copy. A
+    // window that cannot hold what `gym_hours` holds is not a copy of it.
+    const range = byName.get("gym_attendance_session_range_check") ?? "";
+    expect(range).toContain("session_opens_minute >= 0");
+    expect(range).toContain("session_opens_minute <= 1439");
+    expect(range).toContain("session_closes_minute >= 1");
+    expect(range).toContain("session_closes_minute <= 1440");
+
+    // THE SLOT KEY AGREES WITH WHAT IT CLAIMS, in both arms.
+    const slot = byName.get("gym_attendance_slot_key_agrees_check") ?? "";
+    expect(slot).toContain("slot_key = hours_status");
+    expect(slot).toMatch(/session_opens_minute\)?::text/);
+    expect(slot).toMatch(/session_closes_minute\)?::text/);
+
+    // THE UNIQUE IS THE RULING: a member, a gym, a DAY and a SLOT. Dropping
+    // `slot_key` from it collapses two sessions into one visit; dropping `day`
+    // makes a second visit tomorrow impossible.
+    const uq = await sql<{ def: string }[]>`
+      SELECT indexdef AS def FROM pg_indexes
+      WHERE tablename = 'gym_attendance'
+        AND indexname = 'gym_attendance_gym_user_day_slot_uq'`;
+    expect(uq[0]?.def).toContain("UNIQUE");
+    expect(uq[0]?.def).toMatch(/\(gym_id, user_id, day, slot_key\)/);
+
+    // AND THE NINTH PRIVILEGE IS IN THE DDL, not merely in TypeScript. Without
+    // this the card compiles, passes every unit test, and 500s the first time an
+    // owner ticks the box — the failure the type system cannot see.
+    const priv = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conname = 'gym_staff_privileges_check'`;
+    expect(priv[0]?.def).toContain("attendance.read");
   });
 
   /** `0018`'s CLOCK COLUMN, read back off the deployed catalogue like `0017`'s

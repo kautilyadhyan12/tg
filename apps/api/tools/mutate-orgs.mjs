@@ -93,6 +93,12 @@ const TARGETS = {
   // buys these rows a slow database mutant. Its guarantees live in the
   // migration suite, so every row aimed here carries `suite: SEED_SUITE`.
   seed: { file: resolve(ROOT, 'apps/api/src/db/seed.ts') },
+  // THE STREAK'S DAY LIST. Outside `modules/orgs` like `seed` above, and here
+  // for the same kind of reason: Kd's attendance ruling lives half in this file.
+  // `getStreakDays` (workouts UNION attendance) and `getActivityDays` (workouts
+  // alone) are deliberately two functions, and nothing but a mutant can observe
+  // that they still are. Rows aimed here carry `suite: GAMIFICATION_SUITE`.
+  gamification: { file: resolve(ROOT, 'apps/api/src/modules/gamification/repo.ts') },
 };
 
 /** The clock's guarantees live in their own suite. Every row that names the
@@ -135,6 +141,25 @@ const SEED_SUITE = 'test/db.migration.test.ts';
  *  pair is unreachable from any route. Rows aimed at it carry
  *  `suite: HOURS_SUITE`. */
 const HOURS_SUITE = 'test/orgs.hours.test.ts';
+
+/** ATTENDANCE (Kd 2026-08-31 :26469, 2026-09-01 :27900/:27992/:28055/:28107).
+ *  Its own suite for the hours suite's reason and one more: several of its
+ *  guarantees need a gym whose "today" differs from the server's, and one needs
+ *  a PAIR of gyms 26 hours apart. Rows aimed at it carry
+ *  `suite: ATTENDANCE_SUITE`.
+ *
+ *  It sits in :5857 rule 4a's expensive columns three times over — OWNERSHIP
+ *  (who may mark, who may read), NUMBERS A USER SEES (the day's counts, and
+ *  whether "attended twice" is one visit or two), and DATA LOSS (a visit that
+ *  never lands) — so a slow database mutant is exactly what these rows are for. */
+const ATTENDANCE_SUITE = 'test/orgs.attendance.test.ts';
+
+/** The gamification module is not `modules/orgs`, and one row aims there
+ *  deliberately: Kd ruled on 2026-09-01 that going to the gym keeps a STREAK
+ *  alive and did NOT rule that it pays XP (:27900 §3), and until that card the
+ *  two questions read one function. The mutant that collapses them back is the
+ *  only observer of the split — a comment cannot be one. */
+const GAMIFICATION_SUITE = 'test/orgs.attendance.test.ts';
 /** Written ONCE and referenced everywhere, because it is used in two different
  *  KINDS of place: as the `expect` filter on seven mutants, and as the filter
  *  the post-sweep database repair runs. Renaming the test would break the seven
@@ -577,11 +602,19 @@ const MUTANTS = [
     // table the web derives separately is a second answer to "what may a
     // trainer do". Re-measured RED after the move — a re-aimed mutant is an
     // unproven one (:8610).
+    //
+    // RE-ANCHORED AGAIN 2026-09-01, and the PRE-CHECK is what caught it rather
+    // than anybody remembering: Kd's `attendance.read` ruling (:28107) added a
+    // ninth privilege to every role, so the trainer line this pointed at no
+    // longer exists byte-for-byte and the whole-table check ABORTED before a
+    // byte was written (:15770 — never allow-listed, never re-aimed at whichever
+    // line comes first). The mutation is unchanged in MEANING: a trainer gains
+    // the power to confirm. Re-measured RED after the move (:8610).
     target: 'shared',
     why: "KD'S RULING 2026-08-19: a trainer gains the power to confirm, which he reserved to owner and manager until an owner ticks it on for one named person",
     expect: 'holds a TRAINER back from confirming',
-    from: '  trainer: ["members.read", "codes.invite"],',
-    to: '  trainer: ["members.read", "codes.invite", "members.confirm"],',
+    from: '  trainer: ["members.read", "codes.invite", "attendance.read"],',
+    to: '  trainer: ["members.read", "codes.invite", "attendance.read", "members.confirm"],',
   },
   {
     id: 'O35',
@@ -691,11 +724,14 @@ const MUTANTS = [
   {
     id: 'O46',
     // RE-ANCHORED 2026-08-23 with O34 and for the same reason — see there.
+    // RE-ANCHORED AGAIN 2026-09-01 with O34, same cause: the ninth privilege
+    // (:28107) rewrote the trainer line and the whole-table pre-check ABORTED
+    // before anything ran. The mutation's MEANING is unchanged.
     target: 'shared',
     why: "§2.2's remove/restore row widened to trainers, so anybody on staff can end a membership — the same power as confirm, which Kd explicitly held at owner and manager",
     expect: 'a trainer gets 403, another gym',
-    from: '  trainer: ["members.read", "codes.invite"],',
-    to: '  trainer: ["members.read", "codes.invite", "members.remove"],',
+    from: '  trainer: ["members.read", "codes.invite", "attendance.read"],',
+    to: '  trainer: ["members.read", "codes.invite", "attendance.read", "members.remove"],',
   },
   {
     id: 'O47',
@@ -1634,8 +1670,22 @@ const MUTANTS = [
     // guarantee has no test" (:10726's guard). Same guarantee, same target, and
     // the new privilege gets its own SIBLING at O134 rather than being folded in
     // here: a mutant is a claim about ONE line (:15770).
-    from: '    "org.manage",\n    "billing.manage",\n  ],\n  manager:',
-    to: '    "billing.manage",\n  ],\n  manager:',
+    //
+    // RE-ANCHORED AGAIN 2026-09-01, THIRD TIME, SAME CAUSE AND THE PATTERN IS
+    // THE FINDING: every card that mints a privilege appends to this template
+    // and drifts this anchor, and every time the whole-table pre-check has
+    // caught it before a byte ran. Three cards, three aborts, zero silent
+    // no-ops — which is the guard :10726 asked for, working. `attendance.read`
+    // (:28107) now follows `billing.manage`.
+    //
+    // **THE FIRST ATTEMPT AT THIS RE-ANCHOR MADE O121 AND O134 IDENTICAL** —
+    // both deleting `billing.manage` — which would have left O121's guarantee
+    // (the owner losing `org.manage`) with NO observer while both reported RED.
+    // A sibling pair re-anchored by pattern rather than by MEANING is how two
+    // mutants quietly become one; each names the whole window and deletes its
+    // own line from it.
+    from: '    "org.manage",\n    "billing.manage",\n    "attendance.read",\n  ],\n  manager:',
+    to: '    "billing.manage",\n    "attendance.read",\n  ],\n  manager:',
     expect: "a brand-new owner's stored ticks include the new privilege",
   },
   {
@@ -1706,8 +1756,29 @@ const MUTANTS = [
     target: 'shared',
     why: "SHIP-DEAD: the BILLING privilege leaves the owner's template, so every gym created from now on has an owner who is 403'd on their own trial button — O121's failure through the door this card opened, and the reason migration `0015` backfills the tick onto existing owners",
     expect: 'gets the 300-seat band',
-    from: '    "org.manage",\n    "billing.manage",\n  ],\n  manager:',
-    to: '    "org.manage",\n  ],\n  manager:',
+    // RE-ANCHORED 2026-09-01 with O121 and O34/O46: `attendance.read` (:28107)
+    // now follows `billing.manage`, so the window this named ended one line
+    // earlier than the file's. The pre-check aborted, as it has for every
+    // privilege card. See O121's note on why the pair is re-anchored by MEANING.
+    from: '    "org.manage",\n    "billing.manage",\n    "attendance.read",\n  ],\n  manager:',
+    to: '    "org.manage",\n    "attendance.read",\n  ],\n  manager:',
+  },
+  {
+    id: 'O217',
+    target: 'shared',
+    // WITHOUT THIS IT RAN THE ROUTES SUITE AND ABORTED — the failure mode
+    // `HOURS_SUITE`'s own note predicts in as many words: a row that names a
+    // target outside the default suite must name its suite too, or it looks for
+    // a test that is in another file and reports "matches no test".
+    suite: ATTENDANCE_SUITE,
+    why: "SHIP-DEAD FOR THE OWNER'S OWN ATTENDANCE SECTION: `attendance.read` leaves the OWNER's template, so every gym created from now on has an owner 403'd on the screen Kd asked for by name (:28107, *\"will gyms be able see who attended etc ? beacvuse they should\"*). O121's and O134's failure through the door THIS card opened",
+    expect: 'the gym sees them by name',
+    // ITS OWN SIBLING RATHER THAN FOLDED INTO O121/O134, which is the precedent
+    // those two set when `billing.manage` arrived: a mutant is a claim about ONE
+    // line (:15770). The next privilege gets O2xx of its own, and the next
+    // re-anchor should re-read this note before pattern-matching three windows.
+    from: '    "billing.manage",\n    "attendance.read",\n  ],\n  manager:',
+    to: '    "billing.manage",\n  ],\n  manager:',
   },
   // ── WHAT THE CONSOLE IS TOLD ABOUT THE PLAN (O135–O138) ───────────────────
   //
@@ -2487,10 +2558,206 @@ const MUTANTS = [
     suite: HOURS_SUITE,
     why: "THE HOURS READ STOPS CARRYING THE GYM'S CLOCK, so every MEMBER's card falls back to 24-hour whatever their gym chose. The console is unaffected (it has the org row) which is exactly what makes this bite only the half nobody is looking at - one gym showing its owner 4:00 PM and its members 16:00 about the same Monday",
     expect: "a member of the gym reads",
-    from: "    clockFormat: gymClockFormatSchema.parse(gym.clock_format),",
-    to: "    clockFormat: '24h',",
+    // RE-ANCHORED 2026-09-01: the attendance card added two more readers of
+    // `gym.clock_format`, so this one-line anchor went from unique to matching
+    // THREE times and the pre-check aborted — the mutation would otherwise have
+    // landed on whichever came first, which is :15770's named failure and not a
+    // detail. The anchor now carries the two lines above it, which belong to
+    // `getGymHours` and to nothing else.
+    from: "    mode: gymHoursModeSchema.parse(gym.hours_mode),\n    timezone: gym.timezone,\n    clockFormat: gymClockFormatSchema.parse(gym.clock_format),",
+    to: "    mode: gymHoursModeSchema.parse(gym.hours_mode),\n    timezone: gym.timezone,\n    clockFormat: '24h',",
+  },
+  // ---------------------------------------------------------------------
+  // ATTENDANCE (Kd :26469, :27900, :27992, :28055, :28107). Rule 4a's three
+  // expensive columns at once — ownership, a number a user sees, and data loss.
+  // ---------------------------------------------------------------------
+  {
+    id: 'O200',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "KD'S RULING 12 IS SILENTLY REVERSED AND NOTHING ERRORS: `slotKeyFor` returns a constant, so a member who trains morning AND evening is counted ONCE. The UNIQUE still holds, every refusal test still passes, and only a gym counting its own members would ever notice - which is why the database CHECK exists and why this mutant is aimed at the ACCEPTING case",
+    expect: 'a second visit in a DIFFERENT session counts again',
+    from: "    ? `${String(opensMinute)}-${String(closesMinute)}`\n    : hoursStatus;",
+    to: "    ? hoursStatus\n    : hoursStatus;",
+  },
+  {
+    id: 'O201',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "DATA LOSS THROUGH A DOUBLE TAP: `ON CONFLICT DO NOTHING` becomes a plain INSERT, so a member hitting the button twice in a second gets a 23505 out of the route - R3.5's whole subject, on the one control a member can hammer",
+    expect: 'the SAME session tapped twice',
+    from: '      ON CONFLICT (gym_id, user_id, day, slot_key) DO NOTHING\n',
+    to: '\n',
+  },
+  {
+    id: 'O202',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE GYM'S DAY BECOMES THE SERVER'S: the day expression loses its zone, so every visit east or west of the api box is filed on the wrong calendar day. Trap #8, and :26812 s2(a)'s recorded near-miss - a single non-UTC fixture would let this survive for ten hours of every day",
+    expect: "the day stored is the GYM's day",
+    from: "    SELECT (now() AT TIME ZONE g.timezone)::date::text AS day,",
+    to: "    SELECT (now())::date::text AS day,",
+  },
+  {
+    id: 'O203',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: ":26736 IS FOLDED AWAY: a gym that has never said when it is open stops reporting `hours_unset` and reports `outside_hours` instead, so the product claims a gym is shut when nobody has answered. The exact false sentence that ruling exists to prevent",
+    expect: 'never set hours records `hours_unset`',
+    from: '  if (mode === "unset") {\n    return { ...common, hoursStatus: "hours_unset", opensMinute: null, closesMinute: null };\n  }\n',
+    to: '\n',
+  },
+  {
+    id: 'O204',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE DATED CLOSURE STOPS WINNING: the closure branch goes, so a visit on a day the gym said it was CLOSED is filed as a normal open day. :26684 s3's two mechanisms collapse into one and the gym's two answers disagree",
+    expect: 'a dated closure BEATS it',
+    from: '  if (row.closed) {\n    return { ...common, hoursStatus: "closed_day", opensMinute: null, closesMinute: null };\n  }\n',
+    to: '\n',
+  },
+  {
+    id: 'O205',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE SESSION BOUNDARY GOES HALF-CLOSED: the upper comparison becomes `>=`, so the instant a session ENDS falls inside BOTH it and the one that touches it - and `slot_key` has two answers for one visit. Touching sessions are legal (`flattenWeek`'s rule), which is what makes this reachable rather than theoretical",
+    // RE-FILTERED 2026-09-01 BECAUSE IT SURVIVED: every other `in_session`
+    // fixture uses whole-clock windows, so the half-open boundary was never
+    // exercised and loosening it changed nothing they could see. Its observer is
+    // a fixture built ON the boundary minute.
+    expect: 'belongs to the session that is STARTING',
+    from: "        AND h.closes_minute > (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60",
+    to: "        AND h.closes_minute >= (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60",
+  },
+  {
+    id: 'O206',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE WINDOW IS NO LONGER COPIED ONTO THE VISIT: both minutes are written NULL, so a visit that happened inside a session cannot say which one. The whole reason the window is copied and not joined is that `PUT /hours` deletes the row it came from",
+    expect: 'survives the whole timetable being replaced',
+    from: "              ${ctx.opensMinute}, ${ctx.closesMinute}, ${slotKey})",
+    to: "              null, null, ${slotKey})",
+  },
+  {
+    id: 'O207',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE OWNER'S SWITCH BECOMES DECORATION: the manual guard flips to the unreachable method, so a gym that turned manual marking OFF keeps recording taps from the web. :26469 s4 - the switch is the only thing that makes the number trustworthy, since a manual tap can be sent from home",
+    expect: 'switch manual marking off',
+    from: '    if (input.method === "manual" && !ctx.manualEnabled) return { kind: "manual_disabled" };',
+    to: '    if (input.method === "qr" && !ctx.manualEnabled) return { kind: "manual_disabled" };',
+  },
+  {
+    id: 'O208',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "OWNERSHIP: the gym id leaves the day summary's WHERE, so one gym's console counts every gym's attendance. The IDOR R3.2 exists to prevent, on the screen an owner opens every morning",
+    // RE-FILTERED 2026-09-01 BECAUSE IT SURVIVED: the 404 test proves what an
+    // OUTSIDER is refused and says nothing about what an AUTHORISED owner is
+    // SHOWN — and the summary is a separate query from the page. :10182's shape,
+    // a cross-tenant test that builds one tenant.
+    expect: 'counts only that gym',
+    from: "    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date\n    GROUP BY hours_status",
+    to: "    WHERE day = ${gym.day}::date\n    GROUP BY hours_status",
+  },
+  {
+    id: 'O209',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "OWNERSHIP ON THE PER-PERSON READ: the gym id leaves the history WHERE, so naming a user id returns their attendance at EVERY gym they belong to - including gyms the caller has nothing to do with",
+    // THE FILTER IS A REGEX AND `?` IS NOT A LITERAL — the control step caught
+    // this before any mutant ran (:5199's class). "the ?userId=" makes the SPACE
+    // optional and then demands "userId=", which the test's title does not
+    // contain; the filter matched nothing and its mutants would have proved
+    // nothing while reporting a verdict.
+    //
+    // RE-FILTERED AGAIN THE SAME DAY BECAUSE IT SURVIVED: every history fixture
+    // used a member of ONE gym, so dropping the gym id changed nothing any of
+    // them could see. The observer is a member of TWO — an ordinary user of this
+    // product, not an edge case.
+    expect: 'does not include their visits to another',
+    from: "    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL",
+    to: "    WHERE user_id = ${input.userId}\n      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL",
+  },
+  {
+    id: 'O210',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "A NUMBER A USER SEES BECOMES FALSE: the DAY's distinct-people count becomes a visit count, so a gym whose members came twice is told more people walked through the door than actually did - a figure larger than its own roster. :5807 arriving through the feature Kd's ruling 12 created",
+    // RE-AIMED 2026-09-01 BECAUSE IT SURVIVED, AND THE SURVIVAL WAS THE
+    // FINDING RATHER THAN A BAD TEST. It first pointed at the SUMMARY's
+    // per-slot `people`, where `count(DISTINCT user_id)` and `count(*)` are
+    // PROVABLY EQUAL - the UNIQUE on (gym, user, day, slot_key) admits one visit
+    // per person per slot - so no fixture could ever tell them apart and no test
+    // was at fault. The distinction is real only across the DAY, and that number
+    // did not exist until this sweep asked for it: the response now carries
+    // `totals`, because a screen summing the slot rows would double-count
+    // whoever came twice. A mutant that cannot die is a question about the CODE.
+    expect: 'a second visit in a DIFFERENT session counts again',
+    from: "    SELECT count(*) AS visits, count(DISTINCT user_id) AS people",
+    to: "    SELECT count(*) AS visits, count(*) AS people",
+  },
+  {
+    id: 'O211',
+    target: 'service',
+    suite: ATTENDANCE_SUITE,
+    why: "OWNERSHIP: the live-membership check goes, so ANY signed-in stranger holding a gym's uuid can mark themselves present at it - and a REMOVED member keeps marking for ever. The gym's numbers stop being about its members",
+    expect: 'a REMOVED member cannot mark',
+    from: '  if (org === null || !member) {\n    throw new OrgsError(404, "org_not_found", "Gym not found.");\n  }\n  if (org.status === "archived") {',
+    to: '  if (org === null) {\n    throw new OrgsError(404, "org_not_found", "Gym not found.");\n  }\n  if (org.status === "archived") {',
+  },
+  {
+    id: 'O212',
+    target: 'service',
+    suite: ATTENDANCE_SUITE,
+    why: "KD'S RULING 18 IS SILENTLY WIDENED: the day read stops asking for `attendance.read` and asks for `members.read`, so unticking the attendance box changes nothing and the owner's control is decoration. It is the reuse the card rejected, arriving later by the back door",
+    expect: 'an untoggled staffer is refused',
+    from: '  await requirePrivilege(deps, gymId, userId, "attendance.read");\n\n  const cursor = requireAttendanceCursor(query.cursor);',
+    to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const cursor = requireAttendanceCursor(query.cursor);',
+  },
+  {
+    id: 'O213',
+    target: 'service',
+    suite: ATTENDANCE_SUITE,
+    why: "PRIVACY: the self/other fork collapses, so any live MEMBER can read any other member's attendance history by naming their user id. The authorisation difference between reading yourself and reading somebody else is the whole of that route's security",
+    // THE FILTER IS A REGEX AND `?` IS NOT A LITERAL — the control step caught
+    // this before any mutant ran (:5199's class). "the ?userId=" makes the SPACE
+    // optional and then demands "userId=", which the test's title does not
+    // contain; the filter matched nothing and its mutants would have proved
+    // nothing while reporting a verdict.
+    expect: 'filter serves only that person',
+    from: '  } else {\n    await requirePrivilege(deps, gymId, userId, "attendance.read");\n  }',
+    to: '  } else if (subjectId === "") {\n    await requirePrivilege(deps, gymId, userId, "attendance.read");\n  }',
+  },
+  {
+    id: 'O214',
+    target: 'shared',
+    suite: ATTENDANCE_SUITE,
+    why: "KD'S RULING 18 IS HALF-APPLIED: `attendance.read` leaves the TRAINER's defaults, so the role most likely to be standing at the door cannot see who came - and every test written by somebody thinking about owners still passes. This is the half the card names as the one a fixture skips",
+    expect: 'a TRAINER reads the day by default',
+    from: '  trainer: ["members.read", "codes.invite", "attendance.read"],',
+    to: '  trainer: ["members.read", "codes.invite"],',
+  },
+  {
+    id: 'O215',
+    target: 'gamification',
+    suite: GAMIFICATION_SUITE,
+    why: "KD RULED STREAKS AND THIS UNDOES IT: `getStreakDays` becomes the workouts-only list, so going to the gym stops keeping a streak alive. The ruling of 2026-09-01 (:27900 s3) is reversed by deleting a UNION nothing else observes",
+    expect: 'extends the STREAK',
+    from: "    UNION\n    SELECT day::text AS day\n    FROM gym_attendance WHERE user_id = ${userId}\n",
+    to: "\n",
+  },
+  {
+    id: 'O216',
+    target: 'gamification',
+    suite: GAMIFICATION_SUITE,
+    why: "THE OTHER DIRECTION, AND IT IS THE DANGEROUS ONE: `getActivityDays` - the XP list - gains the attendance UNION, so a button tap starts paying XP and anybody can level up without training. Kd ruled streaks and said nothing about XP; a single shared list is how that distinction disappears silently, to everybody at once",
+    expect: 'leaves the XP total alone',
+    from: "    SELECT DISTINCT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day\n    FROM workouts WHERE user_id = ${userId} ORDER BY day ASC`;",
+    to: "    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day\n    FROM workouts WHERE user_id = ${userId}\n    UNION\n    SELECT day::text AS day FROM gym_attendance WHERE user_id = ${userId}\n    ORDER BY day ASC`;",
   },
 ];
+
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never
  *  normalised (:4267's class fix, as recorded at :10866).

@@ -4270,6 +4270,11 @@ d("orgs routes (real Postgres)", () => {
     // staff record that is briefly tick-less would be a staff record whose
     // authority depends on when you looked.
     expect(await storedPrivileges(org.org.id, hire.userId)).toEqual([
+      // `attendance.read` joined every role's defaults on 2026-09-01 — Kd's
+      // ruling (:28107), *"also stafs can see it too default permission owner
+      // can change it"*. This list moved because the DEFAULT moved, which is
+      // the guarantee working, not a test being loosened to fit.
+      "attendance.read",
       "codes.invite",
       "members.read",
     ]);
@@ -4279,6 +4284,7 @@ d("orgs routes (real Postgres)", () => {
 
     const staff = await readStaff(org.org.id, owner.cookies);
     expect(staff.find((s) => s.userId === hire.userId)?.privileges).toEqual([
+      "attendance.read",
       "codes.invite",
       "members.read",
     ]);
@@ -4326,7 +4332,7 @@ d("orgs routes (real Postgres)", () => {
     // why this row cannot carry the claim on its own.
     const before = await readMine(desk.cookies);
     expect(before.staffRole).toBe("trainer");
-    expect(before.privileges).toEqual(["codes.invite", "members.read"]);
+    expect(before.privileges).toEqual(["attendance.read", "codes.invite", "members.read"]);
 
     // THE SUBJECT: the owner ticks on a power the trainer's role does not grant.
     expect(
@@ -4773,6 +4779,7 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(demoted.statusCode).toBe(200);
     expect(await storedPrivileges(org.org.id, person.userId)).toEqual([
+      "attendance.read",
       "codes.invite",
       "members.read",
     ]);
@@ -4791,7 +4798,11 @@ d("orgs routes (real Postgres)", () => {
       WHERE gym_id = ${org.org.id} AND action = 'org.staff_role_changed'`;
     expect(audit).toHaveLength(1);
     expect(audit[0]?.meta.to).toBe("trainer");
-    expect(audit[0]?.meta.privileges).toEqual(["codes.invite", "members.read"]);
+    expect(audit[0]?.meta.privileges).toEqual([
+      "attendance.read",
+      "codes.invite",
+      "members.read",
+    ]);
   });
 
   it("writes an audit row naming both ends, and none at all when nothing changed", async () => {
@@ -4824,7 +4835,7 @@ d("orgs routes (real Postgres)", () => {
     expect(after).toHaveLength(1);
     // BOTH ends: the question asked weeks later is "what could they do before",
     // which the new set alone cannot answer.
-    expect(after[0]?.meta.from).toEqual(["codes.invite", "members.read"]);
+    expect(after[0]?.meta.from).toEqual(["attendance.read", "codes.invite", "members.read"]);
     expect(after[0]?.meta.to).toEqual(["codes.invite", "members.confirm", "members.read"]);
 
     // Saving the same set again is a 200 and writes NOTHING: "the owner changed
@@ -4874,6 +4885,10 @@ d("orgs routes (real Postgres)", () => {
     // The screen shows the same effective set rather than an empty list.
     const listed = await readStaff(org.org.id, owner.cookies);
     expect(listed.find((s) => s.userId === legacy.userId)?.privileges).toEqual([
+      // The MANAGER template, which also gained `attendance.read` (:28107) —
+      // and this row's whole point is that it has NO stored set, so it reads
+      // the template. It moving is the fallback proving it is live.
+      "attendance.read",
       "codes.invite",
       "codes.manage",
       "members.confirm",
@@ -4906,6 +4921,11 @@ d("orgs routes (real Postgres)", () => {
     }
     // Untouched by every refusal.
     expect(await storedPrivileges(org.org.id, hire.userId)).toEqual([
+      // `attendance.read` joined every role's defaults on 2026-09-01 — Kd's
+      // ruling (:28107), *"also stafs can see it too default permission owner
+      // can change it"*. This list moved because the DEFAULT moved, which is
+      // the guarantee working, not a test being loosened to fit.
+      "attendance.read",
       "codes.invite",
       "members.read",
     ]);

@@ -28217,3 +28217,185 @@ rather than a rebuild. **THE HABIT IS THE TRANSFERABLE PART: a call a chat makes
 for Kd is written down WITH ITS COST, at the gate, where he can see it. Two of
 the six things settled on this card were settled that way, and both went against
 the recommendation.**
+
+## 2026-09-01 — ATTENDANCE, SERVER HALF: a member can say "I'm here", the gym can see who came, and the sweep found THREE of my own tests proving less than they claimed plus a mutant that could not die
+
+**Read before building the attendance web half, before adding any reader or
+writer of `gym_attendance`, before touching `getStreakDays` or `getActivityDays`,
+before minting a privilege in this repo, before writing a test whose fixture is
+one gym or one membership, and before hand-writing a migration.**
+
+Built from `CARD-gym-attendance.md` §4a on Kd's "go", after he approved the
+migration as SQL (T5/R4.4). Rulings implemented: :26469 (two ways in, the gym
+sees which, the owner's switch), :26586 (the web has ONE way in), :27900 (only
+the member marks · a member sees their own history · attendance feeds STREAKS),
+:27992 (a second visit in a different session counts again · no dues check · the
+screen must not pile up), :28055 (a gym with no sessions gets one a day),
+:28107 (`attendance.read`, on for all three roles, untickable by the owner).
+
+### 1 · WHAT SHIPS, AND THE ONE THING THAT DOES NOT
+
+Migration `0019_gym_attendance` — `gyms.manual_attendance_enabled` (default
+`true`, which is the ruling and not a convenience) · `gym_attendance` with five
+CHECKs and `UNIQUE (gym_id, user_id, day, slot_key)` · the ninth privilege
+`attendance.read`, its widened DDL CHECK and its backfill onto **every role**.
+The contract once in `@app/shared`. Three routes: `POST .../attendance` (a live
+member), `GET .../attendance` (`attendance.read`), `GET .../attendance/history`
+(self, or `attendance.read` for somebody else), plus `manualAttendanceEnabled`
+on the existing `PATCH /v1/orgs/:gymId`.
+
+**NO SCREEN EXISTS. The web half (§4b) is unbuilt**, so no member can tap
+anything and no owner can see a list. **No browser smoke was run and none was
+offered** — there is nothing to click, and saying so is :26012's shape rather
+than inventing a step. **T3 is UNRUN.**
+
+### 2 · THE RULING LIVES IN A CONSTRAINT, NOT IN A COMMENT — AND THE COLUMN THAT MAKES IT SO FAILS QUIETLY
+
+`slot_key` is the session window when there is one and the `hours_status` name
+otherwise, and it is what makes Kd's :27992 ruling and R3.5 idempotency the SAME
+mechanism: two sessions are two keys (two rows, the ruling), one session tapped
+twice is one key (one row, idempotency), and a gym with no sessions has a
+constant key (one a day, :28055).
+
+**THE FAILURE MODE IS THAT NOTHING ERRORS.** A later writer that sets `slot_key`
+to a constant reverts every gym to one visit a day — the UNIQUE still holds,
+every refusal test still passes, and only a gym counting its own members would
+notice. So the database re-derives the key from the two columns it must come
+from (`gym_attendance_slot_key_agrees_check`) and answers 23514. **A guarantee
+whose only failure direction is silent needs an enforcement that is loud**
+(:7104's PG1, pointed at the direction that fails quietly).
+
+### 3 · THE SWEEP FOUND THREE TESTS PROVING LESS THAN THEIR NAMES SAID, AND ONE MUTANT THAT COULD NOT DIE
+
+Eighteen mutants, all in rule 4a's always-mutated columns. **First run: 15 RED,
+3 ALIVE, and all three survivors were defects in MY TESTS.** None was findable by
+reading.
+
+**(a) A CROSS-TENANT TEST THAT PROVES A 404 SAYS NOTHING ABOUT WHAT AN
+AUTHORISED OWNER IS SHOWN.** O208 deletes the gym id from the day SUMMARY's
+`WHERE` — a different query from the page's — and survived, because every
+existing test asked what an OUTSIDER is refused. :10182's shape (a cross-tenant
+test that builds one tenant) one level in: the tenant was built, the second gym's
+DATA was not. **STANDING: a 404 test and a scoping test are different tests; a
+route can refuse the stranger and still leak into the owner.**
+
+**(b) EVERY HISTORY FIXTURE USED A MEMBER OF ONE GYM.** O209 deletes the gym id
+from the history predicate and survived: with one membership there is nothing to
+leak. **The observer is a member of TWO gyms — an ordinary user of this product,
+not an edge case**, which is what makes the gap embarrassing rather than exotic.
+
+**(c) THE BOUNDARY NO FIXTURE STOOD ON.** O205 loosens `closes_minute >` to
+`>=`, so a tap at the instant a session ENDS falls inside both it and the one
+that touches it, and `ORDER BY opens_minute LIMIT 1` silently files it against
+the session the member was not in. Every `in_session` fixture used whole-clock
+windows, where that boundary is never reached. **The fix is a fixture built ON
+the gym's current minute** — and its wait is the interesting part: the window is
+derived FROM the clock, so if the minute ticks between building it and marking,
+the test fails for a reason that is not the code's. It waits only when fewer than
+fifteen seconds remain. **The first version of that wait was arithmetically
+backwards and slept 59 seconds to gain 14, blowing the timeout — a fixture's own
+timing logic is code and takes a test like any other.**
+
+**(d) A MUTANT THAT COULD NOT DIE WAS A QUESTION ABOUT THE CODE, NOT THE TEST,
+AND THIS IS THE PART TO KEEP.** O210 swapped `count(DISTINCT user_id)` for
+`count(*)` in the per-slot summary and survived every fixture. **It survived
+because the two are PROVABLY EQUAL there**: the UNIQUE admits one visit per
+person per slot, so no fixture could ever tell them apart and no test was at
+fault. **The distinction is real only across the DAY — and that number did not
+exist.** A screen summing the per-slot rows would double-count whoever came twice
+and print a figure larger than the gym's roster, which is :5807 arriving through
+the very feature Kd's ruling 12 created. The response now carries `totals`,
+computed in SQL, and the mutant aims there. **STANDING: when a mutant cannot be
+killed by any honest fixture, ask whether the expression it attacks is
+load-bearing at all — sometimes the answer is that the number it should have
+guarded is missing.**
+
+### 4 · MINTING A PRIVILEGE IN THIS REPO IS A MIGRATION, AND IT DRIFTED FOUR ANCHORS
+
+`attendance.read` is the ninth. The DDL CHECK, the backfill onto every role, the
+`ROLE_PRIVILEGES` templates and the tick box all move together, as :28107 said.
+**What that entry did not predict is the instrument cost: FOUR existing mutation
+anchors drifted** (O34, O46, O121, O134 — every one of them pointing at a role
+template) **and one more went from unique to matching three times** (O199,
+because this card added two readers of `gym.clock_format`). **Every one was
+caught by the whole-table pre-check ABORTING before a byte was written.** Three
+privilege cards, three rounds of the same drift, zero silent no-ops — the guard
+:10726 asked for, working.
+
+**AND THE RE-ANCHOR ITSELF NEARLY SHIPPED A DEFECT: my first pass made O121 and
+O134 IDENTICAL**, both deleting `billing.manage`, which would have left O121's
+guarantee (an owner losing `org.manage`) with no observer while both reported
+RED. **A sibling pair re-anchored by PATTERN rather than by MEANING is how two
+mutants quietly become one.** Each now names the whole window and deletes its own
+line, and `attendance.read` got its own sibling (O217) on the precedent
+`billing.manage` set.
+
+### 5 · TWO FIXTURES THAT MEASURE "NEWEST" BY NAME, FIXED BEFORE THEY BIT
+
+Both were named in the card and both were dealt with deliberately rather than
+waited for. `schemas.test.ts`'s positive control asserted `billing.manage`
+parses — still true, no longer testing what it claims, which is :5348 rule 4's
+liar — and now derives the newest from `ORG_PRIVILEGES`' last entry, because
+naming the new one puts the same trap back a card later.
+`db.migration.test.ts`'s `legacySeven` DERIVED "every privilege except
+`billing.manage`" and would have gone on passing while holding eight: **a
+variable called `legacySeven` holding eight is :27659's shape exactly.** It is
+now the seven names written out, which is a fact about what `0015` FOUND and
+cannot drift.
+
+### 6 · A HAND-WRITTEN MIGRATION NEEDS A HAND-WRITTEN JOURNAL ENTRY, AND ITS ABSENCE REPORTS SUCCESS
+
+`drizzle-kit migrate` printed **"migrations applied successfully"** and applied
+NOTHING: `drizzle/meta/_journal.json` stops at whatever was last registered, and
+a `.sql` file the journal does not name is invisible to it. Caught only because
+the constraints were read back afterwards (:20222's lesson, paying for itself in
+the same session it was applied). **The six earlier hand-written migrations all
+carry journal entries, so the requirement is not new — what is new is the
+recorded fact that its absence is SILENT and green.** **STANDING: after any
+hand-written migration, read the object back out of `pg_catalog`; "applied
+successfully" is not evidence that anything ran.**
+
+### 7 · CHOICES MADE RATHER THAN ASKED (R0.2 does not cover routine shape)
+
+**The status order is `unset` → closure → `open_24h` → session →
+`outside_hours`, and `unset` FIRST is the one that matters**: `GymHoursNote.jsx`'s
+mode gate returns null for `unset` before it looks at closures, so a member could
+otherwise be told `closed_day` about a gym whose own card shows them nothing —
+two surfaces disagreeing about one gym. **The session match is half-open**
+(`opens <= m < closes`) because sessions may touch and an inclusive bound gives
+one visit two slots. **The mark is NOT behind `requireWritablePrivilege`** — that
+helper refuses a gym with no live plan, which would refuse a LAPSED gym's own
+members against Kd's answer and :22215's arm A; an ARCHIVED gym does refuse.
+**Staff authority is not a substitute for membership on the mark**, or staff who
+never joined would enter a gym's own numbers. **No audit row per attendance**:
+the log records what STAFF did, and several hundred member taps a day would bury
+it. **The streak hook runs only for a NEW row and its failure is warned, not
+thrown** — the visit is already committed and the row is the record.
+
+### Round log
+
+**PROVE, all LOCAL (`localhost:5433`, per :13659) and all on the final bytes:**
+`orgs.attendance` **23/23** (new file) · `orgs.routes` **147/147** ·
+`orgs.hours` **38/38** · `db.migration` **15/15** (+1) · `@app/shared` **51/51**
+· `tsc --noEmit` exit 0 on `api` and on `@app/shared` ·
+`eslint --max-warnings=0` exit 0 on `apps/api/{src,test,tools}` and
+`packages/shared/{src,test}` · `check-harnesses` **25 scripts parse**.
+**SWEEP, a stated SUBSET of 217: the eighteen new rows plus the five re-anchored
+ones — 23 mutants · 23 RED · 0 ALIVE · 0 never ran**, controls GREEN and tallied
+first, restore byte-exact after every mutant.
+**The boundary test was run THREE times** (23/23 each) because its fixture waits
+on a clock, and one green run of a timing test is a coin toss with a citation.
+**THE FULL api SUITE IS NOT QUOTED AS A FIGURE AND THAT IS DELIBERATE:** four
+full local runs went 741/741, then 3 failures in `catalog.seed.test.ts`, then an
+unrecorded failure, then 741/741 — **the PRE-EXISTING flake `CLAUDE.md` and
+:13746 both document** (nine files call `seed()` against one shared database
+while two assert exact GLOBAL counts). Scoped runs are unaffected, which is what
+the figures above are. **I have NOT measured whether this card's new suite
+aggravates that flake, and do not claim it does not.**
+**AN INSTRUMENT CORRECTION WORTH MORE THAN A FIGURE: `pnpm --filter api
+test:local -- <file>` SILENTLY RUNS THE WHOLE SUITE.** pnpm swallows the `--`, so
+every run I labelled "scoped" until I checked was a full one. Dropping the `--`
+scopes it. The runs were therefore BROADER than claimed rather than narrower —
+but the LABEL was false, and :8156's trigger (*"believing a mutation verdict
+produced under a `-t` filter"*) has a mirror image: believing a run was filtered
+when it was not.
