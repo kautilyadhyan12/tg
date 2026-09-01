@@ -9,9 +9,13 @@
 // an Idempotency-Key. Creating a gym has no key, so a dropped connection leaves
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
+  closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  gymHoursResponseSchema,
   joinOrgResponseSchema,
+  removeGymClosureResponseSchema,
+  setGymHoursResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
   nudgeApplicationResponseSchema,
@@ -144,6 +148,78 @@ export const orgService = {
    *  by 100 (R10.4). */
   getPlans: (gymId) =>
     readThrough(orgPlansResponseSchema, "your gym's plans", authApi.get(`/v1/orgs/${gymId}/plans`)),
+
+  /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
+   *
+   *  **ONE READER FOR TWO SCREENS, and that is the design rather than a saving:**
+   *  the console's Settings panel and the MEMBER's gym card both call this, so
+   *  the two can never disagree about what a gym said. The server gates it on
+   *  "staff OR a live member", which is why the member's card may call it at all
+   *  (:26684 §2 — *"yes can see"*).
+   *
+   *  **NOT folded into `getMine`**, deliberately: that response is loaded on
+   *  every dashboard paint and carries up to 100 gyms, and a week of sessions
+   *  plus a closure list per gym belongs to the screen that asks for them.
+   *
+   *  The answer carries a `mode`, and **every reader must branch on it before
+   *  drawing a word** — `unset` means nobody has answered and members are told
+   *  NOTHING, which is a different thing from closed (:26736). */
+  getHours: (gymId) =>
+    readThrough(gymHoursResponseSchema, "your gym's opening times", authApi.get(`/v1/orgs/${gymId}/hours`)),
+
+  /** PUT /v1/orgs/:gymId/hours — the WHOLE week, every time.
+   *
+   *  PUT and not PATCH because this REPLACES a timetable rather than merging
+   *  into one, and merging is exactly what a stale screen must not be allowed to
+   *  do here. Per-session edits would also make the overlap rule uncheckable —
+   *  overlap is a property of a whole day.
+   *
+   *  **The body is a discriminated union**, so `open_24h` cannot carry a week
+   *  and `scheduled` cannot arrive without one. **`unset` is not sendable**: a
+   *  gym that has answered cannot un-answer, and `hoursRequest` returns null
+   *  rather than building a request the server would refuse.
+   *
+   *  Gated on `org.manage`. Not retried (R10.2) — Save is the retry, and it is a
+   *  person pressing it. */
+  setHours: (gymId, body) =>
+    readThrough(
+      setGymHoursResponseSchema,
+      "your gym's opening times",
+      authApi.put(`/v1/orgs/${gymId}/hours`, body),
+    ),
+
+  /** POST /v1/orgs/:gymId/closures — "we are closed on this date" (:26684 §3).
+   *
+   *  **IDEMPOTENT ON (gym, day) AT THE DATABASE**, so a double-tap edits the
+   *  reason rather than stacking a second row, and re-posting a day is how a
+   *  note is changed. 200 rather than 201 for that reason: the second call
+   *  creates nothing.
+   *
+   *  **THE REPLY MAY NOT CONTAIN WHAT WAS JUST SAVED, and the caller must handle
+   *  it.** The read is today-forward and capped at a year, while the write has
+   *  no date window on purpose — so a closure typed for yesterday is genuinely
+   *  saved and genuinely absent. `closureAbsentReason` in `hoursView` is the
+   *  sentence for that; a screen that just re-renders the reply looks as though
+   *  the save failed. */
+  closeDay: (gymId, body) =>
+    readThrough(
+      closeGymDayResponseSchema,
+      'that closure',
+      authApi.post(`/v1/orgs/${gymId}/closures`, body),
+    ),
+
+  /** DELETE /v1/orgs/:gymId/closures/:day — un-close a day, restoring the
+   *  weekly pattern.
+   *
+   *  **`removed` names the STATE, not this request** — deleting a day that was
+   *  never closed answers the same way, because "this day is not marked closed"
+   *  is true either way. So a double-tap and a stale screen are not errors. */
+  removeClosure: (gymId, day) =>
+    readThrough(
+      removeGymClosureResponseSchema,
+      'that closure',
+      authApi.delete(`/v1/orgs/${gymId}/closures/${day}`),
+    ),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and

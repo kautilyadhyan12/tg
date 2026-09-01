@@ -27090,3 +27090,113 @@ from the 200 reply (the write has no date window by design; the read is
 today-forward and horizon-capped). **A screen re-rendering from that response
 will look as though the save silently failed** — :5807 arriving through a correct
 server. The web card must say what happened or refuse the date before sending.
+
+## 2026-09-01 — OPENING HOURS REACH A SCREEN: an owner sets them, a member sees them, and THREE of the ten mutants survived their first run because a test measured the machine instead of the code
+
+**Read before drawing opening hours on any screen, before writing a timezone
+test that renders ONE component, before adding a `min` or `max` to a date input
+anywhere in this app, before adding a read to any panel `Settings` mounts, and
+before aiming a mutant at a `readOnly` guard.**
+
+The web half of `CARD-gym-hours.md` §4b, on Kd's *"go"*. Implements :26624,
+:26684 and :26736 on top of the server half (:26812) and its T3 round (:26947).
+
+### 1 · WHAT AN OWNER AND A MEMBER GET
+
+**Console → Settings → "When we're open"**: 24-hour switch or a per-weekday list
+with add/remove session rows; a **"Closed on a date"** control with an optional
+reason, the upcoming list, and an undo. **The member's own gym card** carries the
+hours, the week and any closure — Kd ruled they see them (:26684 §2) and it ships
+in the same card.
+
+**`unset` IS PHYSICAL ON BOTH SURFACES.** A gym that has not answered is told
+*"You haven't said when your gym is open"* on its own screen and shows its
+members **nothing at all**. Neither surface can say "Closed" for it, and that is
+guarded by a mutant on each (**C132**, **C135**).
+
+### 2 · A SINGLE-COMPONENT TIMEZONE TEST MEASURES THE RUNNER'S CLOCK, NOT THE CODE
+
+**C134 — the member's card reading the BROWSER's zone instead of the gym's —
+SURVIVED its first run**, against a fixture that was already a deliberate UTC+14
+gym at 23:30 UTC. **This machine runs at UTC+5:30, where 23:30 UTC is ALSO
+Wednesday**, so the mutant and the correct code agreed and the test proved
+nothing. It would have passed here, passed in CI, and failed for somebody in a
+different half of the world.
+
+**THE FIX IS THE SERVER HALF'S, ONE LEVEL UP: render TWO gyms at once.** UTC+14
+and UTC-12 are 26 hours apart, so their calendar dates ALWAYS differ — **whatever
+zone the machine is in, it can match at most one of them**, so a reader using the
+machine's clock is necessarily wrong about the other. Both cards are rendered in
+one test and both "Today" lines asserted.
+
+**STANDING, and this is the second time in two days it has been earned (:26947
+§2a): a timezone fixture must disagree with the runner by a property of the
+ZONES. One gym plus one clock is a coincidence; a pair at the extremes is a
+proof.**
+
+### 3 · THE SAME MISTAKE ABOUT A SORT, MADE AGAIN, ONE FILE OVER
+
+**C137 — deleting the sort before the overlap check — survived, exactly as O192
+did on the server** (:26947 §2b), and for the identical reason: it was aimed at a
+test named *"catches an overlap the client sent out of order"*, and a neighbour
+comparison on UNSORTED input fires on ANY descending pair, so that test rejects
+its input either way. **What the sort protects is the ACCEPTING case** — a VALID
+week sent out of order must be saved, which is what every real screen produces —
+so the mutant was re-aimed at *"sorts sessions"* and the test renamed to what it
+proves. **Making the same error twice in one feature is why it is written out
+here rather than left in a round log.**
+
+### 4 · A `readOnly` GUARD HAS NO OBSERVER ON A GYM THAT WAS READ-ONLY ALL ALONG
+
+**C140 — deleting `readOnly` from the save gate — survived a test that renders a
+lapsed gym and checks every control is grey.** It had to: on such a gym every box
+is disabled, so nothing is ever typed, and Save is already off *because nothing
+changed*. **A guard whose only test is satisfied by a DIFFERENT guard is not
+guarded** (:7104's PG1).
+
+The observer is the real journey: **the plan lapsing mid-edit.** The console
+re-reads its kept org answer on window focus, so an owner can be halfway through
+a timetable when a trial expires and `readOnly` flips under them. The test types
+first, asserts Save is live (the positive control), flips the prop, and asserts
+Save is dead, the sentence is up, **and the typing survives** — a lapsed gym is
+read-only, not wiped.
+
+### 5 · AN HTML `min` IS A CONSTRAINT, NOT A HINT, AND IT SILENTLY REMOVED A CAPABILITY
+
+The date box shipped with `min={gym's today}` and `max={horizon}`, written as
+guardrails. **The render test found the form simply refuses to submit — no event,
+no sentence, a dead button — making a PAST closure impossible to record from the
+screen.** The server accepts one deliberately (*a gym typing last night's closure
+in at 1am is telling the truth late*), so the attribute removed a capability the
+server offers and explained nothing. **Both attributes are gone and their absence
+is now an assertion**, because the guardrail was never the bound: it is
+`closureAbsentReason`, which lets the save happen and then says what became of it
+— T3 round 1's carry-forward, discharged (**C141**).
+
+### 6 · FOUR TEST FILES BROKE BECAUSE THE FUTURE ARRIVED
+
+`Settings` gained a panel that READS on mount, and the member's card gained one
+too — so four suites whose `orgService` mock predates them died on
+`getHours is not a function`. **Two of them failed LOUDLY (113 red) and two
+failed SILENTLY: every assertion passed and only the runner's exit code
+complained**, because the throw was inside an effect nothing awaited. All four
+now mock `getHours` returning `unset`, which is the honest default for a fixture
+gym nobody has asked. **:21157's "a fixture goes stale because the future
+arrives", and the silent pair is the half worth remembering.**
+
+### Round log
+
+**PROVE, final bytes:** web **1436/1436** (53 files, +51 new across three
+suites) · `hoursView` **30** · `openingHours.render` **14** · `gymHours.render`
+**7** · web lint clean on all thirteen touched files · shared `tsc` 0 · api
+`tsc` 0 · `check-harnesses` **25 scripts parse**.
+**SWEEP, a stated SUBSET of 161: 10 mutants · 10 RED · 0 ALIVE · 0 never ran**,
+restore verified byte-exact after every mutant. **First run was 7 RED / 3 ALIVE**
+— §§2–4 above.
+**A LINT ERROR THE FIRST FIX INTRODUCED, caught by the linter rather than by
+care:** `useEffect` wanted `fetchHours` in its deps and the reflex was an eslint
+exemption; it became a `useCallback` keyed on `gymId`, so the dependency is
+honest and the effect does not re-read on every keystroke.
+**NOT RUN AND NOT CLAIMED: the browser SMOKE** (`RUNBOOK/smoke-opening-hours.md`,
+17 steps, written and handed to Kd — step 1 asserts an ABSENCE and is the one to
+read first) **and the web half's T3.** `OWED.md`'s line does not tick.

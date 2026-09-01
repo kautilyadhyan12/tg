@@ -4,6 +4,7 @@ import { Building2, Clock, Loader2, XCircle } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { expiresInLabel, nextNudgeAfter, nextNudgeText } from '../../utils/joinClock';
 import { gymStatusRows, nudgeState } from './gymMembershipView';
+import GymHoursNote from './GymHoursNote';
 
 // THE CARD THAT SITS ON TOP OF THE APP, and the words are the ruling's own:
 // a person waiting for a gym keeps the WHOLE free app, so what they get is a
@@ -180,7 +181,7 @@ function WaitingRow({ row }) {
 function Row({ row }) {
   if (row.kind === 'member') {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ background: 'rgba(255,138,31,0.15)' }}
@@ -191,6 +192,15 @@ function Row({ row }) {
           <p className="text-sm font-semibold truncate" style={{ color: '#fff' }}>
             You&apos;re a member of {row.orgName}
           </p>
+          {/* WHEN THE GYM IS OPEN — Kd ruled members see it (:26684 §2), and this
+              row is the only one it belongs on: a person WAITING to join is not
+              a member yet and the server's read would 404 them, while somebody
+              REMOVED is being told their membership ended and does not need the
+              timetable of a gym they cannot enter.
+
+              It draws NOTHING until the gym has answered, and nothing on a failed
+              read — see the component. That is what keeps this card additive. */}
+          <GymHoursNote gymId={row.orgId} />
         </div>
       </div>
     );

@@ -7567,12 +7567,17 @@ file and is stated so nobody reads these as lower priority than they are.
       read (staff **OR live member**, so the console and the member's gym card
       share ONE reader and cannot disagree), replace-the-whole-week, close a
       day, un-close a day.
-      **THIS LINE DOES NOT TICK AND MUST NOT BE TICKED YET:** the **WEB HALF
-      (§4b) IS UNBUILT**, so **no screen shows any of this — no member can see
-      their gym's hours and no owner can set them** — and the **browser SMOKE is
-      unrun** (there is nothing to click). **T3 ROUND 1 RAN 2026-09-01 and found
-      ZERO Critical/High; its eight Low are all fixed and logged in
-      `BACKLOG.md`.** It ticks when the web half ships and its smoke passes.
+      **WEB HALF BUILT 2026-09-01** — the console's **"When we're open"** section
+      on Settings (24-hour switch · many sessions per weekday · dated closures
+      with an optional reason and an undo) and the member's own gym card, which
+      draws the hours, the whole week and any closure. **The `unset` state is
+      physical on both surfaces: a gym that has not answered shows NOTHING to its
+      members and is told so on its own screen — never "Closed".**
+      **THIS LINE STILL DOES NOT TICK: the browser SMOKE IS UNRUN**
+      (`RUNBOOK/smoke-opening-hours.md`, 17 steps, written and handed to Kd) and
+      **the web half's T3 IS UNRUN.** The SERVER half's T3 round 1 ran
+      2026-09-01 with ZERO Critical/High and its eight Low are fixed and logged
+      in `BACKLOG.md`. It ticks when both gates pass on the web half.
       **⚠️ THE WEB HALF MUST HANDLE A SAVE WHOSE REPLY DOES NOT CONTAIN IT, and
       it is written here because it is recorded nowhere else** (raised by T3
       round 1 as a carry-forward, not a defect in the server). **Closing a day

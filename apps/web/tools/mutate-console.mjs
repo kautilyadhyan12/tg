@@ -68,6 +68,16 @@ const GYM_SWITCH_SUITE = 'src/pages/console/gymSwitch.render.test.jsx';
  *  not fire" is satisfied by a console permanently shut (:7104's PG1). */
 const READ_ONLY_SUITE = 'src/pages/console/readOnlyConsole.render.test.jsx';
 
+/** OPENING HOURS (Kd :26624, :26684, :26736), added 2026-09-01 with the web
+ *  half. THREE suites because the feature has three readers and a mutant is a
+ *  claim about ONE call site (:15770): the view file decides WHAT is sent and
+ *  what is wrong with a week, the panel decides what an OWNER sees, and the
+ *  note decides what a MEMBER sees — and the member's half is where `unset`
+ *  becoming "Closed" would reach every gym in the database at once. */
+const HOURS_VIEW_SUITE = 'src/pages/console/hoursView.test.js';
+const HOURS_PANEL_SUITE = 'src/components/console/openingHours.render.test.jsx';
+const HOURS_NOTE_SUITE = 'src/components/gym/gymHours.render.test.jsx';
+
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
   api: { file: resolve(ROOT, 'apps/web/src/api/orgsApi.js') },
@@ -114,6 +124,10 @@ const TARGETS = {
   // over anybody it would seal out of their own console. CRLF, like every file
   // here — one-line anchors only.
   planmodal: { file: resolve(ROOT, 'apps/web/src/components/console/PlanModal.jsx') },
+  // WHEN WE'RE OPEN (Kd :26624 and its two addenda), added 2026-09-01.
+  hoursview: { file: resolve(ROOT, 'apps/web/src/pages/console/hoursView.js') },
+  hourspanel: { file: resolve(ROOT, 'apps/web/src/components/console/OpeningHoursPanel.jsx') },
+  hoursnote: { file: resolve(ROOT, 'apps/web/src/components/gym/GymHoursNote.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -2018,6 +2032,103 @@ const MUTANTS = [
     expect: 'drops every applicant countdown on a lapsed gym, in BOTH directions',
     from: 'const expiring = readOnly ? null : expiresInLabel(applicant.expiresAt);',
     to: 'const expiring = expiresInLabel(applicant.expiresAt);',
+  },
+  // ---------------------------------------------------------------------
+  // OPENING HOURS, WEB HALF (Kd :26624, :26684, :26736), added 2026-09-01.
+  // Every row is in rule 4a's always-mutated columns: a number or state a
+  // MEMBER can see and could see FALSELY, a gym blocked from saying something
+  // true, or a write reaching a door that refuses it. Nothing here mutates
+  // wording, layout or a comment.
+  // ---------------------------------------------------------------------
+  {
+    id: 'C132',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "THE DEFECT THIS WHOLE FEATURE WAS DESIGNED AROUND, and it would reach EVERY GYM IN THE DATABASE on the day it shipped: the mode gate goes, so a gym that has never filled the section in is drawn from its ROWS — of which it has none — and its members are told their gym is Closed every day of the week. `unset` and `shut every day` are byte-identical from the rows alone, which is why Kd's :26736 made the third state physical and why this is the first assertion in the note's suite (:5807)",
+    expect: "draws NOTHING",
+    from: "  if (hours.mode !== 'open_24h' && hours.mode !== 'scheduled') return null;",
+    to: "  if (hours.mode === undefined) return null;",
+  },
+  {
+    id: 'C133',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "A MEMBER WALKS TO A LOCKED DOOR: the dated closure stops winning over the weekly pattern, so a gym that typed `Closed today - Holi` still shows its ordinary Wednesday hours. Kd ruled these are TWO MECHANISMS and that the dated one overrides (:26684 3); collapsing them is the exact conflation that ruling exists to prevent, and the member is the one who pays for it",
+    expect: "dated closure WINS",
+    from: "  const closedToday = (hours.closures ?? []).find((c) => c.day === today) ?? null;",
+    to: "  const closedToday = null;",
+  },
+  {
+    id: 'C134',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "TRAP #8 ON A MEMBER-FACING SURFACE: the weekday is taken from the BROWSER instead of the gym, so a member on the other side of the date line is shown yesterday's or tomorrow's opening times as today's. Every UTC-ish fixture agrees with the browser, which is why the note's suite runs a UTC+14 gym at 23:30 UTC and this row is aimed at it",
+    expect: "shows TODAY from the GYM's zone",
+    from: "  const today = gymToday(hours.timezone);",
+    to: "  const today = gymToday(undefined);",
+  },
+  {
+    id: 'C135',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: ":26736's SENTENCE, INVERTED AT ITS SOURCE: the summary for a gym that has not answered becomes the one for a gym that is shut every day. It is the console half of C132 and it is worth its own row because an OWNER reads this line on a closed heading before opening anything — so a gym that has never been asked would be told, on its own settings screen, that it is closed (:5807)",
+    expect: "three DIFFERENT answers",
+    from: "  return \"You haven't said when your gym is open. Members aren't shown anything about opening times until you do.\";",
+    to: "  return 'Your gym is closed every day of the week.';",
+  },
+  {
+    id: 'C136',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "A GYM IS BLOCKED FROM SAYING SOMETHING TRUE (:5807's second half): the overlap comparison goes from strict to inclusive, so two sessions that merely TOUCH - 10:00-12:00 then 12:00-14:00, an ordinary timetable with a break in its numbering - are refused as overlapping. The card names this boundary as risk 4, and it is the direction a reviewer is least likely to check because the refusal LOOKS like the guard working",
+    expect: "ACCEPTS touching",
+    from: "      if (current.opens < previous.closes) {",
+    to: "      if (current.opens <= previous.closes) {",
+  },
+  {
+    id: 'C137',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "THE OVERLAP CHECK TURNS OFF FOR EVERY REAL SCREEN: the sort before the neighbour comparison goes, so an owner who adds a 6am session after a 2pm one - which is every screen anybody would build, including this one - has their overlaps waved through. The server sorts too, so nothing corrupt is stored; what breaks is the owner being told BEFORE the request instead of by a 400 afterwards",
+    expect: "sorts sessions",
+    from: "    parsed.sort((a, b) => a.opens - b.opens);",
+    to: "    parsed.slice();",
+  },
+  {
+    id: 'C138',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "THE GYM CLOSES ON THE WRONG DAY: the ISO conversion returns the JS number, so Sunday becomes 0 instead of 7 and every weekday after it is off by one against a wire and a database that both count 1-7. This is the card's own risk 2, and this function is the ONLY conversion in the app - which is what makes one mutant enough to guard it",
+    expect: "maps a calendar date to ISO",
+    from: "  return js === 0 ? 7 : js;",
+    to: "  return js;",
+  },
+  {
+    id: 'C139',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "A REQUEST THE SERVER WILL REFUSE, BUILT BY THE CLIENT: `unset` becomes sendable, so a gym that has answered can try to un-answer. The server's union does not admit it, so the owner meets a 400 for pressing a button the screen offered them - and the reason `unset` is unsettable at all is that un-answering would silently remove information the gym's members can already see",
+    expect: "NEVER builds a request",
+    from: "  if (draft?.mode !== 'scheduled') return null;\n  if (hoursProblem(draft) !== null) return null;",
+    to: "  if (draft?.mode === 'unset') return { mode: 'unset' };\n  if (hoursProblem(draft) !== null) return null;",
+  },
+  {
+    id: 'C140',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "A LAPSED GYM CAN STILL SAVE: `readOnly` leaves the save gate, so a gym with no live plan fires the request and meets the server's 409. Kd ruled the console read-only for EVERY member of staff (:23711), and this panel is a form - so the button being grey is not the whole of the fix, which is the recorded reason `GymDetailsPanel` carries the same guard inside its submit handler",
+    expect: "already typed when the plan lapsed",
+    from: "  const canSave = allowed && !readOnly && !saving && request !== null && problem === null && touched;",
+    to: "  const canSave = allowed && !saving && request !== null && problem === null && touched;",
+  },
+  {
+    id: 'C141',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "A SAVE THAT WORKED LOOKS LIKE A SAVE THAT FAILED - the carry-forward T3 round 1 left for this half. The write has no date window on purpose (a gym typing last night's closure in at 1am is telling the truth late) while the READ is today-forward and horizon-capped, so such a closure is genuinely saved and genuinely absent from the reply. Without this sentence the screen re-renders the reply, the date is not in it, and the owner reasonably concludes nothing happened (:5807 arriving through a correct server)",
+    expect: "SAYS SO when a save succeeds",
+    from: "      setClosureNotice(closureAbsentReason(closureDay, today));",
+    to: "      setClosureNotice(null);",
   },
 ];
 

@@ -59,6 +59,16 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getApplications: vi.fn(),
       getPlans: vi.fn(),
       startTrial: vi.fn(),
+      /** ADDED 2026-09-01: the member's gym card now carries a `GymHoursNote`,
+       *  which READS on mount (Kd :26684 §2 — members see the hours). Without
+       *  an entry here `getHours` is `undefined`, and the failure is a NOISY
+       *  ONE: the effect throws unhandled, every assertion in the file still
+       *  passes, and only the runner's exit code says anything is wrong.
+       *  `unset` is the honest default — these fixtures' gyms have never been
+       *  asked when they are open, so the note draws nothing at all. */
+      getHours: vi.fn(() =>
+        Promise.resolve({ data: { hours: { mode: 'unset', timezone: 'UTC', week: [], closures: [] } } }),
+      ),
     },
   };
 });

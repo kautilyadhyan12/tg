@@ -1,6 +1,77 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: OPENING HOURS REACH A SCREEN — `CARD-gym-hours.md` §4b, on Kd's "go".
+      DECISIONS :27094, on top of :26812 (server) and :26947 (its T3 round).
+
+  1. **NEXT: KD'S BROWSER SMOKE, then the web half's T3.** The sheet is
+     `RUNBOOK/smoke-opening-hours.md` — 17 steps, ~15 minutes, no pauses and no
+     commands from the chat, so it hands over in one go. **Step 1 asserts an
+     ABSENCE and is the one to read first**: a gym that has not answered must
+     show the word "Closed" NOWHERE. `OWED.md`'s line does NOT tick until both
+     gates pass.
+  2. **WHAT SHIPS:** Console → Settings → "When we're open" (24-hour switch ·
+     many sessions per weekday · dated closures with an optional reason and an
+     undo), and the hours on the MEMBER's own gym card (:26684 §2). New files:
+     `hoursView.js` (+ test), `OpeningHoursPanel.jsx` (+ test),
+     `GymHoursNote.jsx` (+ test). Four `orgService` methods.
+  3. **A SINGLE-COMPONENT TIMEZONE TEST MEASURES THE RUNNER'S CLOCK.** C134 —
+     the member's card reading the BROWSER's zone — SURVIVED a deliberate UTC+14
+     fixture, because this machine is UTC+5:30 where 23:30 UTC is also
+     Wednesday. **Fixed by rendering UTC+14 AND UTC-12 at once: 26 hours apart,
+     so no single clock can match both.** Second time in two days (:26947 §2a).
+  4. **THE SORT MUTANT SURVIVED AGAIN, ONE FILE OVER**, for :26947 §2b's exact
+     reason: a neighbour check on unsorted input rejects a descending pair
+     either way, so the observer is the ACCEPTING case, not the refusing one.
+  5. **A `readOnly` GUARD HAS NO OBSERVER ON A GYM THAT WAS READ-ONLY ALL
+     ALONG** — every box disabled means nothing is typed and Save is already
+     off. The real journey is the plan lapsing MID-EDIT (the console re-reads on
+     window focus), and the owner's typing must SURVIVE it.
+  6. **AN HTML `min` IS A CONSTRAINT, NOT A HINT.** The date box shipped with
+     `min`/`max` as guardrails and they made a PAST closure impossible to
+     record — silently, no event, no sentence — removing a capability the server
+     deliberately offers. Both gone; their ABSENCE is now asserted.
+  7. **FOUR TEST FILES BROKE BECAUSE THE FUTURE ARRIVED** (`getHours` missing
+     from mocks written before these panels). **Two failed LOUDLY (113 red) and
+     TWO FAILED SILENTLY** — every assertion green, only the runner's exit code
+     complaining, because the throw was inside an unawaited effect.
+
+PROVE: **Final bytes.** web **1436/1436** (53 files; +51 across three new
+       suites: `hoursView` 30, `openingHours.render` 14, `gymHours.render` 7) ·
+       web lint clean on all thirteen touched files · shared `tsc` 0 · api
+       `tsc` 0 · `check-harnesses` **25 scripts parse**.
+       **SWEEP (`mutate-console.mjs`), a stated SUBSET of 161: 10 mutants ·
+       10 RED · 0 ALIVE · 0 never ran**, restore byte-exact after every mutant.
+       **First run was 7 RED / 3 ALIVE** — items 3, 4 and 5 above.
+       Guards: `build-decisions-triggers` **765 triggers from 209 of 347
+       rulings, 138 declare none, 0 unparsed** · `check-decisions-index`
+       **252 pointers resolve (251 on a heading, 1 deliberate mid-entry), 986
+       headings**. Always-read RE-MEASURED: triggers **944** + §1 **997** +
+       §2 **58** = **1,999** — **§1 and §2 have not moved all day**; all three
+       of today's records went to §1B, so three full entries cost fifteen
+       always-read lines.
+
+FILES: NEW `apps/web/src/pages/console/hoursView.js` + `.test.js` ·
+       NEW `apps/web/src/components/console/OpeningHoursPanel.jsx` +
+       `openingHours.render.test.jsx` ·
+       NEW `apps/web/src/components/gym/GymHoursNote.jsx` +
+       `gymHours.render.test.jsx` ·
+       NEW `RUNBOOK/smoke-opening-hours.md` ·
+       `apps/web/src/api/orgsApi.js` · `apps/web/src/pages/console/Settings.jsx` ·
+       `apps/web/src/components/gym/GymMembershipCard.jsx` ·
+       `apps/web/tools/mutate-console.mjs` · four test files' mocks
+       (`settings`, `readOnlyConsole`, `gymSwitch`, `joinGym`) · `OWED.md` ·
+       `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **ELEVEN LOCAL COMMITS, NOTHING PUSHED, CI HAS SEEN NONE** (`d72131a`
+       through this one; `origin/web-repoint` is still `01999dc`). Pushing is
+       Kd's call and he has not made it in three sessions. `CLAUDE.md`'s
+       pre-existing uncommitted edit is STILL OUT.
+```
+
+
+```
 TASK: OPENING HOURS, SERVER HALF — T3 ROUND 1 FIX ROUND. DECISIONS :26947,
       reviewing `cacab50` (:26812). **ZERO Critical/High, THE PACKET SHIPS.**
       Eight Low, ALL FIXED in this round and logged in `BACKLOG.md`; none

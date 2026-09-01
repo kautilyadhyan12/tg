@@ -14,12 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,994 lines, MEASURED 2026-09-01 (second measurement that
-day) and not estimated** (939 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
-both of that day's records — the card and its T3 round — went to §1B, where
-:24813 sends every card record, so the whole growth is the ten trigger phrases
-their two `Read before …` sentences produced. **That is the split working exactly
-as ruled: two full entries added, and the always-read cost is ten lines.**
+**ALWAYS-READ TOTAL: 1,999 lines, MEASURED 2026-09-01 (third measurement that
+day) and not estimated** (944 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
+all THREE of that day's records — the server card, its T3 round and the web
+card — went to §1B, where
+:24813 sends every card record, so the whole growth is the fifteen trigger
+phrases their three `Read before …` sentences produced. **That is the split working exactly
+as ruled: three full entries added, and the always-read cost is fifteen lines.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1118,6 +1119,39 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:27094** — 2026-09-01 — **OPENING HOURS REACH A SCREEN: an owner sets them,
+  a member sees them, and THREE of the ten mutants survived their first run
+  because a test measured the machine instead of the code.** **Read before
+  drawing opening hours on any screen, before writing a timezone test that
+  renders ONE component, before adding a `min` or `max` to a date input anywhere
+  in this app, before adding a read to any panel `Settings` mounts, and before
+  aiming a mutant at a `readOnly` guard.** The web half of `CARD-gym-hours.md`
+  §4b on top of :26812 and :26947. Console → Settings → **"When we're open"**
+  (24-hour switch · many sessions per weekday · dated closures with a reason and
+  an undo), plus the hours on the MEMBER's own gym card (:26684 §2). **`unset` is
+  physical on both surfaces and neither can say "Closed" for a gym that has not
+  answered** (mutants C132, C135).
+  **THE THREE SURVIVORS ARE THE PART TO READ.** (1) **A single-component
+  timezone test measures the RUNNER's clock**: the browser-zone mutant survived a
+  deliberate UTC+14 fixture, because this machine is UTC+5:30 where 23:30 UTC is
+  also Wednesday. Fixed by rendering a UTC+14 **and** a UTC-12 gym at once — 26
+  hours apart, so no single clock can match both. **Second time in two days
+  (:26947 §2a): a timezone fixture must disagree with the runner by a property of
+  the ZONES.** (2) **The overlap SORT mutant survived again, one file over**, for
+  :26947 §2b's exact reason — a neighbour check on unsorted input rejects a
+  descending pair either way, so the observer is the ACCEPTING case. (3) **A
+  `readOnly` guard has no observer on a gym that was read-only all along** — every
+  box is disabled, so nothing is typed and Save is already off; the real journey
+  is the plan lapsing MID-EDIT, and the typing must survive it.
+  **AND AN HTML `min` IS A CONSTRAINT, NOT A HINT:** the date box's guardrails
+  made a PAST closure impossible to record, silently, with no event and no
+  sentence — a capability the server deliberately offers, removed by an attribute.
+  Both are gone and their absence is asserted. **Four test files broke because
+  the future arrived (`getHours` missing from mocks that predate the panel) —
+  and TWO of them failed SILENTLY, every assertion green, only the exit code
+  complaining.**
+  **SMOKE UNRUN** (`RUNBOOK/smoke-opening-hours.md`, 17 steps) **and the web
+  half's T3 UNRUN**; the `OWED.md` line does not tick.
 - **:26947** — 2026-09-01 — **OPENING HOURS, SERVER HALF, T3 ROUND 1: ZERO
   Critical/High, THE PACKET SHIPS — and FOUR of the eight Lows were one shape, a
   test whose NAME is wider than its coverage.** **Read before writing a date

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
+import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
@@ -125,6 +126,29 @@ export default function Settings() {
       {canEditGym ? (
         <GymDetailsPanel
           key={`gym-${org.id}`}
+          org={org}
+          privileges={privileges}
+          readOnly={readOnly}
+        />
+      ) : null}
+
+      {/* WHEN WE'RE OPEN — Kd's opening-hours rulings (:26624, :26684, :26736),
+          gated on the SAME privilege the server gates the three write routes
+          with, so a person holding `org.manage` sees exactly the sections they
+          can use.
+
+          KEYED, and for the reason the two panels below it record rather than a
+          new one: `/console/:orgSlug/settings` is ONE route, so moving between
+          two gyms changes the parameter without remounting anything. This panel
+          holds a DRAFT and its own fetched hours, so without the key gym A's
+          half-typed timetable would sit under gym B's heading over gym B's
+          real one — and Save writes to the CURRENT gym's id. The prefix is
+          round 4's requirement: a bare `org.id` on two siblings makes React drop
+          one fiber without scheduling its deletion, which was worse than the
+          defect it replaced. */}
+      {canEditGym ? (
+        <OpeningHoursPanel
+          key={`hours-${org.id}`}
           org={org}
           privileges={privileges}
           readOnly={readOnly}

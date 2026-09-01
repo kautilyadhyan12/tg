@@ -35,6 +35,20 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getPlans: vi.fn(),
       startTrial: vi.fn(),
       updateOrg: vi.fn(),
+      /** ADDED 2026-09-01 WHEN `Settings` GAINED THE OPENING-HOURS PANEL.
+       *  Not a courtesy: that panel READS on mount, so without an entry here
+       *  `orgService.getHours` is `undefined` and every test in this file dies
+       *  on the call rather than on its own subject. **A fixture goes stale
+       *  because the FUTURE ARRIVES** (:21157's own audit finding), and the
+       *  honest default is `unset` — a gym in these fixtures has never been
+       *  asked when it is open, so the panel draws its "you haven't said yet"
+       *  arm and interferes with nothing. */
+      getHours: vi.fn(() =>
+        Promise.resolve({ data: { hours: { mode: 'unset', timezone: 'UTC', week: [], closures: [] } } }),
+      ),
+      setHours: vi.fn(),
+      closeDay: vi.fn(),
+      removeClosure: vi.fn(),
     },
   };
 });
