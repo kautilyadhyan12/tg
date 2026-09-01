@@ -28645,3 +28645,176 @@ behaviour untested.
 **THE FULL api SUITE IS NOT QUOTED AND THAT IS DELIBERATE** — the pre-existing
 `seed()` flake `CLAUDE.md` and :13746 both document. Scoped runs are what the
 figures above are.
+
+## 2026-09-02 — ATTENDANCE, SERVER HALF, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the two findings worth keeping are a rate limit sized for the wrong shape of traffic and a privacy list that was prose
+
+**Read before setting a per-IP rate limit on anything a whole gym does at once,
+before pairing a constant in `apps/api` with a `.max()` in `@app/shared`, before
+writing a query parameter that carries a LIST, before writing a test whose
+fixture can produce only ONE value of the thing being filtered, before putting a
+comment above an assertion drawn from a DIFFERENT query, and before quoting the
+attendance reads' 600/hour as observed.**
+
+Round 2 on :28221 as fixed by :28452, run in a fresh chat, diff-only (:5348 rule
+2). **Zero Critical/High, so the packet SHIPS (rule 1); eight Low, every one of
+them verified against the code before it was acted on and every one FIXED here
+with its `BACKLOG.md` line** (rule 1's *"they will be fixed"*). The escape hatch
+did not fire. **Kd asked whether a further round was needed and the answer was
+no — his own rule already says so, and putting it back to him was the chat's
+error, corrected in the same exchange.**
+
+### 1 · A PER-IP CEILING IS A WHOLE-BUILDING CEILING, AND IT WAS SIZED AS IF IT WERE ONE PERSON'S
+
+`ipMax: 300`/hour on `POST …/attendance` was copied from the shapes nearest to
+hand — `/v1/orgs/join` (120) and the trial (60). **Both of those are things a
+person does ONCE, EVER.** Marking is once or twice a day, per member, and it
+arrives in a lump: everybody turns up for the 6am session. `trustProxy` makes
+`req.ip` the gym's single NAT'd address, so **every member on the gym's own
+wi-fi spends from one bucket**, and 300 is under the size of the gyms this
+product sells.
+
+**WHAT A REFUSAL COSTS IS WHY THIS IS NOT TUNING.** There is no other way in —
+staff marking is not built (:27900) and the QR path belongs to the phone
+(:26586) — so a 429 is a member who cannot mark in at all, and attendance feeds
+streaks (:27900 §3), so it costs them a day they actually turned up for. That is
+:5807's *"blocked from finishing something they should be able to do"*, reached
+through a per-IP number nobody would think to look at.
+
+**3,000 IS DERIVED: the largest gym this product sells is band 5, 1501–2100
+members (`DECISIONS.md:17927`)**, so a gym's entire roster fits inside one hour
+from one address, with headroom; it is 0.83 req/s against the row lock the
+limiter exists for. **The per-user 30/hour is untouched and is the actual abuse
+guard** — the IP dimension cannot do that job on a route whose honest traffic is
+a building full of people behind one address.
+
+**STANDING: before setting `ipMax` on a member-facing write, ask how many
+DIFFERENT PEOPLE share one address on that route, and what a refused user's
+fallback is. If the answer is "a whole gym" and "none", the IP dimension is not
+the guard and must not be sized as though it were.**
+
+### 2 · TWO NUMBERS THAT MUST AGREE WERE PAIRED BY A PARAGRAPH
+
+`ATTENDANCE_PAGE_LIMIT` / `_VISITS_PER_PERSON` / `_SUMMARY_LIMIT` were declared
+in `apps/api/src/modules/orgs/repo.ts` and re-typed as literals in
+`packages/shared`. **:28452 §3 fixed the values and left the pairing to a
+docstring** — and no test named any of the three (grep-verified). Downward drift
+has an observer (the 40-window fixture); **upward drift has none and restores
+exactly the permanent 500 that round had just fixed.**
+
+They now live in `@app/shared` beside the schemas, and the query imports them.
+**Four `.max()` sites read them, not three** — the history page's `visits` was
+missed by the review's count, which is corrected here rather than repeated
+(:23928). `tsc` is the observer, and **M-C proves the direction that matters**:
+setting the shared constant to 9 moves the SQL `LIMIT` in `apps/api`.
+
+**STANDING: a constant in `apps/api` and a `.max()` in `@app/shared` that must
+agree are ONE declaration, and it lives in `@app/shared` — the schema cannot
+import from the app, and the dependency only runs one way.**
+
+### 3 · THE PRIVACY LIST WAS PROSE, AND THE CHECK FOUND A THIRD TABLE ON THE DAY IT WAS WRITTEN
+
+`privacy/tables.ts` holds four lists; three of them are COMMENTS. Prose caught
+`gym_join_applications` a card late (:11072) and `gym_attendance` a card late
+(:28452 §4, by a reviewer rather than by the card that created the table).
+**Twice is a class (:5348 rule 5)**, and :28452's own reason for giving C/H-4 no
+test — *"asserting attendance is purged would encode the answer to the question
+being put to Kd"* — was half right: asserting it is **ENUMERATED** pre-empts
+nothing.
+
+So the names are also an exported array and two tests walk the database: every
+table with a foreign key to `users` must appear on `PII_TABLES` or on the new
+list, and no name on the new list may have stopped matching a real table. **It
+found `gym_closures.created_by_user_id` immediately** — from the opening-hours
+card, which enumerated nothing — now recorded on the SPEC-GAP list with the
+other twelve and added to `OWED.md`'s ruling line. **RECORDED, NOT RULED (R0.2):
+membership means "somebody has looked", never "safe to keep".**
+
+**WHAT IT CANNOT DO, in the test's own comment so nobody quotes it as more
+(:27659): it walks FOREIGN KEYS**, so it is blind to exactly what the hand scan
+was blind to — `subscriptions.owner_id` is polymorphic and carries none — and
+blind to identity inside jsonb. It narrows the gap; it does not close it.
+
+### 4 · A LIST PARAMETER HAS TWO HONEST SPELLINGS AND BOTH WERE 400s
+
+`.max(5)` counted duplicates, so `?statuses=in_session` six times was refused as
+if it asked for six things; and Fastify's parser turns the equally standard
+`?statuses=a&statuses=b` into an ARRAY, which `z.string()` refused outright.
+Both were unreachable while the parameter was dead and both went live with
+:28452 §1's rename. Deduped before it is counted, both wire forms accepted, and
+**the ceiling is now the enum's own option count** so a sixth status moves it
+automatically instead of leaving the next stale literal.
+
+**Scalars keep `z.string()` DELIBERATELY**: for `day` or `cursor` a repeated key
+is genuinely ambiguous and 400 is the right answer. **Only a LIST parameter has
+two spellings**, which is the distinction to carry rather than "accept arrays
+everywhere".
+
+### 5 · TWO TESTS THAT COULD NOT SEE THEIR OWN SUBJECT
+
+**(a) A COMMENT ABOUT ONE QUERY, AN ASSERTION FROM ANOTHER.** *"THE SUMMARY IS
+DELIBERATELY NOT FILTERED"* sat above `expect(wrong.totals.visits).toBe(1)` —
+`totals` is a separate query with its own `WHERE`, so the summary's claim had no
+observer and adding the predicate to it left all 27 tests green (measured).
+
+**(b) A FIXTURE THAT COULD PRODUCE ONLY ONE STATUS.** One member at a gym that
+had never set hours makes *"the filter narrows the PEOPLE"* and *"it narrows the
+VISITS"* indistinguishable — and `getGymAttendanceDay` does the FIRST on
+purpose: the inner CTE picks WHO, the outer join then fetches **all** of their
+visits, which is what an exceptions filter is for. Adding the predicate to the
+outer join also left the old fixture green. **STANDING: a test that filters on a
+field whose fixture only ever holds one value proves the query runs, not that it
+filters** — :10182's shape (a cross-tenant test that builds one tenant) pointed
+at a column instead of a tenant.
+
+### 6 · WHAT STILL HAS NO OBSERVER, stated rather than implied
+
+- **The reads' 600/hour.** Driving it is 601 requests, which is a benchmark. The
+  test drives the WRITE's 30 and pins that the two limiters are two buckets.
+- **The mark's 3,000 per-IP ceiling.** 3,000 injects is not a test.
+- **The shared read BUCKET** — one limiter instance on both read routes, one
+  Redis key, so an owner's 600 is spent by the day list AND by picking a member
+  out of it. Unreachable with no screen; recorded on `CARD-gym-attendance.md`
+  §4b, where the polling interval that would break it gets decided.
+- **No smoke, still**: `apps/web` has zero attendance consumers (the only web
+  file naming it does so in comments), which independently confirms that
+  :28452's `?statuses=` rename broke no existing caller.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :28221 with addendum :28395 and :28452 in full · `HANDOFF.md`'s
+top block · `CLAUDE.md` Part I §2.5 and Part 0.5 · `OWED.md` and `BACKLOG.md`
+tails. **Every one of the eight findings was re-verified against the code before
+it was acted on** (:23928, :24559, S5) — the review is another chat's report and
+hearsay until checked (V4).
+
+**PROVE, all LOCAL (`localhost:5433`, per :13659), on the final restored bytes:**
+`orgs.attendance` **29/29** (+2) · `privacy.purge` **19/19** (+2) · the two
+together **48/48** · `orgs.routes` + `orgs.hours` + `db.migration` in one
+invocation **200/200** · `@app/shared` **51/51** · **`web` 1472/1472 across 53
+files, run because this commit edits `packages/shared` (:28395)** · `tsc
+--noEmit` exit 0 on `api` and `@app/shared` · `eslint --max-warnings=0` exit 0 on
+`apps/api/{src,test,tools}` and `packages/shared/{src,test}`.
+
+**FIX-VERIFICATION SWEEP — eight hand-run mutants, every one RED, every one
+restored** (`git status` shows only the intended files; no mutant string
+survives a grep): **M-A** the `statuses` predicate added to the SUMMARY query →
+red on the new `summary` assertion, which is the line L-1 replaced · **M-B** the
+predicate added to the OUTER join → red on *"keeps all of their visits"*, the
+assertion the old one-status fixture could not make · **M-C**
+`ATTENDANCE_SUMMARY_LIMIT = 9` in `@app/shared` → the 40-window test fails on
+the SQL `LIMIT`, proving one declaration now drives both halves · **M-D**
+`max: 30` → `300` → the 31st tap is a 200 · **M-E** the array arm of the union
+neutered → the repeated-KEY read 400s · **M-F** the dedupe removed → the
+repeated-VALUE read 400s, on a different line from M-E · **M-G**
+`gym_closures` removed from the new list → the FK walk names it · **M-H** a name
+on the list that matches no table → the staleness test fires.
+
+**Each `-t` run reported `1 failed | 28 skipped` (or `18 skipped`), so the
+filter is known to have MATCHED** — :8156's warning about verdicts produced
+under a filter, answered by reading the count rather than the colour.
+
+**THE FULL api SUITE IS NOT QUOTED AND THAT IS DELIBERATE** — the pre-existing
+`seed()` flake `CLAUDE.md` and :13746 document. Scoped runs are what the figures
+above are.

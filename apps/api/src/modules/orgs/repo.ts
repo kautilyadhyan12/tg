@@ -15,6 +15,9 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  ATTENDANCE_PAGE_LIMIT,
+  ATTENDANCE_SUMMARY_LIMIT,
+  ATTENDANCE_VISITS_PER_PERSON,
   gymAttendanceHoursStatusSchema,
   gymAttendanceMethodSchema,
   gymClockFormatSchema,
@@ -3989,14 +3992,26 @@ export async function markGymAttendance(
 /** HOW MANY PEOPLE COME BACK IN ONE PAGE, how many visits one person can carry,
  *  and how many lines the day's SHAPE can have.
  *
- *  Each is mirrored by a `.max()` in `@app/shared` — `ATTENDANCE_PAGE_LIMIT` by
- *  `gymAttendanceDaySchema.people`, `ATTENDANCE_VISITS_PER_PERSON` by
- *  `gymAttendancePersonSchema.visits`, `ATTENDANCE_SUMMARY_LIMIT` by
- *  `gymAttendanceDaySchema.summary` — **and each is now enforced HERE, in the
- *  query, which is the half that was missing.** `ATTENDANCE_VISITS_PER_PERSON`
- *  had no reader at all: a constant, a paragraph explaining it, and no `LIMIT`
- *  anywhere. :26947 Low-5 is *"a comment that claimed a bound the query did not
- *  have"*, and this file quoted that lesson while repeating it one card later.
+ *  ~~Each is mirrored by a `.max()` in `@app/shared`~~ **THE THREE NOW LIVE IN
+ *  `@app/shared` AND ARE IMPORTED HERE, so there is nothing left to mirror.**
+ *  They were declared in this file and written as literals beside the schemas,
+ *  paired by nothing but the paragraph you are reading — and a docstring is not
+ *  an enforcement (:26947 Low-5's shape, one level up from the bound itself).
+ *  Four `.max()` sites read them: `gymAttendanceDaySchema.people` and
+ *  `gymAttendanceHistorySchema.visits` take `ATTENDANCE_PAGE_LIMIT`,
+ *  `gymAttendancePersonSchema.visits` takes `ATTENDANCE_VISITS_PER_PERSON`, and
+ *  `gymAttendanceDaySchema.summary` takes `ATTENDANCE_SUMMARY_LIMIT`.
+ *
+ *  **DRIFT UPWARD IS THE DIRECTION THAT HURT AND IT HAD NO OBSERVER**: raising
+ *  a `LIMIT` here while a literal stayed put in the contract restores exactly
+ *  the permanent 500 :28452 §3 fixed, and no test named any of these constants
+ *  (grep-verified). One declaration is the guard; `tsc` is what watches it.
+ *
+ *  **AND EACH IS ENFORCED HERE, IN THE QUERY, WHICH IS THE HALF THAT WAS
+ *  MISSING.** `ATTENDANCE_VISITS_PER_PERSON` had no reader at all: a constant,
+ *  a paragraph explaining it, and no `LIMIT` anywhere. :26947 Low-5 is *"a
+ *  comment that claimed a bound the query did not have"*, and this file quoted
+ *  that lesson while repeating it one card later.
  *
  *  ~~24 is not arbitrary: sessions never overlap and never wrap past midnight,
  *  so the finest timetable a gym can express is 24 slots, and one person cannot
@@ -4020,10 +4035,6 @@ export async function markGymAttendance(
  *  (a stable timetable yields 24 and 29), so a real gym is never silently
  *  truncated, and bounded so no one response can run away. The pairs move
  *  together or a legitimate answer becomes a parse failure. */
-export const ATTENDANCE_PAGE_LIMIT = 100;
-export const ATTENDANCE_VISITS_PER_PERSON = 400;
-export const ATTENDANCE_SUMMARY_LIMIT = 400;
-
 export interface GymAttendanceSlotCountRow {
   hoursStatus: GymAttendanceHoursStatus;
   opensMinute: number | null;

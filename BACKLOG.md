@@ -3131,3 +3131,92 @@ its name and comments and observed neither.
       shapes are nothing alike — 30/hour for the write (a member marks once or
       twice a day), 600/hour for the reads (an owner watching the door) — since
       one limit covering both would have to be the looser, which is the write's.
+- [x] A comment about the day's SUMMARY sitting above an assertion on TOTALS —
+      `orgs.attendance.test.ts` — found 2026-09-02, attendance T3 round 2 (L-1,
+      rule-4 item) — fixed this commit. The line read *"THE SUMMARY IS
+      DELIBERATELY NOT FILTERED"* and then asserted `wrong.totals.visits`, a
+      different query with its own `WHERE`, so the summary's own claim had no
+      observer at all: adding the `statuses` predicate to the summary query left
+      all 27 tests green (measured). Now asserts `summary` — twice, against the
+      unfiltered read — and keeps the totals assertion beside it. **M-A** (the
+      predicate added to the summary) is RED on the new line.
+- [x] A filter test whose gym could only ever produce ONE status —
+      `orgs.attendance.test.ts` — found 2026-09-02, attendance T3 round 2 (L-2,
+      rule-4 item) — fixed this commit. One member at a gym that had never set
+      hours makes *"narrows the PEOPLE"* and *"narrows the VISITS"* the same
+      sentence, and `getGymAttendanceDay` does the first deliberately — the inner
+      CTE picks WHO and the outer join then fetches ALL of their visits, which is
+      the point of an exceptions filter. Adding the predicate to the outer join
+      left the old fixture green (measured). The fixture is now two members and
+      three visits across two statuses, and **M-B** is RED on the visits
+      assertion specifically.
+- [x] Two rate limiters with no observer — `orgs/routes.ts` — found 2026-09-02,
+      attendance T3 round 2 (L-3) — fixed this commit. Both were added by round
+      1's own Low-5 fix, in a round that could not see them, and one of the two
+      numbers was wrong (the next line). The per-user dimension is now driven —
+      30 marks are 200, the 31st is `429 rate_limited` — and the same test pins
+      that the two limiters are two buckets, which is the claim the split was
+      made for. **M-D** (`max: 30` → `300`) is RED. **The reads' 600/hour is
+      still unobserved and the test says so**: driving it is 601 requests, which
+      is a benchmark, not a test.
+- [x] A per-IP ceiling sized for a once-ever route, on a route a whole gym uses
+      at once — `orgs/routes.ts` — found 2026-09-02, attendance T3 round 2 (L-4)
+      — fixed this commit. `ipMax: 300`/hour was borrowed from `/v1/orgs/join`
+      (120) and the trial (60), **both of which a person does ONCE, EVER**.
+      Marking is once or twice a day per member and it peaks at the session, and
+      `trustProxy` makes `req.ip` the gym's single NAT'd address — so one bucket
+      covers everybody on the gym's wi-fi. A refusal has no fallback (staff
+      marking is not built, :27900; the QR path is the phone's, :26586) and costs
+      a streak day (:27900 §3), which is :5807's *"blocked from finishing
+      something they should be able to do"*. Now **3,000**, derived rather than
+      picked: the largest gym this product sells is band 5's 1501–2100 members
+      (`DECISIONS.md:17927`), so a whole roster fits inside one hour from one
+      address, and it is 0.83 req/s against the row lock. **The per-user 30/hour
+      is untouched — that is the abuse guard.** No test: 3,000 injects is not a
+      test, and that is stated rather than implied.
+- [x] One rate-limit bucket shared by two read routes — `orgs/routes.ts` — found
+      2026-09-02, attendance T3 round 2 (L-5) — recorded, not changed, this
+      commit. `GET …/attendance` and `GET …/attendance/history` share one limiter
+      instance, so one `name` and one Redis key: an owner's 600/hour is spent by
+      both, which is one request per six seconds sustained. **Unreachable today —
+      no screen exists** — and the polling interval that would break it is the
+      web half's decision, so it is written onto `CARD-gym-attendance.md` §4b
+      beside the "no live-updating ticker" line rather than pre-empted here.
+- [x] Three bounds declared twice and paired by a docstring —
+      `orgs/repo.ts` ↔ `packages/shared/src/orgs.ts` — found 2026-09-02,
+      attendance T3 round 2 (L-6) — fixed this commit. `ATTENDANCE_PAGE_LIMIT`,
+      `ATTENDANCE_VISITS_PER_PERSON` and `ATTENDANCE_SUMMARY_LIMIT` lived in
+      `apps/api` and were re-typed as literals in the contract, with nothing but
+      a paragraph holding the pairs together and **no test naming any of them**
+      (grep-verified). Downward drift was caught by the 40-window fixture;
+      **upward drift restores exactly the permanent 500 round 1 fixed**. The
+      three now live in `@app/shared` beside the schemas and the query imports
+      them — four `.max()` sites, not three, which corrects the round's figure.
+      **M-C** (the shared constant set to 9) moves the SQL `LIMIT`, which is the
+      proof they are one declaration.
+- [x] A user-linked table joining the privacy lists only when somebody
+      remembered — `privacy/tables.ts` — found 2026-09-02, attendance T3 round 2
+      (L-7) — fixed this commit. The lists were prose, and prose caught
+      `gym_join_applications` a card late (2026-08-19) and `gym_attendance` a
+      card late (2026-09-02, by a reviewer rather than the card that created the
+      table). Twice is a class (:5348 rule 5), so the names are now also an
+      exported array and a test walks `pg_constraint`: every table with a foreign
+      key to `users` must be on `PII_TABLES` or on the new list, and a second
+      test refuses a name that no longer matches a real table. **It found one on
+      the day it was written — `gym_closures.created_by_user_id`, from the
+      opening-hours card — now recorded on the SPEC-GAP list with the other
+      twelve.** It decides nothing about deletion (R0.2); it asks only whether
+      anybody has LOOKED. **M-G** and **M-H** are RED. Blind spots stated in the
+      test: it walks FKs, so `subscriptions.owner_id` (polymorphic, no FK) and
+      identity inside jsonb are still invisible.
+- [x] A list parameter that refused two legitimate spellings — `orgs/schemas.ts`
+      — found 2026-09-02, attendance T3 round 2 (L-8) — fixed this commit.
+      `.max(5)` counted duplicates, so `?statuses=in_session,in_session,…` × 6
+      was a 400 for a request asking for one thing; and Fastify's parser turns
+      the equally standard `?statuses=a&statuses=b` into an array, which
+      `z.string()` answered 400. Both were unreachable while the parameter itself
+      was dead and both went live with round 1's rename. Now deduped before it is
+      counted, both wire forms accepted, and the ceiling is tied to the enum's
+      own option count so a sixth status moves it automatically. Scalars keep
+      `z.string()` deliberately — for `day` or `cursor` a repeated key really is
+      ambiguous. **M-E** and **M-F** are RED on different lines.

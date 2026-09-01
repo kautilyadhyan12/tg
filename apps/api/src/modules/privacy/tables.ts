@@ -177,9 +177,16 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // list Kd is asked to RULE on has to be complete, or the ruling is partial:
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
-//   gym_join_applications · gym_attendance · api_cost_events · usage_daily ·
-//   trace_samples · gyms.owner_user_id · subscriptions.owner_id ·
+//   gym_join_applications · gym_attendance · gym_closures · api_cost_events ·
+//   usage_daily · trace_samples · gyms.owner_user_id · subscriptions.owner_id ·
 //   exercise_definitions.published_by
+//
+// `gym_closures.created_by_user_id` JOINED THIS LIST 2026-09-02, FOUND BY THE
+// AUTOMATED CHECK BELOW ON THE DAY IT WAS WRITTEN — which is the argument for
+// the check. It records WHICH PERSON declared a gym shut on a given date, the
+// FK is ON DELETE no action like every other row here, and the opening-hours
+// card that created it (DECISIONS :26812) enumerated nothing. Nobody read this
+// file wrongly; nobody read it at all, because reading it was the mechanism.
 //
 // `gym_join_applications` JOINED THIS LIST 2026-08-19 with the waiting-room
 // card (DECISIONS :11072). It belongs on exactly the same footing as
@@ -214,6 +221,54 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // FK to users under a different name. A name-and-FK scan cannot see a
 // polymorphic column — only reading the DDL can.
 //
+// ── THE LISTS ABOVE STOP BEING PROSE ───────────────────────────────────────
+//
+// Everything from "NOT EXPORTED because" down to here is a COMMENT, and a
+// comment is not an instrument: `gym_join_applications` (2026-08-19) and
+// `gym_attendance` (2026-09-02) both had to be noticed by a person, the second
+// one a card late and by a reviewer rather than by the card that created the
+// table. Twice is a class (:5348 rule 5), so the names are also written as an
+// array below and a test walks the database against them: every column with a
+// foreign key to `users` must be accounted for on THIS list or on
+// `PII_TABLES`, and a new table joins one of them on the day it is created or
+// the suite goes red.
+//
+// WHAT IT DOES NOT COVER, stated so nobody quotes it as more (:27659): it is a
+// FOREIGN-KEY scan, so it is blind to exactly what the enumeration method
+// below was blind to — `subscriptions.owner_id` is polymorphic and carries no
+// FK — and blind to identity inside jsonb documents. It narrows the gap; it
+// does not close it. **It decides nothing about deletion**: membership on this
+// list means "recorded, and awaiting the one Kd ruling the SPEC GAP above
+// asks for", never "ruled safe to keep".
+
+/** Tables holding a user link that the Day-14 purge does NOT remove — the
+ *  union of the three lists above, at table granularity, minus anything
+ *  already in `PII_TABLES`. Deliberately hand-written and NOT derived: it is
+ *  the claim a human made about each table, and deriving it from the database
+ *  would make the test assert the schema against itself. */
+export const USER_LINKED_NOT_PURGED_TABLES = [
+  // Kept, each for a stated reason (§5.2), listed above.
+  "users",
+  "leaderboard_snapshots",
+  "org_daily_stats",
+  "audit_log",
+  "invoices",
+  // The SPEC GAP: recorded, not ruled (R0.2).
+  "one_time_tokens",
+  "refresh_tokens",
+  "gym_members",
+  "gym_staff",
+  "gym_join_applications",
+  "gym_attendance",
+  "gym_closures",
+  "api_cost_events",
+  "usage_daily",
+  "trace_samples",
+  "gyms", // gyms.owner_user_id
+  "subscriptions", // subscriptions.owner_id — polymorphic, no FK, see below
+  "exercise_definitions", // exercise_definitions.published_by
+] as const;
+
 // THE METHOD'S REMAINING BLIND SPOT IS DOCUMENTS, NOT COLUMNS (T3 round 2).
 // The column-level list above is now complete — an independent re-derivation
 // found only `org_member_stats`, which is a VIEW over gym_members ⋈ users

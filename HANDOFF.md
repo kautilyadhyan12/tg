@@ -1,6 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ATTENDANCE, SERVER HALF — T3 ROUND 2 (diff-only) IS DONE AND THE PACKET
+      SHIPS. DECISIONS :28649. `CARD-gym-attendance.md` §4a is CLOSED; §4b (the
+      web half) is UNBUILT and is the next chat.
+
+  0. **ZERO Critical/High, EIGHT Low, ALL FIXED HERE, all in `BACKLOG.md`.**
+     **NO FURTHER ROUND — Kd ruled it in this session and his own :5348 rule 1
+     already said so** ("a Low finding never buys another round"). The chat
+     offered one anyway and was corrected; do not re-offer one on this packet.
+  1. **NEXT: §4b, the web half, in a fresh chat.** Round 1 renamed the wire
+     parameter to `?statuses=` (plural) and round 2 widened what it accepts.
+  2. **THE ONE THING §4b MUST NOT GET WRONG, and it is now written on the card:
+     BOTH read routes share ONE rate-limit bucket** — one limiter instance, one
+     Redis key — so an owner's 600/hour is spent by the day list AND by picking
+     a member out of it (a history read). ~1 request per 6 seconds for the whole
+     screen. No polling, no refresh-on-focus that also re-reads a history.
+  3. **A PER-IP LIMIT ON A MEMBER ROUTE IS A WHOLE-GYM LIMIT.** `ipMax` on the
+     mark was 300, copied from routes a person uses ONCE EVER, while
+     `trustProxy` makes `req.ip` the gym's whole wi-fi. Now 3,000 (band 5's
+     1501–2100 members). **The per-user 30/hour is the abuse guard; the IP
+     dimension is not and must not be sized as though it were.**
+  4. **THE THREE ATTENDANCE BOUNDS MOVED TO `@app/shared` AND THE QUERY IMPORTS
+     THEM.** They were a constant in `apps/api` re-typed as a literal in the
+     contract; upward drift restores round 1's permanent 500 and NO test named
+     them. Do not re-declare either half.
+  5. **A NEW TABLE WITH A `user_id` NOW FAILS THE SUITE UNTIL IT IS ENUMERATED**
+     (`privacy.purge.test.ts` walks `pg_constraint`). It found
+     `gym_closures.created_by_user_id` the day it was written. It RECORDS, it
+     does not rule (R0.2), and it is blind to polymorphic columns and jsonb.
+  6. **TWO OF THIS SUITE'S OWN TESTS COULD NOT SEE THEIR SUBJECT** — a comment
+     about the SUMMARY over an assertion on TOTALS (different query), and a
+     filter fixture whose gym could only ever produce ONE status. Both rewritten.
+     **A filter test needs a fixture holding at least two values of the field.**
+
+PROVE: All LOCAL (`localhost:5433`), on the final restored bytes:
+       `orgs.attendance` **29/29** · `privacy.purge` **19/19** · both together
+       **48/48** · `orgs.routes`+`orgs.hours`+`db.migration` in one invocation
+       **200/200** · `@app/shared` **51/51** · **`web` 1472/1472 across 53 files
+       (this commit edits `packages/shared` — :28395's lesson, applied)** ·
+       `tsc --noEmit` exit 0 on `api` and `@app/shared` · `eslint
+       --max-warnings=0` exit 0 on `apps/api/{src,test,tools}` and
+       `packages/shared/{src,test}` · root guards: `check-harnesses` **25 scripts
+       parse**, `check-decisions-index` **262 pointers resolve, 1061 headings**,
+       triggers `--check` **up to date (824 from 223 of 361)**.
+       **EIGHT hand-run mutants, every one RED, every one restored** (M-A…M-H;
+       each `-t` run printed `1 failed | 28 skipped`, so the filter is known to
+       have matched — :8156). **THE FULL api SUITE IS NOT QUOTED**: the
+       pre-existing `seed()` flake (:13746).
+
+FILES: `apps/api/src/modules/orgs/{repo,routes,schemas}.ts` ·
+       `apps/api/src/modules/privacy/tables.ts` · `packages/shared/src/orgs.ts` ·
+       `apps/api/test/orgs.attendance.test.ts` ·
+       `apps/api/test/privacy.purge.test.ts` · `CARD-gym-attendance.md` ·
+       records (`DECISIONS.md`, `DECISIONS-INDEX.md`, `DECISIONS-TRIGGERS.md`
+       regenerated, `OWED.md`, `BACKLOG.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — it is
+       Kd's and was not touched or committed.
+       **NO SMOKE, still: `apps/web` has ZERO attendance consumers** (the only
+       web file naming it does so in comments), which independently confirms the
+       `?statuses=` rename broke no caller. §4b is where a smoke becomes possible.
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate, not this one.
+```
+
+```
 TASK: ATTENDANCE, SERVER HALF — BUILT. DECISIONS :28221.
       `CARD-gym-attendance.md` §4a is done; §4b (the web half) is UNBUILT.
 

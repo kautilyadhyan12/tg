@@ -493,6 +493,18 @@ used.
 - **What it must NOT do:** no live-updating ticker, no chart (that is the
   Overview-numbers card), no per-tap row, and no colour that implies a member did
   something wrong.
+- ⚠️ **THE TWO READS SHARE ONE RATE-LIMIT BUCKET, AND THAT IS THIS SCREEN'S
+  CONSTRAINT TO RESPECT** (recorded 2026-09-02, attendance T3 round 2 Low-5).
+  `GET …/attendance` and `GET …/attendance/history` are both behind the SAME
+  limiter instance in `orgs/routes.ts` — one name, therefore one Redis key — so
+  an owner's **600 requests/hour is spent by BOTH**, and picking a member out of
+  the list (which is a history read) draws from the same allowance as the day
+  list. **Sustained, that is one request every six seconds for everything this
+  screen does.** No polling loop, no refresh-on-focus that also re-reads a
+  history, and if this screen ever wants live-ish updates the limiter is what
+  has to change first — deliberately not changed in advance, because the
+  interval that would break it is this card's decision and nobody has made it.
+  **The "no live-updating ticker" line above is now also a server constraint.**
 - Console → Settings gains the **manual-attendance switch**, obeying `readOnly`
   like every other panel (:24141, :24376).
 - Console → Settings → Staff gains the **seventh tick box**, *"See who came in"*,

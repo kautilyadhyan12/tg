@@ -159,7 +159,9 @@ export type OrgParams = z.infer<typeof orgParamsSchema>;
  *  clearing its filter need not know which to send — **and that equivalence is
  *  MADE TRUE here rather than promised**: an empty list becomes `undefined`,
  *  because `= ANY('{}')` matches nobody and would turn "I cleared the filter"
- *  into "show me an empty day".
+ *  into "show me an empty day". **Repeats and the repeated-KEY spelling are
+ *  both accepted** — see the two comments inside the field; a list parameter
+ *  that refuses `?statuses=a&statuses=b` is refusing a valid request.
  *
  *  **THE KEY IS PLURAL AND THE SERVICE NOW TAKES THIS TYPE, WHICH IS THE ONLY
  *  REASON THE TWO CANNOT DRIFT AGAIN.** It shipped as `status` for one card
@@ -174,9 +176,37 @@ export const attendanceDayQuerySchema = z
   .object({
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     statuses: z
-      .string()
-      .transform((raw) => raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0))
-      .pipe(z.array(gymAttendanceHoursStatusSchema).max(5))
+      // BOTH WIRE FORMS OF A LIST PARAMETER, because a screen gets to pick and
+      // neither choice is wrong. `?statuses=a,b` arrives as a string; the
+      // equally standard `?statuses=a&statuses=b` arrives from Fastify's parser
+      // as an ARRAY, which `z.string()` alone answered 400 — a legitimate
+      // request refused for its punctuation. Scalars in this schema keep
+      // `z.string()` on purpose: for `day` or `cursor` a repeated key is
+      // genuinely ambiguous and 400 is the right answer. Only a LIST parameter
+      // has two honest spellings.
+      .union([z.string(), z.array(z.string())])
+      .transform((raw) => {
+        const parts = (Array.isArray(raw) ? raw : [raw])
+          .flatMap((one) => one.split(","))
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        // DEDUPED BEFORE IT IS COUNTED. The ceiling below is a count of
+        // DISTINCT states, so counting repeats against it refused
+        // `?statuses=in_session,in_session,…` — a request that asks for one
+        // thing, spelled clumsily, and means exactly what it says. A `Set`
+        // also keeps the query's `= ANY` from carrying the same value twice.
+        return [...new Set(parts)];
+      })
+      // TIED TO THE ENUM RATHER THAN TYPED AS A NUMBER: the bound IS "no more
+      // than one of each state", so a sixth state added upstream moves it
+      // automatically instead of turning this into the next stale literal.
+      // After the dedupe above no valid list can reach it; it stays as the
+      // thing that stops an unbounded array being handed to the query at all.
+      .pipe(
+        z
+          .array(gymAttendanceHoursStatusSchema)
+          .max(gymAttendanceHoursStatusSchema.options.length),
+      )
       .transform((list) => (list.length === 0 ? undefined : list))
       .optional(),
     cursor: z.string().min(1).max(200).optional(),

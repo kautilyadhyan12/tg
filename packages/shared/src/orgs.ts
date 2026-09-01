@@ -1813,6 +1813,30 @@ export const gymAttendanceHoursStatusSchema = z.enum([
 ]);
 export type GymAttendanceHoursStatus = z.infer<typeof gymAttendanceHoursStatusSchema>;
 
+/** THE DAY READ'S THREE CEILINGS, AND THEY LIVE HERE BECAUSE THEY ARE ONE FACT
+ *  EACH, NOT TWO.
+ *
+ *  Every one of them is enforced TWICE — by a `LIMIT` (or a `row_number()` cap,
+ *  or a page size) in the query that builds the response, and by a `.max()` on
+ *  the schema that response must satisfy. **A pair that disagrees is not a
+ *  loose bound, it is a 500**: the server truncates to one number and then
+ *  fails to parse its own answer against the other, permanently, on a date
+ *  nothing in this product can delete a row from. That is exactly what shipped
+ *  when the two halves were a query in `apps/api` and a literal in this file
+ *  with a paragraph between them (:28452 §3).
+ *
+ *  So the numbers are DECLARED ONCE, beside the schemas they bound, and the
+ *  query imports them. `@app/shared` rather than the repo because the schema
+ *  cannot import from `apps/api` and the dependency only runs one way.
+ *
+ *  **400 IS `CLOSURE_READ_LIMIT`'s REASONING REUSED** — far above any honest
+ *  day, so a real gym is never silently truncated, and bounded so that no one
+ *  response can run away. Do NOT re-derive either from a timetable: :28452 §3
+ *  is the record of what that produced. */
+export const ATTENDANCE_PAGE_LIMIT = 100;
+export const ATTENDANCE_VISITS_PER_PERSON = 400;
+export const ATTENDANCE_SUMMARY_LIMIT = 400;
+
 /** ONE VISIT. `day` is the GYM's date in the GYM's zone (trap #8), which is why
  *  it travels as `YYYY-MM-DD` and never as an instant; `markedAt` is the
  *  instant, for the clock time a screen prints.
@@ -1860,7 +1884,7 @@ export const gymAttendancePersonSchema = z
   .object({
     userId: z.string().uuid(),
     displayName: z.string(),
-    visits: z.array(gymAttendanceVisitSchema).min(1).max(400),
+    visits: z.array(gymAttendanceVisitSchema).min(1).max(ATTENDANCE_VISITS_PER_PERSON),
   })
   .strict();
 export type GymAttendancePerson = z.infer<typeof gymAttendancePersonSchema>;
@@ -1925,8 +1949,8 @@ export const gymAttendanceDaySchema = z
      *  carry are frozen copies, so a gym that rewrites its timetable during the
      *  day produces more groups than any timetable has slots — and a response
      *  that cannot satisfy its own schema is a permanent 500 on that date. */
-    summary: z.array(gymAttendanceSlotCountSchema).max(400),
-    people: z.array(gymAttendancePersonSchema).max(100),
+    summary: z.array(gymAttendanceSlotCountSchema).max(ATTENDANCE_SUMMARY_LIMIT),
+    people: z.array(gymAttendancePersonSchema).max(ATTENDANCE_PAGE_LIMIT),
     nextCursor: z.string().nullable(),
   })
   .strict();
@@ -1945,7 +1969,7 @@ export const gymAttendanceHistorySchema = z
   .object({
     timezone: z.string().min(1),
     clockFormat: gymClockFormatSchema.default("24h"),
-    visits: z.array(gymAttendanceVisitSchema).max(100),
+    visits: z.array(gymAttendanceVisitSchema).max(ATTENDANCE_PAGE_LIMIT),
     nextCursor: z.string().nullable(),
   })
   .strict();

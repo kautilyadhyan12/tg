@@ -259,16 +259,48 @@ export function registerOrgRoutes(
    *  **THE TWO ARE SPLIT BECAUSE THE SHAPES ARE NOTHING ALIKE.** A member marks
    *  once or twice a day and 30/hour is far beyond honest use; an owner watching
    *  the door refreshes a list, and one limit covering both would have to be the
-   *  looser of the two — which is the write's, the one that matters. */
+   *  looser of the two — which is the write's, the one that matters.
+   *
+   *  **THE PER-IP CEILING ON THE MARK IS A WHOLE GYM'S CEILING, NOT ONE
+   *  PERSON'S, AND ITS FIRST VALUE WAS SIZED AS IF IT WERE ONE PERSON'S.** It
+   *  shipped at 300/hour, borrowed from `/v1/orgs/join` (120) and the trial
+   *  (60) — both of which a given person does ONCE, EVER. Marking is once or
+   *  twice a day, per member, and it peaks: everybody arrives for the 6am
+   *  session. `trustProxy` makes `req.ip` the gym's single NAT'd address, so
+   *  every member on the gym's own wi-fi spends from ONE bucket, and 300 is
+   *  under the size of the gyms this product sells.
+   *
+   *  **WHAT A REFUSAL COSTS IS WHY THIS IS NOT A TUNING PREFERENCE:** there is
+   *  no other way in — `marked_by_user_id` is always the member themselves
+   *  until staff marking is built (:27900), the QR path is the phone app's
+   *  (:26586) — so a 429 is a member who cannot mark in at all, and attendance
+   *  feeds streaks (:27900 §3), so it costs them a day they actually turned up
+   *  for. :5807's "blocked from finishing something they should be able to do".
+   *
+   *  **3,000 IS DERIVED, NOT PICKED: the largest gym this product sells is band
+   *  5, 1501–2100 members** (`DECISIONS.md:17927`), so it clears a gym's ENTIRE
+   *  roster marking inside the same hour with headroom, from one address. It is
+   *  also 0.83 requests/second, which is nothing against the row lock the
+   *  paragraph above worries about. **The abuse guard is the PER-USER 30/hour
+   *  and it is untouched** — the IP dimension cannot do that job on a route
+   *  whose honest traffic is a building full of people behind one address. */
   const attendanceMarkLimit = createDualRateLimit({
     name: "orgs_attendance_mark",
     max: 30,
-    ipMax: 300,
+    ipMax: 3000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
 
+  /** ONE BUCKET, TWO ROUTES, AND THE WEB HALF NEEDS TO KNOW. This instance is
+   *  the pre-handler on BOTH reads below, so `name` — and therefore the Redis
+   *  key — is shared: an owner's 600/hour is spent by the day list AND by any
+   *  history read on the same screen, which is 1 request per 6 seconds
+   *  sustained. Nothing can reach it today (no screen exists), and it is
+   *  recorded on `CARD-gym-attendance.md` §4b rather than guessed at here,
+   *  because the polling interval that would break it is the web half's
+   *  decision to make. */
   const attendanceReadLimit = createDualRateLimit({
     name: "orgs_attendance_read",
     max: 600,

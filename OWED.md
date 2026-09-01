@@ -3306,16 +3306,28 @@ then; none may be hidden or reduced to close the gap.
 - [ ] 🔴 **WHICH USER-LINKED TABLES THE DAY-14 PURGE ACTUALLY CLEARS IS STILL
       KD'S TO RULE, AND UNTIL 2026-09-02 THE QUESTION LIVED ONLY IN A CODE
       COMMENT.** `apps/api/src/modules/privacy/tables.ts` carries a SPEC-GAP list
-      of eleven tables and columns that keep a link to a purged person and that
+      of THIRTEEN tables and columns that keep a link to a purged person and that
       §5.2's prose does not name — `one_time_tokens · refresh_tokens ·
       gym_members · gym_staff · gym_join_applications · gym_attendance ·
-      api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
-      subscriptions.owner_id · exercise_definitions.published_by`. Widening a
+      gym_closures · api_cost_events · usage_daily · trace_samples ·
+      gyms.owner_user_id · subscriptions.owner_id ·
+      exercise_definitions.published_by`. Widening a
       deletion list on a chat's judgement is R0.2, so filing them there was
       right; **leaving the RULING untracked was not, and it is this file's own
       failure mode** — the list has been growing table by table since 2026-07-22
       (`gym_join_applications` joined it 2026-08-19 at :11072, `gym_attendance`
       on 2026-09-02) with no line here to say anybody still owes an answer.
+      **`gym_closures.created_by_user_id` JOINED IT LATER THE SAME DAY AND WAS
+      FOUND BY A MACHINE RATHER THAN A PERSON** (attendance T3 round 2, L-7):
+      the list is now also an exported array with a test walking `pg_constraint`
+      for every foreign key to `users`, so a new user-linked table is red on the
+      day it is created instead of a card late. It records WHICH PERSON declared
+      a gym shut on a given date; the opening-hours card that created it
+      enumerated nothing. **The check does NOT shrink this question — it only
+      guarantees the list Kd is asked to rule on is complete, which :11072 said
+      was the condition of the ruling being worth anything.** It is a foreign-key
+      walk, so `subscriptions.owner_id` (polymorphic, no FK) and identity inside
+      jsonb remain invisible to it and are still enumerated by hand.
       **What it blocks:** nothing today, because the purge itself is not running
       anywhere (the 🔴 below). **What makes it urgent when that changes:** the
       newest member is the most sensitive — attendance is a dated, per-gym record
@@ -3326,7 +3338,8 @@ then; none may be hidden or reduced to close the gap.
       deletion and export stay symmetrical. `gym_attendance` is also the one
       whose **Day-0** half is unhandled: a membership is closed and an
       application cancelled at Day 0, and nothing touches an attendance at all.
-      (DECISIONS 2026-09-02, attendance T3 round 1 C/H-4.)
+      (DECISIONS 2026-09-02, attendance T3 round 1 C/H-4; the thirteenth entry
+      and the automated check, attendance T3 round 2 L-7.)
 - [ ] 🔴 **DPDP Day-14 HARD-DELETE — CODE COMPLETE 2026-07-22, BUT NOT YET
       RUNNING ANYWHERE, so it is NOT done** (branch `dpdp-day14-purge`).
       This line was first written ticked; its T3 (finding D1) proved that

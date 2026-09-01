@@ -1299,6 +1299,36 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:28649** — 2026-09-02 — **ATTENDANCE, SERVER HALF, T3 ROUND 2 (diff-only):
+  ZERO Critical/High, THE PACKET SHIPS — and the two findings worth keeping are a
+  rate limit sized for the wrong shape of traffic and a privacy list that was
+  prose.** **Read before setting a per-IP rate limit on anything a whole gym does
+  at once, before pairing a constant in `apps/api` with a `.max()` in
+  `@app/shared`, before writing a query parameter that carries a LIST, before
+  writing a test whose fixture can produce only ONE value of the thing being
+  filtered, before putting a comment above an assertion drawn from a DIFFERENT
+  query, and before quoting the attendance reads' 600/hour as observed.**
+  Reviews `:28452`. Eight Low, all fixed here, all in `BACKLOG.md`.
+  **`ipMax: 300` on the mark was copied from `/v1/orgs/join` and the trial —
+  things a person does ONCE, EVER** — while `trustProxy` makes `req.ip` a gym's
+  whole wi-fi, a refused member has NO fallback (staff marking unbuilt, the QR
+  path is the phone's) and loses a streak day; **now 3,000, derived from band 5's
+  1501–2100 members, with the per-user 30/hour left as the actual abuse guard.**
+  **Three bounds lived in `apps/api` and were re-typed as literals in the
+  contract, paired by a docstring and named by no test** — downward drift had an
+  observer, upward drift restores :28452's own permanent 500; they now live in
+  `@app/shared` and the query imports them (**four `.max()` sites, not three** —
+  the review's count corrected). **The DPDP lists were PROSE and prose was a
+  card late twice**, so a test now walks `pg_constraint` for every FK to `users`
+  — **it found `gym_closures.created_by_user_id` the day it was written**;
+  RECORDED not ruled, and blind to polymorphic columns and jsonb by construction.
+  **The `statuses` filter refused two legitimate spellings** (repeats counted
+  against the cap; Fastify's repeated-key ARRAY form); **scalars keep
+  `z.string()` deliberately.** **Two of this suite's own tests could not see
+  their subject** — a comment about the SUMMARY over an assertion on TOTALS, and
+  a fixture whose gym could only ever produce one status, so "narrows the PEOPLE"
+  and "narrows the VISITS" were the same sentence. **No observer: the reads'
+  600/hour, the 3,000 IP ceiling, and the shared read bucket (on the web card).**
 - **:28452** — 2026-09-02 — **ATTENDANCE, SERVER HALF, T3 ROUND 1: FOUR
   Critical/High, THE PACKET DOES NOT SHIP — a whole route parameter that parsed,
   validated and was then thrown away, and a bound computed from an invariant

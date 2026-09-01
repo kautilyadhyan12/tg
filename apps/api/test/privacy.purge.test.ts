@@ -25,6 +25,7 @@ import {
   CASCADE_COLLECTED_TABLES,
   DIRECT_DELETE_TABLES,
   PII_TABLES,
+  USER_LINKED_NOT_PURGED_TABLES,
 } from "../src/modules/privacy/tables.js";
 import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 
@@ -521,5 +522,59 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(res.errors).toBeGreaterThanOrEqual(1);
     expect((await directCounts(good.userId))["streaks"]).toBe(0);
     expect((await directCounts(bad.userId))["streaks"]).toBe(1);
+  });
+
+  /** THE PERMANENT GUARD FOR A CLASS THAT HAS NOW HAPPENED TWICE (:5348 rule
+   *  5). `gym_join_applications` joined the SPEC-GAP list a card late in
+   *  2026-08-19, `gym_attendance` a card late in 2026-09-02, and both were
+   *  found by a person reading `tables.ts` — the second one by a reviewer
+   *  rather than by the card that created the table. The enumeration method
+   *  IS the failure mode: it only runs when somebody remembers to run it.
+   *
+   *  So the database is asked instead, and the question is deliberately the
+   *  weakest one that still bites: not "is this table purged" — that is the
+   *  ruling nobody has made yet — but **"has anybody LOOKED at it"**. A new
+   *  table carrying a user id is red on the day it is created, and the fix is
+   *  one line on whichever list its author decides it belongs to.
+   *
+   *  **WHAT IT CANNOT SEE, so no future round reads it as a completeness
+   *  proof** (:27659): it walks FOREIGN KEYS, so it is blind to exactly what
+   *  `tables.ts`'s own hand scan was blind to — `subscriptions.owner_id` is
+   *  polymorphic and carries none — and blind to identity stored inside jsonb.
+   *  It narrows the gap; it does not close it. */
+  it("every table with a foreign key to users is on one of the privacy lists", async () => {
+    const linked = await sql<{ tbl: string; col: string }[]>`
+      SELECT c.conrelid::regclass::text AS tbl, a.attname AS col
+      FROM pg_constraint c
+      JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+      WHERE c.contype = 'f' AND c.confrelid = 'users'::regclass
+      ORDER BY 1, 2`;
+
+    // POSITIVE CONTROL FIRST: an empty or broken scan would satisfy the real
+    // assertion below with nothing to say (:7104's PG1). A floor rather than a
+    // count, because this number only ever grows and an equality here would be
+    // the brittle assertion this test exists to replace.
+    expect(linked.length).toBeGreaterThan(20);
+    expect(linked.map((r) => r.tbl)).toContain("workouts");
+
+    const accounted = new Set<string>([...PII_TABLES, ...USER_LINKED_NOT_PURGED_TABLES]);
+    const unaccounted = [...new Set(linked.map((r) => r.tbl))]
+      .filter((t) => !accounted.has(t))
+      .sort();
+    expect(unaccounted).toEqual([]);
+  });
+
+  /** THE OTHER DIRECTION, and it is the one that rots quietly: a list of names
+   *  nothing checks can outlive the tables it names, and a renamed table would
+   *  leave the check above passing while the entry protects nothing. */
+  it("no name on the not-purged list has gone stale", async () => {
+    const rows = await sql<{ tbl: string }[]>`
+      SELECT c.relname AS tbl
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'`;
+    const real = new Set(rows.map((r) => r.tbl));
+    expect(USER_LINKED_NOT_PURGED_TABLES.filter((t) => !real.has(t))).toEqual([]);
   });
 });

@@ -1171,26 +1171,67 @@ d("gym attendance (real Postgres)", () => {
    *
    *  **BOTH DIRECTIONS, and the second is the one a lazy fix breaks:** a filter
    *  that excludes must also INCLUDE, and an EMPTY filter must mean "no filter"
-   *  rather than `= ANY('{}')`, which matches nobody. */
+   *  rather than `= ANY('{}')`, which matches nobody.
+   *
+   *  **THE FIXTURE IS TWO PEOPLE AND THREE VISITS BECAUSE THE FIRST VERSION OF
+   *  IT COULD NOT SEE WHAT THE FILTER DOES.** It used one member of a gym that
+   *  had never set hours, so every row was `hours_unset` and every question had
+   *  the same answer: "narrows the PEOPLE" and "narrows the VISITS" are
+   *  indistinguishable when nobody holds two statuses. `getGymAttendanceDay`
+   *  narrows the PAGE — the inner `page` CTE picks WHO, and the outer join then
+   *  fetches **every** visit those people made — so a member who set off the
+   *  filter with one visit is shown with ALL of theirs, which is the point of an
+   *  exceptions filter and is not derivable from a one-status day. Adding the
+   *  predicate to the outer join left the old fixture green (measured). */
   it(
-    "the day filter actually filters — and clearing it shows everybody again",
+    "the day filter narrows the PEOPLE, keeps all of their visits, and clearing it shows everybody",
     async () => {
       const owner = await makeUser("filt-owner");
       const member = await makeUser("filt-member");
+      const other = await makeUser("filt-other");
       const org = await makeOrg(owner.cookies, "Filter Gym");
       await joinAsMember(member.cookies, org, owner.cookies);
+      await joinAsMember(other.cookies, org, owner.cookies);
 
-      // A gym that has never set hours: every visit is `hours_unset`, so
-      // `in_session` must return NOBODY and `hours_unset` must return them.
+      // A gym that has never set hours, so a REAL mark produces `hours_unset`
+      // for both of them — and the order they arrive in is the order the page
+      // returns them in.
       const marked = await mark(org.org.id, member.cookies);
       expect(marked.statusCode).toBe(200);
       expect((JSON.parse(marked.body) as { visit: Visit }).visit.hoursStatus).toBe("hours_unset");
+      expect((await mark(org.org.id, other.cookies)).statusCode).toBe(200);
 
-      const wrong = await readDay(org.org.id, owner.cookies, "?statuses=in_session");
-      expect(wrong.people).toHaveLength(0);
+      // THE SECOND STATUS IS WRITTEN DIRECTLY, for the bound test's reason: the
+      // route decides the status from the gym's own clock, so producing a
+      // second one through the API would mean rewriting the timetable and
+      // waiting — the fixture would be measuring the clock, not the filter.
+      const today = await gymToday(org.org.id);
+      await sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+           session_opens_minute, session_closes_minute, slot_key)
+        VALUES (${org.org.id}, ${member.userId}, ${member.userId}, ${today}::date,
+                'manual', 'outside_hours', null, null, 'outside_hours')`;
 
-      const right = await readDay(org.org.id, owner.cookies, "?statuses=hours_unset");
-      expect(right.people.map((p) => p.userId)).toEqual([member.userId]);
+      const all = await readDay(org.org.id, owner.cookies);
+      expect(all.people.map((p) => p.userId)).toEqual([member.userId, other.userId]);
+
+      // NARROWS THE PEOPLE: only the member with an out-of-hours visit is on the
+      // page, and the one who came in normally is gone.
+      const exceptions = await readDay(org.org.id, owner.cookies, "?statuses=outside_hours");
+      expect(exceptions.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // AND KEEPS ALL OF THEIR VISITS. This is the assertion the old fixture
+      // could not make: two visits come back, only ONE of which matches the
+      // filter. Adding the predicate to the outer join turns this red.
+      expect(exceptions.people[0]?.visits.map((v) => v.hoursStatus).sort()).toEqual([
+        "hours_unset",
+        "outside_hours",
+      ]);
+
+      // MATCHES NOBODY: no visit that day was inside a session.
+      const inSession = await readDay(org.org.id, owner.cookies, "?statuses=in_session");
+      expect(inSession.people).toHaveLength(0);
 
       // TWO AT ONCE is the useful case Kd's ruling names, and a comma-separated
       // list is why the parameter is shaped this way at all.
@@ -1199,16 +1240,107 @@ d("gym attendance (real Postgres)", () => {
         owner.cookies,
         "?statuses=outside_hours,hours_unset",
       );
-      expect(both.people.map((p) => p.userId)).toEqual([member.userId]);
+      expect(both.people.map((p) => p.userId)).toEqual([member.userId, other.userId]);
 
       // CLEARED. The schema's own promise is that empty and absent are the same
       // thing; without the empty→undefined mapping this returns nobody.
       const cleared = await readDay(org.org.id, owner.cookies, "?statuses=");
-      expect(cleared.people.map((p) => p.userId)).toEqual([member.userId]);
+      expect(cleared.people.map((p) => p.userId)).toEqual([member.userId, other.userId]);
 
-      // AND THE SUMMARY IS DELIBERATELY NOT FILTERED — it describes the whole
-      // day, so a screen's totals must not move when a filter is applied.
-      expect(wrong.totals.visits).toBe(1);
+      // AND THE DAY'S SHAPE IS DELIBERATELY NOT FILTERED — it describes the
+      // whole day, so an owner's totals and per-slot lines must not move when a
+      // filter is applied. **This asserts `summary`.** The line here used to
+      // read `totals` under a comment about the summary: a different query,
+      // separately scoped, so the sentence and the assertion were about two
+      // different things and the summary's own claim had no observer.
+      expect(inSession.summary).toEqual(all.summary);
+      expect(exceptions.summary).toEqual(all.summary);
+      expect(inSession.totals).toEqual({ visits: 3, people: 2 });
+      expect(inSession.totals).toEqual(all.totals);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A LIST PARAMETER HAS TWO HONEST SPELLINGS AND ONE OF THEM WAS A 400.
+   *
+   *  `?statuses=a&statuses=b` is how a great many clients send a list — and
+   *  Fastify's parser turns it into an ARRAY, which `z.string()` refused. The
+   *  same shape refused `?statuses=a,a`: `.max(5)` counted repeats, so asking
+   *  twice for one thing looked like asking for six. Both were unreachable
+   *  while the parameter itself was dead, and both became live the moment it
+   *  started working — which is why they are pinned before a screen exists. */
+  it(
+    "the filter accepts the repeated-key spelling and a repeated value",
+    async () => {
+      const owner = await makeUser("filtsp-owner");
+      const member = await makeUser("filtsp-member");
+      const org = await makeOrg(owner.cookies, "Filter Spelling Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+
+      const repeatedKey = await readDay(
+        org.org.id,
+        owner.cookies,
+        "?statuses=outside_hours&statuses=hours_unset",
+      );
+      expect(repeatedKey.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // SIX ITEMS, ONE DISTINCT VALUE. Counted before the dedupe this is over
+      // the ceiling and answers 400 to a request that asks for one thing.
+      const repeatedValue = await readDay(
+        org.org.id,
+        owner.cookies,
+        `?statuses=${new Array(6).fill("hours_unset").join(",")}`,
+      );
+      expect(repeatedValue.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // AND THE CEILING STILL REFUSES SOMETHING: a value that is not a status
+      // is a 400 whichever spelling it arrives in.
+      const nonsense = await get(`/v1/orgs/${org.org.id}/attendance?statuses=nope`, owner.cookies);
+      expect(nonsense.statusCode).toBe(400);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE LIMITERS SHIPPED WITH NO OBSERVER, WHICH IS HOW A WRONG CEILING GOES
+   *  UNNOTICED. They were added as a fix, in a round that could not see them —
+   *  and one of the two numbers turned out to be sized for the wrong shape of
+   *  traffic (`routes.ts`, the per-IP ceiling on the mark).
+   *
+   *  **THE PER-USER DIMENSION IS THE ONE A TEST CAN DRIVE HERE, and it is clean
+   *  because `nextIp()` gives every inject its own address** — so nothing in
+   *  this suite accumulates against the IP bucket and this cannot pass or fail
+   *  for the other dimension's reasons.
+   *
+   *  **WHAT IS STILL NOT OBSERVED, stated rather than implied: the reads'
+   *  600/hour.** Driving it is 601 requests, which is a benchmark rather than a
+   *  test. What IS driven is that the two limiters are two buckets — the claim
+   *  the split was made for — so a member who has spent the write allowance can
+   *  still read. */
+  it(
+    "the mark limit refuses the 31st tap in an hour, and the reads keep their own bucket",
+    async () => {
+      const owner = await makeUser("rl-owner");
+      const member = await makeUser("rl-member");
+      const org = await makeOrg(owner.cookies, "Rate Limit Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // THIRTY IS THE CEILING AND EVERY ONE OF THEM IS A 200. The same slot
+      // tapped again is idempotent (R3.5), so this drives the limiter and
+      // nothing else — and the single row it leaves behind is asserted below,
+      // which makes the loop a second observer of that idempotency.
+      for (let i = 0; i < 30; i += 1) {
+        expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+      }
+      const refused = await mark(org.org.id, member.cookies);
+      expect(refused.statusCode).toBe(429);
+      expect((JSON.parse(refused.body) as { error: string }).error).toBe("rate_limited");
+
+      // THE SPLIT IS REAL: the member who has spent the write bucket can still
+      // read their own history, and the owner's day read is untouched.
+      const own = await get(`/v1/orgs/${org.org.id}/attendance/history`, member.cookies);
+      expect(own.statusCode).toBe(200);
+      expect((await readDay(org.org.id, owner.cookies)).totals).toEqual({ visits: 1, people: 1 });
     },
     TEST_TIMEOUT_MS,
   );
