@@ -131,11 +131,28 @@ describe('a gym that has answered', () => {
 
     // Wednesday for the eastern gym, Tuesday for the western one, at the same
     // instant. No single clock can produce both.
-    expect(await screen.findByText('Today: 15:00–21:00')).toBeTruthy();
-    expect(screen.getByText('Today: 06:00–07:00')).toBeTruthy();
+    expect(await screen.findByText('Today: 15:00 – 21:00')).toBeTruthy();
+    expect(screen.getByText('Today: 06:00 – 07:00')).toBeTruthy();
     // And neither is Monday — the control that stops this passing on a reader
     // that simply picked a fixed row.
-    expect(screen.queryByText('Today: 01:00–02:00')).toBeNull();
+    expect(screen.queryByText('Today: 01:00 – 02:00')).toBeNull();
+  });
+
+  it("reads on the GYM's clock, and BOTH clocks are driven", async () => {
+    // Kd, 2026-09-01: the gym chooses. The pair is the assertion — either line
+    // alone would pass with the gym's choice ignored — and a MEMBER seeing a
+    // different clock from their gym's own console is the thing the setting
+    // living on the gym row exists to prevent.
+    const week = [{ weekday: 3, sessions: [{ opensMinute: 960, closesMinute: 1260 }] }];
+
+    orgService.getHours.mockResolvedValue(hours({ clockFormat: '12h', week }));
+    const { unmount } = render(<GymHoursNote gymId={GYM} />);
+    expect(await screen.findByText('Today: 4:00 PM – 9:00 PM')).toBeTruthy();
+    unmount();
+
+    orgService.getHours.mockResolvedValue(hours({ clockFormat: '24h', week }));
+    render(<GymHoursNote gymId={GYM} />);
+    expect(await screen.findByText('Today: 16:00 – 21:00')).toBeTruthy();
   });
 
   it('lists the whole week, and a weekday with no sessions reads Closed', async () => {
@@ -144,7 +161,7 @@ describe('a gym that has answered', () => {
     );
     render(<GymHoursNote gymId={GYM} />);
 
-    await screen.findByText('Today: 06:00–07:00');
+    await screen.findByText('Today: 06:00 – 07:00');
     for (const short of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
       expect(screen.getByText(short)).toBeTruthy();
     }
@@ -167,7 +184,7 @@ describe('a gym that has answered', () => {
     expect(await screen.findByText(/Closed today/)).toBeTruthy();
     expect(screen.getByText(/Holi/)).toBeTruthy();
     // And the pattern's own line for today is NOT also drawn as the headline.
-    expect(screen.queryByText('Today: 06:00–07:00')).toBeNull();
+    expect(screen.queryByText('Today: 06:00 – 07:00')).toBeNull();
   });
 
   it('lists an upcoming closure without repeating today as the headline', async () => {
@@ -179,7 +196,7 @@ describe('a gym that has answered', () => {
     );
     render(<GymHoursNote gymId={GYM} />);
 
-    expect(await screen.findByText('Today: 06:00–07:00')).toBeTruthy();
+    expect(await screen.findByText('Today: 06:00 – 07:00')).toBeTruthy();
     expect(screen.getByText('Closed 2026-09-20')).toBeTruthy();
   });
 });

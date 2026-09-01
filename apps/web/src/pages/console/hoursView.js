@@ -38,14 +38,19 @@ export function isoWeekdayOfDay(day) {
   return js === 0 ? 7 : js;
 }
 
-/** Minutes from midnight to the clock face a person reads and an
- *  `<input type="time">` accepts.
+/** Minutes from midnight to the 24-hour value the DRAFT and the wire use.
+ *
+ *  **This is the storage spelling, never the label.** What an owner or a member
+ *  READS comes from `clockLabel` below, on the clock their gym chose — Kd's
+ *  ruling of 2026-09-01: *"for time both format shpuld be ther gym can choose
+ *  format like it will be 4 or 16"*. Keeping one internal spelling means the
+ *  overlap maths, the draft comparison and the request never have to know which
+ *  clock is on screen.
  *
  *  **1440 renders as `24:00`, which is what it MEANS** — midnight at the END of
- *  the day, so a gym open until midnight loses no minute. A time input cannot
- *  hold `24:00`, which is why the row that closes at midnight is drawn with a
- *  dedicated control rather than by pretending the value is `00:00` (that would
- *  be a zero-length session on the wrong day, and the server refuses it). */
+ *  the day, so a gym open until midnight loses no minute. It is a legal CLOSE
+ *  and an illegal OPEN; `00:00` would be a zero-length session on the wrong day,
+ *  and the server refuses it. */
 export function minutesToClock(minutes) {
   if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return '';
   const h = Math.floor(minutes / 60);
@@ -66,6 +71,69 @@ export function clockToMinutes(text) {
   if (hours === 24 && mins === 0) return 1440;
   if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
   return hours * 60 + mins;
+}
+
+/** THE STEP THE TIME LIST OFFERS, in minutes.
+ *
+ *  **15, and it is a chosen number rather than a spec one.** Kd asked for a list
+ *  instead of typing and for arbitrary times — *"4:00-5:30 whatever they set"* —
+ *  and 15 covers every quarter-hour a gym actually opens at while keeping the
+ *  list to 96 entries. Five-minute steps would be 288, which is a list nobody
+ *  scrolls; hourly would refuse the 5:30 he named. Recorded in DECISIONS rather
+ *  than left as a magic number. */
+export const TIME_STEP_MINUTES = 15;
+
+/** WHAT A PERSON READS, on the clock THEIR GYM CHOSE.
+ *
+ *  `24h` prints `16:00`; `12h` prints `4:00 PM`. **1440 is the one value that
+ *  needs saying out loud in both**: it is midnight at the END of the day, so
+ *  `12h` shows `12:00 AM (midnight)` rather than a bare `12:00 AM` that would
+ *  read as the start of the day and mean the opposite.
+ *
+ *  Deliberately hand-built rather than `toLocaleTimeString`: R5.1's ban is the
+ *  engine's, but its reason travels — a locale-driven label would depend on the
+ *  READER's browser, and this label must depend on the GYM. */
+export function clockLabel(minutes, clockFormat) {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const mm = String(m).padStart(2, '0');
+  if (clockFormat !== '12h') return `${String(h).padStart(2, '0')}:${mm}`;
+  if (minutes === 1440) return '12:00 AM (midnight)';
+  if (minutes === 0) return '12:00 AM';
+  const suffix = h < 12 ? 'AM' : 'PM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${String(hour12)}:${mm} ${suffix}`;
+}
+
+/** EVERY VALUE THE TIME LIST OFFERS, as `{ value, label }`.
+ *
+ *  **The two ends differ, and that is the schema showing through**: an OPENING
+ *  runs 00:00–23:45 (1440 would be a zero-length session on the wrong day) while
+ *  a CLOSING runs 00:15–24:00 (midnight at the end of the day is a real answer).
+ *  So the two dropdowns are built from different lists rather than one list with
+ *  a rule the caller has to remember.
+ *
+ *  **A time the gym ALREADY HOLDS is added if the step would miss it.** A gym
+ *  whose hours were set before this list existed — or by a future card with a
+ *  finer step — must not have its own 06:05 silently vanish from the box the
+ *  moment somebody opens the panel. `:20587`'s lesson, on a picker rather than a
+ *  zone list. */
+export function timeChoices(kind, clockFormat, current) {
+  const first = kind === 'closes' ? TIME_STEP_MINUTES : 0;
+  const last = kind === 'closes' ? 1440 : 1440 - TIME_STEP_MINUTES;
+  const values = [];
+  for (let m = first; m <= last; m += TIME_STEP_MINUTES) values.push(m);
+
+  const held = clockToMinutes(current);
+  if (held !== null && held >= first && held <= last && !values.includes(held)) {
+    values.push(held);
+    values.sort((a, b) => a - b);
+  }
+  return values.map((value) => ({
+    value: minutesToClock(value),
+    label: clockLabel(value, clockFormat),
+  }));
 }
 
 /** THE SERVER'S ANSWER TURNED INTO THE SHAPE THE FORM EDITS — seven rows,
@@ -99,6 +167,53 @@ export function hoursDraft(hours) {
   };
 }
 
+/** COPY ONE DAY'S TIMES ONTO EVERY OTHER DAY — Kd, 2026-09-01: *"if gyms times
+ *  are same for all day they should not manully set the timings for eacg day
+ *  they just click a button an dsame timie is set for rest of the day if they
+ *  want to chnage a particular day timing they can do that by manully also"*.
+ *
+ *  **IT OVERWRITES, and that is his sentence rather than a shortcut.** The
+ *  button means "these are my hours", so a day already holding something is a
+ *  day whose answer is being replaced — and the instruction he gave for changing
+ *  one afterwards is to edit that day, which only makes sense if the copy landed
+ *  everywhere first.
+ *
+ *  The rows are COPIED rather than shared, so editing Tuesday afterwards cannot
+ *  reach into Monday. */
+export function copyDayToAll(draft, weekday) {
+  const source = (draft?.days ?? []).find((d) => d.weekday === weekday);
+  if (source === undefined) return draft;
+  return {
+    ...draft,
+    days: draft.days.map((day) => ({
+      ...day,
+      sessions: source.sessions.map((s) => ({ ...s })),
+    })),
+  };
+}
+
+/** A one-line summary of a day, for the folded row — so a gym can read its whole
+ *  week without opening seven sections.
+ *
+ *  **It is only ever called past the mode gate**, like `dayLine`: a gym that has
+ *  not answered never reaches a week at all. An EMPTY day says "Closed", which
+ *  is true once a gym has answered and is the whole distinction :26736 protects.
+ *
+ *  Unfinished rows are shown as `—` rather than guessed at, because a half-typed
+ *  time is not a time and printing one end of it would be a claim the gym has
+ *  not made. */
+export function daySummary(sessions, clockFormat) {
+  if (!Array.isArray(sessions) || sessions.length === 0) return 'Closed';
+  return sessions
+    .map((s) => {
+      const opens = clockToMinutes(s.opens);
+      const closes = clockToMinutes(s.closes);
+      if (opens === null || closes === null) return '—';
+      return `${clockLabel(opens, clockFormat)} – ${clockLabel(closes, clockFormat)}`;
+    })
+    .join(', ');
+}
+
 /** Two drafts holding the same answer. Used for "has anybody touched this",
  *  which is what decides whether the form follows a background re-read —
  *  `GymDetailsPanel`'s rule, and the defect it exists to stop is the same one:
@@ -128,7 +243,7 @@ export function sameHoursDraft(a, b) {
  *
  *  Order matters: the empty check runs first, because a row with one blank box
  *  cannot be compared against anything. */
-export function hoursProblem(draft) {
+export function hoursProblem(draft, clockFormat) {
   if (draft?.mode !== 'scheduled') return null;
 
   for (const day of draft.days ?? []) {
@@ -162,7 +277,10 @@ export function hoursProblem(draft) {
       // timetable with a break in its numbering), overlapping is not. The card's
       // risk 4, and the one comparison in this file worth reading twice.
       if (current.opens < previous.closes) {
-        return `${label} has two sessions that overlap: ${minutesToClock(previous.opens)}–${minutesToClock(previous.closes)} and ${minutesToClock(current.opens)}–${minutesToClock(current.closes)}.`;
+        // NAMED ON THE GYM'S OWN CLOCK: an owner reading `16:00` in a refusal
+        // about a screen showing `4:00 PM` has to do the conversion themselves,
+        // which is the thing Kd's ruling removed.
+        return `${label} has two sessions that overlap: ${clockLabel(previous.opens, clockFormat)} – ${clockLabel(previous.closes, clockFormat)} and ${clockLabel(current.opens, clockFormat)} – ${clockLabel(current.closes, clockFormat)}.`;
       }
     }
   }
@@ -184,7 +302,7 @@ export function hoursProblem(draft) {
 export function hoursRequest(draft) {
   if (draft?.mode === 'open_24h') return { mode: 'open_24h' };
   if (draft?.mode !== 'scheduled') return null;
-  if (hoursProblem(draft) !== null) return null;
+  if (hoursProblem(draft, '24h') !== null) return null;
 
   const week = [];
   for (const day of draft.days ?? []) {
@@ -281,9 +399,9 @@ export function hoursSummary(hours) {
 /** WHAT A MEMBER IS SHOWN FOR ONE WEEKDAY. Only reached once the gym HAS
  *  answered — `unset` never gets this far, and that is enforced by the caller
  *  branching on the mode first (the guarantee mutant O189 exists for). */
-export function dayLine(sessions) {
+export function dayLine(sessions, clockFormat) {
   if (!Array.isArray(sessions) || sessions.length === 0) return 'Closed';
   return sessions
-    .map((s) => `${minutesToClock(s.opensMinute)}–${minutesToClock(s.closesMinute)}`)
+    .map((s) => `${clockLabel(s.opensMinute, clockFormat)} – ${clockLabel(s.closesMinute, clockFormat)}`)
     .join(', ');
 }

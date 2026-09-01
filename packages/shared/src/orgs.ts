@@ -229,6 +229,22 @@ export const createOrgRequestSchema = z
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
 
+/** WHICH CLOCK THIS GYM'S HOURS ARE SHOWN ON — Kd at the screen, 2026-09-01:
+ *  *"for time both format shpuld be ther gym can choose format like it will be 4
+ *  or 16"*.
+ *
+ *  **THE GYM'S ANSWER, NOT THE READER'S.** `16:00` is unreadable to a great many
+ *  people and `4:00 PM` to a great many others, so nobody can pick it correctly
+ *  on a gym's behalf — it is a fact about who walks through that door, exactly
+ *  like `timezone`. One gym, one clock: the owner's console and every member's
+ *  card draw the same hours from one reader, and a per-device preference would
+ *  put those two on different clocks while both look at the same Monday.
+ *
+ *  It travels on the ORG row (the console has it before it asks for hours) AND
+ *  on the hours response (a member's card makes only that one read). */
+export const gymClockFormatSchema = z.enum(["12h", "24h"]);
+export type GymClockFormat = z.infer<typeof gymClockFormatSchema>;
+
 export const orgSummarySchema = z.object({
   id: z.string().uuid(),
   slug: z.string(),
@@ -237,6 +253,13 @@ export const orgSummarySchema = z.object({
   orgType: orgTypeSchema,
   timezone: z.string(),
   locale: z.string(),
+  /** WHICH CLOCK THIS GYM READS ITS HOURS ON. On the org row as well as on
+   *  the hours response because the console holds this row BEFORE it asks
+   *  for hours, and the control that changes it lives on a panel that must
+   *  render in every state — including a gym that has never set hours at
+   *  all, whose `PUT /hours` would be refused. `.default('24h')` for the
+   *  same expand-then-contract reason `country` records above. */
+  clockFormat: gymClockFormatSchema.default('24h'),
   /** WHERE THE GYM IS — ISO 3166-1 alpha-2, and `null` for every gym created
    *  before migration `0014`, because the wizard collected it and the server
    *  threw it away.
@@ -334,6 +357,13 @@ export const updateOrgRequestSchema = z
     timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {
       message: "not a known IANA time zone",
     }),
+    /** Sent on its own by the opening-hours panel's clock switch, never
+     *  alongside a name or a country — it is a display choice with no money
+     *  and no day boundary behind it, so it is bound by nothing the country
+     *  lock protects. It rides on this PATCH rather than on `PUT /hours`
+     *  because a gym that has NOT set hours must still be able to pick its
+     *  clock, and that request cannot be built (`unset` is not sendable). */
+    clockFormat: gymClockFormatSchema,
   })
   .partial()
   .strict()
@@ -1534,6 +1564,7 @@ export type RemoveOrgStaffResponse = z.infer<typeof removeOrgStaffResponseSchema
 export const gymHoursModeSchema = z.enum(["unset", "open_24h", "scheduled"]);
 export type GymHoursMode = z.infer<typeof gymHoursModeSchema>;
 
+
 /** ISO 8601 weekday: 1 = Monday … 7 = Sunday, matching Postgres `ISODOW`. JS
  *  `getDay()` is 0 = Sunday — the CLIENT converts, in one place, or the gym
  *  closes on the wrong day. */
@@ -1604,6 +1635,14 @@ export const gymHoursSchema = z
   .object({
     mode: gymHoursModeSchema,
     timezone: z.string().min(1),
+    /** BESIDE `timezone` AND FOR ITS REASON: every value in this object is
+     *  meaningless without both — a minute count needs a clock to be read on
+     *  and a zone to be true in. `.default('24h')` for :12660's
+     *  expand-then-contract reason, which is load-bearing rather than
+     *  ceremonial: `orgsApi.js` treats a contract mismatch as a hard failure,
+     *  so a REQUIRED field would blank a member's whole gym card during any
+     *  window where the web is newer than the api. */
+    clockFormat: gymClockFormatSchema.default('24h'),
     week: gymWeekScheduleSchema,
     /** BOUNDED — T3 round 1's Low-5. This array is on a MEMBER-facing response
      *  and nothing capped it: a gym's own owner could close every date to

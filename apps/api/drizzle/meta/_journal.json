@@ -120,6 +120,13 @@
       "when": 1788220800000,
       "tag": "0017_gym_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788220800001,
+      "tag": "0018_gym_clock_format",
+      "breakpoints": true
     }
   ]
 }

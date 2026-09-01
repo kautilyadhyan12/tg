@@ -1,0 +1,42 @@
+-- A GYM CHOOSES THE CLOCK ITS HOURS ARE SHOWN ON (Kd, 2026-09-01, at the
+-- screen: *"for time both format shpuld be ther gym can choose format like it
+-- will be 4 or 16"*). Expand-only, forward-only, no backfill.
+--
+-- Reviewed as SQL by Kd before anything else was written (T5, R4.4).
+--
+-- **HAND-WRITTEN, for `0016`'s and `0017`'s recorded reason and not by
+-- preference.** `drizzle/meta/` stops at `0012_snapshot.json`, so the generator
+-- diffs today's schema against one six migrations old and re-emits everything
+-- since, dying on an already-existing column (42701). This is the sixth
+-- hand-written migration in a row; the snapshot debt has its own `OWED.md` line
+-- and this does NOT fix it.
+--
+-- 1 · WHICH CLOCK.
+--
+--    `16:00` is unreadable to a great many people and `4:00 PM` is unreadable to
+--    a great many others, so this is not a default anybody can pick correctly on
+--    a gym's behalf — it is the GYM's answer, exactly like `timezone` two columns
+--    along, and for the same reason: it is a fact about where the gym is and who
+--    walks through its door.
+--
+--    **IT IS A GYM COLUMN AND NOT A BROWSER SETTING, WHICH IS THE WHOLE POINT.**
+--    The gym's own console and its MEMBERS' screens draw the same hours from one
+--    reader (`getGymHours`), and this card has been careful throughout that those
+--    two can never disagree about the same fact. A per-device preference would
+--    put a gym's owner on one clock and their member on another while both are
+--    looking at the same Monday.
+--
+--    **DEFAULT `24h`, and that is the CONSERVATIVE choice rather than a
+--    preference.** Every gym that exists on the day this lands already has its
+--    hours stored, and `24h` is what those screens have been drawing — so the
+--    default changes nothing anybody is looking at. A gym that wants the other
+--    clock picks it; nothing is invented on their behalf, which is :26736's rule
+--    applied to a second column.
+--
+--    `text` + CHECK, never a PG enum (R4.2), like every other constrained column
+--    in this schema. **NOT reusing `gyms.locale`**: that is a language tag and
+--    `en` covers both clocks — a gym in Bengaluru and a gym in Austin are both
+--    `en` and want different answers here, so deriving one from the other would
+--    be wrong for one of them by construction.
+ALTER TABLE "gyms" ADD COLUMN "clock_format" text DEFAULT '24h' NOT NULL;--> statement-breakpoint
+ALTER TABLE "gyms" ADD CONSTRAINT "gyms_clock_format_check" CHECK ("gyms"."clock_format" IN ('12h','24h'));

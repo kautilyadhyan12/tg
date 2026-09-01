@@ -72,6 +72,20 @@ export const gyms = pgTable(
      *  **DEFAULT `unset` AND NEVER BACKFILLED** — :26736 in as many words: no
      *  default hours are invented, at creation or in a migration. */
     hoursMode: text("hours_mode").notNull().default("unset"),
+    /** WHICH CLOCK THIS GYM'S HOURS ARE SHOWN ON — Kd at the screen, 2026-09-01:
+     *  *"for time both format shpuld be ther gym can choose format like it will
+     *  be 4 or 16"*.
+     *
+     *  **A GYM COLUMN AND NOT A BROWSER SETTING, which is the whole point.** The
+     *  console and the MEMBERS' screens draw the same hours from one reader, and
+     *  a per-device preference would put an owner on one clock and their member
+     *  on another while both look at the same Monday.
+     *
+     *  **NOT DERIVED FROM `locale`**: that is a language tag, and a gym in
+     *  Bengaluru and a gym in Austin are both `en` while wanting different
+     *  answers here. `24h` is the default because it is what every existing
+     *  gym's screens already draw, so it changes nothing anybody is looking at. */
+    clockFormat: text("clock_format").notNull().default("24h"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -79,6 +93,7 @@ export const gyms = pgTable(
     check("gyms_status_check", sql`${t.status} IN ('active','archived')`),
     check("gyms_country_check", sql`${t.country} IS NULL OR ${t.country} ~ '^[A-Z]{2}$'`),
     check("gyms_hours_mode_check", sql`${t.hoursMode} IN ('unset','open_24h','scheduled')`),
+    check("gyms_clock_format_check", sql`${t.clockFormat} IN ('12h','24h')`),
   ],
 );
 

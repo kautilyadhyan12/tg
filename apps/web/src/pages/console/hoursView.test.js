@@ -17,7 +17,11 @@ import {
   CLOSURE_HORIZON_DAYS,
   WEEKDAYS,
   addDays,
+  TIME_STEP_MINUTES,
+  clockLabel,
   clockToMinutes,
+  copyDayToAll,
+  daySummary,
   closureAbsentReason,
   dayLine,
   gymToday,
@@ -28,6 +32,7 @@ import {
   isoWeekdayOfDay,
   minutesToClock,
   sameHoursDraft,
+  timeChoices,
 } from './hoursView';
 
 describe('the weekday convention', () => {
@@ -282,6 +287,119 @@ describe('a closure that saves and does not appear', () => {
   });
 });
 
+describe('the clock a gym chose', () => {
+  it('prints one minute two ways, and 24:00 says midnight out loud on the 12-hour clock', () => {
+    // 1440 is the value that needs saying: a bare "12:00 AM" reads as the START
+    // of the day and means the opposite of what this is.
+    expect(clockLabel(1440, '24h')).toBe('24:00');
+    expect(clockLabel(1440, '12h')).toBe('12:00 AM (midnight)');
+    expect(clockLabel(0, '12h')).toBe('12:00 AM');
+    expect(clockLabel(720, '12h')).toBe('12:00 PM');
+    expect(clockLabel(960, '12h')).toBe('4:00 PM');
+    expect(clockLabel(960, '24h')).toBe('16:00');
+    expect(clockLabel(330, '12h')).toBe('5:30 AM');
+  });
+
+  it('falls back to the 24-hour clock for anything that is not "12h"', () => {
+    // The safe direction: an unknown value must not produce a blank or a guess.
+    expect(clockLabel(960, undefined)).toBe('16:00');
+    expect(clockLabel(960, 'something-new')).toBe('16:00');
+  });
+});
+
+describe('the time list', () => {
+  it('steps in quarter hours, so 5:30 is offered and 5:37 is not', () => {
+    const opens = timeChoices('opens', '24h', '');
+    const values = opens.map((c) => c.value);
+    expect(values).toContain('05:30');
+    expect(values).toContain('05:45');
+    expect(values).not.toContain('05:37');
+    expect(opens.length).toBe(1440 / TIME_STEP_MINUTES);
+  });
+
+  it('offers midnight-at-the-end as a CLOSE and never as an OPEN', () => {
+    // The schema showing through: 1440 is a legal close and an illegal open, so
+    // the two dropdowns cannot be built from one list.
+    expect(timeChoices('closes', '24h', '').map((c) => c.value)).toContain('24:00');
+    expect(timeChoices('opens', '24h', '').map((c) => c.value)).not.toContain('24:00');
+    // And an open cannot start at the very last step either way round.
+    expect(timeChoices('opens', '24h', '').map((c) => c.value)).toContain('23:45');
+    expect(timeChoices('closes', '24h', '').map((c) => c.value)).not.toContain('00:00');
+  });
+
+  it('KEEPS a time the gym already holds even when the step would miss it', () => {
+    // A gym whose hours predate this list — or a future card with a finer step —
+    // must not have its own 06:05 vanish from the box the moment somebody opens
+    // the panel. :20587's lesson, on a picker rather than a zone list.
+    const values = timeChoices('opens', '24h', '06:05').map((c) => c.value);
+    expect(values).toContain('06:05');
+    // In its right place, not appended at the end.
+    expect(values.indexOf('06:05')).toBe(values.indexOf('06:00') + 1);
+  });
+
+  it('labels the same list on whichever clock the gym chose', () => {
+    const at16 = timeChoices('opens', '24h', '').find((c) => c.value === '16:00');
+    const at4pm = timeChoices('opens', '12h', '').find((c) => c.value === '16:00');
+    expect(at16.label).toBe('16:00');
+    expect(at4pm.label).toBe('4:00 PM');
+  });
+});
+
+describe('"use these times every day"', () => {
+  const draft = {
+    mode: 'scheduled',
+    days: WEEKDAYS.map((d) => ({
+      weekday: d.iso,
+      sessions:
+        d.iso === 1
+          ? [{ opens: '06:00', closes: '07:00' }, { opens: '16:00', closes: '21:00' }]
+          : d.iso === 3
+            ? [{ opens: '09:00', closes: '10:00' }]
+            : [],
+    })),
+  };
+
+  it('copies one day onto all seven, OVERWRITING what was there', () => {
+    // Kd's own sentence: the button means "these are my hours", and the way he
+    // described changing one afterwards only works if the copy landed
+    // everywhere first. Wednesday held something different and is replaced.
+    const next = copyDayToAll(draft, 1);
+    for (const day of next.days) {
+      expect(day.sessions).toEqual([
+        { opens: '06:00', closes: '07:00' },
+        { opens: '16:00', closes: '21:00' },
+      ]);
+    }
+  });
+
+  it('copies rather than shares, so editing one day afterwards cannot reach another', () => {
+    const next = copyDayToAll(draft, 1);
+    const monday = next.days.find((d) => d.weekday === 1);
+    const tuesday = next.days.find((d) => d.weekday === 2);
+    expect(monday.sessions[0]).not.toBe(tuesday.sessions[0]);
+    tuesday.sessions[0].opens = '08:00';
+    expect(monday.sessions[0].opens).toBe('06:00');
+  });
+
+  it('leaves the draft alone when asked about a day that is not there', () => {
+    expect(copyDayToAll(draft, 99)).toBe(draft);
+  });
+});
+
+describe('the folded summary of a day', () => {
+  it('reads Closed for an empty day and the times for a full one, on the gym clock', () => {
+    expect(daySummary([], '24h')).toBe('Closed');
+    expect(daySummary([{ opens: '06:00', closes: '07:00' }], '24h')).toBe('06:00 – 07:00');
+    expect(daySummary([{ opens: '16:00', closes: '21:00' }], '12h')).toBe('4:00 PM – 9:00 PM');
+  });
+
+  it('shows an unfinished row as a dash rather than guessing at its other end', () => {
+    // Printing one end of a half-typed time would be a claim the gym has not
+    // made, on the row the owner is still working on.
+    expect(daySummary([{ opens: '06:00', closes: '' }], '24h')).toBe('—');
+  });
+});
+
 describe('the sentences', () => {
   it('gives the three modes three DIFFERENT answers, and never calls `unset` closed', () => {
     // The one assertion in this file that maps straight onto :5807: an unanswered
@@ -311,14 +429,25 @@ describe('the sentences', () => {
   });
 
   it('draws a day with no sessions as Closed — but only a caller past the mode gate reaches it', () => {
-    expect(dayLine([])).toBe('Closed');
-    expect(dayLine(undefined)).toBe('Closed');
-    expect(dayLine([{ opensMinute: 360, closesMinute: 420 }])).toBe('06:00–07:00');
+    expect(dayLine([], '24h')).toBe('Closed');
+    expect(dayLine(undefined, '24h')).toBe('Closed');
+    expect(dayLine([{ opensMinute: 360, closesMinute: 420 }], '24h')).toBe('06:00 – 07:00');
     expect(
-      dayLine([
-        { opensMinute: 360, closesMinute: 420 },
-        { opensMinute: 960, closesMinute: 1260 },
-      ]),
-    ).toBe('06:00–07:00, 16:00–21:00');
+      dayLine(
+        [
+          { opensMinute: 360, closesMinute: 420 },
+          { opensMinute: 960, closesMinute: 1260 },
+        ],
+        '24h',
+      ),
+    ).toBe('06:00 – 07:00, 16:00 – 21:00');
+  });
+
+  /** THE SAME DAY ON BOTH CLOCKS — Kd's ruling of 2026-09-01. The pair is the
+   *  assertion: either line alone would pass with the clock argument ignored. */
+  it("speaks the GYM's clock, and 16:00 and 4:00 PM are the same minute", () => {
+    const sessions = [{ opensMinute: 360, closesMinute: 420 }, { opensMinute: 960, closesMinute: 1260 }];
+    expect(dayLine(sessions, '24h')).toBe('06:00 – 07:00, 16:00 – 21:00');
+    expect(dayLine(sessions, '12h')).toBe('6:00 AM – 7:00 AM, 4:00 PM – 9:00 PM');
   });
 });

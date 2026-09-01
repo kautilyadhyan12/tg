@@ -5154,11 +5154,12 @@ file and is stated so nobody reads these as lower priority than they are.
       country`, both CHECK-constraint rebuilds and the new column together** —
       unusable, and it dies on 42701 if applied. It also names the file by the
       journal's 0-based `idx`, so it collided with the existing `0015`.
-      **`0013`, `0014`, `0015`, `0016` and now `0017` were all hand-written for
-      this reason** and none left a snapshot, so the debt compounds by one
-      migration each time. **`0017_gym_hours` (2026-09-01, opening hours) is the
-      fifth and is counted here rather than being allowed to pass unremarked —
-      that card does NOT fix this and says so in its own risk list.**
+      **`0013` THROUGH `0018` were all hand-written for this reason** and none
+      left a snapshot, so the debt compounds by one migration each time.
+      **`0017_gym_hours` and `0018_gym_clock_format` (both 2026-09-01, opening
+      hours and the gym's chosen clock) are the fifth and sixth, counted here
+      rather than allowed to pass unremarked — that card does NOT fix this and
+      says so in its own risk list.**
       **The fix is one command's worth of work and nobody has scheduled it:**
       regenerate the snapshot chain from the current schema, or accept
       hand-written migrations permanently and say so in `CLAUDE.md`'s T5 template,
@@ -7573,9 +7574,16 @@ file and is stated so nobody reads these as lower priority than they are.
       draws the hours, the whole week and any closure. **The `unset` state is
       physical on both surfaces: a gym that has not answered shows NOTHING to its
       members and is told so on its own screen — never "Closed".**
+      **AND KD RULED FIVE CHANGES AT THE SCREEN, 2026-09-01 (:27204), ALL
+      BUILT:** times come from a **dropdown** in quarter hours, never typed ·
+      **BOTH clocks with the GYM choosing** (migration `0018`,
+      `gyms.clock_format`, default `24h`, shown to the owner AND to members) ·
+      the date opens a **calendar** · **"use these times every day"** copies one
+      day across the week · **each weekday folds INDEPENDENTLY** (opening one
+      must never close another).
       **THIS LINE STILL DOES NOT TICK: the browser SMOKE IS UNRUN**
-      (`RUNBOOK/smoke-opening-hours.md`, 17 steps, written and handed to Kd) and
-      **the web half's T3 IS UNRUN.** The SERVER half's T3 round 1 ran
+      (`RUNBOOK/smoke-opening-hours.md`, rewritten for all five changes, now 23
+      steps) **and the web half's T3 IS UNRUN.** The SERVER half's T3 round 1 ran
       2026-09-01 with ZERO Critical/High and its eight Low are fixed and logged
       in `BACKLOG.md`. It ticks when both gates pass on the web half.
       **⚠️ THE WEB HALF MUST HANDLE A SAVE WHOSE REPLY DOES NOT CONTAIN IT, and

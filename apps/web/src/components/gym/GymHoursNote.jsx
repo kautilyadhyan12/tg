@@ -60,6 +60,11 @@ export default function GymHoursNote({ gymId }) {
   const today = gymToday(hours.timezone);
   const todayIso = isoWeekdayOfDay(today);
   const closedToday = (hours.closures ?? []).find((c) => c.day === today) ?? null;
+  // THE GYM'S OWN CLOCK, not this reader's browser — Kd's 2026-09-01 ruling.
+  // One gym, one clock: the owner's console and every member's card show the
+  // same Monday the same way, which is the point of the setting being on the
+  // GYM row rather than in a browser.
+  const clockFormat = hours.clockFormat ?? '24h';
 
   return (
     <div className="mt-2 flex items-start gap-2">
@@ -88,7 +93,7 @@ export default function GymHoursNote({ gymId }) {
           </p>
         ) : (
           <p className="text-sm font-medium" style={{ color: '#fff' }}>
-            Today: {dayLine(hours.week?.find((d) => d.weekday === todayIso)?.sessions)}
+            Today: {dayLine(hours.week?.find((d) => d.weekday === todayIso)?.sessions, clockFormat)}
           </p>
         )}
 
@@ -109,7 +114,7 @@ export default function GymHoursNote({ gymId }) {
                 }}
               >
                 <span className="w-8 flex-shrink-0">{weekday.short}</span>
-                <span>{dayLine(hours.week?.find((d) => d.weekday === weekday.iso)?.sessions)}</span>
+                <span>{dayLine(hours.week?.find((d) => d.weekday === weekday.iso)?.sessions, clockFormat)}</span>
               </li>
             ))}
           </ul>

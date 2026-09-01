@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **939 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **949 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,13 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,999 lines, MEASURED 2026-09-01 (third measurement that
-day) and not estimated** (944 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
-all THREE of that day's records — the server card, its T3 round and the web
-card — went to §1B, where
-:24813 sends every card record, so the whole growth is the fifteen trigger
-phrases their three `Read before …` sentences produced. **That is the split working exactly
-as ruled: three full entries added, and the always-read cost is fifteen lines.**
+**ALWAYS-READ TOTAL: 2,004 lines, MEASURED 2026-09-01 (fourth measurement that
+day) and not estimated** (949 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
+all FOUR of that day's records — the server card, its T3 round, the web card
+and Kd's five screen changes — went to §1B, where
+:24813 sends every card record, so the whole growth is the twenty trigger
+phrases their four `Read before …` sentences produced. **That is the split working exactly
+as ruled: four full entries added, and the always-read cost is twenty lines.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1119,6 +1119,39 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:27204** — 2026-09-01 — **KD SMOKES THE SCREEN AND RULES FIVE CHANGES: the
+  gym picks its own clock, times come from a list, and each weekday folds on its
+  own.** **Read before drawing any time on any screen in this product, before
+  adding a field to `gyms` that a MEMBER can see, before building a "same for
+  all" control anywhere, before making a list of days or anything else an
+  accordion, and before lengthening a mutation anchor to make it unique.**
+  He ran the sheet, said the feature worked, and then that the screen was
+  unusable — *"things you said pass but it is not convinient at all"*. :22697's
+  shape: a ruling satisfied on paper and wrong in front of him.
+  **THE FIVE:** times from a dropdown (15-minute steps, a chat call) · **BOTH
+  clocks with the GYM choosing** · a calendar for the date · **"use these times
+  every day"** · **each weekday folding INDEPENDENTLY** (*"clicking other day
+  should not undo the drop"*).
+  **THE CLOCK IS A GYM COLUMN** — migration `0018_gym_clock_format`, `12h`/`24h`,
+  DEFAULT `24h`, no backfill — **not a browser setting and not `locale`**: the
+  console and every member's card read one source, so a per-device preference
+  would put an owner and their member on different clocks about the same Monday,
+  and a gym in Bengaluru and one in Austin are both `en`. **It rides on
+  `PATCH /v1/orgs/:gymId`, never `PUT /hours`, because a gym that has NOT set
+  hours cannot send that request — and that is exactly the gym about to type its
+  first timetable.**
+  **A "SAME FOR ALL" BUTTON HAS TWO TRAPS:** it must COPY rows rather than share
+  them (sharing looks identical until the second edit rewrites another day), and
+  it must be ABSENT on an empty day (there it wipes the week under a
+  convenience's label). **AN ACCORDION IS NOT A FOLD** — the open days are a Set.
+  **TWO MUTATION ANCHORS DRIFTED AND BOTH PRE-CHECKS CAUGHT IT BEFORE A BYTE
+  RAN.** O122 anchored on a field plus its two following lines and `clockFormat`
+  landed between them; shortened to the field alone it then matched TWICE, the
+  create schema carrying an identical one. **STANDING: lengthen an anchor to
+  reach something UNIQUE to its own subject, never to include its neighbourhood
+  — and "shorter" is not automatically safer.**
+  **SMOKE UNRUN** (the sheet is rewritten for all five changes, now 23 steps)
+  **and the web half's T3 UNRUN**; the `OWED.md` line does not tick.
 - **:27094** — 2026-09-01 — **OPENING HOURS REACH A SCREEN: an owner sets them,
   a member sees them, and THREE of the ten mutants survived their first run
   because a test measured the machine instead of the code.** **Read before

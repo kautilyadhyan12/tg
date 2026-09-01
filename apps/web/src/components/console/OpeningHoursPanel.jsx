@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, X } from 'lucide-react';
+import { ChevronDown, Copy, Loader2, Plus, X } from 'lucide-react';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
 import {
   WEEKDAYS,
   closureAbsentReason,
+  copyDayToAll,
+  daySummary,
   gymToday,
   hoursDraft,
   hoursProblem,
   hoursRequest,
   hoursSummary,
   sameHoursDraft,
+  timeChoices,
 } from '../../pages/console/hoursView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
 import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { orgService, errorText } from '../../api/orgsApi';
 
 // WHEN WE'RE OPEN — the web half of Kd's opening-hours rulings (:26624, :26684,
@@ -44,21 +48,41 @@ const inputStyle = {
   color: '#fff',
 };
 
-/** A time box. **`24:00` cannot live in `<input type="time">`** — the control
- *  refuses it — so a session that runs to midnight is drawn with the checkbox
- *  beside it rather than by writing `00:00`, which the server correctly refuses
- *  as a session ending before it starts. */
-function TimeBox({ label, value, onChange, disabled }) {
+/** A TIME PICKED FROM A LIST, never typed — Kd at the screen, 2026-09-01:
+ *  *"i have to type by hand what is this drop down should there to use not hand
+ *  type"*.
+ *
+ *  **A `<select>` rather than `<input type="time">`, and the reason is the one
+ *  he gave.** A time input on the desktop is two typed number fields with a
+ *  spinner; a list of quarter-hours is one click. It also carries the label he
+ *  asked for — the options read on the GYM's clock, so a gym that chose 12-hour
+ *  never sees `16:00` anywhere.
+ *
+ *  **The options include the value the gym already holds even when the step
+ *  would miss it** (`timeChoices`), so an existing 06:05 cannot silently vanish
+ *  from a box the moment somebody opens the panel. */
+function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
+  const choices = timeChoices(kind, clockFormat, value);
   return (
-    <input
-      type="time"
-      value={value === '24:00' ? '' : value}
+    <select
+      value={value}
       onChange={(e) => onChange(e.target.value)}
-      disabled={disabled || value === '24:00'}
+      disabled={disabled}
       aria-label={label}
       className="rounded-lg px-2 py-1.5 text-sm"
       style={{ ...inputStyle, opacity: disabled ? 0.5 : 1 }}
-    />
+    >
+      {/* An unfinished row shows this rather than silently sitting on the first
+          option — a box that reads 12:00 AM when nobody chose it is the screen
+          answering on the gym's behalf. `hoursProblem` refuses to save while one
+          is here. */}
+      <option value="">--</option>
+      {choices.map((choice) => (
+        <option key={choice.value} value={choice.value}>
+          {choice.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -81,6 +105,22 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
   const [closureBusy, setClosureBusy] = useState(false);
   const [closureError, setClosureError] = useState(null);
   const [closureNotice, setClosureNotice] = useState(null);
+
+  /** WHICH DAYS ARE UNFOLDED — Kd, 2026-09-01: *"if gym adds multiple times
+   *  then a box becomes ttoo big there should be hide or drop button for the
+   *  other day so when click it shows and if click again then only again undo
+   *  the drop clicking other day should not undo the drop"*.
+   *
+   *  **A SET, NOT A SINGLE VALUE, AND THAT IS THE RULING RATHER THAN A
+   *  DETAIL.** A single `openDay` would make this an accordion where opening
+   *  Tuesday shuts Monday, which is exactly what he said must not happen. Each
+   *  day is its own toggle and a day closes only when that same day is
+   *  clicked again.
+   *
+   *  **Everything starts FOLDED**, because the folded row already shows the
+   *  day's times — the point was a shorter screen, not a hidden one. */
+  const [openDays, setOpenDays] = useState(() => new Set());
+  const [clockSaving, setClockSaving] = useState(false);
 
   /** ONE FETCH, TWO CALLERS — the mount effect and the retry button. Written
    *  once rather than twice because the two differ only in cancellation, and a second
@@ -134,7 +174,12 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
 
   const timezone = hours?.timezone ?? org?.timezone ?? 'UTC';
   const today = gymToday(timezone);
-  const problem = draft === null ? null : hoursProblem(draft);
+  /** THE GYM'S OWN CLOCK, from the hours read and falling back to the org
+   *  row the console already holds — so the switch below shows the right
+   *  state before the read lands, and a gym that has never set hours still
+   *  has a clock to be asked about. */
+  const clockFormat = hours?.clockFormat ?? org?.clockFormat ?? '24h';
+  const problem = draft === null ? null : hoursProblem(draft, clockFormat);
   const request = draft === null ? null : hoursRequest(draft);
   const touched = draft !== null && lastSeen !== null && !sameHoursDraft(draft, lastSeen);
   const canSave = allowed && !readOnly && !saving && request !== null && problem === null && touched;
@@ -177,6 +222,54 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
           : { ...day, sessions: [...day.sessions, { opens: '', closes: '' }] },
       ),
     });
+  };
+
+  /** FOLD OR UNFOLD ONE DAY. Every other day is left exactly as it was — that is
+   *  Kd's *"clicking other day should not undo the drop"*, and it is why this
+   *  copies the Set instead of replacing it with one value. */
+  const toggleDay = (weekday) => {
+    setOpenDays((current) => {
+      const next = new Set(current);
+      if (next.has(weekday)) next.delete(weekday);
+      else next.add(weekday);
+      return next;
+    });
+  };
+
+  /** "SAME EVERY DAY" — copy this day's times onto the other six. It overwrites,
+   *  which is his own sentence: the button means *these are my hours*, and the
+   *  way he described changing one afterwards only works if the copy landed
+   *  everywhere first. */
+  const applyToAll = (weekday) => {
+    if (draft === null) return;
+    edit(copyDayToAll(draft, weekday));
+  };
+
+  /** THE CLOCK SWITCH SAVES ON ITS OWN, and it does NOT go through the hours
+   *  form.
+   *
+   *  It rides on `PATCH /v1/orgs/:gymId` rather than `PUT /hours` for a reason
+   *  that is not tidiness: a gym which has never SET hours cannot send a `PUT`
+   *  at all (`unset` is not a sendable mode), and that gym is precisely the one
+   *  sitting on this screen about to type its first timetable — it must be able
+   *  to pick its clock first. It also means flipping the display never touches
+   *  the week, so it cannot fail for a reason about opening times.
+   *
+   *  **The console's kept org answer is refreshed quietly afterwards**, because
+   *  the same row feeds this panel's fallback and every other screen. */
+  const changeClock = async (next) => {
+    if (!allowed || readOnly || clockSaving || next === clockFormat) return;
+    setClockSaving(true);
+    setSaveError(null);
+    try {
+      await orgService.updateOrg(gymId, { clockFormat: next });
+      setHours((current) => (current === null ? current : { ...current, clockFormat: next }));
+      refreshConsoleOrgsAfterChange();
+    } catch (err) {
+      setSaveError(errorText(err, "We couldn't change the clock. Please try again."));
+    } finally {
+      setClockSaving(false);
+    }
   };
 
   const removeSession = (weekday, index) => {
@@ -293,6 +386,50 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                   does not admit `unset` — so offering it as a choice would be a
                   control that always fails. It appears only while it is the
                   gym's current state, so an owner can see where they are. */}
+              {/* THE CLOCK THIS GYM READS ITS OWN HOURS ON — Kd, 2026-09-01:
+                  *"for time both format shpuld be ther gym can choose format
+                  like it will be 4 or 16"*.
+
+                  **IT SAVES ON ITS OWN, outside the form below**, and is a
+                  `PATCH` on the gym rather than part of `PUT /hours` — a gym
+                  that has never set hours cannot send that request at all, and
+                  that gym is exactly the one about to type its first timetable.
+                  So the clock has to be pickable first.
+
+                  It changes every screen this gym owns, its MEMBERS' cards
+                  included: one gym, one clock, or the two disagree about the
+                  same Monday. */}
+              <fieldset className="flex flex-col gap-2">
+                <legend className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  Which clock do you use?
+                </legend>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
+                    <input
+                      type="radio"
+                      name="clock-format"
+                      checked={clockFormat === '12h'}
+                      onChange={() => void changeClock('12h')}
+                      disabled={!allowed || readOnly || clockSaving}
+                    />
+                    4:00 PM
+                  </label>
+                  <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
+                    <input
+                      type="radio"
+                      name="clock-format"
+                      checked={clockFormat === '24h'}
+                      onChange={() => void changeClock('24h')}
+                      disabled={!allowed || readOnly || clockSaving}
+                    />
+                    16:00
+                  </label>
+                </div>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  This is how times are shown to you and to your members.
+                </p>
+              </fieldset>
+
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
                   When is your gym open?
@@ -326,77 +463,122 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
               </fieldset>
 
               {draft?.mode === 'scheduled' ? (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   {WEEKDAYS.map((weekday) => {
                     const day = draft.days.find((d) => d.weekday === weekday.iso);
                     const sessions = day?.sessions ?? [];
+                    const isOpen = openDays.has(weekday.iso);
                     return (
                       <div
                         key={weekday.iso}
-                        className="rounded-xl p-3"
+                        className="rounded-xl"
                         style={{ background: 'rgba(255,255,255,0.03)' }}
                       >
-                        <div className="flex items-center justify-between gap-3">
+                        {/* THE FOLDED ROW STILL SAYS WHAT THE DAY IS, which is
+                            what makes folding an honest default: the point was a
+                            shorter screen, not a hidden one, so a gym reads its
+                            whole week here without opening anything. */}
+                        <button
+                          type="button"
+                          onClick={() => toggleDay(weekday.iso)}
+                          aria-expanded={isOpen}
+                          className="w-full text-left flex items-center justify-between gap-3 p-3"
+                        >
                           <span className="text-sm font-medium" style={{ color: '#fff' }}>
                             {weekday.label}
                           </span>
-                          {/* NO SESSIONS MEANS CLOSED — but only because the gym
-                              has now ANSWERED. The same row under `unset` says
-                              nothing at all, which is why this line lives inside
-                              the `scheduled` branch. */}
-                          {sessions.length === 0 ? (
-                            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              Closed
-                            </span>
-                          ) : null}
-                        </div>
-
-                        {sessions.map((session, index) => (
-                          <div key={index} className="flex items-center gap-2 mt-2">
-                            {/* THE LABEL CARRIES THE SESSION NUMBER, and it is
-                                not cosmetic: a day can hold many sessions, so
-                                `Monday opens` appears three times on a gym with
-                                a morning, a midday and an evening — three
-                                controls a screen reader cannot tell apart, and a
-                                caller (a test, or a person) cannot address. */}
-                            <TimeBox
-                              label={`${weekday.label} session ${String(index + 1)} opens`}
-                              value={session.opens}
-                              onChange={(v) => editSession(weekday.iso, index, 'opens', v)}
-                              disabled={controlsOff}
-                            />
-                            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              to
-                            </span>
-                            <TimeBox
-                              label={`${weekday.label} session ${String(index + 1)} closes`}
-                              value={session.closes}
-                              onChange={(v) => editSession(weekday.iso, index, 'closes', v)}
-                              disabled={controlsOff}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeSession(weekday.iso, index)}
-                              disabled={controlsOff}
-                              aria-label={`Remove ${weekday.label} session ${String(index + 1)}`}
-                              className="p-1 rounded-lg"
-                              style={{ color: 'rgba(255,255,255,0.55)', opacity: controlsOff ? 0.5 : 1 }}
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="text-xs truncate"
+                              style={{ color: 'rgba(255,255,255,0.45)' }}
                             >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => addSession(weekday.iso)}
-                          disabled={controlsOff}
-                          className="text-xs inline-flex items-center gap-1 mt-2"
-                          style={{ color: '#FF8A1F', opacity: controlsOff ? 0.5 : 1 }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          Add a time
+                              {daySummary(sessions, clockFormat)}
+                            </span>
+                            <ChevronDown
+                              className="w-4 h-4 flex-shrink-0 transition-transform"
+                              style={{
+                                color: 'rgba(255,255,255,0.45)',
+                                transform: isOpen ? 'rotate(180deg)' : 'none',
+                              }}
+                            />
+                          </span>
                         </button>
+
+                        {isOpen ? (
+                          <div className="px-3 pb-3">
+                            {sessions.map((session, index) => (
+                              <div key={index} className="flex items-center gap-2 mb-2">
+                                {/* THE LABEL CARRIES THE SESSION NUMBER, and it
+                                    is not cosmetic: a day can hold many, so
+                                    without it three controls are indistinguishable
+                                    to a screen reader and unaddressable to a
+                                    test. */}
+                                <TimePick
+                                  label={`${weekday.label} session ${String(index + 1)} opens`}
+                                  kind="opens"
+                                  value={session.opens}
+                                  clockFormat={clockFormat}
+                                  onChange={(v) => editSession(weekday.iso, index, 'opens', v)}
+                                  disabled={controlsOff}
+                                />
+                                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                  to
+                                </span>
+                                <TimePick
+                                  label={`${weekday.label} session ${String(index + 1)} closes`}
+                                  kind="closes"
+                                  value={session.closes}
+                                  clockFormat={clockFormat}
+                                  onChange={(v) => editSession(weekday.iso, index, 'closes', v)}
+                                  disabled={controlsOff}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeSession(weekday.iso, index)}
+                                  disabled={controlsOff}
+                                  aria-label={`Remove ${weekday.label} session ${String(index + 1)}`}
+                                  className="p-1 rounded-lg"
+                                  style={{
+                                    color: 'rgba(255,255,255,0.55)',
+                                    opacity: controlsOff ? 0.5 : 1,
+                                  }}
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+
+                            <div className="flex flex-wrap items-center gap-4">
+                              <button
+                                type="button"
+                                onClick={() => addSession(weekday.iso)}
+                                disabled={controlsOff}
+                                className="text-xs inline-flex items-center gap-1"
+                                style={{ color: '#FF8A1F', opacity: controlsOff ? 0.5 : 1 }}
+                              >
+                                <Plus className="w-3 h-3" />
+                                Add a time
+                              </button>
+
+                              {/* ONLY ON A DAY THAT HAS SOMETHING TO COPY. The
+                                  button on an empty day would clear the whole
+                                  week in one click, which is a destructive act
+                                  wearing a convenience's label. */}
+                              {sessions.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => applyToAll(weekday.iso)}
+                                  disabled={controlsOff}
+                                  className="text-xs inline-flex items-center gap-1"
+                                  style={{ color: '#FF8A1F', opacity: controlsOff ? 0.5 : 1 }}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  Use these times every day
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -462,6 +644,22 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                     type="date"
                     value={closureDay}
                     onChange={(e) => setClosureDay(e.target.value)}
+                    /* THE WHOLE BOX OPENS THE CALENDAR — Kd, 2026-09-01:
+                       *"for date i have to hand type men"*. A `type="date"`
+                       input already HAS a calendar, behind a small icon at
+                       its right edge that he did not find and should not have
+                       to — clicking anywhere in the field now opens it.
+                       `showPicker` throws where it is unsupported or not
+                       user-activated, and typing must keep working in that
+                       case, so the failure is swallowed rather than
+                       surfaced. */
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {
+                        /* older browser, or not user-activated — typing still works */
+                      }
+                    }}
                     /* **NO `min` AND NO `max`, AND THAT IS A DECISION THIS CARD
                        MADE THE HARD WAY.** Both were here first, set to the
                        gym's own today and the server's one-year read horizon —

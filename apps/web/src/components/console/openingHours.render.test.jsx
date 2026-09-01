@@ -24,6 +24,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       setHours: vi.fn(),
       closeDay: vi.fn(),
       removeClosure: vi.fn(),
+      updateOrg: vi.fn(),
     },
   };
 });
@@ -61,6 +62,14 @@ const openSection = async () => {
   fireEvent.click(heading);
 };
 
+/** UNFOLD ONE DAY. Since Kd's 2026-09-01 ruling every weekday starts folded
+ *  — a gym with three sessions a day made the box enormous — so its time
+ *  controls are UNMOUNTED until the day's own row is clicked. A test that
+ *  skipped this would be asserting against a folded row. */
+const openDay = (label) => {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}`) }));
+};
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(AT);
@@ -68,6 +77,7 @@ beforeEach(() => {
   orgService.setHours.mockReset();
   orgService.closeDay.mockReset();
   orgService.removeClosure.mockReset();
+  orgService.updateOrg.mockReset();
 });
 
 afterEach(() => {
@@ -111,8 +121,13 @@ describe('the three modes are three different screens', () => {
     for (const day of ['Monday', 'Wednesday', 'Sunday']) {
       expect(screen.getByText(day)).toBeTruthy();
     }
-    // Six empty weekdays, and the word is honest now: this gym HAS answered.
+    // Six folded rows read Closed, and the word is honest now: this gym HAS
+    // answered. The seventh reads its times without being opened, which is what
+    // makes folding an honest default rather than a hiding place.
     expect(screen.getAllByText('Closed').length).toBe(6);
+    expect(screen.getByText('06:00 – 07:00')).toBeTruthy();
+
+    openDay('Wednesday');
     expect(screen.getByLabelText('Wednesday session 1 opens').value).toBe('06:00');
   });
 });
@@ -160,7 +175,8 @@ describe('saving the week', () => {
     await openSection();
 
     fireEvent.click(screen.getByLabelText('Set opening times'));
-    fireEvent.click(screen.getAllByRole('button', { name: /add a time/i })[0]);
+    openDay('Monday');
+    fireEvent.click(screen.getByRole('button', { name: /add a time/i }));
     fireEvent.change(screen.getByLabelText('Monday session 1 opens'), { target: { value: '06:00' } });
     fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '07:00' } });
     fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
@@ -195,6 +211,7 @@ describe('saving the week', () => {
     // Drag the FIRST session's close past the second session's start. The
     // label carries the session number, which is why this can name one of two
     // boxes that would otherwise be indistinguishable.
+    openDay('Monday');
     fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '14:00' } });
 
     expect(await screen.findByText(/two sessions that overlap/i)).toBeTruthy();
@@ -212,8 +229,141 @@ describe('saving the week', () => {
     await openSection();
 
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(true);
+    openDay('Monday');
     fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '08:00' } });
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(false);
+  });
+});
+
+describe("Kd's five changes at the screen (2026-09-01)", () => {
+  it('picks times from a LIST, not by typing, and the list steps in quarter hours', async () => {
+    // *"i have to type by hand what is this drop down should there to use not
+    // hand type"*. A `<select>` and not `<input type="time">` — the role is the
+    // assertion, because a time input would still satisfy a value check.
+    orgService.getHours.mockResolvedValue(
+      answer({ week: [{ weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 420 }] }] }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+    openDay('Monday');
+
+    const box = screen.getByLabelText('Monday session 1 opens');
+    expect(box.tagName).toBe('SELECT');
+    const values = [...box.options].map((o) => o.value);
+    expect(values).toContain('05:30');
+    expect(values).not.toContain('05:37');
+  });
+
+  it("labels every time on the GYM's clock, and BOTH clocks are driven", async () => {
+    // *"for time both format shpuld be ther gym can choose format like it will
+    // be 4 or 16"*. The pair is the assertion: either alone would pass with the
+    // gym's choice ignored.
+    orgService.getHours.mockResolvedValue(
+      answer({
+        clockFormat: '12h',
+        week: [{ weekday: 1, sessions: [{ opensMinute: 960, closesMinute: 1260 }] }],
+      }),
+    );
+    const { unmount } = render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+    // The FOLDED row already reads on the gym's clock — that is where an owner
+    // sees their week without opening anything.
+    expect(screen.getByText('4:00 PM – 9:00 PM')).toBeTruthy();
+    expect(screen.queryByText('16:00 – 21:00')).toBeNull();
+    unmount();
+
+    orgService.getHours.mockResolvedValue(
+      answer({
+        clockFormat: '24h',
+        week: [{ weekday: 1, sessions: [{ opensMinute: 960, closesMinute: 1260 }] }],
+      }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+    expect(screen.getByText('16:00 – 21:00')).toBeTruthy();
+    expect(screen.queryByText('4:00 PM – 9:00 PM')).toBeNull();
+  });
+
+  it('saves the clock on its own, through the GYM and not through the hours', async () => {
+    // It rides on `PATCH /v1/orgs/:gymId` because a gym that has never set hours
+    // cannot send a `PUT /hours` at all — and that gym is exactly the one about
+    // to type its first timetable, so it must be able to pick a clock first.
+    orgService.getHours.mockResolvedValue(answer({ mode: 'unset', clockFormat: '24h' }));
+    orgService.updateOrg.mockResolvedValue({ data: { org: { ...ORG, clockFormat: '12h' } } });
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+
+    fireEvent.click(screen.getByLabelText('4:00 PM'));
+
+    await waitFor(() => {
+      expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { clockFormat: '12h' });
+    });
+    // And NOT through the hours route, which an unanswered gym cannot use.
+    expect(orgService.setHours).not.toHaveBeenCalled();
+  });
+
+  it('copies one day onto the whole week in a click, and only offers it on a day with times', async () => {
+    // *"if gyms times are same for all day they should not manully set the
+    // timings for eacg day they just click a button"*.
+    orgService.getHours.mockResolvedValue(
+      answer({ week: [{ weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 420 }] }] }),
+    );
+    orgService.setHours.mockResolvedValue(answer({}));
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+
+    // The control is absent on an EMPTY day — there it would clear the week in
+    // one click, which is a destructive act wearing a convenience's label.
+    openDay('Tuesday');
+    expect(screen.queryByRole('button', { name: /use these times every day/i })).toBeNull();
+    openDay('Tuesday');
+
+    openDay('Monday');
+    fireEvent.click(screen.getByRole('button', { name: /use these times every day/i }));
+
+    // Every folded row now reads Monday's times, and nothing says Closed.
+    expect(screen.getAllByText('06:00 – 07:00').length).toBe(7);
+    expect(screen.queryByText('Closed')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
+    await waitFor(() => {
+      expect(orgService.setHours).toHaveBeenCalled();
+    });
+    const sent = orgService.setHours.mock.calls[0][1];
+    expect(sent.week.map((d) => d.weekday)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('folds each day on its own — opening Tuesday does NOT close Monday', async () => {
+    // *"clicking other day should not undo the drop"*. A single `openDay` value
+    // would make this an accordion, which is the shape he ruled against, and it
+    // is why the state is a Set.
+    orgService.getHours.mockResolvedValue(
+      answer({
+        week: [
+          { weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 420 }] },
+          { weekday: 2, sessions: [{ opensMinute: 540, closesMinute: 600 }] },
+        ],
+      }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+
+    // Everything starts folded: the rows read their times, the controls are not
+    // mounted. That is what makes folding a shorter screen and not a hidden one.
+    expect(screen.queryByLabelText('Monday session 1 opens')).toBeNull();
+
+    openDay('Monday');
+    expect(screen.getByLabelText('Monday session 1 opens')).toBeTruthy();
+
+    openDay('Tuesday');
+    // BOTH are open. This is the assertion the ruling is about.
+    expect(screen.getByLabelText('Monday session 1 opens')).toBeTruthy();
+    expect(screen.getByLabelText('Tuesday session 1 opens')).toBeTruthy();
+
+    // And a day closes only when its OWN row is clicked again.
+    openDay('Monday');
+    expect(screen.queryByLabelText('Monday session 1 opens')).toBeNull();
+    expect(screen.getByLabelText('Tuesday session 1 opens')).toBeTruthy();
   });
 });
 
@@ -229,6 +379,7 @@ describe('a lapsed gym', () => {
 
     expect(screen.getByText(/needs a plan before anything here can be changed/i)).toBeTruthy();
     expect(screen.getByText('Monday')).toBeTruthy();
+    openDay('Monday');
     expect(screen.getByLabelText('Monday session 1 opens').disabled).toBe(true);
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /mark closed/i }).disabled).toBe(true);
@@ -255,6 +406,7 @@ describe('a lapsed gym', () => {
     const { rerender } = render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
     await openSection();
 
+    openDay('Monday');
     fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '08:00' } });
     // The positive control: with a plan, this edit is saveable. Without it the
     // assertion below would be satisfied by a Save that was never live.

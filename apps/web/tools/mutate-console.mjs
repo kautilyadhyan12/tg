@@ -2104,13 +2104,17 @@ const MUTANTS = [
     to: "  return js;",
   },
   {
+    // RE-ANCHORED 2026-09-01 when the clock ruling threaded `clockFormat`
+    // through `hoursProblem`. The pre-check ABORTED rather than reporting a
+    // false ALIVE, which is :5199's class doing its job — and the guarantee is
+    // unchanged: `unset` must never become a sendable request.
     id: 'C139',
     target: 'hoursview',
     suite: HOURS_VIEW_SUITE,
     why: "A REQUEST THE SERVER WILL REFUSE, BUILT BY THE CLIENT: `unset` becomes sendable, so a gym that has answered can try to un-answer. The server's union does not admit it, so the owner meets a 400 for pressing a button the screen offered them - and the reason `unset` is unsettable at all is that un-answering would silently remove information the gym's members can already see",
     expect: "NEVER builds a request",
-    from: "  if (draft?.mode !== 'scheduled') return null;\n  if (hoursProblem(draft) !== null) return null;",
-    to: "  if (draft?.mode === 'unset') return { mode: 'unset' };\n  if (hoursProblem(draft) !== null) return null;",
+    from: "  if (draft?.mode !== 'scheduled') return null;\n  if (hoursProblem(draft, '24h') !== null) return null;",
+    to: "  if (draft?.mode === 'unset') return { mode: 'unset' };\n  if (hoursProblem(draft, '24h') !== null) return null;",
   },
   {
     id: 'C140',
@@ -2129,6 +2133,76 @@ const MUTANTS = [
     expect: "SAYS SO when a save succeeds",
     from: "      setClosureNotice(closureAbsentReason(closureDay, today));",
     to: "      setClosureNotice(null);",
+  },
+  // ---------------------------------------------------------------------
+  // KD'S FIVE CHANGES AT THE SCREEN, 2026-09-01 — dropdowns instead of typing,
+  // both clocks with the GYM choosing, a calendar for the date, "same every
+  // day", and each weekday folding on its own. Every row below is in rule 4a's
+  // always-mutated columns: something a member or an owner SEES and could see
+  // falsely, or a control that destroys a timetable.
+  // ---------------------------------------------------------------------
+  {
+    id: 'C142',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "A GYM IS SHOWN A CLOCK IT DID NOT CHOOSE (Kd, 2026-09-01: the gym picks 4 or 16): the label ignores the gym's answer and everything falls back to 24-hour. It is the console AND every member's card at once, because both read one function - and it is silent, because 16:00 is a perfectly well-formed time to anyone who can read it",
+    expect: "speaks the GYM's clock",
+    from: "  if (clockFormat !== '12h') return `${String(h).padStart(2, '0')}:${mm}`;",
+    to: "  return `${String(h).padStart(2, \"0\")}:${mm}`;",
+  },
+  {
+    id: 'C143',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "THE TIME LIST LOSES ITS QUARTER HOURS: the step becomes an hour, so the 5:30 Kd named as a case - and every half-hour opening any real gym has - simply is not in the dropdown. The typing he asked to be rid of comes back as the only way to express it, except there is no longer a box to type into",
+    expect: "steps in quarter hours",
+    from: "  for (let m = first; m <= last; m += TIME_STEP_MINUTES) values.push(m);",
+    to: "  for (let m = first; m <= last; m += 60) values.push(m);",
+  },
+  {
+    id: 'C144',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "A TIME THE GYM ALREADY HOLDS VANISHES FROM ITS OWN BOX: the held value stops being added when the step would miss it, so a gym whose hours were set at 06:05 - by an older card, an import, or a future finer step - opens the panel and finds that session showing nothing. Saving then writes a week the gym never chose. :20587's lesson, on a picker rather than a zone list",
+    expect: "KEEPS a time the gym already holds",
+    from: "  const held = clockToMinutes(current);",
+    to: "  const held = null;",
+  },
+  {
+    id: 'C145',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "\"USE THESE TIMES EVERY DAY\" SHARES ROWS INSTEAD OF COPYING THEM, so every day of the week points at ONE object: editing Tuesday afterwards silently rewrites Monday, Wednesday and the rest. Kd's own instruction was that a gym copies once and then changes a particular day by hand, which is the exact sequence this breaks - and it breaks it INVISIBLY, since the screen looks right until the second edit",
+    expect: "copies rather than shares",
+    from: "      sessions: source.sessions.map((s) => ({ ...s })),",
+    to: "      sessions: source.sessions,",
+  },
+  {
+    id: 'C146',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "THE DAYS BECOME AN ACCORDION, WHICH IS THE SHAPE KD RULED AGAINST IN AS MANY WORDS: opening Tuesday folds Monday away. His sentence was \"clicking other day should not undo the drop\", and an owner copying one day's times into another by eye now cannot see both at once - which is the whole reason the fold exists",
+    expect: "opening Tuesday does NOT close Monday",
+    from: "      if (next.has(weekday)) next.delete(weekday);",
+    to: "      next.clear();\n      if (current.has(weekday)) return next;",
+  },
+  {
+    id: 'C147',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "A DESTRUCTIVE BUTTON APPEARS ON AN EMPTY DAY: \"use these times every day\" is offered where there are no times, so one click copies NOTHING onto all seven and wipes the gym's whole week - under a label that promises a convenience. The guard is the only thing between an owner exploring the screen and losing a timetable they just typed",
+    expect: "only offers it on a day with times",
+    from: "                              {sessions.length > 0 ? (",
+    to: "                              {true ? (",
+  },
+  {
+    id: 'C148',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "A MEMBER READS A DIFFERENT CLOCK FROM THEIR OWN GYM: the card ignores the gym's choice and prints 24-hour whatever the owner picked. It is the reason the setting lives on the GYM row rather than in a browser - one gym, one clock - and a member told 16:00 by a gym whose console says 4:00 PM has two answers about the same Monday",
+    expect: "reads on the GYM's clock",
+    from: "  const clockFormat = hours.clockFormat ?? '24h';",
+    to: "  const clockFormat = '24h';",
   },
 ];
 

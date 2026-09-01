@@ -15,6 +15,7 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  gymClockFormatSchema,
   gymHoursModeSchema,
   orgApplicationStatusSchema,
   orgRoleSchema,
@@ -24,6 +25,7 @@ import {
   planIntervalSchema,
 } from "@app/shared";
 import type {
+  GymClockFormat,
   GymHoursMode,
   OrgApplicationStatus,
   OrgRole,
@@ -47,6 +49,11 @@ export interface OrgRow {
   timezone: string;
   locale: string;
   currencyDisplay: string;
+  /** Which clock this gym reads its hours on (Kd, 2026-09-01). Carried on
+   *  the ORG row as well as on the hours response, because the console
+   *  holds this row before it asks for hours and the switch must work on
+   *  a gym that has never set any. */
+  clockFormat: GymClockFormat;
   status: OrgStatus;
 }
 
@@ -153,6 +160,7 @@ interface RawOrg {
   timezone: string;
   locale: string;
   currency_display: string;
+  clock_format: string;
   status: string;
 }
 
@@ -204,6 +212,7 @@ function toOrgRow(raw: RawOrg): OrgRow {
     timezone: raw.timezone,
     locale: raw.locale,
     currencyDisplay: raw.currency_display,
+    clockFormat: gymClockFormatSchema.parse(raw.clock_format),
     status: toOrgStatus(raw.status),
   };
 }
@@ -276,7 +285,7 @@ export async function createOrgAttempt(
                 ${input.orgType}, ${input.timezone}, ${input.locale},
                 ${input.currencyDisplay}, ${input.ownerUserId})
         RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                  currency_display, status`;
+                  currency_display, clock_format, status`;
       const rawOrg = orgRows[0];
       if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
       const org = toOrgRow(rawOrg);
@@ -371,7 +380,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-           g.locale, g.currency_display, g.status,
+           g.locale, g.currency_display, g.clock_format, g.status,
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
@@ -550,7 +559,7 @@ export async function listFormerOrgsForUser(
     SELECT * FROM (
       SELECT DISTINCT ON (m.gym_id)
              g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-             g.locale, g.currency_display, g.status, m.removed_at
+             g.locale, g.currency_display, g.clock_format, g.status, m.removed_at
       FROM gym_members m
       JOIN gyms g ON g.id = m.gym_id
       WHERE m.user_id = ${userId}
@@ -573,7 +582,7 @@ export async function listFormerOrgsForUser(
 export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
   const rows = await sql<RawOrg[]>`
     SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, status
+           currency_display, clock_format, status
     FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
   return row === undefined ? null : toOrgRow(row);
@@ -593,6 +602,10 @@ export interface OrgPatch {
    *  `country` is (R3.1, :10010). */
   currencyDisplay?: string;
   timezone?: string;
+  /** Which clock this gym's hours are shown on. Bound by nothing the
+   *  currency lock protects — it moves no money and no day boundary — so it
+   *  is the one field here a paying gym may always change. */
+  clockFormat?: GymClockFormat;
 }
 
 export type UpdateOrgOutcome =
@@ -757,6 +770,9 @@ export async function updateOrg(
     if ("timezone" in input.patch && input.patch.timezone !== before.timezone) {
       changed.push("timezone");
     }
+    if ("clockFormat" in input.patch && input.patch.clockFormat !== before.clockFormat) {
+      changed.push("clockFormat");
+    }
     if (changed.length === 0) return { kind: "unchanged", org: before };
 
     // Written out column by column rather than assembled from a loop over the
@@ -773,10 +789,15 @@ export async function updateOrg(
             ? (input.patch.currencyDisplay ?? before.currencyDisplay)
             : before.currencyDisplay
         },
-        timezone = ${"timezone" in input.patch ? (input.patch.timezone ?? before.timezone) : before.timezone}
+        timezone = ${"timezone" in input.patch ? (input.patch.timezone ?? before.timezone) : before.timezone},
+        clock_format = ${
+          "clockFormat" in input.patch
+            ? (input.patch.clockFormat ?? before.clockFormat)
+            : before.clockFormat
+        }
       WHERE id = ${input.gymId}
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, status`;
+                currency_display, clock_format, status`;
     const raw = rows[0];
     if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
 
@@ -947,7 +968,7 @@ export async function applyByCode(
   return await sql.begin(async (tx) => {
     const orgRows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, status
+           currency_display, clock_format, status
       FROM gyms WHERE id = ${found.gym_id}`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "no_such_code" };
@@ -1313,7 +1334,7 @@ export async function restoreGym(
   return await sql.begin(async (tx) => {
     const rows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-             currency_display, status
+             currency_display, clock_format, status
       FROM gyms WHERE id = ${input.gymId}
       -- THE LOCK IS ON ITS OWN LINE ON PURPOSE, and not for taste. NO BACKTICKS
       -- IN HERE: one ends the literal, and I incurred that slip twice in this
@@ -1339,7 +1360,7 @@ export async function restoreGym(
       UPDATE gyms SET status = 'active'
       WHERE id = ${input.gymId} AND status = 'archived'
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, status`;
+                currency_display, clock_format, status`;
     const updatedRaw = updated[0];
     if (updatedRaw === undefined) {
       // Unreachable under the `FOR UPDATE` above, which is exactly why it is
@@ -1720,7 +1741,7 @@ export async function confirmApplication(
 
     const orgRows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, status
+           currency_display, clock_format, status
       FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "not_found" };
@@ -1976,6 +1997,7 @@ export async function listApplicationsForUser(
     org_type: string;
     timezone: string;
     locale: string;
+    clock_format: string;
     currency_display: string;
     org_status: string;
     org_can_confirm: boolean;
@@ -2000,7 +2022,8 @@ export async function listApplicationsForUser(
     SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
            a.decided_at, a.member_nudged_at,
            g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
-           g.timezone, g.locale, g.currency_display, g.status AS org_status,
+           g.timezone, g.locale, g.currency_display, g.clock_format,
+           g.status AS org_status,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id
@@ -2035,6 +2058,7 @@ export async function listApplicationsForUser(
       timezone: r.timezone,
       locale: r.locale,
       currency_display: r.currency_display,
+      clock_format: r.clock_format,
       status: r.org_status,
     }),
     application: toApplicationRow({
@@ -3364,6 +3388,10 @@ export const CLOSURE_READ_LIMIT = 400;
 export interface GymHoursRow {
   mode: GymHoursMode;
   timezone: string;
+  /** BESIDE `timezone` and for its reason: a minute count needs a clock to
+   *  be READ on and a zone to be TRUE in, and a member's card makes only
+   *  this one read. */
+  clockFormat: GymClockFormat;
   sessions: GymSessionRow[];
   closures: GymClosureRow[];
 }
@@ -3393,8 +3421,8 @@ export interface GymHoursRow {
  *  Null for a gym that does not exist, which the service turns into its standing
  *  404. */
 export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHoursRow | null> {
-  const gymRows = await sql<{ hours_mode: string; timezone: string }[]>`
-    SELECT hours_mode, timezone FROM gyms WHERE id = ${gymId}`;
+  const gymRows = await sql<{ hours_mode: string; timezone: string; clock_format: string }[]>`
+    SELECT hours_mode, timezone, clock_format FROM gyms WHERE id = ${gymId}`;
   const gym = gymRows[0];
   if (gym === undefined) return null;
 
@@ -3428,6 +3456,7 @@ export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHours
   return {
     mode: gymHoursModeSchema.parse(gym.hours_mode),
     timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
     sessions: sessions.map((r) => ({
       weekday: r.weekday,
       opensMinute: r.opens_minute,

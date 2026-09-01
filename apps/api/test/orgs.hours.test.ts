@@ -96,6 +96,7 @@ interface DaySchedule {
 interface Hours {
   mode: "unset" | "open_24h" | "scheduled";
   timezone: string;
+  clockFormat: "12h" | "24h";
   week: DaySchedule[];
   closures: { day: string; note: string | null }[];
 }
@@ -1234,6 +1235,82 @@ d("gym opening hours (real Postgres)", () => {
       // above being satisfied by a function that logs nothing at all.
       await post(`/v1/orgs/${org.org.id}/closures`, { day, note: "Staff training" }, owner.cookies);
       expect(await auditCount()).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE GYM'S CHOSEN CLOCK — Kd at the screen, 2026-09-01: *"for time both
+   *  format shpuld be ther gym can choose format like it will be 4 or 16"*.
+   *
+   *  It is stored on the GYM and returned on the HOURS read, so the owner's
+   *  console and every member's card draw the same Monday the same way. The two
+   *  assertions are a pair on purpose: either alone passes with the field
+   *  hard-coded.
+   *
+   *  **It rides on `PATCH /v1/orgs/:gymId` and not on `PUT /hours`, and this
+   *  test drives that**: the gym here is `unset`, so it could not send a hours
+   *  request at all — and that is precisely the gym about to type its first
+   *  timetable, which must be able to pick a clock first. */
+  it(
+    "a gym picks its own clock, and it reaches the hours read",
+    async () => {
+      const owner = await makeUser("clock-owner");
+      const org = await makeOrg(owner.cookies, "Hours Clock Gym");
+
+      // Every gym starts on the clock its screens already drew, so nothing is
+      // invented for the gyms that existed before this column did.
+      expect((await readHours(org.org.id, owner.cookies)).clockFormat).toBe("24h");
+
+      const patched = await api().inject({
+        method: "PATCH",
+        url: `/v1/orgs/${org.org.id}`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: owner.cookies,
+        payload: JSON.stringify({ clockFormat: "12h" }),
+      });
+      expect(patched.statusCode).toBe(200);
+
+      // The gym has NOT set hours, so this whole exchange happened on a gym that
+      // cannot use `PUT /hours` — the reason the field lives on the org patch.
+      const hours = await readHours(org.org.id, owner.cookies);
+      expect(hours.mode).toBe("unset");
+      expect(hours.clockFormat).toBe("12h");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a clock nobody defined, and a member of the gym reads the gym's choice",
+    async () => {
+      const owner = await makeUser("clock-bad-owner");
+      const member = await makeUser("clock-bad-member");
+      const org = await makeOrg(owner.cookies, "Hours Clock Bad Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const refused = await api().inject({
+        method: "PATCH",
+        url: `/v1/orgs/${org.org.id}`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: owner.cookies,
+        payload: JSON.stringify({ clockFormat: "am_pm" }),
+      });
+      expect(refused.statusCode).toBe(400);
+
+      const accepted = await api().inject({
+        method: "PATCH",
+        url: `/v1/orgs/${org.org.id}`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: owner.cookies,
+        payload: JSON.stringify({ clockFormat: "12h" }),
+      });
+      expect(accepted.statusCode).toBe(200);
+
+      // ONE GYM, ONE CLOCK. A member reading a different one from their own
+      // gym's console is what putting this on the gym row exists to prevent.
+      expect((await readHours(org.org.id, member.cookies)).clockFormat).toBe("12h");
     },
     TEST_TIMEOUT_MS,
   );

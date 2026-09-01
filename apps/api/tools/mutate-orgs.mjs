@@ -387,12 +387,24 @@ const MUTANTS = [
     // new copy would have left whichever one it stopped naming unguarded — and
     // "a control that LOOKS covered because a mutant was written for its
     // sibling" is :14174 L-1 verbatim.
+    // RE-ANCHORED 2026-09-01 by the clock ruling, which added `clockFormat` to
+    // this schema between the timezone field and `.partial()`, so the anchor's
+    // trailing two lines no longer followed it. **THE PRE-CHECK ABORTED THE
+    // WHOLE SWEEP BEFORE A BYTE WAS WRITTEN** — :5199's class doing its job, and
+    // the reason it exists. Shortened to the timezone field ALONE, which is what
+    // this row is actually about: the two trailing lines only ever made it
+    // fragile to anything appended nearby (:15770 — name the statement, not its
+    // neighbourhood). **THE SHORTENED VERSION THEN MATCHED TWICE** — the CREATE
+    // schema carries the identical timezone field — so it now reaches one line
+    // into the `clockFormat` comment that only the UPDATE schema has. That is
+    // the honest minimum: this row is about the EDIT door, and an anchor that
+    // cannot tell the two doors apart would mutate whichever came first.
     id: 'O122',
     target: 'shared',
     why: 'ANY STRING IS ACCEPTED AS A TIME ZONE ON THE EDIT DOOR, so a gym that corrects its details writes a day boundary nothing can interpret — the permanent, invisible corruption trap #8 names, arriving through the route built to FIX a wrong zone',
     expect: 'refuses a time zone that is not a real one',
-    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n  })\n  .partial()',
-    to: '    timezone: z.string().trim().min(1).max(64),\n  })\n  .partial()',
+    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n    /** Sent on its own by the',
+    to: '    timezone: z.string().trim().min(1).max(64),\n    /** Sent on its own by the',
   },
 
   // ── The console card's read endpoint, GET /v1/orgs/:gymId/codes ──────────
@@ -2440,6 +2452,29 @@ const MUTANTS = [
     expect: 'audits a closure once, not once per tap',
     from: '    if (existing === undefined || existing.note !== input.note) {',
     to: '    if (input.day !== "") {',
+  },
+  // ---------------------------------------------------------------------
+  // THE GYM'S CHOSEN CLOCK (Kd at the screen, 2026-09-01). Both rows are in
+  // rule 4a's "a number a user SEES" column: a gym shown a clock it did not
+  // pick, or a member shown a different one from their own gym.
+  // ---------------------------------------------------------------------
+  {
+    id: 'O198',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "A GYM'S CHOSEN CLOCK IS SILENTLY DROPPED ON EVERY SAVE: the UPDATE stops writing it, so an owner picks 4:00 PM, the screen says it worked, and the next page load is back on 16:00. It is :5807 through a save that reports success - and the column keeps its old value, so nothing in the database looks wrong",
+    expect: "picks its own clock",
+    from: "        clock_format = ${\n          \"clockFormat\" in input.patch\n            ? (input.patch.clockFormat ?? before.clockFormat)\n            : before.clockFormat\n        }",
+    to: "        clock_format = ${before.clockFormat}",
+  },
+  {
+    id: 'O199',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "THE HOURS READ STOPS CARRYING THE GYM'S CLOCK, so every MEMBER's card falls back to 24-hour whatever their gym chose. The console is unaffected (it has the org row) which is exactly what makes this bite only the half nobody is looking at - one gym showing its owner 4:00 PM and its members 16:00 about the same Monday",
+    expect: "a member of the gym reads",
+    from: "    clockFormat: gymClockFormatSchema.parse(gym.clock_format),",
+    to: "    clockFormat: '24h',",
   },
 ];
 

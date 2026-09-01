@@ -844,6 +844,49 @@ d("0001_init on a real database", () => {
     expect(uq[0]?.def).toMatch(/\(gym_id, day\)/);
   });
 
+  /** `0018`'s CLOCK COLUMN, read back off the deployed catalogue like `0017`'s
+   *  (:20222) — never off the `.sql`, which says nothing about a database
+   *  somebody has already touched.
+   *
+   *  **The DEFAULT is the assertion that matters.** Every gym alive on the day
+   *  this landed already had its hours drawn on a 24-hour clock, so `24h`
+   *  changes nothing anybody is looking at. A default of `12h` would silently
+   *  re-render every existing gym's screens — :26736's rule ("nothing is
+   *  invented on a gym's behalf") applied to a second column. */
+  it("0018's clock column exists, is constrained, and defaults to the clock already on screen", async () => {
+    const def = await sql<{ column_default: string | null; is_nullable: string }[]>`
+      SELECT column_default, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'gyms' AND column_name = 'clock_format'`;
+    expect(def[0]?.column_default).toContain("'24h'");
+    expect(def[0]?.is_nullable).toBe('NO');
+
+    const check = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gyms'::regclass AND conname = 'gyms_clock_format_check'`;
+    const text = check[0]?.def.replace(/\s+/g, ' ');
+    expect(text).toContain("'12h'");
+    expect(text).toContain("'24h'");
+
+    // A third value is refused AT THE DATABASE, not only by Zod — and the
+    // positive control is the pair above being accepted, which the app's own
+    // suites drive on every gym they make.
+    let refused = false;
+    try {
+      await sql.begin(async (tx) => {
+        await tx`
+          INSERT INTO gyms (slug, name, clock_format, owner_user_id)
+          VALUES ('zz-clock-check', 'zz clock check', 'am_pm',
+                  (SELECT id FROM users LIMIT 1))`;
+        throw new Error('ROLLBACK-AFTER-UNEXPECTED-SUCCESS');
+      });
+    } catch (err) {
+      const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : null;
+      if (code === '23514') refused = true;
+    }
+    expect(refused).toBe(true);
+  });
+
   /** `hours_mode` DEFAULTS TO `unset` AND NOTHING BACKFILLED IT — :26736's rule
    *  made checkable. A migration that helpfully wrote `'scheduled'` onto
    *  existing rows, or a DDL default of anything else, is how every gym in the

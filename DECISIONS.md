@@ -27200,3 +27200,132 @@ honest and the effect does not re-read on every keystroke.
 **NOT RUN AND NOT CLAIMED: the browser SMOKE** (`RUNBOOK/smoke-opening-hours.md`,
 17 steps, written and handed to Kd — step 1 asserts an ABSENCE and is the one to
 read first) **and the web half's T3.** `OWED.md`'s line does not tick.
+
+## 2026-09-01 — KD SMOKES THE SCREEN AND RULES FIVE CHANGES: the gym picks its own clock, times come from a list, and each weekday folds on its own
+
+**Read before drawing any time on any screen in this product, before adding a
+field to `gyms` that a MEMBER can see, before building a "same for all" control
+anywhere, before making a list of days or anything else an accordion, and before
+lengthening a mutation anchor to make it unique.**
+
+He ran the browser sheet, reported the feature WORKED, and then said the screen
+was unusable: *"things you said pass but it is not convinient at all"*. Five
+changes, all his, all at the screen — the same shape as :22697, where a ruling
+was satisfied on paper and wrong in front of him.
+
+### 1 · THE FIVE, IN HIS WORDS
+
+1. **Times come from a LIST** — *"i have to type by hand what is this drop down
+   should there to use not hand type"*.
+2. **BOTH clocks, and the GYM chooses** — *"for time both format shpuld be ther
+   gym can choose format like it will be 4 or 16"*, because *"someone may not
+   know what is 16"*. Any times they like: *"4:00-5:30 whatever they set"*.
+3. **The date comes from a calendar** — *"for date i have to hand type men"*.
+4. **"Same every day"** — *"if gyms times are same for all day they should not
+   manully set the timings for eacg day they just click a button an dsame timie
+   is set for rest of the day if they want to chnage a particular day timing they
+   can do that by manully also"*.
+5. **Each weekday folds, and folds INDEPENDENTLY** — *"if gym adds multiple times
+   then a box becomes ttoo big there should be hide or drop button for the other
+   day … clicking other day should not undo the drop"*.
+
+### 2 · THE CLOCK IS A GYM COLUMN, AND THAT IS THE ONLY ANSWER THAT KEEPS ONE GYM ON ONE CLOCK
+
+Migration **`0018_gym_clock_format`** — `gyms.clock_format`, `text` + CHECK
+(`12h`/`24h`), DEFAULT `24h`, no backfill. **It is not a browser setting and not
+`locale`.** The console and every member's card draw the same hours from one
+reader, and this card has been careful throughout that those two can never
+disagree about the same fact — a per-device preference would put an owner on one
+clock and their member on another while both look at the same Monday. `locale`
+cannot answer it either: a gym in Bengaluru and a gym in Austin are both `en` and
+want different clocks.
+
+**`24h` IS THE CONSERVATIVE DEFAULT, NOT A PREFERENCE:** it is what every
+existing gym's screens already drew, so the default changes nothing anybody is
+looking at — :26736's "invent nothing on a gym's behalf", applied to a second
+column.
+
+**IT RIDES ON `PATCH /v1/orgs/:gymId`, NOT ON `PUT /hours`, and the reason is a
+state rather than tidiness:** a gym that has never SET hours cannot send a hours
+request at all (`unset` is not a sendable mode) — and that gym is exactly the one
+sitting on this screen about to type its first timetable. It must be able to pick
+its clock first. The API test drives that gym specifically.
+
+**Chat's calls, stated to him and not asked:** the list steps in **15 minutes**
+(96 entries; covers the 5:30 he named, where 5-minute steps would be 288 and
+hourly would refuse it), and the clock shows on the member's screens too.
+
+### 3 · WHAT A "SAME FOR ALL" BUTTON MUST NOT DO, AND THE TWO GUARDS THAT SAY SO
+
+**It OVERWRITES**, which is his own sentence: the button means *these are my
+hours*, and the way he described changing one day afterwards only works if the
+copy landed everywhere first.
+
+**It COPIES rows rather than sharing them** (`{ ...s }`). Sharing looks identical
+on screen and then rewrites Monday when the owner edits Tuesday — **invisible
+until the second edit**, which is why it has its own mutant (**C145**).
+
+**It is absent on an EMPTY day** (**C147**). There, one click copies nothing onto
+all seven and wipes the week the owner just typed — a destructive act wearing a
+convenience's label.
+
+### 4 · AN ACCORDION IS NOT A FOLD, AND HE RULED THE DIFFERENCE
+
+The open days are a **Set**, not a value. A single `openDay` makes opening
+Tuesday close Monday, which is the shape he named — and an owner copying one
+day's times into another by eye cannot see both at once, which is the whole
+reason the fold exists. **Everything starts folded and the folded row still
+prints that day's times**, so the point is a shorter screen and never a hidden
+one (**C146**).
+
+### 5 · AN HTML `min` REMOVED A CAPABILITY, AND THE SAME MISTAKE ALMOST SHIPPED TWICE
+
+Recorded at :27094 §5 and worth repeating here because this session re-derived
+it: `type="date"` already HAS a calendar, behind an icon at the field's right
+edge that Kd did not find and should not have to. The fix is `showPicker()` on
+click — **not** a `min`/`max`, which are CONSTRAINTS that silently refuse a
+submit and which this card already had to remove once.
+
+### 6 · TWO MUTATION ANCHORS DRIFTED UNDER THIS EDIT, AND THE PRE-CHECKS CAUGHT BOTH BEFORE A BYTE RAN
+
+**O122** (the timezone refine on the edit door) anchored on the schema's
+timezone field **plus its two following lines** — and `clockFormat` landed
+between them. The whole-table pre-check ABORTED the sweep (:5199's class doing
+its job). **Shortened to the field alone, it then matched TWICE**, because the
+CREATE schema carries an identical field; it now reaches one line into the
+`clockFormat` comment only the UPDATE schema has. **STANDING: an anchor is
+lengthened to reach something UNIQUE to its own subject, never to include its
+neighbourhood** (:15770) — and "shorter" is not automatically safer, which is the
+half of that lesson this session learned the other way round.
+
+**C139** drifted the same way when `clockFormat` was threaded through
+`hoursProblem`. Same guard, same outcome, no defect shipped.
+
+### 7 · A SWEEP ABORTED BECAUSE DOCKER STOPPED, AND THE ABORT IS THE POINT
+
+Mid-run the mass-write detector could not re-read `gyms` and the harness stopped
+with *"The tree is restored; the database is not verified"*. **Docker Desktop had
+quit** — not a defect, and the harness failed in the safe direction rather than
+printing a green summary over a check that never ran (:19799's shape, inverted).
+Docker was restarted from the chat, the sweep re-run, both mutants RED.
+
+### Round log
+
+**PROVE, final bytes, all LOCAL (`localhost:5433`):** web **1454/1454** across 53
+files (+18 on the day) · api `orgs.hours` **38/38** (+6) · `db.migration`
+**14/14** (+1) · `orgs.routes` **147/147** · shared **51/51** · api `tsc` 0 ·
+shared `tsc` 0 · api `lint` 0 · shared `lint` 0 · web lint clean on every file
+this card touches · `check-harnesses` **25 scripts parse**.
+**SWEEPS: console, a stated SUBSET of 168 — 17 mutants · 17 RED · 0 ALIVE · 0
+never ran; orgs, a stated SUBSET of 199 — 2 mutants · 2 RED · 0 ALIVE · 0 never
+ran.** Restore verified byte-exact after every mutant. **The console sweep was
+17/17 on its FIRST run**, which is the first time on this card — the two lessons
+:27094 §§2–3 recorded (a timezone fixture must be a PAIR; aim a mutant at the
+ACCEPTING case) were applied while writing rather than after.
+**MIGRATION READ BACK OFF THE DEPLOYED CATALOGUE** (:20222): `clock_format`
+default `'24h'::text` NOT NULL, the CHECK naming both values, and a third value
+refused with 23514.
+**NOT RUN AND NOT CLAIMED: the browser SMOKE** — the sheet is rewritten for all
+five changes and is now **23 steps** (`RUNBOOK/smoke-opening-hours.md`), with the
+fold at 7–8, "same every day" at 13–15, the calendar at 16 and the member's clock
+at 22 — **and the web half's T3.** `OWED.md`'s line does not tick.

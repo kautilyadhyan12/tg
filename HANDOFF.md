@@ -1,6 +1,90 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD SMOKED THE SCREEN AND RULED FIVE CHANGES — DECISIONS :27204, on top of
+      :26812 (server), :26947 (its T3) and :27094 (the web half).
+      He ran the sheet, said the feature WORKED, then that the screen was
+      unusable: *"things you said pass but it is not convinient at all"*.
+
+  1. **NEXT: KD'S BROWSER SMOKE, then the web half's T3.** The sheet is
+     REWRITTEN for all five changes — `RUNBOOK/smoke-opening-hours.md`, now 23
+     steps, ~20 minutes, no pauses. **Step 1 still asserts an ABSENCE** (an
+     unanswered gym must not say "Closed" anywhere). The fold is steps 7–8,
+     "same every day" 13–15, the calendar 16, the member's clock 22.
+     `OWED.md`'s line does NOT tick.
+  2. **THE FIVE, ALL BUILT:** times from a **dropdown** (15-minute steps, a chat
+     call) · **BOTH clocks, the GYM choosing** · a **calendar** for the date ·
+     **"use these times every day"** · **each weekday folding INDEPENDENTLY**.
+  3. **THE CLOCK IS A GYM COLUMN — migration `0018_gym_clock_format`** — and NOT
+     a browser setting and NOT `locale`. The console and every member's card read
+     one source, so a per-device preference would put an owner and their member
+     on different clocks about the same Monday; and Bengaluru and Austin are both
+     `en`. **DEFAULT `24h` because that is what every existing gym's screens
+     already drew.** **It rides on `PATCH /v1/orgs/:gymId`, never `PUT /hours`:
+     a gym that has NOT set hours cannot send that request, and that is exactly
+     the gym about to type its first timetable.**
+  4. **A "SAME FOR ALL" BUTTON HAS TWO TRAPS, both now mutants:** it must COPY
+     rows rather than share them (sharing looks identical until the second edit
+     silently rewrites another day), and it must be ABSENT on an empty day
+     (there one click wipes the week under a convenience's label).
+  5. **AN ACCORDION IS NOT A FOLD.** The open days are a Set. A single value
+     makes opening Tuesday close Monday, which is the shape he ruled against.
+  6. **TWO MUTATION ANCHORS DRIFTED AND BOTH PRE-CHECKS CAUGHT IT BEFORE A BYTE
+     RAN.** O122 anchored on a field PLUS its two following lines and
+     `clockFormat` landed between; shortened to the field alone it then matched
+     TWICE (the create schema has an identical one). **STANDING: lengthen an
+     anchor to reach something UNIQUE to its subject, never to include its
+     neighbourhood — and "shorter" is not automatically safer.**
+  7. **A SWEEP ABORTED BECAUSE DOCKER DESKTOP QUIT MID-RUN**, and the abort is
+     the point: it said *"the tree is restored; the database is not verified"*
+     rather than printing a green summary over a check that never ran. Docker was
+     restarted from the chat and the sweep re-run.
+
+PROVE: **Final bytes, all LOCAL (`localhost:5433`).** web **1454/1454** across 53
+       files · api `orgs.hours` **38/38** · `db.migration` **14/14** ·
+       `orgs.routes` **147/147** · shared **51/51** · api `tsc` 0 · shared `tsc`
+       0 · api `lint` 0 · shared `lint` 0 · web lint clean on every file this
+       card touches · `check-harnesses` **25 scripts parse**.
+       **SWEEPS: console, a stated SUBSET of 168 — 17 mutants · 17 RED · 0 ALIVE
+       · 0 never ran; orgs, a stated SUBSET of 199 — 2 mutants · 2 RED · 0 ALIVE
+       · 0 never ran.** Restore byte-exact after every mutant. **The console
+       sweep was 17/17 on its FIRST run** — the first time on this card, because
+       :27094 §§2–3's two lessons were applied while writing rather than after.
+       **MIGRATION READ BACK OFF THE DEPLOYED CATALOGUE** (:20222):
+       `clock_format` default `'24h'::text` NOT NULL, the CHECK naming both
+       values, a third value refused with 23514.
+       Guards: `build-decisions-triggers` **770 triggers from 210 of 348
+       rulings, 138 declare none, 0 unparsed** · `check-decisions-index`
+       **253 pointers resolve (252 on a heading, 1 deliberate mid-entry), 995
+       headings**. Always-read RE-MEASURED: triggers **949** + §1 **997** +
+       §2 **58** = **2,004** — **§1 and §2 have not moved all day**; all FOUR of
+       today's records went to §1B, so four full entries cost twenty always-read
+       lines.
+
+FILES: NEW `apps/api/drizzle/0018_gym_clock_format.sql` ·
+       `apps/api/drizzle/meta/_journal.json` · `apps/api/src/db/schema/tenancy.ts` ·
+       `apps/api/src/modules/orgs/{repo,service}.ts` ·
+       `packages/shared/src/orgs.ts` ·
+       `apps/api/test/{orgs.hours,db.migration}.test.ts` ·
+       `apps/api/tools/mutate-orgs.mjs` (O198–O199, O122 re-anchored) ·
+       `apps/web/src/pages/console/hoursView.js` + `.test.js` ·
+       `apps/web/src/components/console/OpeningHoursPanel.jsx` +
+       `openingHours.render.test.jsx` ·
+       `apps/web/src/components/gym/GymHoursNote.jsx` +
+       `gymHours.render.test.jsx` ·
+       `apps/web/tools/mutate-console.mjs` (C142–C148, C139 re-anchored) ·
+       `RUNBOOK/smoke-opening-hours.md` (rewritten) · `OWED.md` ·
+       `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **TWELVE LOCAL COMMITS, NOTHING PUSHED, CI HAS SEEN NONE** (`d72131a`
+       through this one; `origin/web-repoint` is still `01999dc`). Pushing is
+       Kd's call and he has not made it in three sessions. `CLAUDE.md`'s
+       pre-existing uncommitted edit is STILL OUT.
+```
+
+
+```
 TASK: OPENING HOURS REACH A SCREEN — `CARD-gym-hours.md` §4b, on Kd's "go".
       DECISIONS :27094, on top of :26812 (server) and :26947 (its T3 round).
 

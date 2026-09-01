@@ -126,6 +126,7 @@ function toOrgSummary(org: repo.OrgRow): OrgSummary {
     timezone: org.timezone,
     locale: org.locale,
     currencyDisplay: org.currencyDisplay,
+    clockFormat: org.clockFormat,
     status: org.status,
   };
 }
@@ -278,6 +279,10 @@ export async function updateOrg(
   if ("name" in req && req.name !== undefined) patch.name = req.name;
   if ("city" in req) patch.city = req.city ?? null;
   if ("timezone" in req && req.timezone !== undefined) patch.timezone = req.timezone;
+  // NOT bound by the currency lock below: a clock is a display choice with no
+  // money and no day boundary behind it, so it is the one field on this route
+  // a PAYING gym may always change.
+  if ("clockFormat" in req && req.clockFormat !== undefined) patch.clockFormat = req.clockFormat;
   if ("country" in req && req.country !== undefined) {
     patch.country = normaliseCountry(req.country);
     patch.currencyDisplay = resolveCurrency(req.country);
@@ -2073,6 +2078,7 @@ function toGymHours(row: repo.GymHoursRow): GymHours {
   return {
     mode: row.mode,
     timezone: row.timezone,
+    clockFormat: row.clockFormat,
     week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],
     closures: row.closures.map((c) => ({ day: c.day, note: c.note })),
   };
