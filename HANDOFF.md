@@ -29,6 +29,12 @@ TASK: ATTENDANCE, SERVER HALF — BUILT. DECISIONS :28221.
   7. **`pnpm --filter api test:local -- <file>` RUNS THE WHOLE SUITE** — pnpm
      eats the `--`. Drop it to scope. Every "scoped" figure quoted before I
      checked was a full run.
+  8. **CI CAUGHT WHAT MY PROVE DID NOT (:28395), AND THE LESSON IS GENERAL:
+     `ROLE_PRIVILEGES` lives in `@app/shared`, THREE packages read it, and I ran
+     two.** Four of five CI jobs were green — `api tests on local Postgres`
+     included, so nothing built here was wrong. **A change inside
+     `packages/shared` is a change to every package that imports it.** Fixed and
+     re-pushed; web 1472/1472.
 
 PROVE: All LOCAL (`localhost:5433`), all on the final bytes: `orgs.attendance`
        **23/23** (new) · `orgs.routes` **147/147** · `orgs.hours` **38/38** ·
@@ -57,7 +63,8 @@ FILES: `apps/api/drizzle/0019_gym_attendance.sql` (new) ·
        `apps/api/test/orgs.attendance.test.ts` (new) ·
        `apps/api/test/{db.migration,orgs.routes}.test.ts` ·
        `packages/shared/test/schemas.test.ts` · `apps/api/tools/mutate-orgs.mjs`
-       · `CARD-gym-attendance.md` · records.
+       · `apps/web/src/pages/console/staffView.test.js` (the CI fix) ·
+       `CARD-gym-attendance.md` · records.
 
 OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
        **STILL OWED: how a workout LINKS to an attendance** — the

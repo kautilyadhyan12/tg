@@ -276,8 +276,44 @@ describe('what a row shows as ticked', () => {
    *  and the api deploy separately, so a web build can meet an api that does not
    *  send this field yet. Drawing NOTHING ticked would say a colleague can do
    *  nothing — false — and an owner "fixing" it would save that falsehood. */
+  /** **THE EXPECTATION IS THE ROLE'S GRANTS THIS BUILD HAS WORDS FOR, NOT THE
+   *  WHOLE TEMPLATE — and the difference is this test's own subject.**
+   *
+   *  It compared against `ROLE_PRIVILEGES.trainer` outright and went RED on CI
+   *  when the api minted `attendance.read` (:28107), which is precisely the
+   *  web-older-than-api window the fallback exists for. `effectivePrivileges`
+   *  deliberately draws only what `PRIVILEGE_COPY` can NAME; anything else is
+   *  carried untouched by `unknownPrivileges` and announced by
+   *  `unknownPrivilegesNote`. So the old assertion was true only while the two
+   *  sides were in step — which is the one condition under which this guarantee
+   *  is not needed.
+   *
+   *  The positive control below is what stops the narrower expectation becoming
+   *  vacuous: it pins that the role really does grant more than this build
+   *  draws, so a build that silently forgot a tick cannot pass by drawing none. */
   it('falls back to what the ROLE grants when the server sent no set', () => {
-    expect(effectivePrivileges({ role: 'trainer' })).toEqual([...ROLE_PRIVILEGES.trainer].sort(byOrder));
+    // `privilegeChoices` is the screen's OWN answer to "which boxes exist for
+    // this role", read through the exported surface rather than by reaching for
+    // an internal list — so this stays true of whatever the screen can draw.
+    const drawable = privilegeChoices('trainer').map((c) => c.value);
+    expect(effectivePrivileges({ role: 'trainer' })).toEqual(
+      [...ROLE_PRIVILEGES.trainer].filter((p) => drawable.includes(p)).sort(byOrder),
+    );
+    expect(effectivePrivileges({ role: 'trainer' }).length).toBeGreaterThan(0);
+  });
+
+  it('carries a privilege this build has no words for, rather than stripping it', () => {
+    // THE LIVE CASE, not a hypothetical: `attendance.read` is granted by the api
+    // to every role (:28107) and this build has no tick box for it until the
+    // attendance web half ships. The design says such a tick is carried through
+    // a save UNCHANGED and announced — an owner who never saw it must not be
+    // able to strip it by pressing Save.
+    const drawable = privilegeChoices('trainer').map((c) => c.value);
+    const newest = [...ROLE_PRIVILEGES.trainer].filter((p) => !drawable.includes(p));
+    expect(newest.length).toBeGreaterThan(0);
+    const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] };
+    expect(unknownPrivileges(person)).toEqual(newest);
+    expect(unknownPrivilegesNote(person)).not.toBeNull();
   });
 
   it('is NEVER empty on that fallback — an empty row is the defect it exists to prevent', () => {

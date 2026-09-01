@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **990 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **992 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,8 +14,8 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,201 lines, MEASURED 2026-09-01 (twelfth measurement that
-day) and not estimated** (990 + 1,153 + 58). **THE TWELFTH MEASUREMENT IS THE
+**ALWAYS-READ TOTAL: 2,203 lines, MEASURED 2026-09-01 (thirteenth measurement
+that day) and not estimated** (992 + 1,153 + 58). **THE TWELFTH MEASUREMENT IS THE
 REASSURING ONE: the attendance card — a full server half, migration, three
 routes and a new suite — added SIX lines here, all of them trigger phrases,
 because its record is a CARD record and went to §1B where :24813 sends it. The
@@ -1342,6 +1342,27 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   silently runs the WHOLE suite** (pnpm swallows the `--`); drop the `--` to
   scope it. :8156's trigger has a mirror image — believing a run was FILTERED
   when it was not.
+  **ADDENDUM `:28395`, same session — CI CAUGHT WHAT MY PROVE DID NOT.** **Read
+  before changing anything in `packages/shared`, and before quoting a PROVE block
+  that names api and shared but not web.** The push went red on one job of five
+  (`api tests on local Postgres` was GREEN — nothing built here was wrong):
+  **`ROLE_PRIVILEGES` lives in `@app/shared`, THREE packages read it, and I ran
+  two.** The miss is the PROCESS one — the question a thorough-looking PROVE
+  never asked is *who else reads the file I just edited*, and the answer was
+  grep-able throughout. **STANDING: a change inside `packages/shared` is a change
+  to every package importing it; the PROVE names all of them or says which it
+  skipped and why.**
+  **THE TEST WAS FALSE AND ITS SUBJECT IS THE IRONY**: it asserted
+  `effectivePrivileges` equals the whole role template — **true only while web and
+  api are in step, the one condition under which the fallback it protects is not
+  needed.** The code was right: unnameable ticks are carried by
+  `unknownPrivileges` and announced, so an owner cannot strip what they never saw
+  (:16101). Fixed by deriving from `privilegeChoices` **plus a control that stops
+  the narrower expectation going vacuous** — and the hypothetical became LIVE:
+  `attendance.read` now pins a carry-through guarantee that until today had no
+  observer at all. **No tick box was added (R1.1 — it is §4b's), web lint is
+  pre-existingly red app-wide and excluded from the root gate, and the touched
+  file lints clean in isolation, verified by stashing the rest.**
 - **:27810** — 2026-09-01 — **SMOKE STEP 22b RUNS AND PASSES, THE OPENING-HOURS
   `OWED.md` LINE TICKS — and it is the ONE step of that sheet anybody has ever
   observed.**

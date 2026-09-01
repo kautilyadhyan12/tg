@@ -28392,6 +28392,55 @@ unrecorded failure, then 741/741 — **the PRE-EXISTING flake `CLAUDE.md` and
 while two assert exact GLOBAL counts). Scoped runs are unaffected, which is what
 the figures above are. **I have NOT measured whether this card's new suite
 aggravates that flake, and do not claim it does not.**
+### 8 · ADDENDUM, same session — CI CAUGHT WHAT MY PROVE DID NOT: I CHANGED A SHARED CONTRACT AND RAN EVERY SUITE BUT THE WEB'S
+
+**Read before changing anything in `packages/shared`, and before quoting a PROVE
+block that names api and shared but not web.**
+
+The push above went red on `typecheck / lint / test`. **Four of five CI jobs were
+green — including `api tests on local Postgres`, so nothing this card built was
+wrong.** The failure was `apps/web/src/pages/console/staffView.test.js`, and the
+cause is one sentence: **`ROLE_PRIVILEGES` lives in `@app/shared`, THREE packages
+read it, and I ran two of them.**
+
+**THE MISS IS THE PROCESS ONE, NOT THE CODE ONE.** My PROVE listed api,
+`@app/shared`, tsc and eslint and looked thorough; the question it never asked was
+*who else reads the file I just edited*. The answer was grep-able the whole time
+(`staffView.js` imports `ROLE_PRIVILEGES` in its first line). **STANDING: a change
+inside `packages/shared` is a change to every package that imports it, and the
+PROVE must name all of them or say which it skipped and why.**
+
+**THE TEST WAS THE THING THAT WAS FALSE, AND ITS SUBJECT IS THE IRONY.** It
+asserted `effectivePrivileges({role:'trainer'})` equals the whole
+`ROLE_PRIVILEGES.trainer` template — **true only while the web and the api are in
+step, which is the ONE condition under which the guarantee it was written to
+protect is not needed.** That function deliberately draws only what
+`PRIVILEGE_COPY` can NAME (:16101's expand-then-contract design); anything newer
+is carried untouched by `unknownPrivileges` and announced by
+`unknownPrivilegesNote`, so an owner who never saw the tick cannot strip it by
+pressing Save. **The code behaved exactly as designed and the fixture had frozen
+the moment.**
+
+Fixed by deriving the expectation from `privilegeChoices('trainer')` — the
+screen's own answer to "which boxes exist" — **plus a positive control that the
+narrower expectation cannot go vacuous**: a build that silently forgot a tick
+would draw none and fail. **And the hypothetical became a LIVE case**: a new test
+pins that `attendance.read` really is carried through a save and announced, which
+until today was a guarantee with no observer at all (`unknownPrivileges` was
+written for a future that had not arrived and was tested only against an empty
+list).
+
+**NO TICK BOX WAS ADDED, DELIBERATELY.** The card puts it in §4b with the rest of
+the web work, `OWED.md` records the gap, and the carry-through means nothing is
+lost meanwhile. Adding it here would be the web half arriving inside the server
+half's commit (R1.1).
+
+**WEB LINT IS NOT A GATE AND WAS NOT MADE ONE:** `eslint src` on `apps/web` is
+red across the app today (setState-in-effect, unused vars, fast-refresh), which is
+why the root `lint` script excludes it (`--filter=!web`). **The touched file lints
+clean in isolation, verified by stashing the rest**, and the pre-existing failures
+are untouched and unclaimed.
+
 **AN INSTRUMENT CORRECTION WORTH MORE THAN A FIGURE: `pnpm --filter api
 test:local -- <file>` SILENTLY RUNS THE WHOLE SUITE.** pnpm swallows the `--`, so
 every run I labelled "scoped" until I checked was a full one. Dropping the `--`
