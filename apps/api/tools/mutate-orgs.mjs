@@ -399,12 +399,26 @@ const MUTANTS = [
     // into the `clockFormat` comment that only the UPDATE schema has. That is
     // the honest minimum: this row is about the EDIT door, and an anchor that
     // cannot tell the two doors apart would mutate whichever came first.
+    //
+    // **AND THEN T3 ROUND 1 ON THE WEB HALF FOUND WHAT THAT COST: the anchor had
+    // become hostage to a COMMENT.** It reached into the prose of the field
+    // BELOW it (`Sent on its own by the …`), which is about the clock switch and
+    // has nothing to do with time zones — so rewording a sentence about one
+    // subject would abort a sweep about another. The abort is the safe failure,
+    // but a tripwire in the wrong room is still in the wrong room.
+    // **It now stops at the comment's OPENING MARKER.** What disambiguates the
+    // two doors is structural and no longer verbal: the EDIT door's timezone is
+    // followed by a documented field, the CREATE door's by `locale: z` — which
+    // is the same shape O20 above uses, and what O20 has always relied on. The
+    // prose inside that comment can now be rewritten freely. What would still
+    // move it is deleting that comment or reordering the fields, and both are
+    // changes that SHOULD send somebody back to this anchor.
     id: 'O122',
     target: 'shared',
     why: 'ANY STRING IS ACCEPTED AS A TIME ZONE ON THE EDIT DOOR, so a gym that corrects its details writes a day boundary nothing can interpret — the permanent, invisible corruption trap #8 names, arriving through the route built to FIX a wrong zone',
     expect: 'refuses a time zone that is not a real one',
-    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n    /** Sent on its own by the',
-    to: '    timezone: z.string().trim().min(1).max(64),\n    /** Sent on its own by the',
+    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n    /**',
+    to: '    timezone: z.string().trim().min(1).max(64),\n    /**',
   },
 
   // ── The console card's read endpoint, GET /v1/orgs/:gymId/codes ──────────

@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **953 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **961 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,13 +14,14 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,008 lines, MEASURED 2026-09-01 (fifth measurement that
-day) and not estimated** (953 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
-all FIVE of that day's records — the server card, its T3 round, the web card,
-Kd's five screen changes and his four corrections — went to §1B, where
-:24813 sends every card record, so the whole growth is the twenty-four
-trigger phrases their five `Read before …` sentences produced. **That is the split working exactly
-as ruled: five full entries added, and the always-read cost is twenty-four lines.**
+**ALWAYS-READ TOTAL: 2,016 lines, MEASURED 2026-09-01 (seventh measurement that
+day) and not estimated** (961 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
+all SEVEN of that day's records — the server card, its T3 round, the web card,
+Kd's five screen changes, his four corrections, his smoke declaration and the web
+half's T3 round 1 — went to §1B, where
+:24813 sends every card record, so the whole growth is the thirty-two
+trigger phrases their seven `Read before …` sentences produced. **That is the split working exactly
+as ruled: seven full entries added, and the always-read cost is thirty-two lines.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1119,6 +1120,114 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:27810** — 2026-09-01 — **SMOKE STEP 22b RUNS AND PASSES, THE OPENING-HOURS
+  `OWED.md` LINE TICKS — and it is the ONE step of that sheet anybody has ever
+  observed.**
+  **Read before citing `smoke-opening-hours.md` as evidence that these screens
+  work in a browser, before building the STATE for a smoke step yourself, before
+  re-smoking ONE step instead of a sheet, and before reading a one-word "passed"
+  as covering everything that was in the message.**
+  Kd ran it at the browser and reported PASS; the line ticks naming :27094,
+  :27204, :27333, :27468 and :27659. **It survived :27415's blanket declaration
+  only because it did not exist when that declaration was made** — and it is the
+  only step that looks at T3 round 1's second Critical/High surface, today's own
+  row on a member's card. **THE FIXTURE WAS BUILT SO THE STEP COULD FAIL: real
+  hours on ALL SEVEN weekdays**, so the row had something to print if the dated
+  closure lost — `06:00 – 07:00` would have meant the C/H unfixed, a bare
+  `Closed` would have meant L-5 unfixed, and the six unchanged rows are the
+  positive control against a card that simply stopped drawing hours (:24893 §1).
+  **THE DEPARTURE IS DECLARED: the sheet says "no commands from the chat" and I
+  BUILT THE STATE** — accounts, gym, trial, week, closure, membership — over the
+  same HTTP API the browser uses, Kd doing only the looking. **Legitimate because
+  step 22b CONTAINS NO COMMAND** (:23535's test, :25707's precedent); it would
+  NOT be legitimate for a step whose action is mine. **NOT CLAIMED: the optional
+  owner-side check in the same message** — a pass is per STEP, never per message
+  — **and the other 26 steps are NOT upgraded**, still a gate discharged on his
+  authority rather than an observed run. Fixture choices stated rather than
+  neutral: the gym's zone is Kd's own, so **this run says nothing about the
+  gym-zone-versus-reader-zone question**, and the gym is on the default `24h`.
+- **:27659** — 2026-09-01 — **OPENING HOURS, WEB HALF, T3 ROUND 2 (diff-only):
+  ZERO Critical/High, THE PACKET SHIPS — and three of the six Low are the
+  previous round's own instruments overstating what they did.**
+  **Read before writing a comment that says what a test guarantees, before
+  writing a mutant's `why` about a warning you have not seen, before correcting a
+  count in a record, before leaving a row addressed by its position anywhere in
+  this app, and before printing a bare "Closed" on any surface that also draws a
+  weekly pattern.** Reviews :27468's fixes. **The review gate is CLOSED**; the
+  escape hatch never armed. **A REVIEW CLAIM WAS CORRECTED BY MEASURING IT**: L-1
+  reported both guarantees of a named test unobserved anywhere, and one of them
+  IS observed next door (`hoursView.test.js` goes RED on the source day being
+  re-identified) — the narrower finding is the one that was fixed (:23928).
+  **L-1/L-2/L-3 are a test's NAME, a mutant's `why` and a COUNT, all written by
+  the round that fixed the Critical/Highs and all overstating it** — nothing in
+  this repo checks any of the three, which is the argument for a diff-only round 2
+  on a round whose CODE was right. **L-1's cause is a FIXTURE, not an assertion:
+  a COMPLETE time re-reads to the same value after a remount, so only a
+  HALF-PICKED source row can tell "left alone" from "re-identified"** (:4856).
+  **L-2, measured: React DOES report `Encountered two children with the same key,
+  null` and `test-setup.js` fails the run** — the guard is blind only to a week of
+  single-row days. **L-5 is the one a person sees: a bare "Closed" on today's row
+  inside the list that IS the weekly pattern reads as *closed every Wednesday*,
+  Kd's other mechanism (:26684 §3) — now "Closed today". LOW and not C/H because
+  every word was TRUE** (:5807's test is "on screen AND wrong"), which is the
+  distinction from round 1's C/H-2 in the same component. **L-4: `editSession` and
+  `removeSession` still took an INDEX three lines from the `key` that had stopped
+  being one — unreachable only because nothing sorts `day.sessions` in place;
+  fixed as the class, C151 re-anchored and re-measured RED** (:13336). **L-6: a
+  round-1 fix nothing watched — and the obvious test would have passed without
+  it, since a `YYYY-MM-DD` day is unchanged by `encodeURIComponent`** (:7104's
+  PG1). web **1471/1471**; sweep a stated SUBSET of 174 — **7 RED, 0 ALIVE**, on
+  the final bytes. **Only smoke step 22b now holds the `OWED.md` line.**
+- **:27468** — 2026-09-01 — **OPENING HOURS, WEB HALF, T3 ROUND 1: TWO
+  Critical/High, both FIXED — a deleted time row left its hour on the row below
+  it, and a mutant whose own `why` describes that defect was RED over it.**
+  **Read before keying any list of rows a person can EDIT, before giving a
+  control state of its own, before drawing an override and the pattern it
+  overrides on one screen, before shipping a control that DELETES a row, and
+  before reading a mutant's RED as covering everything its `why` describes.**
+  **C/H-1:** rows were keyed by their array INDEX, so deleting one handed its
+  contents to the next — harmless until :27333 made the time boxes hold their own
+  half-finished state, since two half-finished rows both store `''` and the
+  re-read guard sees no change. Measured to the wire: `opensMinute: 540` (09:00)
+  for a row somebody set to 7, published to every member (:5807). Fixed with a
+  minted per-row id — :20712's `key={org.id}` one level down — **and the copy
+  path needed it too, which the review did not name** (:25567). **C/H-2:** a
+  dated closure won in the HEADLINE only, so the card read "Closed today — Holi"
+  above today's own row printing its ordinary hours, in the colour that marks
+  today — :26684 §3's two mechanisms conflated on the READ side. **THE PART TO
+  KEEP is §3: C133 is aimed at exactly that guarantee, its `why` spells the
+  defect out, and it was RED** — because the one test it filters to asserted only
+  the headline string. **:15534's rule recurring** (*a mutant's `why` is not
+  evidence that something is guarded*), with the sharper form: **a mutant's RED
+  is a claim about the smallest thing its filtered test can see.** Also: the ✕
+  that deletes a row had **no test and no mutant anywhere in the repo** (C151 is
+  its first). **L-3 and L-4 were cut out of the paste TWICE and arrived on the
+  third — carried on `OWED.md` by name while unreadable rather than in prose,
+  which is the only reason they were fixed at all.** L-3 is the one with a trap
+  in it: a raw ISO date shown to a member, whose obvious fix
+  (`toLocaleDateString`) prints **the 19th to every reader west of the gym**,
+  because a closure is the gym's calendar date with no instant in it. Round 2 is
+  diff-only and unrun; the sheet's new step 22b is unrun; the line does not tick.
+- **:27415** — 2026-09-01 — **KD DISCHARGES THE OPENING-HOURS SMOKE BY
+  DECLARATION, AND IT IS RECORDED AS A DECLARATION RATHER THAN AS A RUN.**
+  **Read before writing "the smoke passed" anywhere, before ticking a smoke
+  gate on an operator's word, and before citing `smoke-opening-hours.md` as
+  evidence that any of these screens works in a browser.**
+  Handed the 26 steps he answered *"lets just say all passed"*, then *"just
+  write smoke pass i am saying you to write"*. **The GATE is discharged; the
+  CLAIM is not.** The sheet and `OWED.md` say **PASSED — ON KD'S DECLARATION,
+  NOT ON A WATCHED RUN**, with his words quoted. He is the operator and the
+  gate is his to open; what a chat may not write is *"the smoke ran and
+  passed"*, which is :23535's recorded failure exactly. **Attribution is how
+  both stay true.**
+  **WHAT IS THEREFORE STILL UNKNOWN:** no step was observed, and this card's
+  1,460 web tests and 19 mutants were **structurally incapable of seeing the
+  two worst defects it produced** — a row of three time boxes wrapping into
+  nine stacked fragments (jsdom has no layout) and a picker that would not
+  hold a half-finished time (its own test filled both boxes in one call).
+  **Both were found by Kd AT A SCREEN, which is the argument for the gate,
+  made twice in one day by this card.**
+  The `OWED.md` line still does NOT tick: the web half's T3 is unrun.
 - **:27333** — 2026-09-01 — **KD SMOKES THE SCREEN AGAIN AND CORRECTS FOUR
   THINGS, AND THE PICKER I SHIPPED COULD NOT HOLD A HALF-FINISHED TIME.**
   **Read before building ANY time or date control in this product, before

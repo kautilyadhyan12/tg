@@ -1,6 +1,206 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: SMOKE STEP 22b — RUN, PASSED, AND THE OPENING-HOURS LINE TICKS.
+      DECISIONS :27810. `CARD-gym-hours.md` is DONE.
+
+  1. **NEXT: A NEW CARD.** Nothing on opening hours is outstanding. Kd's build
+     order is :19016/:26385 — the gym stage, finished feature by feature, and
+     :26469 §4 puts ATTENDANCE next (two ways in, stored as different things
+     from day one; the scan path is phone-only, :26558/:26586). Its own §6
+     lists what is NOT ruled and goes to Kd at the plan gate as options.
+  2. **STEP 22b IS THE ONLY STEP OF THAT SHEET ANYBODY HAS OBSERVED.** The
+     other 26 stand on Kd's DECLARATION of 2026-09-01 (:27415), never run.
+     22b survived it only because it did not exist when the declaration was
+     made. **Do not cite the sheet as evidence the screens work in a browser.**
+  3. **THE FIXTURE WAS BUILT SO THE STEP COULD FAIL** — real hours on ALL SEVEN
+     weekdays, so today's row had something to print if the dated closure lost.
+     `06:00 – 07:00` would have meant round 1's C/H-2 unfixed; a bare `Closed`
+     would have meant round 2's L-5 unfixed; the six unchanged rows are the
+     control against a card that stopped drawing hours at all (:24893 §1).
+  4. **THE DEPARTURE IS DECLARED: the sheet says "no commands from the chat"
+     and I BUILT THE STATE** — both accounts, the gym, the trial, the week,
+     today's closure, the confirmed membership — over the same HTTP API the
+     browser uses. **Legitimate because step 22b contains no command of mine**
+     (:23535's test, :25707's precedent). It would NOT be for a step whose
+     action is mine.
+  5. **NOT CLAIMED, and say so if asked: the optional owner-side check** (add a
+     time row, delete it) offered in the same message. He answered "passed" and
+     did not say he ran it — a pass is per STEP, never per message. L-4 stands
+     on C149 and C151, both RED through the committed harness.
+  6. **THE FIXTURE'S ZONE IS KD'S OWN (`Asia/Kolkata`), deliberately** — so this
+     run says NOTHING about the gym-zone-versus-reader-zone question, which is
+     covered only by `gymHours.render.test.jsx`'s UTC+14/UTC-12 pair.
+
+PROVE: No `src`, test, harness or migration file is touched — records only.
+       Guards re-run after the edits: `check-decisions-index` **258 pointers
+       resolve, 1025 headings** · triggers rebuilt, `--check` clean (**791 from
+       215 of 353 rulings**) · `check-harnesses` **25 scripts parse**.
+       The card's own figures are at :27468 and :27659 and are NOT restated.
+       **Servers used, named so nobody assumes otherwise: api `localhost:3000`
+       against the LOCAL database `localhost:5433` (the sheet's own S3 command,
+       never `--env-file=.env`), web `localhost:5173`.** Both were started for
+       this run and are still up.
+
+FILES: `OWED.md` (the 🟡 line TICKS) · `RUNBOOK/smoke-opening-hours.md`
+       (status block) · `DECISIONS.md` · `DECISIONS-INDEX.md` ·
+       `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+OPEN:  **NOTHING IS COMMITTED — the whole opening-hours web half, both T3 rounds
+       and this smoke are uncommitted in the working tree**, on top of the
+       thirteen local commits `d72131a`..`808c978` that have never been pushed
+       (`origin/web-repoint` is still `01999dc`, so **CI has seen none of it**).
+       Committing and pushing are Kd's call.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
+```
+
+```
+TASK: OPENING HOURS, WEB HALF — T3 ROUND 2 (diff-only) FIX ROUND. DECISIONS
+      :27659, reviewing :27468's fixes. ZERO Critical/High — THE PACKET SHIPS.
+
+  1. **NEXT: NOTHING IN THIS FEATURE EXCEPT SMOKE STEP 22b**, which is Kd's to
+     run. The review gate is CLOSED (:5348 rule 1 — zero Critical/High on a
+     diff-only round is the ship condition, and a Low buys no further round), so
+     there is no round 3. `OWED.md`'s line does NOT tick: step 22b is unrun.
+  2. **THREE OF THE SIX LOW ARE ROUND 1's OWN INSTRUMENTS OVERSTATING WHAT THEY
+     DID** — a test's NAME, a mutant's `why`, and the Low COUNT in four files.
+     All three were written by the round that fixed the Critical/Highs, in the
+     same hours. **Nothing in this repo checks any of the three**, which is the
+     argument for a diff-only round 2 on a round whose CODE was right.
+  3. **A REVIEW CLAIM WAS CORRECTED BY MEASURING IT.** L-1 reported both
+     guarantees of a named test unobserved anywhere; one IS observed next door
+     (`hoursView.test.js` goes RED on the source day being re-identified —
+     `expected [ 's21', 's22' ] to deeply equal [ 'm1', 'm2' ]`). The narrower
+     finding is the one that was fixed (:23928).
+  4. **L-1's CAUSE WAS THE FIXTURE, NOT THE ASSERTION** — a COMPLETE time
+     re-reads to the same value after a remount, so only a HALF-PICKED source row
+     can tell "left alone" from "re-identified" (:4856).
+  5. **L-2, MEASURED: React DOES warn.** Under C153's own mutation it reports
+     `Encountered two children with the same key, null` twice and
+     `test-setup.js` fails the run. The guard (:20867) is blind only to a week of
+     single-row days. **A mutant's `why` takes V1 like any other claim.**
+  6. **THE ONE A PERSON SEES (L-5): today's row now says "Closed today".** A bare
+     "Closed" inside the list that IS the weekly pattern reads as *closed every
+     Wednesday* — Kd's other mechanism (:26684 §3). **LOW, not C/H, because every
+     word was TRUE** — :5807's test is "on screen AND wrong", and that is the
+     distinction from round 1's C/H-2 in the same component.
+  7. **L-4: the row-identity fix had been applied to the DRAWING and left in the
+     ADDRESSING.** `editSession`/`removeSession` still took an index. Unreachable
+     only because nothing sorts `day.sessions` in place. Fixed as the class;
+     **C151 re-anchored onto the new line and re-measured RED** (:13336).
+
+PROVE: web **1471/1471** across 53 files, exit 0 (:27468's 1469 + 2 new
+       API-client tests; `orgsApi` 45→47, the three hours suites unchanged at
+       50/25/9) · `eslint --max-warnings=0` exit 0 on all six touched web files ·
+       `check-harnesses` **25 scripts parse** · `check-decisions-index` **257
+       pointers resolve, 1019 headings** · triggers rebuilt, `--check` clean
+       (**787 from 214 of 352 rulings**).
+       **CONSOLE SWEEP, a stated SUBSET of 174: C145, C149, C150, C151, C152,
+       C153, C154 — 7 mutants · 7 RED · 0 ALIVE · 0 never ran**, controls GREEN
+       and tallied first, restore byte-exact, whole-table pre-check green —
+       RE-RUN on the final bytes after the Low fixes landed.
+       **FOUR FIX PROBES, each through the committed suites, each restored
+       byte-exact:** source re-identified → RED (`expected '' to be '8'`, GREEN
+       before) · copy made a no-op → RED · today's row back to bare `Closed` →
+       2 RED · `encodeURIComponent` reverted → RED (GREEN before).
+       **NOT RUN AND NOT CLAIMED: the api and shared suites** (no `apps/api/src`,
+       `packages/shared` or migration file is touched) **and the full sweep.**
+
+FILES: `OpeningHoursPanel.jsx` (edit/remove a row by id) ·
+       `openingHours.render.test.jsx` (the renamed test + its fixture) ·
+       `GymHoursNote.jsx` ("Closed today") · `gymHours.render.test.jsx` ·
+       `apps/web/src/api/orgsApi.test.js` (two new tests + an hours fixture) ·
+       `apps/web/tools/mutate-console.mjs` (C151 re-anchored, C153's `why`
+       corrected) · `BACKLOG.md` · `OWED.md` · `DECISIONS.md` ·
+       `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+OPEN:  **NOTHING IS COMMITTED — this round and round 1 are both uncommitted in
+       the working tree**, on top of the thirteen local commits
+       `d72131a`..`808c978` that have never been pushed (`origin/web-repoint` is
+       still `01999dc`, so **CI has seen none of this**). Pushing is Kd's call.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
+       **Step 22b of the smoke is UNRUN** and the 2026-09-01 declaration
+       (:27415) cannot cover a step that did not exist when it was made.
+```
+
+```
+TASK: OPENING HOURS, WEB HALF — T3 ROUND 1 FIX ROUND. DECISIONS :27468, on top
+      of :27094, :27204 and :27333. TWO Critical/High, both fixed here.
+
+  1. **NEXT: T3 ROUND 2, AND IT IS DIFF-ONLY** (:5348 rule 2) — the two fixes,
+     their tests, C149-C153, and the ~~four~~ SIX Low. The ready-to-paste prompt went
+     to Kd with this round. `OWED.md`'s line does NOT tick.
+  2. **C/H-1 — A DELETED ROW LEFT ITS HOUR ON THE ROW BELOW IT, AND THE GYM
+     SAVED IT.** Session rows were keyed `key={index}`, so deleting row 1 handed
+     row 2's data to row 1's still-mounted boxes. Harmless until :27333 gave
+     those boxes their own half-finished state: two half-finished rows both
+     store `''`, so the re-read guard sees no change. **Measured to the wire —
+     `opensMinute: 540` (09:00) for a row somebody set to 7.** Fixed with a
+     minted per-row id (`mintSessionId`), which is :20712's `key={org.id}` one
+     level down: identity belongs to the ROW, never to its position.
+     **The copy path needed the same fix and the review did not name it**
+     (:25567) — each copy takes a new id, and the SOURCE day is deliberately
+     left alone so a time being picked there is not blanked underneath the owner.
+  3. **C/H-2 — THE CLOSURE WON IN THE HEADLINE ONLY.** A member read "Closed
+     today - Holi" above today's own row printing its ordinary hours, in the
+     colour that marks today. :26684 3's two mechanisms conflated on the READ
+     side. Today's row now says Closed.
+  4. **THE PART TO KEEP: C133 IS AIMED AT C/H-2, ITS `why` SPELLS THE DEFECT
+     OUT, AND IT WAS RED.** The one test it filters to asserted only the
+     headline string, and the week list renders the same time WITHOUT the
+     `Today: ` prefix. **:15534 recurring — a mutant's RED is a claim about the
+     smallest thing its filtered test can see, never about its `why`.**
+  5. **THE X THAT DELETES A ROW HAD NO TEST AND NO MUTANT ANYWHERE.** 17 hours
+     mutants covered everything except the one control that destroys something.
+     C151 is its first observer of any kind.
+  6. **TWO OF THE REVIEW'S LOWS WERE CUT OUT OF THE PASTE TWICE and arrived on
+     the third.** L-3: a raw ISO date shown to a person (`Closed 2026-09-20`).
+     **Its obvious fix is a trap** — a closure is the GYM's calendar date with no
+     instant in it, so `toLocaleDateString` on UTC midnight prints the 19th to
+     every reader west of the gym. Hand-built `closureDateLabel` -> "Sun 20 Sep
+     2026", mutant C154, whose `why` states that this suite's pinned
+     Asia/Kolkata can observe the FORMAT and not the SHIFT. L-4: `removeClosure`
+     built its path segment without `encodeURIComponent` while the three
+     join-code calls under it always have — unreachable, fixed as the file's
+     pattern. **They were carried on `OWED.md` BY NAME while unreadable rather
+     than in prose, which is the only reason they were not lost.**
+
+PROVE: web **1469/1469** across 53 files (:27333's 1459 + 10, reconciled:
+       hoursView 45->50, openingHours.render 21->25, gymHours.render 8->9) ·
+       eslint --max-warnings=0 exit 0 on all seven web files · shared tsc 0 ·
+       api tsc 0 · shared tests 51/51 · shared lint (its own `eslint src test`)
+       0 · check-harnesses **25 scripts parse** · check-decisions-index **256
+       pointers resolve, 1013 headings** · triggers rebuilt, --check clean
+       (**782 from 213 of 351 rulings**).
+       **CONSOLE SWEEP, a stated SUBSET of 174: C145, C149, C150, C151, C152,
+       C153, C154 — 7 mutants · 7 RED · 0 ALIVE · 0 never ran**, controls GREEN
+       and tallied first, restore byte-exact, whole-table pre-check green —
+       RE-RUN on the final bytes after the Low fixes landed.
+       **O122 re-anchored and re-measured RED on the LOCAL database
+       (localhost:5433), 1 of 199**, mass-write detector clean.
+       Always-read RE-MEASURED: triggers **961** + 1 **997** + 2 **58** =
+       **2,016**; 1 and 2 have not moved all day.
+
+FILES: `hoursView.js` + `.test.js` · `OpeningHoursPanel.jsx` +
+       `openingHours.render.test.jsx` · `GymHoursNote.jsx` +
+       `gymHours.render.test.jsx` · `apps/web/src/api/orgsApi.js` ·
+       `apps/web/tools/mutate-console.mjs`
+       (C145 re-anchored, C149-C154 new) · `apps/api/tools/mutate-orgs.mjs`
+       (O122 re-anchored) · `packages/shared/src/orgs.ts` (one blank line) ·
+       `RUNBOOK/smoke-opening-hours.md` (new step 22b) · `BACKLOG.md` ·
+       `OWED.md` · `DECISIONS.md` · `DECISIONS-INDEX.md` ·
+       `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+OPEN:  **NOTHING IS COMMITTED — this round is uncommitted in the working tree**,
+       on top of the thirteen local commits `d72131a`..`808c978` that have never
+       been pushed (`origin/web-repoint` is still `01999dc`, so **CI has seen
+       none of this**). Pushing is Kd's call.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
+       **Step 22b of the smoke is UNRUN** and the 2026-09-01 declaration
+       (:27415) cannot cover a step that did not exist when it was made.
+```
+
+```
 TASK: KD'S SECOND LOOK AT THE SCREEN — four corrections, DECISIONS :27333, on
       top of :27204. **The picker I shipped in :27204 could not be used at all.**
 

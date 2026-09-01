@@ -2941,3 +2941,148 @@ severity gate's rule 4 exists to find, and this round found four in one card.
       — fixed this commit. A CHECK loosened at the BOTTOM stayed green, which is
       the class the test's own header names as its reason for existing. Both
       bounds are now asserted on both minute columns.
+
+## OPENING HOURS, WEB HALF — T3 ROUND 1 (2026-09-01, reviews `67cc56..808c978`)
+
+~~Four~~ **SIX** Low, all fixed in the round; none bought another round (:5348
+rule 1). **The count was wrong in its own section** — the two late findings were
+added to the list below and to the paragraph under it, and the opening number was
+never moved with them; corrected by T3 round 2's L-3, in all four places it was
+written (here, `OWED.md`, `DECISIONS.md`, `HANDOFF.md`). The
+round's two Critical/High are NOT here — a Critical/High is fixed or it holds the
+packet, and both are written up in `DECISIONS.md`.
+
+**SIX Low, and two of them arrived late.** L-3 and L-4 were cut out of the paste
+**twice** — including from a re-paste sent specifically to recover them — and
+came through on the third. They were carried on `OWED.md` in the meantime rather
+than in prose, which is the only reason they are here at all: **a finding nobody
+can read is not a finding nobody has**, and that gap is exactly the shape work
+goes missing in.
+
+- [x] A test whose name promised a step it never checked — `openingHours.render.test.jsx`
+      — found 2026-09-01, T3 round 1 (Low-1) — fixed this commit. Titled *"the
+      list steps in quarter hours"* while `MINUTE_STEP` is **5**, and its only
+      minute assertion was `toContain('30')`, which a 5-, 10-, 15- or 30-minute
+      list all satisfy. Renamed to what it does, and it now asserts the whole
+      twelve-entry list rather than one member of it. No guarantee was uncovered
+      — the step is separately pinned in `hoursView.test.js` — but the test
+      proved nothing its name promised.
+- [x] A comment describing a control that does not exist, above the wrong
+      fieldset — `OpeningHoursPanel.jsx` — found 2026-09-01, T3 round 1 (Low-2) —
+      fixed this commit. *"THE THREE STATES, AND `unset` IS SHOWN BUT NOT
+      SELECTABLE … It appears only while it is the gym's current state"* sat
+      above the CLOCK fieldset and described a third radio in the MODE fieldset;
+      `unset` is a sentence, never an option. Moved above the fieldset it is
+      about and reworded to say so.
+- [x] A raw ISO date printed to a person — `GymHoursNote.jsx`,
+      `OpeningHoursPanel.jsx`, `hoursView.js` — found 2026-09-01, T3 round 1
+      (Low-3) — fixed this commit. Both surfaces read **`Closed 2026-09-20`**:
+      true, so never Critical/High, but machine spelling on a member's card. Now
+      `closureDateLabel` — **`Sun 20 Sep 2026`**, the weekday first because that
+      is the part a member wants, and the field order `formatJoinedAt` already
+      uses one panel over. **THE OBVIOUS FIX IS THE ONE THAT BREAKS IT:** a
+      closure is the GYM's calendar date with no instant in it, and
+      `new Date('2026-09-20')` is UTC midnight, so `toLocaleDateString` prints
+      the 19th to every reader west of the gym — trap #8 on the one surface this
+      feature has kept it off throughout. Hand-built for the reason `clockLabel`
+      is. Mutant **C154**, whose `why` states the limit rather than overstating
+      the row: the suite pins `Asia/Kolkata`, where UTC midnight is the same day,
+      so only the FORMAT is observable here and not the shift itself.
+- [x] A path segment interpolated without `encodeURIComponent` — `orgsApi.js` —
+      found 2026-09-01, T3 round 1 (Low-4) — fixed this commit. `removeClosure`
+      built `/closures/${day}` raw while the three join-code calls below it have
+      always encoded theirs. **Not reachable**: `day` arrives only from the
+      server's own response through a `YYYY-MM-DD` schema. Fixed as the FILE'S
+      PATTERN, not as a live hole — a segment that is safe only because of where
+      its caller happens to get it is one refactor away from not being.
+- [x] A stray second blank line — `packages/shared/src/orgs.ts` — found
+      2026-09-01, T3 round 1 (Low-5) — fixed this commit.
+- [x] A mutation anchor held hostage by a comment about something else —
+      `apps/api/tools/mutate-orgs.mjs` — found 2026-09-01, T3 round 1 (Low-6) —
+      fixed this commit. **O122** distinguishes the EDIT door's timezone field
+      from the CREATE door's identical one, and after :27204 re-anchored it, it
+      did so by reaching into the prose of the NEXT field's JSDoc — which is
+      about the clock switch, so rewording a sentence on one subject would abort
+      a sweep about another. It now stops at the comment's opening `/**`: what
+      separates the two doors is structural (the edit door's field is followed by
+      a documented one, the create door's by `locale: z`, which is what **O20**
+      has always relied on) and no longer verbal. Re-measured **RED** through the
+      harness on the local database, not assumed (:8610).
+
+
+## OPENING HOURS, WEB HALF — T3 ROUND 2, DIFF-ONLY (2026-09-01, reviews round 1's fixes)
+
+**ZERO Critical/High — THE PACKET SHIPS** (:5348 rule 1). Six Low, all fixed in
+this round; none bought another round, and every one of them was reproduced or
+measured here before being touched, because a review's map is a claim exactly
+like its figure (:23928, :24559).
+
+**ONE OF THE REVIEW'S OWN CLAIMS WAS CORRECTED BY MEASURING IT**, and it is the
+useful half of L-1: the review reported that BOTH guarantees its named test
+claims are unobserved anywhere. Measured, one of them is — re-identify the source
+day and `hoursView.test.js`'s *"gives every copied row its OWN identity"* goes RED
+(`expected [ 's21', 's22' ] to deeply equal [ 'm1', 'm2' ]`). What was true is
+narrower and is what the fix addresses: the RENDER test claimed two guarantees in
+its name and comments and observed neither.
+
+- [x] A test whose name and comments claimed two guarantees it observed neither
+      of — `openingHours.render.test.jsx` — found 2026-09-01, T3 round 2 (L-1,
+      rule-4 item) — fixed this commit. *"keeps a row that is being typed when a
+      DIFFERENT day is copied across"*, with a closing comment that the source day
+      "is not re-identified". **Both probes measured GREEN**: the copy keeping the
+      overwritten row's id, and the source day being re-identified too. The second
+      could not be seen because a COMPLETE time re-reads to the same value after a
+      remount — only a HALF-PICKED source row can tell "left alone" from
+      "re-identified". Renamed to what it does and given that fixture; now
+      **RED** on the source being re-identified (`expected '' to be '8'`) and
+      **RED** on a copy that does nothing (`expected '9' to be '6'`). It still
+      does not observe the copied row's identity and no longer says it does —
+      that one is `hoursView.test.js`'s, measured RED above.
+- [x] A mutant's `why` asserting a warning does not exist — `mutate-console.mjs`
+      — found 2026-09-01, T3 round 2 (L-2) — fixed this commit. **C153** said a
+      null key is handled *"silently: there is no warning to read"*. **Measured
+      under C153's own mutation: React reports `Encountered two children with the
+      same key, null` twice and `test-setup.js` turns it into a failed run** — the
+      duplicate-key guard (:20867) DOES see it, on any day holding a second
+      session. Corrected to what it measured, keeping the true half: a week of
+      single-row days puts the nulls in different lists, where React never warns
+      and only the unit test observes it.
+- [x] The round's own Low count, wrong in four files — `BACKLOG.md`, `OWED.md`,
+      `DECISIONS.md`, `HANDOFF.md` — found 2026-09-01, T3 round 2 (L-3) — fixed
+      this commit. All four said *"four Low"* over a list of six; the two late
+      findings were added to the lists and the paragraphs and the opening number
+      was never moved with them, so `DECISIONS.md` contradicted itself four lines
+      apart. Corrected in **every** copy, struck rather than overwritten
+      (:20587 — a figure corrected in fewer than all its copies is a figure that
+      comes back).
+- [x] A row addressed by its POSITION in the two functions that change it —
+      `OpeningHoursPanel.jsx` — found 2026-09-01, T3 round 2 (L-4) — fixed this
+      commit. `editSession` and `removeSession` still took an index while the
+      `key` beside them had become the row's id — round 1's Critical/High fixed in
+      the drawing and left in the addressing. **Not reachable today**: nothing
+      sorts `day.sessions` in place (`hoursProblem` and `hoursRequest` each sort a
+      COPY, verified), so a position still named the row the owner clicked. Fixed
+      as the CLASS rather than the case — the first sort that lands on the draft
+      would make an edit or a delete hit somebody else's row. **C151 re-anchored
+      onto the new line and re-measured RED** (:13336).
+- [x] A bare "Closed" on today's row inside a list of weekdays — `GymHoursNote.jsx`
+      — found 2026-09-01, T3 round 2 (L-5) — fixed this commit. The one
+      user-visible fix in the round: today's row is shut by a DATED closure, but
+      it sits in the list that IS the weekly pattern, so *"Wed — Closed"* reads as
+      *closed every Wednesday* — Kd's other mechanism (:26684 §3). Now **"Closed
+      today"**, which names which one. **Low and not Critical/High under :5807
+      because every word of it was TRUE** — the gym is shut today; what was wrong
+      was what a reader could take it to mean. It is a calendar-day comparison in
+      the GYM's zone on both sides, which is what :13432's rule demands of any
+      sentence carrying the word "today". Two tests go RED without it; no new
+      mutant, because wording is rule 4a's "never mutated" column.
+- [x] Four API calls with no address test, one of them carrying a fix nothing
+      watched — `orgsApi.test.js` — found 2026-09-01, T3 round 2 (L-6, rule-4
+      item) — fixed this commit. The opening-hours surface had no *"hits the X
+      surface"* test, so round 1's own Low-4 (`encodeURIComponent` in
+      `removeClosure`) could be reverted with every suite green — **measured, it
+      was**. Two tests: the four addresses and methods, and the encoding driven
+      with a segment that is not already URL-safe. **The second is the load-bearing
+      one**: a `YYYY-MM-DD` day is unchanged by encoding, so the first passes
+      either way (:7104's PG1). Reverting the fix now fails
+      (`'/v1/orgs/gym-1/closures/a/b?c'` vs `'…/a%2Fb%3Fc'`).

@@ -170,9 +170,24 @@ describe('a gym that has answered', () => {
     expect(screen.getAllByText('Closed').length).toBe(6);
   });
 
-  it("a dated closure WINS over the weekly pattern, and shows the gym's reason", async () => {
+  it("a dated closure WINS over the weekly pattern, ANYWHERE on the card", async () => {
     // Kd's two mechanisms, in the order he ruled them (:26684 §3). Wednesday has
     // hours; today is Wednesday at the gym; today is closed. The closure wins.
+    //
+    // **THIS TEST WAS A LIAR AND IT IS THE ONE THAT LET T3 ROUND 1's SECOND
+    // CRITICAL/HIGH THROUGH.** Its whole negative assertion used to be
+    // `queryByText('Today: 06:00 – 07:00')` — the HEADLINE and nothing else —
+    // while the week list three lines below went on printing `06:00 – 07:00`
+    // for today, in the brighter colour that marks today. It was green over a
+    // member being told the gym is open on a day it had declared shut.
+    // :26947 §2's shape exactly: a test whose NAME states a guarantee its query
+    // does not observe — and the name here even said "WINS over the weekly
+    // pattern", which is precisely the half it never looked at.
+    //
+    // So the assertion is now the whole document: those hours appear NOWHERE.
+    // `queryAllByText` and not `queryByText`, because the card draws a row per
+    // weekday and the singular query throws on a pair before it can return
+    // anything — a failure that names the DOM instead of the claim (:25567).
     orgService.getHours.mockResolvedValue(
       hours({
         week: [{ weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] }],
@@ -181,10 +196,45 @@ describe('a gym that has answered', () => {
     );
     render(<GymHoursNote gymId={GYM} />);
 
-    expect(await screen.findByText(/Closed today/)).toBeTruthy();
-    expect(screen.getByText(/Holi/)).toBeTruthy();
-    // And the pattern's own line for today is NOT also drawn as the headline.
-    expect(screen.queryByText('Today: 06:00 – 07:00')).toBeNull();
+    // THE REASON IS QUERIED ON ITS OWN, and that is a fact about the tool rather
+    // than a style choice: Testing Library matches an element's OWN text nodes,
+    // so the headline reads as `Closed today` and its ` — Holi` span is a
+    // separate match. A regex spanning both finds nothing.
+    expect(await screen.findByText(/Holi/)).toBeTruthy();
+    expect(screen.queryAllByText('Today: 06:00 – 07:00')).toHaveLength(0);
+    expect(screen.queryAllByText('06:00 – 07:00')).toHaveLength(0);
+    // TWO elements read "Closed today" — the headline and today's own row — and
+    // six read a bare "Closed", which is the weekly pattern. **The split is T3
+    // round 2's L-5**: this list IS the pattern, so a bare "Closed" on today's
+    // row is read as *closed every Wednesday*, which is Kd's OTHER mechanism
+    // (:26684 §3). The counts are also what stop a row that quietly vanished
+    // from passing.
+    expect(screen.getAllByText('Closed today')).toHaveLength(2);
+    expect(screen.getAllByText('Closed')).toHaveLength(6);
+  });
+
+  it('leaves the pattern alone on the days the closure is not about', async () => {
+    // THE POSITIVE CONTROL for the case above, and it is not decoration: an
+    // override that fired on every row — or a card that simply stopped drawing
+    // hours whenever any closure existed — would satisfy every assertion up
+    // there. Today is closed; Monday still reads its real hours.
+    orgService.getHours.mockResolvedValue(
+      hours({
+        week: [
+          { weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 1320 }] },
+          { weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] },
+        ],
+        closures: [{ day: GYM_TODAY, note: 'Holi' }],
+      }),
+    );
+    render(<GymHoursNote gymId={GYM} />);
+
+    await screen.findByText(/Holi/);
+    expect(screen.getByText('06:00 – 22:00')).toBeTruthy();
+    // Five weekdays shut by the pattern; today shut by the closure and saying
+    // which, in the headline and in its own row.
+    expect(screen.getAllByText('Closed today')).toHaveLength(2);
+    expect(screen.getAllByText('Closed')).toHaveLength(5);
   });
 
   it('lists an upcoming closure without repeating today as the headline', async () => {
@@ -197,6 +247,11 @@ describe('a gym that has answered', () => {
     render(<GymHoursNote gymId={GYM} />);
 
     expect(await screen.findByText('Today: 06:00 – 07:00')).toBeTruthy();
-    expect(screen.getByText('Closed 2026-09-20')).toBeTruthy();
+    // WRITTEN THE WAY A PERSON WRITES A DATE, not the way the wire spells it —
+    // T3 round 1's Low-3. `2026-09-20` is a Sunday, and the weekday is the part
+    // a member actually wants ("is that this weekend?"). The raw form must be
+    // gone, not merely joined by a friendlier one.
+    expect(screen.getByText('Closed Sun 20 Sep 2026')).toBeTruthy();
+    expect(screen.queryByText(/2026-09-20/)).toBeNull();
   });
 });

@@ -11,10 +11,40 @@ has simply not answered yet. Those two states look identical in the database, an
 confusing them would have told every existing gym's members that their gym never
 opens. If step 1 shows the word "Closed" anywhere, stop and say so.
 
-**Time:** about 20 minutes (26 steps). **You need:** the API and the web app running
+**Time:** about 20 minutes (27 steps). **You need:** the API and the web app running
 locally, and **two email addresses** (the second never receives mail).
 
-**Status: NOT YET RUN.**
+**Status: 26 steps PASSED ON KD'S DECLARATION, 2026-09-01, NOT ON A WATCHED RUN
+— and STEP 22b PASSED ON AN ACTUAL RUN the same day, watched by Kd at the
+browser. THE TWO ARE DIFFERENT KINDS OF EVIDENCE AND ARE KEPT APART ON PURPOSE.**
+
+**STEP 22b — RUN AND PASSED, 2026-09-01.** It is the only step here that anybody
+has actually observed. The gym carried real hours on **every** weekday, so today's
+row had something to print had the dated closure failed to win; Kd reported the row
+reading **"Closed today"** while the other six read `06:00 – 07:00`.
+**THE SETUP WAS THE CHAT'S AND THE OBSERVATION WAS KD'S, which departs from this
+sheet's own "no commands from the chat" and is declared rather than hidden:** both
+accounts, the gym, the trial, the week, today's closure and the confirmed
+membership were built over the same HTTP API the browser uses, and Kd then signed
+in and looked. **Step 22b itself contains no command** (:23535's test), so his
+word is the correct and complete evidence for it.
+**NOT CLAIMED: the owner-side check offered alongside it** (add a time row, then
+delete it) — it was optional, he did not say he ran it, and a pass is per STEP,
+never per message (:27415).
+
+He was handed the 26 steps and answered *"lets just say all passed"*, then
+*"just write smoke pass i am saying you to write"*. **That is his call to make
+and it is recorded as his**, because the alternative — writing that a run
+happened — would put a false claim in the record, which is the one thing a
+smoke sheet exists to prevent (:23535, where a chat recorded 11/11 with three
+steps unrun).**
+
+**SO: DO NOT CITE THIS AS EVIDENCE THAT THE SCREENS WORK IN A BROWSER.** No
+step below was observed. What it discharges is the GATE, on the operator's
+authority; what it does not discharge is the question the gate was built to
+answer — and the two defects this card's automated suites could not see
+(a wrapped row of nine stacked fragments, and a picker that would not hold a
+half-finished time) were both found by Kd AT A SCREEN.
 
 ---
 
@@ -78,7 +108,8 @@ start to finish.
 | 19 | Now pick a date **in the past** (say last week), leave the reason empty, and press **Mark closed**. | **A sentence appears: "That date has already passed at your gym, so it's saved but not shown below."** The list does **not** grow. **This is correct, not a failure** — the save worked, and the list only shows dates still to come. Say if you see an error message instead. |
 | 20 | Press **Undo** beside the Staff-training date, then **Mark closed** on **today's date**, reason **Holi**. | The first disappears; today appears in the list. |
 | 21 | In a **different browser** (or a private window), sign up as **account B** and type the join code from step 1. Back as **A**, go to **Members** and confirm B. | B is a member of the gym. |
-| 22 | As **account B**, look at the main dashboard, at the card that says **"You're a member of ..."**. | Under it: **"Closed today — Holi"**, then the week — **Mon 6:00 AM – 7:00 AM, 4:00 PM – 9:00 PM**, and so on. **Every time is on the 12-hour clock the OWNER picked at step 3** — one gym, one clock. And **the dated closure wins over Monday's normal hours**, which is the point of this step. |
+| 22 | As **account B**, look at the main dashboard, at the card that says **"You're a member of ..."**. | Under it: **"Closed today — Holi"**, then the week. **Every time is on the 12-hour clock the OWNER picked at step 3** — one gym, one clock. |
+| 22b | **STAY ON THAT CARD AND FIND TODAY'S OWN ROW** in the week underneath — it is the row printed in a brighter white than the others. | **It reads "Closed today"** — those two words, not a bare "Closed" (T3 round 2's L-5: this list is the WEEKLY pattern, so a bare "Closed" on that row reads as *closed every Wednesday*, which is a different thing from being shut for one date). Today's normal opening hours must appear **nowhere on this card** — not in the headline, not in that row. **If today's row shows times, that is a FAIL and the step to report**: the top of the card would be saying the gym is shut while the row your eye goes to says it is open. (This step exists because the card did exactly that until 2026-09-01, and the test guarding it was only ever looking at the headline.) |
 | 23 | As **account A**, go back to **Settings → When we're open** and press **Undo** beside today's closure. Then, as **B**, press **F5** on the dashboard. | B's card no longer says "Closed today". It now shows today's normal line from the week. |
 
 ---

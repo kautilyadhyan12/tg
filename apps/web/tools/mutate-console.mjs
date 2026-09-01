@@ -2174,8 +2174,12 @@ const MUTANTS = [
     suite: HOURS_VIEW_SUITE,
     why: "\"USE THESE TIMES EVERY DAY\" SHARES ROWS INSTEAD OF COPYING THEM, so every day of the week points at ONE object: editing Tuesday afterwards silently rewrites Monday, Wednesday and the rest. Kd's own instruction was that a gym copies once and then changes a particular day by hand, which is the exact sequence this breaks - and it breaks it INVISIBLY, since the screen looks right until the second edit",
     expect: "copies rather than shares",
-    from: "      sessions: source.sessions.map((s) => ({ ...s })),",
-    to: "      sessions: source.sessions,",
+    // RE-ANCHORED by T3 round 1's C/H-1 fix, which added the fresh id and moved
+    // the source day out of the map — and RE-MEASURED rather than assumed
+    // (:8610). The subject is unchanged: `to` still shares one array across the
+    // week, which is the defect this row has always been about.
+    from: "        : { ...day, sessions: source.sessions.map((s) => ({ ...s, id: mintSessionId() })) },",
+    to: "        : { ...day, sessions: source.sessions },",
   },
   {
     id: 'C146',
@@ -2203,6 +2207,73 @@ const MUTANTS = [
     expect: "reads on the GYM's clock",
     from: "  const clockFormat = hours.clockFormat ?? '24h';",
     to: "  const clockFormat = '24h';",
+  },
+  // ---------------------------------------------------------------------
+  // T3 ROUND 1 ON THE WEB HALF, 2026-09-01 — two Critical/High, and the row
+  // below each one is the permanent guard :5348 rule 5 requires. Both are in
+  // rule 4a's always-mutated columns: a time a MEMBER is shown and a gym
+  // PUBLISHES, and a control that destroys a timetable.
+  //
+  // THE THIRD ROW HERE IS A HOLE THE REVIEW FOUND RATHER THAN A DEFECT: the X
+  // that deletes a time row had no test and no mutant of any kind — the one
+  // control on this screen that destroys something was the one nothing watched.
+  // ---------------------------------------------------------------------
+  {
+    id: 'C149',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "THE GYM PUBLISHES A TIME NOBODY TYPED - T3 round 1's C/H-1, made permanent. The rows go back to being identified by their POSITION, so deleting one does not delete a row: it hands the next row's data to the deleted row's still-mounted boxes. Those boxes hold their own half-finished state (:27333) and re-read the row only when its stored string CHANGES - and two half-finished rows both store the empty string, so nothing changes and nothing re-reads. Measured before the fix: pick 9 on row 1, 7 on row 2, delete row 1, finish the row, and the gym saves opensMinute 540 - 09:00 - for a row somebody set to 7, which every member is then shown (:5807)",
+    expect: "removing a time row",
+    from: "                              <div key={session.id} className=\"flex flex-wrap items-center gap-2 mb-2\">",
+    to: "                              <div key={index} className=\"flex flex-wrap items-center gap-2 mb-2\">",
+  },
+  {
+    id: 'C150',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "A MEMBER IS TOLD THE GYM IS OPEN ON A DAY IT DECLARED SHUT - T3 round 1's C/H-2, made permanent. The dated closure stops reaching the WEEK LIST while still winning in the headline, so the card reads `Closed today - Holi` and then prints today's ordinary hours three lines below it, in the brighter colour that marks today. C133 next door already describes this failure in its own words and could not see this half of it, because the only test watching it looked at the headline. Kd's :26684 3 says the dated closure wins over the pattern - in every place the pattern is drawn, not merely in the first one",
+    expect: "ANYWHERE on the card",
+    from: "                  {weekday.iso === todayIso && closedToday !== null",
+    to: "                  {false && weekday.iso === todayIso && closedToday !== null",
+  },
+  {
+    id: 'C151',
+    target: 'hourspanel',
+    suite: HOURS_PANEL_SUITE,
+    why: "THE X BUTTON STOPS DELETING ANYTHING, and this row exists because T3 round 1 found that NOTHING in this repo watched it - no test, no mutant. An owner who adds a row by mistake, or whose gym drops a session, cannot take it off the timetable: the click is swallowed, the row stays, and the only sign is that the screen does not change. It is the one control on this screen that destroys something, which is exactly the column rule 4a says is never left unmutated. RE-ANCHORED by T3 round 2's L-4 (:13336), which moved this line from a POSITION to the row's own id; the subject is unchanged and it was re-measured RED on the new line rather than assumed",
+    expect: "takes the row away",
+    from: "          : { ...day, sessions: day.sessions.filter((s) => s.id !== id) },",
+    to: "          : day,",
+  },
+  {
+    id: 'C152',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "C/H-1 DOWN THE SECOND PATH: a copied row keeps the identity of the row it overwrote, so the form's boxes do not re-read it. A day holding a half-typed 9 goes on showing 9 after `use these times every day` has replaced it with somebody else's 6 - the same defect as C149 arriving through the convenience button rather than through the delete. It shares a line with C145 and guards the opposite half of it: C145 says the rows are COPIED, this says each copy is a NEW ROW",
+    // The two filters here are deliberately not case-variants of one phrase: a
+    // `-t` that differs from its neighbour only in capitals is one careless
+    // rename away from matching the wrong test, or none.
+    expect: "every copied row",
+    from: "        : { ...day, sessions: source.sessions.map((s) => ({ ...s, id: mintSessionId() })) },",
+    to: "        : { ...day, sessions: source.sessions.map((s) => ({ ...s })) },",
+  },
+  {
+    id: 'C153',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "THE ROWS THE SERVER SENDS ARRIVE WITHOUT IDENTITIES, so every row the gym already has is told apart by its position again - C149's defect, at its source, for the timetable an owner opens rather than the rows they add in the session. It also puts a null key on every row, and T3 round 2's L-2 corrected what this row used to claim about that: MEASURED under this exact mutation, a day holding two or more rows makes React report `Encountered two children with the same key, null` twice and `test-setup.js` turns that into a FAILED run - so the duplicate-key guard does see this. What it cannot see is a week of single-row days, where the null keys land in different day lists and React never warns at all, which is why the unit test below is the observer and the guard is not",
+    expect: "stops one row wearing another",
+    from: "        id: mintSessionId(),",
+    to: "        id: null,",
+  },
+  {
+    id: 'C154',
+    target: 'hoursview',
+    suite: HOURS_VIEW_SUITE,
+    why: "THE CLOSURE DATE GOES BACK TO BEING RESOLVED THROUGH A ZONE. A closure is the GYM's calendar date with no instant in it, and `new Date('2026-09-20')` is UTC midnight - so a locale formatter prints the 19th to every member west of the gym, which is trap #8 landing on the one surface this feature kept it off throughout. **THE HONEST LIMIT, because a mutant that overstates itself is worse than none: this suite pins Asia/Kolkata (+05:30), where UTC midnight is the SAME day, so the DAY SHIFT itself is not observable here and only the FORMAT is.** What this row therefore guards is that the label is not produced by a locale formatter at all - which is what makes the shift impossible - and the day-shift half would need a fixture in the Americas",
+    expect: "spells it out with the weekday",
+    from: "  return `${short} ${String(Number(date))} ${MONTH_SHORT[Number(month) - 1]} ${year}`;",
+    to: "  return parsed.toLocaleDateString();",
   },
 ];
 

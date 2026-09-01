@@ -4,10 +4,13 @@
 // names · members SEE the hours · dated closures), :26736 ("hours not set" is
 // NOT "closed", and no weekday is special).
 //
-// EVERYTHING HERE IS PURE AND EVERY RULE IS THE SERVER'S. The server is the
-// enforcement (R3.3); these exist so an owner is told BEFORE they press Save
-// rather than by a 400 afterwards. Where the two could disagree, this file is
-// the one that is wrong.
+// EVERY RULE HERE IS THE SERVER'S. The server is the enforcement (R3.3); these
+// exist so an owner is told BEFORE they press Save rather than by a 400
+// afterwards. Where the two could disagree, this file is the one that is wrong.
+//
+// EVERYTHING IS PURE EXCEPT `mintSessionId`, which is a counter and says why
+// under its own heading. That exception is the fix for T3 round 1's first
+// Critical/High and is the only state in the file.
 
 /** ISO 8601, which is the wire's convention and Postgres's `ISODOW`: 1 = Monday
  *  … 7 = Sunday. **JS `getDay()` is 0 = Sunday and is deliberately NOT used
@@ -180,6 +183,37 @@ export function joinClock({ hour, minute, meridiem }, clockFormat) {
   return minutesToClock(h24 * 60 + minute);
 }
 
+/** A ROW'S OWN IDENTITY, AND IT IS THE FIX FOR T3 ROUND 1's FIRST
+ *  CRITICAL/HIGH — the one thing in this file that is not a pure function.
+ *
+ *  **THE DEFECT: a session row was identified by its POSITION.** The form keyed
+ *  each row with its array index, so deleting row 1 did not delete a row — it
+ *  handed row 2's data to row 1's still-mounted controls. Those controls hold
+ *  their own half-finished state on purpose (:27333: the boxes have more
+ *  positions than the stored string can express), and they only re-read the row
+ *  when the row's string CHANGES. **Two half-finished rows both store `''`**, so
+ *  nothing changed, nothing re-read, and the deleted row's hour stayed on screen
+ *  over the surviving row's data. Measured end to end: pick 9 on row 1, 7 on row
+ *  2, delete row 1, finish the row — the gym saves `opensMinute: 540`, which is
+ *  09:00, for a row somebody set to 7. **A time nobody typed, published to every
+ *  member** (:5807).
+ *
+ *  **THIS IS :20712's CLASS, NOT ITS CASE.** There the fix was `key={org.id}` so
+ *  a panel could not carry state across gyms; here it is the same sentence one
+ *  level down — **identity belongs to the ROW, never to its place in the list**
+ *  — and it protects every future field a row gains without that field's author
+ *  having to know this happened.
+ *
+ *  A counter and not `crypto.randomUUID()`: this never leaves the browser, never
+ *  reaches the wire (`hoursRequest` builds its own objects) and never reaches
+ *  the touched check (`sameHoursDraft` compares times), so it needs to be unique
+ *  within one page's life and nothing more. */
+let sessionIdSeq = 0;
+export function mintSessionId() {
+  sessionIdSeq += 1;
+  return `s${String(sessionIdSeq)}`;
+}
+
 /** THE SERVER'S ANSWER TURNED INTO THE SHAPE THE FORM EDITS — seven rows,
  *  always, in ISO order.
  *
@@ -200,6 +234,7 @@ export function hoursDraft(hours) {
     byWeekday.set(
       day.weekday,
       (Array.isArray(day.sessions) ? day.sessions : []).map((s) => ({
+        id: mintSessionId(),
         opens: minutesToClock(s?.opensMinute),
         closes: minutesToClock(s?.closesMinute),
       })),
@@ -223,16 +258,29 @@ export function hoursDraft(hours) {
  *  everywhere first.
  *
  *  The rows are COPIED rather than shared, so editing Tuesday afterwards cannot
- *  reach into Monday. */
+ *  reach into Monday.
+ *
+ *  **EACH COPY IS A NEW ROW AND TAKES A NEW ID, which is T3 round 1's
+ *  Critical/High arriving down a second path.** A copied row is a different row
+ *  from the one that used to sit there, and if it kept the old row's identity
+ *  the controls would not re-read it — two half-finished rows both store `''`,
+ *  so a day holding a half-typed 9 would go on showing 9 after being overwritten
+ *  with somebody else's 6.
+ *
+ *  **THE SOURCE DAY IS LEFT EXACTLY AS IT IS, deliberately.** It is the day the
+ *  owner is looking at when they press the button, and re-identifying its rows
+ *  would blank a time they are halfway through picking — a fix that broke the
+ *  thing next to what it was fixing (:6277's class). */
 export function copyDayToAll(draft, weekday) {
   const source = (draft?.days ?? []).find((d) => d.weekday === weekday);
   if (source === undefined) return draft;
   return {
     ...draft,
-    days: draft.days.map((day) => ({
-      ...day,
-      sessions: source.sessions.map((s) => ({ ...s })),
-    })),
+    days: draft.days.map((day) =>
+      day.weekday === weekday
+        ? day
+        : { ...day, sessions: source.sessions.map((s) => ({ ...s, id: mintSessionId() })) },
+    ),
   };
 }
 
@@ -445,6 +493,51 @@ export function hoursSummary(hours) {
     return `Your opening times are set for ${String(open)} ${open === 1 ? 'day' : 'days'} a week.`;
   }
   return "You haven't said when your gym is open. Members aren't shown anything about opening times until you do.";
+}
+
+const MONTH_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** A CLOSURE'S DATE, WRITTEN THE WAY A PERSON WRITES ONE — `Sun 20 Sep 2026`.
+ *
+ *  T3 round 1's Low-3: both surfaces printed the raw `2026-09-20` off the wire.
+ *  True, so never Critical/High, but it is machine spelling on a member's card.
+ *
+ *  **THE OBVIOUS FIX IS THE ONE THAT BREAKS IT.** `new Date('2026-09-20')` is
+ *  UTC midnight, and `toLocaleDateString` then renders it in the READER's zone —
+ *  so a member anywhere west of the gym reads the 19th for a gym that closed on
+ *  the 20th. That is trap #8 landing on the one surface this card has kept it
+ *  off all the way through: **a closure is the GYM's calendar date and has no
+ *  instant in it at all**, so it must never be resolved through a zone.
+ *
+ *  Hand-built for the same reason `clockLabel` above is: **the label must depend
+ *  on the GYM, and `toLocaleDateString` depends on whoever is reading.** The
+ *  field order follows `formatJoinedAt` in `consoleView.js` (day, month, year),
+ *  so the console does not show two different date shapes on adjacent panels.
+ *
+ *  **AN UNREADABLE VALUE IS RETURNED UNCHANGED rather than hidden or guessed
+ *  at.** A well-shaped date that is not a real one — `2026-02-31` — rolls over
+ *  silently in `Date`, so the round-trip is CHECKED and not trusted: that is
+ *  what a round-trip is actually good for, the mirror of :26947 §3, where one
+ *  was mistaken for proof that a string was a date at all. */
+export function closureDateLabel(day) {
+  if (typeof day !== 'string') return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (m === null) return day;
+  const [, year, month, date] = m;
+  const parsed = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return day;
+  if (
+    parsed.getUTCFullYear() !== Number(year) ||
+    parsed.getUTCMonth() + 1 !== Number(month) ||
+    parsed.getUTCDate() !== Number(date)
+  ) {
+    return day;
+  }
+  const short = WEEKDAYS.find((w) => w.iso === isoWeekdayOfDay(day))?.short ?? '';
+  return `${short} ${String(Number(date))} ${MONTH_SHORT[Number(month) - 1]} ${year}`;
 }
 
 /** WHAT A MEMBER IS SHOWN FOR ONE WEEKDAY. Only reached once the gym HAS

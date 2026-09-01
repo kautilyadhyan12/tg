@@ -1564,7 +1564,6 @@ export type RemoveOrgStaffResponse = z.infer<typeof removeOrgStaffResponseSchema
 export const gymHoursModeSchema = z.enum(["unset", "open_24h", "scheduled"]);
 export type GymHoursMode = z.infer<typeof gymHoursModeSchema>;
 
-
 /** ISO 8601 weekday: 1 = Monday … 7 = Sunday, matching Postgres `ISODOW`. JS
  *  `getDay()` is 0 = Sunday — the CLIENT converts, in one place, or the gym
  *  closes on the wrong day. */

@@ -3,6 +3,7 @@ import { CalendarClock } from 'lucide-react';
 import { orgService } from '../../api/orgsApi';
 import {
   WEEKDAYS,
+  closureDateLabel,
   dayLine,
   gymToday,
   isoWeekdayOfDay,
@@ -99,7 +100,28 @@ export default function GymHoursNote({ gymId }) {
 
         {/* THE REST OF THE WEEK, and only when there IS a week — a 24-hour gym
             has nothing to list, and listing seven identical rows for it would be
-            noise. */}
+            noise.
+
+            **TODAY'S ROW OBEYS THE CLOSURE TOO, and that is T3 round 1's second
+            Critical/High.** The headline branched on `closedToday` and this list
+            did not, so a member read "Closed today — Holi" and, three lines
+            under it, today's own row still printing the ordinary pattern —
+            06:00 – 07:00, in the brighter colour this list uses to mark today.
+            The one row a member's eye is steered to was the one asserting the
+            gym is open on a day it had declared shut (:5807), and it is exactly
+            the conflation :26684 §3 rules against: the dated closure WINS over
+            the weekly pattern, in every place the pattern is drawn and not only
+            in the first one.
+
+            **IT SAYS "Closed today", NOT "Closed", AND THE EXTRA WORD IS THE
+            WHOLE POINT** — T3 round 2's L-5. This list IS the weekly pattern, so
+            a bare "Closed" on the Wednesday row is read as *closed every
+            Wednesday* by a member who is looking at a list of weekdays. The word
+            names WHICH of Kd's two mechanisms shut the day: the dated override,
+            today only, gone tomorrow. It is a calendar-day comparison in the
+            GYM's zone on both sides (`todayIso` from `gymToday`, `closedToday`
+            matched on the gym's own date), which is what :13432's rule requires
+            of any sentence containing "today". */}
         {hours.mode === 'scheduled' ? (
           <ul className="mt-1 flex flex-col gap-0.5">
             {WEEKDAYS.map((weekday) => (
@@ -114,7 +136,14 @@ export default function GymHoursNote({ gymId }) {
                 }}
               >
                 <span className="w-8 flex-shrink-0">{weekday.short}</span>
-                <span>{dayLine(hours.week?.find((d) => d.weekday === weekday.iso)?.sessions, clockFormat)}</span>
+                <span>
+                  {weekday.iso === todayIso && closedToday !== null
+                    ? 'Closed today'
+                    : dayLine(
+                        hours.week?.find((d) => d.weekday === weekday.iso)?.sessions,
+                        clockFormat,
+                      )}
+                </span>
               </li>
             ))}
           </ul>
@@ -128,7 +157,7 @@ export default function GymHoursNote({ gymId }) {
               .filter((c) => c.day !== today)
               .map((closure) => (
                 <li key={closure.day} className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  Closed {closure.day}
+                  Closed {closureDateLabel(closure.day)}
                   {closure.note !== null && closure.note !== '' ? ` — ${closure.note}` : ''}
                 </li>
               ))}

@@ -12,7 +12,7 @@
 //   · a closure that saves and does NOT come back says so, which is the
 //     carry-forward T3 round 1 left for this half.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -69,6 +69,12 @@ const openSection = async () => {
 const openDay = (label) => {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}`) }));
 };
+
+/** ONE WEEKDAY'S BLOCK, for the cases that unfold two days at once. The controls
+ *  inside a day are identical from day to day, so a query that is not scoped
+ *  matches every unfolded copy of them. */
+const dayBlock = (label) =>
+  screen.getByRole('button', { name: new RegExp(`^${label}`) }).closest('div');
 
 /** SET ONE TIME THROUGH THE THREE BOXES Kd asked for — hour, minute, and
  *  AM/PM when the gym is on a 12-hour clock. `hour` is what the HOUR BOX
@@ -308,7 +314,7 @@ describe('saving the week', () => {
 });
 
 describe("Kd's five changes at the screen (2026-09-01)", () => {
-  it('picks times from a LIST, not by typing, and the list steps in quarter hours', async () => {
+  it('picks times from a LIST, not by typing, and the minutes step in FIVES', async () => {
     // *"i have to type by hand what is this drop down should there to use not
     // hand type"*. A `<select>` and not `<input type="time">` — the role is the
     // assertion, because a time input would still satisfy a value check.
@@ -326,7 +332,14 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
     expect(hourBox.tagName).toBe('SELECT');
     expect(minuteBox.tagName).toBe('SELECT');
     expect([...hourBox.options].map((o) => o.value)).toContain('5');
-    expect([...minuteBox.options].map((o) => o.value)).toContain('30');
+    // THE STEP ITSELF, not one value it happens to contain. This asserted only
+    // `toContain('30')`, which a 5-, 10-, 15- or 30-minute list all satisfy —
+    // and the test's own name said "quarter hours" while `MINUTE_STEP` is 5, so
+    // the name was wrong and nothing under it could have said so. T3 round 1's
+    // Low-1: a test that proves nothing its name promises.
+    expect([...minuteBox.options].filter((o) => o.value !== '').map((o) => o.value)).toEqual([
+      '0', '5', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55',
+    ]);
     // Both start EMPTY on an unfinished row rather than sitting on midnight.
     expect([...hourBox.options][0].value).toBe('');
   });
@@ -518,6 +531,122 @@ describe('a lapsed gym', () => {
   });
 });
 
+/** REMOVING ONE TIME ROW — T3 round 1's first Critical/High, and the control
+ *  had no test and no mutant of any kind before this block: the review grepped
+ *  for one and found zero. The one button on this screen that DESTROYS
+ *  something was the one nothing watched.
+ *
+ *  **WHAT WENT WRONG.** The rows were keyed by their array index, so deleting
+ *  row 1 did not delete a row — it handed row 2's data to row 1's still-mounted
+ *  boxes. Those boxes hold their own half-finished state on purpose (:27333)
+ *  and re-read the row only when its stored string CHANGES; two half-finished
+ *  rows both store `''`, so nothing changed and the deleted row's hour stayed
+ *  on screen over the surviving row's data.
+ *
+ *  **BOTH CASES ARE DRIVEN, because either alone can be satisfied by the wrong
+ *  thing**: the screen (what the owner is looking at) and the WIRE (what the
+ *  gym actually publishes to its members), which is where the damage lands. */
+describe('removing a time row', () => {
+  const twoHalfFinishedRows = async () => {
+    orgService.getHours.mockResolvedValue(answer());
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await screen.findByText(/closed every day of the week/i);
+    await openSection();
+    openDay('Wednesday');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add a time/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add a time/i }));
+    // HALF-FINISHED ON PURPOSE, AND THE FIXTURE IS THE CLAIM (:4856). Only the
+    // hour is picked, so each row still stores `''` — which is the one state in
+    // which the two rows are indistinguishable to the re-read guard, and so the
+    // only fixture that can tell a keyed row from an indexed one.
+    pickTime('Wednesday session 1 opens', { hour: 9 });
+    pickTime('Wednesday session 2 opens', { hour: 7 });
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('9');
+    expect(screen.getByLabelText('Wednesday session 2 opens hour').value).toBe('7');
+  };
+
+  it('takes the row away and leaves the OTHER row holding what was picked on it', async () => {
+    await twoHalfFinishedRows();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Wednesday session 1' }));
+
+    // The row is genuinely gone — the positive control, without which a delete
+    // that did nothing at all would satisfy the assertion below.
+    expect(screen.queryByLabelText('Wednesday session 2 opens hour')).toBeNull();
+    // And the survivor is the row that was picked as 7, not the deleted 9.
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('7');
+  });
+
+  it('and the gym then publishes the time that was picked, not the deleted one', async () => {
+    // THE HALF THAT MATTERS TO A MEMBER. The screen above is what the owner
+    // sees; this is what every member is told, and it is where the defect was
+    // measured: `opensMinute: 540` — 09:00 — for a row somebody set to 7.
+    await twoHalfFinishedRows();
+    orgService.setHours.mockResolvedValue(answer());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Wednesday session 1' }));
+
+    pickTime('Wednesday session 1 opens', { minute: 0 });
+    pickTime('Wednesday session 1 closes', { hour: 22, minute: 0 });
+    fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
+
+    await waitFor(() => {
+      expect(orgService.setHours).toHaveBeenCalled();
+    });
+    const [, body] = orgService.setHours.mock.calls[0];
+    expect(body.week).toEqual([
+      { weekday: 3, sessions: [{ opensMinute: 420, closesMinute: 1320 }] },
+    ]);
+  });
+
+  it('overwrites a day being typed, and leaves the day the button was pressed on alone', async () => {
+    // **THIS TEST'S PREVIOUS NAME AND COMMENTS CLAIMED TWO GUARANTEES IT
+    // OBSERVED NEITHER OF, and T3 round 2's L-4 measured both.** It was called
+    // "keeps a row that is being typed when a DIFFERENT day is copied across"
+    // and its last line said the source day "is not re-identified" — yet with
+    // the copy keeping the overwritten row's id it stayed GREEN, and with the
+    // SOURCE day re-identified it stayed GREEN too. Both guarantees are real and
+    // both are covered next door in `hoursView.test.js`, on the ids themselves;
+    // what was false was this file's account of itself (:15534's rule, applied
+    // to a test's own prose rather than to a mutant's).
+    //
+    // THE FIXTURE IS WHAT MAKES THE SECOND ASSERTION MEAN ANYTHING (:4856). A
+    // COMPLETE time re-reads to the same value after a remount, so a source row
+    // holding `06:00` cannot tell "left alone" from "re-identified". Only a
+    // HALF-PICKED source row can: re-identify it and the box goes back to `--`.
+    orgService.getHours.mockResolvedValue(
+      answer({ week: [{ weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 420 }] }] }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+
+    openDay('Wednesday');
+    fireEvent.click(screen.getByRole('button', { name: /Add a time/i }));
+    pickTime('Wednesday session 1 opens', { hour: 9 });
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('9');
+
+    openDay('Monday');
+    // SCOPED TO MONDAY'S OWN BLOCK, here and below. Every day holding a row draws
+    // an identical "Add a time" and "Use these times every day", so with two days
+    // unfolded the plain query matches a pair — and picking one by position would
+    // be asserting against whichever the tree happened to render first (:11757).
+    fireEvent.click(within(dayBlock('Monday')).getByRole('button', { name: /Add a time/i }));
+    pickTime('Monday session 2 opens', { hour: 8 });
+
+    fireEvent.click(
+      within(dayBlock('Monday')).getByRole('button', { name: /Use these times every day/i }),
+    );
+
+    // The copy landed on the day being typed and its boxes followed it: the 9
+    // nobody could save is gone and Monday's 6 is there.
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('6');
+    // And the day the owner pressed the button on is untouched — the half-picked
+    // 8 is still under their hand. Re-identify the source and this reads `--`.
+    expect(screen.getByLabelText('Monday session 2 opens hour').value).toBe('8');
+  });
+});
+
 describe('closing a date', () => {
   it('sends the date and the reason, and lists it back', async () => {
     orgService.getHours.mockResolvedValue(answer({ mode: 'open_24h' }));
@@ -534,7 +663,10 @@ describe('closing a date', () => {
     await waitFor(() => {
       expect(orgService.closeDay).toHaveBeenCalledWith(ORG.id, { day: '2026-09-20', note: 'Holi' });
     });
-    expect(await screen.findByText(/2026-09-20/)).toBeTruthy();
+    // The owner's own list reads like a date too (Low-3), and in the same shape
+    // `formatJoinedAt` uses one panel over.
+    expect(await screen.findByText('Sun 20 Sep 2026')).toBeTruthy();
+    expect(screen.queryByText(/2026-09-20/)).toBeNull();
   });
 
   it('does NOT bound the date box, so a past closure can still be recorded', async () => {

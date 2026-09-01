@@ -37,6 +37,17 @@ const APPLICATION_BODY = {
   decidedAt: null,
 };
 
+/** The opening-hours surface answers the SAME `hours` object from all four of
+ *  its routes, so one fixture serves them all. `open_24h` keeps `week` empty
+ *  without that being a contradiction the parser has to forgive. */
+const HOURS_BODY = {
+  mode: 'open_24h',
+  timezone: 'UTC',
+  clockFormat: '24h',
+  week: [],
+  closures: [],
+};
+
 const STAFF_BODY = {
   userId: '66666666-6666-6666-6666-666666666666',
   displayName: 'Rita Sen',
@@ -71,6 +82,11 @@ const okBody = (url, method = 'get') => {
   if (url.endsWith('/applications')) return { items: [], nextCursor: null, pendingCount: 0 };
   if (url.endsWith('/confirm')) return { status: 'confirmed', membership: MEMBERSHIP_BODY };
   if (url.endsWith('/reject')) return { status: 'rejected' };
+  // `/closures/:day` before `/closures`, and both before the fallback: the DELETE
+  // is the only one of the four that wraps its hours in a `status`.
+  if (url.includes('/closures/')) return { status: 'removed', hours: HOURS_BODY };
+  if (url.endsWith('/closures')) return { hours: HOURS_BODY };
+  if (url.endsWith('/hours')) return { hours: HOURS_BODY };
   if (url.includes('/members/')) return { status: 'removed' };
   if (url.endsWith('/members')) return { items: [], nextCursor: null };
   if (url.endsWith('/codes')) return { codes: [] };
@@ -212,6 +228,52 @@ describe('orgService endpoints', () => {
     // preflight for it, which `fastify.inject` never exercises. A repoint of
     // this to POST would sail past every server test.
     expect(seen[5]).toMatchObject({ url: '/v1/orgs/gym-1/members/user-9', method: 'delete' });
+  });
+
+  /** THE OPENING-HOURS SURFACE, and the last segment is the reason this exists.
+   *
+   *  T3 round 2's L-6: the four hours calls had no address test of any kind, so
+   *  `removeClosure`'s `encodeURIComponent` — round 1's own Low-4 fix — could be
+   *  deleted and every suite in this repo stayed green. The three join-code calls
+   *  below have always encoded their segments and were equally unwatched; one
+   *  assertion on the awkward one covers the pattern.
+   *
+   *  **The METHOD is part of the assertion** for the same reason it is on the
+   *  join door: PUT, POST and DELETE all send a CORS preflight that
+   *  `fastify.inject` never exercises — the shape that made Card 4's DELETE dead
+   *  app-wide behind 250 green server tests. */
+  it('hits the opening-hours surface, and encodes the date it deletes', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.getHours('gym-1');
+    await orgService.setHours('gym-1', { mode: 'open_24h' });
+    await orgService.closeDay('gym-1', { day: '2026-09-20', note: 'Holi' });
+    await orgService.removeClosure('gym-1', '2026-09-20');
+
+    expect(seen[0]).toMatchObject({ url: '/v1/orgs/gym-1/hours', method: 'get' });
+    expect(seen[1]).toMatchObject({ url: '/v1/orgs/gym-1/hours', method: 'put' });
+    expect(JSON.parse(seen[1].data)).toEqual({ mode: 'open_24h' });
+    expect(seen[2]).toMatchObject({ url: '/v1/orgs/gym-1/closures', method: 'post' });
+    expect(JSON.parse(seen[2].data)).toEqual({ day: '2026-09-20', note: 'Holi' });
+    expect(seen[3]).toMatchObject({
+      url: '/v1/orgs/gym-1/closures/2026-09-20',
+      method: 'delete',
+    });
+  });
+
+  /** THE ENCODING ITSELF, driven with something that has to change shape.
+   *
+   *  A `YYYY-MM-DD` day is unchanged by `encodeURIComponent`, so the test above
+   *  passes with or without it — the assertion that a real date comes out
+   *  looking like a real date is worth having and proves nothing about the call
+   *  (:7104's PG1). This one hands it a value the schema cannot currently
+   *  produce, which is exactly the point: the segment is safe today because of
+   *  where its caller happens to get it, and that is one refactor from not being
+   *  true. */
+  it('encodes a path segment that is NOT already URL-safe', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.removeClosure('gym-1', 'a/b?c');
+
+    expect(seen[0].url).toBe('/v1/orgs/gym-1/closures/a%2Fb%3Fc');
   });
 
   it('hits the staff surface: list, add, change role and take the keys back', async () => {

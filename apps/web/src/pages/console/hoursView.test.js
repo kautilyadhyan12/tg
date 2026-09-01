@@ -23,6 +23,7 @@ import {
   copyDayToAll,
   daySummary,
   closureAbsentReason,
+  closureDateLabel,
   dayLine,
   gymToday,
   hoursDraft,
@@ -101,6 +102,39 @@ describe('the draft', () => {
     // about when the gym is open.
     expect(hoursDraft(null).mode).toBe('unset');
     expect(hoursDraft({ mode: 'something-new' }).mode).toBe('unset');
+  });
+
+  it('gives every row its own identity, which is what stops one row wearing another\'s state', () => {
+    // T3 round 1's Critical/High at its source. The form's time boxes hold their
+    // own half-finished state, and React only rebuilds them when the row's
+    // IDENTITY changes — so if rows are told apart by their position instead,
+    // deleting one hands its contents to whichever row moves up into its place.
+    // Measured before the fix: the gym saved 09:00 for a row somebody set to 7.
+    const draft = hoursDraft({
+      mode: 'scheduled',
+      timezone: 'UTC',
+      week: [
+        {
+          weekday: 2,
+          sessions: [
+            { opensMinute: 360, closesMinute: 420 },
+            { opensMinute: 960, closesMinute: 1260 },
+          ],
+        },
+        { weekday: 4, sessions: [{ opensMinute: 360, closesMinute: 420 }] },
+      ],
+      closures: [],
+    });
+    const ids = draft.days.flatMap((d) => d.sessions.map((s) => s.id));
+
+    expect(ids).toHaveLength(3);
+    expect(ids.every((id) => typeof id === 'string' && id !== '')).toBe(true);
+    // DISTINCT ACROSS THE WHOLE WEEK, not merely within a day. Two rows with the
+    // same times — Tuesday's 06:00 and Thursday's 06:00 above are deliberately
+    // identical — must still be two different rows, or a copy between days would
+    // put a duplicate key on one list and React would silently drop a row
+    // (:20867, and the guard in `test-setup.js` that exists because of it).
+    expect(new Set(ids).size).toBe(3);
   });
 
   it('notices a change and ignores a redraw', () => {
@@ -384,12 +418,19 @@ describe('"use these times every day"', () => {
       weekday: d.iso,
       sessions:
         d.iso === 1
-          ? [{ opens: '06:00', closes: '07:00' }, { opens: '16:00', closes: '21:00' }]
+          ? [
+              { id: 'm1', opens: '06:00', closes: '07:00' },
+              { id: 'm2', opens: '16:00', closes: '21:00' },
+            ]
           : d.iso === 3
-            ? [{ opens: '09:00', closes: '10:00' }]
+            ? [{ id: 'w1', opens: '09:00', closes: '10:00' }]
             : [],
     })),
   };
+
+  /** The TIMES of a day, which is what "copied" means here. The identity of each
+   *  row is its own guarantee and has its own test below. */
+  const times = (day) => day.sessions.map((s) => ({ opens: s.opens, closes: s.closes }));
 
   it('copies one day onto all seven, OVERWRITING what was there', () => {
     // Kd's own sentence: the button means "these are my hours", and the way he
@@ -397,11 +438,34 @@ describe('"use these times every day"', () => {
     // everywhere first. Wednesday held something different and is replaced.
     const next = copyDayToAll(draft, 1);
     for (const day of next.days) {
-      expect(day.sessions).toEqual([
+      expect(times(day)).toEqual([
         { opens: '06:00', closes: '07:00' },
         { opens: '16:00', closes: '21:00' },
       ]);
     }
+  });
+
+  it('gives every copied row its OWN identity, because an overwritten row is a different row', () => {
+    // T3 round 1's Critical/High arriving down the copy path. The form's time
+    // boxes hold their own half-finished state and re-read a row only when its
+    // stored string changes — and a half-typed row stores `''` exactly like the
+    // empty one it replaces. A copy that kept the old row's identity would
+    // therefore leave a day showing a 9 nobody can save, over somebody else's 6.
+    const next = copyDayToAll(draft, 1);
+    const monday = next.days.find((d) => d.weekday === 1);
+    const copied = next.days
+      .filter((d) => d.weekday !== 1)
+      .flatMap((d) => d.sessions.map((s) => s.id));
+
+    // THE SOURCE DAY IS UNTOUCHED — it is the day the owner is looking at when
+    // they press the button, and re-identifying its rows would blank a time they
+    // are halfway through picking (:6277: a fix that breaks its own neighbour).
+    expect(monday.sessions.map((s) => s.id)).toEqual(['m1', 'm2']);
+    // Twelve new rows across the other six days, every one of them distinct and
+    // none of them wearing an identity that already existed in this draft.
+    expect(copied).toHaveLength(12);
+    expect(new Set(copied).size).toBe(12);
+    expect(copied.some((id) => ['m1', 'm2', 'w1'].includes(id))).toBe(false);
   });
 
   it('copies rather than shares, so editing one day afterwards cannot reach another', () => {
@@ -415,6 +479,49 @@ describe('"use these times every day"', () => {
 
   it('leaves the draft alone when asked about a day that is not there', () => {
     expect(copyDayToAll(draft, 99)).toBe(draft);
+  });
+});
+
+describe("a closure's date, written for a person", () => {
+  it('spells it out with the weekday, and never as the wire spells it', () => {
+    // T3 round 1's Low-3. `2026-09-20` is a Sunday.
+    expect(closureDateLabel('2026-09-20')).toBe('Sun 20 Sep 2026');
+    // No leading zero on the day: a person writes the 5th, not the 05th.
+    expect(closureDateLabel('2026-09-05')).toBe('Sat 5 Sep 2026');
+    // Both ends of the year, because the month table is hand-built and an
+    // off-by-one in it would be invisible in the middle.
+    expect(closureDateLabel('2027-01-01')).toBe('Fri 1 Jan 2027');
+    expect(closureDateLabel('2026-12-31')).toBe('Thu 31 Dec 2026');
+  });
+
+  it('is the same string in every time zone, which is why it is hand-built', () => {
+    // **THE TRAP THIS FUNCTION EXISTS TO AVOID.** A closure is the GYM's
+    // calendar date with no instant in it; `new Date('2026-09-20')` is UTC
+    // midnight, so the obvious `toLocaleDateString` renders the 19th for every
+    // reader west of the gym. That is trap #8 on the one surface this feature
+    // has kept it off throughout.
+    //
+    // **AND THIS SUITE CANNOT PROVE THE SHIFT IS GONE — stated rather than
+    // implied.** The runner pins `Asia/Kolkata` (+05:30), where UTC midnight is
+    // 05:30 the SAME day, so a zone-dependent implementation would agree with
+    // this one here and disagree only in the Americas — :27094 §2's lesson
+    // exactly, a fixture that cannot tell two implementations apart. What this
+    // test does pin is that the output is not produced by a locale formatter at
+    // all: no `toLocaleDateString` setting yields this string.
+    expect(closureDateLabel('2026-09-20')).toBe('Sun 20 Sep 2026');
+    expect(closureDateLabel('2026-09-20')).not.toMatch(/\//);
+  });
+
+  it('hands back anything it cannot read, rather than hiding it or guessing', () => {
+    // A value we cannot spell is still a value the gym is entitled to see. The
+    // rollover case is the one worth having: `Date` turns 31 February into 3
+    // March without a word, so a round-trip is CHECKED here rather than trusted
+    // — the mirror of :26947 §3, where one was mistaken for proof of validity.
+    expect(closureDateLabel('2026-02-31')).toBe('2026-02-31');
+    expect(closureDateLabel('20 Sep 2026')).toBe('20 Sep 2026');
+    expect(closureDateLabel('')).toBe('');
+    expect(closureDateLabel(null)).toBe('');
+    expect(closureDateLabel(undefined)).toBe('');
   });
 });
 

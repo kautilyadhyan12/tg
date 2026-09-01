@@ -7517,7 +7517,7 @@ file and is stated so nobody reads these as lower priority than they are.
       Do not resurrect it.
 - [ ] 🟡 **GYM SETS ITS OWN PRICING, OFFERS AND FREE PROMOTIONS.** Zero spec hits.
       Rides along with the Connect work — same build, same card family.
-- [ ] 🟡 **A GYM CANNOT SAY WHEN IT IS OPEN — opening hours as SESSIONS,
+- [x] 🟡 **A GYM CANNOT SAY WHEN IT IS OPEN — opening hours as SESSIONS,
       Kd's requirement 2026-08-31 (DECISIONS :26624).** *"a gym can set time
       like we are open from 6 to 7 am … 2 to 3 pm … 4 to 9 pm … or 24 hour
       open … a day can have many session"*. **Zero spec hits for opening hours
@@ -7590,11 +7590,64 @@ file and is stated so nobody reads these as lower priority than they are.
       "Closed" because there the gym HAS answered · and the picker now HOLDS a
       half-finished time, which the first version could not, making it
       unusable.
-      **THIS LINE STILL DOES NOT TICK: the browser SMOKE IS UNRUN**
-      (`RUNBOOK/smoke-opening-hours.md`, rewritten for all five changes, now 23
-      steps) **and the web half's T3 IS UNRUN.** The SERVER half's T3 round 1 ran
-      2026-09-01 with ZERO Critical/High and its eight Low are fixed and logged
-      in `BACKLOG.md`. It ticks when both gates pass on the web half.
+      **THE SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, 2026-09-01, NOT ON A
+      WATCHED RUN** — handed the 26 steps he answered *"lets just say all
+      passed"* and then *"just write smoke pass i am saying you to write"*.
+      **His call, recorded as his; do NOT cite it as evidence the screens work
+      in a browser.** Sheet: `RUNBOOK/smoke-opening-hours.md`, now **27 steps**.
+      **AND THE SHEET HAS MOVED SINCE HE DISCHARGED IT: step 22b is new and is
+      OUTSTANDING.** It is the only step that looks at TODAY's own row on a
+      member's card — the surface of the web T3's second Critical/High — and a
+      declaration cannot cover a step that did not exist when it was made.
+      Running it is Kd's call like the rest of the sheet.
+      **THE WEB HALF'S T3 ROUND 1 RAN 2026-09-01: TWO Critical/High, both FIXED
+      in that round** — a deleted time row leaving its half-typed hour on the
+      surviving row (the gym published `09:00` for a row somebody set to 7) and a
+      member's card printing today's opening hours under its own "Closed today".
+      Each carries a test that fails without the fix and a permanent mutant
+      (**C149**, **C150**), and the ✕ that deletes a row got its first observer
+      of any kind (**C151**). ~~Four~~ **SIX** Low fixed and logged in
+      `BACKLOG.md` (count corrected by T3 round 2's L-3).
+      ~~**TWO OF THAT REVIEW'S LOWS HAVE NEVER BEEN READ: L-3 and L-4 were cut
+      out of the paste, twice.**~~ **DISCHARGED the same session — they arrived
+      on the third paste and are FIXED: a raw ISO date shown to a member
+      (`Closed 2026-09-20` → `Closed Sun 20 Sep 2026`, hand-built because the
+      obvious `toLocaleDateString` prints the 19th to every reader west of the
+      gym) and an unencoded path segment in `removeClosure`.** Both in
+      `BACKLOG.md`. **The line is kept struck rather than deleted, because the
+      part worth remembering is that they were carried HERE while unreadable
+      rather than mentioned in prose** — that is the only reason a finding
+      nobody could read was not a finding nobody had.
+      ~~**THIS LINE STILL DOES NOT TICK: the web half's T3 ROUND 2 is unrun** (it
+      is diff-only, :5348 rule 2) **and step 22b is unrun.**~~
+      **T3 ROUND 2 RAN 2026-09-01 (diff-only): ZERO Critical/High, so the REVIEW
+      GATE IS CLOSED and the packet ships** (:5348 rule 1; entry at
+      `DECISIONS.md:27659`). Six Low, all fixed in that round and logged in
+      `BACKLOG.md` — **three of them were round 1's own instruments overstating
+      what they had done** (a test's name, a mutant's `why`, and this file's own
+      "four Low" count), and the one a person can see is today's row on a
+      member's card now reading **"Closed today"** rather than a bare "Closed",
+      which in a list of weekdays reads as *closed every Wednesday*.
+      ~~**THIS LINE STILL DOES NOT TICK, AND EXACTLY ONE THING NOW HOLDS IT:
+      SMOKE STEP 22b IS UNRUN.**~~
+      **STEP 22b RAN 2026-09-01 AND KD REPORTED PASS — the line TICKS on this
+      commit** (`DECISIONS.md:27810`). Today's row on a member's card read
+      **"Closed today"** while the other six read `06:00 – 07:00`, on a gym whose
+      every weekday carried real hours, so the row had something to print if the
+      dated closure had failed to win.
+      **THE DEPARTURE IS DECLARED RATHER THAN HIDDEN, because this sheet says
+      "no commands from the chat": I BUILT THE STATE — both accounts, the gym,
+      the trial, the week, today's closure and the confirmed membership — over
+      the same HTTP API the browser uses, and Kd did the OBSERVING.** Step 22b
+      contains no command of mine (:23535's test), so his word is the correct and
+      complete evidence for it. **What is NOT claimed: the optional owner-side
+      check offered in the same message** (add a time row, delete it) — he did not
+      say he ran it, and a pass is per STEP, never per message (:27415).
+      **THE OTHER 26 STEPS STILL STAND ON HIS DECLARATION OF 2026-09-01, NOT ON A
+      WATCHED RUN** — this tick does not upgrade them, and nothing here is
+      evidence that the rest of these screens work in a browser.
+      The SERVER half's T3 round 1 ran 2026-09-01 with ZERO Critical/High and its
+      eight Low are fixed and logged in `BACKLOG.md`.
       **⚠️ THE WEB HALF MUST HANDLE A SAVE WHOSE REPLY DOES NOT CONTAIN IT, and
       it is written here because it is recorded nowhere else** (raised by T3
       round 1 as a carry-forward, not a defect in the server). **Closing a day

@@ -27411,3 +27411,488 @@ change broke.
 three-box picker (step 5 is now 5/5b/5c so the one-box-at-a-time behaviour is
 its own step) and for "No times set" — **25 steps** — **and the web half's T3.**
 `OWED.md`'s line does not tick.
+
+## 2026-09-01 — KD DISCHARGES THE OPENING-HOURS SMOKE BY DECLARATION, AND IT IS RECORDED AS A DECLARATION RATHER THAN AS A RUN
+
+**Read before writing "the smoke passed" anywhere, before ticking a smoke gate on
+an operator's word, and before citing `smoke-opening-hours.md` as evidence that
+any of these screens works in a browser.**
+
+Handed the 26 steps he answered *"lets just say all passed"*, and when told the
+record would not carry a pass that did not happen, *"just write smoke pass i am
+saying you to write"*.
+
+### 1 · WHAT WAS WRITTEN, AND WHY IT IS NOT WHAT HE LITERALLY ASKED FOR
+
+**The gate is discharged. The claim is not.** The sheet and `OWED.md` both now
+say **PASSED — ON KD'S DECLARATION, NOT ON A WATCHED RUN**, with his two
+sentences quoted.
+
+**He is the operator and the gate is his to open** — CLAUDE.md: a concern raised
+once and reaffirmed is his decision, and the chat proceeds. What the chat may not
+do is write *"the smoke ran and passed"*, because that is a false statement about
+an event, and :23535 is this repo's recorded instance of exactly it (a chat
+logged 11/11 with three steps unrun, and had to correct itself the same session).
+**Attributing the pass is how both things are true at once:** the gate opens on
+his authority, and the record still says what happened.
+
+### 2 · WHAT IS THEREFORE STILL UNKNOWN, STATED SO NOBODY INFERS OTHERWISE
+
+**No step was observed.** The automated suites for this card are large — 1,460
+web tests, 19 mutants across two harnesses, all green — **and they were
+structurally incapable of seeing the two worst defects this card produced**, both
+of which Kd found AT A SCREEN:
+
+- the three time boxes **wrapping one per line**, so the row read as nine stacked
+  fragments (`--`, `:`, `--`, `to`, …). jsdom has no layout; no assertion in this
+  repo could have caught it.
+- the picker that **would not hold a half-finished time**, which its own render
+  test passed over because the test filled both boxes in one call.
+
+**That is the argument for the smoke gate existing, made by this card twice in
+one day** — so a gate discharged without a run leaves precisely the class of
+defect the gate is for.
+
+### 3 · THE LINE STILL DOES NOT TICK
+
+`OWED.md`'s opening-hours line stays open: **the web half's T3 is unrun.** The
+review prompt was handed over with the diff (`t3-gym-hours-screens-r1.diff`,
+`67dcc56..808c978`).
+
+### Round log
+
+No code, no test, no `src` file — records only. `RUNBOOK/smoke-opening-hours.md`
+status block · `OWED.md` · `DECISIONS.md` · `DECISIONS-INDEX.md` ·
+`DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+## 2026-09-01 — OPENING HOURS, WEB HALF, T3 ROUND 1: TWO Critical/High, both FIXED — a deleted time row left its hour on the row below it, and a mutant that describes that whole class of defect was RED over one of them
+
+**Read before keying any list of rows a person can EDIT, before giving a control
+state of its own, before drawing an override and the pattern it overrides on one
+screen, before shipping a control that DELETES a row, and before reading a
+mutant's RED as covering everything its `why` describes.**
+
+Reviews `67cc56..808c978` (:27094, :27204, :27333) in a fresh chat. **Two
+Critical/High ⇒ the packet did NOT ship on that round** (:5348 rule 1); both are
+fixed here with a test that fails without the fix and a permanent mutant.
+~~Four~~ **SIX** Low fixed and logged in `BACKLOG.md` — **struck by T3 round 2's
+L-3: §5 below adds two more findings and this number was never moved with them,
+so the entry contradicted itself four lines apart.** Kd approved the finding list
+before a byte was written (*"go"*). **Escape hatch NOT armed:** the previous round in this
+feature (:26947) was the SERVER half and found zero Critical/High, so there is no
+two-rounds-running trigger. **A Critical/High in `OpeningHoursPanel.jsx` or
+`GymHoursNote.jsx` next round would be the second running and is Kd's call.**
+
+**BOTH FINDINGS WERE REPRODUCED HERE BEFORE ANYTHING WAS CHANGED**, in throwaway
+probes deleted afterwards — a review's map is a claim exactly like its figure
+(:23928, :24559). The first reproduced one step FURTHER than the review took it:
+past the screen and onto the wire.
+
+### 1 · C/H-1 — A ROW WAS IDENTIFIED BY ITS POSITION, SO DELETING ONE HANDED ITS CONTENTS TO THE NEXT
+
+`sessions.map((session, index) => <div key={index}>)`. Deleting row 1 therefore
+did not delete a row: React kept row 1's controls mounted and handed them row 2's
+data.
+
+**That is only harmless if the controls are stateless, and :27333 made them
+stateful on purpose.** The three time boxes hold their own half-finished parts,
+because the stored `"HH:MM"` cannot express *"the hour is 6 and the minute is not
+chosen yet"* — and they re-read the row only when its stored string CHANGES.
+**Two half-finished rows both store `''`.** So nothing changed, nothing
+re-read, and the deleted row's hour stayed on screen over the surviving row's
+data.
+
+**MEASURED, and the wire is the half that matters:**
+
+| | |
+|---|---|
+| picked on row 1 | `9` |
+| picked on row 2 | `7` |
+| row 1 deleted, box now reads | **`9`** |
+| finish that row and save, SENT | **`opensMinute: 540`** — 09:00 |
+| what the owner chose | 07:00 |
+
+**A time nobody typed, published to every member of that gym** (:5807), with
+nothing on screen or in the payload looking wrong.
+
+**THE GUARD THE REVIEW COULD HAVE BLAMED IS THE ONE THING THAT MUST NOT MOVE.**
+The `value !== lastValue` check is :27333's fix for a picker that could not hold
+a half-finished time, and it is correct. **The index key is the defect** — and
+the two are only lethal TOGETHER, which is why neither card that shipped them saw
+it.
+
+**THE FIX IS :20712's CLASS ONE LEVEL DOWN.** There, `key={org.id}` stopped a
+panel carrying state between gyms; here every session row is minted an id
+(`mintSessionId`) and keyed by it, so **identity belongs to the ROW and never to
+its place in the list** — which protects every field a row gains later without
+that field's author knowing this happened.
+
+**THE COPY PATH NEEDED THE SAME THING AND THE REVIEW DID NOT NAME IT** (:25567 —
+a review's suggested fix is not the whole of its finding). *"Use these times
+every day"* overwrites six days; a copy that kept the overwritten row's identity
+would leave a day showing a half-typed `9` over somebody else's `6`, by exactly
+the mechanism above. **Each copy takes a new id — and the SOURCE day is left
+untouched**, because it is the day the owner is looking at when they press the
+button, and re-identifying its rows would blank a time they are halfway through
+picking (:6277: a fix that breaks its own neighbour).
+
+### 2 · C/H-2 — THE CLOSURE WON IN THE HEADLINE AND NOWHERE ELSE
+
+A member's card read **"Closed today — Holi"** and, three lines below, today's
+own row printed **`06:00 – 07:00`** — in the brighter colour the list uses to
+mark today. The headline branched on the closure; the week list did not.
+
+**The list carries no heading, so nothing frames it as "the usual pattern", and
+the one row a member's eye is steered to was the one asserting the gym is open on
+a day it had declared shut.** :26684 §3's two mechanisms conflated on the READ
+side: the dated closure wins over the weekly pattern **in every place the pattern
+is drawn**, not merely in the first one.
+
+Today's row now says **Closed**. The fix is deliberately not a heading over the
+list — that would leave the false row and explain it away.
+
+### 3 · THE PART TO KEEP: A MUTANT WAS RED OVER THIS AND ITS OWN `why` DESCRIBES IT
+
+**C133 exists**, it is aimed at exactly this guarantee, and its `why` reads: *"the
+dated closure stops winning over the weekly pattern, so a gym that typed `Closed
+today - Holi` still shows its ordinary Wednesday hours"*. **That is C/H-2, spelled
+out, in the guard written to prevent it — and the sweep reported it RED.**
+
+It could only ever see the headline, because the one test it filters to could only
+ever see the headline: *"a dated closure WINS over the weekly pattern"*, whose
+whole negative assertion was `queryByText('Today: 06:00 – 07:00')`. The week
+list's row renders `06:00 – 07:00` **without** the `Today: ` prefix, so the query
+matched nothing and the test was green over a member being lied to.
+
+**THIS IS :15534's RULE RECURRING — *a mutant's `why` is not evidence that
+something is guarded* — and it is worth the second entry because the shape is
+sharper here.** A mutant's RED is a claim about the SMALLEST thing its filtered
+test can see, never about the sentence in its `why`. It is :26947 §2's *"a test
+whose NAME is wider than its coverage"* one level up: **the `why` is wider than
+the test, and the test is wider than its assertion.** When those three describe
+the same defect and it ships anyway, the failure is at the narrowest of them.
+
+The test now asserts the whole document — `queryAllByText('06:00 – 07:00')` is
+zero, and seven rows read Closed — with a positive control beside it (a day the
+closure is NOT about still reads its real hours), without which an override that
+fired on every row, or a card that drew no hours whenever any closure existed,
+would satisfy every assertion in it.
+
+### 4 · THE ONE CONTROL THAT DESTROYS SOMETHING HAD NO OBSERVER AT ALL
+
+Not a liar — a hole, and the review found it by grepping for one: **`removeSession`
+and its ✕ had no test and no mutant anywhere in the repo.** Seventeen hours
+mutants covered the fold, the copy, the clock, the overlap strictness, the ISO
+conversion, `unset` and the read-only gate; **the one button that deletes a row
+was unwatched**, which is why C/H-1 could ship through it. It now has both
+(**C151**), and rule 4a names exactly this column.
+
+### 5 · TWO OF THE REVIEW'S OWN LOWS ARRIVED ON THE THIRD PASTE, AND WHAT HELD THEM IS THE POINT
+
+The finding list arrived truncated — L-1, L-2, then straight into L-6's text
+mid-sentence — and **a re-paste asked for specifically to recover them was cut in
+the same place.** They came through on the third and are FIXED here:
+
+- **L-3 — a raw ISO date shown to a person**, `Closed 2026-09-20`, on the
+  member's card and the owner's list. True, so never Critical/High, but machine
+  spelling. Now `closureDateLabel` → **`Sun 20 Sep 2026`**. **The obvious fix is
+  the one that breaks it:** a closure is the gym's calendar date with no instant
+  in it, `new Date('2026-09-20')` is UTC midnight, and `toLocaleDateString` then
+  prints **the 19th to every reader west of the gym** — trap #8 arriving on the
+  one surface this feature has kept it off all the way through. Hand-built for
+  the reason `clockLabel` is: the label must depend on the GYM. **C154 states its
+  own limit rather than overstating the row** — this suite pins `Asia/Kolkata`,
+  where UTC midnight is the same day, so the FORMAT is observable here and the
+  SHIFT is not.
+- **L-4 — a path segment built without `encodeURIComponent`** in
+  `removeClosure`, while the three join-code calls under it have always encoded
+  theirs. Unreachable today, and fixed as the file's own pattern rather than as a
+  live hole.
+
+**THE PART TO KEEP IS WHERE THEY LIVED WHILE THEY COULD NOT BE READ.** Two
+findings existed, were known to exist, and could not be acted on — which is
+precisely the state work disappears from. They went onto `OWED.md` by name for
+the two hours they were unreadable, not into a sentence in a report. **A finding
+nobody can read is not a finding nobody has**, and prose-only deferrals are what
+that file was created to stop.
+
+### Round log
+
+**PROVE, final bytes.** web **1469 / 1469 across 53 files, exit 0** — :27333's
+1459 plus this round's ten, which reconciles exactly (`hoursView` 45→**50**,
+`openingHours.render` 21→**25**, `gymHours.render` 8→**9**). The review's stated
+baseline of 1460 is one above the card's own recorded figure and was not
+re-derivable here; the arithmetic above is what this round measured.
+`eslint --max-warnings=0` **exit 0** on all seven touched web files · shared `tsc`
+**0** · api `tsc` **0** · shared tests **51/51** · shared `lint` (its own script,
+`eslint src test`) **exit 0** · `check-harnesses` **25 scripts parse**.
+
+**RULE 3, measured through the COMMITTED harness rather than by hand** (:5105's
+distinction — *"I measured it RED"* and *"the committed harness measures it RED"*
+are different claims). **Console sweep, a stated SUBSET of 174: C145, C149, C150,
+C151, C152, C153, C154 — 7 mutants · 7 RED · 0 ALIVE · 0 never ran**, all seven
+controls GREEN and tallied first, restore verified byte-exact after every mutant,
+whole-table anchor pre-check green over all 174 rows. **Re-run in full after the
+Low fixes landed**, because a verdict on bytes that have moved is not a verdict
+(:15198).
+
+**C145 WAS RE-ANCHORED BY THIS ROUND'S OWN FIX AND RE-MEASURED, NOT ASSUMED**
+(:8610): the fresh id and the source-day carve-out moved the line it names. Its
+subject is unchanged, and **C152 now shares that line guarding the opposite half**
+— C145 says the rows are COPIED, C152 says each copy is a NEW ROW.
+
+**O122 RE-ANCHORED AND RE-MEASURED RED** on the LOCAL database (`localhost:5433`,
+:13659 / :21897 — the database is named because a mutant verdict without one is
+not evidence), 1 of 199, whole-table pre-check green, mass-write detector clean,
+restore byte-exact.
+
+**THE SHEET GAINED STEP 22b** — the only step that looks at today's own row on a
+member's card. **It is OUTSTANDING and says so in three places**: Kd discharged
+this smoke by declaration on 2026-09-01 (:27415), and **a declaration cannot
+cover a step that did not exist when it was made.**
+
+**NOT RUN AND NOT CLAIMED:** the api suite (no `apps/api/src` file is touched —
+the only api change is a mutation anchor), the full console sweep, and **T3 ROUND
+2, which is diff-only** (:5348 rule 2) and is the remaining review gate.
+`OWED.md`'s line does not tick.
+
+## 2026-09-01 — OPENING HOURS, WEB HALF, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and three of the six findings are the previous round's own instruments overstating what they did
+
+**Read before writing a comment that says what a test guarantees, before writing
+a mutant's `why` about a warning you have not seen, before correcting a count in
+a record, before leaving a row addressed by its position anywhere in this app,
+and before printing a bare "Closed" on any surface that also draws a weekly
+pattern.**
+
+Reviews the fixes in :27468 (diff-only, :5348 rule 2). **Zero Critical/High ⇒ the
+packet SHIPS** — the two-rounds-running escape hatch never armed, and this closes
+the web half's review gate. Six Low, all fixed here, none of which bought another
+round. Kd approved the finding list before a byte was written (*"go"*).
+
+**EVERY FINDING WAS MEASURED HERE BEFORE IT WAS TOUCHED, AND ONE OF THE REVIEW'S
+OWN CLAIMS DID NOT SURVIVE THAT.** L-1 reported that both guarantees a named test
+claims are unobserved anywhere in the repo. Measured: re-identify the source day
+and `hoursView.test.js`'s *"gives every copied row its OWN identity"* goes RED —
+`expected [ 's21', 's22' ] to deeply equal [ 'm1', 'm2' ]`. **The true finding is
+narrower than the reported one, and it is the narrower one that was fixed**
+(:23928 — a figure a review hands you is corrected, not carried).
+
+### 1 · THREE OF THE SIX ARE INSTRUMENTS LYING ABOUT THEMSELVES, AND THE PATTERN IS WORTH MORE THAN THE CASES
+
+Not the code: a test's name, a mutant's `why`, and a count in four records. **All
+three were written by the round that fixed the Critical/Highs, in the same hours,
+and every one of them overstates what it had done.**
+
+- **L-1 — a test claimed two guarantees and observed neither.** It was called
+  *"keeps a row that is being typed when a DIFFERENT day is copied across"* and
+  its closing comment said the source day "is not re-identified". Both probes
+  measured GREEN. **The second is the instructive one: a COMPLETE time re-reads
+  to the same value after a remount**, so a source row holding `06:00` cannot
+  tell "left alone" from "re-identified" — the FIXTURE forbade the observation,
+  not the assertion (:4856). Given a HALF-PICKED source row it is now RED on
+  exactly that (`expected '' to be '8'`), and RED on a copy that does nothing
+  (`expected '9' to be '6'`).
+- **L-2 — C153's `why` said there is no warning to read.** Measured under C153's
+  own mutation: **React reports `Encountered two children with the same key,
+  null` twice and `test-setup.js` fails the run.** The duplicate-key guard
+  (:20867) sees it whenever a day holds two rows; it is blind only to a week of
+  single-row days, where the nulls land in different day lists. **A mutant's
+  `why` is a claim about the world and takes V1 like any other** — :15534's rule
+  arriving in the sentence rather than in the verdict.
+- **L-3 — "four Low" over a list of six, in four files.** The two late findings
+  were added to the lists and to the prose and the opening number never moved
+  with them, so :27468 contradicted itself four lines apart. Corrected in every
+  copy, struck rather than overwritten (:20587).
+
+**A ROUND'S ACCOUNT OF ITSELF IS WRITTEN WHEN IT IS MOST TIRED AND LEAST
+SCEPTICAL, AND IT IS THE PART NO TEST CAN FAIL.** Nothing in this repo checks a
+test's name against its assertions, a `why` against its run, or a count against
+the list beneath it. The diff-only re-review is the only thing that does — which
+is the argument for round 2 existing even on a round whose CODE was right.
+
+### 2 · L-5 — A TRUE SENTENCE THAT READS AS A DIFFERENT ONE, AND WHY IT STAYED LOW
+
+A member's card drew today's dated closure as a bare **"Closed"** in the week
+list. Every word of it true — the gym IS shut today. **But that list is the
+weekly pattern**, so "Wed — Closed" is read as *closed every Wednesday*, which is
+Kd's OTHER mechanism (:26684 §3), and the two exist precisely so that a gym's two
+answers cannot disagree.
+
+Now **"Closed today"**. The extra word names which mechanism shut the day, and it
+is a calendar-day comparison in the GYM's zone on both sides (`todayIso` from
+`gymToday`; the closure matched on the gym's own date) — which is what :13432's
+standing rule demands of any sentence carrying the word "today".
+
+**IT IS LOW UNDER :5807 AND THE REASONING MATTERS, because the temptation is to
+round it up:** the test is *"on screen AND wrong"*, and nothing here was wrong.
+What was wrong is what a reader could take it to mean, one inference further out.
+Round 1's C/H-2 in this same component WAS false — a row printing opening hours
+under a "Closed today" headline — and the distance between those two is the whole
+of rule 1a. Two tests go RED without the new word. **No new mutant: wording is
+rule 4a's "never mutated" column**, and spending a slot there would say the audit
+grades a synonym the way it grades a delete.
+
+### 3 · L-4 — THE FIX WAS APPLIED TO THE DRAWING AND LEFT IN THE ADDRESSING
+
+Round 1 gave every session row a minted id and keyed the list by it.
+**`editSession` and `removeSession` went on taking an INDEX**, three lines from
+the `key` that had just stopped being one.
+
+**Unreachable today, and it is worth saying exactly why rather than "it is
+safe":** nothing sorts `day.sessions` in place — `hoursProblem` sorts a `parsed`
+copy and `hoursRequest` sorts the mapped objects, both read here — so a position
+still names the row the owner clicked. **The first sort that lands on the draft
+itself turns an edit or a ✕ into an action on somebody else's row, silently, and
+that is round 1's Critical/High arriving a third way.** Fixed as the CLASS
+(:20712's sentence one level down: identity belongs to the ROW), which is what
+protects the field a row gains next year from an author who never reads this.
+**C151 was re-anchored onto the new line and re-measured RED, not assumed**
+(:13336).
+
+### 4 · L-6 — A FIX FROM ROUND 1 THAT NOTHING WATCHED, AND THE TEST THAT WOULD HAVE PASSED ANYWAY
+
+`removeClosure`'s `encodeURIComponent` was round 1's own Low-4. **Measured:
+revert it and every suite in this repo stays green** — the four opening-hours
+calls had no *"hits the X surface"* test, the pattern this file has used since
+the join door.
+
+**THE SECOND TEST IS THE ONE THAT DOES THE WORK, AND THE FIRST IS THE TRAP IT
+AVOIDS:** a `YYYY-MM-DD` day is unchanged by `encodeURIComponent`, so an address
+assertion driven with a real date passes with the encoding deleted. That is
+:7104's PG1 in a new place — a guard whose only test is satisfied by a different
+guarantee. Driven with `a/b?c` it fails the moment the encoding goes.
+
+### Round log
+
+**PROVE, final bytes.** web **1471 / 1471 across 53 files, exit 0** — :27468's
+1469 plus this round's two new API-client tests, which reconciles exactly
+(`orgsApi` 45 → **47**; `hoursView` **50**, `openingHours.render` **25**,
+`gymHours.render` **9**, all three unchanged in count).
+`eslint --max-warnings=0` **exit 0** on all six touched web files ·
+`check-harnesses` **25 scripts parse (22 .mjs + 3 .sh)**.
+
+**No `apps/api/src`, `packages/shared` or migration file is touched**, so the api
+and shared suites were NOT run and are NOT claimed.
+
+**SWEEP, console, a stated SUBSET of 174: C145, C149, C150, C151, C152, C153,
+C154 — 7 mutants · 7 RED · 0 ALIVE · 0 never ran**, all seven controls GREEN and
+tallied first, restore verified byte-exact after every mutant, whole-table anchor
+pre-check green over all 174 rows. **Re-run on the FINAL bytes, after the Low
+fixes landed** (:15198).
+
+**THE FOUR FIX PROBES, each driven through the committed suites and each restored
+byte-exact by sha256:**
+
+| probe | result |
+|---|---|
+| the source day re-identified | `openingHours.render` **RED** — `expected '' to be '8'` (GREEN before this round) |
+| `copyDayToAll` made a no-op | `openingHours.render` **RED** — `expected '9' to be '6'` |
+| today's row back to a bare `Closed` | `gymHours.render` **2 RED** |
+| `encodeURIComponent` reverted | `orgsApi` **RED** — `a/b?c` against `a%2Fb%3Fc` (GREEN before this round) |
+
+**THE SMOKE SHEET'S STEP 22b WAS UPDATED BY THIS ROUND AND THAT IS PART OF THE
+FIX, NOT SCOPE:** its ✅ said today's row *"reads Closed"*, which the L-5 fix makes
+false — an unrun step whose expectation no longer matches the shipping bytes
+would have had Kd report a FAIL on a correct screen. The step still asserts the
+same guarantee and now names the two words.
+
+**WHAT THE ROUND DELIBERATELY DID NOT DO:** it did not spend a mutant on the
+wording fix (rule 4a), did not widen past the six approved findings (:25450), and
+did not re-run the full 174-mutant sweep — stated rather than implied.
+
+**THE `OWED.md` LINE STILL DOES NOT TICK, AND ONLY ONE THING HOLDS IT NOW:**
+**smoke step 22b is unrun** — the only step that looks at today's own row on a
+member's card, added after Kd discharged the sheet by declaration (:27415), and a
+declaration cannot cover a step that did not exist when it was made. **The review
+gate itself is CLOSED**: zero Critical/High on a diff-only round is the ship
+condition, and a Low buys no further round (:5348 rule 1).
+
+## 2026-09-01 — SMOKE STEP 22b RUNS AND PASSES, THE OPENING-HOURS LINE TICKS — and it is the ONE step of this sheet anybody has ever observed
+
+**Read before citing `smoke-opening-hours.md` as evidence that these screens work
+in a browser, before building the STATE for a smoke step yourself, before
+re-smoking ONE step instead of a sheet, and before reading a one-word "passed" as
+covering everything that was in the message.**
+
+Kd ran step 22b at the browser on 2026-09-01 and reported **PASS**. It was the
+last gate on `CARD-gym-hours.md`; **`OWED.md`'s line ticks on this commit**,
+naming the web half (:27094), Kd's five screen changes (:27204), his four
+corrections (:27333), T3 round 1 (:27468) and T3 round 2 (:27659).
+
+### 1 · WHY ONE STEP, AND WHY THIS ONE — the scope is a claim, not a convenience
+
+The other 26 steps were discharged by DECLARATION on 2026-09-01 (:27415), never
+run. **Step 22b did not exist when that declaration was made**, which is the whole
+reason it survived it — a declaration cannot cover a step nobody had written.
+It is also the only step that looks at the surface of T3 round 1's second
+Critical/High: **today's own row on a member's card.** :25707's rule applied to a
+step that was never run rather than to one being re-run.
+
+### 2 · THE FIXTURE WAS BUILT SO THE STEP COULD FAIL
+
+**A ✅ reading "the row says Closed today" is satisfied by a card that drew no
+hours at all**, which is :24893 §1's shape and the trap this project keeps
+walking into. So the gym was given **real hours on every one of the seven
+weekdays** — `06:00 – 07:00` — before today's closure was written.
+
+That makes the three outcomes distinguishable at a glance, which is what a smoke
+step is for:
+
+| what the row could have said | what it would have meant |
+|---|---|
+| `06:00 – 07:00` | the closure lost outside the headline — round 1's C/H-2, unfixed |
+| a bare `Closed` | the fix landed but T3 round 2's L-5 did not |
+| **`Closed today`** | both landed — **and this is what he saw**, with the other six rows still reading `06:00 – 07:00` |
+
+The six unchanged rows are the positive control: an override that fired on every
+row, or a card that stopped drawing hours whenever any closure existed, would
+have been visible in the same glance.
+
+### 3 · THE DEPARTURE, DECLARED — I BUILT THE STATE AND HE DID THE LOOKING
+
+**This sheet says in its own setup: "No pauses and no commands from the chat. The
+whole sheet is yours to run start to finish." I departed from that and it is
+recorded here rather than left for a later chat to discover.** Reaching step 22b
+means two accounts, a gym, a trial, a week of hours, a dated closure and a
+confirmed membership — twenty-odd steps of setup for one observation, on a local
+database where none of his own gyms exist. **I built all of it over the same HTTP
+API the browser uses**, then handed him a link, one login and one row to read.
+
+**THE TEST FOR WHETHER THAT IS LEGITIMATE IS :23535's, AND IT IS PASSED: step 22b
+CONTAINS NO COMMAND.** It is wholly a person at a screen reading one row, so his
+word is the correct and complete evidence for it — the same reasoning that made
+:25707's step-11 pass valid. **Where it would NOT hold is a step whose action is
+mine**; there, a pass is mine to produce with output, and his word cannot stand
+in for it.
+
+**Two things about the fixture that were choices, stated so they are not read as
+neutral:** the gym's zone is `Asia/Kolkata`, deliberately the same as Kd's, so
+"today" on screen is unambiguously today for the person looking — **which means
+this run says NOTHING about the gym-zone-versus-reader-zone question** that
+`gymHours.render.test.jsx` covers with a UTC+14/UTC-12 pair. And the gym is on the
+default `24h` clock, so the six other rows read `06:00 – 07:00` rather than
+`6:00 AM`.
+
+### 4 · WHAT A ONE-WORD PASS DOES NOT COVER
+
+The same message offered an **optional owner-side check** — add a time row on
+Monday, then delete it — because T3 round 2's L-4 changed how a row is edited and
+deleted. **He answered "passed" and did not say he ran it, so it is NOT recorded
+as run.** A pass is per STEP, never per message (:27415, :23535). The L-4 change
+stands on C149 and C151, both RED through the committed harness.
+
+**AND THE 26 STEPS ARE NOT UPGRADED BY THIS.** They remain a discharged GATE on
+the operator's authority, not an observed run. **This tick is not evidence that
+the rest of these screens work in a browser** — the sheet says so in its own
+status block and this entry does not soften it.
+
+### Round log
+
+No `src`, test, harness or migration file is touched by this commit: records
+only — `OWED.md` (the line ticks), `RUNBOOK/smoke-opening-hours.md` (status),
+`DECISIONS.md`, `DECISIONS-INDEX.md`, `DECISIONS-TRIGGERS.md`, `HANDOFF.md`. The
+card's PROVE figures are at :27468 and :27659 and are not restated here.
+
+**The servers this run used were LOCAL and are named so nobody assumes otherwise**
+— api on `localhost:3000` against `localhost:5433` (the sheet's own S3 command,
+not `--env-file=.env`), web on `localhost:5173`, both started for this run.

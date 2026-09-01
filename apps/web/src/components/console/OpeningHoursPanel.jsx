@@ -4,6 +4,7 @@ import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
 import {
   WEEKDAYS,
   closureAbsentReason,
+  closureDateLabel,
   copyDayToAll,
   daySummary,
   gymToday,
@@ -14,6 +15,7 @@ import {
   hoursProblem,
   hoursRequest,
   hoursSummary,
+  mintSessionId,
   sameHoursDraft,
   splitClock,
 } from '../../pages/console/hoursView';
@@ -289,7 +291,18 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
     edit({ ...draft, mode });
   };
 
-  const editSession = (weekday, index, field, value) => {
+  /** **A ROW IS ADDRESSED BY ITS OWN ID, NEVER BY ITS POSITION** — the same
+   *  sentence `mintSessionId` and the `key` below are written on, applied to the
+   *  two functions that CHANGE a row rather than to the one that draws it.
+   *
+   *  It was safe while it was an index, and it was safe by accident: nothing
+   *  currently reorders `day.sessions` in place — `hoursProblem` and
+   *  `hoursRequest` each sort a COPY — so a position still named the row the
+   *  owner clicked. **The first sort that lands on the draft itself would make
+   *  an edit land on somebody else's row, silently**, which is T3 round 1's
+   *  Critical/High arriving a third way. Identity belongs to the row; a position
+   *  is a fact about a list at one moment. */
+  const editSession = (weekday, id, field, value) => {
     if (draft === null) return;
     edit({
       ...draft,
@@ -298,7 +311,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
           ? day
           : {
               ...day,
-              sessions: day.sessions.map((s, i) => (i === index ? { ...s, [field]: value } : s)),
+              sessions: day.sessions.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
             },
       ),
     });
@@ -311,7 +324,13 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
       days: draft.days.map((day) =>
         day.weekday !== weekday
           ? day
-          : { ...day, sessions: [...day.sessions, { opens: '', closes: '' }] },
+          : {
+              ...day,
+              // ITS OWN IDENTITY FROM THE MOMENT IT EXISTS — see `mintSessionId`.
+              // A row identified by its position hands its contents to whichever
+              // row moves into that position when another one is deleted.
+              sessions: [...day.sessions, { id: mintSessionId(), opens: '', closes: '' }],
+            },
       ),
     });
   };
@@ -364,14 +383,16 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
     }
   };
 
-  const removeSession = (weekday, index) => {
+  /** THE ✕. By id for `editSession`'s reason, and here the cost of a position
+   *  would be a row the owner did not point at being destroyed. */
+  const removeSession = (weekday, id) => {
     if (draft === null) return;
     edit({
       ...draft,
       days: draft.days.map((day) =>
         day.weekday !== weekday
           ? day
-          : { ...day, sessions: day.sessions.filter((_, i) => i !== index) },
+          : { ...day, sessions: day.sessions.filter((s) => s.id !== id) },
       ),
     });
   };
@@ -473,11 +494,6 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
         ) : (
           <>
             <form onSubmit={save} className="flex flex-col gap-5">
-              {/* THE THREE STATES, AND `unset` IS SHOWN BUT NOT SELECTABLE.
-                  A gym that has answered cannot un-answer — the server's union
-                  does not admit `unset` — so offering it as a choice would be a
-                  control that always fails. It appears only while it is the
-                  gym's current state, so an owner can see where they are. */}
               {/* THE CLOCK THIS GYM READS ITS OWN HOURS ON — Kd, 2026-09-01:
                   *"for time both format shpuld be ther gym can choose format
                   like it will be 4 or 16"*.
@@ -522,6 +538,13 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                 </p>
               </fieldset>
 
+              {/* THE THREE STATES, AND `unset` IS SHOWN AS A SENTENCE RATHER
+                  THAN OFFERED AS A CHOICE. A gym that has answered cannot
+                  un-answer — the server's union does not admit `unset` — so a
+                  third radio here would be a control whose every save is
+                  refused. The sentence below appears only while `unset` is the
+                  gym's current state, so an owner can still see where they
+                  are. */}
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
                   When is your gym open?
@@ -608,11 +631,23 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                         {isOpen ? (
                           <div className="px-3 pb-3">
                             {sessions.map((session, index) => (
-                              /* `flex-wrap` on the ROW so a narrow screen breaks
+                              /* **KEYED BY THE ROW'S OWN ID, NEVER BY ITS
+                                 POSITION** — T3 round 1's first Critical/High,
+                                 and the reason is in `mintSessionId`. With
+                                 `key={index}`, deleting a row did not delete a
+                                 row: it handed the next row's data to the
+                                 deleted row's still-mounted boxes, which keep
+                                 their own half-finished state and re-read the
+                                 row only when its stored string changes. Two
+                                 half-finished rows both store `''`, so nothing
+                                 changed, nothing re-read, and the gym saved a
+                                 time nobody picked.
+
+                                 `flex-wrap` on the ROW so a narrow screen breaks
                                  BETWEEN the two times rather than inside one — the
                                  halves are `shrink-0` above, so a break can only
                                  happen where it reads properly. */
-                              <div key={index} className="flex flex-wrap items-center gap-2 mb-2">
+                              <div key={session.id} className="flex flex-wrap items-center gap-2 mb-2">
                                 {/* THE LABEL CARRIES THE SESSION NUMBER, and it
                                     is not cosmetic: a day can hold many, so
                                     without it three controls are indistinguishable
@@ -623,7 +658,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                                   kind="opens"
                                   value={session.opens}
                                   clockFormat={clockFormat}
-                                  onChange={(v) => editSession(weekday.iso, index, 'opens', v)}
+                                  onChange={(v) => editSession(weekday.iso, session.id, 'opens', v)}
                                   disabled={controlsOff}
                                 />
                                 <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
@@ -634,12 +669,12 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                                   kind="closes"
                                   value={session.closes}
                                   clockFormat={clockFormat}
-                                  onChange={(v) => editSession(weekday.iso, index, 'closes', v)}
+                                  onChange={(v) => editSession(weekday.iso, session.id, 'closes', v)}
                                   disabled={controlsOff}
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => removeSession(weekday.iso, index)}
+                                  onClick={() => removeSession(weekday.iso, session.id)}
                                   disabled={controlsOff}
                                   aria-label={`Remove ${weekday.label} session ${String(index + 1)}`}
                                   className="p-1 rounded-lg"
@@ -837,7 +872,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                   {hours.closures.map((closure) => (
                     <li key={closure.day} className="flex items-center justify-between gap-3">
                       <span className="text-sm" style={{ color: '#fff' }}>
-                        {closure.day}
+                        {closureDateLabel(closure.day)}
                         {closure.note !== null && closure.note !== '' ? (
                           <span style={{ color: 'rgba(255,255,255,0.55)' }}> — {closure.note}</span>
                         ) : null}

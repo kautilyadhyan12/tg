@@ -218,7 +218,13 @@ export const orgService = {
     readThrough(
       removeGymClosureResponseSchema,
       'that closure',
-      authApi.delete(`/v1/orgs/${gymId}/closures/${day}`),
+      // ENCODED LIKE EVERY OTHER PATH SEGMENT IN THIS FILE — the three join-code
+      // calls below have always done it. Today's `day` reaches here only from
+      // the server's own response through a `YYYY-MM-DD` schema, so nothing can
+      // currently be smuggled into the path; this is the FILE'S PATTERN rather
+      // than a fix for a live hole, and a segment that is safe only because of
+      // where its caller happens to get it is one refactor from not being.
+      authApi.delete(`/v1/orgs/${gymId}/closures/${encodeURIComponent(day)}`),
     ),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
