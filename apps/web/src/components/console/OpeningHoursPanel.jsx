@@ -7,12 +7,15 @@ import {
   copyDayToAll,
   daySummary,
   gymToday,
+  hourChoices,
+  joinClock,
+  minuteChoices,
   hoursDraft,
   hoursProblem,
   hoursRequest,
   hoursSummary,
   sameHoursDraft,
-  timeChoices,
+  splitClock,
 } from '../../pages/console/hoursView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
 import { READ_ONLY_NOTE } from '../../pages/console/billingView';
@@ -48,41 +51,126 @@ const inputStyle = {
   color: '#fff',
 };
 
-/** A TIME PICKED FROM A LIST, never typed — Kd at the screen, 2026-09-01:
- *  *"i have to type by hand what is this drop down should there to use not hand
- *  type"*.
+/** `_ _ : _ _` — HOUR, MINUTE, and AM/PM when the gym reads on a 12-hour clock.
  *
- *  **A `<select>` rather than `<input type="time">`, and the reason is the one
- *  he gave.** A time input on the desktop is two typed number fields with a
- *  spinner; a list of quarter-hours is one click. It also carries the label he
- *  asked for — the options read on the GYM's clock, so a gym that chose 12-hour
- *  never sees `16:00` anywhere.
+ *  Kd, 2026-09-01: *"in the time select this is what i meant _ _ : _ _ here when
+ *  the gym clicks they can set the time theself by selecting number but you have
+ *  give soem already set time"*. **The first version was ONE dropdown of 96
+ *  pre-made times and he was right that it is the wrong shape** — a person
+ *  setting a clock picks an hour and then a minute, and a 96-item list is a
+ *  scroll where three short lists are three glances.
  *
- *  **The options include the value the gym already holds even when the step
- *  would miss it** (`timeChoices`), so an existing 06:05 cannot silently vanish
- *  from a box the moment somebody opens the panel. */
+ *  **Every box starts EMPTY and shows `--`.** Nothing is chosen on the gym's
+ *  behalf, and `hoursProblem` refuses to save while any part is unfilled — a box
+ *  sitting on the first option would be the screen answering a question nobody
+ *  asked.
+ *
+ *  **24:00 lives in the HOUR list on the closing end only**, spelled out as
+ *  midnight at the end of the day, and its minute is fixed at `00` because there
+ *  is no 24:15. */
 function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
-  const choices = timeChoices(kind, clockFormat, value);
+  /** **THE THREE BOXES HOLD THEIR OWN HALF-FINISHED STATE, and they have to.**
+   *
+   *  The draft stores one string per end (`"06:30"`), which cannot express
+   *  *"the hour is 6 and the minute is not chosen yet"*. Deriving all three
+   *  boxes from that string meant picking the hour produced `''` — nothing is
+   *  complete — and the hour box snapped straight back to `--`. **The first
+   *  version did exactly that and the control was unusable: neither box would
+   *  hold what you picked.** Caught by the render test that drives the two
+   *  boxes separately, which is how a person uses them.
+   *
+   *  So the parts live here and the joined string goes OUT. `hoursProblem` is
+   *  still what refuses to save a row that is half-filled — nothing here
+   *  invents the missing half. */
+  const [parts, setParts] = useState(() => splitClock(value, clockFormat));
+  const [lastValue, setLastValue] = useState(value);
+  const [lastFormat, setLastFormat] = useState(clockFormat);
+
+  // The prop moved under us — a save came back, the week was copied across, or
+  // the gym switched clock. React's own pattern for state derived from a prop,
+  // so there is no frame in which the boxes and the row disagree.
+  if (value !== lastValue || clockFormat !== lastFormat) {
+    setLastValue(value);
+    setLastFormat(clockFormat);
+    setParts(splitClock(value, clockFormat));
+  }
+
+  const hours = hourChoices(kind, clockFormat);
+  const minutes = minuteChoices();
+  const endOfDay = parts.hour === 24;
+
+  const emit = (next) => {
+    const merged = { ...parts, ...next };
+    setParts(merged);
+    const joined = joinClock(merged, clockFormat);
+    // `lastValue` is moved with it so the sync above does not immediately
+    // overwrite a half-finished pick with the row's still-empty string.
+    setLastValue(joined);
+    onChange(joined);
+  };
+
+  const boxStyle = { ...inputStyle, opacity: disabled ? 0.5 : 1 };
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      aria-label={label}
-      className="rounded-lg px-2 py-1.5 text-sm"
-      style={{ ...inputStyle, opacity: disabled ? 0.5 : 1 }}
-    >
-      {/* An unfinished row shows this rather than silently sitting on the first
-          option — a box that reads 12:00 AM when nobody chose it is the screen
-          answering on the gym's behalf. `hoursProblem` refuses to save while one
-          is here. */}
-      <option value="">--</option>
-      {choices.map((choice) => (
-        <option key={choice.value} value={choice.value}>
-          {choice.label}
-        </option>
-      ))}
-    </select>
+    <span className="inline-flex items-center gap-1">
+      <select
+        value={parts.hour === null ? '' : String(parts.hour)}
+        onChange={(e) => {
+          const hour = e.target.value === '' ? null : Number(e.target.value);
+          // The end-of-day entry has no minutes to choose, and picking it must
+          // not leave a stale `:45` behind it.
+          emit(hour === 24 ? { hour, minute: 0 } : { hour });
+        }}
+        disabled={disabled}
+        aria-label={`${label} hour`}
+        className="rounded-lg px-2 py-1.5 text-sm"
+        style={boxStyle}
+      >
+        <option value="">--</option>
+        {hours.map((h) => (
+          <option key={h.value} value={h.value}>
+            {h.label}
+          </option>
+        ))}
+      </select>
+
+      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        :
+      </span>
+
+      <select
+        value={parts.minute === null ? '' : String(parts.minute)}
+        onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
+        disabled={disabled || endOfDay}
+        aria-label={`${label} minute`}
+        className="rounded-lg px-2 py-1.5 text-sm"
+        style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
+      >
+        <option value="">--</option>
+        {minutes.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+
+      {/* AM/PM ONLY ON THE 12-HOUR CLOCK — it is meaningless on the other one,
+          and the end-of-day entry already says "midnight" in its own label. */}
+      {clockFormat === '12h' && !endOfDay ? (
+        <select
+          value={parts.meridiem ?? ''}
+          onChange={(e) => emit({ meridiem: e.target.value === '' ? null : e.target.value })}
+          disabled={disabled}
+          aria-label={`${label} AM or PM`}
+          className="rounded-lg px-2 py-1.5 text-sm"
+          style={boxStyle}
+        >
+          <option value="">--</option>
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      ) : null}
+    </span>
   );
 }
 
@@ -412,7 +500,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                       onChange={() => void changeClock('12h')}
                       disabled={!allowed || readOnly || clockSaving}
                     />
-                    4:00 PM
+                    12-hour <span style={{ color: 'rgba(255,255,255,0.45)' }}>(4:00 PM)</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
                     <input
@@ -422,7 +510,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                       onChange={() => void changeClock('24h')}
                       disabled={!allowed || readOnly || clockSaving}
                     />
-                    16:00
+                    24-hour <span style={{ color: 'rgba(255,255,255,0.45)' }}>(16:00)</span>
                   </label>
                 </div>
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
@@ -464,6 +552,15 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
 
               {draft?.mode === 'scheduled' ? (
                 <div className="flex flex-col gap-2">
+                  {/* SAID ONCE, HERE, INSTEAD OF EVERY EMPTY ROW CLAIMING IT.
+                      Kd: *"if time is not chosen then beside day why closed is
+                      showing?"* — a day nobody has filled in is not a day the gym
+                      has said it is shut, and a row asserting that while somebody
+                      is still typing is the screen answering for them. The rule
+                      is true and belongs above the list, not on each line. */}
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    A day with no times is a day you are closed.
+                  </p>
                   {WEEKDAYS.map((weekday) => {
                     const day = draft.days.find((d) => d.weekday === weekday.iso);
                     const sessions = day?.sessions ?? [];

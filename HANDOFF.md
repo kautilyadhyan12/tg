@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD'S SECOND LOOK AT THE SCREEN — four corrections, DECISIONS :27333, on
+      top of :27204. **The picker I shipped in :27204 could not be used at all.**
+
+  1. **NEXT: KD'S BROWSER SMOKE, then the web half's T3.**
+     `RUNBOOK/smoke-opening-hours.md`, now **25 steps** — step 5 is split into
+     5/5b/5c so "each box keeps what you picked" is its own step, and step 9
+     checks the form says **"No times set"** rather than "Closed".
+     `OWED.md`'s line does NOT tick.
+  2. **THE PICKER WAS UNUSABLE AND ITS OWN TEST DID NOT SEE IT.** Three boxes
+     derived from one stored `"HH:MM"` string, which cannot express *"the hour is
+     6 and the minute is not chosen yet"* — so picking the hour produced `''` and
+     the box snapped back to `--`. **No time could be entered.** The test passed
+     because it set both boxes in ONE helper call; it went red only when split
+     into two, **which is how a person uses three boxes**.
+     **STANDING: when a control has more positions than the value it writes, the
+     control owns the state.** Deriving it from the value silently forbids every
+     position the value cannot hold.
+  3. **A LABEL THAT IS AN EXAMPLE IS NOT A LABEL.** "4:00 PM" / "16:00" read as
+     something other than the 12/24 choice he asked for; now
+     "12-hour (4:00 PM)" / "24-hour (16:00)".
+  4. **A FORM MUST NOT SAY "CLOSED" ABOUT A DAY NOBODY HAS FILLED IN** —
+     :26736 one level in. `daySummary` (the FORM) says "No times set" and the
+     rule is stated once above the list; **`dayLine` (the MEMBER's card) still
+     says "Closed" and must**, because there the gym HAS answered.
+  5. **HIS FOURTH COMPLAINT WAS THE DEFAULT, NOT A BUG.** *"the times are just
+     number no am pm"* — the gym was on `24h`, the deliberate default. **Checked
+     before changing anything**, which is why the fix went to the label and the
+     picker rather than to a phantom fault in the clock wiring.
+  6. **A MUTANT WHOSE SUBJECT CEASED TO EXIST WAS RE-AIMED, NOT DELETED.**
+     C144 guarded "a held time the step would miss", which hour+minute can always
+     express; it now guards the defect this very rewrite shipped (item 2), with a
+     test that drives the two boxes SEPARATELY.
+
+PROVE: web **1459/1459** across 53 files (+5) · `hoursView` 45 ·
+       `openingHours.render` 21 · `gymHours.render` 8 · web lint clean on all six
+       files · api `tsc` 0 · `check-harnesses` **25 scripts parse**.
+       **SWEEP: console, a stated SUBSET of 168 — 17 mutants · 17 RED · 0 ALIVE ·
+       0 never ran**, restore byte-exact after every mutant.
+       Guards: `build-decisions-triggers` **774 triggers from 211 of 349
+       rulings, 138 declare none, 0 unparsed** · `check-decisions-index`
+       **254 pointers resolve (253 on a heading, 1 deliberate mid-entry), 1001
+       headings**. Always-read RE-MEASURED: triggers **953** + §1 **997** +
+       §2 **58** = **2,008** — §1 and §2 have not moved all day; all FIVE of
+       today's records went to §1B.
+
+FILES: `apps/web/src/pages/console/hoursView.js` + `.test.js` ·
+       `apps/web/src/components/console/OpeningHoursPanel.jsx` +
+       `openingHours.render.test.jsx` · `apps/web/tools/mutate-console.mjs`
+       (C143/C144 re-aimed) · `RUNBOOK/smoke-opening-hours.md` · `OWED.md` ·
+       `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **THIRTEEN LOCAL COMMITS, NOTHING PUSHED, CI HAS SEEN NONE** (`d72131a`
+       through this one; `origin/web-repoint` is still `01999dc`). Pushing is
+       Kd's call. `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT.
+       **The local API and web dev servers are RUNNING**, restarted on the
+       shipping bytes, for Kd's smoke.
+```
+
+
+```
 TASK: KD SMOKED THE SCREEN AND RULED FIVE CHANGES — DECISIONS :27204, on top of
       :26812 (server), :26947 (its T3) and :27094 (the web half).
       He ran the sheet, said the feature WORKED, then that the screen was

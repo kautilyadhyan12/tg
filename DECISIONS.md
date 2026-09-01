@@ -27329,3 +27329,85 @@ refused with 23514.
 five changes and is now **23 steps** (`RUNBOOK/smoke-opening-hours.md`), with the
 fold at 7–8, "same every day" at 13–15, the calendar at 16 and the member's clock
 at 22 — **and the web half's T3.** `OWED.md`'s line does not tick.
+
+## 2026-09-01 — KD SMOKES THE SCREEN AGAIN AND CORRECTS FOUR THINGS, AND THE PICKER I SHIPPED COULD NOT HOLD A HALF-FINISHED TIME
+
+**Read before building ANY time or date control in this product, before deriving
+a control's state from a value that cannot hold a partial one, before writing
+"Closed" on a form somebody is still filling in, and before labelling a choice
+with an EXAMPLE of it.**
+
+His four, verbatim: *"which clock do you use? 4:00 PM / 16:00 — i did not mean
+that … there are two time format right one is 12 one is whole 24"* · *"in the
+time select this is what i meant `_ _ : _ _` … they can set the time theself by
+selecting number but you have give soem already set time"* · *"if time is not
+chosen then beside day why closed is showing?"* · *"the times are just number no
+am pm"*.
+
+### 1 · THE PICKER I SHIPPED COULD NOT BE USED AT ALL, AND ITS OWN TEST DID NOT SEE IT
+
+The rewrite replaced one 96-item list with three boxes — hour, minute, AM/PM —
+and derived all three from the stored `"HH:MM"` string. **That string cannot
+express *"the hour is 6 and the minute is not chosen yet"***, so picking the hour
+produced `''`, and the hour box snapped straight back to `--`. **Neither box
+would hold what you picked; no time could be entered.**
+
+**The render test written WITH it passed**, because it set both boxes in one
+helper call and the joined value was complete by the time anything re-rendered.
+It went red only when the helper was split into two `fireEvent.change` calls —
+**which is how a person uses three boxes.**
+
+**Fix: `TimePick` holds its own three parts and emits the joined string
+outward**, with React's adjust-state-on-prop-change pattern so a save, a
+copy-to-all or a clock switch still moves it. **STANDING: when a control's state
+has more positions than the value it writes, the control owns the state. Deriving
+it from the value silently forbids every position the value cannot hold** — and a
+test that exercises the control in ONE step cannot see it.
+Guarded by **C144**, whose test drives the two boxes SEPARATELY and says why.
+
+### 2 · A LABEL THAT IS AN EXAMPLE OF THE THING IS NOT A LABEL FOR THE THING
+
+The switch offered **"4:00 PM"** and **"16:00"** — samples, not names — and he
+read it as something other than the 12/24 choice he had asked for. Now
+**"12-hour (4:00 PM)"** and **"24-hour (16:00)"**: the name first, the example
+after it, in a quieter colour.
+
+### 3 · A FORM MUST NOT SAY "CLOSED" ABOUT A DAY NOBODY HAS FILLED IN
+
+Every empty weekday row said **Closed** while the owner was still typing.
+**That is :26736 one level in.** Its rule is that a gym which has not answered is
+never described as shut — and inside the FORM, a day nobody has reached yet has
+not been answered either, even on a gym that has answered for other days.
+
+The form now says **"No times set"**, and the rule it used to assert per row is
+stated **once, above the list**: *"A day with no times is a day you are closed."*
+**The MEMBER's card still says "Closed" and must** — there the gym has answered
+and the day is genuinely shut, which is how *"closed every Sunday"* is expressed
+(`dayLine` unchanged; `daySummary` is the one that moved).
+
+### 4 · THE AM/PM COMPLAINT WAS THE DEFAULT, NOT A BUG
+
+*"the times are just number no am pm"* — the wiring was correct and the gym was
+on `24h`, which is the deliberate default (§2 of :27204: it is what every
+existing gym's screens already drew). **Checked before changing anything rather
+than assumed**, which is the only reason the fix went to the label and the picker
+instead of to a phantom bug in the clock.
+
+### Round log
+
+**PROVE, final bytes:** web **1459/1459** across 53 files (+5) · `hoursView`
+**45** · `openingHours.render` **21** · `gymHours.render` **8** · web lint clean
+on all six files · api `tsc` 0 · `check-harnesses` **25 scripts parse**.
+**SWEEP: console, a stated SUBSET of 168 — 17 mutants · 17 RED · 0 ALIVE · 0
+never ran**, restore byte-exact after every mutant.
+**TWO MUTANTS WERE RE-AIMED RATHER THAN DELETED, and the second is the
+interesting one.** C143 moved from the old list's step to the new minute list's —
+same subject, new home. **C144's original subject ceased to exist**: it guarded
+"a held time the step would miss", which hour+minute can always express. Rather
+than drop the row, it was re-pointed at **the defect this rewrite actually
+shipped** (§1). A mutant whose subject is gone is a slot to spend on what the
+change broke.
+**NOT RUN AND NOT CLAIMED: the browser SMOKE**, whose sheet is updated for the
+three-box picker (step 5 is now 5/5b/5c so the one-box-at-a-time behaviour is
+its own step) and for "No times set" — **25 steps** — **and the web half's T3.**
+`OWED.md`'s line does not tick.

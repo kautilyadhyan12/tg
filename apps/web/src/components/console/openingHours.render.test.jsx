@@ -70,6 +70,21 @@ const openDay = (label) => {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}`) }));
 };
 
+/** SET ONE TIME THROUGH THE THREE BOXES Kd asked for — hour, minute, and
+ *  AM/PM when the gym is on a 12-hour clock. `hour` is what the HOUR BOX
+ *  shows, so on a 12-hour gym it is 1-12 and never 0-23. */
+const pickTime = (label, { hour, minute, meridiem } = {}) => {
+  if (hour !== undefined) {
+    fireEvent.change(screen.getByLabelText(`${label} hour`), { target: { value: String(hour) } });
+  }
+  if (minute !== undefined) {
+    fireEvent.change(screen.getByLabelText(`${label} minute`), { target: { value: String(minute) } });
+  }
+  if (meridiem !== undefined) {
+    fireEvent.change(screen.getByLabelText(`${label} AM or PM`), { target: { value: meridiem } });
+  }
+};
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(AT);
@@ -121,14 +136,18 @@ describe('the three modes are three different screens', () => {
     for (const day of ['Monday', 'Wednesday', 'Sunday']) {
       expect(screen.getByText(day)).toBeTruthy();
     }
-    // Six folded rows read Closed, and the word is honest now: this gym HAS
-    // answered. The seventh reads its times without being opened, which is what
-    // makes folding an honest default rather than a hiding place.
-    expect(screen.getAllByText('Closed').length).toBe(6);
+    // **THE EMPTY ROWS DO NOT SAY Closed — Kd, 2026-09-01.** On the FORM a day
+    // nobody has filled in is not a day the gym has declared shut, and the rule
+    // is stated ONCE above the list instead of asserted on six separate rows.
+    expect(screen.getAllByText('No times set').length).toBe(6);
+    expect(screen.queryByText('Closed')).toBeNull();
+    expect(screen.getByText('A day with no times is a day you are closed.')).toBeTruthy();
+    // The seventh reads its times without being opened, which is what makes
+    // folding an honest default rather than a hiding place.
     expect(screen.getByText('06:00 – 07:00')).toBeTruthy();
 
     openDay('Wednesday');
-    expect(screen.getByLabelText('Wednesday session 1 opens').value).toBe('06:00');
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('6');
   });
 });
 
@@ -177,8 +196,8 @@ describe('saving the week', () => {
     fireEvent.click(screen.getByLabelText('Set opening times'));
     openDay('Monday');
     fireEvent.click(screen.getByRole('button', { name: /add a time/i }));
-    fireEvent.change(screen.getByLabelText('Monday session 1 opens'), { target: { value: '06:00' } });
-    fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '07:00' } });
+    pickTime('Monday session 1 opens', { hour: 6, minute: 0 });
+    pickTime('Monday session 1 closes', { hour: 7, minute: 0 });
     fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
 
     await waitFor(() => {
@@ -191,6 +210,59 @@ describe('saving the week', () => {
     expect(await screen.findByText('Saved.')).toBeTruthy();
   });
 
+  it('HOLDS a half-finished time, so picking the hour first is not thrown away', async () => {
+    // **THE FIRST VERSION OF THE PICKER FAILED THIS AND THE CONTROL WAS
+    // UNUSABLE.** The draft stores one string per end, which cannot express
+    // "the hour is 6 and the minute is not chosen yet" — so deriving the boxes
+    // from it meant picking the hour produced an empty string and the box
+    // snapped straight back to `--`. Neither box would hold what you picked.
+    //
+    // The two picks are made SEPARATELY here on purpose: that is how a person
+    // uses three boxes, and a test that set both at once would never see it.
+    orgService.getHours.mockResolvedValue(answer({ mode: 'unset' }));
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+    fireEvent.click(screen.getByLabelText('Set opening times'));
+    openDay('Monday');
+    fireEvent.click(screen.getByRole('button', { name: /add a time/i }));
+
+    pickTime('Monday session 1 opens', { hour: 6 });
+    // The hour survives on its own, with the minute still unchosen.
+    expect(screen.getByLabelText('Monday session 1 opens hour').value).toBe('6');
+    expect(screen.getByLabelText('Monday session 1 opens minute').value).toBe('');
+
+    pickTime('Monday session 1 opens', { minute: 30 });
+    expect(screen.getByLabelText('Monday session 1 opens hour').value).toBe('6');
+    expect(screen.getByLabelText('Monday session 1 opens minute').value).toBe('30');
+
+    // And a row that is still half-finished cannot be saved — the missing half
+    // is refused rather than invented.
+    expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(true);
+    expect(screen.getByText(/isn't finished/i)).toBeTruthy();
+  });
+
+  it('picks a 12-hour time through all three boxes, and 4 PM is 16:00 on the wire', async () => {
+    // The AM/PM box is the third thing that can be unset, and the conversion
+    // (4 PM to 960 minutes) is the arithmetic a naive `h % 12` gets wrong.
+    orgService.getHours.mockResolvedValue(answer({ mode: 'unset', clockFormat: '12h' }));
+    orgService.setHours.mockResolvedValue(answer({ clockFormat: '12h' }));
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+    await openSection();
+    fireEvent.click(screen.getByLabelText('Set opening times'));
+    openDay('Monday');
+    fireEvent.click(screen.getByRole('button', { name: /add a time/i }));
+
+    pickTime('Monday session 1 opens', { hour: 6, minute: 0, meridiem: 'AM' });
+    pickTime('Monday session 1 closes', { hour: 4, minute: 30, meridiem: 'PM' });
+    fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
+
+    await waitFor(() => {
+      expect(orgService.setHours).toHaveBeenCalledWith(ORG.id, {
+        mode: 'scheduled',
+        week: [{ weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 990 }] }],
+      });
+    });
+  });
   it('refuses to send an overlap and says which two clash', async () => {
     orgService.getHours.mockResolvedValue(
       answer({
@@ -212,7 +284,7 @@ describe('saving the week', () => {
     // label carries the session number, which is why this can name one of two
     // boxes that would otherwise be indistinguishable.
     openDay('Monday');
-    fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '14:00' } });
+    pickTime('Monday session 1 closes', { hour: 14 });
 
     expect(await screen.findByText(/two sessions that overlap/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
@@ -230,7 +302,7 @@ describe('saving the week', () => {
 
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(true);
     openDay('Monday');
-    fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '08:00' } });
+    pickTime('Monday session 1 closes', { hour: 8 });
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(false);
   });
 });
@@ -247,11 +319,16 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
     await openSection();
     openDay('Monday');
 
-    const box = screen.getByLabelText('Monday session 1 opens');
-    expect(box.tagName).toBe('SELECT');
-    const values = [...box.options].map((o) => o.value);
-    expect(values).toContain('05:30');
-    expect(values).not.toContain('05:37');
+    // `_ _ : _ _` — an hour box and a minute box, both `<select>`, never one
+    // list of ready-made times and never anything you type into.
+    const hourBox = screen.getByLabelText('Monday session 1 opens hour');
+    const minuteBox = screen.getByLabelText('Monday session 1 opens minute');
+    expect(hourBox.tagName).toBe('SELECT');
+    expect(minuteBox.tagName).toBe('SELECT');
+    expect([...hourBox.options].map((o) => o.value)).toContain('5');
+    expect([...minuteBox.options].map((o) => o.value)).toContain('30');
+    // Both start EMPTY on an unfinished row rather than sitting on midnight.
+    expect([...hourBox.options][0].value).toBe('');
   });
 
   it("labels every time on the GYM's clock, and BOTH clocks are driven", async () => {
@@ -293,7 +370,7 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
     render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
     await openSection();
 
-    fireEvent.click(screen.getByLabelText('4:00 PM'));
+    fireEvent.click(screen.getByLabelText(/12-hour/));
 
     await waitFor(() => {
       expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { clockFormat: '12h' });
@@ -323,7 +400,7 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
 
     // Every folded row now reads Monday's times, and nothing says Closed.
     expect(screen.getAllByText('06:00 – 07:00').length).toBe(7);
-    expect(screen.queryByText('Closed')).toBeNull();
+    expect(screen.queryByText('No times set')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /save opening times/i }));
     await waitFor(() => {
@@ -350,20 +427,20 @@ describe("Kd's five changes at the screen (2026-09-01)", () => {
 
     // Everything starts folded: the rows read their times, the controls are not
     // mounted. That is what makes folding a shorter screen and not a hidden one.
-    expect(screen.queryByLabelText('Monday session 1 opens')).toBeNull();
+    expect(screen.queryByLabelText('Monday session 1 opens hour')).toBeNull();
 
     openDay('Monday');
-    expect(screen.getByLabelText('Monday session 1 opens')).toBeTruthy();
+    expect(screen.getByLabelText('Monday session 1 opens hour')).toBeTruthy();
 
     openDay('Tuesday');
     // BOTH are open. This is the assertion the ruling is about.
-    expect(screen.getByLabelText('Monday session 1 opens')).toBeTruthy();
-    expect(screen.getByLabelText('Tuesday session 1 opens')).toBeTruthy();
+    expect(screen.getByLabelText('Monday session 1 opens hour')).toBeTruthy();
+    expect(screen.getByLabelText('Tuesday session 1 opens hour')).toBeTruthy();
 
     // And a day closes only when its OWN row is clicked again.
     openDay('Monday');
-    expect(screen.queryByLabelText('Monday session 1 opens')).toBeNull();
-    expect(screen.getByLabelText('Tuesday session 1 opens')).toBeTruthy();
+    expect(screen.queryByLabelText('Monday session 1 opens hour')).toBeNull();
+    expect(screen.getByLabelText('Tuesday session 1 opens hour')).toBeTruthy();
   });
 });
 
@@ -380,7 +457,7 @@ describe('a lapsed gym', () => {
     expect(screen.getByText(/needs a plan before anything here can be changed/i)).toBeTruthy();
     expect(screen.getByText('Monday')).toBeTruthy();
     openDay('Monday');
-    expect(screen.getByLabelText('Monday session 1 opens').disabled).toBe(true);
+    expect(screen.getByLabelText('Monday session 1 opens hour').disabled).toBe(true);
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /mark closed/i }).disabled).toBe(true);
   });
@@ -407,7 +484,7 @@ describe('a lapsed gym', () => {
     await openSection();
 
     openDay('Monday');
-    fireEvent.change(screen.getByLabelText('Monday session 1 closes'), { target: { value: '08:00' } });
+    pickTime('Monday session 1 closes', { hour: 8 });
     // The positive control: with a plan, this edit is saveable. Without it the
     // assertion below would be satisfied by a Save that was never live.
     expect(screen.getByRole('button', { name: /save opening times/i }).disabled).toBe(false);
@@ -418,7 +495,7 @@ describe('a lapsed gym', () => {
     expect(screen.getByText(/needs a plan before anything here can be changed/i)).toBeTruthy();
     // AND THE TYPING SURVIVES. A lapsed gym is read-only, not wiped — taking an
     // owner's half-finished timetable away would be a second, worse surprise.
-    expect(screen.getByLabelText('Monday session 1 closes').value).toBe('08:00');
+    expect(screen.getByLabelText('Monday session 1 closes hour').value).toBe('8');
   });
 });
 

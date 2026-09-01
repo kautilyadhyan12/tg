@@ -11,7 +11,7 @@ has simply not answered yet. Those two states look identical in the database, an
 confusing them would have told every existing gym's members that their gym never
 opens. If step 1 shows the word "Closed" anywhere, stop and say so.
 
-**Time:** about 20 minutes. **You need:** the API and the web app running
+**Time:** about 20 minutes (25 steps). **You need:** the API and the web app running
 locally, and **two email addresses** (the second never receives mail).
 
 **Status: NOT YET RUN.**
@@ -55,19 +55,21 @@ start to finish.
 | # | Do this | Expect |
 |---|---|---|
 | 1 | Sign up as **account A**, create a gym (country **United States**), press **"Start your 30-day free trial"** on the pop-up. Copy the join code. Go to **Settings** and find **"When we're open"**. | Under the heading: **"You haven't said when your gym is open. Members aren't shown anything about opening times until you do."** **The word "Closed" must not appear anywhere on this screen.** This is the whole point of step 1 — an unanswered gym says nothing, it does not claim to be shut. |
-| 2 | Click the **"When we're open"** heading to open it. | At the top, **"Which clock do you use?"** offering **4:00 PM** and **16:00**, with **16:00** already picked. Below it, **Open 24 hours** and **Set opening times** — neither ticked. No days listed. **Save is grey.** |
-| 3 | Pick **4:00 PM**. | It ticks immediately. **There is no Save for this — it saves itself.** Everything on this screen, and on your members' screens, now reads on a 12-hour clock. |
+| 2 | Click the **"When we're open"** heading to open it. | At the top, **"Which clock do you use?"** offering **12-hour (4:00 PM)** and **24-hour (16:00)**, with **24-hour** already picked. Below it, **Open 24 hours** and **Set opening times** — neither ticked. No days listed. **Save is grey.** |
+| 3 | Pick **12-hour**. | It ticks immediately. **There is no Save for this — it saves itself.** Everything on this screen, and on your members' screens, now reads on a 12-hour clock. |
 | 4 | Choose **Open 24 hours**, then press **Save opening times**. | **"Saved."** Close and re-open the section (or press F5): the heading now reads **"Your gym is open 24 hours."** |
-| 5 | Choose **Set opening times**. **Click the word "Monday"** to unfold that day. Press **"Add a time"** and pick **6:00 AM** to **7:00 AM** from the two dropdowns. Press **"Add a time"** again and pick **4:00 PM** to **9:00 PM**. | **Both times come from a LIST — there is nothing to type.** The list steps in quarter hours, so **5:30 PM is in it** and something like 5:37 is not. Monday shows two rows. **This is "many sessions in a day".** Save is now pressable. |
-| 6 | Click **Sunday** to unfold it, press **"Add a time"**, pick **8:00 AM** to **12:00 PM**. Press **Save opening times**. | **"Saved."** The summary reads **"Your opening times are set for 2 days a week."** **Sunday is open because you said so** — no weekday is special. |
+| 5 | Choose **Set opening times**. **Click the word "Monday"** to unfold that day. Press **"Add a time"**. | Each time is **three little boxes — `_ _ : _ _` and AM/PM** — all starting on `--`. **Nothing is typed.** |
+| 5b | Set the first row to **6 : 00 AM** to **7 : 00 AM**, one box at a time. | **Each box keeps what you picked** — set the hour, and it stays while you go to the minute. The minute list steps in fives, so **:30 is there**. |
+| 5c | Press **"Add a time"** on Monday again and set **4 : 00 PM** to **9 : 00 PM**. | Monday shows two rows. **This is "many sessions in a day".** Save is now pressable. |
+| 6 | Click **Sunday** to unfold it, press **"Add a time"**, set **8 : 00 AM** to **12 : 00 PM**. Press **Save opening times**. | **"Saved."** The summary reads **"Your opening times are set for 2 days a week."** **Sunday is open because you said so** — no weekday is special. |
 | 7 | **THE FOLDING — watch this one.** Monday and Sunday are both unfolded. Now click **Wednesday**. | **Wednesday opens AND Monday and Sunday stay open.** Opening one day must never close another. |
 | 8 | Now click **Monday** again. | **Only Monday folds.** Wednesday and Sunday are still open. Each folded row still shows that day's times, so the whole week is readable without opening anything. |
-| 9 | Press **F5** and open the section again. | Every day is **folded**, and the rows read **Monday: 6:00 AM – 7:00 AM, 4:00 PM – 9:00 PM**, **Sunday: 8:00 AM – 12:00 PM**, and the other five **"Closed"**. That word is now TRUE — this gym has answered. **Every time is on the 12-hour clock; 16:00 appears nowhere.** |
-| 10 | Unfold **Monday** and change the **first** row's closing time to **5:00 PM**. | A red line: **"Monday has two sessions that overlap: 6:00 AM – 5:00 PM and 4:00 PM – 9:00 PM."** **The refusal is on your clock too.** **Save goes grey.** Nothing was sent. |
-| 11 | Put Monday's first closing time back to **7:00 AM**. | The red line goes and **Save comes back**. |
-| 12 | Unfold **Sunday**, press the **X** beside its row, then **Save opening times**. | **"Saved."** Sunday reads **"Closed"** and the summary says **1 day a week**. **This is how "we're closed every Sunday" is said** — there is no separate switch for it, on purpose. |
-| 13 | **"SAME EVERY DAY".** Unfold **Monday** and press **"Use these times every day"**. Then press **Save opening times**. | **All seven rows now read Monday's two times** and nothing says "Closed". **"Saved."** |
-| 14 | Unfold **Thursday**, change its opening to **7:00 AM**, and press Save. | **Only Thursday changed.** That is "copy once, then fix one day by hand". |
+| 9 | Press **F5** and open the section again. | Every day is **folded**, and the rows read **Monday: 6:00 AM – 7:00 AM, 4:00 PM – 9:00 PM**, **Sunday: 8:00 AM – 12:00 PM**, and the other five **"No times set"** — **not "Closed"**, because on this form a day you have not filled in is not a day you have declared shut. One line above the list says a day with no times means you are closed. **Every time is on the 12-hour clock; 16:00 appears nowhere.** |
+| 10 | Unfold **Monday** and change the **first** row's closing hour to **5** and AM/PM to **PM**. | A red line: **"Monday has two sessions that overlap: 6:00 AM – 5:00 PM and 4:00 PM – 9:00 PM."** **The refusal is on your clock too.** **Save goes grey.** Nothing was sent. |
+| 11 | Put Monday's first closing back to **7 AM**. | The red line goes and **Save comes back**. |
+| 12 | Unfold **Sunday**, press the **X** beside its row, then **Save opening times**. | **"Saved."** Sunday reads **"No times set"** and the summary says **1 day a week**. **This is how "we're closed every Sunday" is said** — there is no separate switch for it, on purpose. |
+| 13 | **"SAME EVERY DAY".** Unfold **Monday** and press **"Use these times every day"**. Then press **Save opening times**. | **All seven rows now read Monday's two times** and nothing says "No times set". **"Saved."** |
+| 14 | Unfold **Thursday**, change its opening hour to **7**, and press Save. | **Only Thursday changed.** That is "copy once, then fix one day by hand". |
 | 15 | Unfold **Tuesday** and look at the buttons under its rows. | **"Add a time"** and **"Use these times every day"**. On a day with NO times that second button is deliberately absent — on an empty day it would wipe the whole week in one click. |
 | 16 | Scroll to **"Closed on a date"** and **click the date box**. | **A calendar opens** — you do not type the date. |
 | 17 | Pick a day about a week away, type **Holi** as the reason, press **Mark closed**. | The date appears in a list underneath with **Holi** after it, and an **Undo** beside it. |

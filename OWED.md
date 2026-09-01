@@ -7581,6 +7581,15 @@ file and is stated so nobody reads these as lower priority than they are.
       the date opens a **calendar** · **"use these times every day"** copies one
       day across the week · **each weekday folds INDEPENDENTLY** (opening one
       must never close another).
+      **AND FOUR CORRECTIONS FROM HIS SECOND LOOK (:27333):** the clock switch
+      is labelled **12-hour / 24-hour** rather than by an example of each · the
+      time control is **three boxes, `_ _ : _ _` plus AM/PM**, one 96-item list
+      having been the wrong shape · **the FORM says "No times set", never
+      "Closed", for a day nobody has filled in** — :26736 one level in, with the
+      rule stated once above the list and the MEMBER's card still saying
+      "Closed" because there the gym HAS answered · and the picker now HOLDS a
+      half-finished time, which the first version could not, making it
+      unusable.
       **THIS LINE STILL DOES NOT TICK: the browser SMOKE IS UNRUN**
       (`RUNBOOK/smoke-opening-hours.md`, rewritten for all five changes, now 23
       steps) **and the web half's T3 IS UNRUN.** The SERVER half's T3 round 1 ran

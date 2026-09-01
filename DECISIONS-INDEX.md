@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **949 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **953 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,13 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,004 lines, MEASURED 2026-09-01 (fourth measurement that
-day) and not estimated** (949 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
-all FOUR of that day's records — the server card, its T3 round, the web card
-and Kd's five screen changes — went to §1B, where
-:24813 sends every card record, so the whole growth is the twenty trigger
-phrases their four `Read before …` sentences produced. **That is the split working exactly
-as ruled: four full entries added, and the always-read cost is twenty lines.**
+**ALWAYS-READ TOTAL: 2,008 lines, MEASURED 2026-09-01 (fifth measurement that
+day) and not estimated** (953 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
+all FIVE of that day's records — the server card, its T3 round, the web card,
+Kd's five screen changes and his four corrections — went to §1B, where
+:24813 sends every card record, so the whole growth is the twenty-four
+trigger phrases their five `Read before …` sentences produced. **That is the split working exactly
+as ruled: five full entries added, and the always-read cost is twenty-four lines.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1119,6 +1119,33 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:27333** — 2026-09-01 — **KD SMOKES THE SCREEN AGAIN AND CORRECTS FOUR
+  THINGS, AND THE PICKER I SHIPPED COULD NOT HOLD A HALF-FINISHED TIME.**
+  **Read before building ANY time or date control in this product, before
+  deriving a control's state from a value that cannot hold a partial one,
+  before writing "Closed" on a form somebody is still filling in, and before
+  labelling a choice with an EXAMPLE of it.**
+  **THE PICKER WAS UNUSABLE AND ITS OWN TEST DID NOT SEE IT.** Three boxes
+  (hour, minute, AM/PM) derived from one stored `"HH:MM"` string — which
+  cannot express *"the hour is 6 and the minute is not chosen yet"* — so
+  picking the hour produced `''` and the box snapped back to `--`. **No time
+  could be entered at all.** The test passed because it set both boxes in ONE
+  helper call; it went red only when split into two, **which is how a person
+  uses three boxes**. **STANDING: when a control has more positions than the
+  value it writes, the control owns the state — deriving it from the value
+  silently forbids every position the value cannot hold.** Guarded by C144.
+  **A LABEL THAT IS AN EXAMPLE IS NOT A LABEL.** "4:00 PM" / "16:00" became
+  "12-hour (4:00 PM)" / "24-hour (16:00)" — the name first.
+  **AND A FORM MUST NOT SAY "CLOSED" ABOUT A DAY NOBODY HAS FILLED IN** —
+  :26736 one level in. The form says **"No times set"** and states the rule
+  ONCE above the list; **the MEMBER's card still says "Closed" and must**,
+  because there the gym HAS answered. `dayLine` unchanged, `daySummary` moved.
+  **The fourth complaint ("no am pm") was the DEFAULT, not a bug** — checked
+  before changing anything, which is why the fix went to the label and the
+  picker rather than to a phantom fault in the clock.
+  **A MUTANT WHOSE SUBJECT CEASED TO EXIST WAS RE-AIMED, NOT DELETED**, at the
+  defect the same change shipped. **SMOKE UNRUN** (sheet updated, 25 steps)
+  **and the web half's T3 UNRUN**; the `OWED.md` line does not tick.
 - **:27204** — 2026-09-01 — **KD SMOKES THE SCREEN AND RULES FIVE CHANGES: the
   gym picks its own clock, times come from a list, and each weekday folds on its
   own.** **Read before drawing any time on any screen in this product, before

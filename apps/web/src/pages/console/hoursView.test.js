@@ -17,7 +17,7 @@ import {
   CLOSURE_HORIZON_DAYS,
   WEEKDAYS,
   addDays,
-  TIME_STEP_MINUTES,
+  MINUTE_STEP,
   clockLabel,
   clockToMinutes,
   copyDayToAll,
@@ -31,8 +31,11 @@ import {
   hoursSummary,
   isoWeekdayOfDay,
   minutesToClock,
+  hourChoices,
+  joinClock,
+  minuteChoices,
   sameHoursDraft,
-  timeChoices,
+  splitClock,
 } from './hoursView';
 
 describe('the weekday convention', () => {
@@ -307,41 +310,70 @@ describe('the clock a gym chose', () => {
   });
 });
 
-describe('the time list', () => {
-  it('steps in quarter hours, so 5:30 is offered and 5:37 is not', () => {
-    const opens = timeChoices('opens', '24h', '');
-    const values = opens.map((c) => c.value);
-    expect(values).toContain('05:30');
-    expect(values).toContain('05:45');
-    expect(values).not.toContain('05:37');
-    expect(opens.length).toBe(1440 / TIME_STEP_MINUTES);
+describe('the `_ _ : _ _` pickers', () => {
+  it('offers whole hours and five-minute steps, so 5:30 is reachable in two clicks', () => {
+    // Kd asked for hour-then-minute rather than one list of ready-made times.
+    // Twelve minute entries cover the hour where the 96-item list they replace
+    // was a scroll.
+    expect(hourChoices('opens', '24h').map((h) => h.value)).toEqual(
+      Array.from({ length: 24 }, (_, i) => i),
+    );
+    expect(minuteChoices().map((m) => m.value)).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]);
+    expect(minuteChoices()).toHaveLength(60 / MINUTE_STEP);
   });
 
-  it('offers midnight-at-the-end as a CLOSE and never as an OPEN', () => {
-    // The schema showing through: 1440 is a legal close and an illegal open, so
-    // the two dropdowns cannot be built from one list.
-    expect(timeChoices('closes', '24h', '').map((c) => c.value)).toContain('24:00');
-    expect(timeChoices('opens', '24h', '').map((c) => c.value)).not.toContain('24:00');
-    // And an open cannot start at the very last step either way round.
-    expect(timeChoices('opens', '24h', '').map((c) => c.value)).toContain('23:45');
-    expect(timeChoices('closes', '24h', '').map((c) => c.value)).not.toContain('00:00');
+  it('reads 12, 1 … 11 on the 12-hour clock, with AM/PM as its own control', () => {
+    // How a person reads a clock face — the hour box is not 0-23 with a suffix
+    // glued on.
+    expect(hourChoices('opens', '12h').map((h) => h.label)).toEqual([
+      '12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
+    ]);
   });
 
-  it('KEEPS a time the gym already holds even when the step would miss it', () => {
-    // A gym whose hours predate this list — or a future card with a finer step —
-    // must not have its own 06:05 vanish from the box the moment somebody opens
-    // the panel. :20587's lesson, on a picker rather than a zone list.
-    const values = timeChoices('opens', '24h', '06:05').map((c) => c.value);
-    expect(values).toContain('06:05');
-    // In its right place, not appended at the end.
-    expect(values.indexOf('06:05')).toBe(values.indexOf('06:00') + 1);
+  it('offers midnight-at-the-END as a CLOSING hour and never as an opening one', () => {
+    // The schema showing through: 24:00 is a legal close and an impossible open.
+    // It is SPELLED OUT on the 12-hour clock, because a bare "12:00 AM" reads as
+    // the start of the day and means the opposite.
+    expect(hourChoices('closes', '24h').map((h) => h.value)).toContain(24);
+    expect(hourChoices('opens', '24h').map((h) => h.value)).not.toContain(24);
+    expect(hourChoices('closes', '12h').find((h) => h.value === 24).label).toContain('midnight');
+  });
+});
+
+describe('a stored time and the three boxes', () => {
+  it('round-trips an ordinary morning time on both clocks', () => {
+    expect(splitClock('06:30', '24h')).toEqual({ hour: 6, minute: 30, meridiem: null });
+    expect(splitClock('06:30', '12h')).toEqual({ hour: 6, minute: 30, meridiem: 'AM' });
+    expect(joinClock({ hour: 6, minute: 30, meridiem: null }, '24h')).toBe('06:30');
+    expect(joinClock({ hour: 6, minute: 30, meridiem: 'AM' }, '12h')).toBe('06:30');
   });
 
-  it('labels the same list on whichever clock the gym chose', () => {
-    const at16 = timeChoices('opens', '24h', '').find((c) => c.value === '16:00');
-    const at4pm = timeChoices('opens', '12h', '').find((c) => c.value === '16:00');
-    expect(at16.label).toBe('16:00');
-    expect(at4pm.label).toBe('4:00 PM');
+  it('handles the two ends of the 12-hour clock, where the arithmetic is easy to get backwards', () => {
+    // Noon and midnight are the two the naive `h % 12` gets wrong.
+    expect(splitClock('12:00', '12h')).toEqual({ hour: 12, minute: 0, meridiem: 'PM' });
+    expect(splitClock('00:00', '12h')).toEqual({ hour: 12, minute: 0, meridiem: 'AM' });
+    expect(joinClock({ hour: 12, minute: 0, meridiem: 'PM' }, '12h')).toBe('12:00');
+    expect(joinClock({ hour: 12, minute: 0, meridiem: 'AM' }, '12h')).toBe('00:00');
+    expect(joinClock({ hour: 4, minute: 0, meridiem: 'PM' }, '12h')).toBe('16:00');
+  });
+
+  it('keeps the end-of-day hour as 24 on BOTH clocks rather than converting it', () => {
+    // Converting would land on 12:00 AM, which is the OTHER end of the day —
+    // the whole distinction 1440 exists to hold.
+    expect(splitClock('24:00', '24h').hour).toBe(24);
+    expect(splitClock('24:00', '12h').hour).toBe(24);
+    expect(joinClock({ hour: 24, minute: 0, meridiem: null }, '24h')).toBe('24:00');
+    expect(joinClock({ hour: 24, minute: 0, meridiem: 'AM' }, '12h')).toBe('24:00');
+  });
+
+  it('answers empty while any box is still unset, rather than guessing a midnight', () => {
+    // A box sitting on its first option would be the screen answering a question
+    // nobody asked, and `hoursProblem` is what refuses to save on this.
+    expect(splitClock('', '24h')).toEqual({ hour: null, minute: null, meridiem: null });
+    expect(joinClock({ hour: null, minute: 30, meridiem: null }, '24h')).toBe('');
+    expect(joinClock({ hour: 6, minute: null, meridiem: null }, '24h')).toBe('');
+    // On the 12-hour clock the AM/PM box is a third thing that can be unset.
+    expect(joinClock({ hour: 6, minute: 30, meridiem: null }, '12h')).toBe('');
   });
 });
 
@@ -387,8 +419,12 @@ describe('"use these times every day"', () => {
 });
 
 describe('the folded summary of a day', () => {
-  it('reads Closed for an empty day and the times for a full one, on the gym clock', () => {
-    expect(daySummary([], '24h')).toBe('Closed');
+  it('says NO TIMES SET for an empty day — never "Closed", which the form must not assert', () => {
+    // Kd, 2026-09-01: *"if time is not chosen then beside day why closed is
+    // showing?"*. On the FORM an empty row is a day nobody has filled in; the
+    // MEMBER's card still says Closed, because there the gym HAS answered.
+    expect(daySummary([], '24h')).toBe('No times set');
+    expect(dayLine([], '24h')).toBe('Closed');
     expect(daySummary([{ opens: '06:00', closes: '07:00' }], '24h')).toBe('06:00 – 07:00');
     expect(daySummary([{ opens: '16:00', closes: '21:00' }], '12h')).toBe('4:00 PM – 9:00 PM');
   });

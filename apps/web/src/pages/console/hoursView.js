@@ -73,16 +73,6 @@ export function clockToMinutes(text) {
   return hours * 60 + mins;
 }
 
-/** THE STEP THE TIME LIST OFFERS, in minutes.
- *
- *  **15, and it is a chosen number rather than a spec one.** Kd asked for a list
- *  instead of typing and for arbitrary times — *"4:00-5:30 whatever they set"* —
- *  and 15 covers every quarter-hour a gym actually opens at while keeping the
- *  list to 96 entries. Five-minute steps would be 288, which is a list nobody
- *  scrolls; hourly would refuse the 5:30 he named. Recorded in DECISIONS rather
- *  than left as a magic number. */
-export const TIME_STEP_MINUTES = 15;
-
 /** WHAT A PERSON READS, on the clock THEIR GYM CHOSE.
  *
  *  `24h` prints `16:00`; `12h` prints `4:00 PM`. **1440 is the one value that
@@ -92,7 +82,11 @@ export const TIME_STEP_MINUTES = 15;
  *
  *  Deliberately hand-built rather than `toLocaleTimeString`: R5.1's ban is the
  *  engine's, but its reason travels — a locale-driven label would depend on the
- *  READER's browser, and this label must depend on the GYM. */
+ *  READER's browser, and this label must depend on the GYM.
+ *
+ *  This is the READING half; `splitClock`/`joinClock` below are the EDITING
+ *  half, which is three separate boxes because Kd asked for `_ _ : _ _` rather
+ *  than one list of ready-made times. */
 export function clockLabel(minutes, clockFormat) {
   if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return '';
   const h = Math.floor(minutes / 60);
@@ -106,34 +100,84 @@ export function clockLabel(minutes, clockFormat) {
   return `${String(hour12)}:${mm} ${suffix}`;
 }
 
-/** EVERY VALUE THE TIME LIST OFFERS, as `{ value, label }`.
+/** THE MINUTE STEP. Kd asked for `_ _ : _ _` — pick the hour, pick the minute —
+ *  rather than one long list of pre-made times: *"here when the gym clicks they
+ *  can set the time theself by selecting number but you have give soem already
+ *  set time"*.
  *
- *  **The two ends differ, and that is the schema showing through**: an OPENING
- *  runs 00:00–23:45 (1440 would be a zero-length session on the wrong day) while
- *  a CLOSING runs 00:15–24:00 (midnight at the end of the day is a real answer).
- *  So the two dropdowns are built from different lists rather than one list with
- *  a rule the caller has to remember.
- *
- *  **A time the gym ALREADY HOLDS is added if the step would miss it.** A gym
- *  whose hours were set before this list existed — or by a future card with a
- *  finer step — must not have its own 06:05 silently vanish from the box the
- *  moment somebody opens the panel. `:20587`'s lesson, on a picker rather than a
- *  zone list. */
-export function timeChoices(kind, clockFormat, current) {
-  const first = kind === 'closes' ? TIME_STEP_MINUTES : 0;
-  const last = kind === 'closes' ? 1440 : 1440 - TIME_STEP_MINUTES;
-  const values = [];
-  for (let m = first; m <= last; m += TIME_STEP_MINUTES) values.push(m);
+ *  **5, so twelve entries cover the hour.** It admits the 5:30 he named and
+ *  anything else a gym opens at, and a twelve-item list is one glance where the
+ *  96-item list it replaces was a scroll. */
+export const MINUTE_STEP = 5;
 
-  const held = clockToMinutes(current);
-  if (held !== null && held >= first && held <= last && !values.includes(held)) {
-    values.push(held);
-    values.sort((a, b) => a - b);
+/** THE HOURS TO PICK FROM, on whichever clock the gym chose.
+ *
+ *  **24:00 IS AN HOUR IN THIS LIST AND ONLY ON THE CLOSING END.** It is midnight
+ *  at the END of the day — a real closing time and an impossible opening one —
+ *  and it is spelled out rather than left as a bare `12:00 AM`, which reads as
+ *  the START of the day and means the opposite.
+ *
+ *  On the 12-hour clock the list is 12, 1 … 11 and the AM/PM half is its own
+ *  control beside it, which is how a person reads a clock. */
+export function hourChoices(kind, clockFormat) {
+  const endOfDay =
+    kind === 'closes'
+      ? [{ value: 24, label: clockFormat === '12h' ? '12 (midnight, end of day)' : '24' }]
+      : [];
+  if (clockFormat === '12h') {
+    return [
+      { value: 12, label: '12' },
+      ...Array.from({ length: 11 }, (_, i) => ({ value: i + 1, label: String(i + 1) })),
+      ...endOfDay,
+    ];
   }
-  return values.map((value) => ({
-    value: minutesToClock(value),
-    label: clockLabel(value, clockFormat),
-  }));
+  return [
+    ...Array.from({ length: 24 }, (_, h) => ({ value: h, label: String(h).padStart(2, '0') })),
+    ...endOfDay,
+  ];
+}
+
+export function minuteChoices() {
+  return Array.from({ length: 60 / MINUTE_STEP }, (_, i) => {
+    const m = i * MINUTE_STEP;
+    return { value: m, label: String(m).padStart(2, '0') };
+  });
+}
+
+/** A STORED `"HH:MM"` BROKEN INTO THE THREE THINGS THE PICKERS HOLD.
+ *
+ *  On the 12-hour clock `hour` is what the hour box shows (12, 1 … 11) and
+ *  `meridiem` is the AM/PM box; on the 24-hour clock `meridiem` is null and the
+ *  hour is itself. **The end-of-day 24:00 keeps hour 24 in BOTH**, because it is
+ *  a distinct entry in the list rather than a time to be converted — converting
+ *  it would land on 12:00 AM, which is the other end of the day.
+ *
+ *  Everything is null for an unfinished box, so a caller must decide what an
+ *  empty row means rather than being handed a silent midnight. */
+export function splitClock(text, clockFormat) {
+  const minutes = clockToMinutes(text);
+  if (minutes === null) return { hour: null, minute: null, meridiem: null };
+  if (minutes === 1440) return { hour: 24, minute: 0, meridiem: clockFormat === '12h' ? 'AM' : null };
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (clockFormat !== '12h') return { hour: h, minute: m, meridiem: null };
+  return {
+    hour: h % 12 === 0 ? 12 : h % 12,
+    minute: m,
+    meridiem: h < 12 ? 'AM' : 'PM',
+  };
+}
+
+/** THE THREE PICKERS BACK INTO ONE STORED `"HH:MM"`, or `''` while any of them
+ *  is still empty — which is what `hoursProblem` refuses to save. */
+export function joinClock({ hour, minute, meridiem }, clockFormat) {
+  if (hour === null || minute === null) return '';
+  if (hour === 24) return '24:00';
+  if (clockFormat !== '12h') return minutesToClock(hour * 60 + minute);
+  if (meridiem === null) return '';
+  const base = hour % 12;
+  const h24 = meridiem === 'PM' ? base + 12 : base;
+  return minutesToClock(h24 * 60 + minute);
 }
 
 /** THE SERVER'S ANSWER TURNED INTO THE SHAPE THE FORM EDITS — seven rows,
@@ -203,7 +247,14 @@ export function copyDayToAll(draft, weekday) {
  *  time is not a time and printing one end of it would be a claim the gym has
  *  not made. */
 export function daySummary(sessions, clockFormat) {
-  if (!Array.isArray(sessions) || sessions.length === 0) return 'Closed';
+  // **NOT "Closed" — Kd, 2026-09-01: *"if time is not chosen then beside day why
+  // closed is showing?"*. On the FORM, an empty row is a day nobody has filled
+  // in yet, and calling that "Closed" is the screen answering on the gym's
+  // behalf while they are still typing. It is :26736's rule one level in: the
+  // MEMBER's card still says "Closed", because there the gym HAS answered and a
+  // day with no times is genuinely a day it is shut (`dayLine`). The section
+  // carries one line saying so, rather than this row asserting it.
+  if (!Array.isArray(sessions) || sessions.length === 0) return 'No times set';
   return sessions
     .map((s) => {
       const opens = clockToMinutes(s.opens);
