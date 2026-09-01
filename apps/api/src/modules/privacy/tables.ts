@@ -177,8 +177,8 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // list Kd is asked to RULE on has to be complete, or the ruling is partial:
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
-//   gym_join_applications · api_cost_events · usage_daily · trace_samples ·
-//   gyms.owner_user_id · subscriptions.owner_id ·
+//   gym_join_applications · gym_attendance · api_cost_events · usage_daily ·
+//   trace_samples · gyms.owner_user_id · subscriptions.owner_id ·
 //   exercise_definitions.published_by
 //
 // `gym_join_applications` JOINED THIS LIST 2026-08-19 with the waiting-room
@@ -191,6 +191,19 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // RULE THEM TOGETHER: a ruling that purges membership history but leaves the
 // applications that produced it is a partial answer, and the property that
 // makes either list auditable is that deletion and export stay symmetrical.
+//
+// `gym_attendance` JOINED THIS LIST 2026-09-02, ONE CARD LATE AND FOUND BY A
+// REVIEW RATHER THAN BY THE CARD THAT CREATED IT. It is the third member of the
+// same family and the most sensitive of them: a membership says a person
+// belonged to a gym, an application says they asked to, and attendance says
+// WHICH DAYS THEY WERE PHYSICALLY IN THE BUILDING — a dated movement record,
+// per gym. `0019_gym_attendance.sql` said "the DPDP cascade owns what happens to
+// it", which was false in the one way that matters: §5.2 ANONYMIZES the users
+// row rather than deleting it, so `ON DELETE no action` from `users` never fires
+// on an erasure and the rows simply stay. Same footing, same open question,
+// RULE IT WITH THE OTHER TWO — and note it is the one whose Day-0 half is NOT
+// handled, since nothing closes or cancels an attendance the way a membership
+// and an application are closed.
 //
 // THE LAST TWO WERE MISSED at first review and added after T3 F4. The
 // enumeration method is why, and it is worth stating so the next person

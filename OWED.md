@@ -3303,6 +3303,30 @@ then; none may be hidden or reduced to close the gap.
       (DECISIONS 2026-07-21.)
 
 ### Legal / operational gates
+- [ ] 🔴 **WHICH USER-LINKED TABLES THE DAY-14 PURGE ACTUALLY CLEARS IS STILL
+      KD'S TO RULE, AND UNTIL 2026-09-02 THE QUESTION LIVED ONLY IN A CODE
+      COMMENT.** `apps/api/src/modules/privacy/tables.ts` carries a SPEC-GAP list
+      of eleven tables and columns that keep a link to a purged person and that
+      §5.2's prose does not name — `one_time_tokens · refresh_tokens ·
+      gym_members · gym_staff · gym_join_applications · gym_attendance ·
+      api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
+      subscriptions.owner_id · exercise_definitions.published_by`. Widening a
+      deletion list on a chat's judgement is R0.2, so filing them there was
+      right; **leaving the RULING untracked was not, and it is this file's own
+      failure mode** — the list has been growing table by table since 2026-07-22
+      (`gym_join_applications` joined it 2026-08-19 at :11072, `gym_attendance`
+      on 2026-09-02) with no line here to say anybody still owes an answer.
+      **What it blocks:** nothing today, because the purge itself is not running
+      anywhere (the 🔴 below). **What makes it urgent when that changes:** the
+      newest member is the most sensitive — attendance is a dated, per-gym record
+      of which days a person was physically inside a building, and it survives an
+      erasure request today. **RULE THEM TOGETHER** — a ruling that purges
+      membership history but keeps the applications and the visits that produced
+      it is a partial answer, and what makes either list auditable is that
+      deletion and export stay symmetrical. `gym_attendance` is also the one
+      whose **Day-0** half is unhandled: a membership is closed and an
+      application cancelled at Day 0, and nothing touches an attendance at all.
+      (DECISIONS 2026-09-02, attendance T3 round 1 C/H-4.)
 - [ ] 🔴 **DPDP Day-14 HARD-DELETE — CODE COMPLETE 2026-07-22, BUT NOT YET
       RUNNING ANYWHERE, so it is NOT done** (branch `dpdp-day14-purge`).
       This line was first written ticked; its T3 (finding D1) proved that

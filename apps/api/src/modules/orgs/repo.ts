@@ -3986,23 +3986,43 @@ export async function markGymAttendance(
   });
 }
 
-/** HOW MANY PEOPLE COME BACK IN ONE PAGE, and how many visits one person can
- *  carry.
+/** HOW MANY PEOPLE COME BACK IN ONE PAGE, how many visits one person can carry,
+ *  and how many lines the day's SHAPE can have.
  *
- *  `ATTENDANCE_PAGE_LIMIT` is mirrored by `gymAttendanceDaySchema.people`'s
- *  `.max(100)` in `@app/shared`, and `ATTENDANCE_VISITS_PER_PERSON` by
- *  `gymAttendancePersonSchema.visits`' `.max(24)` — **the pairs move together or
- *  a legitimate answer becomes a parse failure**, which is a worse outcome than
- *  the unbounded array they replace (:26947 Low-5's own lesson, applied at
- *  design time rather than after a review).
+ *  Each is mirrored by a `.max()` in `@app/shared` — `ATTENDANCE_PAGE_LIMIT` by
+ *  `gymAttendanceDaySchema.people`, `ATTENDANCE_VISITS_PER_PERSON` by
+ *  `gymAttendancePersonSchema.visits`, `ATTENDANCE_SUMMARY_LIMIT` by
+ *  `gymAttendanceDaySchema.summary` — **and each is now enforced HERE, in the
+ *  query, which is the half that was missing.** `ATTENDANCE_VISITS_PER_PERSON`
+ *  had no reader at all: a constant, a paragraph explaining it, and no `LIMIT`
+ *  anywhere. :26947 Low-5 is *"a comment that claimed a bound the query did not
+ *  have"*, and this file quoted that lesson while repeating it one card later.
  *
- *  24 is not arbitrary: sessions never overlap and never wrap past midnight, so
- *  the finest timetable a gym can express is 24 slots, and one person cannot
- *  produce more distinct visits in a day than the gym has slots to put them in.
- *  The four non-session statuses are mutually exclusive with each other and with
- *  a session on the same tap, so they add nothing to the ceiling. */
+ *  ~~24 is not arbitrary: sessions never overlap and never wrap past midnight,
+ *  so the finest timetable a gym can express is 24 slots, and one person cannot
+ *  produce more distinct visits in a day than the gym has slots to put them
+ *  in.~~ **STRUCK: TRUE OF ONE TIMETABLE, AND A DAY CAN HOLD SEVERAL.** A visit
+ *  stores a FROZEN COPY of the window it fell in — which is exactly what the
+ *  test *"the window a visit carries survives the whole timetable being
+ *  replaced"* pins — and `PUT /hours` may run any number of times in a day. The
+ *  distinct `(hours_status, opens, closes)` groups in one gym-day are therefore
+ *  **not bounded by the timetable at all**, and both old ceilings were
+ *  arithmetic about a quantity nothing enforces. The sentence is struck in place
+ *  rather than deleted so the next reader sees what it used to claim (:26947 §4).
+ *
+ *  **WHAT IT COST, AND WHY THE BOUND MOVED INTO THE QUERY:** asserted only in
+ *  the response schema, a gym that edited its hours enough times in one day made
+ *  its own attendance page fail `gymAttendanceDayResponseSchema.parse` — a 500
+ *  on that date, permanently, since nothing in this product deletes an
+ *  attendance row.
+ *
+ *  **400 IS `CLOSURE_READ_LIMIT`'s REASONING REUSED**: far above any honest day
+ *  (a stable timetable yields 24 and 29), so a real gym is never silently
+ *  truncated, and bounded so no one response can run away. The pairs move
+ *  together or a legitimate answer becomes a parse failure. */
 export const ATTENDANCE_PAGE_LIMIT = 100;
-export const ATTENDANCE_VISITS_PER_PERSON = 24;
+export const ATTENDANCE_VISITS_PER_PERSON = 400;
+export const ATTENDANCE_SUMMARY_LIMIT = 400;
 
 export interface GymAttendanceSlotCountRow {
   hoursStatus: GymAttendanceHoursStatus;
@@ -4105,7 +4125,8 @@ export async function getGymAttendanceDay(
     FROM gym_attendance
     WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date
     GROUP BY hours_status, session_opens_minute, session_closes_minute
-    ORDER BY session_opens_minute NULLS LAST, hours_status`;
+    ORDER BY session_opens_minute NULLS LAST, hours_status
+    LIMIT ${ATTENDANCE_SUMMARY_LIMIT}`;
 
   /** ONE PAGE OF PEOPLE. The inner select finds WHO, ordered and bounded; the
    *  outer one fetches every visit belonging to those people, so a person is
@@ -4136,14 +4157,23 @@ export async function getGymAttendanceDay(
       ORDER BY first_marked_at, a.user_id
       LIMIT ${limit}
     )
-    SELECT p.user_id, u.display_name, p.first_marked_at,
-           a.day::text AS day, a.marked_at, a.method, a.hours_status,
-           a.session_opens_minute, a.session_closes_minute
-    FROM page p
-    JOIN users u ON u.id = p.user_id
-    JOIN gym_attendance a
-      ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
-    ORDER BY p.first_marked_at, p.user_id, a.marked_at`;
+    SELECT v.user_id, v.display_name, v.first_marked_at, v.day, v.marked_at,
+           v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
+    FROM (
+      SELECT p.user_id, u.display_name, p.first_marked_at,
+             a.day::text AS day, a.marked_at, a.method, a.hours_status,
+             a.session_opens_minute, a.session_closes_minute,
+             -- THE PER-PERSON CEILING, ENFORCED RATHER THAN ASSERTED. Earliest
+             -- first, so a truncated person keeps the visits they actually made
+             -- in order rather than an arbitrary window of them.
+             row_number() OVER (PARTITION BY p.user_id ORDER BY a.marked_at) AS rn
+      FROM page p
+      JOIN users u ON u.id = p.user_id
+      JOIN gym_attendance a
+        ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
+    ) v
+    WHERE v.rn <= ${ATTENDANCE_VISITS_PER_PERSON}
+    ORDER BY v.first_marked_at, v.user_id, v.marked_at`;
 
   const grouped: GymAttendancePersonRow[] = [];
   let last: { userId: string; markedAt: Date } | null = null;
@@ -4264,6 +4294,19 @@ function encodeAttendanceCursor(markedAt: Date, id: string): string {
   return `${markedAt.toISOString()}|${id}`;
 }
 
+/** BOTH HALVES ARE CHECKED, AND THE UUID HALF IS THE ONE THAT WAS MISSING.
+ *
+ *  Both queries interpolate the id as `::uuid`, so a cursor this function
+ *  accepts and Postgres cannot cast is a **500 with a Sentry event** rather than
+ *  the 400 the caller above it exists to raise — from something as ordinary as a
+ *  stale or truncated marker in a client's hands. The module states the rule two
+ *  files away (`applicationParamsSchema`: *"a non-uuid must fail as a 400 at the
+ *  boundary and never as a 500 from Postgres refusing the cast"*) and this is
+ *  the same rule, one layer down. :26947 §5's shape — a rule a file states in
+ *  one place is not a rule the file keeps. */
+const ATTENDANCE_CURSOR_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function parseAttendanceCursor(
   raw: string,
 ): { markedAt: Date; id: string } | null {
@@ -4272,6 +4315,7 @@ export function parseAttendanceCursor(
   const instant = raw.slice(0, bar);
   const id = raw.slice(bar + 1);
   const markedAt = new Date(instant);
-  if (Number.isNaN(markedAt.getTime()) || id === "") return null;
+  // The empty-id case is subsumed: an empty string fails the pattern too.
+  if (Number.isNaN(markedAt.getTime()) || !ATTENDANCE_CURSOR_UUID.test(id)) return null;
   return { markedAt, id };
 }

@@ -153,17 +153,31 @@ export type OrgParams = z.infer<typeof orgParamsSchema>;
  *  today, which for a gym in Assam is the wrong day for five and a half hours of
  *  every one (trap #8).
  *
- *  **`status` IS A COMMA-SEPARATED LIST because it filters to the EXCEPTIONS an
- *  owner goes looking for** — outside hours, closed day — and both at once is
+ *  **`statuses` IS A COMMA-SEPARATED LIST because it filters to the EXCEPTIONS
+ *  an owner goes looking for** — outside hours, closed day — and both at once is
  *  the useful case (:27992 §3). Empty and absent are the same thing, so a screen
- *  clearing its filter need not know which to send. */
+ *  clearing its filter need not know which to send — **and that equivalence is
+ *  MADE TRUE here rather than promised**: an empty list becomes `undefined`,
+ *  because `= ANY('{}')` matches nobody and would turn "I cleared the filter"
+ *  into "show me an empty day".
+ *
+ *  **THE KEY IS PLURAL AND THE SERVICE NOW TAKES THIS TYPE, WHICH IS THE ONLY
+ *  REASON THE TWO CANNOT DRIFT AGAIN.** It shipped as `status` for one card
+ *  while `getOrgAttendanceDay` read `query.statuses`, so the filter was parsed,
+ *  validated and then thrown away — the whole parameter did nothing, and an
+ *  owner asking for the exceptions was shown every visit of the day under a
+ *  label saying otherwise (:5807). **`tsc` could not see it**: every field of
+ *  the old inline parameter type was optional and two of them (`day`, `cursor`)
+ *  matched, so neither weak-type detection nor an excess-property check fires.
+ *  A name agreeing with a name is not a guarantee; a type is. */
 export const attendanceDayQuerySchema = z
   .object({
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    status: z
+    statuses: z
       .string()
       .transform((raw) => raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0))
       .pipe(z.array(gymAttendanceHoursStatusSchema).max(5))
+      .transform((list) => (list.length === 0 ? undefined : list))
       .optional(),
     cursor: z.string().min(1).max(200).optional(),
   })

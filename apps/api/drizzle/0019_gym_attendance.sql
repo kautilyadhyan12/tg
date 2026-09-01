@@ -126,8 +126,15 @@ ALTER TABLE "gyms" ADD COLUMN "manual_attendance_enabled" boolean DEFAULT true N
 --
 --    `user_id` and `marked_by_user_id` are `ON DELETE no action` like every
 --    other actor column in this schema: who came is a fact about the past, and
---    the DPDP cascade owns what happens to it. `gym_id` CASCADEs because an
---    attendance is meaningless without its gym and nothing points at it.
+--    ~~the DPDP cascade owns what happens to it~~ -- CORRECTED 2026-09-02, and
+--    the original is struck rather than deleted because it is the kind of
+--    sentence that stops the next person looking: THE CASCADE NEVER FIRES. §5.2
+--    ANONYMIZES the `users` row instead of deleting it, so nothing cascades from
+--    it on an erasure request, and this table joined the SPEC-GAP list in
+--    `modules/privacy/tables.ts` only after a review found it missing. Read that
+--    list, not this line, for what actually happens to these rows.
+--    `gym_id` CASCADEs because an attendance is meaningless without its gym and
+--    nothing points at it.
 CREATE TABLE "gym_attendance" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL,

@@ -1843,15 +1843,24 @@ export type GymAttendanceVisit = z.infer<typeof gymAttendanceVisitSchema>;
  *
  *  `visits` is bounded for the same reason `closures` is: it is on a response a
  *  gym's own members drive, and nothing else caps how many times one person can
- *  tap in a day. **24 matches `gymDayScheduleSchema.sessions`' bound and for the
- *  same reason** — sessions never overlap and never wrap, so the finest possible
+ *  tap in a day.
+ *
+ *  ~~**24 matches `gymDayScheduleSchema.sessions`' bound and for the same
+ *  reason** — sessions never overlap and never wrap, so the finest possible
  *  timetable is 24 slots, and a person cannot produce more distinct visits in a
- *  day than the gym has slots to put them in. */
+ *  day than the gym has slots to put them in.~~ **STRUCK: that is true of ONE
+ *  timetable, and a day can hold several.** A visit carries a FROZEN COPY of its
+ *  window and `PUT /hours` may run all day, so a person's distinct slots in one
+ *  day are not bounded by the timetable. A bound the writer cannot enforce is
+ *  not a bound: past 24 the server's own response failed its own schema and the
+ *  day 500'd permanently. **400 is now enforced by a `LIMIT` in the query that
+ *  builds this** (`ATTENDANCE_VISITS_PER_PERSON`), far above any honest day, so
+ *  the two cannot disagree. */
 export const gymAttendancePersonSchema = z
   .object({
     userId: z.string().uuid(),
     displayName: z.string(),
-    visits: z.array(gymAttendanceVisitSchema).min(1).max(24),
+    visits: z.array(gymAttendanceVisitSchema).min(1).max(400),
   })
   .strict();
 export type GymAttendancePerson = z.infer<typeof gymAttendancePersonSchema>;
@@ -1909,7 +1918,14 @@ export const gymAttendanceDaySchema = z
     totals: z
       .object({ visits: z.number().int().min(0), people: z.number().int().min(0) })
       .strict(),
-    summary: z.array(gymAttendanceSlotCountSchema).max(29),
+    /** ONE LINE PER DISTINCT `(status, window)` OF THE DAY, and the ceiling is
+     *  enforced by a `LIMIT` in the query rather than asserted here
+     *  (`ATTENDANCE_SUMMARY_LIMIT`). ~~29 = 24 sessions + the five non-session
+     *  states.~~ **STRUCK for `visits`' reason**: the windows a day's visits
+     *  carry are frozen copies, so a gym that rewrites its timetable during the
+     *  day produces more groups than any timetable has slots — and a response
+     *  that cannot satisfy its own schema is a permanent 500 on that date. */
+    summary: z.array(gymAttendanceSlotCountSchema).max(400),
     people: z.array(gymAttendancePersonSchema).max(100),
     nextCursor: z.string().nullable(),
   })

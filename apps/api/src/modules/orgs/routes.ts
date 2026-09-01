@@ -21,6 +21,7 @@ import {
   createOrgCodeRequestSchema,
   createOrgRequestSchema,
   joinOrgRequestSchema,
+  markGymAttendanceRequestSchema,
   setGymHoursRequestSchema,
   memberParamsSchema,
   myApplicationParamsSchema,
@@ -247,6 +248,36 @@ export function registerOrgRoutes(
     },
   );
 
+  /** ATTENDANCE'S OWN LIMITS, and the WRITE is the one that needed them.
+   *
+   *  Every mark takes `SELECT … FOR UPDATE` on the gym row, so without a limit
+   *  one member holds a gym's console writes behind them at whatever the global
+   *  floor allows — the only thing standing between a gym and that was a shared
+   *  300/min. `/v1/orgs/join` and the nudge route already carry per-route
+   *  limits for smaller reasons; this one serialises a whole gym.
+   *
+   *  **THE TWO ARE SPLIT BECAUSE THE SHAPES ARE NOTHING ALIKE.** A member marks
+   *  once or twice a day and 30/hour is far beyond honest use; an owner watching
+   *  the door refreshes a list, and one limit covering both would have to be the
+   *  looser of the two — which is the write's, the one that matters. */
+  const attendanceMarkLimit = createDualRateLimit({
+    name: "orgs_attendance_mark",
+    max: 30,
+    ipMax: 300,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  const attendanceReadLimit = createDualRateLimit({
+    name: "orgs_attendance_read",
+    max: 600,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
   /** "I'M HERE" — Kd ruling 2026-08-31 (:26469), built before the gym's numbers
    *  because a number about attendance cannot exist before attendance does.
    *
@@ -266,12 +297,22 @@ export function registerOrgRoutes(
    *  content type the simple-request rules exclude; `app.ts` lists POST, which
    *  every write in this file already depends on, and the SMOKE is what proves
    *  it in a real browser (Card 4's dead-method bug behind 250 green tests). */
-  app.post("/v1/orgs/:gymId/attendance", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const marked = await service.markOrgAttendance(orgDeps, requireUserId(req), params.gymId);
-    return reply.status(200).send(marked);
-  });
+  app.post(
+    "/v1/orgs/:gymId/attendance",
+    { preHandler: [app.authenticate, attendanceMarkLimit] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      // THE EMPTY BODY IS PARSED RATHER THAN ASSUMED. `.strict()` is what turns
+      // the paragraph above from a claim into a refusal: a client that sends
+      // `{"day":"..."}` hoping to name its own day is answered 400 instead of
+      // being silently ignored. `?? {}` because a POST with no body at all is
+      // the normal case and must stay a 200.
+      if (parseOr400(markGymAttendanceRequestSchema, req.body ?? {}, req, reply) === null) return;
+      const marked = await service.markOrgAttendance(orgDeps, requireUserId(req), params.gymId);
+      return reply.status(200).send(marked);
+    },
+  );
 
   /** WHO CAME — the console's Attendance section (:28107, a section of its own
    *  rather than a corner of Settings).
@@ -282,19 +323,23 @@ export function registerOrgRoutes(
    *  gym running three sessions produces several hundred visits a day, and the
    *  counts are computed over the WHOLE day in SQL so a screen can never report
    *  the page it happens to be holding. */
-  app.get("/v1/orgs/:gymId/attendance", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const query = parseOr400(attendanceDayQuerySchema, req.query, req, reply);
-    if (query === null) return;
-    const attendance = await service.getOrgAttendanceDay(
-      orgDeps,
-      requireUserId(req),
-      params.gymId,
-      query,
-    );
-    return reply.status(200).send(attendance);
-  });
+  app.get(
+    "/v1/orgs/:gymId/attendance",
+    { preHandler: [app.authenticate, attendanceReadLimit] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const query = parseOr400(attendanceDayQuerySchema, req.query, req, reply);
+      if (query === null) return;
+      const attendance = await service.getOrgAttendanceDay(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        query,
+      );
+      return reply.status(200).send(attendance);
+    },
+  );
 
   /** ONE PERSON'S OWN ATTENDANCE — a member seeing themselves (:27900), and an
    *  owner picking a name out of the list above (:28055's `?userId=`).
@@ -304,7 +349,7 @@ export function registerOrgRoutes(
    *  get an IDOR wrong (R3.2), and everything after the gate is identical. */
   app.get(
     "/v1/orgs/:gymId/attendance/history",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, attendanceReadLimit] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;

@@ -3086,3 +3086,48 @@ its name and comments and observed neither.
       one**: a `YYYY-MM-DD` day is unchanged by encoding, so the first passes
       either way (:7104's PG1). Reverting the fix now fails
       (`'/v1/orgs/gym-1/closures/a/b?c'` vs `'…/a%2Fb%3Fc'`).
+- [x] A request schema that was exported, documented and never parsed — the mark
+      route's body — `orgs/routes.ts` — found 2026-09-02, attendance T3 round 1
+      (L-1) — fixed this commit. The route's own comment calls the empty body a
+      SECURITY decision (the server picks the day, the method and the slot, R3.1),
+      and `markGymAttendanceRequestSchema` is `z.object({}).strict()` — but
+      nothing called it, so `.strict()` was a promise no code kept and a client
+      naming its own day was silently ignored rather than refused. Now parsed as
+      `req.body ?? {}`, because a POST with no body at all is the normal case and
+      must stay a 200. Both directions have a test; M4 (deleting the parse) goes
+      RED on the refusal.
+- [x] A comment naming a gate the function does not use — `orgs/service.ts`
+      `markOrgAttendance` — found 2026-09-02, attendance T3 round 1 (L-2) — fixed
+      this commit. It read *"THE GATE IS `requireGymAudience` PLUS A LIVE
+      MEMBERSHIP"*; `requireGymAudience` appears nowhere in the function, and it
+      admits non-member STAFF — which the paragraph three below it says must not
+      happen. **The code was the stricter of the two and the sentence was the
+      loose one**, so this is :26947 §5's shape (a rule a file states in one place
+      is not a rule the file keeps) pointed at documentation rather than
+      behaviour. Struck in place, not deleted.
+- [x] R2.5's empty catch reached through an optional chain — `orgs/service.ts`
+      `OrgsDeps.log` — found 2026-09-02, attendance T3 round 1 (L-3) — fixed this
+      commit. The streak hook's failure was reported with `deps.log?.warn(...)`,
+      so a deps object without a logger swallowed it with no record at all — the
+      exact thing the catch was written to avoid. The field's own comment
+      defended the optionality as sparing "every test's deps object"; **measured,
+      that is ZERO objects** — `routes.ts` is the only construction site in the
+      repo and it already passes `app.log`. Now required; `tsc` is the observer.
+- [x] A database read on the degrade path, awaited outside the guard —
+      `orgs/service.ts` `markOrgAttendance` — found 2026-09-02, attendance T3
+      round 1 (L-4) — fixed this commit. `getUserSyncContext` sat OUTSIDE the
+      `.catch()` protecting the streak recompute, so a blip there 500'd a POST
+      whose attendance row was **already committed** — telling a member their tap
+      failed while they are marked in, which is the outcome the paragraph above
+      it forbids (:5807). Now inside: everything between the commit and the
+      response degrades, or nothing does. No test — it needs fault injection on a
+      read this suite has no seam for, and that is stated rather than implied.
+- [x] Three routes with no per-route rate limit, one of them holding a gym's row
+      lock — `orgs/routes.ts` — found 2026-09-02, attendance T3 round 1 (L-5) —
+      fixed this commit. Every mark takes `SELECT … FOR UPDATE` on the gym row,
+      so the only thing between one member and a gym's serialised console writes
+      was the shared 300/min global floor, while `/v1/orgs/join` and the nudge
+      route already carry limits for smaller reasons. Split in two because the
+      shapes are nothing alike — 30/hour for the write (a member marks once or
+      twice a day), 600/hour for the reads (an owner watching the door) — since
+      one limit covering both would have to be the looser, which is the write's.

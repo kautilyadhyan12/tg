@@ -1136,6 +1136,159 @@ d("gym attendance (real Postgres)", () => {
   );
 
   // -------------------------------------------------------------------------
+  // T3 ROUND 1 REGRESSIONS (2026-09-02) — each of these went RED before its fix
+  // -------------------------------------------------------------------------
+
+  /** THE SHAPE THE ROUND-1 CURSOR TEST ABOVE COULD NOT SEE. `cursor=nonsense`
+   *  has no `|`, so it dies at the FIRST check and says nothing about the
+   *  second. This one is well-formed enough to get past that and reach the
+   *  `::uuid` cast, which is where a stale marker in a real client's hands
+   *  lands — a 500 and a Sentry event for something the caller can do nothing
+   *  about. The test above stayed GREEN through the whole defect. */
+  it(
+    "a page marker whose id is not a uuid is a 400 on BOTH reads, never a 500",
+    async () => {
+      const owner = await makeUser("cur2-owner");
+      const org = await makeOrg(owner.cookies, "Cursor Cast Gym");
+      const marker = `${new Date().toISOString()}|not-a-uuid`;
+      for (const path of ["attendance", "attendance/history"]) {
+        const res = await get(
+          `/v1/orgs/${org.org.id}/${path}?cursor=${encodeURIComponent(marker)}`,
+          owner.cookies,
+        );
+        expect(res.statusCode).toBe(400);
+        expect((JSON.parse(res.body) as { error: string }).error).toBe("bad_cursor");
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE FILTER HAD NO TEST AT ALL, WHICH IS WHY IT COULD SHIP DEAD. The schema
+   *  emitted `status` while the service read `query.statuses`, so it parsed,
+   *  validated and was thrown away: an owner asking for the exceptions saw every
+   *  visit of the day (:5807). 23 green tests, a green typecheck and a 23-mutant
+   *  sweep all passed over it, because none of them sent the parameter.
+   *
+   *  **BOTH DIRECTIONS, and the second is the one a lazy fix breaks:** a filter
+   *  that excludes must also INCLUDE, and an EMPTY filter must mean "no filter"
+   *  rather than `= ANY('{}')`, which matches nobody. */
+  it(
+    "the day filter actually filters — and clearing it shows everybody again",
+    async () => {
+      const owner = await makeUser("filt-owner");
+      const member = await makeUser("filt-member");
+      const org = await makeOrg(owner.cookies, "Filter Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // A gym that has never set hours: every visit is `hours_unset`, so
+      // `in_session` must return NOBODY and `hours_unset` must return them.
+      const marked = await mark(org.org.id, member.cookies);
+      expect(marked.statusCode).toBe(200);
+      expect((JSON.parse(marked.body) as { visit: Visit }).visit.hoursStatus).toBe("hours_unset");
+
+      const wrong = await readDay(org.org.id, owner.cookies, "?statuses=in_session");
+      expect(wrong.people).toHaveLength(0);
+
+      const right = await readDay(org.org.id, owner.cookies, "?statuses=hours_unset");
+      expect(right.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // TWO AT ONCE is the useful case Kd's ruling names, and a comma-separated
+      // list is why the parameter is shaped this way at all.
+      const both = await readDay(
+        org.org.id,
+        owner.cookies,
+        "?statuses=outside_hours,hours_unset",
+      );
+      expect(both.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // CLEARED. The schema's own promise is that empty and absent are the same
+      // thing; without the empty→undefined mapping this returns nobody.
+      const cleared = await readDay(org.org.id, owner.cookies, "?statuses=");
+      expect(cleared.people.map((p) => p.userId)).toEqual([member.userId]);
+
+      // AND THE SUMMARY IS DELIBERATELY NOT FILTERED — it describes the whole
+      // day, so a screen's totals must not move when a filter is applied.
+      expect(wrong.totals.visits).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A BOUND DERIVED FROM AN INVARIANT THE WRITER DOES NOT ENFORCE IS NOT A
+   *  BOUND. Both ceilings were computed from "the finest timetable is 24 slots",
+   *  which is true of ONE timetable — and a visit stores a FROZEN COPY of its
+   *  window, so a gym replacing its hours during the day makes more distinct
+   *  windows than any timetable has slots. Past the ceiling the server's own
+   *  response failed its own schema: a 500 on that date, for ever, since nothing
+   *  in this product deletes an attendance row.
+   *
+   *  One member with 40 distinct windows drives BOTH halves at once — 40 summary
+   *  groups (was `.max(29)`) and 40 visits on one person (was `.max(24)`). */
+  it(
+    "a day with more distinct session windows than any timetable has slots still reads",
+    async () => {
+      const owner = await makeUser("bound-owner");
+      const member = await makeUser("bound-member");
+      const org = await makeOrg(owner.cookies, "Bound Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      const today = await gymToday(org.org.id);
+
+      // WRITTEN DIRECTLY, because reaching 40 windows through the API would mean
+      // 40 timetable edits and 40 taps at 40 different minutes — the fixture
+      // would be measuring the clock rather than the bound.
+      const windows = Array.from({ length: 40 }, (_, i) => ({
+        opens: i * 10,
+        closes: i * 10 + 5,
+      }));
+      for (const w of windows) {
+        await sql`
+          INSERT INTO gym_attendance
+            (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+             session_opens_minute, session_closes_minute, slot_key)
+          VALUES (${org.org.id}, ${member.userId}, ${member.userId}, ${today}::date,
+                  'manual', 'in_session', ${w.opens}, ${w.closes},
+                  ${`${String(w.opens)}-${String(w.closes)}`})`;
+      }
+
+      const res = await get(`/v1/orgs/${org.org.id}/attendance`, owner.cookies);
+      expect(res.statusCode).toBe(200);
+
+      const day = (JSON.parse(res.body) as { attendance: AttendanceDay }).attendance;
+      expect(day.summary).toHaveLength(windows.length);
+      expect(day.people[0]?.visits).toHaveLength(windows.length);
+      // ONE PERSON, forty visits — the number Kd's ruling 12 exists to make
+      // visible, and the totals must say so.
+      expect(day.totals).toEqual({ visits: windows.length, people: 1 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE BODY IS EMPTY BY DESIGN AND NOW BY ENFORCEMENT. The route's own comment
+   *  calls the empty body a security decision — the server picks the day, the
+   *  method and the slot — but nothing parsed it, so `.strict()` was a promise
+   *  no code kept. */
+  it(
+    "the mark route refuses a body that tries to name anything",
+    async () => {
+      const owner = await makeUser("body-owner");
+      const member = await makeUser("body-member");
+      const org = await makeOrg(owner.cookies, "Body Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const res = await post(
+        `/v1/orgs/${org.org.id}/attendance`,
+        { day: "2020-01-01", method: "qr" },
+        member.cookies,
+      );
+      expect(res.statusCode).toBe(400);
+
+      // AND THE ORDINARY CALL IS UNTOUCHED — a POST with no keys is the normal
+      // case and must stay a 200.
+      expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
   // KD RULING 9 (:27900 §3) — STREAKS YES, XP NO
   // -------------------------------------------------------------------------
 

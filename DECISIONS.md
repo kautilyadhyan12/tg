@@ -28448,3 +28448,200 @@ scopes it. The runs were therefore BROADER than claimed rather than narrower —
 but the LABEL was false, and :8156's trigger (*"believing a mutation verdict
 produced under a `-t` filter"*) has a mirror image: believing a run was filtered
 when it was not.
+
+## 2026-09-02 — ATTENDANCE, SERVER HALF, T3 ROUND 1: FOUR Critical/High, THE PACKET DOES NOT SHIP — a whole route parameter that parsed, validated and was then thrown away, and a bound computed from an invariant nothing enforces
+
+**Read before adding a query parameter to ANY route in this repo, before writing
+a `.max()` into a response schema, before parsing a composite cursor, before
+adding a user-linked table to this schema, and before quoting a green mutation
+sweep as evidence that a route's INPUTS work.**
+
+Round 1 on `:28221`, run in a fresh chat, on a card that had shipped with 23
+green tests, a green typecheck and a 23-mutant sweep with 0 alive. **Four
+Critical/High, three of them reproduced against the local database with probe
+runs before anything was written.** All four fixed this commit, each with a test
+that goes RED without its fix. **This round finds Criticals, so the packet does
+NOT ship (:5348 rule 1); the next round is diff-only over these fixes.** The
+escape hatch is not triggered — this is round 1 on this subsystem.
+
+### 1 · A ROUTE PARAMETER THAT PARSED, VALIDATED AND WAS THEN THROWN AWAY
+
+`attendanceDayQuerySchema` emitted **`status`**; `getOrgAttendanceDay` read
+**`query.statuses`**. There is no `statuses` key anywhere on that path, so the
+filter was always `undefined` and the `ANY` predicate was disabled. **An owner
+filtering the day to its exceptions — outside-hours and closed-day visits, which
+:27992 §3 makes the second thing on the screen — was shown EVERY visit of the
+day under a label saying otherwise** (:5807).
+
+**WHY `tsc` COULD NOT SEE IT, because this is the reusable part.** The service
+took a hand-written inline copy of the query type. Every field of that copy is
+optional, so weak-type detection needs *no* overlapping property to fire — and
+`day` and `cursor` overlapped, so it did not. Excess-property checking does not
+apply to a variable. **Two object types agreed on two of three names and
+disagreed on the one that mattered, and nothing in the language is looking.**
+Fixed by deleting the copy: the service now takes `AttendanceDayQuery` itself,
+so a rename on either side is a compile error. **The history reader got the same
+treatment in the same commit — a guard that covers one of two readers is not a
+guard.**
+
+**AND THE EMPTY CASE WAS BROKEN UNDERNEATH IT.** The schema's own comment
+promises *"empty and absent are the same thing, so a screen clearing its filter
+need not know which to send"* — but an empty list reached `= ANY('{}')`, which
+matches nobody. Renaming alone would have shipped "I cleared the filter" as
+"show me an empty day". Empty now maps to `undefined` **at the boundary**, so
+the repo's contract stays "a non-empty list or nothing".
+
+**THE INSTRUMENT LESSON IS THE ONE TO CARRY: A MUTATION SWEEP CANNOT KILL CODE
+NO TEST EXERCISES.** 23 tests, 23 mutants, 0 alive — and not one of them ever
+sent `?status=`. A sweep measures the tests you have against the code you have;
+a parameter with no test is invisible to it in exactly the way it is invisible
+to a reader who assumes a filter that parses must filter. **When a card adds an
+input, the question is not "is it validated" but "does anything CALL it".**
+
+### 2 · A COMPOSITE CURSOR WHOSE SECOND HALF WAS NEVER CHECKED
+
+`parseAttendanceCursor` verified the instant and rejected an empty id, and never
+checked that the id was a **uuid** — while both queries interpolate it as
+`::uuid`. So `requireAttendanceCursor`'s 400 could not fire and Postgres raised
+**22P02**: a 500 with a Sentry event, on both reads, from something as ordinary
+as a stale or truncated marker in a client's hands.
+
+**THE MODULE ALREADY STATED THE RULE, TWO FILES AWAY** —
+`applicationParamsSchema`: *"a non-uuid must fail as a 400 at the boundary and
+never as a 500 from Postgres refusing the cast"*. :26947 §5's shape again: **a
+rule a file states in one function is not a rule the file keeps.**
+
+**AND THE EXISTING TEST FOR THIS EXACT GUARANTEE STAYED GREEN** (rule 4). *"An
+unreadable page marker is a 400, never a silent page one"* sends
+`cursor=nonsense`, which has no `|` and dies at the FIRST check — it could never
+reach the second. **A test whose input fails early proves nothing about the
+checks downstream of where it stopped**, and its title claimed the general
+property. The new test sends a well-formed instant with a bad id, which is the
+only shape that reaches the cast.
+
+### 3 · A BOUND DERIVED FROM AN INVARIANT NOTHING ENFORCES — AND A PERMANENT 500
+
+`summary.max(29)` and `visits.max(24)` were both computed from *"sessions never
+overlap and never wrap, so the finest timetable a gym can express is 24 slots"*.
+**That is true of ONE timetable, and a day can hold several.** A visit stores a
+FROZEN COPY of its window — which this card's own test *"the window a visit
+carries survives the whole timetable being replaced"* exists to pin — and
+`PUT /hours` may run any number of times in a day. **The distinct
+`(hours_status, opens, closes)` groups in one gym-day are therefore not bounded
+by the timetable at all.**
+
+Past the ceiling the server's own response failed
+`gymAttendanceDayResponseSchema.parse`: **a 500 on that date, permanently**,
+because nothing in this product deletes an attendance row. Same class one level
+down — a person with 25 frozen windows took the whole page with them.
+
+**THIS IS :26947 §4 RECURRING ONE CARD LATER, IN A FILE THAT CITES IT.** That
+finding was *"a comment that claimed a bound the query did not have"*, and its
+fix was a SQL `LIMIT` mirrored by a `.max()`. This card quoted that lesson in the
+constant's own docstring — and **`ATTENDANCE_VISITS_PER_PERSON` had no reader at
+all**: a constant, a paragraph justifying it, and no `LIMIT` anywhere. **A
+paragraph explaining a bound is evidence that somebody thought about it, never
+that anything enforces it — grep the constant.**
+
+Fixed the way the precedent fixed it: 400 for both, `CLOSURE_READ_LIMIT`'s
+reasoning reused (far above any honest day, so a real gym is never silently
+truncated), **enforced in the query** — `LIMIT` on the summary, a
+`row_number() OVER (PARTITION BY user_id)` cap on each person's visits. The
+struck sentences are struck in place, not deleted.
+
+### 4 · A NEW USER-LINKED TABLE JOINED NONE OF THE PRIVACY LISTS, AND THE COMMENT SAYING OTHERWISE WAS FALSE
+
+`0019_gym_attendance.sql` said *"the DPDP cascade owns what happens to it"*. **It
+does not, and the way it fails is the point: §5.2 ANONYMIZES the `users` row
+rather than deleting it, so `ON DELETE no action` from `users` never fires on an
+erasure request and the rows simply stay.** `gym_attendance` appeared on none of
+`modules/privacy/tables.ts`' three lists — grep-verified, zero hits for
+"attendance" in that whole directory. **A person who deletes their account kept
+a dated, per-gym record of every day they walked into a building.**
+
+**THE PRECEDENT WAS ONE CARD OLD AND EXPLICIT:** `gym_join_applications` joined
+the SPEC-GAP list the day the waiting-room card created it (:11072), with the
+reason written beside it — *"a list Kd is asked to RULE on has to be complete,
+or the ruling is partial"*. Attendance is the third member of that family and
+the most sensitive: a membership says a person belonged to a gym, an application
+says they asked to, attendance says **which days they were physically inside
+it**.
+
+**IT JOINS THE SPEC-GAP LIST, NOT THE DELETE LIST** — widening a deletion list
+on a chat's judgement is R0.2, and :11072 says RULE THEM TOGETHER. **What this
+round also found is that the RULING itself had never been tracked anywhere**:
+the list has grown table by table inside a code comment since 2026-07-22 with no
+`OWED.md` line saying anybody still owes an answer. **That is this repo's own
+deferral rule failing on the file it was written to protect**, and it now has a
+red line. Attendance is additionally the one whose **Day-0** half is unhandled —
+a membership is closed and an application cancelled at Day 0; nothing touches an
+attendance.
+
+### 5 · WHAT WAS CHECKED HARDEST AND FOUND SOUND, so the next round does not re-derive it
+
+**The streak/XP split holds** (:27900 §3, the thing that ruling most feared).
+`getStreakDays` (workouts union attendance) and `getActivityDays` (workouts
+alone) are genuinely two functions; `recomputeXp` reads the workouts-only list,
+so an attendance-only day pays no continuation XP. Its test needs two
+consecutive days to be non-vacuous and says so, and O215/O216 mutate the union
+in **both** directions. Tenancy is clean on all three routes and observed — the
+day summary's `gym_id` was mutated out and the suite went red. Idempotency is
+enforced by the database rather than by a check, with `slot_key`'s CHECK
+re-deriving the key so the quiet direction raises 23514.
+
+### 6 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **The 400 `LIMIT`s are backstops nothing watches.** The regression fixture uses
+  40 windows, which proves the SCHEMA bound moved and says nothing about the
+  `LIMIT`; seeing those fire needs a 400+ row fixture. The bound that mattered
+  in production is the one now driven.
+- **L-4 has no test.** Moving `getUserSyncContext` inside the degrade guard needs
+  fault injection on a read this suite has no seam for.
+- **C/H-4 has no test and should not have one.** Asserting attendance is purged
+  would encode the answer to the question being put to Kd.
+- **No smoke, still: the web half is unbuilt, so there is nothing to click**
+  (:26012's shape). The web half now inherits a renamed query parameter —
+  `?statuses=`, plural — which is the one wire change in this round.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full (813 triggers) · `DECISIONS-INDEX.md` §1 and §2
+in full · `DECISIONS.md` :27900 with addenda :27992/:28055/:28107, :28221 with
+addendum :28395, :26947 §§4–5, :11072's precedent via `privacy/tables.ts` ·
+`CLAUDE.md` Part I §2.5 · `OWED.md` and `BACKLOG.md` tails.
+
+**EVERY FINDING WAS RE-VERIFIED AGAINST THE CODE BEFORE IT WAS ACTED ON**
+(:23928, :24559, S5), and the review's own suggested fix for §1 was NOT taken as
+the whole of it (:25567) — renaming the key alone would have left the empty-list
+half broken.
+
+**PROVE, all LOCAL (`localhost:5433`, per :13659), on the final bytes:**
+`orgs.attendance` **27/27** (+4) · `orgs.attendance` + `orgs.routes` +
+`orgs.hours` + `db.migration` together **227/227** · `@app/shared` **51/51** ·
+**`web` 1472/1472 across 53 files — run because this commit edits
+`packages/shared`, which is :28395's whole lesson and the first time it has been
+applied rather than recorded** · `tsc --noEmit` exit 0 on `api` and `@app/shared`
+· `eslint --max-warnings=0` clean on `apps/api/{src,test,tools}` and
+`packages/shared/{src,test}` — **it caught two real errors in my own new test**
+(numbers in a template literal) · `check-harnesses` **25 scripts parse** ·
+`check-decisions-index` **260 pointers resolve** · triggers up to date.
+
+**FIX-VERIFICATION SWEEP, five hand-run mutants, every one RED and every one
+restored** (`grep "MUTANT M"` clean afterwards, `git status` shows only the
+intended files): **M1** reverts the cursor's uuid check, and the new test reports
+`400 -> 500`, the defect exactly · **M2** renames the schema key back, red **for
+the WRONG reason** (`.strict()` rejecting an unknown key, not a dead filter), so
+it was replaced rather than counted · **M2b** keeps the key and passes
+`statuses: undefined` to the repo — the original defect precisely —
+*"expected [ {…} ] to have a length of +0 but got 1"* · **M2c** removes the
+empty-to-undefined mapping, red on the CLEARED assertion alone · **M3** restores
+`summary.max(29)`, `expected 500 to be 200` · **M3b** restores `visits.max(24)`,
+the same · **M4** removes the body parse, `expected 200 to be 400`. **M2 is the
+one worth keeping: a mutant that goes red for a reason other than the defect is
+not an observer of the defect**, and counting it would have left the real
+behaviour untested.
+
+**THE FULL api SUITE IS NOT QUOTED AND THAT IS DELIBERATE** — the pre-existing
+`seed()` flake `CLAUDE.md` and :13746 both document. Scoped runs are what the
+figures above are.

@@ -1299,6 +1299,31 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:28452** — 2026-09-02 — **ATTENDANCE, SERVER HALF, T3 ROUND 1: FOUR
+  Critical/High, THE PACKET DOES NOT SHIP — a whole route parameter that parsed,
+  validated and was then thrown away, and a bound computed from an invariant
+  nothing enforces.** **Read before adding a query parameter to ANY route in this
+  repo, before writing a `.max()` into a response schema, before parsing a
+  composite cursor, before adding a user-linked table to this schema, and before
+  quoting a green mutation sweep as evidence that a route's INPUTS work.**
+  Reviews `:28221`. **The day filter was DEAD** — schema emitted `status`, the
+  service read `query.statuses`, and `tsc` cannot see two all-optional object
+  types agreeing on two names out of three; the service now takes the schema's
+  own type, both readers. **An empty filter matched nobody** (`= ANY('{}')`)
+  against the schema's own promise. **A composite cursor's uuid half was
+  unchecked**, so a stale marker was a 500 from `::uuid`, and the existing test
+  for that guarantee stayed GREEN because its input died at the first check.
+  **Both response bounds were computed from "the finest timetable is 24 slots"**,
+  which is true of ONE timetable — visits carry FROZEN windows and `PUT /hours`
+  runs all day — so a gym could make its own attendance page 500 permanently;
+  `ATTENDANCE_VISITS_PER_PERSON` had no reader at all, :26947 §4 recurring in a
+  file that cites it. **`gym_attendance` was on none of the DPDP lists** and the
+  migration said the cascade owned it, which is false because §5.2 anonymizes
+  rather than deletes; it joins the SPEC-GAP list (:11072) and the RULING finally
+  gets an `OWED.md` line after living in a code comment since 2026-07-22.
+  **Sound and not to be re-derived: the streak/XP split, tenancy on all three
+  routes, database-enforced idempotency.** Five Lows fixed, logged in
+  `BACKLOG.md`. **No observer: the 400 `LIMIT` backstops, L-4, and C/H-4.**
 - **:28221** — 2026-09-01 — **ATTENDANCE, SERVER HALF: a member can say "I'm
   here", the gym can see who came, and the sweep found THREE of my own tests
   proving less than they claimed plus a mutant that could not die.** **Read

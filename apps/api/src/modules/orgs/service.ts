@@ -43,11 +43,12 @@ import {
 } from "./schemas.js";
 import type {
   AddOrgStaffRequest,
+  AttendanceDayQuery,
+  AttendanceHistoryQuery,
   CloseGymDayRequest,
   CloseGymDayResponse,
   GymAttendanceDayResponse,
   GymAttendanceHistoryResponse,
-  GymAttendanceHoursStatus,
   GymAttendanceVisit,
   MarkGymAttendanceResponse,
   ConfirmApplicationResponse,
@@ -114,15 +115,23 @@ export interface OrgsDeps {
    *  waiting for a 1-in-a-billion coincidence. Production passes
    *  `crypto.randomBytes`. */
   randomBytes: (n: number) => Uint8Array;
-  /** OPTIONAL, and the one caller that needs it is the attendance hook.
+  /** REQUIRED, and the one caller that needs it is the attendance hook.
    *
    *  A streak that fails to recompute must not lose the attendance (the row IS
    *  the record), so that failure is caught and WARNED rather than thrown — and
-   *  R8.5 forbids the empty catch that would otherwise be the alternative. It is
-   *  optional because every other function in this module has never needed a
-   *  logger and adding a required field would rewrite every test's deps object
-   *  to buy nothing. */
-  log?: { warn: (obj: Record<string, unknown>, msg: string) => void } | undefined;
+   *  R8.5 forbids the empty catch that would otherwise be the alternative.
+   *
+   *  ~~It is optional because every other function in this module has never
+   *  needed a logger and adding a required field would rewrite every test's deps
+   *  object to buy nothing.~~ **STRUCK — the premise was measured and false, and
+   *  the optionality reintroduced the very thing the catch exists to avoid.**
+   *  `deps.log?.warn(...)` on an absent logger is R8.5's empty catch reached
+   *  through an optional chain: the failure is swallowed with no record at all.
+   *  There is exactly ONE construction site in the whole repo
+   *  (`routes.ts`, which already passes `app.log`), so "every test's deps
+   *  object" was zero objects. Required costs nothing and removes the silent
+   *  path. */
+  log: { warn: (obj: Record<string, unknown>, msg: string) => void };
 }
 
 /** Part 3 §4.0 step 4 names the first code "Front Desk". */
@@ -2276,8 +2285,13 @@ function requireAttendanceCursor(
 
 /** MARK YOURSELF PRESENT.
  *
- *  **THE GATE IS `requireGymAudience` PLUS A LIVE MEMBERSHIP, AND DELIBERATELY
- *  NOT `requireWritablePrivilege`.** That helper is built for CONSOLE writes by
+ *  **THE GATE IS THE GYM EXISTING PLUS A LIVE MEMBERSHIP — NOT
+ *  `requireGymAudience`, AND DELIBERATELY NOT `requireWritablePrivilege`.**
+ *  ~~`requireGymAudience`~~ is named nowhere in this function and naming it here
+ *  understated the gate: that helper admits non-member STAFF, which the
+ *  paragraph three below says must not happen. The code has always been the
+ *  stricter of the two; the sentence was the loose one. That helper is built for
+ *  CONSOLE writes by
  *  STAFF and refuses a gym with no live plan — which would refuse **a lapsed
  *  gym's own members**, contradicting Kd's answer at the plan gate (:27992) and
  *  :22215's arm A, where a lapsed gym's members fall back to the free app rather
@@ -2343,19 +2357,28 @@ export async function markOrgAttendance(
       // streak is recomputed from committed history on the next read anyway, so
       // a failure here degrades with a warn rather than turning a recorded visit
       // into a 500 (`awardMealBadges`' precedent, same shape, same reason).
+      //
+      // **THE READ IS INSIDE THE GUARD, NOT BESIDE IT.** `getUserSyncContext`
+      // is a database read on the same failure-prone path, and awaiting it
+      // OUTSIDE the catch made a blip there a 500 on a POST whose attendance row
+      // is already committed — telling the member their tap failed while they
+      // are marked in, which is the exact outcome the paragraph above forbids
+      // (:5807). Everything between the commit and the response degrades or
+      // nothing does.
       if (!outcome.alreadyMarked) {
-        const ctx = await getUserSyncContext(deps.sql, userId);
-        await onAttendanceMarked({ sql: deps.sql }, userId, ctx.timezone).catch((err: unknown) => {
-          deps.log?.warn(
-            {
-              event: "gamification.attendance_streak_failed",
-              userId,
-              gymId,
-              errName: err instanceof Error ? err.name : typeof err,
-            },
-            "attendance streak recompute failed",
-          );
-        });
+        await getUserSyncContext(deps.sql, userId)
+          .then((ctx) => onAttendanceMarked({ sql: deps.sql }, userId, ctx.timezone))
+          .catch((err: unknown) => {
+            deps.log.warn(
+              {
+                event: "gamification.attendance_streak_failed",
+                userId,
+                gymId,
+                errName: err instanceof Error ? err.name : typeof err,
+              },
+              "attendance streak recompute failed",
+            );
+          });
       }
       return markGymAttendanceResponseSchema.parse({
         status: "created",
@@ -2387,11 +2410,10 @@ export async function getOrgAttendanceDay(
   deps: OrgsDeps,
   userId: string,
   gymId: string,
-  query: {
-    day?: string | undefined;
-    statuses?: readonly GymAttendanceHoursStatus[] | undefined;
-    cursor?: string | undefined;
-  },
+  // THE SCHEMA'S OWN TYPE, NEVER A HAND-WRITTEN COPY OF IT. The copy that used
+  // to be here named `statuses` while the schema emitted `status`, and the
+  // filter silently did nothing for a whole card (see `attendanceDayQuerySchema`).
+  query: AttendanceDayQuery,
 ): Promise<GymAttendanceDayResponse> {
   await requirePrivilege(deps, gymId, userId, "attendance.read");
 
@@ -2446,7 +2468,9 @@ export async function getOrgAttendanceHistory(
   deps: OrgsDeps,
   userId: string,
   gymId: string,
-  query: { userId?: string | undefined; cursor?: string | undefined },
+  // The schema's own type, for `getOrgAttendanceDay`'s reason — the guard is
+  // worth nothing if it covers one of the two readers.
+  query: AttendanceHistoryQuery,
 ): Promise<GymAttendanceHistoryResponse> {
   const subjectId = query.userId ?? userId;
   if (subjectId === userId) {
