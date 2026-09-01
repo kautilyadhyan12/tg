@@ -27989,6 +27989,69 @@ argument Kd's own :26469 §4 ruling makes about `method`**, applied to the
 question he answered here. No `OWED.md` line is opened for staff marking: it was
 not deferred, it was answered.
 
+### 6 · ADDENDUM, same session — KD REVERSES THE ONE-VISIT-PER-DAY RECOMMENDATION AND ADDS TWO RULINGS NOBODY ASKED HIM FOR
+
+**Read before writing any UNIQUE, count or `ON CONFLICT` on `gym_attendance`,
+before adding any payment, dues or arrears condition to a member-facing path,
+and before designing ANY console screen that lists one row per event.**
+
+Shown the card, he answered on three fronts. **Two of the three were not
+questions he had been asked**, which is the part to keep.
+
+**1. A SECOND VISIT IN A DIFFERENT SESSION COUNTS AGAIN** — *"if a member again
+comes in different slot and gives attandance taht also count and owner can see
+that the member attended two times"*. **This REVERSES §1's one-visit-per-day
+recommendation, which the card had flagged as vetoable with its cost stated —
+and the flag is what made the reversal cheap.** Built as
+**UNIQUE (gym_id, user_id, day, slot_key)** with `slot_key` NOT NULL: the session
+window when there is one, else the `hours_status` name. **The ruling then lives
+in a constraint rather than in a comment**, and a double-tap of the SAME session
+is still one row, so idempotency (R3.5) survives the change instead of being
+traded for it.
+**THE ONE LIMIT IT LEAVES, NAMED RATHER THAN DEFAULTED: a gym open 24 hours, or
+one that has not declared sessions, has nothing to tell two visits apart**, so a
+second tap the same day stays one visit. The alternative is an invented time
+window, which is R0.2 and would be wrong in both directions for somebody.
+**Whether those gyms should count repeat visits too is now the one open question
+on this card, and a chat must not answer it with a number it chose.** The remedy
+available today is the gym declaring its sessions — the feature shipped last
+card — so the incentive points the right way.
+
+**2. THE APP NEVER CHECKS WHETHER A MEMBER HAS PAID THE GYM** — *"if a memebr is
+not part of the gym or have not paid then gym memebr can remove them thas gym
+responsibility"*. **Unprompted, and it closes a door before anybody opened it.**
+Attendance asks ONE question — is this a live member of this gym — and the gym's
+remedy for anyone else is the `members.remove` door it already has. That single
+condition does both jobs, which is why **no dues, arrears or payment concept
+enters the schema, the routes or the screen.** Note the shape: this is a ruling
+about what the product does NOT do, and those are the ones that get quietly
+reversed later by a chat "improving" a check.
+**Not to be confused with the gym's OWN plan lapsing**, answered separately in
+the same message: a member of a lapsed gym **can** still mark attendance
+(:22215's arm A), and an ARCHIVED gym (:25771) refuses.
+
+**3. THE OWNER'S SCREEN MUST NOT PILE UP** — *"many memebr will come attend and
+give attandance … it might pile up and may be hard to analuse and see so the ui
+should be clean and beautiful"*. **He raised the feature's real failure mode
+before a line of it existed, and it is a BUILD REQUIREMENT WITH A TEST, not a
+styling note.** A 300-member gym running three sessions produces several hundred
+visits a day and a flat list of them is unreadable.
+**THE SHAPE, and it is in the card so the build cannot drift:** the day's SHAPE
+before any names (one line per session with its count) · the exceptions next,
+as a filter, because outside-hours and closed-day visits are what an owner goes
+looking for · then **PEOPLE, one row each, with their times as chips — so "this
+member attended twice" is visible at a glance and a 400-tap day is 300 rows, not
+400** · a name search · paged, never infinite · and an empty state that tells
+"nobody has come yet" apart from "the button is switched off", which look
+identical and are not (:8267/:8343).
+**THE SPECIFIC WAY THIS GETS BROKEN: a screen that downloads the day's visits
+and counts them in the browser.** It is right on a fixture of six and reports
+the first PAGE on a fixture of four hundred. **The counts come from the server
+or they are wrong**, and that is the assertion the web half's test makes.
+**He also restated where this is going and it agrees with :26558/:26586** —
+*"we will build it properly for mobile where qr will be there and gym can turn
+off manual attandance"*.
+
 ### Round log
 
 **Grounding read this session before anything was proposed:**
@@ -28018,8 +28081,13 @@ engine banned-token grep · drizzle migrations on a Neon branch · typecheck / l
 / test · api tests on local Postgres · gitleaks over full history.
 
 **NOTHING IS BUILT.** `CARD-gym-attendance.md` is written and awaits the gate.
-Two things in it are explicitly left for Kd there rather than assumed: whether a
-visit is one-per-DAY (recommended, with its cost stated — a member who comes
+~~Two things in it are explicitly left for Kd there rather than assumed: whether
+a visit is one-per-DAY (recommended, with its cost stated — a member who comes
 morning and evening counts once) and whether a member of a LAPSED gym can still
 mark attendance (recommended yes; refusing would show a member something false
-about their own gym, :5807).
+about their own gym, :5807).~~ **BOTH ANSWERED IN §6, ONE OF THEM AGAINST THE
+RECOMMENDATION** — and the flag on it is what made the reversal cost one edit
+rather than a rebuild. **THE HABIT IS THE TRANSFERABLE PART: a call a chat makes
+for Kd is written down WITH ITS COST, at the gate, where he can see it. Two of
+the six things settled on this card were settled that way, and both went against
+the recommendation.**

@@ -4,24 +4,25 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **975 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **978 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,042 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 earlier on 2026-09-01).
+2. **§1 below — STANDING RULES. 1,081 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,075 lines, MEASURED 2026-09-01 (eighth measurement that
-day) and not estimated** (975 + 1,042 + 58). **§1 MOVED FOR THE FIRST TIME THAT
-DAY, AND THE REASON IS THE TEST OF THE SPLIT: the eight records before it were
-CARD records and went to §1B, where :24813 sends them; the ninth is a KD RULING
-(:27900) and rulings belong here.** Its 45 lines are what the always-read cost of
-a ruling looks like — the earlier eight cost thirty-two lines between them, all
-of it trigger phrases. **That is the split working as ruled, in both directions:
-a card record is a pointer, a ruling is read.**
+**ALWAYS-READ TOTAL: 2,117 lines, MEASURED 2026-09-01 (ninth measurement that
+day) and not estimated** (978 + 1,081 + 58). **§1 MOVED TWICE THAT DAY, AND THE
+REASON IS THE TEST OF THE SPLIT: the eight records before it were CARD records
+and went to §1B, where :24813 sends them; the ninth and tenth are a KD RULING
+(:27900) and its same-session ADDENDUM (:27992), and rulings belong here.** They
+cost 45 and 39 lines — what the always-read price of a ruling looks like —
+against thirty-two lines for the earlier eight put together, all of it trigger
+phrases. **That is the split working as ruled, in both directions: a card record
+is a pointer, a ruling is read.**
 ~~**§1 AND §2 HAVE NOT MOVED ALL DAY**: all SEVEN of that day's records — the
 server card, its T3 round, the web card, Kd's five screen changes, his four
 corrections, his smoke declaration and the web half's T3 round 1 — went to §1B,
@@ -1132,6 +1133,45 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   for Kd at the gate rather than assuming them: one-visit-per-DAY (recommended,
   cost stated) and whether a LAPSED gym's member can still mark attendance
   (recommended yes, :5807).
+  **ADDENDUM `:27992`, same session — KD REVERSES THE ONE-VISIT-PER-DAY
+  RECOMMENDATION AND ADDS TWO RULINGS NOBODY ASKED HIM FOR.** **Read before
+  writing any UNIQUE, count or `ON CONFLICT` on `gym_attendance`, before adding
+  any payment, dues or arrears condition to a member-facing path, and before
+  designing ANY console screen that lists one row per event.**
+  **(1) A SECOND VISIT IN A DIFFERENT SESSION COUNTS AGAIN** — *"if a member
+  again comes in different slot and gives attandance taht also count and owner
+  can see that the member attended two times"*. Built as **UNIQUE (gym_id,
+  user_id, day, slot_key)**, `slot_key` NOT NULL — the session window when there
+  is one, else the `hours_status` name — **so the ruling lives in a constraint
+  rather than a comment**, and a double-tap of the SAME session is still one row,
+  keeping R3.5 instead of trading it away. **THE LIMIT IS NAMED, NOT DEFAULTED: a
+  24-hour gym, or one that has declared no sessions, has nothing to tell two
+  visits apart, so a second tap stays one visit. Whether those gyms should count
+  repeats is the one OPEN question on this card and a chat must not answer it
+  with an invented time window (R0.2).**
+  **(2) THE APP NEVER CHECKS WHETHER A MEMBER HAS PAID THE GYM** — *"if a memebr
+  is not part of the gym or have not paid then gym memebr can remove them thas
+  gym responsibility"*, unprompted. Attendance asks ONE question — is this a live
+  member — and `members.remove` is the gym's remedy for anyone else. **No dues,
+  arrears or payment concept enters the schema, the routes or the screen.** A
+  ruling about what the product does NOT do, and those are the ones a later chat
+  quietly reverses by "improving" a check. **Distinct from the GYM's own plan
+  lapsing**, answered in the same message: a lapsed gym's member CAN mark
+  (:22215 arm A); an ARCHIVED gym (:25771) refuses.
+  **(3) THE OWNER'S SCREEN MUST NOT PILE UP** — *"many memebr will come attend
+  and give attandance … it might pile up and may be hard to analuse and see so
+  the ui should be clean and beautiful"*, raised before a line of it existed.
+  **A BUILD REQUIREMENT WITH A TEST, not styling.** The day's SHAPE before any
+  names (one line per session with its count) · the exceptions next, as a filter
+  · then **PEOPLE, one row each, times as chips — "attended twice" visible at a
+  glance, and a 400-tap day is 300 rows** · name search · paged, never infinite ·
+  an empty state distinguishing "nobody came yet" from "the button is off"
+  (:8267/:8343). **THE SPECIFIC BREAKAGE: a screen that downloads the day's
+  visits and counts them in the browser — right on six rows, reporting the first
+  PAGE on four hundred. The counts come from the server or they are wrong.**
+  **THE TRANSFERABLE HABIT, measured on this card: a call a chat makes FOR Kd is
+  written down WITH ITS COST, at the gate. Two of the six things settled here
+  were settled that way, and BOTH went against the recommendation.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

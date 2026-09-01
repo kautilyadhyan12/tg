@@ -3,8 +3,11 @@
 **Status: WRITTEN, NOT BUILT. Awaiting Kd's approval at the plan gate.**
 Rulings: `DECISIONS.md` :26469 + addenda :26558, :26586 · the hours rulings
 :26624, :26684, :26736 (attendance is stamped with the session it fell in) ·
-**and four answers Kd gave at this gate on 2026-09-01, one of which overruled the
-recommendation** (streaks — §3.9 below). Tracked at `OWED.md`'s
+**and Kd's answers at this gate on 2026-09-01, across two passes: four questions
+answered (TWO of them against the recommendation — streaks, and one visit per
+day) plus two rulings he added unprompted (the app never checks a member's dues;
+the owner's screen must not pile up). Rulings 9 and 12–14 below.**
+Tracked at `OWED.md`'s
 "ATTENDANCE / QR CHECK-IN" line. Branch `web-repoint`, as every gym card has been.
 
 ---
@@ -25,7 +28,22 @@ for arriving at an odd time — the visit is recorded and labelled, never refuse
 That is your ruling, and it is the honest thing for a gym that forgot to update
 its hours.
 
+**Coming back later the same day counts again.** A member who trains in the
+morning session and returns for the evening one has attended **twice**, and the
+owner sees both times against that person's name. Your ruling, and §4a builds it
+by making the SESSION the thing that tells two visits apart.
+
 **A member sees their own list of days they came** — your answer at this gate.
+
+**Whether a member has paid the gym is the gym's business, not the app's.** The
+app never checks it and never blocks anybody over it; a gym that wants somebody
+out removes them from the roster, which it can already do. Your ruling.
+
+**The owner's screen is built so it cannot become a wall of names.** A busy gym
+produces hundreds of taps a day, and a flat list of them is unreadable — the
+screen leads with the count per session, then lists PEOPLE (not taps), each with
+their times beside them. §4b is the whole design and it is a requirement of this
+card, not polish added afterwards.
 
 **Coming to the gym now keeps a streak alive** — also your answer. §3.9 says
 exactly what that does and does not change, because it is the one part of this
@@ -48,7 +66,9 @@ at all — the scanner that replaces it arrives with the phone app.
 | A QR code, a poster, a scanner, a scan link | **the phone app** — your ruling (:26558, :26586) |
 | The gym's Overview numbers and the 8-week chart | the NEXT card (:26469 §1.2) |
 | Front-desk staff marking somebody present | **your answer at this gate: not now.** The record stores WHO marked each visit from day one, so it can be added later without spoiling the history |
-| Counting a second visit on the same day | §4a stores one visit per person per day — see the cost stated there |
+| ~~Counting a second visit on the same day~~ | **IN this card — Kd ruled it in at the gate.** A second visit in a DIFFERENT session counts again |
+| Counting a second visit at a gym that has declared NO sessions | §4a — there is nothing to tell two taps apart, so it stays one. The remedy is the gym declaring its sessions |
+| Checking whether a member has paid the gym | **never the app's job** — Kd, at this gate. The gym removes them from the roster |
 | Booking a place in a session, capacity limits | booking — its own card, the biggest on the gym list |
 | Marking somebody present for a PAST day | not asked for; the button means "I am here now" |
 | Telling a gym who trained somewhere else | **struck by Kd** (:26469 §1.3) — do not re-propose |
@@ -79,6 +99,22 @@ at all — the scanner that replaces it arrives with the phone app.
 10. **A member sees their own attendance history** — Kd, 2026-09-01, at this gate.
 11. **Everything about a day is in the GYM's own time zone** (:26469 §5, trap #8)
     — with one named exception, in §5 risk 2, where it collides with the streak.
+12. **A SECOND VISIT IN A DIFFERENT SESSION COUNTS AGAIN, and the owner sees
+    that the member attended twice** — Kd, 2026-09-01, at this gate, overruling
+    the one-visit-per-day recommendation. §4a makes the SESSION the thing that
+    distinguishes two visits, so the ruling lives in a UNIQUE constraint rather
+    than in a comment.
+13. **THE APP NEVER CHECKS WHETHER A MEMBER HAS PAID THE GYM** — Kd, same gate:
+    *"if a memebr is not part of the gym or have not paid then gym memebr can
+    remove them thas gym responsibility"*. Attendance asks one question only —
+    is this a live member of this gym — and the gym's own remedy is the
+    `members.remove` door it already has. **Do not add a dues, arrears or
+    payment condition to any attendance path.**
+14. **THE OWNER'S SCREEN MUST NOT PILE UP** — Kd, same gate: *"many memebr will
+    come attend and give attandance … it might pile up and may be hard to
+    analuse and see so the ui should be clean and beautiful"*. This is a build
+    requirement with a test, not a styling note; §4b is the design and §5 risk 6
+    is what happens if it is treated as polish.
 
 ---
 
@@ -132,16 +168,38 @@ Kd before anything else is written (R4.4 / T5).**
       historical fact, not a live reference.**
     - A CHECK ties them together: both NULL, or both set with `closes > opens`,
       **and non-NULL only when `hours_status = 'in_session'`**.
+  - `slot_key` — `text` NOT NULL. **This column exists to make ruling 12
+    enforceable rather than remembered**, and it is the only genuinely new idea
+    in the schema:
+    | `hours_status` | `slot_key` |
+    |---|---|
+    | `in_session` | the session window in minutes, e.g. `360-420` |
+    | `open_24h` | `open_24h` |
+    | `outside_hours` | `outside_hours` |
+    | `closed_day` | `closed_day` |
+    | `hours_unset` | `hours_unset` |
+    - **NOT NULL and never blank**, so the UNIQUE below always bites — a
+      nullable key would let Postgres treat every NULL as distinct and silently
+      re-admit the double-taps this is built to stop.
+    - The window is copied, not referenced, for the same reason
+      `session_opens_minute` is: `PUT /hours` deletes and re-inserts the week.
   - `created_at`.
-  - **UNIQUE (gym_id, user_id, day)** — one visit per member per gym per day.
-    This is what makes the write idempotent when somebody double-taps (R3.5) and
-    what stops one person inflating "how many came today".
-    - **THE COST, STATED RATHER THAN BURIED (Kd may veto this at the gate):** a
-      member who trains in the morning AND comes back in the evening is counted
-      once, in the morning session. The alternative — one row per session — makes
-      the headline number "people who came today" require a DISTINCT, and gives
-      no answer at all for the three statuses that have no session. **The
-      recommendation is one-per-day; the reversal is a migration, not a rewrite.**
+  - **UNIQUE (gym_id, user_id, day, slot_key)** — **Kd's ruling 12, made
+    physical.** A member who attends the 6–7am session and comes back for the
+    4–9pm one has two DIFFERENT `slot_key`s, so both rows exist and the owner
+    sees two times. A member who taps the same session twice has the same key,
+    so the second tap returns the first row: idempotent, and an accidental
+    double-tap can never inflate the gym's number (R3.5).
+    - **THE ONE LIMIT, STATED RATHER THAN BURIED:** at a gym that has declared
+      NO sessions — open 24 hours, or hours never set — the four non-session
+      keys are constant, so a second tap the same day is treated as the same
+      visit. **There is genuinely nothing to tell two visits apart there**, and
+      the alternative is an invented time window (R0.2) that would be wrong for
+      somebody in both directions. **The remedy is the gym declaring its
+      sessions, which is the feature shipped last card**, and the incentive
+      therefore points the right way: better numbers for gyms that say when they
+      are open. **If Kd wants a 24-hour gym to count repeat visits too, that is
+      a rule change and needs a rule — not a default a chat picks.**
 
 **`packages/shared/src/orgs.ts`** — the contract, once, for both sides (R7.2):
 `gymAttendanceMethodSchema` · `gymAttendanceHoursStatusSchema` ·
@@ -156,19 +214,42 @@ repo owns tenancy):
 |---|---|---|
 | `POST /v1/orgs/:gymId/attendance` | a **live member** of that gym | idempotent on (gym, user, gym-day); refused when the gym has the manual switch OFF |
 | `GET /v1/orgs/:gymId/attendance/me` | a **live member** | the member's own days, newest first, cursor-paginated with a bound on BOTH ends (:26947's Low) |
-| `GET /v1/orgs/:gymId/attendance?day=YYYY-MM-DD` | staff with **`members.read`** | who came — the same privilege that already gates the roster; no new privilege is minted |
+| `GET /v1/orgs/:gymId/attendance?day=YYYY-MM-DD` | staff with **`members.read`** | who came — the same privilege that already gates the roster; no new privilege is minted. **Answers PEOPLE, each carrying their visits, plus a per-session count** — see below |
 | the manual switch | **`org.manage`**, on the existing `PATCH /v1/orgs/:gymId` | one more field on the gym-details door rather than a sixteenth write door. **Read :19366 and :19560 before touching that route** — it carries the country lock |
 
-- The write goes through `requireWritablePrivilege`… **and that is the one thing
-  in this table to check rather than assume.** That guard is built for CONSOLE
-  writes by STAFF; this is a write by a MEMBER, and a lapsed gym's members were
-  ruled to keep the free app rather than be locked out (:22215). **OPEN QUESTION
-  FOR THE BUILD, not for Kd: can a member mark attendance at a gym whose plan has
-  lapsed?** The recommendation is **yes** — the gym still exists, the member still
-  turns up, and refusing would show a member something false about their own gym
-  (:5807). An archived gym (:25771) is a different matter and should refuse.
-  Whichever way it lands, it needs its own test, because the existing gates
-  answer a different question.
+**THE GYM-SIDE READ ANSWERS PEOPLE, NOT TAPS — this is ruling 14 built into the
+contract rather than left to the screen.** A 300-member gym running three
+sessions can produce several hundred rows in a day; a screen handed that list has
+already lost. The response is:
+
+- **a per-session summary**: each of the day's sessions with a count, plus counts
+  for each non-session status that actually occurred. **The owner reads the shape
+  of the day before a single name.**
+- **the people**, one entry per member, each carrying their visit times and
+  statuses for that day. **A member who came twice is ONE entry with TWO times**
+  — which is exactly what Kd asked to be able to see, and is also what stops the
+  list growing faster than the gym's membership.
+- **cursor pagination, bounded at BOTH ends** (:26947's Low), ordered by first
+  visit time.
+- **the exceptions are answerable without paging through everybody**: a filter
+  for visits that were outside hours or on a closed day, because those are the
+  rows an owner actually goes looking for.
+
+**THE LAPSED-GYM QUESTION IS ANSWERED — Kd, at this gate: a member of a gym
+whose plan has lapsed CAN still mark attendance.** So the write does **not** go
+behind `requireWritablePrivilege`: that guard is built for CONSOLE writes by
+STAFF, and using it here would refuse a member on a lapsed gym, contradicting
+both this answer and :22215's arm A. **An ARCHIVED gym (:25771) is a different
+matter and refuses**, because nobody new joins and nothing new happens there.
+**This needs its own test on each arm — live gym, lapsed gym, archived gym —
+because the existing gates answer a different question and quoting them here
+would be quoting the wrong guarantee.**
+
+**AND NOTHING ON THIS PATH ASKS WHETHER THE MEMBER HAS PAID THE GYM** (ruling
+13). The only condition is a live membership row. A gym removes somebody it does
+not want through `members.remove`, and a removed member's mark is already refused
+by that same condition — **one check, doing both jobs, which is why no dues
+concept enters the schema.**
 - **`POST` and `PATCH` reach a browser through a CORS preflight
   `fastify.inject` cannot exercise — verify `app.ts`'s method list before
   claiming this works** (Card 4's dead-method bug).
@@ -214,8 +295,25 @@ interface, never another module's repo).
   staffer of gym B get 404 on gym A.
 - a non-member gets 404 on the mark and on the member read; a `trainer` without
   `members.read` gets 403 on the gym-side list.
-- **double-tap produces ONE row** and answers 200 both times, with the second
-  answer identical to the first (R3.5).
+- **RULING 12, from both sides, because a UNIQUE has two failure directions and a
+  test that only checks it FIRES is satisfied by a door that is simply shut**
+  (:19560's O124 lesson): a second tap in the SAME session produces ONE row and
+  answers 200 twice with an identical body (R3.5) · **a tap in a DIFFERENT
+  session the same day produces a SECOND row**, and the gym-side read shows that
+  member once with TWO times · a second tap at a gym with no declared sessions
+  stays one row, which is the stated limit and is pinned so nobody later thinks
+  it is a bug and "fixes" it into an invented time window.
+- **the gym-side read's shape**: a member who came twice appears ONCE with two
+  times, and the per-session counts add up to the number of visits, not the
+  number of people — the two figures differ exactly when somebody came twice, so
+  a fixture with a repeat visitor is the only one that can tell them apart.
+- **the lapsed and archived arms, each on its own fixture**: a member of a LIVE
+  gym marks · a member of a LAPSED gym marks (Kd's answer) · a member of an
+  ARCHIVED gym is refused. **A test that drives only the live arm proves
+  nothing about the other two.**
+- **no payment condition exists anywhere on the path** (ruling 13) — a member
+  with a live membership row marks successfully regardless of anything the gym
+  believes about their dues, because there is no such field to believe.
 - **a removed member cannot mark** — and the test drives a real removed
   membership row rather than an absent one.
 - the switch: OFF refuses the mark with a sentence a member can act on; ON
@@ -243,8 +341,13 @@ behaviour and touches ownership, a number a user sees, and something that saves,
 so it is squarely in the always-mutated columns): the tenancy predicate on each
 new repo function · the live-membership check on the mark · the manual switch's
 guard · the gym-zone date expression · each arm of the `hours_status` decision ·
-the `ON CONFLICT` arm · the streak union. Local Postgres (`test:local`), per
-:13659, and the harness prints which database it used.
+**`slot_key`'s session arm, aimed at the ACCEPTING case — two sessions must both
+land — because a mutant that only proves the UNIQUE fires is satisfied by a
+constant key** (risk 7) · the `ON CONFLICT` arm · **the per-session counts, which
+are a number a user sees and therefore rule 4a's first column** · the streak
+union, whose mutant must turn an XP test red and not only a streak test. Local
+Postgres (`test:local`), per :13659, and the harness prints which database it
+used.
 
 ### 4b — WEB HALF (a separate chat, after 4a's T3)
 
@@ -254,16 +357,49 @@ the `ON CONFLICT` arm · the streak union. Local Postgres (`test:local`), per
   with no explanation is the defect :24141 named.
 - **The member's own history**: a short list of the days they came, on the same
   card, newest first.
-- Console → a **"Who came"** view: today by default, with a date picker, showing
-  time in, how they marked it, and which session.
+- Console → a **"Who came"** view. **This is ruling 14 and it is the largest
+  design job in the card**, so it is specified rather than left to the chat that
+  builds it. Top to bottom:
+  1. **The day, and the way to move between days** — a calendar control, the
+     same one the closures screen already uses, so the two console screens do
+     not offer two different date pickers.
+  2. **THE SHAPE OF THE DAY, BEFORE ANY NAMES.** One row per session —
+     `6:00 am – 7:00 am · 34 people` — in time order, plus a row for each
+     non-session status that actually occurred that day. **A gym with three
+     sessions reads its whole day in three lines.** This is the part that stops
+     the pile-up, and it is why the server answers a summary rather than letting
+     the browser count a list it had to download first.
+  3. **THE EXCEPTIONS, NEXT, BECAUSE THEY ARE WHAT AN OWNER LOOKS FOR** — how
+     many arrived outside opening hours or on a day the gym said it was closed,
+     as a control that filters the list below to exactly those. **Never a red
+     badge on a person**: the visit is unusual, the member is not in trouble,
+     and :26624 §4.4 exists precisely so nobody is refused for it.
+  4. **THE PEOPLE, ONE ROW EACH, NOT ONE ROW PER TAP.** Name, then their times
+     as small chips — `6:12 am` `5:40 pm` — so **"this member attended twice" is
+     visible at a glance**, which is what Kd asked for, and a day with 400 taps
+     across 300 people is 300 rows rather than 400.
+  5. **A name search**, because past a couple of hundred people the only
+     question an owner has is about one person.
+  6. **Paged, never infinite-scrolled**, and the empty state says which of the
+     two things is true — nobody has marked attendance today, or this gym has
+     the button switched off — because those look identical and only one of them
+     is a problem (:8267/:8343's class).
+- **What it must NOT do:** no live-updating ticker, no chart (that is the
+  Overview-numbers card), no per-tap row, and no colour that implies a member did
+  something wrong.
 - Console → Settings gains the **manual-attendance switch**, obeying `readOnly`
   like every other panel (:24141, :24376).
 - **The times drawn are the GYM's times, in the gym's chosen clock format**
   (`gyms.clock_format`, migration `0018`) — the same reader the hours screens
   already use, so the two screens cannot disagree.
 - Tests: the five statuses render distinguishably; `hours_unset` renders no claim
-  about opening hours; the button's absence when the switch is off; a
-  double-tap does not draw two entries.
+  about opening hours; the button's absence when the switch is off; a double-tap
+  does not draw two entries; **a member who came twice draws ONE row with TWO
+  times** (ruling 12 at the screen, and the one a reviewer should check first);
+  **the session summary is drawn from the server's counts and never recomputed in
+  the browser** — a screen that counts its own page would report the page, not
+  the day; and **the empty state tells the two cases apart** (nobody came yet vs
+  the switch is off).
 
 ---
 
@@ -295,7 +431,19 @@ the `ON CONFLICT` arm · the streak union. Local Postgres (`test:local`), per
    turn it off, see nothing recorded, and conclude attendance is broken.
 5. **`0019` is hand-written**, so the snapshot debt grows by one. It already has
    an `OWED.md` line; this card does not fix it and must not claim to.
-6. **The api DB-backed suites need Docker Desktop running.** One request to Kd
+6. **THE PILE-UP IS A RULING, AND THE WAY IT GETS BROKEN IS BY TREATING IT AS
+   POLISH.** Kd raised it unprompted, before a line existed. The specific failure
+   is a screen that downloads the day's visits and counts them in the browser: it
+   looks right on a fixture of six and reports the first page on a fixture of
+   four hundred. **The counts come from the server or they are wrong**, and that
+   is the assertion §4b's test makes.
+7. **`slot_key` is the ruling's only load-bearing column.** If a future writer
+   ever sets it to a constant, or lets it be blank, the UNIQUE stops
+   distinguishing sessions and every gym silently reverts to one visit per day —
+   with no error anywhere. It is in the mutation sweep for exactly that reason,
+   and the mutant should be aimed at the ACCEPTING case (two sessions must both
+   land), not only at the refusing one (:26812 §2b).
+8. **The api DB-backed suites need Docker Desktop running.** One request to Kd
    per machine restart, then the chat runs them itself.
 
 ## 6 · SPEC GAP / DEVIATION
@@ -303,9 +451,17 @@ the `ON CONFLICT` arm · the streak union. Local Postgres (`test:local`), per
 **None.** Attendance has zero spec hits anywhere in `docs/spec/` (grep-verified
 at :26469 and again this session) — this is new product. Every shape above traces
 to a Kd ruling at :26469, :26558, :26586, :26624, :26684 or :26736, or to his
-four answers at this gate, or is declared above as a call of mine with its cost
+answers at this gate, or is declared above as a call of mine with its cost
 stated.
 
-**Two things are explicitly waiting for Kd at the gate rather than assumed:**
+~~**Two things are explicitly waiting for Kd at the gate rather than assumed:**
 the one-visit-per-day rule (§4a, with its cost), and whether a member of a
-LAPSED gym can still mark attendance (§4a, recommendation: yes).
+LAPSED gym can still mark attendance (§4a, recommendation: yes).~~
+**BOTH ANSWERED 2026-09-01, and one of them reversed the recommendation:** a
+second visit in a DIFFERENT session **counts again** (rulings 12) and a member
+of a lapsed gym **can** mark (agreed as recommended). He added two rulings
+nobody had asked for — **the app never checks whether a member has paid the
+gym** (13) and **the owner's screen must not pile up** (14). **One thing is now
+left open and it is named rather than defaulted: whether a gym that is open 24
+hours, or has not declared its sessions, should also count repeat visits.**
+§4a says why a chat must not answer that with an invented time window.

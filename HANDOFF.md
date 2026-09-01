@@ -5,12 +5,16 @@ TASK: THE OPENING-HOURS WORK IS COMMITTED AND PUSHED, CI IS GREEN, AND KD
       ANSWERED THE ATTENDANCE GATE'S FOUR QUESTIONS. DECISIONS :27900.
       `CARD-gym-attendance.md` is WRITTEN and UNAPPROVED. NOTHING IS BUILT.
 
-  1. **NEXT: KD APPROVES OR CORRECTS `CARD-gym-attendance.md`, then §4a (the
-     server half) is one chat.** The card leaves TWO things for him at that
-     gate rather than assuming them — one visit per DAY (recommended, cost
-     stated) and whether a LAPSED gym's member can still mark attendance
-     (recommended yes). Do not start §4a without an approval that was given
-     with the card ON SCREEN (:26777).
+  1. **NEXT: §4a of `CARD-gym-attendance.md` (the server half) is one chat, and
+     migration `0019` goes to Kd as SQL before anything else is written (T5).**
+     He read the card and answered on three fronts (:27992): a second visit in a
+     DIFFERENT session counts again · a lapsed gym's member CAN mark · the app
+     never checks a member's dues · and the owner's screen must not pile up.
+     **The card is updated to all four. Confirm he approves the UPDATED card
+     before writing code — an approval covers what was ON SCREEN (:26777).**
+  1b. **THE ONE OPEN QUESTION, named not defaulted: should a 24-hour gym (or one
+     that declared no sessions) count REPEAT visits?** It has nothing to tell
+     two taps apart. **Do not answer it with an invented time window (R0.2).**
   2. **THE STREAK ANSWER IS THE DANGEROUS ONE AND IT IS NOT A ONE-LINE UNION.**
      The streak and the lifetime XP total are BOTH replayed from
      `getActivityDays` (`gamification/repo.ts:136`, workouts only). Kd ruled
@@ -31,19 +35,27 @@ PROVE: No `src`, test, harness or migration file is touched by the RECORDS half
        exit 0 · `check-harnesses` **25 scripts parse** · `check-decisions-index`
        **258 pointers, 1025 headings** · triggers `--check` clean.
        After the records edits: `check-decisions-index` **259 pointers resolve,
-       1032 headings** · triggers rebuilt, `--check` clean (**796 from 216 of
-       354 rulings**) · `check-harnesses` **25 scripts parse**.
+       1033 headings** · triggers rebuilt, `--check` clean (**799 from 217 of
+       355 rulings**) · `check-harnesses` **25 scripts parse**.
+       **`:27992` IS AN INLINE POINTER THE INDEX GUARD DOES NOT CHECK**
+       (:21057 deliberately covers `**:NNNN**` lines only) — **so it was
+       grep-verified by hand against `DECISIONS.md` and lands on its own `###`
+       heading.** Say so rather than implying the guard covered it.
        **NOT RUN AND NOT CLAIMED: the api DB-backed suites** (no `apps/api/src`
        file touched) **and any mutation sweep.**
 
-FILES: commit `abd0d8f` — the 18 opening-hours files. Then records only:
-       `CARD-gym-attendance.md` (new) · `DECISIONS.md` · `DECISIONS-INDEX.md`
-       (the ruling goes to §1, not §1B — always-read 2,016 → 2,075 lines,
-       re-measured) · `DECISIONS-TRIGGERS.md` · `OWED.md` · `HANDOFF.md`.
+FILES: commit `abd0d8f` — the 18 opening-hours files. Then records only, across
+       two commits as Kd answered in two passes: `CARD-gym-attendance.md` (new,
+       then revised) · `DECISIONS.md` · `DECISIONS-INDEX.md` (both the ruling and
+       its addendum go to §1, not §1B — always-read 2,016 → 2,075 → **2,117**
+       lines, re-measured each time, never estimated) · `DECISIONS-TRIGGERS.md` ·
+       `OWED.md` · `HANDOFF.md`.
 
 OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
        **STILL OWED and moved rather than closed: how a workout LINKS to an
        attendance** — it goes to the Overview-numbers card's gate, not this one.
+       **AND ❓ OPEN ON THIS CARD: repeat visits at a gym with no sessions**
+       (item 1b above), with its own `OWED.md` line.
 ```
 
 ```

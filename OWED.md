@@ -7702,12 +7702,43 @@ file and is stated so nobody reads these as lower priority than they are.
       **It goes to THAT card's plan gate, as options with a recommendation,
       never as a chat's default (R0.2).**
       **THE BUILD PLAN IS WRITTEN AND UNAPPROVED: `CARD-gym-attendance.md`**
-      (2026-09-01). **NOTHING IS BUILT.** Two things it leaves for Kd at the gate
-      rather than assuming: whether a visit is **one per DAY** (recommended, cost
-      stated — a member who comes morning and evening is counted once) and
+      (2026-09-01). **NOTHING IS BUILT.** ~~Two things it leaves for Kd at the
+      gate rather than assuming: whether a visit is **one per DAY** (recommended,
+      cost stated — a member who comes morning and evening is counted once) and
       whether a member of a **LAPSED** gym can still mark attendance
       (recommended yes; refusing would show a member something false about their
-      own gym, :5807).
+      own gym, :5807).~~
+      **BOTH ANSWERED SAME SESSION (:27992), ONE AGAINST THE RECOMMENDATION —
+      and Kd added TWO rulings nobody asked him for:**
+      **(1) A SECOND VISIT IN A DIFFERENT SESSION COUNTS AGAIN** and the owner
+      sees the member attended twice — *"if a member again comes in different
+      slot and gives attandance taht also count"*. Built as **UNIQUE (gym_id,
+      user_id, day, slot_key)**, `slot_key` NOT NULL (the session window, else
+      the `hours_status` name), so the ruling sits in a constraint rather than a
+      comment and a same-session double-tap is still one row (R3.5 kept, not
+      traded).
+      **(2) A LAPSED gym's member CAN still mark** (:22215 arm A); an ARCHIVED
+      gym (:25771) refuses.
+      **(3) THE APP NEVER CHECKS WHETHER A MEMBER HAS PAID THE GYM** — *"thas
+      gym responsibility"*. One condition only: a live membership row.
+      `members.remove` is the gym's remedy for anyone else. **No dues, arrears or
+      payment concept enters the schema, the routes or the screen** — and this is
+      a ruling about what the product does NOT do, the kind a later chat quietly
+      reverses by "improving" a check.
+      **(4) THE OWNER'S SCREEN MUST NOT PILE UP** — *"it might pile up and may be
+      hard to analuse and see so the ui should be clean and beautiful"*. **A
+      build requirement with a test, not styling:** the day's shape before any
+      names, exceptions as a filter, then PEOPLE one row each with their times as
+      chips, name search, paged never infinite, and an empty state that tells
+      "nobody came yet" apart from "the button is off". **The counts come from
+      the server or they are wrong** — a browser that counts its own page reports
+      the page.
+      **❓ THE ONE OPEN QUESTION LEFT ON THIS CARD, named rather than defaulted:
+      should a gym that is open 24 HOURS, or that has declared no sessions, also
+      count REPEAT visits?** It has no sessions to tell two taps apart, so today
+      a second tap the same day stays one visit. **A chat must NOT answer this
+      with an invented time window (R0.2)** — the remedy available now is the gym
+      declaring its sessions, which is the feature shipped last card.
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode
