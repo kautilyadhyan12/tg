@@ -1,6 +1,76 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OPENING-HOURS SERVER HALF IS BUILT — `CARD-gym-hours.md` §4a.
+      DECISIONS :26812 (this card), implementing :26624 + :26684 + :26736.
+      Kd said *"start building now"* after overruling a proposal to re-list the
+      gym features first; he had already been shown the migration AS SQL.
+
+  1. **NEXT CARD IS THE WEB HALF (§4b), and nothing this card built is
+     reachable without it.** No screen shows opening hours — no member can see
+     their gym's, no owner can set them. The `OWED.md` line says so three ways
+     and DOES NOT TICK. **No smoke was run and none was offered: there is
+     nothing to click.** T3 is UNRUN — the prompt was handed to Kd with this.
+  2. **WHAT EXISTS:** migration `0017_gym_hours` (`gyms.hours_mode` DEFAULT
+     `'unset'` · `gym_hours` ISO-weekday + minutes-from-midnight · `gym_closures`
+     UNIQUE on `(gym_id, day)`), the contract once in `@app/shared`, and four
+     routes — `GET/PUT /v1/orgs/:gymId/hours`, `POST /closures`,
+     `DELETE /closures/:day`. The READ is staff **OR live member** (:26684 §2);
+     the three writes are `org.manage` behind the EXISTING
+     `requireWritablePrivilege`, so no new refusal vocabulary was invented.
+  3. **THE TWO SURVIVING MUTANTS WERE BOTH DEFECTS IN MY TESTS — read :26812 §2
+     before writing either kind again.** (a) A lone UTC+14 fixture agrees with a
+     bare `now()` for fourteen hours a day, so the timezone mutant lived; fixed
+     with a **UTC+14 and UTC-12 pair**, 26 hours apart, whose dates can never
+     both equal the server's. (b) A mutant deleting the overlap SORT was aimed at
+     a test called "out of order" that rejects its input either way; re-aimed at
+     the ACCEPTING case. **A test name restating a guarantee is not evidence it
+     observes one.**
+  4. **THE WRITE-DOOR GUARD FIRED AND IS NOW FIFTEEN.** `orgs.routes.test.ts`'s
+     count went red before anybody asked whether the three new doors were gated.
+     Raised WITH its three list entries, never ahead of them.
+  5. **A SWEEP I ALMOST QUOTED NEVER RAN** — `cd apps/api && …` short-circuited
+     because the shell was already there, and `tail` printed a stale file listing
+     O168–O181. The summary line names the ids it actually ran; that is the only
+     reason it was caught (:13336).
+
+PROVE: **ALL LOCAL (`localhost:5433`, :13659), all on the final bytes.**
+       `orgs.hours` **32/32** (new) · `orgs.routes` **147/147** ·
+       `db.migration` **13/13** (+2) · `orgs.unit` + `orgs.plans` +
+       `orgs.sweep` + `orgs.trialSweep` + `orgs.archiveSweep` **82/82** ·
+       shared **51/51** · web **1385/1385** unchanged · api `tsc` 0 ·
+       shared `tsc` 0 · api `lint` 0 · shared `lint` 0 ·
+       `check-harnesses` **25 scripts parse**.
+       **SWEEP, a stated SUBSET of 193: 12 mutants · 12 RED · 0 ALIVE · 0 never
+       ran**, restore byte-exact after every mutant, database named in the
+       output. First run 10 RED / 2 ALIVE — see item 3.
+       **MIGRATION READ BACK OFF THE DEPLOYED CATALOGUE** (:20222): both tables
+       present, `hours_mode` default `'unset'::text` NOT NULL, **all 112
+       existing gyms `unset` — nothing invented for anybody** (:26736 measured).
+       **GITLEAKS 52 findings, ALL pre-existing, ZERO from this card.**
+       Guards: `build-decisions-triggers` **755 triggers from 207 of 345
+       rulings, 138 declare none, 0 unparsed** · `check-decisions-index`
+       **250 pointers resolve (249 on a heading, 1 deliberate mid-entry), 969
+       headings**. Always-read RE-MEASURED: triggers **934** + §1 **997** +
+       §2 **58** = **1,989** (§1 and §2 unmoved — the card record went to §1B).
+
+FILES: NEW `apps/api/drizzle/0017_gym_hours.sql` ·
+       NEW `apps/api/test/orgs.hours.test.ts` ·
+       `apps/api/drizzle/meta/_journal.json` · `apps/api/src/db/schema/tenancy.ts` ·
+       `apps/api/src/modules/orgs/{repo,service,routes,schemas}.ts` ·
+       `packages/shared/src/orgs.ts` · `apps/api/tools/mutate-orgs.mjs` ·
+       `apps/api/test/{db.migration,orgs.routes}.test.ts` · `OWED.md` ·
+       `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **NINE LOCAL COMMITS NOW, NOTHING PUSHED, CI HAS SEEN NONE** (`d72131a`
+       through this one; `origin/web-repoint` is still `01999dc`). Pushing is
+       Kd's call. `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT, as
+       it has been for two sessions.
+```
+
+
+```
 TASK: THE OPENING-HOURS CARD IS WRITTEN AND NOT BUILT — `CARD-gym-hours.md`.
       DECISIONS :26624 + :26684 + :26736 (the rulings) and :26777 (the gate
       failure). **NO src, test, harness or migration file is touched by any

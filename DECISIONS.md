@@ -26808,3 +26808,134 @@ document.**
 
 `CARD-gym-hours.md` is that document, written after the revert and committed
 with this entry. **NOTHING IS BUILT.**
+
+## 2026-09-01 — THE OPENING-HOURS SERVER HALF IS BUILT: a gym can say when it is open, "hours not set" is its own state, and the mutation sweep found TWO of my own tests proving less than they claimed
+
+**Read before building the attendance card, before adding any reader of
+`gyms.hours_mode`, `gym_hours` or `gym_closures`, before writing a test whose
+fixture is a single non-UTC timezone, before aiming a mutant at a test whose
+NAME sounds like the guarantee, and before adding a sixteenth write door to the
+orgs module.**
+
+Built from `CARD-gym-hours.md` §4a on Kd's *"start building now"*, which came
+after he overruled a proposal to re-list the gym features first. Rulings
+implemented: :26624 (sessions, many per day, or 24 hours), :26684 (no session
+names · members SEE the hours · dated closures), :26736 ("hours not set" is not
+"closed").
+
+### 1 · WHAT SHIPS, AND THE ONE THING THAT DOES NOT
+
+Migration `0017_gym_hours` — `gyms.hours_mode` (`text` + CHECK, DEFAULT
+`'unset'`, NOT NULL) · `gym_hours` (ISO weekday 1–7, minutes from midnight,
+four CHECKs) · `gym_closures` (`date`, optional ≤120-char note, UNIQUE on
+`(gym_id, day)`). The contract once in `@app/shared`. Four routes:
+`GET /v1/orgs/:gymId/hours` (staff **OR live member**), `PUT .../hours`,
+`POST .../closures`, `DELETE .../closures/:day`, the last three behind
+`requireWritablePrivilege(… "org.manage")` so a lapsed and an archived gym are
+refused by gates that already existed — **no new refusal vocabulary was
+invented.**
+
+**NO SCREEN EXISTS. The web half (§4b) is unbuilt, so no member can see their
+gym's hours and no owner can set them**, and `OWED.md`'s line says so in three
+separate ways rather than one. **No browser smoke was run and none was
+offered**, because there is nothing to click — the card states that rather than
+inventing a step (:26012's shape). **T3 is UNRUN.**
+
+### 2 · THE SWEEP FOUND TWO TESTS THAT PROVED LESS THAN THEIR NAMES SAID, AND THIS IS THE PART TO KEEP
+
+Twelve mutants, all in rule 4a's always-mutated columns. **The first run was 10
+RED, 2 ALIVE, and both survivors were defects in MY TESTS rather than in the
+code.** Neither was findable by reading.
+
+**(a) A SINGLE NON-UTC FIXTURE PROVES NOTHING FOR MOST OF THE DAY.** The zone
+test used one gym at `Pacific/Kiritimati` (UTC+14) and asserted that past
+closures are hidden. **O187 — which replaces `(now() AT TIME ZONE g.timezone)`
+with a bare `now()` — SURVIVED it.** Kiritimati's calendar date differs from
+UTC's only while UTC is past 10:00, so for fourteen hours a day the correct
+expression and the broken one agree. The test would have been green on CI at
+some hours and red at others, which is worse than absent. **THE FIX IS A PAIR
+AT OPPOSITE EXTREMES: UTC+14 and UTC-12 are 26 hours apart, so their two
+calendar dates ALWAYS differ and the server's date can match at most one of
+them** — the mutant is now wrong for one gym at every instant, on any machine.
+The fixture's own premise (`eastToday !== westToday`) is asserted rather than
+assumed. **STANDING: a timezone test needs a fixture whose disagreement with the
+server is a property of the ZONES, never of the hour the suite happened to run.**
+
+**(b) A MUTANT AIMED AT THE TEST WHOSE NAME MATCHES THE GUARANTEE.** O192
+deletes the sort in `flattenWeek` and was aimed at a test called *"catches an
+overlap even when the client sends the sessions out of order"*. **It survived,
+because a neighbour comparison on UNSORTED input fires on ANY descending pair —
+so that test rejects its input either way, for the wrong reason.** What the sort
+actually protects is the opposite case: **a VALID week sent out of order must be
+ACCEPTED**, whose observer is the happy path (its three sessions are deliberately
+sent 16:00, 06:00, 14:00). The mutant was re-aimed there and the test renamed to
+*"refuses a descending pair that overlaps"* — what it proves. **STANDING: a test
+name that restates the guarantee is not evidence that the test observes it; aim a
+mutant at the case the code would get WRONG, which is often the accepting one.**
+
+**(c) THE HARNESS'S OWN CONTROL CAUGHT A THIRD, BEFORE ANY MUTANT RAN.** O188's
+`expect` filter quoted a sentence from inside a test BODY rather than a test
+NAME, so it matched nothing; the control step aborted with *"that filter matches
+no test, so its mutants would prove nothing"*. :5199's class, working.
+
+**(d) O189 IS AIMED AT A STATE NO ROUTE CAN REACH, DELIBERATELY.** The reader
+branches on `mode` before drawing a week; but the writer deletes the rows
+whenever the mode leaves `scheduled`, so on every path a route can reach the week
+is empty either way and the mutant survives the obvious test. Only a gym holding
+rows its mode does not admit can observe it, so the test **forces that state in
+SQL**. A guarantee whose only observer is a state the product cannot produce
+still needs one — that is what stops the next writer re-introducing it.
+
+### 3 · THE WRITE-DOOR GUARD DID ITS JOB AND IS NOW FIFTEEN
+
+`orgs.routes.test.ts`'s *"the twelve are the module's twelve"* went RED on the
+count before anybody thought to ask whether the three new doors were gated
+(15 `requireWritablePrivilege` call sites against a pinned 12). **The number was
+raised WITH the three list entries, never ahead of them** — the guard is only
+worth anything if the count and the list move together. It is now
+`CONSOLE_WRITE_COUNT = 15`.
+
+### 4 · CHOICES MADE RATHER THAN ASKED (R0.2 does not cover routine shape)
+
+**ISO weekday 1–7 on the wire and in the database**, matching Postgres
+`EXTRACT(ISODOW)`, so the attendance card buckets a stamp with no mapping table;
+JS `getDay()` is 0-based and the CLIENT converts, in one place. **Minutes from
+midnight, 0–1439 opening and 1–1440 closing**, so a gym open till midnight loses
+no minute and 1440 cannot be an opening. **Sessions never wrap past midnight** —
+22:00–02:00 is two rows — so "which day was this on" never has two answers.
+**PUT replaces the whole week**, because per-session CRUD makes the overlap rule
+uncheckable (overlap is a property of a whole day) and lets two half-applied
+requests leave a gym advertising a timetable no human chose. **Touching sessions
+are legal, overlapping ones are not**, one strict `<`. **The same weekday listed
+twice is REFUSED rather than merged**, or the overlap check runs per-entry and
+passes on a pair that clashes across them. **`unset` is not settable**: a gym
+that has answered cannot un-answer. **A closure carries no `removed_at`** — a
+declared R4.3 exception, since a statement about one day expires by itself and
+un-closing is a correction, with `audit_log` recording both ends. **A malformed
+but well-shaped date (`2027-02-31`) is a 400 from the service**, not a 500 from
+Postgres refusing the cast.
+
+### Round log
+
+**PROVE, all LOCAL (`localhost:5433`, per :13659) and all on the final bytes:**
+`orgs.hours` **32/32** (new file) · `orgs.routes` **147/147** · `db.migration`
+**13/13** (+2) · `orgs.unit`, `orgs.plans`, `orgs.sweep`, `orgs.trialSweep`,
+`orgs.archiveSweep` **82/82** · shared **51/51** · web **1385/1385** unchanged ·
+api `tsc` exit 0 · shared `tsc` exit 0 · api `lint` exit 0 · shared `lint` exit
+0 · `check-harnesses` **25 scripts parse**.
+**SWEEP, a stated SUBSET of 193: 12 mutants · 12 RED · 0 ALIVE · 0 never ran**,
+restore verified byte-exact after every mutant, database named in the output
+(`localhost:5433`). First run was 10 RED / 2 ALIVE — see §2.
+**MIGRATION VERIFIED ON THE DEPLOYED CATALOGUE, not off the file** (:20222):
+both tables present, `hours_mode` default `'unset'::text` NOT NULL, and **all
+112 existing gyms read back `unset` — nothing was invented for anybody**, which
+is :26736's rule measured rather than asserted.
+**GITLEAKS: 52 findings, ALL pre-existing, ZERO introduced by this card.** The
+one inside a file this card touches is `OWED.md`'s long-recorded
+`generic-api-key` false positive on the prose `kcalPointForSetsV3`, on a line
+this diff does not touch.
+**A SWEEP I ALMOST QUOTED NEVER RAN.** A `cd apps/api && …` invocation
+short-circuited because the shell was already there, and `tail` printed a stale
+file from an earlier card listing O168–O181. Caught by reading the summary line,
+which names the ids it actually ran — :13336's lesson, and the reason that line
+prints the id list at all.

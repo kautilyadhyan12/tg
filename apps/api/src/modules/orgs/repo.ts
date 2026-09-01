@@ -15,6 +15,7 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  gymHoursModeSchema,
   orgApplicationStatusSchema,
   orgRoleSchema,
   orgStatusSchema,
@@ -23,6 +24,7 @@ import {
   planIntervalSchema,
 } from "@app/shared";
 import type {
+  GymHoursMode,
   OrgApplicationStatus,
   OrgRole,
   OrgStatus,
@@ -3330,4 +3332,281 @@ export async function insertAudit(
     INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
     VALUES (${entry.actorUserId}, ${entry.gymId}, ${entry.action},
             ${entry.targetType}, ${entry.targetId}, ${tx.json(entry.meta)})`;
+}
+
+// ---------------------------------------------------------------------------
+// OPENING HOURS (Kd 2026-08-31, :26624 + :26684 + :26736). Tenancy is in every
+// WHERE below, like every other function in this file (R3.2).
+// ---------------------------------------------------------------------------
+
+export interface GymSessionRow {
+  weekday: number;
+  opensMinute: number;
+  closesMinute: number;
+}
+
+export interface GymClosureRow {
+  day: string;
+  note: string | null;
+}
+
+export interface GymHoursRow {
+  mode: GymHoursMode;
+  timezone: string;
+  sessions: GymSessionRow[];
+  closures: GymClosureRow[];
+}
+
+/** WHAT ONE GYM HAS SAID ABOUT WHEN IT IS OPEN — the whole answer in one read,
+ *  because the console and the member's gym card share it and two readers is two
+ *  chances to disagree.
+ *
+ *  **THE CLOSURE FILTER IS TODAY-FORWARD IN THE GYM'S OWN ZONE, and the zone
+ *  comes off the gym's row rather than the server's clock.** `(now() AT TIME
+ *  ZONE g.timezone)::date` is the gym's own calendar date — the same instrument
+ *  the nightly rollup will need, and the reason a US gym and an Assam gym are
+ *  both right in one run (trap #8, :26469 §5). A closure that has passed is a
+ *  fact about history that no screen asks for, and leaving them in would grow a
+ *  member's card without bound.
+ *
+ *  **`day` COMES BACK AS A STRING, NOT A `Date`, and that is the trap-#8 fix
+ *  rather than a style choice.** `postgres` maps a `date` column to a JS Date at
+ *  UTC midnight, and formatting that anywhere east or west of UTC prints the day
+ *  before or after. `::text` means the calendar date the gym typed is the
+ *  calendar date every reader gets.
+ *
+ *  Null for a gym that does not exist, which the service turns into its standing
+ *  404. */
+export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHoursRow | null> {
+  const gymRows = await sql<{ hours_mode: string; timezone: string }[]>`
+    SELECT hours_mode, timezone FROM gyms WHERE id = ${gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const sessions = await sql<{ weekday: number; opens_minute: number; closes_minute: number }[]>`
+    SELECT weekday, opens_minute, closes_minute
+    FROM gym_hours
+    WHERE gym_id = ${gymId}
+    ORDER BY weekday, opens_minute`;
+
+  const closures = await sql<{ day: string; note: string | null }[]>`
+    SELECT c.day::text AS day, c.note
+    FROM gym_closures c
+    JOIN gyms g ON g.id = c.gym_id
+    WHERE c.gym_id = ${gymId}
+      AND c.day >= (now() AT TIME ZONE g.timezone)::date
+    ORDER BY c.day`;
+
+  return {
+    mode: gymHoursModeSchema.parse(gym.hours_mode),
+    timezone: gym.timezone,
+    sessions: sessions.map((r) => ({
+      weekday: r.weekday,
+      opensMinute: r.opens_minute,
+      closesMinute: r.closes_minute,
+    })),
+    closures: closures.map((r) => ({ day: r.day, note: r.note })),
+  };
+}
+
+export type SetGymHoursOutcome = { kind: "set"; hours: GymHoursRow } | { kind: "not_found" };
+
+/** REPLACE THE WHOLE WEEK ATOMICALLY.
+ *
+ *  **IT IS A REPLACE AND NOT PER-SESSION CRUD, and that is a correctness
+ *  decision rather than a shortcut.** Add/edit/delete on individual sessions
+ *  lets two half-applied requests leave a gym advertising a timetable no human
+ *  ever chose — and the overlap rule, the one thing that makes these rows
+ *  readable, is only checkable against a WHOLE day. With the week in one body
+ *  the service validates exactly what will exist.
+ *
+ *  **DELETE-THEN-INSERT INSIDE ONE TRANSACTION, under `lockOrgRow`** — the same
+ *  instrument and the same order (org row → child rows) every other mutation in
+ *  this module takes, so it adds no new deadlock edge. It is what stops two
+ *  owners saving different timetables from interleaving into a third that is
+ *  neither.
+ *
+ *  **`open_24h` DELETES THE ROWS TOO.** A gym that switches to 24 hours and back
+ *  must not find last month's sessions waiting: the mode and the rows would be
+ *  two answers to one question, and the stale set is the one nobody looked at.
+ *  Kd's flag is the whole answer in that mode (:26624 §4.5).
+ *
+ *  `unset` cannot arrive — the request union does not admit it, because a gym
+ *  that has answered cannot un-answer — so this never writes it. */
+export async function setGymHours(
+  sql: Sql,
+  input: {
+    gymId: string;
+    mode: "open_24h" | "scheduled";
+    sessions: readonly GymSessionRow[];
+    actorUserId: string;
+  },
+): Promise<SetGymHoursOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    // Read through `getGymHours` rather than `getOrgById`: the audit row below
+    // needs the mode this gym was in, and `OrgRow` deliberately does not carry
+    // `hours_mode` — widening it would put the field in front of six callers
+    // that have no business with it.
+    const before = await getGymHours(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;
+    if (input.mode === "scheduled" && input.sessions.length > 0) {
+      // One multi-row INSERT rather than a loop: this is one statement's worth
+      // of work, and a loop inside a transaction is N round trips buying no
+      // extra guarantee.
+      await tx`
+        INSERT INTO gym_hours ${tx(
+          input.sessions.map((s) => ({
+            gym_id: input.gymId,
+            weekday: s.weekday,
+            opens_minute: s.opensMinute,
+            closes_minute: s.closesMinute,
+          })),
+          "gym_id",
+          "weekday",
+          "opens_minute",
+          "closes_minute",
+        )}`;
+    }
+    await tx`UPDATE gyms SET hours_mode = ${input.mode} WHERE id = ${input.gymId}`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.hours_set",
+      targetType: "gym",
+      targetId: input.gymId,
+      // The COUNT, not the timetable. A reader weeks later wants "who changed
+      // the hours and when"; a whole week of ranges in a meta column is the
+      // whole-row snapshot :19366's `changed` list exists to avoid.
+      meta: {
+        before: before.mode,
+        after: input.mode,
+        sessions: String(input.mode === "scheduled" ? input.sessions.length : 0),
+      },
+    });
+
+    const hours = await getGymHours(tx, input.gymId);
+    // Unreachable: the row is locked in this transaction and was read above.
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "set", hours };
+  });
+}
+
+export type CloseGymDayOutcome = { kind: "closed"; hours: GymHoursRow } | { kind: "not_found" };
+
+/** MARK ONE DAY CLOSED — Kd's *"we are close today"* (:26684 §3).
+ *
+ *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT
+ *  (gym_id, day) DO UPDATE` is what makes an owner's double-tap leave one row,
+ *  and it is also how a note is EDITED — re-closing a day replaces its reason. A
+ *  service-side "is it already closed?" would be a check-then-act with a window
+ *  in it.
+ *
+ *  **NO CHECK THAT THE DAY IS IN THE FUTURE, deliberately.** A gym typing
+ *  yesterday's closure in at 1am is recording something true, and the READ
+ *  already hides past dates from every screen — so a refusal would buy nothing
+ *  but an error message for a gym telling the truth late. */
+export async function closeGymDay(
+  sql: Sql,
+  input: { gymId: string; day: string; note: string | null; actorUserId: string },
+): Promise<CloseGymDayOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    await tx`
+      INSERT INTO gym_closures (gym_id, day, note, created_by_user_id)
+      VALUES (${input.gymId}, ${input.day}::date, ${input.note}, ${input.actorUserId})
+      ON CONFLICT (gym_id, day) DO UPDATE
+        SET note = EXCLUDED.note, created_by_user_id = EXCLUDED.created_by_user_id`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.day_closed",
+      targetType: "gym",
+      targetId: input.gymId,
+      meta: { day: input.day, note: input.note },
+    });
+
+    const hours = await getGymHours(tx, input.gymId);
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "closed", hours };
+  });
+}
+
+export type RemoveGymClosureOutcome =
+  | { kind: "removed"; hours: GymHoursRow }
+  | { kind: "not_found" };
+
+/** UN-CLOSE A DAY, restoring the weekly pattern.
+ *
+ *  **A HARD `DELETE`, and it is the declared R4.3 exception this table was
+ *  designed around.** A closure is a statement about ONE day that expires by
+ *  itself; un-closing is a CORRECTION rather than an event with a history worth
+ *  keeping, and `audit_log` records both ends anyway.
+ *
+ *  **Deleting a day that was never closed is NOT an error.** The outcome names
+ *  the STATE — this day is not marked closed — which is true whether this call
+ *  removed the row or there never was one, so a double-tap and a stale screen
+ *  answer the same way. `not_found` is reserved for the GYM. */
+export async function removeGymClosure(
+  sql: Sql,
+  input: { gymId: string; day: string; actorUserId: string },
+): Promise<RemoveGymClosureOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    const deleted = await tx<{ day: string }[]>`
+      DELETE FROM gym_closures
+      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date
+      RETURNING day::text AS day`;
+
+    // Only a real removal writes an audit row: a log that records non-events is
+    // one nobody can read a real event out of (:19366's rule, same module).
+    if (deleted.length > 0) {
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.day_reopened",
+        targetType: "gym",
+        targetId: input.gymId,
+        meta: { day: input.day },
+      });
+    }
+
+    const hours = await getGymHours(tx, input.gymId);
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "removed", hours };
+  });
+}
+
+/** IS THIS PERSON A LIVE MEMBER OF THIS GYM — the read side of the hours route.
+ *
+ *  **Deliberately NOT `getStaffAuthority`'s question.** That answers "what may
+ *  this person DO here", and its ghost rule (:14401) is about authority
+ *  surviving a membership that ended. This asks the simpler thing a member's gym
+ *  card needs: is this person, right now, in this gym. The service ORs the two,
+ *  so an invited manager who never joined still reads the hours.
+ *
+ *  `removed_at IS NULL` is the same live-membership predicate every other reader
+ *  in this codebase uses, deliberately not re-spelled as something cleverer —
+ *  a second definition of "live member" is how one of them drifts. */
+export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId}
+      AND m.user_id = ${userId}
+      AND m.removed_at IS NULL
+      AND u.status = 'active'
+    LIMIT 1`;
+  return rows.length > 0;
 }

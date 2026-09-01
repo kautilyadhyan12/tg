@@ -789,4 +789,74 @@ d("0001_init on a real database", () => {
     }
     expect(accepted).toBe(true);
   });
+
+  /** THE FOUR CHECKS AND THE UNIQUE READ BACK OUT OF THE DEPLOYED CATALOGUE,
+   *  never off the migration file — :20222's lesson. A hand-written migration
+   *  that was edited after it was applied, or applied to a database somebody had
+   *  already touched, is invisible to a test that reads the `.sql`.
+   *
+   *  **The exact strings are the assertion.** A CHECK loosened from `> ` to `>=`
+   *  or a range widened by one is exactly the class this card names as risk 4
+   *  (the touching boundary), and it would leave every other test in the suite
+   *  green. */
+  it("0017's opening-hours constraints exist on the deployed database", async () => {
+    const rows = await sql<{ name: string; def: string }[]>`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid IN ('gym_hours'::regclass, 'gym_closures'::regclass, 'gyms'::regclass)
+        AND conname IN ('gym_hours_weekday_check', 'gym_hours_opens_check',
+                        'gym_hours_closes_check', 'gym_hours_order_check',
+                        'gym_closures_note_len_check', 'gyms_hours_mode_check')
+      ORDER BY conname`;
+    const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
+
+    expect([...byName.keys()].sort()).toEqual([
+      "gym_closures_note_len_check",
+      "gym_hours_closes_check",
+      "gym_hours_opens_check",
+      "gym_hours_order_check",
+      "gym_hours_weekday_check",
+      "gyms_hours_mode_check",
+    ]);
+
+    expect(byName.get("gym_hours_weekday_check")).toContain("weekday >= 1");
+    expect(byName.get("gym_hours_weekday_check")).toContain("weekday <= 7");
+    expect(byName.get("gym_hours_opens_check")).toContain("opens_minute <= 1439");
+    expect(byName.get("gym_hours_closes_check")).toContain("closes_minute <= 1440");
+    // The strict `>` is what makes a zero-length session impossible; `>=` would
+    // admit one and nothing else in the suite would notice.
+    expect(byName.get("gym_hours_order_check")).toContain("closes_minute > opens_minute");
+    expect(byName.get("gyms_hours_mode_check")).toContain("'unset'");
+    expect(byName.get("gyms_hours_mode_check")).toContain("'open_24h'");
+    expect(byName.get("gyms_hours_mode_check")).toContain("'scheduled'");
+
+    const uq = await sql<{ def: string }[]>`
+      SELECT indexdef AS def FROM pg_indexes
+      WHERE tablename = 'gym_closures' AND indexname = 'gym_closures_gym_day_uq'`;
+    expect(uq[0]?.def).toContain("UNIQUE");
+    expect(uq[0]?.def).toMatch(/\(gym_id, day\)/);
+  });
+
+  /** `hours_mode` DEFAULTS TO `unset` AND NOTHING BACKFILLED IT — :26736's rule
+   *  made checkable. A migration that helpfully wrote `'scheduled'` onto
+   *  existing rows, or a DDL default of anything else, is how every gym in the
+   *  database starts telling its members it is closed. */
+  it("0017 leaves every existing gym saying nothing about its hours", async () => {
+    const def = await sql<{ column_default: string | null; is_nullable: string }[]>`
+      SELECT column_default, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'gyms' AND column_name = 'hours_mode'`;
+    expect(def[0]?.column_default).toContain("'unset'");
+    expect(def[0]?.is_nullable).toBe("NO");
+
+    // No gym anywhere has been given hours by anything but a person using the
+    // product. Scoped to gyms with NO sessions so a suite that legitimately set
+    // some cannot turn this red (a whole-table count would be :23128's shape).
+    const invented = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n
+      FROM gyms g
+      WHERE g.hours_mode = 'scheduled'
+        AND NOT EXISTS (SELECT 1 FROM gym_hours h WHERE h.gym_id = g.id)`;
+    expect(invented[0]?.n).toBe(0);
+  });
 });

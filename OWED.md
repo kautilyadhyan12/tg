@@ -5154,8 +5154,11 @@ file and is stated so nobody reads these as lower priority than they are.
       country`, both CHECK-constraint rebuilds and the new column together** —
       unusable, and it dies on 42701 if applied. It also names the file by the
       journal's 0-based `idx`, so it collided with the existing `0015`.
-      **`0013`, `0014`, `0015` and `0016` were all hand-written for this reason**
-      and none left a snapshot, so the debt compounds by one migration each time.
+      **`0013`, `0014`, `0015`, `0016` and now `0017` were all hand-written for
+      this reason** and none left a snapshot, so the debt compounds by one
+      migration each time. **`0017_gym_hours` (2026-09-01, opening hours) is the
+      fifth and is counted here rather than being allowed to pass unremarked —
+      that card does NOT fix this and says so in its own risk list.**
       **The fix is one command's worth of work and nobody has scheduled it:**
       regenerate the snapshot chain from the current schema, or accept
       hand-written migrations permanently and say so in `CLAUDE.md`'s T5 template,
@@ -7558,6 +7561,17 @@ file and is stated so nobody reads these as lower priority than they are.
       yet" state**: members are told nothing about opening times until a gym
       sets them, a weekday with no sessions means closed only AFTER it has, and
       **no default hours are ever invented at creation or in a migration.**
+      **SERVER HALF BUILT 2026-09-01** from `CARD-gym-hours.md` §4a: migration
+      `0017_gym_hours` (`gyms.hours_mode` defaulting to `unset` · `gym_hours` ·
+      `gym_closures`), the contract once in `@app/shared`, and four routes —
+      read (staff **OR live member**, so the console and the member's gym card
+      share ONE reader and cannot disagree), replace-the-whole-week, close a
+      day, un-close a day.
+      **THIS LINE DOES NOT TICK AND MUST NOT BE TICKED YET, for three separate
+      reasons and each is enough on its own:** the **WEB HALF (§4b) IS UNBUILT**,
+      so **no screen shows any of this — no member can see their gym's hours and
+      no owner can set them**; the **browser SMOKE is unrun**; and **T3 is
+      unrun**. It ticks when the web half ships and both gates pass.
 - [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:

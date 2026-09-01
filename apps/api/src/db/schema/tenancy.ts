@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -53,12 +54,128 @@ export const gyms = pgTable(
     activation: jsonb("activation").notNull().default(sql`'{}'`), // Part 3 §5.1 checklist state
     status: text("status").notNull().default("active"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /** HAS THIS GYM SAID WHEN IT IS OPEN — Kd ruling 2026-08-31 (:26624), with
+     *  the third state ruled by his addendum 2 (:26736).
+     *
+     *  **`unset` IS NOT A NULL WEARING A NAME. It is the whole point of the
+     *  column.** A gym that never opened the section has no `gym_hours` rows,
+     *  which is byte-for-byte what a genuinely closed week looks like — so
+     *  without this a member card would print "Closed" for every gym that has
+     *  simply not answered yet, which is a user shown something FALSE (:5807)
+     *  and would have hit EVERY existing gym on the day this shipped.
+     *
+     *  `open_24h` is a FLAG rather than a fake 00:00–23:59 row (:26624 §4.5), so
+     *  every reader asks one question instead of pattern-matching a time range.
+     *  `scheduled` means the rows below are the answer, and only THEN does a
+     *  weekday with no rows mean closed.
+     *
+     *  **DEFAULT `unset` AND NEVER BACKFILLED** — :26736 in as many words: no
+     *  default hours are invented, at creation or in a migration. */
+    hoursMode: text("hours_mode").notNull().default("unset"),
     createdAt: createdAt(),
   },
   (t) => [
     check("gyms_org_type_check", sql`${t.orgType} IN ('gym','studio','clinic')`),
     check("gyms_status_check", sql`${t.status} IN ('active','archived')`),
     check("gyms_country_check", sql`${t.country} IS NULL OR ${t.country} ~ '^[A-Z]{2}$'`),
+    check("gyms_hours_mode_check", sql`${t.hoursMode} IN ('unset','open_24h','scheduled')`),
+  ],
+);
+
+/** THE SESSIONS A GYM IS OPEN FOR — Kd 2026-08-31 (:26624): *"a gym can set time
+ *  like we are open from 6 to 7 am … 2 to 3 pm … 4 to 9 pm … a day can have many
+ *  session"*. One row per session.
+ *
+ *  **`weekday` IS ISO 8601 — 1 = Monday … 7 = Sunday**, which is Postgres
+ *  `EXTRACT(ISODOW FROM …)` exactly. The attendance card must bucket a stamp
+ *  into the session it fell in, and matching the database's own function means
+ *  that query needs no mapping table. **JS `getDay()` is 0 = Sunday and is
+ *  deliberately not the convention: the CLIENT converts, in one place.**
+ *
+ *  **MINUTES FROM MIDNIGHT IN THE GYM'S OWN ZONE, never instants.** "We open at
+ *  six" is a wall-clock fact about a place and is true in June and December; a
+ *  timestamp would move it twice a year (trap #8, :26469 §5). `closes_minute`
+ *  may be 1440 — midnight at the END of the day — so a gym open till midnight
+ *  loses no minute; `opens_minute` may not, since 1440 as an opening is a
+ *  zero-length session on the wrong day.
+ *
+ *  **A SESSION CANNOT WRAP PAST MIDNIGHT, deliberately.** 22:00–02:00 is Monday
+ *  1320–1440 plus Tuesday 0–120. Every query stays one comparison and "which day
+ *  was this on" never has two answers. Making that pleasant is the screen's job
+ *  — one control writing two rows — never a schema change.
+ *
+ *  **NO NAME COLUMN and NO CAPACITY COLUMN.** Kd struck session names outright
+ *  (:26684 §1, *"not neeeded"*) — not deferred, no `OWED.md` line (:8771's
+ *  precedent) — and it must not return as a carrier for what a closure note or a
+ *  join-code label should say. Capacity belongs to the booking card's schema
+ *  (:26624 §4.2); half of that table here is worse than none of it. */
+export const gymHours = pgTable(
+  "gym_hours",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    weekday: integer("weekday").notNull(),
+    opensMinute: integer("opens_minute").notNull(),
+    closesMinute: integer("closes_minute").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_hours_weekday_check", sql`${t.weekday} BETWEEN 1 AND 7`),
+    check("gym_hours_opens_check", sql`${t.opensMinute} BETWEEN 0 AND 1439`),
+    check("gym_hours_closes_check", sql`${t.closesMinute} BETWEEN 1 AND 1440`),
+    check("gym_hours_order_check", sql`${t.closesMinute} > ${t.opensMinute}`),
+    index("gym_hours_gym_weekday_idx").on(t.gymId, t.weekday, t.opensMinute),
+  ],
+);
+
+/** "WE ARE CLOSED TODAY" — the DATED override (Kd :26684 §3, *"gym can update
+ *  like we are close today etc … have option"*).
+ *
+ *  **THE TWO MECHANISMS MUST NOT MERGE, and this table's shape is what enforces
+ *  it.** "Closed every Sunday" is the WEEKLY PATTERN — that weekday holds no
+ *  `gym_hours` rows — while "closed today" is a DATED override that WINS over
+ *  the pattern. A recurring closed day needs no feature, and a second way to say
+ *  it would let a gym's two answers disagree. **Hence there is no `weekday`
+ *  column here and there must never be one.** (:26736: no weekday is special.)
+ *
+ *  **UNIQUE (gym_id, day) IS THE IDEMPOTENCY (R3.5)** — a day is closed or it is
+ *  not, so re-closing UPDATES the note rather than stacking a row, and an owner
+ *  double-tapping cannot produce two answers for one date. The guarantee is in
+ *  the database, not in the service remembering to check.
+ *
+ *  **`note` IS NOT THE STRUCK SESSION NAME RETURNING.** Names were struck on a
+ *  SESSION; this is a short line on an EXCEPTION ("Closed today — Holi") where
+ *  the explanation is the entire point, and a member reading "closed" with no
+ *  reason is the worse product. 120 characters so a member's card cannot become
+ *  a notice board — announcements are their own owed feature.
+ *
+ *  **NO `removed_at`, a DECLARED exception to R4.3.** A closure is a statement
+ *  about one day that expires by itself when the date passes — which is the
+ *  failure mode of a toggle somebody forgets to switch back — and un-closing is
+ *  a correction, not an event with a history. `audit_log` records both ends. */
+export const gymClosures = pgTable(
+  "gym_closures",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    /** The GYM's date in the GYM's zone, for the same reason the session minutes
+     *  are wall-clock: "closed on the 25th" is about a calendar, not an instant.
+     *  Every reader computes today as `(now() AT TIME ZONE g.timezone)::date`. */
+    day: date("day").notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check(
+      "gym_closures_note_len_check",
+      sql`${t.note} IS NULL OR char_length(${t.note}) <= 120`,
+    ),
+    uniqueIndex("gym_closures_gym_day_uq").on(t.gymId, t.day),
   ],
 );
 

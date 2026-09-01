@@ -127,6 +127,14 @@ const PLANS_SUITE = 'test/orgs.plans.test.ts';
  *  then READS BACK. A `seed` row that forgot this would run the routes suite,
  *  which never asserts a price, and report a RED that means nothing (:4718 F2). */
 const SEED_SUITE = 'test/db.migration.test.ts';
+
+/** OPENING HOURS (Kd 2026-08-31). Its own suite because its guarantees need
+ *  fixtures the routes suite has none of — a gym at UTC+14 whose "today" is a
+ *  different date from the server's, and repo calls made DIRECTLY, since the
+ *  service always hands the repo the gym id it just authorised and a mismatched
+ *  pair is unreachable from any route. Rows aimed at it carry
+ *  `suite: HOURS_SUITE`. */
+const HOURS_SUITE = 'test/orgs.hours.test.ts';
 /** Written ONCE and referenced everywhere, because it is used in two different
  *  KINDS of place: as the `expect` filter on seven mutants, and as the filter
  *  the post-sweep database repair runs. Renaming the test would break the seven
@@ -2254,6 +2262,136 @@ const MUTANTS = [
     expect: 'with no scope at all, still selects',
     from: '        AND (${scope}::uuid[] IS NULL OR g.id = ANY(${scope}::uuid[]))',
     to: '        AND (g.id = ANY(${scope}::uuid[]))',
+  },
+
+  // -------------------------------------------------------------------------
+  // OPENING HOURS (Kd 2026-08-31, :26624 + :26684 + :26736). Every row below is
+  // in one of rule 4a's ALWAYS-MUTATED columns — ownership, a number or state a
+  // user SEES and could see falsely, or data loss — and nothing here mutates
+  // wording, layout or a comment.
+  // -------------------------------------------------------------------------
+  {
+    id: 'O182',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "OWNERSHIP: the session read stops being scoped to one gym, so every gym's timetable is served to every other gym's members and staff. Invisible to every ROUTE test in the suite — the service hands the repo the id it just authorised, so a mismatched pair is unreachable from a route — which is why the tenancy block calls this function directly",
+    expect: "never returns another gym's sessions",
+    from: '    FROM gym_hours\n    WHERE gym_id = ${gymId}',
+    to: '    FROM gym_hours\n    WHERE (gym_id = ${gymId} OR true)',
+  },
+  {
+    id: 'O183',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "OWNERSHIP: the CLOSURE read loses its gym scope, so a member's gym card lists closures other gyms typed — including their notes, which are free text somebody wrote for their own members",
+    expect: "never returns another gym's sessions",
+    from: '    WHERE c.gym_id = ${gymId}\n      AND c.day >=',
+    to: '    WHERE (c.gym_id = ${gymId} OR true)\n      AND c.day >=',
+  },
+  {
+    id: 'O184',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "DATA LOSS, the worst case on this card: the whole-week replace stops deleting the old sessions, so every save MERGES into what was there. A gym correcting its hours ends up advertising both the old and the new ones, the overlap rule it was validated against no longer describes the rows, and no screen can show a gym what it has actually said",
+    expect: 'replaces the week',
+    from: '    await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;',
+    to: '    await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId} AND false`;',
+  },
+  {
+    id: 'O185',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "OWNERSHIP + DATA LOSS: un-closing a day stops being scoped to one gym, so one owner tapping undo on their own holiday re-opens that same date for every gym in the product. The `day` clause survives, so it is a QUIET cross-tenant delete rather than a table wipe — the shape a stray tenancy predicate actually takes",
+    expect: 'leaves the same day closed in another',
+    from: '      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date',
+    to: '      WHERE day = ${input.day}::date',
+  },
+  {
+    id: 'O186',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "IDEMPOTENCY (R3.5): the closure upsert loses its ON CONFLICT arm, so an owner double-tapping `Closed today` — or a retried request — hits the UNIQUE and gets a 500, and editing a closure's note becomes impossible because the only way to change one is to write it again",
+    expect: 'EDITS the note without stacking a row',
+    from: '      ON CONFLICT (gym_id, day) DO UPDATE\n        SET note = EXCLUDED.note, created_by_user_id = EXCLUDED.created_by_user_id`;',
+    to: '`;',
+  },
+  {
+    id: 'O187',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "A USER IS SHOWN SOMETHING FALSE (:5807), and it is trap #8 exactly: the closure list is filtered against the SERVER's date instead of the gym's own. A gym on the other side of the date line loses today's closure from its members' cards for ten hours of every day — or keeps yesterday's up — while every UTC gym looks perfect, which is why the fixture behind this runs at UTC+14",
+    expect: "measured in the GYM's zone",
+    from: '      AND c.day >= (now() AT TIME ZONE g.timezone)::date',
+    to: '      AND c.day >= now()::date',
+  },
+  {
+    id: 'O188',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "A USER IS SHOWN SOMETHING FALSE: the closure filter goes strict, so a gym that is closed TODAY drops off its own members' cards on the one day it matters — the day they would otherwise turn up at a locked door",
+    expect: "measured in the GYM's zone",
+    from: '      AND c.day >= (now() AT TIME ZONE g.timezone)::date',
+    to: '      AND c.day > (now() AT TIME ZONE g.timezone)::date',
+  },
+  {
+    id: 'O189',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: ":26736's WHOLE SUBJECT, and the defect that would have hit EVERY gym in the database on the day this shipped: the reader trusts the ROWS instead of the MODE, so a gym that has never set hours — no rows, `unset` — renders identically to one that is genuinely closed, and its members are told `Closed` about a gym that has simply not answered. Kd caught the example that led to it before a line was built; this is what stops it coming back",
+    // AIMED AT THE FORCED-STATE TEST, not at the `open_24h` one, and the
+    // difference is the whole finding. The writer DELETES the rows whenever the
+    // mode leaves `scheduled`, so on every path a route can reach, `week` is
+    // empty whether the reader branches on the mode or not — this mutant
+    // SURVIVES the obvious test. Only a gym holding rows its mode does not admit
+    // can observe it, and no route can produce one, so the test forces the state
+    // in SQL.
+    expect: 'the MODE decides what the week contains',
+    from: '    week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],',
+    to: '    week: toWeekSchedule(row.sessions),',
+  },
+  {
+    id: 'O190',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "OWNERSHIP: the hours read stops asking whether the caller belongs to this gym at all, so any signed-in stranger holding a uuid reads a gym's timetable — and, worse, learns the gym exists, which is the enumeration oracle the module's standing 404 exists to close",
+    expect: 'a signed-in stranger gets 404',
+    from: '  if (org === null || (authority === null && !member)) {',
+    to: '  if (org === null) {',
+  },
+  {
+    id: 'O191',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "A USER IS BLOCKED FROM FINISHING SOMETHING (:5807's second half): the overlap comparison goes from strict to inclusive, so two sessions that merely TOUCH — 10:00-12:00 then 12:00-14:00, an ordinary timetable with a break in its numbering — are refused as overlapping. This card names the touching boundary as risk 4, and it is the direction a reviewer is least likely to check because the refusal looks like the guard working",
+    expect: 'ACCEPTS touching ones',
+    from: '      if (current.opensMinute < previous.closesMinute) {',
+    to: '      if (current.opensMinute <= previous.closesMinute) {',
+  },
+  {
+    id: 'O192',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "A GYM ADVERTISES A TIMETABLE NOBODY CAN READ: the sessions stop being sorted before the neighbour comparison, so an overlap sent in any order but ascending walks straight through the check. A screen that lets an owner add a 6am session after a 2pm one — which is every screen anybody would build — turns the guard off entirely",
+    // AIMED AT THE HAPPY PATH, and the re-aim is the finding. This first pointed
+    // at a test called "catches an overlap even when the client sends the
+    // sessions out of order" and SURVIVED it: a neighbour check on unsorted
+    // input fires on ANY descending pair, so it rejects that input too and the
+    // test stays green with the sort gone. What the sort protects is the
+    // opposite case — a VALID week sent out of order must be ACCEPTED — and the
+    // observer for that is the happy path, whose three sessions are deliberately
+    // sent 16:00, 06:00, 14:00.
+    expect: 'reads them back in order',
+    from: '    const sessions = [...day.sessions].sort((a, b) => a.opensMinute - b.opensMinute);',
+    to: '    const sessions = [...day.sessions];',
+  },
+  {
+    id: 'O193',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "A 500 A CLIENT CANNOT ACT ON: the calendar check goes, so `2027-02-31` — well-shaped, and not a day — reaches Postgres, which refuses the cast. The route answers 500 to a request whose only fault is a typo, and the audit row it half-wrote is rolled back with no trace of why",
+    expect: 'well-shaped and does not exist',
+    from: '    day: requireCalendarDate(req.day),',
+    to: '    day: req.day,',
   },
 ];
 

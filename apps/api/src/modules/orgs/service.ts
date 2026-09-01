@@ -11,8 +11,12 @@ import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,
   ROLE_PRIVILEGES,
+  closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  gymHoursResponseSchema,
+  removeGymClosureResponseSchema,
+  setGymHoursResponseSchema,
   joinOrgResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
@@ -34,12 +38,20 @@ import {
 } from "./schemas.js";
 import type {
   AddOrgStaffRequest,
+  CloseGymDayRequest,
+  CloseGymDayResponse,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
   CreateOrgResponse,
+  GymHours,
+  GymHoursResponse,
+  GymWeekSchedule,
   JoinOrgRequest,
   JoinOrgResponse,
+  RemoveGymClosureResponse,
+  SetGymHoursRequest,
+  SetGymHoursResponse,
   MyOrgApplicationsResponse,
   MyOrgsResponse,
   NudgeApplicationResponse,
@@ -1870,4 +1882,298 @@ function parseCursor(cursor: string | undefined): { joinedAt: string; id: string
 
 function assertNever(x: never): never {
   throw new Error(`unhandled join outcome: ${JSON.stringify(x)}`);
+}
+
+// ---------------------------------------------------------------------------
+// OPENING HOURS — Kd ruling 2026-08-31 (:26624), addenda :26684 and :26736.
+// ---------------------------------------------------------------------------
+
+/** WHO MAY READ A GYM'S HOURS: its staff, or a live member of it.
+ *
+ *  **It is deliberately wider than `requirePrivilege` and deliberately not
+ *  public.** Kd ruled that MEMBERS SEE THE HOURS (:26684 §2, *"yes can see"*),
+ *  and the member's gym card is served by this same route — one reader for both
+ *  screens, so the console and the card cannot disagree about what a gym said.
+ *  A stranger still gets the module's standing 404: a gym's timetable is not
+ *  secret, but a route that answers for any uuid is a gym-enumeration oracle,
+ *  which is the same reason `requirePrivilege` 404s rather than 403s.
+ *
+ *  **The two conditions are ORed rather than merged**, because they are genuinely
+ *  different questions: `getStaffAuthority` answers "what may this person do
+ *  here" and admits an invited manager who never joined (:14401's ghost rule);
+ *  `isLiveMember` answers "is this person in this gym today". Requiring both
+ *  would lock a manager out of a screen they administer. */
+async function requireGymAudience(deps: OrgsDeps, gymId: string, userId: string): Promise<void> {
+  const [org, authority, member] = await Promise.all([
+    repo.getOrgById(deps.sql, gymId),
+    repo.getStaffAuthority(deps.sql, gymId, userId),
+    repo.isLiveMember(deps.sql, gymId, userId),
+  ]);
+  if (org === null || (authority === null && !member)) {
+    throw new OrgsError(404, "org_not_found", "Gym not found.");
+  }
+}
+
+/** A REAL DATE, not merely a well-shaped one.
+ *
+ *  `closeGymDayRequestSchema` and `closureParamsSchema` check `YYYY-MM-DD`, and
+ *  **`2026-02-31` passes that and is not a day.** Postgres would refuse the cast
+ *  and the caller would get a 500 they cannot act on, so the round trip through
+ *  `Date` is the cheap oracle: JS rolls an impossible date forward (31 Feb →
+ *  3 Mar), so a value that does not print back identically was never a date.
+ *
+ *  Deliberately NOT a locale or timezone question — the string is interpreted at
+ *  UTC purely to normalise it, and the DAY it names is the gym's own (trap #8).
+ *  Nothing here decides what "today" is. */
+function requireCalendarDate(day: string): string {
+  const parsed = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) {
+    throw new OrgsError(400, "invalid_date", "That date doesn't exist.");
+  }
+  return day;
+}
+
+/** Minutes from midnight as a 24-hour clock face, for the ONE place a human
+ *  reads them: the sentence that names two sessions which clash. Deliberately
+ *  not `toLocale*` — R5.1's ban is the engine's, but the reason travels: a
+ *  server-side locale would make an error message depend on where the process
+ *  runs. 1440 renders as `24:00`, which is what it means (midnight at the END of
+ *  the day) and is how timetables have always written it. */
+function clockFace(minute: number): string {
+  const h = Math.floor(minute / 60);
+  const m = minute % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+const WEEKDAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+/** ISO weekday (1 = Monday … 7 = Sunday) to the word a refusal message uses.
+ *  Indexed off a validated 1–7 — `gymWeekdaySchema` has already run — and the
+ *  fallback exists only because `noUncheckedIndexedAccess` is on (R2.1) and a
+ *  refusal must never crash on the way to being sent. */
+function weekdayName(weekday: number): string {
+  return WEEKDAY_NAMES[weekday - 1] ?? `day ${String(weekday)}`;
+}
+
+/** FLATTEN THE WEEK INTO ROWS, REFUSING ANYTHING A GYM COULD NOT HAVE MEANT.
+ *
+ *  Two rules, and both exist because the attendance card must be able to ask
+ *  "which session did this stamp fall in" and get exactly one answer:
+ *
+ *  **(1) ONE ENTRY PER WEEKDAY.** Two `{weekday: 3}` entries in one body would
+ *  be silently concatenated by any reader that just iterates — and the overlap
+ *  check below would then run per-entry and pass on a pair that overlaps ACROSS
+ *  them. Refused rather than merged: a client sending Wednesday twice has a bug
+ *  its user cannot see.
+ *
+ *  **(2) NO OVERLAP WITHIN A DAY. TOUCHING IS LEGAL.** 10:00–12:00 beside
+ *  12:00–14:00 is a gym with a break in its numbering, not an error; 10:00–12:00
+ *  beside 11:00–13:00 is a timetable with no single answer. The comparison is
+ *  `next.opens < current.closes` — strict, so equality (touching) passes — and
+ *  it is the boundary this card names as easy to get backwards, which is why a
+ *  test drives both sides of it.
+ *
+ *  **The message names the two sessions that clash**, because "invalid week" is
+ *  a refusal an owner cannot act on; they need to know which two rows to look
+ *  at. It carries no other input back (R3.10). */
+function flattenWeek(week: GymWeekSchedule): repo.GymSessionRow[] {
+  const rows: repo.GymSessionRow[] = [];
+  const seen = new Set<number>();
+
+  for (const day of week) {
+    if (seen.has(day.weekday)) {
+      throw new OrgsError(
+        400,
+        "duplicate_weekday",
+        `${weekdayName(day.weekday)} is listed twice. Send each day once, with all of its sessions.`,
+      );
+    }
+    seen.add(day.weekday);
+
+    // Sorted here rather than trusting the client's order: the overlap check is
+    // a neighbour comparison and is only correct on sorted input, and a screen
+    // that lets an owner add a 6am session after a 2pm one is a screen we want
+    // to keep working.
+    const sessions = [...day.sessions].sort((a, b) => a.opensMinute - b.opensMinute);
+    for (let i = 1; i < sessions.length; i += 1) {
+      const previous = sessions[i - 1];
+      const current = sessions[i];
+      if (previous === undefined || current === undefined) continue;
+      if (current.opensMinute < previous.closesMinute) {
+        throw new OrgsError(
+          400,
+          "overlapping_sessions",
+          `${weekdayName(day.weekday)} has two sessions that overlap: ` +
+            `${clockFace(previous.opensMinute)}–${clockFace(previous.closesMinute)} and ` +
+            `${clockFace(current.opensMinute)}–${clockFace(current.closesMinute)}.`,
+        );
+      }
+    }
+
+    for (const session of sessions) {
+      rows.push({
+        weekday: day.weekday,
+        opensMinute: session.opensMinute,
+        closesMinute: session.closesMinute,
+      });
+    }
+  }
+  return rows;
+}
+
+/** The repo's flat rows back into the per-weekday shape the contract carries.
+ *  Only weekdays that HAVE sessions appear — an absent weekday and an empty list
+ *  mean the same thing, and emitting seven entries every time would put five
+ *  empty objects on every member's gym card. */
+function toWeekSchedule(sessions: readonly repo.GymSessionRow[]): GymHours["week"] {
+  const byWeekday = new Map<number, { opensMinute: number; closesMinute: number }[]>();
+  for (const s of sessions) {
+    const list = byWeekday.get(s.weekday) ?? [];
+    list.push({ opensMinute: s.opensMinute, closesMinute: s.closesMinute });
+    byWeekday.set(s.weekday, list);
+  }
+  return [...byWeekday.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([weekday, list]) => ({ weekday, sessions: list }));
+}
+
+/** ONE PLACE TURNS A ROW INTO THE ANSWER, and it is what makes the `unset`
+ *  guarantee checkable rather than a comment.
+ *
+ *  **`week` IS EMPTY UNLESS THE MODE IS `scheduled`.** A gym on `open_24h` has
+ *  no rows anyway (the writer deletes them), and `unset` has none by
+ *  construction — but a reader that trusted the rows alone would be one stray
+ *  row away from telling members a 24-hour gym closes at six. The mode decides,
+ *  every time, which is :26736's rule made mechanical. */
+function toGymHours(row: repo.GymHoursRow): GymHours {
+  return {
+    mode: row.mode,
+    timezone: row.timezone,
+    week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],
+    closures: row.closures.map((c) => ({ day: c.day, note: c.note })),
+  };
+}
+
+/** WHEN IS THIS GYM OPEN — the console's Settings panel and the member's gym
+ *  card, one reader.
+ *
+ *  **NOT gated on the gym having a live plan.** §4.2's read-only console is
+ *  read-ONLY: a lapsed gym keeps answering every read, and hiding a gym's
+ *  opening times from its own members because it stopped paying would tell them
+ *  something false about the gym rather than about the bill (:23711's rule, the
+ *  same reason the roster and the code list stay open). */
+export async function getOrgHours(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<GymHoursResponse> {
+  await requireGymAudience(deps, gymId, userId);
+  const row = await repo.getGymHours(deps.sql, gymId);
+  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+  return gymHoursResponseSchema.parse({ hours: toGymHours(row) });
+}
+
+/** SET THE WHOLE WEEK, or declare the gym open 24 hours.
+ *
+ *  `org.manage` through `requireWritablePrivilege`, so a gym with no live plan
+ *  and an archived gym are refused by the gates that already exist (:23711,
+ *  :26220) — **no new refusal vocabulary is invented for this card.** */
+export async function setOrgHours(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  req: SetGymHoursRequest,
+): Promise<SetGymHoursResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+
+  const sessions = req.mode === "scheduled" ? flattenWeek(req.week) : [];
+  const outcome = await repo.setGymHours(deps.sql, {
+    gymId,
+    mode: req.mode,
+    sessions,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "set":
+      return setGymHoursResponseSchema.parse({ hours: toGymHours(outcome.hours) });
+    case "not_found":
+      // Unreachable in practice — the gate above already read the org — but a
+      // gym deleted between that read and this write must not surface as a 500.
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** "WE ARE CLOSED TODAY" for one date, with an optional reason.
+ *
+ *  **An omitted `note` and an explicit null both mean "no reason given", and
+ *  that is not a lost distinction.** Re-closing a day is how a note is edited
+ *  (the UNIQUE makes the write an upsert), so a body with no note must be able
+ *  to CLEAR one — a screen whose reason box the owner emptied sends exactly
+ *  that. An empty string is normalised to null by the same rule, so the card
+ *  never renders a dash after a dangling dash. */
+export async function closeOrgDay(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  req: CloseGymDayRequest,
+): Promise<CloseGymDayResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+
+  const trimmed = req.note ?? null;
+  const outcome = await repo.closeGymDay(deps.sql, {
+    gymId,
+    day: requireCalendarDate(req.day),
+    note: trimmed === null || trimmed.length === 0 ? null : trimmed,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "closed":
+      return closeGymDayResponseSchema.parse({ hours: toGymHours(outcome.hours) });
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** UN-CLOSE A DAY, restoring the weekly pattern. Answering `removed` for a day
+ *  that was never closed is deliberate — the word names the STATE, not this
+ *  request (`removeOrgMember`'s convention, same reason). */
+export async function removeOrgClosure(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  day: string,
+): Promise<RemoveGymClosureResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+
+  const outcome = await repo.removeGymClosure(deps.sql, {
+    gymId,
+    day: requireCalendarDate(day),
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "removed":
+      return removeGymClosureResponseSchema.parse({
+        status: "removed",
+        hours: toGymHours(outcome.hours),
+      });
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
 }

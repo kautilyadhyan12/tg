@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **929 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 earlier on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **934 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,8 +14,11 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,984 lines, MEASURED 2026-08-31 (tenth measurement that
-day) and not estimated.**
+**ALWAYS-READ TOTAL: 1,989 lines, MEASURED 2026-09-01 and not estimated**
+(934 + 997 + 58). **§1 AND §2 DID NOT MOVE**: that day's card record went to
+§1B, where :24813 sends every card record, so the only growth is the five
+trigger phrases its `Read before …` sentence produced — which is the split
+working exactly as ruled.
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1114,6 +1117,28 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:26812** — 2026-09-01 — **THE OPENING-HOURS SERVER HALF IS BUILT: a gym can
+  say when it is open, "hours not set" is its own state, and the mutation sweep
+  found TWO of my own tests proving less than they claimed.** **Read before
+  building the attendance card, before adding any reader of `gyms.hours_mode`,
+  `gym_hours` or `gym_closures`, before writing a test whose fixture is a single
+  non-UTC timezone, before aiming a mutant at a test whose NAME sounds like the
+  guarantee, and before adding a sixteenth write door to the orgs module.**
+  Implements :26624 + :26684 + :26736 from `CARD-gym-hours.md` §4a. Migration
+  `0017_gym_hours`, the contract in `@app/shared`, four routes (the READ open to
+  staff **OR a live member**, so the console and the member's gym card share one
+  reader). **NO SCREEN EXISTS — the web half is unbuilt, no smoke was run or
+  offered, T3 is UNRUN, and the `OWED.md` line does NOT tick.**
+  **THE TWO SURVIVORS ARE THE PART TO READ, and both were defects in the TESTS:**
+  a lone UTC+14 fixture agrees with a bare `now()` for fourteen hours a day, so
+  the zone mutant lived — fixed with a UTC+14 **and** UTC-12 pair, 26 hours
+  apart, whose dates can never both match the server's; and a mutant deleting the
+  overlap SORT was aimed at a test whose name said "out of order" but which
+  rejects its input either way, so it was re-aimed at the ACCEPTING case (the
+  happy path). **Standing: a timezone fixture must disagree with the server by a
+  property of the ZONES, never of the hour; and a test name restating a guarantee
+  is not evidence it observes one.** The write-door guard went red on the count
+  and is now `CONSOLE_WRITE_COUNT = 15`.
 - **:26220** — 2026-08-31 — **THE FOUR-MONTH CLOSURE, T3 ROUND 1: ZERO
   Critical/High, THE PACKET SHIPS — and two of the eight Lows were conditions the
   statement did not have.** **Read before trusting `archived_at IS NULL` to mean

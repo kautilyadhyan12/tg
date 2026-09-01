@@ -1512,3 +1512,149 @@ export type OrgStaffMutationResponse = z.infer<typeof orgStaffMutationResponseSc
  *  call deleted the row or the previous one did. */
 export const removeOrgStaffResponseSchema = z.object({ status: z.literal("removed") });
 export type RemoveOrgStaffResponse = z.infer<typeof removeOrgStaffResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// OPENING HOURS — Kd ruling 2026-08-31 (:26624), with :26684 and :26736.
+// One contract, consumed by the API's validation AND by the console and the
+// member's gym card (R7.2), so the two screens cannot disagree about what a
+// gym said.
+// ---------------------------------------------------------------------------
+
+/** THE THIRD STATE IS THE WHOLE FEATURE'S FAILURE MODE, so it is in the type.
+ *
+ *  `unset` — nobody has said anything, and members are told NOTHING about
+ *  opening times. `open_24h` — Kd's *"or 24 hour open"*, a flag rather than a
+ *  fake 00:00–23:59 row. `scheduled` — the week below is the answer, and only
+ *  now does a weekday with no sessions mean CLOSED.
+ *
+ *  Every reader MUST branch on this before drawing a word (:26736): a gym that
+ *  never filled the form in and a gym that is genuinely shut look identical
+ *  from the rows alone, and printing "Closed" for the first is :5807
+ *  Critical/High. */
+export const gymHoursModeSchema = z.enum(["unset", "open_24h", "scheduled"]);
+export type GymHoursMode = z.infer<typeof gymHoursModeSchema>;
+
+/** ISO 8601 weekday: 1 = Monday … 7 = Sunday, matching Postgres `ISODOW`. JS
+ *  `getDay()` is 0 = Sunday — the CLIENT converts, in one place, or the gym
+ *  closes on the wrong day. */
+export const gymWeekdaySchema = z.number().int().min(1).max(7);
+
+/** ONE SESSION THE GYM IS OPEN FOR — minutes from midnight in the gym's own
+ *  time zone.
+ *
+ *  **The refine is what makes a bad range a 400 the client can explain rather
+ *  than a 500 Postgres produced** from `gym_hours_order_check`. The database
+ *  keeps its CHECK anyway: this schema guards the door, the constraint guards
+ *  the table, and a guarantee with one enforcement point is a guarantee that
+ *  ends the day somebody adds a second writer.
+ *
+ *  `closesMinute` may be 1440 (midnight at the end of the day) and `opensMinute`
+ *  may not. Sessions never wrap past midnight — 22:00–02:00 is two rows. */
+export const gymSessionSchema = z
+  .object({
+    opensMinute: z.number().int().min(0).max(1439),
+    closesMinute: z.number().int().min(1).max(1440),
+  })
+  .strict()
+  .refine((s) => s.closesMinute > s.opensMinute, {
+    message: "A session must end after it starts.",
+    path: ["closesMinute"],
+  });
+export type GymSession = z.infer<typeof gymSessionSchema>;
+
+/** One weekday and everything the gym is open for on it. An absent weekday and
+ *  a weekday with an empty list mean the same thing — no sessions — and the
+ *  server normalises to the latter so a reader never has to know which it got. */
+export const gymDayScheduleSchema = z
+  .object({
+    weekday: gymWeekdaySchema,
+    /** Bounded so a body cannot carry ten thousand rows for one day. **24 is
+     *  chosen, not spec'd, and it is the largest number that cannot be wrong**:
+     *  sessions never wrap past midnight and must not overlap, so the finest
+     *  real timetable — one session an hour, all day — is exactly 24. A gym
+     *  running hourly from 6am to 10pm needs 16 and fits. Recorded in DECISIONS
+     *  rather than left as a magic bound. */
+    sessions: z.array(gymSessionSchema).max(24),
+  })
+  .strict();
+export type GymDaySchedule = z.infer<typeof gymDayScheduleSchema>;
+
+export const gymWeekScheduleSchema = z.array(gymDayScheduleSchema).max(7);
+export type GymWeekSchedule = z.infer<typeof gymWeekScheduleSchema>;
+
+/** ONE DATED CLOSURE. `day` is the GYM's date in the GYM's zone, never the
+ *  server's and never the browser's (trap #8) — which is why it travels as a
+ *  plain `YYYY-MM-DD` string and never as an instant. */
+export const gymClosureSchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    note: z.string().max(120).nullable(),
+  })
+  .strict();
+export type GymClosure = z.infer<typeof gymClosureSchema>;
+
+/** WHAT `GET /v1/orgs/:gymId/hours` ANSWERS — one reader for the console and
+ *  for the member's gym card, so the two can never disagree.
+ *
+ *  `week` is empty unless `mode` is `scheduled`, and `closures` lists only
+ *  today-forward dates in the gym's own zone: a closure that has passed is a
+ *  fact about history and no screen asks for it. `timezone` travels with them
+ *  because every one of these values is meaningless without it. */
+export const gymHoursSchema = z
+  .object({
+    mode: gymHoursModeSchema,
+    timezone: z.string().min(1),
+    week: gymWeekScheduleSchema,
+    closures: z.array(gymClosureSchema),
+  })
+  .strict();
+export type GymHours = z.infer<typeof gymHoursSchema>;
+
+/** Every response on this surface wraps the same `hours` object, so a screen
+ *  that has just written can re-render from the reply instead of re-reading —
+ *  and the two can never show different weeks. */
+export const gymHoursResponseSchema = z.object({ hours: gymHoursSchema });
+export type GymHoursResponse = z.infer<typeof gymHoursResponseSchema>;
+
+/** SETTING THE HOURS — a discriminated union, so `open_24h` CANNOT arrive
+ *  carrying a week and `scheduled` cannot arrive without one. The alternative
+ *  (one object with an optional `week`) makes "24 hours, and here is Tuesday" a
+ *  representable state that some reader eventually has to decide about.
+ *
+ *  **`unset` IS NOT SETTABLE, deliberately.** It means "nobody has answered",
+ *  and a gym that HAS answered cannot un-answer — that would be a gym silently
+ *  removing information its members can see, which is the no-removal rule's own
+ *  shape. A gym that wants to say nothing says it is closed every day. */
+export const setGymHoursRequestSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("open_24h") }).strict(),
+  z.object({ mode: z.literal("scheduled"), week: gymWeekScheduleSchema }).strict(),
+]);
+export type SetGymHoursRequest = z.infer<typeof setGymHoursRequestSchema>;
+
+export const setGymHoursResponseSchema = z.object({ hours: gymHoursSchema });
+export type SetGymHoursResponse = z.infer<typeof setGymHoursResponseSchema>;
+
+/** CLOSING ONE DAY. `note` is optional and nullable — omitted means "no reason
+ *  given", and an explicit null clears a note a previous close set, because
+ *  re-closing the same day is how a note is edited (the UNIQUE makes it an
+ *  upsert). */
+export const closeGymDayRequestSchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    note: z.string().trim().max(120).nullable().optional(),
+  })
+  .strict();
+export type CloseGymDayRequest = z.infer<typeof closeGymDayRequestSchema>;
+
+export const closeGymDayResponseSchema = z.object({ hours: gymHoursSchema });
+export type CloseGymDayResponse = z.infer<typeof closeGymDayResponseSchema>;
+
+/** `removed` is a statement about the STATE and not about this request — the
+ *  same wording and the same reason as `removeMemberResponseSchema`. Deleting a
+ *  closure that was never there answers "this day is not marked closed", which
+ *  is true either way, so a double-tap is not an error. */
+export const removeGymClosureResponseSchema = z.object({
+  status: z.literal("removed"),
+  hours: gymHoursSchema,
+});
+export type RemoveGymClosureResponse = z.infer<typeof removeGymClosureResponseSchema>;

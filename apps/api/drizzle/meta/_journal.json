@@ -113,6 +113,13 @@
       "when": 1788134400000,
       "tag": "0016_subscription_ended_at",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788220800000,
+      "tag": "0017_gym_hours",
+      "breakpoints": true
     }
   ]
 }

@@ -13,10 +13,13 @@ import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
   addOrgStaffRequestSchema,
   applicationParamsSchema,
+  closeGymDayRequestSchema,
+  closureParamsSchema,
   codeParamsSchema,
   createOrgCodeRequestSchema,
   createOrgRequestSchema,
   joinOrgRequestSchema,
+  setGymHoursRequestSchema,
   memberParamsSchema,
   myApplicationParamsSchema,
   orgApplicationListQuerySchema,
@@ -158,6 +161,85 @@ export function registerOrgRoutes(
     const plans = await service.listOrgPlans(orgDeps, requireUserId(req), params.gymId);
     return reply.status(200).send(plans);
   });
+
+  /** WHEN IS THIS GYM OPEN — Kd ruling 2026-08-31 (:26624, :26684, :26736).
+   *
+   *  **ONE READER FOR TWO SCREENS**, and that is the design rather than a
+   *  saving: the console's Settings panel and the MEMBER's gym card both draw
+   *  this response, so they cannot disagree about what a gym said. Kd ruled
+   *  members see the hours (:26684 §2, *"yes can see"*), so the service's gate
+   *  is "staff OR live member" rather than a privilege.
+   *
+   *  **Deliberately NOT folded into `/v1/orgs/mine`.** That response is loaded
+   *  on every dashboard paint and carries up to 100 gyms; a week of sessions and
+   *  a closure list per gym belongs to the screen that asks for it. */
+  app.get("/v1/orgs/:gymId/hours", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const hours = await service.getOrgHours(orgDeps, requireUserId(req), params.gymId);
+    return reply.status(200).send(hours);
+  });
+
+  /** PUT and not PATCH: the body is the WHOLE week every time, so this REPLACES
+   *  a timetable rather than merging into one — and merging is exactly what a
+   *  stale screen must not be allowed to do here (the ticks route's reasoning,
+   *  same file). Per-session CRUD would also make the overlap rule uncheckable,
+   *  because overlap is a property of a whole day.
+   *
+   *  PUT reaches a browser only through a CORS PREFLIGHT — the failure
+   *  `fastify.inject` is structurally unable to see (Card 4's dead-method bug
+   *  behind 250 green tests). `app.ts` lists PUT, which the staff-privileges
+   *  route above already depends on; VERIFIED here rather than assumed, and the
+   *  SMOKE is what proves it in a real browser. */
+  app.put("/v1/orgs/:gymId/hours", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(setGymHoursRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const hours = await service.setOrgHours(orgDeps, requireUserId(req), params.gymId, body);
+    return reply.status(200).send(hours);
+  });
+
+  /** "WE ARE CLOSED TODAY" for one date (:26684 §3).
+   *
+   *  **200 and not 201, and it is idempotent on (gym, day).** Closing a day that
+   *  is already closed EDITS its note rather than minting a second row — the
+   *  UNIQUE index is what guarantees it (R3.5) — so an owner double-tapping
+   *  cannot create two answers for one date. A 201 would claim a creation that
+   *  the second call did not make. */
+  app.post("/v1/orgs/:gymId/closures", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(closeGymDayRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const hours = await service.closeOrgDay(orgDeps, requireUserId(req), params.gymId, body);
+    return reply.status(200).send(hours);
+  });
+
+  /** UN-CLOSE A DAY, restoring the weekly pattern. DELETE is the honest method:
+   *  the same request twice leaves the same state and answers the same way, and
+   *  the date is a path segment because a body on a DELETE is a shape half the
+   *  HTTP stack drops.
+   *
+   *  Like PUT above, a browser reaches this only through a CORS PREFLIGHT.
+   *  `app.ts` lists DELETE — the members, codes and staff routes in this file
+   *  already depend on it — and the smoke sheet's un-close step is what proves
+   *  it in a real browser. */
+  app.delete(
+    "/v1/orgs/:gymId/closures/:day",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(closureParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.removeOrgClosure(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.day,
+      );
+      return reply.status(200).send(result);
+    },
+  );
 
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
     const orgs = await service.listMyOrgs(orgDeps, requireUserId(req));

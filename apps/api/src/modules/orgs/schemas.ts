@@ -5,12 +5,23 @@ import { z } from "zod";
 
 export {
   addOrgStaffRequestSchema,
+  closeGymDayRequestSchema,
+  closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgCodeRequestSchema,
   createOrgRequestSchema,
   createOrgResponseSchema,
   createOrgTypeSchema,
+  gymClosureSchema,
+  gymHoursModeSchema,
+  gymHoursResponseSchema,
+  gymHoursSchema,
+  gymSessionSchema,
+  gymWeekScheduleSchema,
   joinOrgRequestSchema,
+  removeGymClosureResponseSchema,
+  setGymHoursRequestSchema,
+  setGymHoursResponseSchema,
   joinOrgResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
@@ -51,7 +62,18 @@ export {
 export { ORG_PRIVILEGES, OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES } from "@app/shared";
 export type {
   AddOrgStaffRequest,
+  CloseGymDayRequest,
+  CloseGymDayResponse,
   ConfirmApplicationResponse,
+  GymClosure,
+  GymHours,
+  GymHoursMode,
+  GymHoursResponse,
+  GymSession,
+  GymWeekSchedule,
+  RemoveGymClosureResponse,
+  SetGymHoursRequest,
+  SetGymHoursResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
   CreateOrgResponse,
@@ -148,6 +170,23 @@ export const codeParamsSchema = z
   .object({ gymId: z.string().uuid(), code: z.string().trim().min(1).max(32) })
   .strict();
 export type CodeParams = z.infer<typeof codeParamsSchema>;
+
+/** The gym id AND the date being un-closed.
+ *
+ *  **The date is shape-checked here and NOT calendar-checked**, deliberately:
+ *  `2026-02-31` matches the pattern and Postgres refuses the cast. That refusal
+ *  is a 500 the client cannot act on, so the SERVICE turns a malformed date into
+ *  the module's 400 before it reaches SQL — the pattern here only stops a
+ *  megabyte of path, and a hand-typed `::date` is never built from the raw
+ *  string (R3.8: it is a parameter, not an identifier).
+ *
+ *  It is a path segment rather than a body because DELETE is the honest method
+ *  for un-closing a day and a body on a DELETE is a shape half the HTTP stack
+ *  drops. */
+export const closureParamsSchema = z
+  .object({ gymId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+  .strict();
+export type ClosureParams = z.infer<typeof closureParamsSchema>;
 
 /** The nudge route carries NO gym id, and that is the tenancy decision rather
  *  than an omission: the caller is nudging THEIR OWN application, so the pair

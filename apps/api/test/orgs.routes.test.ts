@@ -6105,9 +6105,16 @@ d("orgs routes (real Postgres)", () => {
   /** HOW MANY WRITE DOORS THE CONSOLE HAS. One number, pinned in THREE places —
    *  this constant, the length of the list below, and the count of
    *  `requireWritablePrivilege` call sites in the module itself (the test right
-   *  after the list). A thirteenth write route added without a line below now
-   *  fails there instead of going unnoticed. */
-  const CONSOLE_WRITE_COUNT = 12;
+   *  after the list). A sixteenth write route added without a line below now
+   *  fails there instead of going unnoticed.
+   *
+   *  **12 → 15 on 2026-09-01, and the guard is what raised it**: the opening-
+   *  hours card (:26624) added `PUT /hours`, `POST /closures` and
+   *  `DELETE /closures/:day`, and this test went red on the count before anybody
+   *  thought to check whether the new doors were gated. That is the guard doing
+   *  exactly its job — the number is raised WITH the three lines below, never
+   *  ahead of them. */
+  const CONSOLE_WRITE_COUNT = 15;
 
   /** EVERY WRITE THE CONSOLE HAS, as `{ name, run }`. Written out rather than
    *  derived, for the reason the "every route requires authentication" test at the
@@ -6139,6 +6146,13 @@ d("orgs routes (real Postgres)", () => {
       { name: "PATCH /staff/:userId", run: () => patch(`/v1/orgs/${id}/staff/${g.member.userId}`, { role: "trainer" }, { cookies }) },
       { name: "PUT /staff/:userId/privileges", run: () => put(`/v1/orgs/${id}/staff/${g.member.userId}/privileges`, { privileges: ["members.read"] }, { cookies }) },
       { name: "DELETE /staff/:userId", run: () => del(`/v1/orgs/${id}/staff/${g.member.userId}`, { cookies }) },
+      // OPENING HOURS (:26624). The closure date is a FIXED far-future day so
+      // this list stays order-independent — the two closure doors are run in
+      // sequence against one gym and must not depend on which ran first, which
+      // is the same property the note above the positive-control test names.
+      { name: "PUT /hours", run: () => put(`/v1/orgs/${id}/hours`, { mode: "open_24h" }, { cookies }) },
+      { name: "POST /closures", run: () => post(`/v1/orgs/${id}/closures`, { day: "2099-01-01" }, { cookies }) },
+      { name: "DELETE /closures/:day", run: () => del(`/v1/orgs/${id}/closures/2099-01-01`, { cookies }) },
     ];
   };
 
@@ -6162,8 +6176,8 @@ d("orgs routes (real Postgres)", () => {
    *  **The honest limit, stated rather than implied:** this recognises
    *  `await requireWritablePrivilege(`. A door gated some other way — a different
    *  helper, or the call assigned rather than awaited — is not seen. What it
-   *  covers is the next door added in the style all twelve use today. */
-  it("the twelve are the module's twelve", () => {
+   *  covers is the next door added in the style all fifteen use today. */
+  it("the fifteen are the module's fifteen", () => {
     const src = readFileSync(new URL("../src/modules/orgs/service.ts", import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|\s)\/\/.*$/gm, "$1");
@@ -6234,14 +6248,14 @@ d("orgs routes (real Postgres)", () => {
    *
    *  **IT ASSERTS "NEVER REFUSED FOR THE PLAN" RATHER THAN "ALL TWELVE RETURN
    *  200", and that is a deliberate weakening of the wrong assertion.** The
-   *  twelve run in sequence against ONE gym and legitimately interfere — rotating
+   *  fifteen run in sequence against ONE gym and legitimately interfere — rotating
    *  a code retires it, so deleting it afterwards is a different answer;
    *  confirming an application makes rejecting the same one a conflict. Demanding
-   *  200 from all twelve would pin an ORDER nobody chose, and would go red for
+   *  200 from all fifteen would pin an ORDER nobody chose, and would go red for
    *  reasons that have nothing to do with this card. What matters here is
    *  precisely that `gym_not_on_plan` never appears — the two spot-checks below
    *  keep a real success in the test as well. */
-  it("none of the twelve is refused for the plan while the gym is on one", { timeout: 120_000 }, async () => {
+  it("none of the fifteen is refused for the plan while the gym is on one", { timeout: 120_000 }, async () => {
     const g = await lapsableGym("live");
     for (const w of consoleWrites(g, g.owner.cookies)) {
       const res = await w.run();
