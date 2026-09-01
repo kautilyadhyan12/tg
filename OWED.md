@@ -7567,11 +7567,24 @@ file and is stated so nobody reads these as lower priority than they are.
       read (staff **OR live member**, so the console and the member's gym card
       share ONE reader and cannot disagree), replace-the-whole-week, close a
       day, un-close a day.
-      **THIS LINE DOES NOT TICK AND MUST NOT BE TICKED YET, for three separate
-      reasons and each is enough on its own:** the **WEB HALF (§4b) IS UNBUILT**,
-      so **no screen shows any of this — no member can see their gym's hours and
-      no owner can set them**; the **browser SMOKE is unrun**; and **T3 is
-      unrun**. It ticks when the web half ships and both gates pass.
+      **THIS LINE DOES NOT TICK AND MUST NOT BE TICKED YET:** the **WEB HALF
+      (§4b) IS UNBUILT**, so **no screen shows any of this — no member can see
+      their gym's hours and no owner can set them** — and the **browser SMOKE is
+      unrun** (there is nothing to click). **T3 ROUND 1 RAN 2026-09-01 and found
+      ZERO Critical/High; its eight Low are all fixed and logged in
+      `BACKLOG.md`.** It ticks when the web half ships and its smoke passes.
+      **⚠️ THE WEB HALF MUST HANDLE A SAVE WHOSE REPLY DOES NOT CONTAIN IT, and
+      it is written here because it is recorded nowhere else** (raised by T3
+      round 1 as a carry-forward, not a defect in the server). **Closing a day
+      answers 200 with the gym's hours — and that object is TODAY-FORWARD and
+      capped at a ONE-YEAR HORIZON, so a closure typed for YESTERDAY or for more
+      than a year ahead is genuinely saved and genuinely absent from the reply.**
+      Both are by design (the write has no date window on purpose: a gym typing
+      last night's closure in at 1am is telling the truth late). **A screen that
+      re-renders straight from the response will look as though the save silently
+      failed**, which is :5807 — a user shown something false — arriving through
+      a correct server. The screen must either say what happened or refuse the
+      out-of-range date before sending.
 - [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:

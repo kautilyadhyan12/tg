@@ -26851,8 +26851,12 @@ code.** Neither was findable by reading.
 test used one gym at `Pacific/Kiritimati` (UTC+14) and asserted that past
 closures are hidden. **O187 — which replaces `(now() AT TIME ZONE g.timezone)`
 with a bare `now()` — SURVIVED it.** Kiritimati's calendar date differs from
-UTC's only while UTC is past 10:00, so for fourteen hours a day the correct
-expression and the broken one agree. The test would have been green on CI at
+UTC's only while UTC is past 10:00, so for the other TEN hours of every day the
+correct expression and the broken one agree. **(The first draft of this
+paragraph, the test header and mutant O187's `why` all had the two numbers
+SWAPPED — they DIFFER for 14 hours and AGREE for 10. Corrected in all four
+places by T3 round 1's Low-4; no conclusion moves, and that is exactly why three
+records could carry it.)** The test would have been green on CI at
 some hours and red at others, which is worse than absent. **THE FIX IS A PAIR
 AT OPPOSITE EXTREMES: UTC+14 and UTC-12 are 26 hours apart, so their two
 calendar dates ALWAYS differ and the server's date can match at most one of
@@ -26939,3 +26943,150 @@ short-circuited because the shell was already there, and `tail` printed a stale
 file from an earlier card listing O168–O181. Caught by reading the summary line,
 which names the ids it actually ran — :13336's lesson, and the reason that line
 prints the id list at all.
+
+## 2026-09-01 — OPENING HOURS, SERVER HALF, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — and FOUR of the eight Lows were one shape, a test whose NAME is wider than its coverage
+
+**Read before writing a date guard that round-trips through `Date`, before
+trusting a predicate that has exactly one caller and one suite, before asserting
+that a migration "invented nothing" by counting live rows, before bounding only
+one end of a member-facing list, and before writing a smoke or a screen against
+`POST /v1/orgs/:gymId/closures`.**
+
+Reviews `cacab50` (:26812). Fresh chat, ran its own suites rather than taking the
+PROVE block. **Eight Low, ALL FIXED IN THIS ROUND and logged in `BACKLOG.md`;
+none bought another round** (:5348 rule 1). Four new mutants, **O194–O197**, one
+per fix that guards behaviour.
+
+### 1 · THE FINDING THAT MATTERS MOST IS THE ONE WITH NO OBSERVER
+
+**Low-2: `isLiveMember`'s `removed_at IS NULL` had ZERO coverage, and ownership
+is the one column rule 4a says is never left unmutated.** The reviewer mutated it
+to `(m.removed_at IS NULL OR true)` and the whole 32-test file stayed GREEN. The
+code was correct; nothing was watching it. **A person the gym REMOVED would have
+gone on reading that gym's timetable for ever, and no test, review or screen
+would have said so.** It had one caller and one suite and was not among the
+original twelve mutants — **which is exactly the profile of a predicate that goes
+unwatched: too obvious to test, too small to notice.** Now a test (join → 200 →
+remove → 404, with the owner as the untouched control) and **O194**.
+
+### 2 · THE SHAPE THAT REPEATED FOUR TIMES
+
+Low-2, Low-3, Low-7 and Low-8 are one defect: **a test whose NAME states a
+guarantee its QUERY does not observe.**
+
+- **Low-3** — *"0017 leaves every existing gym saying nothing about its hours"*
+  counted only `hours_mode = 'scheduled'` with no session rows. **A migration
+  back-filling `open_24h` onto all 112 gyms — telling every member their gym
+  never closes, :26736's falsehood in its loudest form — left it GREEN**, and so
+  did the `column_default` assertion beside it, since a DDL default plus a
+  separate `UPDATE` satisfies both. **The fix reads the shipped `.sql` and
+  asserts no statement BEGINS with `UPDATE`/`INSERT`/`DELETE`** — anchored at the
+  statement start, because "contains the word" matched `ON DELETE cascade` in the
+  two foreign keys and failed on correct DDL, and `ON DELETE cascade` is now the
+  positive control proving the anchor is needed. The live half is restated as the
+  real guarantee: no gym holds a non-`unset` mode without an `org.hours_set`
+  audit row.
+- **Low-7** — *"a non-uuid gym id is a 400 at the boundary"* drove GET and PUT
+  and skipped both closure routes, including the ONE route on a different params
+  schema.
+- **Low-8** — the migration's range assertions checked only the upper halves, so
+  a CHECK loosened at the BOTTOM stayed green. Its own header names that class as
+  its reason for existing.
+
+**STANDING: rule 4's audit is not only "break the code and see if a test goes
+red" — it is also "read what the test's query actually covers against what its
+NAME claims". Four of these in one card, and the card had already passed a
+twelve-mutant sweep.**
+
+### 3 · THE GUARD THAT ROUND-TRIPPED AND STILL LET THE BAD VALUE THROUGH
+
+**Low-1: `0000-01-01` matched `YYYY-MM-DD` AND round-tripped through `Date`
+identically**, so `requireCalendarDate` — a function whose entire purpose is
+turning a well-shaped non-date into a 400 — passed it to Postgres, which answers
+`date/time field value out of range`. **JS has a year 0; the Gregorian calendar
+does not.** Reproduced both ways before fixing: `0000-01-01` errors,
+`0001-01-01` is accepted and is now the positive control. The bound is on the
+parsed YEAR (**O195**). **STANDING: a round-trip proves a string is
+SELF-CONSISTENT, never that the receiving system accepts it — the two ranges are
+different questions and only one of them was being asked.**
+
+### 4 · A COMMENT THAT CLAIMED A BOUND THE QUERY DID NOT HAVE
+
+**Low-5:** the closure reader's own comment said past closures are dropped
+because *"leaving them in would grow a member's card without bound"* — **but it
+trimmed only the PAST.** `day` reaches `9999-12-31`, the close route has no
+per-gym cap, the SQL had no `LIMIT`, and the response schema was an unbounded
+array **on a MEMBER-facing payload**: a gym's own owner could grow every one of
+its members' responses without limit. Now a **one-year horizon plus `LIMIT 400`**,
+mirrored by `.max(400)` in the shared schema — **deliberately above 366 so a gym
+closed every day for a year reads back completely rather than being silently
+truncated**, and the two bounds are driven by a test rather than kept in step by
+a comment (**O196**). The false sentence is struck in place rather than deleted,
+so the next reader sees what it used to claim.
+
+### 5 · THE MODULE STATED A RULE THREE FUNCTIONS AWAY AND BROKE IT
+
+**Low-6: `closeGymDay` wrote `org.day_closed` on EVERY call**, including a
+byte-identical re-close, so an owner double-tapping left two audit rows claiming
+two changes for one state — while `removeGymClosure`, three functions below,
+already refused to log a non-event **and spelled out why** (*"a log that records
+non-events is one nobody can read a real event out of"*). Now audits only a new
+closure or a changed note, with the previous note in the meta so
+"opened → closed" and "somebody corrected the reason" are distinguishable
+(**O197**). **STANDING: a rule a file states in one function is not a rule the
+file keeps.**
+
+### 6 · THE HEADER TAUGHT THE FIXTURE THE SWEEP HAD ALREADY DISPROVED
+
+**Low-4**, and it is :26812 §2(a) failing to finish its own job. The file header
+still described *"a NON-UTC gym … `Pacific/Kiritimati`"* after the fixture had
+become a UTC+14/UTC-12 PAIR — **so a next writer reading the header would copy
+the exact pattern that let O187 survive.** Separately, three records said the two
+dates differ for *"ten hours"*; **they differ for FOURTEEN and agree for ten.**
+No conclusion moves either way — **which is precisely why three copies could
+carry it, and why a figure nobody re-derives is the one that rots.** Corrected in
+the header, the inline comment, O187's `why` and :26812 §2(a).
+
+### 7 · A NUMBER IN MY OWN PROVE BLOCK THAT WAS NOT TRACEABLE TO ITS COMMAND (V1)
+
+:26812's round log says *"GITLEAKS: 52 findings, ALL pre-existing"*. The reviewer
+ran `gitleaks detect --log-opts eb89f8c..cacab50` (no leaks) and a full-history
+`gitleaks detect` (**3 findings, all pre-existing prose false positives in record
+files**) and could not reconcile 52 — correctly declining to call it wrong,
+having not run the command that produced it.
+
+**THE CORRECTION: the 52 came from `gitleaks detect --no-git`, a WORKING-TREE
+scan**, which sweeps untracked files — the ~61 `t3-*` scratch files at the repo
+root and `backend-ml/.venv` (38 of the 52) among them — rather than history. Both
+figures are right about different questions. **The defect is mine and is V1's
+exact subject: a count without its invocation is not a verifiable number**, and
+the next chat comparing 52 against 3 would have thought something regressed. Read
+`:26812`'s gitleaks line as `--no-git` and this one as history.
+
+### Round log
+
+**Every fix carries a mutant or a test that fails without it**; there were no
+Critical/High findings, so :5348 rule 3 is N/A and this is recorded rather than
+claimed. **Escape hatch not triggered** — round 1, no Criticals.
+**PROVE on the final bytes, all LOCAL (`localhost:5433`):** `orgs.hours`
+**37/37** (+5) · `db.migration` **13/13** · both in one invocation **49/49** ·
+`orgs.routes` **147/147** · `orgs.unit` + `orgs.plans` + `orgs.sweep` +
+`orgs.trialSweep` + `orgs.archiveSweep` **82/82** · shared **51/51** · web
+**1385/1385** unchanged · api `tsc` 0 · shared `tsc` 0 · api `lint` 0 · shared
+`lint` 0 · `check-harnesses` **25 scripts parse**.
+**SWEEP, a stated SUBSET of 197: 16 mutants · 16 RED · 0 ALIVE · 0 never ran**,
+restore verified byte-exact after every mutant.
+**O185 HAD TO BE RE-ANCHORED and the pre-check is what caught it:** Low-6's fix
+added a `SELECT note FROM gym_closures` carrying an identical
+`WHERE gym_id = … AND day = …` line, so the one-line anchor matched TWICE. It is
+**not** re-aimed at whichever line comes first (:15770) — the `DELETE` is named
+in the anchor, because that is the statement the row is about.
+**Two of my own fixes were caught by their own tests before this round closed:**
+the `.sql` regex failing on `ON DELETE cascade`, and a `before` identifier
+colliding with the existing one in `closeGymDay`.
+**THE ONE CARRY-FORWARD, and it is on `OWED.md` rather than here:** closing a day
+in the PAST, or more than a year AHEAD, is genuinely saved and genuinely absent
+from the 200 reply (the write has no date window by design; the read is
+today-forward and horizon-capped). **A screen re-rendering from that response
+will look as though the save silently failed** — :5807 arriving through a correct
+server. The web card must say what happened or refuse the date before sending.

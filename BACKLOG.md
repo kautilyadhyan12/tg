@@ -2874,3 +2874,70 @@ builds the fixture's email addresses, so the second registration was a duplicate
 and returned a 400 from a helper 6,000 lines away. **A scoped run is evidence
 about a test's subject, never about that test's fit with its file** — and every
 mutant in this repo runs under exactly such a filter.
+
+## OPENING HOURS, SERVER HALF — T3 ROUND 1 (2026-09-01, DECISIONS :26812)
+
+**ZERO Critical/High — the packet SHIPS.** Eight Low, all fixed in the same
+round, none buying another. **Four of the eight are the same shape and it is
+worth naming: a test whose NAME is wider than its coverage.** That is what the
+severity gate's rule 4 exists to find, and this round found four in one card.
+
+- [x] Year zero (`0000-01-01`) reached Postgres as a 500 — `service.ts`
+      `requireCalendarDate` — found 2026-09-01, opening-hours T3 round 1 (Low-1)
+      — fixed this commit. It matches `YYYY-MM-DD` **and round-trips through
+      `Date` identically**, because JS has a year 0 and the Gregorian calendar
+      does not, so the one input class the guard exists to convert into a 400 was
+      answering 500. Bound is now on the parsed YEAR; `0001-01-01` still works
+      and is the positive control. Mutant **O195**.
+- [x] `isLiveMember`'s `removed_at IS NULL` had NO observer — `repo.ts` — found
+      2026-09-01, T3 round 1 (Low-2, also a rule-4 item) — fixed this commit.
+      The reviewer mutated the predicate and the whole 32-test file stayed green;
+      a removed member would have gone on reading their old gym's timetable for
+      ever with nothing to say so. **Ownership is rule 4a's never-unmutated
+      column**, so this was the worst of the eight. New test (join → read 200 →
+      remove → read 404, owner unaffected) and mutant **O194**.
+- [x] "0017 leaves every existing gym saying nothing" did not observe its own
+      name — `db.migration.test.ts` — found 2026-09-01, T3 round 1 (Low-3, rule-4
+      item) — fixed this commit. It counted only `scheduled`-with-no-rows, so a
+      migration back-filling **`open_24h` onto all 112 gyms — telling every
+      member their gym never closes, :26736's falsehood in its loudest form** —
+      left it green, and the `column_default` assertion beside it did too. Now
+      asserts the shipped `.sql` contains no row-writing statement (anchored at
+      the statement start, with `ON DELETE cascade` as the positive control that
+      the anchor is needed) **plus** that no gym holds a non-`unset` mode without
+      an `org.hours_set` audit row. The hours suite's teardown now resets
+      `hours_mode` first so no window can violate that.
+- [x] The test file's header taught the fixture the sweep had already disproved,
+      and had its hours backwards — `orgs.hours.test.ts`, `mutate-orgs.mjs`,
+      `DECISIONS.md` — found 2026-09-01, T3 round 1 (Low-4) — fixed this commit.
+      The header still described a single `Pacific/Kiritimati` gym after the
+      fixture became a UTC+14/UTC-12 pair, so a next writer would copy the
+      pattern that let O187 survive. Separately, **three records said the two
+      dates differ for "ten hours" when they differ for FOURTEEN and agree for
+      ten** — no conclusion moved, which is exactly why three copies could carry
+      it. Corrected in all four places.
+- [x] The closure list on a member-facing response was unbounded, and the comment
+      said it was not — `repo.ts` + `packages/shared/src/orgs.ts` — found
+      2026-09-01, T3 round 1 (Low-5) — fixed this commit. The reader trimmed only
+      the PAST while `day` reaches `9999-12-31` with no per-gym cap, so a gym's
+      own owner could grow every one of its members' payloads without limit. Now
+      a one-year horizon **and** `LIMIT 400`, mirrored by `.max(400)` on the
+      response schema (deliberately above 366 so a legitimate full year is never
+      silently truncated). Mutant **O196**.
+- [x] `closeGymDay` audited a no-op, three functions after the module states it
+      should not — `repo.ts` — found 2026-09-01, T3 round 1 (Low-6) — fixed this
+      commit. `removeGymClosure` already refuses to log a non-event *"a log that
+      records non-events is one nobody can read a real event out of"*, while this
+      wrote `org.day_closed` on every call, so a double-tap left two rows
+      claiming two changes for one state. Now audits only a new closure or a
+      changed note, and the meta carries the previous note. Mutant **O197**.
+- [x] "a non-uuid gym id is a 400 at the boundary" drove only two of four routes
+      — `orgs.hours.test.ts` — found 2026-09-01, T3 round 1 (Low-7, rule-4 item)
+      — fixed this commit. The two closure routes were absent, and
+      `DELETE /closures/:day` is the **only** route on a different params schema,
+      so it is the one most likely to drift.
+- [x] The migration's range assertions checked only the upper halves —
+      `db.migration.test.ts` — found 2026-09-01, T3 round 1 (Low-8, rule-4 item)
+      — fixed this commit. A CHECK loosened at the BOTTOM stayed green, which is
+      the class the test's own header names as its reason for existing. Both
+      bounds are now asserted on both minute columns.

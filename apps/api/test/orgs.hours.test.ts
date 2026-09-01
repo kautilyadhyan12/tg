@@ -20,13 +20,17 @@
 //      rows are GONE as well as that the week is empty — one without the other
 //      would pass with either half broken.
 //
-//   3. **PAST CLOSURES ARE HIDDEN IN THE GYM'S OWN ZONE, and the fixture drives
-//      a NON-UTC gym on purpose.** `(now() AT TIME ZONE g.timezone)::date` and
-//      `now()::date` agree for most of any UTC day, so a UTC fixture cannot tell
-//      a correct filter from one that forgot the zone (trap #8). The gym here is
-//      `Pacific/Kiritimati` (UTC+14) — the largest offset there is — so its
-//      "today" is genuinely a different date from the server's for ten hours of
-//      every day.
+//   3. **PAST CLOSURES ARE HIDDEN IN THE GYM'S OWN ZONE, AND THE FIXTURE IS A
+//      PAIR AT OPPOSITE EXTREMES — one non-UTC gym is NOT enough, which the
+//      mutation sweep proved rather than anybody spotting it.** The first
+//      version used a single gym at `Pacific/Kiritimati` (UTC+14) and the
+//      zone-deleting mutant SURVIVED it: Kiritimati's calendar date differs from
+//      UTC's only while UTC is past 10:00, so for the other ten hours of every
+//      day `(now() AT TIME ZONE g.timezone)::date` and a bare `now()::date`
+//      agree and the test proves nothing — green on CI at some hours, red at
+//      others. The fixture is now UTC+14 **and** UTC-12: 26 hours apart, so
+//      their two calendar dates ALWAYS differ and the server's can match at most
+//      one of them, at every instant, on any machine (:26812 §2(a), trap #8).
 //
 //   4. **TOUCHING IS LEGAL AND OVERLAP IS NOT.** 10:00–12:00 beside 12:00–14:00
 //      is a real timetable; 10:00–12:00 beside 11:00–13:00 has no single answer
@@ -113,6 +117,15 @@ d("gym opening hours (real Postgres)", () => {
     // (:10726 Low-2). `gym_hours` and `gym_closures` DO cascade off `gyms` and
     // are deleted anyway — a cleanup that relies on a cascade is a cleanup that
     // silently stops working the day somebody changes the FK.
+    // **`hours_mode` IS RESET BEFORE ANYTHING IS DELETED, and that ordering is
+    // load-bearing for a SIBLING suite.** `db.migration.test.ts` asserts that no
+    // gym holds a non-`unset` mode without an `org.hours_set` audit row — the
+    // "0017 invented nothing" guarantee (T3 round 1's Low-3). Deleting this
+    // suite's audit rows while its gyms still carried a mode would open a window
+    // in which that assertion is false through no fault of the migration, and
+    // the two suites share one database (:23128's shape). Resetting first means
+    // the invariant holds at every instant of the teardown.
+    await sql`UPDATE gyms SET hours_mode = 'unset' WHERE id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_hours WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_closures WHERE gym_id IN (${mine})`;
@@ -784,9 +797,11 @@ d("gym opening hours (real Postgres)", () => {
       // A single UTC+14 gym was the first version of this test and it PASSED
       // WITH THE ZONE DELETED — caught by the mutation sweep, not by reading it.
       // Kiritimati's calendar date differs from UTC's only while UTC is past
-      // 10:00, so for fourteen hours a day `(now() AT TIME ZONE g.timezone)` and
-      // a bare `now()` agree and the test proves nothing. It would have gone red
-      // on CI at some hours and green at others — worse than no test.
+      // 10:00, so for the other TEN hours of every day `(now() AT TIME ZONE
+      // g.timezone)` and a bare `now()` agree and the test proves nothing. It
+      // would have gone green on CI at those hours and red at the rest — worse
+      // than no test. (Corrected direction: they DIFFER for 14 hours and AGREE
+      // for 10; the first write-up had the two numbers swapped — T3 Low-4.)
       //
       // UTC+14 and UTC-12 are 26 hours apart, so THEIR two calendar dates ALWAYS
       // differ, at every instant. The server's date can therefore match at most
@@ -886,6 +901,40 @@ d("gym opening hours (real Postgres)", () => {
       expect(hours.week).toEqual([
         { weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 1320 }] },
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A REMOVED MEMBER LOSES THE READ — T3 round 1's Low-2, and it is the
+   *  ownership column, so it is the one class that must never go unwatched.
+   *
+   *  `isLiveMember`'s `removed_at IS NULL` had NO observer: the reviewer mutated
+   *  it to `(m.removed_at IS NULL OR true)` and this file stayed 32/32 green. The
+   *  code was right; the guard was missing. Without one, a person the gym removed
+   *  goes on reading that gym's timetable for ever, and nothing would say so. */
+  it(
+    "a member REMOVED from the gym stops being able to read its hours",
+    async () => {
+      const owner = await makeUser("removed-owner");
+      const member = await makeUser("removed-member");
+      const org = await makeOrg(owner.cookies, "Hours Removed Member Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // The positive control FIRST, so "404 afterwards" is a statement about the
+      // removal and not about a member who never had access.
+      expect((await get(`/v1/orgs/${org.org.id}/hours`, member.cookies)).statusCode).toBe(200);
+
+      const removed = await del(
+        `/v1/orgs/${org.org.id}/members/${member.userId}`,
+        owner.cookies,
+      );
+      expect(removed.statusCode).toBe(200);
+
+      // 404, not 403: they are not staff either, so they get exactly what a
+      // stranger gets and learn nothing about the gym.
+      expect((await get(`/v1/orgs/${org.org.id}/hours`, member.cookies)).statusCode).toBe(404);
+      // The owner is unaffected — the removal scoped to one person.
+      expect((await get(`/v1/orgs/${org.org.id}/hours`, owner.cookies)).statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );
@@ -1073,13 +1122,118 @@ d("gym opening hours (real Postgres)", () => {
   );
 
   it(
-    "a non-uuid gym id is a 400 at the boundary, not a 500 from Postgres",
+    "a non-uuid gym id is a 400 at the boundary on ALL FOUR routes, not a 500 from Postgres",
     async () => {
       const owner = await makeUser("baduuid");
+      // ALL FOUR, and the two closure routes are the point — T3 round 1's Low-7.
+      // `DELETE /closures/:day` is the only route on a DIFFERENT params schema
+      // (`closureParamsSchema`), so it is the one most likely to drift, and it
+      // was the one this test's name covered and its body did not.
       expect((await get("/v1/orgs/not-a-uuid/hours", owner.cookies)).statusCode).toBe(400);
       expect(
         (await put("/v1/orgs/not-a-uuid/hours", { mode: "open_24h" }, owner.cookies)).statusCode,
       ).toBe(400);
+      expect(
+        (await post("/v1/orgs/not-a-uuid/closures", { day: futureDay(70) }, owner.cookies))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await del(`/v1/orgs/not-a-uuid/closures/${futureDay(70)}`, owner.cookies)).statusCode,
+      ).toBe(400);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** YEAR ZERO — T3 round 1's Low-1, and it is `requireCalendarDate`'s own
+   *  failure mode rather than a curiosity. `0000-01-01` matches `YYYY-MM-DD` AND
+   *  round-trips through `Date` identically (JS has a year 0; the Gregorian
+   *  calendar does not), so the guard passed it to Postgres, which answers
+   *  `date/time field value out of range` — a 500 for the exact input class this
+   *  function exists to turn into a 400. */
+  it(
+    "refuses year zero, which is well-shaped, round-trips, and is not a date",
+    async () => {
+      const owner = await makeUser("year-zero");
+      const org = await makeOrg(owner.cookies, "Hours Year Zero Gym");
+
+      expect(
+        (await post(`/v1/orgs/${org.org.id}/closures`, { day: "0000-01-01" }, owner.cookies))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await del(`/v1/orgs/${org.org.id}/closures/0000-01-01`, owner.cookies)).statusCode,
+      ).toBe(400);
+
+      // THE POSITIVE CONTROL IS THE YEAR NEXT DOOR, deliberately: `0001-01-01`
+      // IS a date Postgres accepts, so a fix that simply refused old years would
+      // fail here rather than looking correct.
+      expect(
+        (await post(`/v1/orgs/${org.org.id}/closures`, { day: "0001-01-01" }, owner.cookies))
+          .statusCode,
+      ).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE CLOSURE LIST IS BOUNDED AT BOTH ENDS — T3 round 1's Low-5, which found
+   *  the reader's own comment claiming a bound it did not have. Trimming only the
+   *  past bounds nothing when `day` reaches `9999-12-31`. */
+  it(
+    "does not carry a closure past the one-year horizon onto a member's card",
+    async () => {
+      const owner = await makeUser("horizon-owner");
+      const org = await makeOrg(owner.cookies, "Hours Horizon Gym");
+
+      const near = await gymDay(org.org.id, 300);
+      const far = await gymDay(org.org.id, 400);
+      for (const day of [near, far]) {
+        expect(
+          (await post(`/v1/orgs/${org.org.id}/closures`, { day }, owner.cookies)).statusCode,
+        ).toBe(200);
+      }
+
+      const hours = await readHours(org.org.id, owner.cookies);
+      expect(hours.closures.map((c) => c.day)).toEqual([near]);
+
+      // BOTH ROWS ARE STILL THERE: the horizon is a READ bound, not a refusal.
+      // A gym may type a closure years ahead; it simply does not ride on every
+      // member's payload until it is within a year.
+      const rows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_closures WHERE gym_id = ${org.org.id}`;
+      expect(rows[0]?.n).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** RE-CLOSING A DAY WITH THE SAME NOTE IS NOT AN EVENT — T3 round 1's Low-6.
+   *  `removeGymClosure` already refused to log a non-event and said why;
+   *  `closeGymDay` was writing `org.day_closed` on every call, so a double-tap
+   *  left two rows claiming two changes for one state. */
+  it(
+    "audits a closure once, not once per tap — and audits a CHANGED note again",
+    async () => {
+      const owner = await makeUser("audit-noop");
+      const org = await makeOrg(owner.cookies, "Hours Audit NoOp Gym");
+      const day = futureDay(80);
+
+      const auditCount = async () => {
+        const rows = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM audit_log
+          WHERE gym_id = ${org.org.id} AND action = 'org.day_closed'`;
+        return rows[0]?.n ?? -1;
+      };
+
+      await post(`/v1/orgs/${org.org.id}/closures`, { day, note: "Holi" }, owner.cookies);
+      expect(await auditCount()).toBe(1);
+
+      // The same request again — the state does not move, so the log does not.
+      await post(`/v1/orgs/${org.org.id}/closures`, { day, note: "Holi" }, owner.cookies);
+      expect(await auditCount()).toBe(1);
+
+      // A CHANGED reason IS an event, and the control is what stops the fix
+      // above being satisfied by a function that logs nothing at all.
+      await post(`/v1/orgs/${org.org.id}/closures`, { day, note: "Staff training" }, owner.cookies);
+      expect(await auditCount()).toBe(2);
     },
     TEST_TIMEOUT_MS,
   );

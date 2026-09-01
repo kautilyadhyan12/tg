@@ -819,9 +819,16 @@ d("0001_init on a real database", () => {
       "gyms_hours_mode_check",
     ]);
 
+    // BOTH BOUNDS ON EVERY RANGE — T3 round 1's Low-8. The first version
+    // asserted only the upper halves, so a CHECK loosened at the BOTTOM
+    // (`opens_minute >= -600`, an hour before yesterday) stayed green here,
+    // which is the exact class this test's own header names as its reason for
+    // existing.
     expect(byName.get("gym_hours_weekday_check")).toContain("weekday >= 1");
     expect(byName.get("gym_hours_weekday_check")).toContain("weekday <= 7");
+    expect(byName.get("gym_hours_opens_check")).toContain("opens_minute >= 0");
     expect(byName.get("gym_hours_opens_check")).toContain("opens_minute <= 1439");
+    expect(byName.get("gym_hours_closes_check")).toContain("closes_minute >= 1");
     expect(byName.get("gym_hours_closes_check")).toContain("closes_minute <= 1440");
     // The strict `>` is what makes a zero-length session impossible; `>=` would
     // admit one and nothing else in the suite would notice.
@@ -849,14 +856,64 @@ d("0001_init on a real database", () => {
     expect(def[0]?.column_default).toContain("'unset'");
     expect(def[0]?.is_nullable).toBe("NO");
 
-    // No gym anywhere has been given hours by anything but a person using the
-    // product. Scoped to gyms with NO sessions so a suite that legitimately set
-    // some cannot turn this red (a whole-table count would be :23128's shape).
+    /** **THE MIGRATION FILE ITSELF CONTAINS NO WRITE, and this is the assertion
+     *  that actually carries the guarantee — T3 round 1's Low-3.**
+     *
+     *  The live-data check below used to be the whole test, and it observed only
+     *  `scheduled`-with-no-rows. **A migration that back-filled `open_24h` onto
+     *  all 112 gyms — telling every member their gym never closes, which is
+     *  :26736's falsehood in its loudest form — left it GREEN**, and so did the
+     *  `column_default` assertion above, since a DDL default of `'unset'` plus a
+     *  separate `UPDATE` satisfies both. The test's name claimed the guarantee;
+     *  its query checked a corner of it.
+     *
+     *  Reading the shipped artefact is the same standard `pg_get_constraintdef`
+     *  holds above, and unlike a live count it cannot be weakened by whatever
+     *  else is in a shared database. */
+    const sqlText = await readFile(
+      new URL("../drizzle/0017_gym_hours.sql", import.meta.url),
+      "utf8",
+    );
+    const statements = sqlText
+      .split("--> statement-breakpoint")
+      .map((chunk) =>
+        chunk
+          .split("\n")
+          .filter((line) => !line.trimStart().startsWith("--"))
+          .join("\n")
+          .trim(),
+      )
+      .filter((chunk) => chunk.length > 0);
+    expect(statements.length).toBeGreaterThan(0); // the split still yields something
+    for (const statement of statements) {
+      // ANCHORED AT THE START OF THE STATEMENT, not "contains the word". The
+      // first version matched `ON DELETE cascade` inside the two foreign-key
+      // ALTERs and failed on correct DDL — a guard that cries wolf gets deleted
+      // by the next person, which is worse than not having it. A row-writing
+      // statement BEGINS with its verb.
+      expect(statement, "0017 must not write a row").not.toMatch(/^\s*(UPDATE|INSERT|DELETE)\b/i);
+    }
+    // The positive control for the anchor above: this migration DOES contain
+    // `ON DELETE cascade`, so a naive "contains the word" check would be
+    // satisfied by the wrong thing, and a future edit that loosened the regex
+    // back would go unnoticed without this line.
+    expect(sqlText).toMatch(/ON DELETE cascade/i);
+
+    // AND THE LIVE HALF, now stated as the guarantee rather than a corner of it:
+    // no gym holds a mode it was not given BY A PERSON — every real change goes
+    // through `setGymHours`, which writes `org.hours_set` in the same
+    // transaction. Scoped this way rather than as a whole-table count so a
+    // sibling suite's own gyms cannot turn it red (:23128's shape); the hours
+    // suite resets `hours_mode` before it deletes anything, so no teardown
+    // window can violate it either.
     const invented = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n
       FROM gyms g
-      WHERE g.hours_mode = 'scheduled'
-        AND NOT EXISTS (SELECT 1 FROM gym_hours h WHERE h.gym_id = g.id)`;
+      WHERE g.hours_mode <> 'unset'
+        AND NOT EXISTS (
+          SELECT 1 FROM audit_log a
+          WHERE a.gym_id = g.id AND a.action = 'org.hours_set'
+        )`;
     expect(invented[0]?.n).toBe(0);
   });
 });

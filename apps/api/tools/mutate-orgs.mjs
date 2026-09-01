@@ -2303,8 +2303,14 @@ const MUTANTS = [
     suite: HOURS_SUITE,
     why: "OWNERSHIP + DATA LOSS: un-closing a day stops being scoped to one gym, so one owner tapping undo on their own holiday re-opens that same date for every gym in the product. The `day` clause survives, so it is a QUIET cross-tenant delete rather than a table wipe — the shape a stray tenancy predicate actually takes",
     expect: 'leaves the same day closed in another',
-    from: '      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date',
-    to: '      WHERE day = ${input.day}::date',
+    // RE-ANCHORED IN THE T3 FIX ROUND, and the reason is the recorded one
+    // (:15770): Low-6's fix added a `SELECT note FROM gym_closures` carrying the
+    // IDENTICAL `WHERE gym_id = … AND day = …` line, so the one-line anchor
+    // matched TWICE and the pre-check aborted. It is NOT re-aimed at whichever
+    // line comes first — the DELETE is named, which is the statement this row is
+    // about.
+    from: '      DELETE FROM gym_closures\n      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date',
+    to: '      DELETE FROM gym_closures\n      WHERE day = ${input.day}::date',
   },
   {
     id: 'O186',
@@ -2319,7 +2325,7 @@ const MUTANTS = [
     id: 'O187',
     target: 'repo',
     suite: HOURS_SUITE,
-    why: "A USER IS SHOWN SOMETHING FALSE (:5807), and it is trap #8 exactly: the closure list is filtered against the SERVER's date instead of the gym's own. A gym on the other side of the date line loses today's closure from its members' cards for ten hours of every day — or keeps yesterday's up — while every UTC gym looks perfect, which is why the fixture behind this runs at UTC+14",
+    why: "A USER IS SHOWN SOMETHING FALSE (:5807), and it is trap #8 exactly: the closure list is filtered against the SERVER's date instead of the gym's own. A gym on the other side of the date line loses today's closure from its members' cards — or keeps yesterday's up — while every UTC gym looks perfect. THIS MUTANT SURVIVED ITS FIRST RUN against a single UTC+14 fixture, because Kiritimati and UTC share a calendar date for ten hours of every day and differ for fourteen; the fixture behind it is now a UTC+14 AND UTC-12 PAIR, 26 hours apart, whose dates can never both equal the server's",
     expect: "measured in the GYM's zone",
     from: '      AND c.day >= (now() AT TIME ZONE g.timezone)::date',
     to: '      AND c.day >= now()::date',
@@ -2392,6 +2398,48 @@ const MUTANTS = [
     expect: 'well-shaped and does not exist',
     from: '    day: requireCalendarDate(req.day),',
     to: '    day: req.day,',
+  },
+
+  // -------------------------------------------------------------------------
+  // T3 ROUND 1's FIX ROUND. Every row below guards something the review found
+  // UNGUARDED — four of its eight Lows were "a test whose name is wider than its
+  // coverage", and a fix without a mutant is the same defect one round later.
+  // -------------------------------------------------------------------------
+  {
+    id: 'O194',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "OWNERSHIP, AND IT HAD NO OBSERVER AT ALL UNTIL T3 ROUND 1 (Low-2): the live-membership predicate goes, so a person the gym REMOVED goes on reading that gym's timetable for ever. The reviewer mutated this exact line and the whole 32-test file stayed green — the code was right and nothing was watching it, which in rule 4a's ownership column is the one place that is never acceptable",
+    expect: 'REMOVED from the gym stops being able to read',
+    from: '      AND m.removed_at IS NULL\n      AND u.status =',
+    to: '      AND (m.removed_at IS NULL OR true)\n      AND u.status =',
+  },
+  {
+    id: 'O195',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "A 500 A CLIENT CANNOT ACT ON, through the hole the calendar guard did not cover (T3 round 1, Low-1): year zero matches `YYYY-MM-DD` and round-trips through `Date` identically — JS has a year 0, the Gregorian calendar does not — so `0000-01-01` reached Postgres, which answers `date/time field value out of range`. This is the bound that closed it, and `0001-01-01` must keep working",
+    expect: 'refuses year zero',
+    from: '  if (parsed.getUTCFullYear() < 1) {',
+    to: '  if (parsed.getUTCFullYear() < 0) {',
+  },
+  {
+    id: 'O196',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "AN UNBOUNDED MEMBER-FACING PAYLOAD (T3 round 1, Low-5): the far horizon goes, and since `day` reaches 9999-12-31 with no per-gym cap on the close route, a gym's own owner can grow every one of its members' responses without limit. The reader's comment claimed this bound existed while only the PAST was trimmed",
+    expect: 'past the one-year horizon',
+    from: '      AND c.day < ((now() AT TIME ZONE g.timezone)::date + ${CLOSURE_HORIZON_DAYS}::int)\n',
+    to: '\n',
+  },
+  {
+    id: 'O197',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "A LOG THAT RECORDS NON-EVENTS (T3 round 1, Low-6): the no-op guard goes and `closeGymDay` audits every call again, so an owner double-tapping `Closed today` leaves two rows claiming two changes for one state. `removeGymClosure` three functions below already refuses to do this and says why — the module stated the rule and this function broke it",
+    expect: 'audits a closure once, not once per tap',
+    from: '    if (existing === undefined || existing.note !== input.note) {',
+    to: '    if (input.day !== "") {',
   },
 ];
 

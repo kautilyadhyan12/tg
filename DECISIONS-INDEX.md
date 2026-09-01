@@ -4,8 +4,8 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **934 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **939 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
@@ -14,11 +14,12 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 1,989 lines, MEASURED 2026-09-01 and not estimated**
-(934 + 997 + 58). **§1 AND §2 DID NOT MOVE**: that day's card record went to
-§1B, where :24813 sends every card record, so the only growth is the five
-trigger phrases its `Read before …` sentence produced — which is the split
-working exactly as ruled.
+**ALWAYS-READ TOTAL: 1,994 lines, MEASURED 2026-09-01 (second measurement that
+day) and not estimated** (939 + 997 + 58). **§1 AND §2 HAVE NOT MOVED ALL DAY**:
+both of that day's records — the card and its T3 round — went to §1B, where
+:24813 sends every card record, so the whole growth is the ten trigger phrases
+their two `Read before …` sentences produced. **That is the split working exactly
+as ruled: two full entries added, and the always-read cost is ten lines.**
 **RE-MEASURED ON COMMITS THAT ONLY APPENDED, WHICH IS THE POINT: +66 lines in
 two days, then +13 more in one afternoon, with no restructure anywhere near
 it.** The trigger below says to re-measure "whenever this file is restructured" —
@@ -1117,6 +1118,35 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:26947** — 2026-09-01 — **OPENING HOURS, SERVER HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS — and FOUR of the eight Lows were one shape, a
+  test whose NAME is wider than its coverage.** **Read before writing a date
+  guard that round-trips through `Date`, before trusting a predicate that has
+  exactly one caller and one suite, before asserting that a migration "invented
+  nothing" by counting live rows, before bounding only one end of a
+  member-facing list, and before writing a smoke or a screen against
+  `POST /v1/orgs/:gymId/closures`.** Reviews `cacab50` (:26812). **All eight Low
+  FIXED in the round and logged in `BACKLOG.md`; none bought another round.**
+  Four new mutants O194–O197, one per fix that guards behaviour.
+  **THE WORST WAS THE ONE WITH NO OBSERVER: `isLiveMember`'s `removed_at IS
+  NULL` had ZERO coverage** — the reviewer mutated it and the whole 32-test file
+  stayed green, so a REMOVED member would have gone on reading their old gym's
+  timetable for ever. One caller, one suite, not in the original twelve mutants —
+  the profile of a predicate that goes unwatched. **`0000-01-01` matched the
+  pattern AND round-tripped through `Date`, so the date guard handed Postgres a
+  500** (JS has a year 0; the calendar does not) — standing: **a round-trip proves
+  a string is self-consistent, never that the receiving system accepts it.** **A
+  comment claimed the closure list was bounded while only the PAST was trimmed**,
+  on a member-facing payload with no cap — now a one-year horizon plus LIMIT 400,
+  mirrored in the shared schema. **`closeGymDay` audited no-ops three functions
+  after the module states it must not** — a rule a file states in one function is
+  not a rule the file keeps. **And the test header still taught the single-gym
+  timezone fixture the sweep had already disproved**, with "ten hours" where the
+  truth is fourteen, in three records at once.
+  **ALSO A CORRECTION TO :26812 (V1): its "GITLEAKS: 52 findings" came from
+  `--no-git`, a WORKING-TREE scan sweeping untracked files; a history scan gives
+  3.** Both are right about different questions, and a count without its
+  invocation is not a verifiable number.
 - **:26812** — 2026-09-01 — **THE OPENING-HOURS SERVER HALF IS BUILT: a gym can
   say when it is open, "hours not set" is its own state, and the mutation sweep
   found TWO of my own tests proving less than they claimed.** **Read before

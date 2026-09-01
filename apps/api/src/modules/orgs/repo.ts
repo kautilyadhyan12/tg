@@ -3350,6 +3350,17 @@ export interface GymClosureRow {
   note: string | null;
 }
 
+/** HOW FAR AHEAD A CLOSURE IS SHOWN, and how many can come back at once.
+ *
+ *  366 covers a leap year, so a gym that has closed every day for the next year
+ *  reads back completely; `CLOSURE_READ_LIMIT` sits above it deliberately, so
+ *  the horizon is what bounds the answer and the LIMIT is a backstop that can
+ *  never silently truncate a legitimate year. Both are mirrored by
+ *  `gymHoursSchema`'s `.max()` in `@app/shared`, and the pair is driven by a
+ *  test — two bounds that could drift apart are one bound plus a comment. */
+const CLOSURE_HORIZON_DAYS = 366;
+export const CLOSURE_READ_LIMIT = 400;
+
 export interface GymHoursRow {
   mode: GymHoursMode;
   timezone: string;
@@ -3366,8 +3377,12 @@ export interface GymHoursRow {
  *  ZONE g.timezone)::date` is the gym's own calendar date — the same instrument
  *  the nightly rollup will need, and the reason a US gym and an Assam gym are
  *  both right in one run (trap #8, :26469 §5). A closure that has passed is a
- *  fact about history that no screen asks for, and leaving them in would grow a
- *  member's card without bound.
+ *  fact about history that no screen asks for.
+ *
+ *  **~~and leaving them in would grow a member's card without bound~~ — THE
+ *  SENTENCE WAS FALSE AND T3 ROUND 1 (Low-5) CAUGHT IT.** Trimming the PAST
+ *  bounds nothing: the far end was open to `9999-12-31`. The bound is now real
+ *  and is at the query, below.
  *
  *  **`day` COMES BACK AS A STRING, NOT A `Date`, and that is the trap-#8 fix
  *  rather than a style choice.** `postgres` maps a `date` column to a JS Date at
@@ -3389,13 +3404,26 @@ export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHours
     WHERE gym_id = ${gymId}
     ORDER BY weekday, opens_minute`;
 
+  /** TODAY-FORWARD **AND BOUNDED AT BOTH ENDS** — the far end added by T3 round
+   *  1's Low-5, which found the comment below claiming a bound the query did not
+   *  have.
+   *
+   *  Trimming only the PAST bounds nothing: `day` accepts up to `9999-12-31`,
+   *  the close route has no per-gym cap, and this array is on a MEMBER-facing
+   *  response — so a gym's own owner could grow every one of its members'
+   *  payloads without limit. A horizon of one year is what a screen can draw and
+   *  is past any closure a gym plausibly types today; `LIMIT` is the second
+   *  bound, deliberately above 366 so a gym closed every day for a year still
+   *  reads back completely rather than being silently truncated. */
   const closures = await sql<{ day: string; note: string | null }[]>`
     SELECT c.day::text AS day, c.note
     FROM gym_closures c
     JOIN gyms g ON g.id = c.gym_id
     WHERE c.gym_id = ${gymId}
       AND c.day >= (now() AT TIME ZONE g.timezone)::date
-    ORDER BY c.day`;
+      AND c.day < ((now() AT TIME ZONE g.timezone)::date + ${CLOSURE_HORIZON_DAYS}::int)
+    ORDER BY c.day
+    LIMIT ${CLOSURE_READ_LIMIT}`;
 
   return {
     mode: gymHoursModeSchema.parse(gym.hours_mode),
@@ -3518,20 +3546,50 @@ export async function closeGymDay(
     const before = await getOrgById(tx, input.gymId);
     if (before === null) return { kind: "not_found" };
 
+    /** WHAT THIS DAY SAID BEFORE, read under the lock already held — T3 round 1
+     *  Low-6.
+     *
+     *  **A RE-CLOSE THAT CHANGES NOTHING MUST NOT WRITE AN AUDIT ROW.**
+     *  `removeGymClosure` three functions below already refuses to log a
+     *  non-event, with the reason spelled out — *"a log that records non-events
+     *  is one nobody can read a real event out of"* — and this function was
+     *  writing `org.day_closed` on every call, so an owner double-tapping left
+     *  two rows claiming two changes for one state. That is :19366's own
+     *  no-op rule, which this module states and this function was breaking.
+     *
+     *  A read-then-write is safe here and nowhere near a check-then-act: the gym
+     *  row is locked above, and the write below is an upsert whose correctness
+     *  does not depend on this read — only the AUDIT decision does. */
+    const previous = await tx<{ note: string | null }[]>`
+      SELECT note FROM gym_closures
+      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date`;
+    const existing = previous[0];
+
     await tx`
       INSERT INTO gym_closures (gym_id, day, note, created_by_user_id)
       VALUES (${input.gymId}, ${input.day}::date, ${input.note}, ${input.actorUserId})
       ON CONFLICT (gym_id, day) DO UPDATE
         SET note = EXCLUDED.note, created_by_user_id = EXCLUDED.created_by_user_id`;
 
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.day_closed",
-      targetType: "gym",
-      targetId: input.gymId,
-      meta: { day: input.day, note: input.note },
-    });
+    // Newly closed, or the reason changed. Re-closing an already-closed day with
+    // the same note is the caller confirming a state, not changing one.
+    if (existing === undefined || existing.note !== input.note) {
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.day_closed",
+        targetType: "gym",
+        targetId: input.gymId,
+        // The previous note distinguishes "this day was open and is now closed"
+        // from "somebody corrected the reason", which is the question a person
+        // reading this row weeks later is actually asking.
+        meta: {
+          day: input.day,
+          before: existing === undefined ? null : existing.note,
+          note: input.note,
+        },
+      });
+    }
 
     const hours = await getGymHours(tx, input.gymId);
     if (hours === null) throw new Error("gym vanished inside its own transaction");

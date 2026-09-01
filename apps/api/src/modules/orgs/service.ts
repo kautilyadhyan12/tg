@@ -1924,10 +1924,26 @@ async function requireGymAudience(deps: OrgsDeps, gymId: string, userId: string)
  *
  *  Deliberately NOT a locale or timezone question — the string is interpreted at
  *  UTC purely to normalise it, and the DAY it names is the gym's own (trap #8).
- *  Nothing here decides what "today" is. */
+ *  Nothing here decides what "today" is.
+ *
+ *  **YEAR ZERO IS THE HOLE T3 ROUND 1 FOUND (Low-1), and it is this function's
+ *  own failure mode rather than an edge case somewhere else.** `0000-01-01`
+ *  matches the pattern AND round-trips through `Date` identically — JS has a year
+ *  0, the Gregorian calendar does not, and Postgres refuses the cast with
+ *  `date/time field value out of range`. So the one input class this guard exists
+ *  to convert into a 400 was answering 500. Verified both ways before the fix:
+ *  `0000-01-01` errors in Postgres, `0001-01-01` is accepted. The bound is
+ *  therefore on the YEAR and not on the string. */
 function requireCalendarDate(day: string): string {
   const parsed = new Date(`${day}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) {
+    throw new OrgsError(400, "invalid_date", "That date doesn't exist.");
+  }
+  // `getUTCFullYear()` and not a substring: the round-trip above has already
+  // proven the string is what `Date` parsed, so the parsed value is the honest
+  // thing to bound — and a substring comparison would need its own opinion about
+  // leading zeros.
+  if (parsed.getUTCFullYear() < 1) {
     throw new OrgsError(400, "invalid_date", "That date doesn't exist.");
   }
   return day;

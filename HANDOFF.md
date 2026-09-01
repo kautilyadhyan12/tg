@@ -1,6 +1,79 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: OPENING HOURS, SERVER HALF — T3 ROUND 1 FIX ROUND. DECISIONS :26947,
+      reviewing `cacab50` (:26812). **ZERO Critical/High, THE PACKET SHIPS.**
+      Eight Low, ALL FIXED in this round and logged in `BACKLOG.md`; none
+      bought another round (:5348 rule 1).
+
+  1. **NEXT CARD IS STILL THE WEB HALF (§4b).** Nothing this card built is
+     reachable — no screen shows opening hours. The `OWED.md` line does NOT
+     tick; it now records the T3 pass and the ONE carry-forward below.
+  2. **CARRY-FORWARD FOR THE WEB CARD, and it is on `OWED.md` because it is
+     recorded nowhere else:** closing a day in the PAST, or more than a YEAR
+     ahead, is genuinely SAVED and genuinely ABSENT from the 200 reply — the
+     write has no date window by design, the read is today-forward and now
+     horizon-capped. **A screen re-rendering from that response will look as
+     though the save silently failed** (:5807 through a correct server). Say
+     what happened, or refuse the date before sending.
+  3. **THE WORST FINDING WAS THE ONE WITH NO OBSERVER (Low-2).**
+     `isLiveMember`'s `removed_at IS NULL` had ZERO coverage — the reviewer
+     mutated it and the whole 32-test file stayed GREEN, so a REMOVED member
+     would have read their old gym's timetable for ever. One caller, one suite,
+     not among the original twelve mutants. **That is the profile of a predicate
+     that goes unwatched: too obvious to test, too small to notice.** Now a test
+     and **O194**.
+  4. **FOUR OF THE EIGHT WERE ONE SHAPE: a test whose NAME is wider than its
+     query** (Low-2, Low-3, Low-7, Low-8) — and the card had already passed a
+     twelve-mutant sweep. **Rule 4's audit is also "read what the query covers
+     against what the name claims", not only "break it and watch it go red".**
+  5. **`0000-01-01` MATCHED THE PATTERN AND ROUND-TRIPPED THROUGH `Date`**, so
+     the date guard handed Postgres a 500 (JS has a year 0; the Gregorian
+     calendar does not). **A round-trip proves a string is SELF-CONSISTENT,
+     never that the receiving system accepts it.** Mutant **O195**;
+     `0001-01-01` is the positive control.
+  6. **A CORRECTION TO :26812 (V1), raised by the reviewer:** its
+     *"GITLEAKS: 52 findings"* came from `--no-git`, a WORKING-TREE scan that
+     sweeps untracked files (`backend-ml/.venv` is 38 of the 52, the ~61 `t3-*`
+     scratch files more). A HISTORY scan gives **3**, all pre-existing prose
+     false positives. Both right about different questions; **a count without
+     its invocation is not a verifiable number.**
+  7. **O185 HAD TO BE RE-ANCHORED and the pre-check caught it, not care:**
+     Low-6's fix added a second identical `WHERE gym_id = … AND day = …` line,
+     so the one-line anchor matched TWICE. It names the `DELETE` now — NOT
+     re-aimed at whichever line comes first (:15770).
+
+PROVE: **Final bytes, all LOCAL (`localhost:5433`).** `orgs.hours` **37/37**
+       (+5) · `db.migration` **13/13** · both in one invocation **49/49** ·
+       `orgs.routes` **147/147** · `orgs.unit` + `orgs.plans` + `orgs.sweep` +
+       `orgs.trialSweep` + `orgs.archiveSweep` **82/82** · shared **51/51** ·
+       web **1385/1385** unchanged · api `tsc` 0 · shared `tsc` 0 · api `lint`
+       0 · shared `lint` 0 · `check-harnesses` **25 scripts parse**.
+       **SWEEP, a stated SUBSET of 197: 16 mutants · 16 RED · 0 ALIVE · 0 never
+       ran**, restore byte-exact after every mutant.
+       Guards: `build-decisions-triggers` **760 triggers from 208 of 346
+       rulings, 138 declare none, 0 unparsed** · `check-decisions-index`
+       **251 pointers resolve (250 on a heading, 1 deliberate mid-entry), 978
+       headings**. Always-read RE-MEASURED: triggers **939** + §1 **997** +
+       §2 **58** = **1,994** — **§1 and §2 have not moved all day**; both of
+       today's records went to §1B, so two full entries cost ten always-read
+       lines.
+
+FILES: `apps/api/src/modules/orgs/{repo,service}.ts` ·
+       `packages/shared/src/orgs.ts` ·
+       `apps/api/test/{orgs.hours,db.migration}.test.ts` ·
+       `apps/api/tools/mutate-orgs.mjs` · `OWED.md` · `BACKLOG.md` ·
+       `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+       `HANDOFF.md`.
+
+OPEN:  **TEN LOCAL COMMITS NOW, NOTHING PUSHED, CI HAS SEEN NONE** (`d72131a`
+       through this one; `origin/web-repoint` is still `01999dc`). Pushing is
+       Kd's call and he has not made it in two sessions. `CLAUDE.md`'s
+       pre-existing uncommitted edit is STILL OUT.
+```
+
+
+```
 TASK: THE OPENING-HOURS SERVER HALF IS BUILT — `CARD-gym-hours.md` §4a.
       DECISIONS :26812 (this card), implementing :26624 + :26684 + :26736.
       Kd said *"start building now"* after overruling a proposal to re-list the

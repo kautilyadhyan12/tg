@@ -1605,7 +1605,14 @@ export const gymHoursSchema = z
     mode: gymHoursModeSchema,
     timezone: z.string().min(1),
     week: gymWeekScheduleSchema,
-    closures: z.array(gymClosureSchema),
+    /** BOUNDED — T3 round 1's Low-5. This array is on a MEMBER-facing response
+     *  and nothing capped it: a gym's own owner could close every date to
+     *  `9999-12-31` and grow every one of its members' payloads without limit.
+     *  The server's reader now applies a one-year horizon and a `LIMIT 400`;
+     *  **400 here is that limit, and the two must move together** — a cap
+     *  BELOW the server's would turn a legitimate answer into a parse failure,
+     *  which is a worse outcome than the unbounded array it replaces. */
+    closures: z.array(gymClosureSchema).max(400),
   })
   .strict();
 export type GymHours = z.infer<typeof gymHoursSchema>;
