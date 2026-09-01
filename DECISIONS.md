@@ -28052,6 +28052,58 @@ or they are wrong**, and that is the assertion the web half's test makes.
 *"we will build it properly for mobile where qr will be there and gym can turn
 off manual attandance"*.
 
+### 7 · ADDENDUM 2, same session — KD CLOSES THE LAST OPEN QUESTION AND ASKS WHETHER GYMS CAN SEE WHO ATTENDED
+
+**Read before proposing any time-window or cooldown rule for repeat attendance,
+and before deciding where an owner-facing screen lives in the console's
+navigation.**
+
+**1. AT A GYM WITH NO SESSIONS IT IS ONE ATTENDANCE PER DAY** — *"only one time
+attandance"*, answering §6's single open question in four words.
+
+**THE SHAPE DOES NOT CHANGE; ITS STATUS DOES.** `slot_key` already made a second
+tap at a 24-hour or hours-unset gym return the first row, and the card carried
+that as *a chat's stated consequence with its cost named*. **It is now HIS
+ruling, which is a different thing entirely: a later chat proposing "count it
+again after an hour" is re-opening a settled question, not filling a gap.** The
+number such a proposal must pick is exactly the R0.2 invention this avoided, and
+the remedy for a gym that wants repeat visits counted is to declare its sessions
+— the feature shipped last card.
+
+**THE PART WORTH KEEPING IS THE MECHANISM, NOT THE ANSWER: this is the SECOND
+time on this card that flagging a chat's own call, with its cost, at the gate,
+produced a ruling in one line.** §6's ruling 1 REVERSED such a call; this one
+RATIFIED one. **Both cost a sentence to ask and would have cost a rebuild to
+discover later**, and the two outcomes going opposite ways is the argument that
+the flag is doing real work rather than performing diligence.
+
+**2. "WILL GYMS BE ABLE SEE WHO ATTENDED ETC ? BEACVUSE THEY SHOULD"** — yes,
+and it was already the card's main owner-facing screen. **HIS ASKING IS RECORDED
+RATHER THAN WAVED AWAY, BECAUSE THE QUESTION IS EVIDENCE ABOUT THE PLAN, NOT
+ABOUT HIM.** :26469 §1 ruled *"the gym … SEES who came"* and the card described
+the screen in detail — and the person who commissioned the feature still had to
+ask whether it was in there. **A feature nobody can find is a feature that is
+not there**, so two things are now written into the card rather than assumed:
+
+- **The "Who came" view is a first-class console screen reached in ONE click
+  from the nav, beside Members — never a panel inside Settings.** Settings is
+  where a gym CONFIGURES things; this is a thing an owner opens every day.
+  `ConsoleLayout`'s nav list is the file that decides it, and :14570 and :11616
+  both govern that file.
+- **One member's own history is answerable**, on the same route via `?userId=`
+  — the direct reading of *"etc"*. **A filter, not a second endpoint**: same
+  privilege, same tenancy predicate, same cursor, one WHERE clause. A separate
+  route would be a second surface to secure (:14401's shape), and its test
+  carries the case a filter fails silently on — **another member who also
+  attended must be ABSENT**, which a test checking only the wanted rows cannot
+  see.
+
+**STANDING, and it generalises past this card: when Kd asks whether something
+he already ruled is going to exist, the answer is "yes, and here is where it
+will be on screen" — then check that the plan actually says where.** The
+recommendation-shaped failure here would have been to answer "yes, it's already
+in the card" and change nothing.
+
 ### Round log
 
 **Grounding read this session before anything was proposed:**

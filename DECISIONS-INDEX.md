@@ -4,25 +4,29 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **978 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **980 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,081 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 earlier on 2026-09-01).
+2. **§1 below — STANDING RULES. 1,113 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,117 lines, MEASURED 2026-09-01 (ninth measurement that
-day) and not estimated** (978 + 1,081 + 58). **§1 MOVED TWICE THAT DAY, AND THE
-REASON IS THE TEST OF THE SPLIT: the eight records before it were CARD records
-and went to §1B, where :24813 sends them; the ninth and tenth are a KD RULING
-(:27900) and its same-session ADDENDUM (:27992), and rulings belong here.** They
-cost 45 and 39 lines — what the always-read price of a ruling looks like —
-against thirty-two lines for the earlier eight put together, all of it trigger
-phrases. **That is the split working as ruled, in both directions: a card record
-is a pointer, a ruling is read.**
+**ALWAYS-READ TOTAL: 2,151 lines, MEASURED 2026-09-01 (tenth measurement that
+day) and not estimated** (980 + 1,113 + 58). **§1 MOVED THREE TIMES THAT DAY,
+AND THE REASON IS THE TEST OF THE SPLIT: the eight records before it were CARD
+records and went to §1B, where :24813 sends them; the three after are a KD
+RULING (:27900) and its two same-session ADDENDA (:27992, :28055), and rulings
+belong here.** They cost 45, 39 and 34 lines — what the always-read price of a
+ruling looks like — against thirty-two lines for the earlier eight put together,
+all of it trigger phrases. **That is the split working as ruled, in both
+directions: a card record is a pointer, a ruling is read.** **AND IT IS THE
+FIRST DAY THE ALWAYS-READ COST GREW BY MORE THAN A HUNDRED LINES — worth
+watching, not yet worth acting on: three rulings in one session is not the
+normal rate, and :22497's failure was an index nobody re-measured, which is
+exactly what these ten measurements are.**
 ~~**§1 AND §2 HAVE NOT MOVED ALL DAY**: all SEVEN of that day's records — the
 server card, its T3 round, the web card, Kd's five screen changes, his four
 corrections, his smoke declaration and the web half's T3 round 1 — went to §1B,
@@ -1172,6 +1176,38 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **THE TRANSFERABLE HABIT, measured on this card: a call a chat makes FOR Kd is
   written down WITH ITS COST, at the gate. Two of the six things settled here
   were settled that way, and BOTH went against the recommendation.**
+  **ADDENDUM 2 `:28055`, same session — KD CLOSES THE LAST OPEN QUESTION AND
+  ASKS WHETHER GYMS CAN SEE WHO ATTENDED.** **Read before proposing any
+  time-window or cooldown rule for repeat attendance, and before deciding where
+  an owner-facing screen lives in the console's navigation.**
+  **(1) AT A GYM WITH NO SESSIONS IT IS ONE ATTENDANCE PER DAY** — *"only one
+  time attandance"*. **The SHAPE does not change; its STATUS does.** `slot_key`
+  already behaved this way as *a chat's stated consequence*; it is now HIS
+  ruling, **so "count it again after an hour" is RE-OPENING a settled question,
+  not filling a gap** — and the number such a proposal must pick is the R0.2
+  invention this avoided. Remedy for a gym wanting repeats counted: declare its
+  sessions.
+  **THE MECHANISM IS THE PART THAT GENERALISES: this is the SECOND time on this
+  card that flagging a chat's own call, WITH ITS COST, at the gate produced a
+  ruling in one line — the first REVERSED such a call (:27992 §1), this one
+  RATIFIED one.** The two going opposite ways is the evidence the flag does real
+  work rather than performing diligence.
+  **(2) THE GYM SEES WHO ATTENDED, BY NAME** — *"will gyms be able see who
+  attended etc ? beacvuse they should"*. It was already the card's main
+  owner-facing screen and :26469 §1 already ruled it. **HIS ASKING IS EVIDENCE
+  ABOUT THE PLAN, NOT ABOUT HIM: the person who commissioned the feature still
+  had to ask whether it was in there — a feature nobody can find is a feature
+  that is not there.** Two things therefore written in rather than assumed: the
+  **"Who came" view is a first-class console screen reached in ONE click from
+  the nav, beside Members, never a panel inside Settings** (`ConsoleLayout`'s
+  nav list decides it; :14570 and :11616 govern that file) · and **one member's
+  own history is answerable on the SAME route via `?userId=` — a filter, not a
+  second endpoint** (:14401's shape), whose test must assert that another member
+  who also attended is **ABSENT**, the case a silently-inert filter passes.
+  **STANDING: when Kd asks whether something he already ruled is going to exist,
+  answer "yes, and here is where it will be on screen" — then check the plan
+  actually says where.** Answering *"it's already in the card"* and changing
+  nothing is the failure this avoided.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

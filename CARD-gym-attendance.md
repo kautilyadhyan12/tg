@@ -3,10 +3,11 @@
 **Status: WRITTEN, NOT BUILT. Awaiting Kd's approval at the plan gate.**
 Rulings: `DECISIONS.md` :26469 + addenda :26558, :26586 · the hours rulings
 :26624, :26684, :26736 (attendance is stamped with the session it fell in) ·
-**and Kd's answers at this gate on 2026-09-01, across two passes: four questions
-answered (TWO of them against the recommendation — streaks, and one visit per
-day) plus two rulings he added unprompted (the app never checks a member's dues;
-the owner's screen must not pile up). Rulings 9 and 12–14 below.**
+**and Kd's answers at this gate on 2026-09-01, across three passes: five
+questions answered (TWO against the recommendation — streaks, and one visit per
+day) plus three rulings he added unprompted (the app never checks a member's
+dues; the owner's screen must not pile up; the gym sees who attended, by name).
+Rulings 9 and 12–16 below. NOTHING ON THIS CARD IS OPEN.**
 Tracked at `OWED.md`'s
 "ATTENDANCE / QR CHECK-IN" line. Branch `web-repoint`, as every gym card has been.
 
@@ -67,7 +68,7 @@ at all — the scanner that replaces it arrives with the phone app.
 | The gym's Overview numbers and the 8-week chart | the NEXT card (:26469 §1.2) |
 | Front-desk staff marking somebody present | **your answer at this gate: not now.** The record stores WHO marked each visit from day one, so it can be added later without spoiling the history |
 | ~~Counting a second visit on the same day~~ | **IN this card — Kd ruled it in at the gate.** A second visit in a DIFFERENT session counts again |
-| Counting a second visit at a gym that has declared NO sessions | §4a — there is nothing to tell two taps apart, so it stays one. The remedy is the gym declaring its sessions |
+| Counting a second visit at a gym that has declared NO sessions | **ruled out by Kd** — *"only one time attandance"*. The remedy is the gym declaring its sessions |
 | Checking whether a member has paid the gym | **never the app's job** — Kd, at this gate. The gym removes them from the roster |
 | Booking a place in a session, capacity limits | booking — its own card, the biggest on the gym list |
 | Marking somebody present for a PAST day | not asked for; the button means "I am here now" |
@@ -115,6 +116,16 @@ at all — the scanner that replaces it arrives with the phone app.
     analuse and see so the ui should be clean and beautiful"*. This is a build
     requirement with a test, not a styling note; §4b is the design and §5 risk 6
     is what happens if it is treated as polish.
+15. **AT A GYM WITH NO SESSIONS IT IS ONE ATTENDANCE PER DAY** — Kd,
+    2026-09-01: *"only one time attandance"*, closing the question ruling 12
+    left open. **A time window is not to be proposed here; the remedy is the gym
+    declaring its sessions.**
+16. **THE GYM SEES WHO ATTENDED, BY NAME** — Kd, same message: *"will gyms be
+    able see who attended etc ? beacvuse they should"*. It was already the
+    card's main owner-facing screen (:26469 §1 — *"the gym … SEES who came"*),
+    and his asking is recorded because **a feature nobody can find is a feature
+    that is not there**: the console must reach it in one obvious click, not
+    bury it inside Settings.
 
 ---
 
@@ -190,16 +201,17 @@ Kd before anything else is written (R4.4 / T5).**
     sees two times. A member who taps the same session twice has the same key,
     so the second tap returns the first row: idempotent, and an accidental
     double-tap can never inflate the gym's number (R3.5).
-    - **THE ONE LIMIT, STATED RATHER THAN BURIED:** at a gym that has declared
-      NO sessions — open 24 hours, or hours never set — the four non-session
-      keys are constant, so a second tap the same day is treated as the same
-      visit. **There is genuinely nothing to tell two visits apart there**, and
-      the alternative is an invented time window (R0.2) that would be wrong for
-      somebody in both directions. **The remedy is the gym declaring its
-      sessions, which is the feature shipped last card**, and the incentive
-      therefore points the right way: better numbers for gyms that say when they
-      are open. **If Kd wants a 24-hour gym to count repeat visits too, that is
-      a rule change and needs a rule — not a default a chat picks.**
+    - **AT A GYM WITH NO SESSIONS IT IS ONE ATTENDANCE PER DAY, AND THAT IS NOW
+      A RULING RATHER THAN A LIMIT** — Kd, 2026-09-01: *"only one time
+      attandance"*, answering the open question this card raised. At a gym open
+      24 hours, or one that has not set its hours, the four non-session keys are
+      constant, so the second tap returns the first row. **This was the shape
+      already built, and what changed is its status: it was a chat's stated
+      consequence and is now his call.** A future chat proposing a time window
+      here — "count it again after an hour" — is re-opening a settled question,
+      and the number it would have to pick is the R0.2 invention this avoided.
+      The remedy for a gym that wants repeat visits counted is to declare its
+      sessions, which is the feature shipped last card.
 
 **`packages/shared/src/orgs.ts`** — the contract, once, for both sides (R7.2):
 `gymAttendanceMethodSchema` · `gymAttendanceHoursStatusSchema` ·
@@ -234,6 +246,13 @@ already lost. The response is:
 - **the exceptions are answerable without paging through everybody**: a filter
   for visits that were outside hours or on a closed day, because those are the
   rows an owner actually goes looking for.
+- **ONE MEMBER'S OWN HISTORY, on the same route** (`?userId=`, no `day`), so an
+  owner asking *"how often does this person actually come?"* is answered by a
+  filter rather than by a second endpoint. **My call, and small on purpose:**
+  same route, same `members.read` privilege, same tenancy predicate, same
+  cursor — it adds a WHERE clause, not a surface. It is the direct reading of
+  ruling 16's *"who attended etc"*, and building a separate route for it would
+  be a second thing to secure (:14401's shape).
 
 **THE LAPSED-GYM QUESTION IS ANSWERED — Kd, at this gate: a member of a gym
 whose plan has lapsed CAN still mark attendance.** So the write does **not** go
@@ -307,6 +326,12 @@ interface, never another module's repo).
   times, and the per-session counts add up to the number of visits, not the
   number of people — the two figures differ exactly when somebody came twice, so
   a fixture with a repeat visitor is the only one that can tell them apart.
+- **the `?userId=` filter** (ruling 16): returns that member's days and **only
+  that member's** — a fixture with two members who both attended, asserting the
+  other one is absent, because a filter that silently does nothing passes any
+  test that only checks the wanted rows are present. **And its own cross-tenant
+  case**: a `userId` belonging to gym B returns nothing on gym A rather than
+  leaking that the person exists.
 - **the lapsed and archived arms, each on its own fixture**: a member of a LIVE
   gym marks · a member of a LAPSED gym marks (Kd's answer) · a member of an
   ARCHIVED gym is refused. **A test that drives only the live arm proves
@@ -357,9 +382,13 @@ used.
   with no explanation is the defect :24141 named.
 - **The member's own history**: a short list of the days they came, on the same
   card, newest first.
-- Console → a **"Who came"** view. **This is ruling 14 and it is the largest
-  design job in the card**, so it is specified rather than left to the chat that
-  builds it. Top to bottom:
+- Console → a **"Who came"** view, **reached from the console's own navigation
+  in one click** — ruling 16. It sits beside Members, never inside Settings:
+  Settings is where a gym CONFIGURES things, and this is a thing an owner opens
+  every day. **`ConsoleLayout`'s nav list is the file that decides this, and
+  :14570 and :11616 both govern it — read them before editing it.**
+- **This is ruling 14 and it is the largest design job in the card**, so it is
+  specified rather than left to the chat that builds it. Top to bottom:
   1. **The day, and the way to move between days** — a calendar control, the
      same one the closures screen already uses, so the two console screens do
      not offer two different date pickers.
@@ -379,7 +408,9 @@ used.
      visible at a glance**, which is what Kd asked for, and a day with 400 taps
      across 300 people is 300 rows rather than 400.
   5. **A name search**, because past a couple of hundred people the only
-     question an owner has is about one person.
+     question an owner has is about one person — **and picking that person opens
+     THEIR history**, the `?userId=` read above, answering *"how often do they
+     actually come?"* without leaving the screen.
   6. **Paged, never infinite-scrolled**, and the empty state says which of the
      two things is true — nobody has marked attendance today, or this gym has
      the button switched off — because those look identical and only one of them
@@ -458,10 +489,13 @@ stated.
 the one-visit-per-day rule (§4a, with its cost), and whether a member of a
 LAPSED gym can still mark attendance (§4a, recommendation: yes).~~
 **BOTH ANSWERED 2026-09-01, and one of them reversed the recommendation:** a
-second visit in a DIFFERENT session **counts again** (rulings 12) and a member
+second visit in a DIFFERENT session **counts again** (ruling 12) and a member
 of a lapsed gym **can** mark (agreed as recommended). He added two rulings
 nobody had asked for — **the app never checks whether a member has paid the
-gym** (13) and **the owner's screen must not pile up** (14). **One thing is now
-left open and it is named rather than defaulted: whether a gym that is open 24
-hours, or has not declared its sessions, should also count repeat visits.**
-§4a says why a chat must not answer that with an invented time window.
+gym** (13) and **the owner's screen must not pile up** (14).
+~~**One thing is now left open and it is named rather than defaulted: whether a
+gym that is open 24 hours, or has not declared its sessions, should also count
+repeat visits.**~~ **CLOSED the same day — *"only one time attandance"*
+(ruling 15). NOTHING ON THIS CARD IS NOW OPEN.** He also confirmed ruling 16
+unprompted, which is why the "Who came" view is specified as a first-class
+console screen rather than a panel somebody has to find.

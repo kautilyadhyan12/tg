@@ -7733,12 +7733,25 @@ file and is stated so nobody reads these as lower priority than they are.
       "nobody came yet" apart from "the button is off". **The counts come from
       the server or they are wrong** — a browser that counts its own page reports
       the page.
-      **❓ THE ONE OPEN QUESTION LEFT ON THIS CARD, named rather than defaulted:
-      should a gym that is open 24 HOURS, or that has declared no sessions, also
-      count REPEAT visits?** It has no sessions to tell two taps apart, so today
-      a second tap the same day stays one visit. **A chat must NOT answer this
-      with an invented time window (R0.2)** — the remedy available now is the gym
-      declaring its sessions, which is the feature shipped last card.
+      ~~**❓ THE ONE OPEN QUESTION LEFT ON THIS CARD, named rather than
+      defaulted: should a gym that is open 24 HOURS, or that has declared no
+      sessions, also count REPEAT visits?**~~ **CLOSED SAME SESSION BY KD
+      (:28055): *"only one time attandance"*.** The shape does not change —
+      `slot_key` already behaved this way — **but its STATUS does: it was a
+      chat's stated consequence and is now his ruling, so "count it again after
+      an hour" is RE-OPENING a settled question rather than filling a gap, and
+      the number it needs is the R0.2 invention this avoided.** Struck and
+      closed, not deferred.
+      **(5) THE GYM SEES WHO ATTENDED, BY NAME** (:28055) — *"will gyms be able
+      see who attended etc ? beacvuse they should"*. Already ruled at :26469 §1
+      and already in the card, **and he still had to ask, which is evidence
+      about the PLAN and not about him — a feature nobody can find is a feature
+      that is not there.** Now written in rather than assumed: the **"Who came"
+      view is a first-class console screen, ONE click from the nav, beside
+      Members, never inside Settings**, and **one member's own history is
+      answerable on the same route via `?userId=` — a filter, not a second
+      endpoint** (:14401's shape).
+      **NOTHING ON THIS CARD IS NOW OPEN.**
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

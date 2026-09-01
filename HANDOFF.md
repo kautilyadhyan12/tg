@@ -12,9 +12,17 @@ TASK: THE OPENING-HOURS WORK IS COMMITTED AND PUSHED, CI IS GREEN, AND KD
      never checks a member's dues · and the owner's screen must not pile up.
      **The card is updated to all four. Confirm he approves the UPDATED card
      before writing code — an approval covers what was ON SCREEN (:26777).**
-  1b. **THE ONE OPEN QUESTION, named not defaulted: should a 24-hour gym (or one
-     that declared no sessions) count REPEAT visits?** It has nothing to tell
-     two taps apart. **Do not answer it with an invented time window (R0.2).**
+  1b. ~~**THE ONE OPEN QUESTION**~~ **CLOSED by Kd the same session (:28055):
+     a gym with no sessions gets ONE attendance per day — *"only one time
+     attandance"*. NOTHING ON THIS CARD IS OPEN.** The shape was already built
+     that way; what changed is that it is now HIS ruling, so a later
+     "count it again after an hour" is re-opening a settled question.
+  1c. **HE ALSO ASKED WHETHER GYMS CAN SEE WHO ATTENDED — and it was already
+     the card's main owner screen.** The asking is the finding: he
+     commissioned the feature and still could not tell. So the card now says
+     WHERE it lives (a first-class console screen, one click from the nav,
+     beside Members, never inside Settings) and adds one member's own history
+     as a `?userId=` filter on the same route.
   2. **THE STREAK ANSWER IS THE DANGEROUS ONE AND IT IS NOT A ONE-LINE UNION.**
      The streak and the lifetime XP total are BOTH replayed from
      `getActivityDays` (`gamification/repo.ts:136`, workouts only). Kd ruled
@@ -35,20 +43,22 @@ PROVE: No `src`, test, harness or migration file is touched by the RECORDS half
        exit 0 · `check-harnesses` **25 scripts parse** · `check-decisions-index`
        **258 pointers, 1025 headings** · triggers `--check` clean.
        After the records edits: `check-decisions-index` **259 pointers resolve,
-       1033 headings** · triggers rebuilt, `--check` clean (**799 from 217 of
-       355 rulings**) · `check-harnesses` **25 scripts parse**.
-       **`:27992` IS AN INLINE POINTER THE INDEX GUARD DOES NOT CHECK**
-       (:21057 deliberately covers `**:NNNN**` lines only) — **so it was
-       grep-verified by hand against `DECISIONS.md` and lands on its own `###`
-       heading.** Say so rather than implying the guard covered it.
+       1034 headings** · triggers rebuilt, `--check` clean (**801 from 218 of
+       356 rulings**) · `check-harnesses` **25 scripts parse**.
+       **`:27992` AND `:28055` ARE INLINE POINTERS THE INDEX GUARD DOES NOT
+       CHECK** (:21057 deliberately covers `**:NNNN**` lines only) — **so both
+       were grep-verified by hand against `DECISIONS.md` and each lands on its
+       own `###` heading.** Say so rather than implying the guard covered them.
        **NOT RUN AND NOT CLAIMED: the api DB-backed suites** (no `apps/api/src`
        file touched) **and any mutation sweep.**
 
 FILES: commit `abd0d8f` — the 18 opening-hours files. Then records only, across
-       two commits as Kd answered in two passes: `CARD-gym-attendance.md` (new,
-       then revised) · `DECISIONS.md` · `DECISIONS-INDEX.md` (both the ruling and
-       its addendum go to §1, not §1B — always-read 2,016 → 2,075 → **2,117**
-       lines, re-measured each time, never estimated) · `DECISIONS-TRIGGERS.md` ·
+       three commits as Kd answered in three passes: `CARD-gym-attendance.md`
+       (new, then revised twice) · `DECISIONS.md` · `DECISIONS-INDEX.md` (the
+       ruling and BOTH addenda go to §1, not §1B — always-read
+       2,016 → 2,075 → 2,117 → **2,151** lines, re-measured each time, never
+       estimated; **the first day it grew by more than a hundred, which is worth
+       watching and is not yet worth acting on**) · `DECISIONS-TRIGGERS.md` ·
        `OWED.md` · `HANDOFF.md`.
 
 OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
