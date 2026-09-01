@@ -28104,6 +28104,80 @@ will be on screen" — then check that the plan actually says where.** The
 recommendation-shaped failure here would have been to answer "yes, it's already
 in the card" and change nothing.
 
+### 8 · ADDENDUM 3, same session — ATTENDANCE BECOMES ITS OWN CONSOLE SECTION, AND STAFF SEEING IT MINTS THE NINTH PRIVILEGE
+
+*"i think it should not be in settings but in a section call attandance a new
+option besides gym memebr settings etc also stafs can see it too default
+permission owner can change it"*.
+
+**Read before adding a console nav item, before adding a privilege to
+`ORG_PRIVILEGES`, before assuming a new privilege is a TypeScript change, and
+before putting an owner-facing LIST inside Settings.**
+
+**1. ATTENDANCE IS A SECTION, NOT A PANEL.** A fourth item in the console's left
+rail. Measured, not recalled: it holds exactly three today — `Gym`, `Members`,
+`Settings` (the last conditional) — `ConsoleLayout.jsx:118-121`. **:14570 and
+:11616 both govern that file.**
+
+**THE DISTINCTION HIS SENTENCE DRAWS IS WORTH KEEPING BECAUSE IT SETTLES FUTURE
+CARDS TOO: Settings is where a gym CONFIGURES itself; a section is where it
+WORKS.** The manual-attendance switch therefore STAYS in Settings while the list
+moves out — not an inconsistency, the rule applied twice. **The previous
+addendum had already moved this screen out of Settings on my own reasoning
+(:28055 §2), and he ruled the same thing one message later without having been
+shown that.** Independent arrival at the same answer is the useful signal here;
+what his sentence ADDS is the section's NAME and its place in the rail.
+
+**2. STAFF SEE IT BY DEFAULT, AND THE OWNER CAN CHANGE THAT — this mints
+`attendance.read`, the NINTH privilege, and it is not a one-line array edit.**
+The card had gated the gym-side read on the existing `members.read`, which would
+have satisfied *"staff see it by default"* with no new vocabulary — **and would
+have failed the second half of his sentence**, because unticking it to hide
+attendance also takes away the roster. **:13803's precedent, restated at :21157
+for `billing.manage`: two rows meaning different things get different
+privileges.**
+
+**THE TRAP, MEASURED, AND IT IS INVISIBLE TO THE TYPE SYSTEM:**
+`gym_staff.privileges` carries a CHECK that lists all eight names **in DDL**
+(`tenancy.ts:404-405`, `privileges IS NULL OR privileges <@ ARRAY[…]`). **A
+ninth name added in TypeScript alone compiles, passes every unit test, and 500s
+in Postgres the first time an owner ticks the box.** The array and the CHECK
+move in ONE commit. **The guard for this already exists and goes red by itself —
+`db.migration.test.ts:549` asserts the CHECK's contents equal
+`[...ORG_PRIVILEGES].sort()`. Do not "fix" that expectation; it is the thing
+telling you the DDL was not widened.**
+
+**THREE MORE CONSEQUENCES, none of them optional:**
+- **A BACKFILL, on :21157's precedent.** A staff row with `privileges` NULL
+  falls back to the ROLE template and gains the tick free; a row with a STORED
+  set does not, and would silently lose the default Kd just ruled. **Adding it
+  to stored sets is not overriding an owner's choice — no owner has ever made a
+  choice about a privilege that did not exist.**
+- **A TICK BOX, and it IS the ruling rather than a detail.** `PRIVILEGE_COPY`
+  (`staffView.js:178-209`) is where a box comes from and it holds SIX of the
+  eight; `org.manage` and `billing.manage` have none, a gap `OWED.md` already
+  carries (:21157). **Shipping the ninth without a box would make it the third,
+  and would make *"owner can change it"* a false sentence.**
+- **DEFAULT ON FOR ALL THREE ROLES**, the trainer's list being the one that
+  proves it (`members.read` and `codes.invite` only, `orgs.ts:1401`). **NOT in
+  `OWNER_ONLY_PRIVILEGES`** — a manager's row must carry it — and **NOT in
+  `LAST_OWNER_REQUIRED_PRIVILEGES`**, which guards the two ticks that can strand
+  a gym; losing a READ strands nobody.
+
+**AND A FIXTURE WILL GO STALE BECAUSE THE FUTURE ARRIVED — THE SAME ONE AS LAST
+TIME, WHICH IS WHY IT IS WRITTEN DOWN INSTEAD OF WAITED FOR.** :21157's audit
+found `schemas.test.ts` using `billing.manage` as its stand-in for *"a privilege
+a newer server knows"*, and fixed it with a positive control asserting **the
+REAL newest privilege** parses — so minting this one moves what "newest" means.
+`db.migration.test.ts:677`'s `legacySeven` is the same shape and **worse: it
+filters `billing.manage` by name and its arithmetic still passes with nine, so
+it goes QUIET rather than RED.** A test that stops testing without failing is
+:5348 rule 4's definition of a liar.
+
+**STANDING: "add a privilege" is a MIGRATION in this repo, not a list edit** —
+DDL CHECK, backfill, role templates, tick box, and two fixtures that measure
+"newest" by name.
+
 ### Round log
 
 **Grounding read this session before anything was proposed:**

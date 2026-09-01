@@ -20,9 +20,18 @@ TASK: THE OPENING-HOURS WORK IS COMMITTED AND PUSHED, CI IS GREEN, AND KD
   1c. **HE ALSO ASKED WHETHER GYMS CAN SEE WHO ATTENDED — and it was already
      the card's main owner screen.** The asking is the finding: he
      commissioned the feature and still could not tell. So the card now says
-     WHERE it lives (a first-class console screen, one click from the nav,
-     beside Members, never inside Settings) and adds one member's own history
-     as a `?userId=` filter on the same route.
+     WHERE it lives and adds one member's own history as a `?userId=` filter
+     on the same route.
+  1d. **THEN HE RULED THE PLACE AND THE PERMISSION (:28107): a section called
+     Attendance in the console rail (fourth item; the rail holds three today),
+     and STAFF SEE IT BY DEFAULT with the owner able to switch it off per
+     person.** ⚠️ **THAT MINTS `attendance.read`, THE NINTH PRIVILEGE, AND IT
+     IS A MIGRATION — `gym_staff.privileges` has a CHECK listing all eight
+     names in DDL (`tenancy.ts:404-405`), so a ninth added in TypeScript alone
+     compiles, passes every unit test, and 500s the first time an owner ticks
+     the box.** Plus a backfill, a tick box in `PRIVILEGE_COPY` (without which
+     "owner can change it" is false), and TWO fixtures that measure "newest
+     privilege" by name — one of which goes QUIET rather than red.
   2. **THE STREAK ANSWER IS THE DANGEROUS ONE AND IT IS NOT A ONE-LINE UNION.**
      The streak and the lifetime XP total are BOTH replayed from
      `getActivityDays` (`gamification/repo.ts:136`, workouts only). Kd ruled
@@ -43,23 +52,26 @@ PROVE: No `src`, test, harness or migration file is touched by the RECORDS half
        exit 0 · `check-harnesses` **25 scripts parse** · `check-decisions-index`
        **258 pointers, 1025 headings** · triggers `--check` clean.
        After the records edits: `check-decisions-index` **259 pointers resolve,
-       1034 headings** · triggers rebuilt, `--check` clean (**801 from 218 of
-       356 rulings**) · `check-harnesses` **25 scripts parse**.
-       **`:27992` AND `:28055` ARE INLINE POINTERS THE INDEX GUARD DOES NOT
-       CHECK** (:21057 deliberately covers `**:NNNN**` lines only) — **so both
-       were grep-verified by hand against `DECISIONS.md` and each lands on its
-       own `###` heading.** Say so rather than implying the guard covered them.
+       1035 headings** · triggers rebuilt, `--check` clean (**805 from 219 of
+       357 rulings**) · `check-harnesses` **25 scripts parse**.
+       **`:27992`, `:28055` AND `:28107` ARE INLINE POINTERS THE INDEX GUARD
+       DOES NOT CHECK** (:21057 deliberately covers `**:NNNN**` lines only) —
+       **so all three were grep-verified by hand against `DECISIONS.md` and each
+       lands on its own `###` heading.** Say so rather than implying the guard
+       covered them.
        **NOT RUN AND NOT CLAIMED: the api DB-backed suites** (no `apps/api/src`
        file touched) **and any mutation sweep.**
 
 FILES: commit `abd0d8f` — the 18 opening-hours files. Then records only, across
-       three commits as Kd answered in three passes: `CARD-gym-attendance.md`
-       (new, then revised twice) · `DECISIONS.md` · `DECISIONS-INDEX.md` (the
-       ruling and BOTH addenda go to §1, not §1B — always-read
-       2,016 → 2,075 → 2,117 → **2,151** lines, re-measured each time, never
-       estimated; **the first day it grew by more than a hundred, which is worth
-       watching and is not yet worth acting on**) · `DECISIONS-TRIGGERS.md` ·
-       `OWED.md` · `HANDOFF.md`.
+       four commits as Kd answered in four passes: `CARD-gym-attendance.md`
+       (new, then revised three times) · `DECISIONS.md` · `DECISIONS-INDEX.md`
+       (the ruling and ALL THREE addenda go to §1, not §1B — always-read
+       2,016 → 2,075 → 2,117 → 2,151 → **2,195** lines, re-measured each time,
+       never estimated; **+179 in a day, the first time it has passed a hundred.
+       Worth watching, not yet worth acting on — four rulings in one session is
+       not the normal rate and they are all ONE card's plan gate. The honest
+       test is whether the NEXT card's gate costs this much**) ·
+       `DECISIONS-TRIGGERS.md` · `OWED.md` · `HANDOFF.md`.
 
 OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559).
        **STILL OWED and moved rather than closed: how a workout LINKS to an

@@ -3,11 +3,12 @@
 **Status: WRITTEN, NOT BUILT. Awaiting Kd's approval at the plan gate.**
 Rulings: `DECISIONS.md` :26469 + addenda :26558, :26586 · the hours rulings
 :26624, :26684, :26736 (attendance is stamped with the session it fell in) ·
-**and Kd's answers at this gate on 2026-09-01, across three passes: five
+**and Kd's answers at this gate on 2026-09-01, across four passes: five
 questions answered (TWO against the recommendation — streaks, and one visit per
-day) plus three rulings he added unprompted (the app never checks a member's
-dues; the owner's screen must not pile up; the gym sees who attended, by name).
-Rulings 9 and 12–16 below. NOTHING ON THIS CARD IS OPEN.**
+day) plus five rulings he added unprompted (the app never checks a member's
+dues; the owner's screen must not pile up; the gym sees who attended by name;
+attendance is its own console section; staff see it by default and the owner can
+change that). Rulings 9 and 12–18 below. NOTHING ON THIS CARD IS OPEN.**
 Tracked at `OWED.md`'s
 "ATTENDANCE / QR CHECK-IN" line. Branch `web-repoint`, as every gym card has been.
 
@@ -124,8 +125,18 @@ at all — the scanner that replaces it arrives with the phone app.
     able see who attended etc ? beacvuse they should"*. It was already the
     card's main owner-facing screen (:26469 §1 — *"the gym … SEES who came"*),
     and his asking is recorded because **a feature nobody can find is a feature
-    that is not there**: the console must reach it in one obvious click, not
-    bury it inside Settings.
+    that is not there**.
+17. **ATTENDANCE IS ITS OWN CONSOLE SECTION, NOT A CORNER OF SETTINGS** — Kd,
+    2026-09-01: *"it should not be in settings but in a section call attandance
+    a new option besides gym memebr settings etc"*. **A fourth item in the
+    console's left rail**, beside `Gym`, `Members` and `Settings` — measured,
+    those are the three that exist today (`ConsoleLayout.jsx:118-121`).
+18. **STAFF SEE IT BY DEFAULT, AND THE OWNER CAN CHANGE THAT** — Kd, same
+    message: *"also stafs can see it too default permission owner can change
+    it"*. **This mints the ninth privilege, `attendance.read`, ON by default for
+    all three roles, WITH A TICK BOX** — and the tick box is not a detail, it is
+    the half of the ruling that says *"owner can change it"*. §4a says what that
+    costs, including the one thing that silently breaks without a migration.
 
 ---
 
@@ -213,6 +224,49 @@ Kd before anything else is written (R4.4 / T5).**
       The remedy for a gym that wants repeat visits counted is to declare its
       sessions, which is the feature shipped last card.
 
+**AND THE SAME MIGRATION MINTS THE NINTH PRIVILEGE — ruling 18, with the trap
+that makes it a migration rather than a one-line array edit.** All of this is
+measured, not recalled:
+
+- `ORG_PRIVILEGES` in `@app/shared` gains **`attendance.read`** (eight today —
+  `orgs.ts:1282-1291`).
+- **`gym_staff.privileges` carries a CHECK that lists all eight names in DDL**
+  (`tenancy.ts:404-405`, `privileges IS NULL OR privileges <@ ARRAY[…]`). **A
+  ninth name added only in TypeScript is refused by Postgres on every save** —
+  the owner ticks the box, the save 500s, and nothing in the type system sees it
+  coming. **The migration widens that CHECK, in the same commit as the array.**
+  - **The guard for this already exists and will go red on its own:**
+    `db.migration.test.ts:549` asserts the CHECK's contents equal
+    `[...ORG_PRIVILEGES].sort()`. **Do not "fix" it by editing the expectation —
+    it is the thing telling you the DDL was not widened.**
+- **BACKFILL, on :21157's precedent.** A staff row whose `privileges` is NULL
+  falls back to the ROLE template and gains the new tick for free; a row with a
+  STORED set does not, and would silently lose the default Kd just ruled. **So
+  the migration adds `attendance.read` to existing stored sets** — this is not
+  overriding an owner's choice, because no owner has ever made a choice about a
+  privilege that did not exist.
+- `ROLE_PRIVILEGES` gains it for **owner, manager AND trainer** — *"stafs can
+  see it too"*, and the trainer's list is the one that proves it (it holds only
+  `members.read` and `codes.invite` today, `orgs.ts:1401`).
+- **NOT in `OWNER_ONLY_PRIVILEGES`** (a manager's row must be able to carry it)
+  and **NOT in `LAST_OWNER_REQUIRED_PRIVILEGES`** (losing a READ locks nobody
+  out of anything — that list guards `staff.manage` and `billing.manage`, both
+  of which can strand a gym).
+- **A SEVENTH ENTRY IN `PRIVILEGE_COPY`** (`staffView.js:178-209`), which is
+  where the tick box actually comes from. **Six of the eight privileges have a
+  box; `org.manage` and `billing.manage` do not, and `OWED.md` carries that as a
+  known gap (:21157).** Shipping `attendance.read` without a box would make it
+  the third — **and it would break ruling 18 outright, because "the owner can
+  change it" would be false.**
+- **A FIXTURE WILL GO STALE BECAUSE THE FUTURE ARRIVED, and it is the same one
+  as last time:** :21157's audit found `schemas.test.ts` using `billing.manage`
+  as its stand-in for *"a privilege a newer server knows"*, and fixed it with a
+  positive control asserting **the REAL newest privilege parses**. Minting this
+  one moves what "newest" means. `db.migration.test.ts:677`'s `legacySeven` is
+  the same shape — it filters `billing.manage` by name and its arithmetic still
+  passes with nine, so **it goes quiet rather than red**, which is worse.
+  **Both are to be looked at deliberately, not waited for.**
+
 **`packages/shared/src/orgs.ts`** — the contract, once, for both sides (R7.2):
 `gymAttendanceMethodSchema` · `gymAttendanceHoursStatusSchema` ·
 `gymAttendanceEntrySchema` · the mark request and its response · the member's
@@ -226,7 +280,7 @@ repo owns tenancy):
 |---|---|---|
 | `POST /v1/orgs/:gymId/attendance` | a **live member** of that gym | idempotent on (gym, user, gym-day); refused when the gym has the manual switch OFF |
 | `GET /v1/orgs/:gymId/attendance/me` | a **live member** | the member's own days, newest first, cursor-paginated with a bound on BOTH ends (:26947's Low) |
-| `GET /v1/orgs/:gymId/attendance?day=YYYY-MM-DD` | staff with **`members.read`** | who came — the same privilege that already gates the roster; no new privilege is minted. **Answers PEOPLE, each carrying their visits, plus a per-session count** — see below |
+| `GET /v1/orgs/:gymId/attendance?day=YYYY-MM-DD` | staff with **`attendance.read`** | who came — ruling 18's own tick, ON by default for all three roles and switchable off per person by the owner. **Answers PEOPLE, each carrying their visits, plus a per-session count** — see below |
 | the manual switch | **`org.manage`**, on the existing `PATCH /v1/orgs/:gymId` | one more field on the gym-details door rather than a sixteenth write door. **Read :19366 and :19560 before touching that route** — it carries the country lock |
 
 **THE GYM-SIDE READ ANSWERS PEOPLE, NOT TAPS — this is ruling 14 built into the
@@ -249,7 +303,7 @@ already lost. The response is:
 - **ONE MEMBER'S OWN HISTORY, on the same route** (`?userId=`, no `day`), so an
   owner asking *"how often does this person actually come?"* is answered by a
   filter rather than by a second endpoint. **My call, and small on purpose:**
-  same route, same `members.read` privilege, same tenancy predicate, same
+  same route, same `attendance.read` privilege, same tenancy predicate, same
   cursor — it adds a WHERE clause, not a surface. It is the direct reading of
   ruling 16's *"who attended etc"*, and building a separate route for it would
   be a second thing to secure (:14401's shape).
@@ -312,8 +366,16 @@ interface, never another module's repo).
 - happy path: mark, read it back on both the member's list and the gym's day list.
 - **the cross-tenant denial case on all three routes** (R9.2) — a member and a
   staffer of gym B get 404 on gym A.
-- a non-member gets 404 on the mark and on the member read; a `trainer` without
-  `members.read` gets 403 on the gym-side list.
+- a non-member gets 404 on the mark and on the member read.
+- **ruling 18 from BOTH directions**: a `trainer` — the narrowest role — reads
+  the gym-side list **by default**, with no ticks edited, which is the half a
+  test usually skips · and a staffer the owner has UNTICKED gets 403. **A test
+  that only proves the refusal is satisfied by a door that is simply shut**
+  (:19560's O124).
+- **the ninth privilege round-trips through the DATABASE, not just the type
+  system**: save `attendance.read` onto a staff row and read it back. Without the
+  widened CHECK this is the test that fails, and it fails where the defect is
+  rather than on a screen.
 - **RULING 12, from both sides, because a UNIQUE has two failure directions and a
   test that only checks it FIRES is satisfied by a door that is simply shut**
   (:19560's O124 lesson): a second tap in the SAME session produces ONE row and
@@ -382,11 +444,21 @@ used.
   with no explanation is the defect :24141 named.
 - **The member's own history**: a short list of the days they came, on the same
   card, newest first.
-- Console → a **"Who came"** view, **reached from the console's own navigation
-  in one click** — ruling 16. It sits beside Members, never inside Settings:
-  Settings is where a gym CONFIGURES things, and this is a thing an owner opens
-  every day. **`ConsoleLayout`'s nav list is the file that decides this, and
-  :14570 and :11616 both govern it — read them before editing it.**
+- Console → **a section of its own called "Attendance"** — ruling 17, his words:
+  *"a new option besides gym memebr settings etc"*. **A fourth item in the left
+  rail**, which today holds exactly three: `Gym`, `Members`, and `Settings`
+  (conditional) — `ConsoleLayout.jsx:118-121`, measured. It is NOT a panel
+  inside Settings: Settings is where a gym CONFIGURES itself, and this is a
+  thing an owner opens every morning. **:14570 and :11616 both govern that nav
+  list — read them before editing it.**
+  - **The item is shown when the person holds `attendance.read`** — and
+    **hiding it is not the enforcement** (R3.3, :11429 rule 4). The route 403s
+    on its own, and the screen still has to draw the server's sentence if one
+    arrives, exactly as `StaffPanel` already does.
+  - **The manual-attendance switch stays in SETTINGS**, not here, and that is
+    the ruling rather than an inconsistency: the switch CONFIGURES the feature,
+    the section USES it. Ruling 17 moved the list out of Settings; it did not
+    move the setting.
 - **This is ruling 14 and it is the largest design job in the card**, so it is
   specified rather than left to the chat that builds it. Top to bottom:
   1. **The day, and the way to move between days** — a calendar control, the
@@ -420,6 +492,10 @@ used.
   something wrong.
 - Console → Settings gains the **manual-attendance switch**, obeying `readOnly`
   like every other panel (:24141, :24376).
+- Console → Settings → Staff gains the **seventh tick box**, *"See who came in"*,
+  in `PRIVILEGE_COPY`. **Ruling 18's second half lives here and nowhere else** —
+  without it, "the owner can change it" is a sentence with no control behind it.
+  Worded like its six neighbours: plain, second person, no jargon.
 - **The times drawn are the GYM's times, in the gym's chosen clock format**
   (`gyms.clock_format`, migration `0018`) — the same reader the hours screens
   already use, so the two screens cannot disagree.
@@ -468,13 +544,19 @@ used.
    looks right on a fixture of six and reports the first page on a fixture of
    four hundred. **The counts come from the server or they are wrong**, and that
    is the assertion §4b's test makes.
-7. **`slot_key` is the ruling's only load-bearing column.** If a future writer
+7. **THE NINTH PRIVILEGE HAS A FAILURE MODE THE TYPE SYSTEM CANNOT SEE.**
+   `gym_staff.privileges` is guarded by a CHECK that lists the eight names in
+   DDL. Add the ninth in TypeScript alone and everything compiles, every unit
+   test passes, and the first owner who ticks the box gets a 500 from Postgres.
+   **The array and the CHECK move in ONE commit**, and
+   `db.migration.test.ts:549` is the guard that says so.
+8. **`slot_key` is the ruling's only load-bearing column.** If a future writer
    ever sets it to a constant, or lets it be blank, the UNIQUE stops
    distinguishing sessions and every gym silently reverts to one visit per day —
    with no error anywhere. It is in the mutation sweep for exactly that reason,
    and the mutant should be aimed at the ACCEPTING case (two sessions must both
    land), not only at the refusing one (:26812 §2b).
-8. **The api DB-backed suites need Docker Desktop running.** One request to Kd
+9. **The api DB-backed suites need Docker Desktop running.** One request to Kd
    per machine restart, then the chat runs them itself.
 
 ## 6 · SPEC GAP / DEVIATION
@@ -496,6 +578,9 @@ gym** (13) and **the owner's screen must not pile up** (14).
 ~~**One thing is now left open and it is named rather than defaulted: whether a
 gym that is open 24 hours, or has not declared its sessions, should also count
 repeat visits.**~~ **CLOSED the same day — *"only one time attandance"*
-(ruling 15). NOTHING ON THIS CARD IS NOW OPEN.** He also confirmed ruling 16
-unprompted, which is why the "Who came" view is specified as a first-class
-console screen rather than a panel somebody has to find.
+(ruling 15). NOTHING ON THIS CARD IS NOW OPEN.** He then ruled 16–18
+unprompted: the gym sees who attended by name, **Attendance is its own console
+section rather than a corner of Settings**, and **staff see it by default with
+the owner able to change that** — which mints the ninth privilege and its tick
+box. §4a carries the one thing that breaks silently if that is done in
+TypeScript alone.

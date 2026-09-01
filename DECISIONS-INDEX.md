@@ -4,29 +4,33 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **980 lines** (~630 at the
-   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 earlier on 2026-09-01). §1 is
+1. **`DECISIONS-TRIGGERS.md`** — generated, **984 lines** (~630 at the
+   2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,113 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 earlier on 2026-09-01).
+2. **§1 below — STANDING RULES. 1,153 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,151 lines, MEASURED 2026-09-01 (tenth measurement that
-day) and not estimated** (980 + 1,113 + 58). **§1 MOVED THREE TIMES THAT DAY,
+**ALWAYS-READ TOTAL: 2,195 lines, MEASURED 2026-09-01 (eleventh measurement that
+day) and not estimated** (984 + 1,153 + 58). **§1 MOVED FOUR TIMES THAT DAY,
 AND THE REASON IS THE TEST OF THE SPLIT: the eight records before it were CARD
-records and went to §1B, where :24813 sends them; the three after are a KD
-RULING (:27900) and its two same-session ADDENDA (:27992, :28055), and rulings
-belong here.** They cost 45, 39 and 34 lines — what the always-read price of a
-ruling looks like — against thirty-two lines for the earlier eight put together,
-all of it trigger phrases. **That is the split working as ruled, in both
-directions: a card record is a pointer, a ruling is read.** **AND IT IS THE
-FIRST DAY THE ALWAYS-READ COST GREW BY MORE THAN A HUNDRED LINES — worth
-watching, not yet worth acting on: three rulings in one session is not the
-normal rate, and :22497's failure was an index nobody re-measured, which is
-exactly what these ten measurements are.**
+records and went to §1B, where :24813 sends them; the four after are a KD
+RULING (:27900) and its three same-session ADDENDA (:27992, :28055, :28107), and
+rulings belong here.** They cost 45, 39, 34 and 40 lines — what the always-read
+price of a ruling looks like — against thirty-two lines for the earlier eight put
+together, all of it trigger phrases. **That is the split working as ruled, in
+both directions: a card record is a pointer, a ruling is read.**
+**AND IT IS THE FIRST DAY THE ALWAYS-READ COST GREW BY MORE THAN A HUNDRED
+LINES — 2,016 → 2,195, +179 — worth watching, not yet worth acting on: FOUR
+rulings in one session is not the normal rate, they are all one card's plan
+gate, and :22497's failure was an index nobody re-measured, which is exactly
+what these eleven measurements are.** **The honest test is not the day's total
+but whether the NEXT card's gate costs this much; if a two-hour planning
+conversation routinely adds 180 always-read lines, the instrument needs the same
+question asked of it that :22497 asked, and the answer will not be "summarise".**
 ~~**§1 AND §2 HAVE NOT MOVED ALL DAY**: all SEVEN of that day's records — the
 server card, its T3 round, the web card, Kd's five screen changes, his four
 corrections, his smoke declaration and the web half's T3 round 1 — went to §1B,
@@ -1208,6 +1212,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   answer "yes, and here is where it will be on screen" — then check the plan
   actually says where.** Answering *"it's already in the card"* and changing
   nothing is the failure this avoided.
+  **ADDENDUM 3 `:28107`, same session — ATTENDANCE BECOMES ITS OWN CONSOLE
+  SECTION, AND STAFF SEEING IT MINTS THE NINTH PRIVILEGE.** *"it should not be
+  in settings but in a section call attandance a new option besides gym memebr
+  settings etc also stafs can see it too default permission owner can change
+  it"*. **Read before adding a console nav item, before adding a privilege to
+  `ORG_PRIVILEGES`, before assuming a new privilege is a TypeScript change, and
+  before putting an owner-facing LIST inside Settings.**
+  **(1) A SECTION, NOT A PANEL** — a fourth item in the left rail, which holds
+  exactly three today (`Gym`, `Members`, `Settings`; `ConsoleLayout.jsx:118-121`,
+  measured). **THE DISTINCTION SETTLES FUTURE CARDS TOO: Settings is where a gym
+  CONFIGURES itself; a section is where it WORKS** — so the manual-attendance
+  SWITCH stays in Settings while the LIST moves out, the rule applied twice
+  rather than an inconsistency. :14570 and :11616 govern that nav file.
+  **(2) `attendance.read` IS THE NINTH PRIVILEGE, DEFAULT ON FOR ALL THREE
+  ROLES.** Reusing `members.read` would have satisfied *"staff see it by
+  default"* and FAILED *"owner can change it"* — unticking it to hide attendance
+  also takes the roster (:13803's precedent, restated at :21157).
+  **THE TRAP IS INVISIBLE TO THE TYPE SYSTEM: `gym_staff.privileges` carries a
+  CHECK listing all eight names in DDL** (`tenancy.ts:404-405`). **A ninth added
+  in TypeScript alone compiles, passes every unit test, and 500s in Postgres the
+  first time an owner ticks the box.** `db.migration.test.ts:549` already
+  asserts the CHECK equals `[...ORG_PRIVILEGES].sort()` — **it goes red by
+  itself, and "fixing" that expectation hides the defect.**
+  **Three more, none optional:** a **BACKFILL** onto stored sets (:21157's
+  precedent — a NULL row inherits the role template free, a stored row would
+  silently lose the default he just ruled, and no owner ever chose about a
+  privilege that did not exist) · **A TICK BOX in `PRIVILEGE_COPY`**
+  (`staffView.js:178-209`, which holds SIX of eight — `org.manage` and
+  `billing.manage` have none, an `OWED.md` gap) — **without it "owner can change
+  it" is a false sentence** · and **NOT in `OWNER_ONLY_PRIVILEGES`** (a manager
+  must carry it) **nor `LAST_OWNER_REQUIRED_PRIVILEGES`** (losing a READ strands
+  nobody).
+  **AND TWO FIXTURES MEASURE "NEWEST" BY NAME AND WILL GO STALE — the same
+  shape :21157's audit already caught once.** `schemas.test.ts`'s positive
+  control asserts the REAL newest privilege parses; `db.migration.test.ts:677`'s
+  `legacySeven` filters `billing.manage` by name and **its arithmetic still
+  passes with nine, so it goes QUIET rather than RED** — :5348 rule 4's
+  definition of a liar. **Written down instead of waited for.**
+  **STANDING: "add a privilege" is a MIGRATION in this repo, not a list edit** —
+  DDL CHECK, backfill, role templates, tick box, and two fixtures.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

@@ -7751,6 +7751,33 @@ file and is stated so nobody reads these as lower priority than they are.
       Members, never inside Settings**, and **one member's own history is
       answerable on the same route via `?userId=` — a filter, not a second
       endpoint** (:14401's shape).
+      **(6) ATTENDANCE IS ITS OWN CONSOLE SECTION, AND STAFF SEE IT BY DEFAULT
+      WITH THE OWNER ABLE TO CHANGE THAT** (:28107) — *"it should not be in
+      settings but in a section call attandance a new option besides gym memebr
+      settings etc also stafs can see it too default permission owner can change
+      it"*. **A fourth item in the console's left rail** (it holds three today:
+      `Gym`, `Members`, `Settings`). **The SWITCH stays in Settings while the
+      LIST moves out** — Settings is where a gym CONFIGURES itself, a section is
+      where it WORKS.
+      **⚠️ THIS MINTS `attendance.read`, THE NINTH PRIVILEGE, AND IN THIS REPO
+      THAT IS A MIGRATION AND NOT A LIST EDIT.** Reusing `members.read` would
+      have satisfied "staff see it by default" and FAILED "owner can change it"
+      — unticking it also takes the roster (:13803, :21157).
+      **The trap the type system cannot see: `gym_staff.privileges` carries a
+      CHECK listing all eight names in DDL** (`tenancy.ts:404-405`), **so a
+      ninth added in TypeScript alone compiles, passes every unit test, and 500s
+      in Postgres the first time an owner ticks the box.**
+      `db.migration.test.ts:549` already asserts the CHECK equals
+      `[...ORG_PRIVILEGES].sort()` and goes red by itself — **do not "fix" that
+      expectation.** Also required: a **BACKFILL** onto stored privilege sets
+      (:21157's precedent), a **TICK BOX** in `PRIVILEGE_COPY` (six of eight
+      have one — **without it "owner can change it" is a false sentence**),
+      default ON for **all three roles**, and **not** in
+      `OWNER_ONLY_PRIVILEGES` or `LAST_OWNER_REQUIRED_PRIVILEGES`.
+      **AND TWO FIXTURES MEASURE "NEWEST PRIVILEGE" BY NAME AND WILL GO STALE**
+      — `schemas.test.ts`'s positive control, and `db.migration.test.ts:677`'s
+      `legacySeven`, whose arithmetic still passes with nine so **it goes QUIET
+      rather than RED** (:5348 rule 4's liar). Named here rather than waited for.
       **NOTHING ON THIS CARD IS NOW OPEN.**
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
