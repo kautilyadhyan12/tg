@@ -1,6 +1,87 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW-NUMBERS CARD, §4a — T3 ROUND 1 AND ITS FIX ROUND.
+      DECISIONS :30236. **ZERO Critical/High: the packet SHIPS** (:5348 rule 1).
+      Nine Low from the review, a TENTH found while fixing them, **all ten
+      FIXED in this round.** **NO ROUND 2 IS OWED** — a Low buys no round, and
+      Kd was told that rather than asked (:28649's correction, one card on).
+      **THE `OWED.md` LINE STILL DOES NOT TICK: no screen, no smoke, and the
+      backfill has not been run against Kd's branch.**
+
+  1. **THE ONE THAT MATTERS: A JOIN THAT FANNED OUT, HIDDEN BY THE COUNTS BESIDE
+     IT.** `rollup.ts`'s `counted` joined `gym_members`; `gym_members_live_uq`
+     is a PARTIAL index (`WHERE removed_at IS NULL`), so leave-and-rejoin leaves
+     TWO rows both matching the day's interval and every workout fanned out —
+     `sets`, `total_reps`, `minutes`, `scored_sets` DOUBLED **while `workouts`
+     and `active_members` stayed right, being DISTINCT counts.** That split is
+     why nothing in the suite could see it. :12731's L2-3, same index, one table
+     over. Fixed as `WHERE EXISTS`; **O239** plus the test it never had, whose
+     fixture asserts both membership rows exist before counting (:10010).
+     **Low ONLY because `org_daily_stats` has no reader** — :5807 Critical/High
+     the day the chart moves onto that table.
+  2. **THE SUITE HAD NEVER PUT A VISIT OUTSIDE THE CURRENT WEEK**, so the ▲▼
+     arrow's window and the 8-week bucketing had nowhere to fail and
+     `prevVisits`/`prevVisitors` appeared once in the file — in a type
+     declaration. One visit exactly seven days back pins both; **O240**.
+  3. **A MIGRATION ASSERTION THAT RAN OVER ZERO ROWS AND WAS GREEN FOR IT.**
+     `org_daily_stats` is empty outside the overview suite, whose writer cleans
+     up after itself, so *"invented no history"*'s second half was vacuous and
+     its verdict depended on which sibling was mid-run. Positive control added.
+     **Its first fixture was refused 23502 by seven NOT NULL columns and the
+     surrounding `catch` swallowed it into a silent `false`** — the control was
+     failing for a reason unrelated to what it tested (:30094 §3(c), third time
+     in three commits).
+  4. **A MEASUREMENT INSIDE A KD RULING EXPIRED THE DAY IT WAS WRITTEN, and I
+     found it rather than the review.** `archiveSweep.ts` still cites
+     *"`org_daily_stats` … has no writer and no reader — grep-verified"* as
+     evidence for the four-month closure ruling; the commit under review gave it
+     a writer. **Ruling untouched, sentence corrected** — :25771's trigger sends
+     chats to that exact file.
+  5. **BOTH DOCUMENT FINDINGS WERE IN THE FILE THE §4b CHAT BUILDS FROM**: "3
+     days" where the code does 7, and a backfill given as `--now --days=70` when
+     **`--all-hours`** is the flag that ignores the hour filter (a bare `--now`
+     is dropped, the filter stays ON, Kd gets eight empty weeks — :15927's
+     FOURTH recurrence). Both corrected in the card, in the style §4a.4 already
+     used. The uneven-week-comparison requirement moved out of a
+     `packages/shared` comment and into §4b, where the screen's author reads.
+
+PROVE: all LOCAL (`localhost:5433`, :13659), all on the final bytes.
+       `orgs.overview` 13/13 (+1) · `db.migration` 16/16 · **full api 767/767,
+       exit 0** · `@app/shared` 52/52 · `web` 1612/1612 (shared changed —
+       :28395) · tsc exit 0 on api and shared, **PROVEN REAL by planting a type
+       error** (exit 1, 2 errors, restore sha256-identical) · eslint clean on
+       five api files + one shared · `node --check` on the harness · three root
+       guards green with REAL exit codes (:13247).
+       **SWEEP a stated SUBSET of 230: `MUTATE_ONLY=O229,O239,O240` — 3 RED, 0
+       ALIVE, 0 never ran**, three controls GREEN and tallied, restores
+       sha256-verified, mass-write detector clean over 415 rows. O229 was
+       RE-AIMED by the fix, not allow-listed (:15770); O239/O240 numbered from
+       the true ceiling O238, not the file's last row (:30094's own lesson).
+       **NOT QUOTED AS CLEAN:** the FIRST full local run failed
+       `workouts.sync.test.ts` at `beforeAll` on a 500 from `/v1/auth/register`.
+       Passes 23/23 scoped, full suite green on the final bytes, and this diff
+       cannot reach registration — **but `OWED.md:2155` does NOT name that
+       shape**, and :13746's rule stands: one green run is not a claim.
+
+FILES: `src/modules/orgs/{rollup.ts,repo.ts,archiveSweep.ts}` ·
+       `test/{orgs.overview.test.ts,db.migration.test.ts}` ·
+       `tools/mutate-orgs.mjs` · `packages/shared/src/orgs.ts` ·
+       `CARD-gym-overview-numbers.md` · `BACKLOG.md` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed.
+       **NEXT: §4b, THE WEB HALF** — three tiles and the 8-week chart on
+       `pages/console/Overview.jsx`, `overviewView.js` pure beside it. §4b now
+       names FIVE things, not four: the four empty states **plus the uneven week
+       comparison**, which is :5807 if the screen draws a bare arrow.
+       **AND THE STEP THAT IS NOT OPTIONAL: run the backfill**
+       (`tools/orgs-rollup.ts --all-hours --days=70` — the CORRECTED flag)
+       against the branch Kd's browser reads before asking him to smoke
+       anything, or his chart is eight empty weeks.
+```
+
+```
 TASK: THE OVERVIEW-NUMBERS CARD, §4a — THE SERVER HALF. DECISIONS :30094.
       Kd approved `CARD-gym-overview-numbers.md` (*"approve"*) with migration
       `0020` reviewed as SQL first. **THE `OWED.md` LINE DOES NOT TICK: the web

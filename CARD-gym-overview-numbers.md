@@ -204,8 +204,15 @@ the same numbers.
 REQUIREMENT RATHER THAN A LUXURY.** Workouts arrive from an OFFLINE QUEUE
 (R10.3): a Monday workout can be synced on Wednesday. A job that only ever
 computes yesterday would leave that Monday permanently under-counted, with
-nothing anywhere to say so. Default window: **3 gym-local days**, with the tool
+nothing anywhere to say so. Default window: **7 gym-local days**, with the tool
 able to widen it.
+
+> **CORRECTED AFTER THE BUILD, like §4a.4 below and for the same reason.** This
+> line said **3** and the shipped `ROLLUP_WINDOW_DAYS` is **7**: seven also
+> means a week-long worker outage heals itself on the next run rather than
+> leaving a hole nobody notices, which three does not. The plan is corrected
+> rather than left disagreeing with the code — a build document a later chat
+> reads as current is the thing that makes a silent divergence expensive.
 
 **The gym's day is `(now() AT TIME ZONE g.timezone)::date`** — the identical
 expression `readAttendanceContext` already uses for attendance
@@ -247,11 +254,21 @@ minute keeps it off the four existing schedules' minutes, for the reason those
 four blocks already give: one worker runs them all, and stacking makes a slow job
 look like a late one in the logs.
 
-`tools/orgs-rollup.ts` runs it by hand — `--now` (ignore the hour filter) and
-`--days=N` (widen the window) — on `tools/trial-sweep.ts`'s precedent. **Its
-first job is the backfill**: `--now --days=70` once, so a gym with attendance
-history recorded before this card gets an 8-week chart rather than eight empty
-bars.
+`tools/orgs-rollup.ts` runs it by hand — **`--all-hours`** (ignore the hour
+filter) and `--days=N` (widen the window) — on `tools/trial-sweep.ts`'s
+precedent. **Its first job is the backfill**: **`--all-hours --days=70`** once,
+so a gym with attendance history recorded before this card gets an 8-week chart
+rather than eight empty bars.
+
+> **CORRECTED AFTER THE BUILD, and this one would have cost Kd a smoke.** This
+> line gave the flag as `--now` and the backfill as `--now --days=70`. Shipped,
+> **`--all-hours` is what ignores the hour filter** and `--now=<ISO>` sets the
+> instant — so `--now` with no `=` is dropped as an unknown argument, the hour
+> filter stays ON, and the backfill matches only whichever gyms happen to read
+> 02:xx at that moment. It reports a cheerful, tiny number and Kd gets eight
+> empty weeks: :15927's recurrence, which the tool's own comment already names
+> as *"the backfill silently does almost nothing"*. `HANDOFF.md` and
+> `DECISIONS.md:30094` §4 both carry the right command; this file did not.
 
 #### 4a.4 `GET /v1/orgs/:gymId/overview`
 
@@ -348,6 +365,16 @@ not the screen.
 **"We have no data" and "the answer is zero" are DIFFERENT SENTENCES**, and
 printing the second for the first is the defect :8267 was raised on and :26736
 caught one card ago before it shipped.
+
+**AND A FIFTH REQUIREMENT THAT IS NOT AN EMPTY STATE: THE WEEK COMPARISON IS
+UNEVEN AND THE SCREEN MUST SAY SO.** `week.prevVisits`/`prevVisitors` are the
+whole of last week; `week.visits`/`visitors` are this week **so far**. On a
+Tuesday that is two days against seven, so a bare ▲▼ tells a healthy gym it is
+collapsing — :5807 on its face, a number on screen that is wrong. Say what the
+comparison is ("vs the same point last week", or the full week labelled as
+full); never draw the arrow alone. *(Added by the server half's review: the
+requirement existed only as a comment in `packages/shared`, which is not
+somewhere the screen's author reads.)*
 
 **Web tests:** each state above renders its own sentence · the tiles draw the
 server's figures and compute NOTHING (a mutant that changes a served number must

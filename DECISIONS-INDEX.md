@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,057 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,063 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,17 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,323 lines, MEASURED 2026-09-02 and not estimated**
-(1,057 + 1,208 + 58). **THE FIFTEENTH MEASUREMENT IS THE SPLIT WORKING, TAKEN
+**ALWAYS-READ TOTAL: 2,329 lines, MEASURED 2026-09-02 and not estimated**
+(1,063 + 1,208 + 58). **THE SIXTEENTH MEASUREMENT IS THE FIFTEENTH'S RESULT
+REPEATED ON A REVIEW ROUND: a T3 round plus ten fixes cost SIX lines here, all
+of them trigger phrases, and §1 and §2 did not move at all** — the record went
+to §1B, where :24813 sends every card record. **Two consecutive cards at +6 is
+the first evidence the split holds at a STEADY rate rather than on one lucky
+entry**, which is what the thirteenth measurement asked for and the fourteenth
+could only half answer. Taken with this header's own prescribed command
+(`grep -n "^## 1 ·…"` plus `wc -l`) against the bytes being committed, never by
+adding a delta to the figures above. **THE FIFTEENTH MEASUREMENT IS THE SPLIT
+WORKING, TAKEN
 THE SAME DAY AS THE FOURTEENTH: a whole server half — a migration, a new module,
 a fifth scheduled job, a new route, a new suite and eleven mutants — cost SIX
 lines here, all of them trigger phrases, and §1 did not move at all.** Its record
@@ -4273,6 +4282,40 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   the template**, twice in one session, the second time past `tsc`.
   **SERVER HALF ONLY. No screen, so NO SMOKE; T3 UNRUN; the `OWED.md` line does
   not tick.** PROVE and the sweep's figures at `:30094`'s Round log.
+
+- **:30236** — 2026-09-02 — **THE GYM'S NUMBERS, SERVER HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS** — nine Low from the review, a TENTH found
+  while fixing them, **all ten fixed in the round** with `BACKLOG.md` lines; no
+  round 2 owed (:5348 rule 1, :28649's correction). Escape hatch NOT armed —
+  :29740 was also zero. **Read before joining a table whose only uniqueness is a
+  PARTIAL index, before putting a `count(*)` beside a `count(<column>)` over the
+  same LEFT JOIN, before asserting anything over a table that only one suite ever
+  writes, before writing a command line into a build document, before trusting a
+  suite in which every fixture row lands in the CURRENT week, and before quoting
+  `org_daily_stats` as having no writer.**
+  **THE ONE THAT MATTERS: `counted` joined `gym_members` and FANNED OUT.**
+  `gym_members_live_uq` is PARTIAL (`WHERE removed_at IS NULL`), so leaving and
+  rejoining leaves TWO rows both matching the day's interval — `sets`,
+  `total_reps`, `minutes` and `scored_sets` DOUBLED **while `workouts` and
+  `active_members` stayed right, being DISTINCT counts**, which is what hid it.
+  :12731's L2-3, same index. **Low ONLY because the table has no reader** (ten
+  hits re-grepped, all schema/comment/privacy-list); it is :5807 Critical/High
+  the day the chart moves onto it. Fixed as `WHERE EXISTS`, with **O239** and the
+  test it never had. Also: **no visit in the suite had ever landed outside the
+  current week**, so the ▲▼ window and the 8-week bucketing had nowhere to fail
+  (**O240**) · **a migration assertion running over ZERO rows was vacuously
+  green**, its verdict depending on which sibling suite was mid-run, and the
+  positive control's first fixture was refused 23502 by seven NOT NULL columns
+  and swallowed by its own `catch` · **`archiveSweep.ts` still cited
+  "`org_daily_stats` has no writer" as evidence for Kd's four-month ruling**,
+  which this commit's own writer falsified — the ruling stands, the sentence is
+  corrected (:25771's trigger points there) · **the card said 3 days where the
+  code does 7 and gave a backfill command that silently does nothing**
+  (`--all-hours`, not `--now`) — :15927's fourth recurrence, in the document the
+  §4b chat builds from.
+  **STILL DOES NOT TICK: no screen, so no smoke; the backfill has NOT been run
+  against Kd's branch; `org_daily_stats` has a writer and still no reader.**
+  PROVE and the sweep's figures at `:30236`'s Round log.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

@@ -2791,7 +2791,7 @@ const MUTANTS = [
     suite: OVERVIEW_SUITE,
     why: "KD'S RULING 2, HALF TWO: the membership interval goes, so a person the gym removed months ago still adds workouts to its numbers. The condition is redundant TODAY (only a live member can mark themselves in), which is precisely why nothing but a mutant can prove it is still there for the day staff marking lands",
     expect: 'counts a workout for the gym ONLY when the member was present',
-    from: "        AND m.joined_at < t.day_end\n        AND (m.removed_at IS NULL OR m.removed_at > t.day_start)\n",
+    from: "          AND m.joined_at < t.day_end\n          AND (m.removed_at IS NULL OR m.removed_at > t.day_start)\n",
     to: "",
   },
   {
@@ -2874,6 +2874,25 @@ const MUTANTS = [
     expect: "refuses a stranger's gym with 404",
     from: "): Promise<OrgOverviewResponse> {\n  await requirePrivilege(deps, gymId, userId, \"attendance.read\");",
     to: "): Promise<OrgOverviewResponse> {\n  await requirePrivilege(deps, gymId, userId, \"members.read\");",
+  },
+  // ── T3 ROUND 1's FIXES (:5348 rule 5 — a class found once cannot come back) ──
+  {
+    id: 'O239',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "THE SEMI-JOIN GOES BACK TO A PLAIN JOIN, which is what shipped. `gym_members_live_uq` is PARTIAL, so a member who left and rejoined holds TWO rows, both match the day's interval, and every workout fans out: `sets`, `total_reps`, `minutes` and `scored_sets` DOUBLE while `workouts` and `active_members` stay right because they are DISTINCT counts. That split is why no other assertion in the suite can see it (:12731 L2-3, same index, one table over)",
+    expect: "counts a rejoined member's workout ONCE",
+    from: "      WHERE EXISTS (\n        SELECT 1 FROM gym_members m\n        WHERE m.gym_id = p.gym_id AND m.user_id = p.user_id\n          AND m.joined_at < t.day_end\n          AND (m.removed_at IS NULL OR m.removed_at > t.day_start)\n      )",
+    to: "      JOIN gym_members m ON m.gym_id = p.gym_id AND m.user_id = p.user_id\n        AND m.joined_at < t.day_end\n        AND (m.removed_at IS NULL OR m.removed_at > t.day_start)",
+  },
+  {
+    id: 'O240',
+    target: 'repo',
+    suite: OVERVIEW_SUITE,
+    why: "THE PREVIOUS WEEK COLLAPSES TO NOTHING, so §4.1's up/down arrow compares this week against a permanent zero and every gym is told for ever that it is growing. Before round 1 no visit in this suite ever landed outside the current week, so both `prev` figures were zero in every fixture and this window could be moved or deleted with nothing going red",
+    expect: 'serves the tiles and eight weeks',
+    from: "      count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)\n        AS prev_week_visits,",
+    to: "      count(*) FILTER (WHERE a.day >= b.week_start AND a.day < b.week_start)\n        AS prev_week_visits,",
   },
 ];
 

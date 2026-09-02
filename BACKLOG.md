@@ -3411,3 +3411,96 @@ its name and comments and observed neither.
       uncovered shape already lives (:27659's rule about comments that say what a
       test guarantees). :26947's shape, arriving in a comment rather than a test
       name.
+- [x] The membership join FANS OUT and doubles a stored day's numbers —
+      `apps/api/src/modules/orgs/rollup.ts` — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-1) — fixed this commit. `gym_members_live_uq` is
+      a PARTIAL unique index (`WHERE removed_at IS NULL`), so a member who leaves
+      and rejoins holds TWO rows and both satisfy the rolled day's interval;
+      `counted` joined `gym_members` with no dedupe, so every workout fanned out
+      and `sets`, `total_reps`, `minutes` and `scored_sets` DOUBLED. **`workouts`
+      and `active_members` stayed right because they are DISTINCT counts** — the
+      split that made it invisible to every other assertion in the suite.
+      **LOW ONLY BECAUSE `org_daily_stats` HAS NO READER** (re-grepped at fix
+      time: 10 hits, all schema, comment or privacy-list) — it is
+      :5807 Critical/High the day a screen reads that table. Fixed as a
+      SEMI-JOIN (`WHERE EXISTS`), with the test the guarantee never had (its
+      fixture asserts two membership rows exist before counting anything —
+      :10010) and **O239**. Same shape as :12731's L2-3, same index, one table
+      over. O229's anchor was re-aimed by the fix rather than allow-listed
+      (:15770).
+- [x] The build document said 3 days and the code does 7 —
+      `CARD-gym-overview-numbers.md` §4a.2 — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-2) — fixed this commit. The same commit corrected
+      §4a.4's divergence and wrote *"The plan was corrected rather than quietly
+      diverged from"*; this one and L-3 were left behind. Corrected in the same
+      style, with the reason seven beats three (a week-long outage heals itself).
+- [x] The build document's backfill command silently does nothing —
+      `CARD-gym-overview-numbers.md` §4a.3 — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-3) — fixed this commit. It gave `--now` as the
+      flag that ignores the hour filter and the backfill as `--now --days=70`.
+      Shipped, **`--all-hours` ignores the filter** and `--now=<ISO>` sets the
+      instant, so a bare `--now` is dropped, the filter stays ON, and a chat
+      following the card hands Kd eight empty weeks — :15927's fourth
+      recurrence. `HANDOFF.md` and `DECISIONS.md:30094` §4 carried the right
+      command, which is the only reason this was not higher.
+- [x] The ▲▼ arrow's previous-week figures had no assertion and no mutant —
+      `apps/api/test/orgs.overview.test.ts` — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-4) — fixed this commit. `prevVisits`/
+      `prevVisitors` appeared once in the whole suite, in a type declaration.
+      Related and fixed with it: **every visit in the file was on today**, so the
+      8-week series was only ever observed as *"seven zeros and today"* and its
+      bucketing had nowhere to fail. One visit exactly seven days back now pins
+      both the tile and bucket 6, plus **O240**.
+- [x] A migration assertion that runs over zero rows and is vacuously green —
+      `apps/api/test/db.migration.test.ts` — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-5) — fixed this commit. *"invented no history"*'s
+      second half counts `org_daily_stats` rows with `scored_sets = 0 AND
+      avg_form_score IS NOT NULL`; the table is empty outside the overview suite
+      and that suite cleans up after itself, so the verdict depended on which
+      sibling happened to be mid-run — the class this file already records at its
+      O111 comment. A positive control now plants a violating row inside a
+      rolled-back transaction and asserts the query sees it. The first half (the
+      `information_schema` readback :28221 §6 requires) was sound and is
+      untouched.
+- [x] Two counting lines twenty apart, only one saying why it is safe —
+      `apps/api/src/modules/orgs/repo.ts` — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-6) — fixed this commit. The tiles use `count(*)`
+      and the series `count(a.id)` over the same LEFT JOIN; the series comment
+      warns against exactly the expression sitting uncommented above it. The
+      tiles' `count(*)` is safe **only because every FILTER tests `a.day`**,
+      which is NULL on the all-NULL row — now said where it can be read.
+- [x] Three fields called `visitors`, two populations, one saying so —
+      `packages/shared/src/orgs.ts` — found 2026-09-02, gym-overview server-half
+      T3 round 1 (L-7) — fixed this commit. `today`/`week`/`weeks[]` count every
+      attendee; `month.visitors` counts only current non-complimentary members so
+      it can be a numerator. Both true, and the web half draws them adjacently:
+      an owner holding a complimentary seat (`repo.ts:346`) reads *"2 people came
+      today"* beside *"1 member came this month"*. The scope is now stated on all
+      three.
+- [x] A bound enforced by a default rather than a clamp —
+      `apps/api/src/modules/orgs/repo.ts` — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-8) — fixed this commit. `weeks?: number` was
+      unclamped while `orgOverviewSchema.weeks` is `.max(OVERVIEW_WEEKS)`, so a
+      future caller passing 12 builds a valid response that fails its own
+      outgoing parse — a 500 on a read. Unreachable today (the only caller passes
+      nothing). :28452's second C/H shape; now `Math.min`, the default and the cap
+      being one constant paired in code rather than by a paragraph (:28649 §2).
+- [x] A build requirement living only in a shared-package comment —
+      `CARD-gym-overview-numbers.md` §4b — found 2026-09-02, gym-overview
+      server-half T3 round 1 (L-9) — fixed this commit. *"The comparison is
+      deliberately UNEVEN and a screen must say so"* was in `packages/shared`
+      and in neither the card's §4b list nor `OWED.md`. A bare ▲▼ on a Tuesday
+      compares two days against seven and tells a healthy gym it is collapsing —
+      :5807. :29057's class, one card old.
+- [x] A measurement quoted in a ruling's file expired the day it was written —
+      `apps/api/src/modules/orgs/archiveSweep.ts` — found 2026-09-02 by the chat
+      applying this round's fixes, NOT by the review — fixed this commit. Its
+      header cites *"`org_daily_stats` exists in the schema and has no writer and
+      no reader — grep-verified"* as one of the two measurements behind Kd's
+      four-month closure ruling. **The same commit under review gave that table a
+      writer.** The ruling is untouched (a daily aggregate is not a *"last
+      active"* date and nothing queries it for one) but :25771's trigger sends
+      chats to this exact file, and they would read a dead table into a live one.
+      Corrected in place rather than deleted, because it is the evidence Kd was
+      shown. :7298's class — a sentence that outlives the condition that raised
+      it.

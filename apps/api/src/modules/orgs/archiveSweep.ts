@@ -13,10 +13,18 @@
 // **IT COUNTS FROM THE DAY THE PLAN ENDED, NOT FROM INACTIVITY, and that was a
 // recommendation he approved rather than a paraphrase of what he said.** Two
 // measurements decided it: nothing in this product records when a gym was last
-// active (`org_daily_stats` exists in the schema and has no writer and no reader
-// — grep-verified), and an inactivity rule would be able to close a gym that is
-// PAYING but quiet, which is closing a paying customer's account. The date a
-// plan ended needs no new machinery and cannot reach a paying gym at all.
+// active, and an inactivity rule would be able to close a gym that is PAYING but
+// quiet, which is closing a paying customer's account. The date a plan ended
+// needs no new machinery and cannot reach a paying gym at all.
+//
+// **THE FIRST MEASUREMENT WAS "`org_daily_stats` HAS NO WRITER AND NO READER —
+// grep-verified", AND HALF OF IT EXPIRED ON 2026-09-02**: `modules/orgs/rollup.ts`
+// writes that table hourly now (:30094). **The ruling is untouched** — the sweep
+// still counts from the day the plan ended, and the reason still holds, because
+// a daily aggregate is not a "last active" date and nothing queries it for one.
+// The sentence is corrected rather than deleted because it is the evidence Kd
+// was shown, and a chat sent here by :25771's trigger would otherwise read a
+// dead table into a live one.
 //
 // **WHAT CLOSING A GYM DOES, because the word is bigger than the change.**
 // `gyms.status` becomes `archived`. Nothing is deleted: the gym, its members,

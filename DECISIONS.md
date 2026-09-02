@@ -30232,3 +30232,153 @@ Every row sits in :5857 rule 4a's *"numbers a user sees"* column.
 (:28221 §6 — *"applied successfully" is not evidence that anything ran*): both
 columns present, `integer`, `NOT NULL`, default `0`, over a table holding **0
 rows**, so the default's claim is about nothing.
+
+## 2026-09-02 — THE GYM'S NUMBERS, SERVER HALF, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — and the finding that matters doubles a stored number for anyone who left the gym and came back, invisible because the two counts beside it are DISTINCT
+
+**Read before joining a table whose only uniqueness is a PARTIAL index, before
+putting a `count(*)` beside a `count(<column>)` over the same LEFT JOIN, before
+asserting anything over a table that only one suite ever writes, before writing
+a command line into a build document, before trusting a suite in which every
+fixture row lands in the CURRENT week, and before quoting `org_daily_stats` as
+having no writer.**
+
+Reviews `6b91e15` (:30094) in a fresh chat. **Zero Critical/High, so the packet
+SHIPS** (:5348 rule 1). **Nine Low from the review, a TENTH found while fixing
+them, all ten FIXED in this round with their `BACKLOG.md` lines** (rule 1's
+*"they will be fixed"*) — **no round 2 is owed, and Kd was told so rather than
+asked**, :28649's correction applied one card later. **Escape hatch NOT armed:**
+zero Criticals here, and :29740 — the previous round in this subsystem — was
+also zero. Kd approved the fix list before a byte was written (*"go"*).
+
+### 1 · THE FAN-OUT, AND IT IS THIS REPO'S OWN RECORDED TRAP ONE TABLE OVER
+
+`rollup.ts`'s `counted` CTE joined `gym_members` with only the membership
+interval as its condition. **`gym_members_live_uq` is a PARTIAL unique index
+(`WHERE removed_at IS NULL`), so a member who leaves and rejoins holds TWO rows,
+and both satisfy the same gym-day's interval** — reachable through the console's
+own two buttons (`repo.ts` stamps `removed_at = now()`; the confirm path inserts
+a fresh row, its `ON CONFLICT` target being that same partial index). Every
+workout then fanned out once per matching row.
+
+**WHAT MAKES IT WORTH AN ENTRY IS WHICH COLUMNS SURVIVED.** `workouts` and
+`active_members` are `count(DISTINCT …)` and stayed correct; `sets`,
+`total_reps`, `minutes` and `scored_sets` DOUBLED. **A fixture can therefore
+assert the workout count, get the right answer, and prove nothing about the four
+numbers beside it.** That is the same shape :12731's L2-3 found in `formerOrgs`
+— same index, same *"a guarantee that holds only because of what one caller
+happens to do"* — and `repo.ts:563` already carries a `DISTINCT ON` for it.
+
+**IT IS LOW ONLY BECAUSE `org_daily_stats` HAS NO READER**, re-grepped at fix
+time: ten hits across `apps/api/src`, `packages/shared` and `apps/web`, every one
+a schema file, a comment or the privacy list. **The day :30094 §2.1's condition
+lands and the chart moves onto the table, this becomes :5807 Critical/High
+without anybody editing it.** Fixed as a SEMI-JOIN (`WHERE EXISTS`), which
+cannot fan out however many rows match, with **O239** and the test the guarantee
+never had — whose fixture asserts the two membership rows exist *before* it
+counts anything (:10010: a fixture that cannot produce the defect proves
+nothing).
+
+### 2 · THE SUITE HAD NEVER PUT A VISIT OUTSIDE THE CURRENT WEEK
+
+`prevVisits`/`prevVisitors` — §4.1's up/down arrow — appeared **once** in the
+whole suite, in a type declaration. Underneath that: **every visit in the file
+was on `today`**, so the 8-week series was only ever observed as *"seven zeros
+and today"*, and both the previous-week window and the bucketing could be moved
+or deleted with nothing going red. One visit exactly seven days back fixes both
+at once (it always lands in the previous Monday bucket, whatever weekday the
+suite runs on), plus **O240**.
+
+### 3 · AN ASSERTION THAT RAN OVER ZERO ROWS AND WAS GREEN FOR IT
+
+`db.migration.test.ts`'s *"invented no history"* has two halves. The
+`information_schema` readback is sound and is the part :28221 §6 requires. Its
+second half counts `org_daily_stats` rows with `scored_sets = 0 AND
+avg_form_score IS NOT NULL` — **and that table is empty outside the overview
+suite, whose own writer cleans up after itself, so the count ran over nothing and
+was vacuously true.** Its verdict depended on which sibling suite happened to be
+mid-run: the *"a verdict that depends on which database you point at"* class this
+same file already records at its O111 comment, and :26947 §2's *"a test whose
+NAME is wider than its query"* arriving again. A positive control now plants a
+violating row inside a rolled-back transaction and asserts the query sees
+exactly it.
+
+**AND THE FIXTURE'S FIRST ATTEMPT WAS REFUSED BY THE DATABASE, WHICH IS THE
+DETAIL TO KEEP:** seven of `org_daily_stats`' columns are `NOT NULL` with no
+default (only `visits`/`visitors` default, because `0020` added them to a table
+that already had rows to answer for), so an insert naming four columns raised
+23502 — **and the surrounding `catch` swallowed it into a silent `false`**. The
+control was failing for a reason that had nothing to do with what it tested.
+:30094 §3(c)'s two refusals, a third time in three commits.
+
+### 4 · A MEASUREMENT INSIDE A KD RULING EXPIRED THE DAY IT WAS WRITTEN
+
+**Found while fixing the other nine, not by the review.** `archiveSweep.ts`'s
+header cites *"`org_daily_stats` exists in the schema and has no writer and no
+reader — grep-verified"* as one of the two measurements behind Kd's four-month
+closure ruling (:25771). **The commit under review gave that table a writer.**
+The ruling is untouched — a daily aggregate is not a *"last active"* date and
+nothing queries it for one — but **:25771's own trigger sends chats to that
+exact file**, where they would read a dead table into a live one. Corrected in
+place rather than deleted, because it is the evidence Kd was shown. :7298's
+class: a sentence that outlives the condition that raised it.
+
+### 5 · THE TWO DOCUMENT FINDINGS, AND WHY THEY ARE NOT COSMETIC
+
+`CARD-gym-overview-numbers.md` is what the §4b chat builds from. It said the
+window was **3 days** where the code ships **7**, and it gave the backfill as
+`--now --days=70` when **`--all-hours`** is the flag that ignores the hour
+filter and `--now=<ISO>` sets the instant — so a bare `--now` is dropped, the
+filter stays ON, and the backfill matches only whichever gyms happen to read
+02:xx at that moment. **A chat following the card hands Kd eight empty weeks**:
+:15927's fourth recurrence, and the tool's own comment already names the outcome
+(*"the backfill silently does almost nothing"*). The same commit had corrected
+§4a.4's divergence and written *"The plan was corrected rather than quietly
+diverged from"* — **these two were left behind, which is what makes that
+sentence worth checking rather than quoting.**
+
+Also moved into §4b, where the screen's author will read it: **the week
+comparison is UNEVEN and the screen must say so.** It existed only as a comment
+in `packages/shared`. On a Tuesday a bare arrow compares two days against seven
+and tells a healthy gym it is collapsing — :5807, and :29057's class one card
+old.
+
+### Round log
+
+The other four Lows, all fixed: a `count(*)` and a `count(a.id)` twenty lines
+apart over the same LEFT JOIN with only the second explaining itself (the
+tiles' is safe **only** because every FILTER tests `a.day`, NULL on the
+all-NULL row) · three fields named `visitors` counted over two populations with
+only one saying so (an owner holding a complimentary seat reads *"2 people came
+today"* beside *"1 member came this month"* — both true) · `weeks?: number`
+unclamped against a `.max(OVERVIEW_WEEKS)` response schema, a 500 on a read from
+:28452's second C/H shape, unreachable today · and the §4b requirement above.
+
+**PROVE, all LOCAL (`localhost:5433`, :13659) and all on the final bytes:**
+`orgs.overview` **13/13** (+1) · `db.migration` **16/16** · **full api suite
+767/767, exit 0** · `@app/shared` **52/52** · `web` **1612/1612** (shared
+changed — :28395) · `tsc --noEmit` exit 0 on `api` and `@app/shared`, **PROVEN
+REAL by planting a type error** (exit 1, 2 errors, restore sha256-identical) ·
+`eslint --max-warnings=0` exit 0 on five api files and one shared file ·
+`node --check` on the harness · the three root guards green with REAL exit codes
+(:13247), and the first `check-harnesses` run I reported as red was **my own
+wrong path**, not the guard.
+
+**SWEEP, a stated SUBSET of 230: `MUTATE_ONLY=O229,O239,O240` — 3 mutants, 3
+RED, 0 ALIVE, 0 never ran**, all three controls GREEN and tallied, restores
+sha256-verified after every mutant, mass-write detector clean over 415
+fingerprinted rows, and the harness printed its own *"THIS IS NOT A FULL
+SWEEP"*. **O229's anchor was re-aimed by the semi-join fix rather than
+allow-listed or pointed at whichever line came first** (:15770). Numbering came
+from the true ceiling in use (O238) and not the file's last row — :30094's own
+duplicate-id lesson, applied by the chat that recorded it.
+
+**ONE THING I WILL NOT QUOTE AS CLEAN.** The first full local run failed
+`workouts.sync.test.ts` at `beforeAll` with a 500 from `/v1/auth/register`. It
+passes 23/23 scoped, the full suite passed 767/767 on the final bytes, and
+nothing in this diff can reach the registration path — **but that is a shape
+`OWED.md:2155` does NOT name** (it names `catalog.seed` and `db.migration`), and
+:13746's rule stands: **one green run is not a claim about the suite.**
+
+**WHAT STILL DOES NOT TICK:** no screen exists, so **no smoke** · the backfill
+has **not** been run against Kd's Neon branch · `org_daily_stats` has a writer
+and still **no reader** · the overview card's `OWED.md` line does not tick.

@@ -658,6 +658,60 @@ d("gym overview numbers (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "counts a rejoined member's workout ONCE, not once per membership row",
+    async () => {
+      const owner = await makeUser("r9-owner");
+      const member = await makeUser("r9-member");
+      const org = await makeOrg(owner.cookies, "Rollup Rejoined");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const at = new Date((await dbNow()).getTime() + 14 * 24 * 3600 * 1000);
+      const day = await gymDay(org.org.id, at, 1);
+      const noon = new Date(
+        (await gymLocalInstant(org.org.id, at, 11)).getTime() - 24 * 3600 * 1000,
+      );
+
+      // LEFT AND CAME BACK, through the console's own two buttons.
+      // `gym_members_live_uq` is PARTIAL (`WHERE removed_at IS NULL`), so the
+      // closed row does not block the new one and this person now holds TWO,
+      // BOTH of which satisfy the rolled day's membership interval.
+      await sql`
+        UPDATE gym_members SET removed_at = ${noon}
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // THE FIXTURE STATES ITS OWN PREMISE (:10010): a test whose fixture cannot
+      // produce the defect proves nothing, so the two rows are asserted to exist
+      // before a single number is counted.
+      const rows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_members
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      expect(rows[0]?.n).toBe(2);
+
+      await visit(org.org.id, member.userId, day);
+      await workout(member.userId, noon, { sets: 4, reps: 40, minutes: 20, formScores: [80] });
+
+      await rollUpGymDays(
+        { sql, log: noopLog },
+        { now: at, gymIds: [org.org.id], allHours: true, days: 7 },
+      );
+
+      // WITH A PLAIN JOIN THESE READ 8 / 80 / 40 / 2 while `workouts` and
+      // `active_members` STAY RIGHT — they are DISTINCT counts. That split is
+      // what made the defect invisible to every other assertion in this file,
+      // so both halves are asserted here.
+      const row = dayRow(await statsFor(org.org.id), day);
+      expect(row.workouts).toBe(1);
+      expect(row.active_members).toBe(1);
+      expect(row.sets).toBe(4);
+      expect(row.total_reps).toBe(40);
+      expect(row.minutes).toBe(20);
+      expect(row.scored_sets).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // -------------------------------------------------------------------------
   // THE ROUTE
   // -------------------------------------------------------------------------
@@ -674,12 +728,17 @@ d("gym overview numbers (real Postgres)", () => {
 
       const now = await dbNow();
       const today = await gymDay(org.org.id, now, 0);
+      // EXACTLY ONE WEEK BACK, so it lands in the previous Monday-based bucket
+      // whatever weekday the suite runs on — the ▲▼ arrow's other half, and the
+      // only visit in this file that is not in the current week.
+      const lastWeek = await gymDay(org.org.id, now, 7);
 
       // Today: one member twice, one member once — 3 visits, 2 visitors, and the
       // two numbers diverge (header #2).
       await visit(org.org.id, member.userId, today, { opens: 360, closes: 420 });
       await visit(org.org.id, member.userId, today, { opens: 1020, closes: 1200 });
       await visit(org.org.id, other.userId, today, { opens: 360, closes: 420 });
+      await visit(org.org.id, member.userId, lastWeek, { opens: 360, closes: 420 });
 
       const overview = await readOverview(org.org.id, owner.cookies);
 
@@ -687,9 +746,18 @@ d("gym overview numbers (real Postgres)", () => {
       expect(overview.timezone).toBe("Asia/Kolkata");
       expect(overview.tiles.today.visits).toBe(3);
       expect(overview.tiles.today.visitors).toBe(2);
-      // The week contains today, so it is at least today's figures.
+      // The week contains today, so it is at least today's figures — and the
+      // week BEFORE it holds exactly the one visit above. Without that visit
+      // both `prev` figures are zero for every fixture in this file, which is
+      // the state in which the ▲▼ arrow's window can be moved or deleted with
+      // nothing going red.
       expect(overview.tiles.week.visits).toBe(3);
       expect(overview.tiles.week.visitors).toBe(2);
+      expect(overview.tiles.week.prevVisits).toBe(1);
+      expect(overview.tiles.week.prevVisitors).toBe(1);
+      // Last week's visitor is the same person, so the 30-day figure is still
+      // two people and adoption is unmoved — the new visit is observed by the
+      // previous-week assertions and nothing else.
       expect(overview.tiles.month.visitors).toBe(2);
       // Two joined members; the owner's complimentary seat is excluded.
       expect(overview.tiles.month.members).toBe(2);
@@ -700,7 +768,13 @@ d("gym overview numbers (real Postgres)", () => {
       expect(overview.weeks.length).toBe(8);
       const starts = overview.weeks.map((w) => w.weekStart);
       expect([...starts].sort()).toEqual(starts);
-      expect(overview.weeks.slice(0, 7).every((w) => w.visits === 0)).toBe(true);
+      expect(overview.weeks.slice(0, 6).every((w) => w.visits === 0)).toBe(true);
+      // THE BUCKETING IS NOW OBSERVED AS SOMETHING OTHER THAN "seven zeros and
+      // today": a visit a week back must land in bucket 6 and nowhere else, so
+      // a series whose weeks were off by one has somewhere to fail.
+      const previous = overview.weeks[6];
+      expect(previous?.visits).toBe(1);
+      expect(previous?.visitors).toBe(1);
       const current = overview.weeks[7];
       expect(current?.visits).toBe(3);
       expect(current?.visitors).toBe(2);

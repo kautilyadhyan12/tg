@@ -4374,7 +4374,12 @@ export async function getOrgOverview(
   sql: SqlOrTx,
   input: { gymId: string; weeks?: number; monthDays?: number },
 ): Promise<OrgOverviewRow | null> {
-  const weeks = input.weeks ?? OVERVIEW_WEEKS;
+  // CLAMPED, NOT MERELY DEFAULTED. `orgOverviewSchema.weeks` caps the array at
+  // `OVERVIEW_WEEKS`, so a caller asking for more would build a valid response
+  // that fails its own outgoing parse — a 500 on a read, from a number nobody
+  // would think to look at. The default and the cap are the same constant and
+  // they are paired HERE rather than by a paragraph (:28649 §2).
+  const weeks = Math.min(input.weeks ?? OVERVIEW_WEEKS, OVERVIEW_WEEKS);
   const monthDays = input.monthDays ?? OVERVIEW_MONTH_DAYS;
 
   const gymRows = await sql<{ timezone: string; today: string }[]>`
@@ -4405,6 +4410,12 @@ export async function getOrgOverview(
                AS series_start
     )
     SELECT
+      -- "count(*)" IS SAFE HERE ONLY BECAUSE OF THE FILTER, and the series
+      -- query twenty lines below uses "count(a.id)" for the opposite reason.
+      -- This is a LEFT JOIN, so a gym nobody has ever visited produces one
+      -- all-NULL row; every FILTER here tests "a.day", which is NULL on that
+      -- row, so it is excluded and the count is 0. Delete or widen a FILTER and
+      -- "count(*)" starts reporting that empty row as one visit.
       count(*) FILTER (WHERE a.day = b.today) AS today_visits,
       count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,
       count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,

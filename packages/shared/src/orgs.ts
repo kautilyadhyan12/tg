@@ -2069,7 +2069,14 @@ export const orgOverviewSchema = z
     tiles: z
       .object({
         /** Live, not from the nightly record: "how many have come in so far" is
-         *  a question about a day still in progress. */
+         *  a question about a day still in progress.
+         *
+         *  **`visitors` HERE COUNTS EVERY ATTENDEE, and `month.visitors` below
+         *  does NOT** — that one is restricted to current, non-complimentary
+         *  members so it can be a numerator. Both are true; they are different
+         *  populations, and a screen that draws them side by side without
+         *  saying so shows an owner who marked themselves in "2 people came
+         *  today" beside "1 member came this month". */
         today: z
           .object({
             visits: z.number().int().min(0),
@@ -2080,7 +2087,12 @@ export const orgOverviewSchema = z
          *  *"Δ vs previous period (▲▼, org TZ weeks)"*. **The comparison is
          *  deliberately UNEVEN and a screen must say so**: on a Tuesday it is
          *  two days against seven, and a bare arrow would be a false claim that
-         *  the gym is collapsing. */
+         *  the gym is collapsing. (A build requirement, not a note — it is in
+         *  `CARD-gym-overview-numbers.md` §4b's list beside the empty states,
+         *  because a requirement that lives only in a comment on the far side
+         *  of a package is one the screen's author never reads.)
+         *
+         *  **Counted over EVERY attendee**, like `today` and unlike `month`. */
         week: z
           .object({
             visits: z.number().int().min(0),

@@ -1034,6 +1034,41 @@ d("0001_init on a real database", () => {
       SELECT count(*)::int AS n FROM org_daily_stats
       WHERE scored_sets = 0 AND avg_form_score IS NOT NULL`;
     expect(fabricated[0]?.n).toBe(0);
+
+    // POSITIVE CONTROL, AND WITHOUT IT THE ASSERTION ABOVE IS VACUOUS.
+    // `org_daily_stats` is empty outside the overview suite and its only writer
+    // cleans up after itself, so that count runs over ZERO ROWS and is green
+    // whatever the writer does — a test whose verdict depends on which suite
+    // happens to be mid-run (:26947 §2's class: a name wider than its query).
+    // A violating row is planted inside a rolled-back transaction to prove the
+    // query can actually see one.
+    let sawViolation = false;
+    try {
+      await sql.begin(async (tx) => {
+        await tx`
+          INSERT INTO gyms (slug, name, owner_user_id)
+          VALUES ('zz-ods-fabricated', 'zz ods fabricated', (SELECT id FROM users LIMIT 1))`;
+        // EVERY WORKOUT-SIDE COLUMN IS NOT NULL WITH NO DEFAULT, and omitting
+        // them refuses the row with a 23502 that this `catch` would have
+        // swallowed into a silent `false`. Only `visits`/`visitors` default,
+        // because `0020` added them to a table that already had rows to answer
+        // for. The fixture was wrong about the product and the database said so.
+        await tx`
+          INSERT INTO org_daily_stats
+            (gym_id, day, active_members, workouts, sets, total_reps, minutes,
+             scored_sets, avg_form_score, new_members, removed_members)
+          VALUES ((SELECT id FROM gyms WHERE slug = 'zz-ods-fabricated'),
+                  DATE '2020-01-01', 0, 0, 0, 0, 0, 0, 42.0, 0, 0)`;
+        const seen = await tx<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM org_daily_stats
+          WHERE scored_sets = 0 AND avg_form_score IS NOT NULL`;
+        sawViolation = (seen[0]?.n ?? 0) === 1;
+        throw new Error("ROLLBACK");
+      });
+    } catch {
+      /* rolled back on purpose */
+    }
+    expect(sawViolation).toBe(true);
   });
 
   /** `hours_mode` DEFAULTS TO `unset` AND NOTHING BACKFILLED IT — :26736's rule

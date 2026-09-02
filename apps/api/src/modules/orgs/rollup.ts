@@ -202,7 +202,7 @@ export async function rollUpGymDays(
       GROUP BY t.gym_id, t.day
     ),
     -- **:29961 RULING 2, AND IT IS TWO CONDITIONS.** "present" is the second
-    -- one (they were in the building). This join is the FIRST — §2.1's
+    -- one (they were in the building). The EXISTS below is the FIRST — §2.1's
     -- membership interval, "[joined_at, removed_at)" measured against the gym's
     -- own day.
     --
@@ -219,11 +219,23 @@ export async function rollUpGymDays(
              w.sets_count, w.total_reps, w.duration_ms
       FROM present p
       JOIN target t ON t.gym_id = p.gym_id AND t.day = p.day
-      JOIN gym_members m ON m.gym_id = p.gym_id AND m.user_id = p.user_id
-        AND m.joined_at < t.day_end
-        AND (m.removed_at IS NULL OR m.removed_at > t.day_start)
       JOIN workouts w ON w.user_id = p.user_id
         AND (w.started_at AT TIME ZONE t.timezone)::date = p.day
+      -- A SEMI-JOIN AND NOT A JOIN, AND THAT IS THE WHOLE POINT.
+      -- "gym_members_live_uq" is a PARTIAL unique index (WHERE removed_at IS
+      -- NULL), so a person who leaves and rejoins holds TWO rows and BOTH can
+      -- satisfy the interval below on the same gym-day — reachable through the
+      -- console's own two buttons. A plain JOIN fans this workout out once per
+      -- matching row and DOUBLES "sets", "total_reps", "minutes" and
+      -- "scored_sets", while "workouts" and "active_members" stay right because
+      -- they are DISTINCT counts — which is exactly what makes it invisible.
+      -- :12731's L2-3, the same partial index, one table over.
+      WHERE EXISTS (
+        SELECT 1 FROM gym_members m
+        WHERE m.gym_id = p.gym_id AND m.user_id = p.user_id
+          AND m.joined_at < t.day_end
+          AND (m.removed_at IS NULL OR m.removed_at > t.day_start)
+      )
     ),
     wk AS (
       SELECT c.gym_id, c.day,
