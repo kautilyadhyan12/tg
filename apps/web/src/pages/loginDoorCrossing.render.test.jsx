@@ -203,6 +203,19 @@ describe('the member sidebar', () => {
     const links = Array.from(document.querySelectorAll('a[href]'));
     expect(links.some((a) => a.getAttribute('href') === '/my-gyms')).toBe(true);
     expect(links.filter((a) => a.getAttribute('href').startsWith('/console'))).toHaveLength(0);
+    // T3 ROUND 1, L-2 — THE HREF FILTER ALONE LEFT A GAP THE OLD WORDS BAN HAD
+    // COVERED: a crossing built as a BUTTON with an onClick navigate, or one
+    // pointing at an innocent path, has no `/console` href to find. So the
+    // words come back — ANCHORED and SINGULAR, banning exactly the item Kd
+    // removed (`My Gym`) while leaving the member section he asked for
+    // (`My Gyms`) alone.
+    //
+    // **IT LIVES IN THIS CASE AND NOT IN THE ONE ABOVE, and that is the whole
+    // lesson of where it was first put.** The case above renders a sidebar for
+    // somebody with NO gyms, where no gym item is drawn at all — a ban on a
+    // label is vacuous against a screen that draws no labels. It has to be
+    // asserted where an item actually renders, which is here.
+    expect(screen.queryByText(/^\s*my gym\s*$/i)).toBeNull();
   });
 });
 

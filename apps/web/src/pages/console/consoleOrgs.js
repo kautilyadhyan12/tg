@@ -73,6 +73,10 @@ let inFlightUserId = null;
  *  protects a real sign-out; this protects a deliberate reset. */
 let generation = 0;
 const listeners = new Set();
+/** The subset of `listeners` that asked for the focus re-read — see
+ *  `subscribeConsoleOrgs`. The member app's subscriber is deliberately not in
+ *  here (T3 round 1 C/H-3). */
+const watchers = new Set();
 let watching = false;
 
 function publish(next) {
@@ -88,12 +92,34 @@ export function consoleOrgsSnapshot() {
   return state.forUserId === getUserId() ? state : IDLE;
 }
 
-export function subscribeConsoleOrgs(listener) {
+/** `watch: false` SUBSCRIBES TO THE ANSWER WITHOUT ASKING FOR THE FOCUS
+ *  RE-READ, and it exists because the member app now reads this store.
+ *
+ *  **T3 round 1 C/H-3.** `subscribeConsoleOrgs` started the window watch for
+ *  every subscriber, so putting `My Gyms` in the member `Sidebar` — which
+ *  `AppLayout` keeps mounted on every member screen — turned :16331's
+ *  refresh-on-focus into an app-wide behaviour for MEMBERS: measured at 1 read
+ *  on mount and 4 after three focus events, all day, on every screen. The
+ *  console's version is sized for the handful of staff who open a console; a
+ *  gym's members are hundreds of people behind ONE NAT'd address, and
+ *  `/v1/orgs/mine` has only the global 300/minute that `trustProxy` keys to
+ *  `req.ip` — the same shape as the per-IP mark limit :28649 had to raise.
+ *
+ *  **The console's behaviour is UNCHANGED**: it passes nothing and still
+ *  watches. Stopping is now keyed on the WATCHERS rather than on all
+ *  listeners, so a quiet member subscriber can never hold the listeners open
+ *  after the last console screen has gone, nor tear them off one that is still
+ *  there. */
+export function subscribeConsoleOrgs(listener, { watch = true } = {}) {
   listeners.add(listener);
-  startWatching();
+  if (watch) {
+    watchers.add(listener);
+    startWatching();
+  }
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0) stopWatching();
+    watchers.delete(listener);
+    if (watchers.size === 0) stopWatching();
   };
 }
 
@@ -300,8 +326,15 @@ function handleVisibilityChange() {
 /** BOTH EVENTS, and they are not the same event. `visibilitychange` is the tab
  *  switch; `focus` is the other window on the same screen — which is precisely
  *  the case this card exists for, two people side by side, one of them ticking
- *  a box. Attached while the console has a subscriber and removed with the last
- *  one, so nothing is listening while a person is in the member app.
+ *  a box. Attached while the console has a WATCHING subscriber and removed with
+ *  the last one.
+ *
+ *  **This used to say "so nothing is listening while a person is in the member
+ *  app", and on 2026-09-02 that became FALSE** — the member `Sidebar` subscribed
+ *  to this store for its `My Gyms` item and, through it, to these two events on
+ *  every member screen. It is true again because that subscriber passes
+ *  `watch: false`; the sentence is corrected rather than deleted, because what
+ *  made it false is worth a later reader knowing (T3 round 1 C/H-3).
  *
  *  Guarded for the environment: the store's own tests run in node, where there
  *  is no window to listen to. */

@@ -1,6 +1,77 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: MY GYMS + ATTENDANCE (MEMBER HALF) — T3 ROUND 1 ANSWERED. THREE
+      Critical/High and FOUR Low, ALL SEVEN FIXED. DECISIONS :28976.
+      **THE PACKET DOES NOT SHIP THIS ROUND (:5348 rule 1) — A DIFF-ONLY ROUND 2
+      IS THE NEXT CHAT.** Then the owner's half (§4b-2), then the smoke.
+
+  1. **ONLY THE READ EVER SETS `AttendancePanel`'s `status`.** A tap used to flip
+     a FAILED read to `ready`, which drew the whole list holding one day — a
+     member with months of visits shown a history of one. A tap says what it
+     recorded and nothing about the rest.
+  2. **THE READ'S LIST AND THE TAPS ARE TWO LISTS, MERGED AT RENDER
+     (`mergeVisits`).** A read already in flight cannot know about a tap; it used
+     to land and erase it, and the screen said "You're marked in." and "You
+     haven't marked yourself in here yet." together. **Do not "tidy" them back
+     into one piece of state.**
+  3. **`subscribeConsoleOrgs(listener, { watch: false })` EXISTS FOR THE MEMBER
+     APP AND MUST STAY.** `Sidebar` is mounted on every member screen for the
+     whole session, so the ordinary subscribe put the console's refresh-on-focus
+     into the whole member app (1 read on mount → 4 after three focus events).
+     Stopping is keyed on WATCHERS, so the console is unchanged.
+  4. **THE STATED COST OF (3): the nav item appears on the next PAGE LOAD, not
+     the next tab switch.** Own `OWED.md` line, with the bounded fix named. **Do
+     not answer it with a poll or a focus re-read.**
+  5. **MY OWN ROUND-1 SWEEP SAID "7 mutants, 0 ALIVE" AND MISSED BOTH VISIBLE
+     DEFECTS** — every mutant aimed at a pure function or the nav gate, none at
+     the panel's state machine. **"0 alive" describes the mutants you chose.**
+     Round 1's render tests tapped the button, and tested a failed read, but
+     never in the same test.
+  6. **AN ANCHORED WORDS BAN MUST LIVE WHERE THE ITEM RENDERS.** I put L-2's fix
+     in the case that draws a sidebar for somebody with NO gyms — vacuous. This
+     round's own mutant exposed it; F6 (a second `My Gym` pointing at
+     `/dashboard`, which no href filter can see) is what isolates it.
+  7. **`packages/shared/src/orgs.ts` HAD A COMMENT THIS CARD MADE FALSE** and it
+     is struck in place, not deleted. A contract file is the first thing the next
+     chat opens.
+
+PROVE: All on the fixed bytes. `web` **1521/1521 across 55 files** (1511 before).
+       Scoped: `attendanceView` 24/24 · `myGyms.render` 19/19 ·
+       `loginDoorCrossing.render` 10/10 · `consoleOrgs` 14/14. `@app/shared`
+       **51/51** · `tsc --noEmit` exit 0 on `@app/shared` AND `api` (run because
+       this round edits a comment inside `packages/shared` — :28395) · `eslint
+       --max-warnings=0` exit 0 on all nine touched files. Root guards:
+       `check-harnesses` **25 parse**, `check-decisions-index` **264 pointers,
+       1075 headings**, triggers `--check` **up to date (836 from 225 of 363)**.
+       **AUDIT: 6 mutants, 6 RED, 0 ALIVE, every restore sha256 byte-exact** —
+       each UNDOES one fix, which is :5348 rule 3's evidence. F1 draws the list
+       off a failed read · F2 draws the read's list alone · F3 subscribes the
+       console's way · F4 sorts `visitDays` ascending (the mutant round 1's own
+       fixture was blind to) · F5 takes the removed label · F6 isolates the words
+       ban. The run names the test that caught each.
+
+FILES: `apps/web/src/components/gym/{AttendancePanel.jsx,attendanceView.js}` ·
+       `apps/web/src/hooks/useMyGyms.js` ·
+       `apps/web/src/pages/console/consoleOrgs.js` ·
+       `packages/shared/src/orgs.ts` (comment only) · tests
+       (`attendanceView.test.js`, `myGyms.render.test.jsx`,
+       `loginDoorCrossing.render.test.jsx`) · records (`DECISIONS.md`,
+       `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md` regenerated, `OWED.md`,
+       `BACKLOG.md`, `CARD-gym-attendance.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **ROUND 2 IS DIFF-ONLY** — it covers these fixes and the surfaces they
+       touch, never a fresh full pass (:5348 rule 2).
+       **THE BROWSER SMOKE HAS STILL NEVER RUN ON ANY ATTENDANCE SURFACE**, and
+       both C/H defects this round fixed are ones a click-through would have
+       surfaced. The sheet is owed with the owner's half, because half its steps
+       need the Settings switch.
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate.
+```
+
+```
 TASK: ATTENDANCE §4b, THE MEMBER HALF — BUILT. DECISIONS :28822. Kd ruled a
       NEW THING at this gate: `My Gyms`, a member-app nav item, appears once a
       gym APPROVES somebody. §4b is now SPLIT: the OWNER's half (console

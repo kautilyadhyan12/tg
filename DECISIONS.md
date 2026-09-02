@@ -28972,3 +28972,132 @@ test) · `components/common/sidebarNav.js` · `hooks/useMyGyms.js` ·
 `packages/shared` change — so :28395's "a change inside `packages/shared` is a
 change to every package that imports it" does not apply and `web` is the whole
 of the suite that could move.
+
+## 2026-09-02 — MY GYMS, T3 ROUND 1: THREE Critical/High, THE PACKET DOES NOT SHIP THIS ROUND — and my own seven-mutant sweep had missed both visible defects because none of them drove a screen
+
+**Read before touching `AttendancePanel`'s history state, before subscribing
+anything in the MEMBER app to `consoleOrgs.js`, before putting a "these words
+must not appear" assertion in a test that renders no such item, before quoting a
+mutation sweep that aimed only at pure functions, and before writing a comment
+in `packages/shared` about what a screen does.**
+
+Fresh-chat review of `b59fe05` (`DECISIONS.md:28822`). **THREE Critical/High,
+FOUR Low. All seven fixed here; :5348 rule 1 means this round does not ship and
+a diff-only round 2 is owed.** Every finding was verified against the code
+before a line was changed, and every one held.
+
+### 1 · THE TWO A MEMBER WOULD HAVE SEEN
+
+**C/H-1 — A TAP DREW A WHOLE HISTORY OUT OF A READ THAT NEVER ANSWERED.** The
+mark handler flipped a FAILED history read to `ready` so the new visit could be
+drawn. What that actually drew was the LIST — containing one day. **A member
+with months of visits, on a dropped request, was shown a history of exactly one
+day**, with `more` false so not even the "most recent visits" line qualified it.
+:8267/:8343's class, arriving through the WRITE path in a file whose own header
+says it avoids that on the read path.
+**The fix is a rule, not a patch: only the READ ever sets `status`.** A tap says
+what it recorded; it says nothing about what else is in the history, and a
+screen that answers the second question from the first is guessing.
+
+**C/H-2 — A READ ALREADY IN FLIGHT ERASED THE VISIT SOMEBODY HAD JUST MADE.**
+The mount read's `.then` replaced the list wholesale, so a mark landing before it
+returned was wiped, and the screen said **"You're marked in."** and **"You
+haven't marked yourself in here yet."** at the same time. **This is
+`refreshConsoleOrgs`' own recorded lesson** — a read begun before the thing
+being asked about cannot answer it — **which this very file QUOTED in a comment
+and did not apply.** The fix holds the taps in their own list and merges at
+render (`mergeVisits`), so neither can overwrite the other.
+
+### 2 · THE THIRD WAS INVISIBLE, APP-WIDE, AND MY RECORD SAID SOMETHING FALSE ABOUT IT
+
+**C/H-3 — PUTTING `My Gyms` IN THE SIDEBAR PUT THE CONSOLE'S REFRESH-ON-FOCUS
+INTO THE WHOLE MEMBER APP.** `subscribeConsoleOrgs` started the window watch for
+every subscriber, and `Sidebar` lives in `AppLayout` — mounted on every member
+screen for the whole session. **Measured by the reviewer: 1 read on mount, 4
+after three focus events**, on every screen, for every member.
+**:16331's focus re-read is sized for a console — a handful of staff. A gym's
+members are hundreds of people behind ONE NAT'd address**, and `/v1/orgs/mine`
+carries only the global 300/minute that `trustProxy` keys to `req.ip`: the same
+shape :28649 had to raise the mark route's per-IP ceiling for, six days earlier.
+**`subscribeConsoleOrgs(listener, { watch: false })` is the fix**, with stopping
+keyed on WATCHERS rather than on all listeners so the console's behaviour is
+bit-for-bit unchanged.
+**AND THE RECORD WAS WRONG, WHICH IS THE PART TO KEEP:** `:28822` §3 and its
+`OWED.md` line described the cost as *"one wasted request per screen that draws
+the card"*, and `consoleOrgs.js`'s own comment still promised *"nothing is
+listening while a person is in the member app"*. **A cost I stated without
+measuring was understated by the difference between once and for ever.** Both
+are corrected in place rather than deleted.
+
+**THE STATED COST OF THE FIX, so nobody discovers it as a defect: the item now
+appears on the next PAGE LOAD rather than on the next tab switch.** Kd's ruling
+is satisfied — it appears once a gym approves them — and making it arrive
+without a load is a bounded improvement with its own `OWED.md` line, never
+something to buy by putting a poll on every member's screen.
+
+### 3 · THE FOUR LOW, AND ONE OF THEM CAUGHT MY FIX FOR ANOTHER ONE
+
+All fixed here and logged in `BACKLOG.md`; none bought a round (:5348 rule 1).
+
+- **L-1 — A TEST WHOSE FIXTURE MADE IT A LIAR.** *"keeps the server's order"* was
+  fed days OLDEST-first, the reverse of what the server sends, so an ascending
+  `sort` in `visitDays` left it GREEN. **A test of "keeps the order it was
+  given" must be given the order production sends**; it now drives BOTH
+  directions, so a descending sort cannot pass either.
+- **L-2 — AND THE INSTRUCTIVE PART IS WHERE I FIRST PUT THE FIX.** The crossing
+  assertion now bans the DESTINATION (`/console`), which a crossing built as a
+  BUTTON — or pointed at an innocent path — would slip past. I added the
+  anchored words ban back... **into the case that renders a sidebar for somebody
+  with NO gyms, where no gym item is drawn at all.** A ban on a label is vacuous
+  against a screen that draws no labels. **The fix-round's own mutant F5 exposed
+  it** (it was caught by a different test than the one I had aimed at), and F6
+  was then written to isolate it: a second item labelled `My Gym` pointing at
+  `/dashboard`, which no href filter can see. Moved to the case where an item
+  actually renders, and RED there.
+- **L-3 — A CONTRACT COMMENT THIS COMMIT MADE FALSE.** `orgs.ts` said the screen
+  *"re-reads after a failed mark rather than trusting it"*; the shipped screen
+  deliberately never re-reads (the shared bucket). Struck in place, with what
+  actually bounds the risk written in its place: the SERVER refuses the mark, so
+  a wrongly-drawn button costs one refused tap and a true sentence.
+- **L-4 — the mark's zone and clock now win over the held pair**, being the
+  fresher of two answers about the same gym.
+
+### 4 · WHAT MY OWN AUDIT MISSED, AND WHY — THE TRANSFERABLE PART
+
+Round 1 reported **7 mutants, 7 RED, 0 ALIVE**, and that report was TRUE and
+told me nothing about the two defects a member could see. **All seven aimed at
+pure functions and at the nav gate. Not one drove the panel's STATE MACHINE** —
+a mark arriving into a failed read, or into a read still in flight — **which is
+exactly where both C/H defects lived.**
+
+**STANDING: "0 alive" is a statement about the mutants you chose, never about
+the code.** When a component holds state that two async answers can both write,
+the mutants that matter are the ones that ORDER those answers — and the cheapest
+way to find them is to ask what the screen shows while one is still in the air.
+Round 1's own render tests came within one line of catching both: they tapped
+the button, and they tested a failed read, but never in the same test.
+
+### Round log
+
+**PROVE, all on the fixed bytes.** `web` **1521/1521 across 55 files** (1511
+before; +6 `mergeVisits` and order cases, +4 render regressions). Scoped:
+`attendanceView` 24/24 · `myGyms.render` 19/19 · `loginDoorCrossing.render`
+10/10 · `consoleOrgs` 14/14. `@app/shared` **51/51** and `tsc --noEmit` exit 0
+on `@app/shared` AND on `api` — run because this round edits a comment in
+`packages/shared`, which :28395 says is a change to every package that imports
+it; the diff there is a comment and the runs prove it.
+`eslint --max-warnings=0` exit 0 on all nine touched files.
+
+**AUDIT — 6 mutants, 6 RED, 0 ALIVE, every restore sha256 byte-exact.** Each one
+UNDOES a fix, so each is :5348 rule 3's evidence that the fix carries a test that
+fails without it: **F1** draws the list off a failed read · **F2** draws the
+read's list alone again · **F3** subscribes the console's way · **F4** sorts
+`visitDays` ascending (the mutant round 1's fixture was blind to) · **F5** takes
+the removed label · **F6** adds a second `My Gym` pointing somewhere innocent,
+which only the words ban can catch. Every mutant names the test that caught it in
+the run output.
+
+**NOT DONE and owed: a diff-only round 2** (:5348 rule 2 — it covers only these
+fixes and the surfaces they touch), and **the browser smoke, which has still
+never run on any attendance surface.** Both C/H-1 and C/H-2 are defects a
+click-through would have surfaced.

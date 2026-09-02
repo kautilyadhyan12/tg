@@ -36,7 +36,7 @@ import { memberOrgs } from '../components/gym/gymMembershipView';
  *  are not in a gym" during either would be the empty-vs-failed defect wearing
  *  a third hat. */
 export function useMyGyms() {
-  const snapshot = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
+  const snapshot = useSyncExternalStore(subscribeQuietly, consoleOrgsSnapshot);
 
   // ON MOUNT ONLY, and `snapshot.status` is deliberately NOT a dependency —
   // `ensure` asks again after a failure, so a status dependency loops the app
@@ -52,6 +52,30 @@ export function useMyGyms() {
     gyms: snapshot.status === 'ready' ? memberOrgs(snapshot.orgs) : [],
     reload,
   };
+}
+
+/** SUBSCRIBED WITHOUT THE CONSOLE'S FOCUS RE-READ — T3 round 1 C/H-3.
+ *
+ *  `Sidebar` lives in `AppLayout`, so it is mounted on EVERY member screen for
+ *  the whole session. Subscribing the ordinary way attached the console's
+ *  `focus` and `visibilitychange` listeners to the member app: measured, 1 read
+ *  on mount and 4 after three focus events, on every screen, for every member.
+ *  A console is a handful of staff; a gym's members are hundreds of people
+ *  behind ONE address, and `/v1/orgs/mine` has only the global 300/minute that
+ *  `trustProxy` keys to `req.ip`.
+ *
+ *  **THE COST, and it is stated rather than hidden: the item now appears on the
+ *  next page load rather than on the next tab switch.** A member approved while
+ *  their tab sits open sees `My Gyms` when they next load the app. Kd's ruling
+ *  is satisfied — the option appears once a gym approves them — and making it
+ *  arrive without a load is a bounded improvement with its own `OWED.md` line,
+ *  not something to buy by putting a poll on every member's screen.
+ *
+ *  **Module scope, so its identity is stable.** An inline arrow would be a new
+ *  function every render, and `useSyncExternalStore` would unsubscribe and
+ *  resubscribe on each one. */
+function subscribeQuietly(listener) {
+  return subscribeConsoleOrgs(listener, { watch: false });
 }
 
 /** Try again — a foreground read, so the shell's nav item and the screen

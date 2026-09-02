@@ -36,6 +36,43 @@ side a finding falls on, it is Critical/High.
 
 ## Log
 
+### My Gyms + attendance, the MEMBER half — T3 round 1 (DECISIONS :28976)
+
+Reviews `b59fe05`. **THREE Critical/High** (they are in the entry, not here) and
+**FOUR Low.** Kd approved the whole list before any code changed. All four fixed
+in the same round as the Criticals.
+
+- [x] **A test whose FIXTURE made it a liar** — `attendanceView.test.js`, *"keeps
+      the server's order rather than re-sorting it"* was fed days OLDEST-first,
+      the reverse of what the server sends, so an ascending `sort` added to
+      `visitDays` produced exactly the order the fixture asked for and the test
+      stayed GREEN. **A test of "keeps the order it was given" must be given the
+      order production sends.** Now drives BOTH directions, so a descending sort
+      cannot pass either; mutant F4 is RED on it. — found 2026-09-02, round 1 —
+      fixed this commit
+- [x] **The crossing assertion had a gap the old words-ban had covered** —
+      `loginDoorCrossing.render.test.jsx` checked `a[href]` only, so a crossing
+      built as a BUTTON, or pointed at an innocent path, had no href to find.
+      An ANCHORED, SINGULAR words ban is back beside it (`/^\s*my gym\s*$/i`),
+      which bans the item Kd removed without touching the `My Gyms` he asked
+      for. **I first put it in the case that renders a sidebar for somebody with
+      NO gyms — where no gym item is drawn at all, so the ban was vacuous** —
+      and this round's own mutant F5 exposed that by being caught elsewhere;
+      F6 now isolates it. — found 2026-09-02, round 1 — fixed this commit
+- [x] **A contract comment this card had made FALSE** —
+      `packages/shared/src/orgs.ts`'s `manualAttendanceEnabled` said *"the screen
+      re-reads after a failed mark rather than trusting it"*; the shipped screen
+      deliberately never re-reads (the shared rate-limit bucket, :28649). Struck
+      in place, with what actually bounds the risk written in: the server refuses
+      the mark, so a wrongly-drawn button costs one refused tap and a true
+      sentence. — found 2026-09-02, round 1 — fixed this commit
+- [x] **The stale clock won over the fresh one** — `AttendancePanel` preferred
+      the zone and clock format held from the history read over the ones the
+      MARK's own answer carried, so a gym that changed its clock between the
+      page load and the tap drew the new chip on the old setting. Both describe
+      the same gym and the mark's is the fresher. — found 2026-09-02, round 1 —
+      fixed this commit
+
 ### The forced prompt's WEB half (the modal) — T3 round 1 (DECISIONS :23257)
 
 Reviews `99687c5` + `3891acc`. **ZERO Critical/High, SIX Low.** Escape hatch NOT

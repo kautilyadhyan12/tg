@@ -4,8 +4,11 @@
 `0019` reviewed as SQL by Kd and approved before anything else was written
 (T5/R4.4). §4b (WEB HALF) IS SPLIT IN TWO, with Kd told before he approved,
 because one chat cannot hold two screens and two switches: its MEMBER HALF IS
-BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS UNBUILT. T3 IS
-UNRUN on both and NO BROWSER SMOKE HAS RUN on either.**
+BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS UNBUILT.
+T3 ROUND 1 RAN ON THE MEMBER HALF (`DECISIONS.md:28976`): THREE Critical/High
+and FOUR Low, all seven fixed, so that packet does NOT ship its round and a
+DIFF-ONLY ROUND 2 IS OWED. T3 is UNRUN on the server half. NO BROWSER SMOKE HAS
+RUN on either.**
 
 **AND KD RULED A SECOND THING ON 2026-09-02, at the plan gate for §4b: the
 member's gym features get their OWN SECTION in the member app's left nav,

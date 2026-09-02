@@ -144,6 +144,27 @@ describe('the nav item', () => {
     expect(links.filter((a) => a.getAttribute('href').startsWith('/console'))).toHaveLength(0);
   });
 
+  // C/H-3. `Sidebar` is mounted on every member screen for the whole session,
+  // so subscribing the console's way put :16331's refresh-on-focus into the
+  // member app — measured at 4 reads after three focus events. A console is a
+  // handful of staff; a gym's members are hundreds of people behind one address
+  // and `/v1/orgs/mine` has only the global 300/minute keyed to `req.ip`.
+  //
+  // THE OTHER DIRECTION IS NOT ORPHANED: the console's focus re-read is driven
+  // through real window events by `console.render.test.jsx` and
+  // `settings.render.test.jsx`, which go red if this fix took the watch away
+  // from the console too.
+  it('does not re-read the gym list when the window regains focus', async () => {
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(api.getMine).toHaveBeenCalledTimes(1);
+    fireEvent(window, new Event('focus'));
+    fireEvent(window, new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(api.getMine).toHaveBeenCalledTimes(1);
+  });
+
   it('does not draw the item when the list could not be read', async () => {
     api.getMine.mockRejectedValue(new Error('offline'));
     drawSidebar();
@@ -257,6 +278,67 @@ describe('saying you are here', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     expect(screen.queryByText(/haven't marked yourself in here yet/i)).toBeNull();
     expect(screen.queryByText('Days you came')).toBeNull();
+  });
+
+  // ── T3 ROUND 1 REGRESSIONS ────────────────────────────────────────────────
+  // Each of the three fails without its fix; that is the whole reason it is
+  // here (:5348 rule 3). All three describe a state the SCREEN gets into, which
+  // is where round 1's C/H defects lived and where round 1's own seven mutants
+  // did not look — they aimed at the pure helpers and the nav gate.
+
+  // C/H-1. A tap used to flip a FAILED read to `ready`, so the list appeared
+  // holding only the visit just made: a member with months of history was shown
+  // a history of one day, `more` false so not even the "most recent" line
+  // qualified it. A tap knows what it recorded and knows nothing about the rest.
+  it('never draws the history off a read that failed, even after a tap', async () => {
+    api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+    // The tap is confirmed — that part is true and stays on screen …
+    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
+    // … and the list it says nothing about is not drawn at all.
+    expect(screen.queryByText('Days you came')).toBeNull();
+    expect(screen.queryByText('Wed 2 Sep 2026')).toBeNull();
+  });
+
+  // C/H-2. The mount read landed AFTER the mark and replaced the list
+  // wholesale, erasing the visit — so the screen said "You're marked in." and
+  // "You haven't marked yourself in here yet." at once. The read was started
+  // before the tap, so it cannot answer for it.
+  it('does not let a read that was already in flight erase the visit', async () => {
+    let answerTheRead = () => {};
+    api.getAttendanceHistory.mockReturnValue(
+      new Promise((resolve) => {
+        answerTheRead = () => resolve(history([]));
+      }),
+    );
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
+    // The read — which left before the tap and therefore knows nothing of it —
+    // now comes back empty.
+    answerTheRead();
+    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
+    expect(screen.getByText('06:12')).toBeTruthy();
+    expect(screen.queryByText(/haven't marked yourself in here yet/i)).toBeNull();
+  });
+
+  it('draws the visit once when the read comes back already carrying it', async () => {
+    let answerTheRead = () => {};
+    api.getAttendanceHistory.mockReturnValue(
+      new Promise((resolve) => {
+        answerTheRead = () => resolve(history([visit()]));
+      }),
+    );
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
+    answerTheRead();
+    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
+    expect(screen.getAllByText('06:12')).toHaveLength(1);
   });
 
   it('prints the refusal when the server turns the mark down', async () => {

@@ -1325,6 +1325,32 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:28976** — 2026-09-02 — **MY GYMS, T3 ROUND 1: THREE Critical/High, the
+  packet does NOT ship this round — and the card's own 7-mutant sweep had missed
+  both visible defects.** **Read before touching `AttendancePanel`'s history
+  state, before subscribing anything in the MEMBER app to `consoleOrgs.js`,
+  before putting a "these words must not appear" assertion in a test that
+  renders no such item, before quoting a mutation sweep that aimed only at pure
+  functions, and before writing a comment in `packages/shared` about what a
+  screen does.** **C/H-1: a tap flipped a FAILED history read to `ready`, so a
+  member with months of visits was shown a history of exactly ONE day** — fixed
+  by a rule (only the READ sets `status`). **C/H-2: the mount read replaced the
+  list wholesale, erasing a visit marked while it was in flight** — the screen
+  said *"You're marked in."* and *"You haven't marked yourself in here yet."*
+  together; **it is `refreshConsoleOrgs`' own recorded lesson, quoted in that
+  file's comments and not applied.** **C/H-3: `subscribeConsoleOrgs` started the
+  window watch for EVERY subscriber, so `My Gyms` in the sidebar put :16331's
+  refresh-on-focus into the whole member app** (measured 1 read on mount, 4 after
+  three focus events, on every screen) — `{ watch: false }` is the fix, stopping
+  keyed on WATCHERS so the console is unchanged; **and :28822's own record
+  understated the cost as "one wasted request per screen", a number stated
+  without measuring.** Four Low, all fixed, in `BACKLOG.md` — including **a test
+  whose fixture was already sorted the way the mutant would sort it**, and **an
+  anchored words ban I first added to the one case that renders no such item**,
+  caught by this round's own mutant. **STANDING: "0 alive" is a statement about
+  the mutants you chose, never about the code — when two async answers write one
+  piece of state, the mutants that matter ORDER them.** Diff-only round 2 owed;
+  the browser smoke has still never run.
 - **:28649** — 2026-09-02 — **ATTENDANCE, SERVER HALF, T3 ROUND 2 (diff-only):
   ZERO Critical/High, THE PACKET SHIPS — and the two findings worth keeping are a
   rate limit sized for the wrong shape of traffic and a privacy list that was

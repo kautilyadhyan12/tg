@@ -273,8 +273,16 @@ export const orgSummarySchema = z.object({
    *  REQUIRED field would blank a member's whole gym card rather than hide one
    *  button. The default must match the DDL's, or a gym that has switched it
    *  OFF would have the button drawn back on by the older server's silence —
-   *  which is why this is the ONE default here that carries a risk, and why the
-   *  screen re-reads after a failed mark rather than trusting it. */
+   *  which is why this is the ONE default here that carries a risk.
+   *
+   *  ~~and why the screen re-reads after a failed mark rather than trusting
+   *  it.~~ **STRUCK 2026-09-02 (T3 round 1, L-3): the shipped screen never
+   *  re-reads, deliberately** — both attendance reads share ONE rate-limit
+   *  bucket with the console's day list (:28649), so a re-read on this path
+   *  would spend an owner's allowance. **What actually bounds the risk is the
+   *  SERVER**: a mark against a gym with the switch off is refused, and the
+   *  screen prints that refusal. A drawn-back-on button costs one refused tap
+   *  and a true sentence — never a recorded visit. */
   manualAttendanceEnabled: z.boolean().default(true),
   /** WHERE THE GYM IS — ISO 3166-1 alpha-2, and `null` for every gym created
    *  before migration `0014`, because the wizard collected it and the server

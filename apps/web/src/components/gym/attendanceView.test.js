@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   markedSentence,
+  mergeVisits,
   sessionWindowLabel,
   visitDays,
   visitMinutes,
@@ -136,12 +137,23 @@ describe('the days they came', () => {
     expect(days[1].times).toEqual(['01:05']);
   });
 
-  it('keeps the server s order rather than re-sorting it', () => {
+  // T3 ROUND 1, L-1 — THIS TEST USED TO BE A LIAR AND ITS FIXTURE IS WHY. It
+  // fed days OLDEST-first, the reverse of the newest-first order the server
+  // actually sends, so an ascending `sort` added to `visitDays` left it GREEN:
+  // the mutant produced exactly the order the fixture asked for. **A test of
+  // "keeps the order it was given" must be given the order production sends** —
+  // and, since the claim is about preserving ANY order, both directions are
+  // driven so a descending sort cannot pass either. (:5348 rule 4; the shape is
+  // D12's — a case that does not drive what its name says.)
+  it.each([
+    ['newest first, as the server sends it', ['2026-09-02', '2026-08-30']],
+    ['oldest first, to prove nothing is being sorted', ['2026-08-30', '2026-09-02']],
+  ])('keeps the order it was given — %s', (_label, order) => {
     const days = visitDays(
-      [visit({ day: '2026-08-30' }), visit({ day: '2026-09-02' })],
+      order.map((day) => visit({ day })),
       { timezone: 'UTC', clockFormat: '24h' },
     );
-    expect(days.map((d) => d.day)).toEqual(['2026-08-30', '2026-09-02']);
+    expect(days.map((d) => d.day)).toEqual(order);
   });
 
   // A DAY IS A FACT OFF THE WIRE; A CHIP IS A RENDERING OF IT. An unreadable
@@ -181,5 +193,35 @@ describe('putting the visit the server just confirmed into the list', () => {
   it('leaves the list alone when there is no visit to add', () => {
     const held = [visit()];
     expect(withVisit(held, null)).toBe(held);
+  });
+});
+
+// T3 ROUND 1, C/H-2 — the read and the taps are two lists because a read
+// already in flight cannot know about a tap, and holding both in one place let
+// it erase them.
+describe('merging the read s list with the taps this session', () => {
+  const read = visit({ day: '2026-08-30', markedAt: '2026-08-30T01:00:00.000Z' });
+  const tapped = visit({ day: '2026-09-02', markedAt: '2026-09-02T06:12:00.000Z' });
+
+  it('keeps a tap the read knows nothing about', () => {
+    expect(mergeVisits([read], [tapped])).toEqual([tapped, read]);
+  });
+
+  it('draws a visit once when the read already carries it', () => {
+    expect(mergeVisits([tapped, read], [tapped])).toEqual([tapped, read]);
+  });
+
+  it('keeps taps newest-first among themselves', () => {
+    const later = visit({ day: '2026-09-02', markedAt: '2026-09-02T17:40:00.000Z' });
+    expect(mergeVisits([read], [later, tapped])).toEqual([later, tapped, read]);
+  });
+
+  it('answers the read s list when nothing has been tapped', () => {
+    expect(mergeVisits([read], [])).toEqual([read]);
+    expect(mergeVisits([read], null)).toEqual([read]);
+  });
+
+  it('answers the taps when the read gave nothing', () => {
+    expect(mergeVisits(null, [tapped])).toEqual([tapped]);
   });
 });

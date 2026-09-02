@@ -7856,8 +7856,13 @@ file and is stated so nobody reads these as lower priority than they are.
       console's **Attendance** section (:28107, a fourth nav item), the manual
       switch on **Settings**, and the *"See who came in"* **TICK BOX** in
       `PRIVILEGE_COPY`, **without which "the owner can change it" is a false
-      sentence**. Plus: **no browser smoke has been run on either half** and
-      **T3 is UNRUN on both.**
+      sentence**. Plus: **no browser smoke has been run on either half.**
+      **T3 ROUND 1 RAN ON THE MEMBER HALF 2026-09-02 (`DECISIONS.md:28976`):
+      THREE Critical/High and FOUR Low, all seven fixed, so the packet does NOT
+      ship that round and a DIFF-ONLY ROUND 2 IS OWED** (:5348 rule 2). Two of
+      the three were things a member could SEE and be told falsely — a history
+      of one day drawn off a read that never answered, and a visit erased by a
+      read that was already in flight. **T3 is still UNRUN on the server half.**
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,
@@ -7884,6 +7889,24 @@ file and is stated so nobody reads these as lower priority than they are.
       `/v1/orgs/applications/mine` in the store** (the card reads both and
       settles them separately), so it is a card of its own rather than a line in
       somebody else's.
+      **AMENDED 2026-09-02 by T3 round 1's C/H-3** (`DECISIONS.md:28976` §2):
+      **the cost written above was measured wrong.** Subscribing the sidebar the
+      console's way also attached the console's FOCUS listeners, so the member
+      app re-read `/v1/orgs/mine` on every focus and tab switch, on every screen,
+      all session — 1 read on mount, 4 after three focus events. **Fixed there;
+      what remains true of this line is only the one duplicate read per screen.**
+- [ ] ⚪ **`My Gyms` APPEARS ON THE NEXT PAGE LOAD, NOT THE NEXT TAB SWITCH.**
+      The stated cost of that same fix: a member approved while their tab sits
+      open sees the item when they next load the app. **Kd's ruling is satisfied
+      — the option appears once a gym approves them — and this is about how
+      fast, not whether.** **DO NOT "fix" it with a focus re-read or any poll in
+      the member app:** `Sidebar` is on every member screen for the whole
+      session, a gym's members share ONE NAT'd address, and `/v1/orgs/mine` has
+      only the global 300/minute keyed to `req.ip` — that IS what C/H-3 was.
+      **The bounded fix is a targeted refresh at the moment the answer can have
+      changed**, i.e. when the member is on Settings → Gym, where
+      `GymMembershipCard` already reads `/v1/orgs/mine` and could feed the store
+      — **the same card as the line above, and to be done with it.**
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

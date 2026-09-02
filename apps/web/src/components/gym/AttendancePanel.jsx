@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { markedSentence, visitDays, withVisit } from './attendanceView';
+import { markedSentence, mergeVisits, visitDays, withVisit } from './attendanceView';
 
 // "I'M HERE" — Kd's ruling of 2026-08-31 (:26469), and the member's own list of
 // the days they came (:27900, his answer at the card's gate).
@@ -23,8 +23,10 @@ import { markedSentence, visitDays, withVisit } from './attendanceView';
 // SERVER constraint rather than a style choice: this read and the console's
 // day list share ONE rate-limit bucket — 600 an hour between them, one Redis
 // key — so a loop on this screen would spend an owner's allowance as well as
-// the member's. After a successful tap the server's own answer is written into
-// the list on screen (`withVisit`) instead of asking again.
+// the member's. After a successful tap the server's own answer is kept and
+// merged into what is drawn (`mergeVisits`) instead of asking again — held
+// apart from the read's list, because a read already in flight cannot know
+// about a tap and used to erase it (T3 round 1 C/H-2).
 
 /** One chip per visit. Times are the GYM's, on the GYM's clock — see
  *  `attendanceView.js` for why the zone is never the reader's. */
@@ -58,6 +60,14 @@ export default function AttendancePanel({ gym }) {
   // `status` is named rather than inferred from an empty list: "nobody has a
   // visit yet" and "we could not ask" look identical in the data and must never
   // look identical on screen (:8267/:8343).
+  //
+  // **ONLY THE READ EVER SETS `status`, and T3 round 1 C/H-1 is why.** A mark
+  // used to flip a FAILED read to `ready` so the new visit could be drawn — and
+  // that drew the whole list off a read that never answered, so a member with
+  // months of history was shown a history of exactly one day, with `more` false
+  // so not even the "most recent visits" line appeared. A tap tells you what it
+  // recorded; it does not tell you what else is in your history, and a screen
+  // that answers the second question from the first is guessing.
   const [history, setHistory] = useState({
     status: 'loading',
     visits: [],
@@ -65,6 +75,10 @@ export default function AttendancePanel({ gym }) {
     clockFormat: '24h',
     more: false,
   });
+  // THE TAPS THIS SESSION CONFIRMED, HELD APART FROM THE READ'S LIST (C/H-2).
+  // See `mergeVisits` — a read already in flight when somebody taps cannot know
+  // about the tap, and holding both in one place let it erase them.
+  const [marked, setMarked] = useState([]);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -102,15 +116,20 @@ export default function AttendancePanel({ gym }) {
       const res = await orgService.markAttendance(gymId);
       const answer = res.data;
       setMark({ busy: false, done: answer, error: null });
-      // THE SERVER'S OWN VISIT GOES STRAIGHT INTO THE LIST — see the header for
-      // why this is not a re-read. The zone and clock come with it, so a member
-      // whose history read FAILED still gets a correctly-formatted chip.
+      // THE SERVER'S OWN VISIT GOES INTO ITS OWN LIST — see the header for why
+      // this is not a re-read, and `mergeVisits` for why it is not put into the
+      // read's list. `status` is deliberately untouched: a tap says what it
+      // recorded and says nothing about what else is in the history (C/H-1).
+      setMarked((held) => withVisit(held, answer?.visit ?? null));
+      // THE MARK'S ZONE AND CLOCK ARE THE FRESHER PAIR AND WIN (T3 round 1,
+      // L-4). Both answers describe the same gym, and this one was computed
+      // now — so a gym that changed its clock between the read and the tap
+      // draws the new chip the way the gym reads it today, not the way it did
+      // when the page loaded.
       setHistory((held) => ({
         ...held,
-        status: held.status === 'failed' ? 'ready' : held.status,
-        visits: withVisit(held.visits, answer?.visit ?? null),
-        timezone: held.timezone ?? answer?.timezone ?? null,
-        clockFormat: held.timezone === null ? (answer?.clockFormat ?? '24h') : held.clockFormat,
+        timezone: answer?.timezone ?? held.timezone,
+        clockFormat: answer?.clockFormat ?? held.clockFormat,
       }));
     } catch (err) {
       setMark({
@@ -125,7 +144,7 @@ export default function AttendancePanel({ gym }) {
     }
   };
 
-  const days = visitDays(history.visits, {
+  const days = visitDays(mergeVisits(history.visits, marked), {
     timezone: history.timezone,
     clockFormat: history.clockFormat,
   });

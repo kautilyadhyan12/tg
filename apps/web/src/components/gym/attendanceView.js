@@ -130,6 +130,29 @@ export function withVisit(visits, visit) {
   return already ? list : [visit, ...list];
 }
 
+/** THE SERVER'S LIST AND THE TAPS THIS SESSION CONFIRMED, AS ONE LIST.
+ *
+ *  **T3 round 1 C/H-2.** The two were held in one place and the READ won: its
+ *  `.then` replaced the list wholesale, so a read that was already in flight
+ *  when somebody tapped — it cannot know about a tap that had not happened when
+ *  it left — landed a moment later and erased the visit. The screen then said
+ *  *"You're marked in."* and *"You haven't marked yourself in here yet."* at the
+ *  same time, which is :5807 twice over. **This is `refreshConsoleOrgs`' own
+ *  recorded lesson** (a read begun before the thing being asked about cannot
+ *  answer it), which this file's first version quoted and did not apply.
+ *
+ *  Kept apart and merged at render instead: the read owns `visits`, the taps own
+ *  their own list, and neither can overwrite the other. Deduped by `withVisit`,
+ *  so a read that DOES already contain the visit does not draw it twice, and
+ *  marked visits come first because they are the newest thing in the list. */
+export function mergeVisits(readVisits, markedVisits) {
+  const read = Array.isArray(readVisits) ? readVisits : [];
+  const marked = Array.isArray(markedVisits) ? markedVisits : [];
+  // From the END, so that after each prepend the FIRST marked visit ends up
+  // outermost and the newest-first order survives the fold.
+  return marked.reduceRight((list, one) => withVisit(list, one), read);
+}
+
 /** THE MEMBER'S OWN DAYS — one row per DAY, their times inside it.
  *
  *  **This is ruling 14's shape on the member's side and it is the same
