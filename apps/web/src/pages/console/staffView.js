@@ -187,6 +187,19 @@ const PRIVILEGE_COPY = [
     hint: 'See the code and hand it out to new people.',
   },
   {
+    // KD'S RULING 18's SECOND HALF, AND IT LIVES HERE AND NOWHERE ELSE
+    // (:28107): *"also stafs can see it too default permission owner can
+    // change it"*. Without a box, "the owner can change it" is a sentence
+    // with no control behind it — the gap `org.manage` and `billing.manage`
+    // are already in, which `OWED.md` carries.
+    //
+    // A READ, so it sits high in the least-powerful-first order: seeing who
+    // came in is a smaller thing than letting somebody into the gym.
+    value: 'attendance.read',
+    label: 'See who came in',
+    hint: 'The list of people who marked themselves in each day.',
+  },
+  {
     value: 'members.confirm',
     label: 'Let people into the gym',
     hint: 'Say yes or no to people waiting to join.',

@@ -29246,3 +29246,163 @@ behaviour change) · `pages/myGyms.render.test.jsx` (+3 cases) · records
 `DECISIONS-TRIGGERS.md` regenerated, `OWED.md`, `BACKLOG.md`, `HANDOFF.md`).
 **No source file changed behaviour this round** — three of the four fixes are
 tests and one is the record.
+
+## 2026-09-02 — ATTENDANCE, THE OWNER'S HALF: a gym gets its own Attendance section, the switch that turns it off, and the tick box without which Kd's own sentence was false — and a fixture that had been WAITING for this card went red the moment it landed
+
+**Read before adding an item to the console's left rail, before drawing a count
+on any console screen that also PAGES, before writing a test whose subject is a
+read that is still in flight, before setting state at the top of an effect in
+this repo, and before assuming a lapsed gym's console is read-only because its
+subscription says so.**
+
+Builds `CARD-gym-attendance.md` §4b-2, the half :28822 left. **NOTHING ON THE
+SERVER CHANGED** — :28221 shipped the three routes, the ninth privilege and its
+migration, so this is web-only: no migration, no `apps/api` file, no
+`packages/shared` change.
+
+### 1 · WHAT AN OWNER NOW HAS
+
+A fourth item in the console rail, **Attendance** (:28107 ruling 17), holding
+Kd's ruling 14 top to bottom: the day and arrows to move between days · **the
+shape of the day before any names** (one line per session, `06:00 – 07:00 ·
+34 people`) · the unusual arrivals as a FILTER · then people, one row each, times
+as chips · a name search, and picking somebody opens their own history · paged,
+never infinite. Plus the **switch** on Settings and the **"See who came in"**
+tick box on Staff.
+
+### 2 · THE ONE CALL MADE FOR KD, WITH ITS COST, AT THE GATE
+
+**The name search covers the people LOADED, because the server has no name
+filter**, and the screen says so in as many words when pages remain: *"Nobody by
+that name in the people loaded so far — load the rest to search them too."* The
+alternative was a server change first, i.e. a different card. **Put to Kd with
+that cost before a line was written and approved** — the habit :27992/:28055
+recorded, where two of six things settled that way went AGAINST the
+recommendation.
+**The failure mode it avoids is the one ruling 14 names**: a silent "nobody by
+that name" for a member sitting on page three is the same lie as counting a page
+and calling it the day. Server-side search has an `OWED.md` line.
+
+### 3 · THE COUNTS ARE THE SERVER'S, AND THE FIXTURE IS WHAT MAKES THAT TESTABLE
+
+Ruling 14's only load-bearing requirement (:27992 §3). The test hands the screen
+a day whose **`totals` say 300 people while its page carries TWO** — an answer no
+honest day produces — and asserts `300 people · 412 visits` renders. A screen
+counting its rows prints `2`. **A1 and A2 are that defect put back** (the
+headline counting `people.length`, the exceptions count summed over the page)
+and both are RED.
+**`totals.people` cannot be derived from `summary` at all** — per slot `visits`
+and `people` are provably equal, and they diverge across the DAY exactly when
+somebody came twice, which is what ruling 12 made possible.
+
+### 4 · A FIXTURE WENT RED BECAUSE THIS CARD ARRIVED, AND :28107 PREDICTED IT — BUT NAMED THE WRONG TWO FILES
+
+`staffView.test.js`'s *"carries a privilege this build has no words for"* used
+**`attendance.read` itself** as its stand-in for a privilege the api grants and
+the web cannot draw. Its own comment said *"THE LIVE CASE, not a hypothetical …
+until the attendance web half ships"*. **This is that ship, so the live gap
+closed and the test went red — correctly, and for a reason with nothing to do
+with the guarantee it defends.**
+
+**:28107 named two fixtures that would go stale this way and both were in
+`apps/api`** (`schemas.test.ts`, `db.migration.test.ts`'s `legacySeven`). **This
+was a THIRD, in the web, that the ruling did not name.** The class was right and
+the count was low.
+
+**Fixed as a CLASS on :21157's precedent** — a synthetic token
+(`zzz.not-a-real-privilege`) no vocabulary can ever mint, so no future card can
+accidentally give it a tick box — **plus a positive control that goes red if
+somebody deletes a tick box**: everything the api grants a trainer must be
+drawable and therefore not reported as unknown. **A16 (the tick box removed) is
+RED on it.**
+
+### 5 · THE FINDING: MY OWN STALE-READ TEST WAS VACUOUS AND ONLY THE MUTANT SAID SO
+
+The screen holds a day, a filter and pages, so it stamps its answer with the
+question it was fetched for — `consoleOrgs.js`'s rule 3, applied to a day instead
+of a user. **A4 replaces that check with `true` and my test stayed GREEN.**
+
+**Why: I hung the FIRST read and let the second resolve at once, so the abandoned
+read was cancelled by the effect's own cleanup and never landed.** The window the
+stamp actually protects is *while the NEW read is in the air*, when the held
+people still belong to the previous day. **The new read is the one that has to
+hang.** Rewritten that way it is RED immediately.
+
+**This is the SECOND round running in which a test I wrote to hold a guarantee
+passed under the defect** — round 2 of the member half was the first
+(`DECISIONS.md:29117` §2), and there too a foreground-versus-background
+distinction was what made the fixture blind. **STANDING, and it is now earned
+twice: a regression test is not finished when it passes, only when it FAILS under
+the revert.**
+
+### 6 · THE SYNCHRONOUS RESET THAT LINT REFUSED, AND WHY THE FIX IS BETTER THAN THE CODE IT REPLACED
+
+The effect opened by resetting to `loading` — `react-hooks/set-state-in-effect`,
+a cascading render. **The repair is not cosmetic: the reset was TWO SOURCES OF
+TRUTH**, because the held people belonged to the old day for as long as the new
+read was in flight and only the setter's TIMING kept them off screen. Stamping
+makes staleness a property of the DATA, so a late answer cannot be drawn under
+the wrong heading whatever the ordering. **A4 and A5 are the two doors into that
+defect** (the read, and a PAGE landing after the day changed) and both are RED.
+
+**The retry had to fold into the same key.** Try again changes neither the day
+nor the filter, so an effect keyed on those alone would never run twice and the
+spinner would sit for ever. `attempt` is part of the stamp: one mechanism gives
+the retry its re-read AND its spinner (the store's rule 1 — somebody waiting on
+purpose can see they were heard).
+
+### 7 · READ-ONLY IS THE SERVER'S THREE-STATE ANSWER, NOT THE SUBSCRIPTION
+
+A first draft of the lapsed-gym test set an `expired` subscription and left
+`consoleReadOnly` off. Nothing greyed, and **the panel was right while the
+fixture was wrong** — `consoleIsReadOnly` reads `org.consoleReadOnly === true`
+and deliberately not `!hasLivePlan(org)`, because that null has three causes and
+two of them are ignorance (:23711, C97). **Recorded because the ten minutes it
+cost were spent looking for a defect in correct code.**
+
+### 8 · WHAT IS NOT BUILT, so nobody reads this as the card closing
+
+**NO BROWSER SMOKE HAS EVER RUN ON ANY ATTENDANCE SURFACE — either half — and
+T3 IS UNRUN on this half and on the server half.** The `OWED.md` attendance line
+does NOT tick. Two deferrals took their lines in this commit: **server-side name
+search**, and **the second date picker** (this screen's and the closures screen's
+are the same control written twice; the hours panel is under five rounds of
+review and R1.1 says a fix round is not where that gets refactored).
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1593/1593 across 57 files**
+(1524/55 before; +69 new, +2 files). Scoped: `consoleAttendance.render` **32/32**
+· `attendanceView` **28/28** · `settings.render` **123/123** (114 before) ·
+`staffView` **50/50**. `eslint --max-warnings=0` exit 0 on all **thirteen**
+touched files — it caught the cascading-render defect in §6, which is why that
+section exists. Root guards: `check-harnesses` **25 parse** ·
+`check-decisions-index` **265 pointers, 1081 headings** · triggers `--check` **up
+to date (840 from 226 of 364)**. No `packages/shared` or server change, so
+:28395's fan-out does not apply and `web` is the whole of the suite that could
+move.
+
+**AUDIT — 16 mutants, 16 RED, 0 ALIVE, every restore sha256 byte-exact**, checked
+against hashes taken BEFORE the first mutation and restored from copies OUTSIDE
+the working tree (never `git checkout --`, :25567 — this card's own uncommitted
+work was in those files). All in :5857 rule 4a's always-mutated columns (numbers
+a user sees, a permission gate) and **NO database mutant, because this card
+changes no server behaviour**. A1/A2 count the page · A3 filters in the browser ·
+A4/A5 draw a stale answer · A6 draws an empty day over a failed read · A7 calls
+`hours_unset` unusual · A8/A9 collapse the three empty sentences · A10 claims a
+partial search is complete · A11/A13 open the nav gate · A12 uses the reader's
+zone · A14 makes the switch optimistic · A15 ignores `readOnly` · A16 removes the
+tick box. **A4 was ALIVE on the first pass and §5 is that finding**; A14 aborted
+on a drifted anchor and was re-aimed rather than allow-listed (:15770).
+
+**Files.** New: `pages/console/Attendance.jsx` ·
+`pages/console/attendanceView.js` · `components/console/AttendanceSettingsPanel.jsx`
+· `pages/console/attendanceView.test.js` ·
+`pages/console/consoleAttendance.render.test.jsx`. Edited:
+`components/console/ConsoleLayout.jsx` (fourth nav item) · `App.jsx` (one route) ·
+`api/orgsApi.js` (`getAttendanceDay`) · `pages/console/staffView.js`
+(`PRIVILEGE_COPY`, seventh box) · `pages/console/Settings.jsx` (mounts the switch)
+· `pages/console/settings.render.test.jsx` (+9) ·
+`pages/console/staffView.test.js` (the stale fixture, §4) ·
+`pages/landingRoute.test.js` (the route count, 5 → 6, which its own comment says
+is the correct response to adding a route).

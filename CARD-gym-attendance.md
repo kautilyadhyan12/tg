@@ -455,6 +455,17 @@ used.
 
 ### 4b — WEB HALF (SPLIT IN TWO, 2026-09-02)
 
+**4b-2 — THE OWNER'S HALF: BUILT 2026-09-02, `DECISIONS.md:29250`.** The
+console's **Attendance** section, the manual switch on Settings, and the *"See
+who came in"* tick box. Web-only — no migration, no `apps/api` file, no
+`packages/shared` change. **NO SMOKE HAS RUN ON EITHER HALF AND T3 IS UNRUN ON
+BOTH**, so the `OWED.md` line still does not tick; the smoke sheet is owed and
+can now be written across both halves, which is what this split was waiting for.
+**ONE THING IN THE LIST BELOW SHIPPED NARROWER THAN WRITTEN AND IT WAS KD'S CALL
+AT THE GATE: the name search covers the people LOADED**, because the server has
+no name parameter — the screen says so whenever pages remain, and the server-side
+filter has its own `OWED.md` line.
+
 **4b-1 — THE MEMBER'S HALF: BUILT 2026-09-02, `DECISIONS.md:28822`.** The
 `My Gyms` section Kd ruled the same day, the **"I'm here"** button and the
 sentence it answers with, and the days they came. **Everything below marked

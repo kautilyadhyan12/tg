@@ -156,10 +156,11 @@ describe('the console routes and sign-out honour the amendment', () => {
     ) ?? [];
     // The COUNT is what keeps this honest: without it a regex that silently
     // stopped matching would pass over an empty list. It moved 4 → 5 when the
-    // Settings route landed (2026-08-22), and moving it is the correct response
+    // Settings route landed (2026-08-22) and 5 → 6 when the Attendance section
+    // landed (2026-09-02, :28107), and moving it is the correct response
     // to adding a route — the loop below is the guarantee, this number is only
     // the proof that the loop saw everything.
-    expect(consoleRoutes.length).toBe(5);
+    expect(consoleRoutes.length).toBe(6);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireOnboarding={false}');
     }

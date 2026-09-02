@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
+import AttendanceSettingsPanel from '../../components/console/AttendanceSettingsPanel';
 import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
@@ -151,6 +152,30 @@ export default function Settings() {
           key={`hours-${org.id}`}
           org={org}
           privileges={privileges}
+          readOnly={readOnly}
+        />
+      ) : null}
+
+      {/* MARKING ATTENDANCE — the owner's on/off switch (:26469 §1.4).
+          **THE SWITCH IS HERE AND THE LIST OF WHO CAME IS NOT, and that is Kd's
+          ruling 17 rather than an inconsistency** (:28107): *"Settings is where
+          a gym CONFIGURES itself; a section is where it WORKS"*. The list moved
+          out to its own console section; the setting that turns the feature on
+          stayed.
+
+          Gated on `org.manage`, the same privilege the server gates
+          `PATCH /v1/orgs/:gymId` with — the switch rides that request for
+          `clockFormat`'s reason, being a setting ABOUT the feature rather than a
+          use OF it.
+
+          KEYED for the two panels' reason above: one route, so moving between
+          gyms changes the parameter without remounting, and this panel holds a
+          pending flag and a save error that must not follow the owner onto
+          another gym. The prefix is round 4's requirement (:20867). */}
+      {canEditGym ? (
+        <AttendanceSettingsPanel
+          key={`attendance-${org.id}`}
+          org={org}
           readOnly={readOnly}
         />
       ) : null}

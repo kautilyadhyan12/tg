@@ -7869,9 +7869,28 @@ file and is stated so nobody reads these as lower priority than they are.
       Every one was a guarantee the code kept correctly with **nothing holding it
       there**, including C/H-3's own second half; three mutants now hold them.
       **THIS LINE STILL DOES NOT TICK, and "the packet ships" is a statement
-      about that diff only.** What holds it: **the OWNER's half is unbuilt** · **no
+      about that diff only.** What holds it: ~~**the OWNER's half is unbuilt**~~
+      **BUILT 2026-09-02, see below** · **no
       browser smoke has EVER run on any attendance surface, either half** · **T3
       is unrun on the server half.**
+      **§4b's OWNER HALF BUILT 2026-09-02 (`DECISIONS.md:29250`)** — the console's
+      **Attendance** section (:28107's fourth nav item, gated on
+      `attendance.read` and NOT on a job title), the **manual switch** on
+      Settings, and the *"See who came in"* **TICK BOX** in `PRIVILEGE_COPY`,
+      which is ruling 18's second half and without which *"the owner can change
+      it"* had no control behind it. **Web-only: no migration, no `apps/api`
+      file, no `packages/shared` change** — :28221 had already shipped the routes
+      and the ninth privilege. Kd's ruling 14 is the screen's shape: the day's
+      SHAPE first (one line per session, server-counted), the exceptions as a
+      FILTER (the server's `?statuses=`, never a browser predicate), then PEOPLE
+      one row each with times as chips, paged and never infinite.
+      **THE COUNTS ARE SERVED AND THE SCREEN DERIVES NONE** — the test hands it a
+      day whose `totals` say 300 people while its page carries two, which is
+      ruling 14's named breakage made observable.
+      ⚠️ **STILL NOT TICKING, AND NOW ONLY TWO THINGS HOLD IT: no browser smoke
+      has EVER run on any attendance surface, either half, and T3 is UNRUN on
+      this half and on the server half.** The smoke sheet is owed and can now be
+      written across BOTH halves, which is what §4b's split was waiting for.
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,
@@ -7916,6 +7935,39 @@ file and is stated so nobody reads these as lower priority than they are.
       changed**, i.e. when the member is on Settings → Gym, where
       `GymMembershipCard` already reads `/v1/orgs/mine` and could feed the store
       — **the same card as the line above, and to be done with it.**
+- [ ] 🟡 **THE OWNER'S ATTENDANCE SEARCH CANNOT SEARCH WHAT IT HAS NOT LOADED.**
+      Deferred 2026-09-02 by the owner's half (`DECISIONS.md:29250` §2), **as a
+      call put to Kd WITH ITS COST at the gate and approved**, rather than
+      discovered afterwards. `GET /v1/orgs/:gymId/attendance` has no name
+      parameter and pages 100 people at a time, so the console's search filters
+      the rows LOADED. **The screen is honest about it** — with pages still
+      unread it says *"Nobody by that name in the people loaded so far — load the
+      rest to search them too"* and never *"nobody came"*, because a silent miss
+      for a member sitting on page three is the same defect as counting a page
+      and calling it the day (ruling 14, :27992 §3). **A gym at the trial cap of
+      300 is three presses from fully searchable**, which is why this is 🟡 and
+      not blocking. **THE FIX IS A SERVER PARAMETER, not a bigger page**: a `q`
+      on the day route, filtered in SQL, so the answer is about the DAY and not
+      about what a browser happens to hold. **Do NOT "fix" it by raising
+      `ATTENDANCE_PAGE_LIMIT`** — that moves the cliff without removing it, and
+      the limit is paired with a `.max()` in the contract that a change would
+      have to move in the same commit (:28452 §3, :28649 L-6).
+- [ ] ⚪ **TWO DATE PICKERS NOW EXIST IN THE CONSOLE AND THEY ARE THE SAME
+      CONTROL WRITTEN TWICE.** Raised 2026-09-02 by the owner's half
+      (`DECISIONS.md:29250` §8). The Attendance section's day box and the hours
+      screen's *"closed on a date"* box are byte-for-byte the same behaviour —
+      `type="date"`, the whole box opening the calendar via `showPicker()` in a
+      swallowed try/catch (**Kd's own instruction, 2026-09-01: *"for date i have
+      to hand type men"***), and deliberately **no `min` and no `max`** (an HTML
+      `min` is a CONSTRAINT, not a hint: the field silently refuses to submit
+      with no event and no sentence, which the hours card learned the hard way).
+      **Not extracted deliberately**: sharing them means editing
+      `OpeningHoursPanel.jsx`, an 800-line file under five rounds of review, and
+      R1.1 says a card does not refactor a file it otherwise has no business in.
+      **THE RISK IS THE ORDINARY ONE FOR A DUPLICATE — the next fix lands in one
+      copy.** The fix is a small shared `DayField` in `components/console/`, used
+      by both, with the hours render suite as the guard that the extraction
+      changed nothing.
 - [ ] ⚪ **A GYM THAT CHANGES ITS TIME ZONE LEAVES OLD VISITS WITH A DATE AND A
       TIME THAT DESCRIBE DIFFERENT DAYS.** Raised 2026-09-02 by the member half's
       T3 round 2 (`DECISIONS.md:29117` §4) as an observation, **not a finding of

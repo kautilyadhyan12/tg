@@ -40,6 +40,7 @@ import ConsoleHome     from './pages/console/ConsoleHome';
 import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
+import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleSettings from './pages/console/Settings';
 
 export default function App() {
@@ -213,6 +214,16 @@ export default function App() {
             <Route path="/console/:orgSlug/members" element={
               <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* WHO CAME IN — Kd's ruling 2026-09-01 (:28107): its own section,
+                not a panel inside Settings. The nav draws the tab only for
+                somebody holding `attendance.read`, and this route is reachable
+                by typing the address either way — the server is the enforcement
+                (R3.3) and the screen prints its refusal. */}
+            <Route path="/console/:orgSlug/attendance" element={
+              <ProtectedRoute requireOnboarding={false}>
+                <ConsoleLayout><ConsoleAttendance /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

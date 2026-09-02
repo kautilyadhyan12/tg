@@ -1,12 +1,13 @@
 import { Fragment } from 'react';
 import { NavLink, Link, useParams } from 'react-router-dom';
-import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
+import { Building2, Users, Settings, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { canManageStaff } from '../../pages/console/staffView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
+import { canReadAttendance } from '../../pages/console/attendanceView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 
 // The console's own shell — Part 3 §3.1: "Responsive web app (owners live on
@@ -117,6 +118,23 @@ export default function ConsoleLayout({ children }) {
     ? [
         { to: `/console/${orgSlug}`, end: true, icon: Building2, label: 'Gym' },
         { to: `/console/${orgSlug}/members`, end: false, icon: Users, label: 'Members' },
+        // ATTENDANCE IS A SECTION OF ITS OWN — Kd's ruling 2026-09-01 (:28107):
+        // *"it should not be in settings but in a section call attandance a new
+        // option besides gym memebr settings etc"*. **Settings is where a gym
+        // CONFIGURES itself; a section is where it WORKS**, which is why the
+        // manual-attendance SWITCH stays on Settings while this list is out
+        // here. It sits before Settings because that is the order he named it in
+        // and because it is the screen an owner opens every morning.
+        //
+        // GATED ON `attendance.read`, the ninth privilege, which every role
+        // holds by default and an owner may untick (:28107 §2) — so this asks
+        // for the POWER and never the job title, which is :11429's seam and the
+        // defect the roster's Remove control shipped once (`canRemoveMembers`).
+        // **Hiding is not the enforcement** (R3.3): the route 403s on its own
+        // and the screen prints the server's sentence.
+        ...(canReadAttendance(viewerPrivileges(org))
+          ? [{ to: `/console/${orgSlug}/attendance`, end: false, icon: ClipboardCheck, label: 'Attendance' }]
+          : []),
         ...(settingsIsReachable(viewerPrivileges(org))
           ? [{ to: `/console/${orgSlug}/settings`, end: false, icon: Settings, label: 'Settings' }]
           : []),

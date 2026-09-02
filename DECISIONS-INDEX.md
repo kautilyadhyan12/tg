@@ -1325,6 +1325,34 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:29250** — 2026-09-02 — **ATTENDANCE, THE OWNER'S HALF: the console gets an
+  Attendance section, the Settings switch, and the tick box without which Kd's
+  own *"the owner can change it"* was a false sentence.** **Read before adding an
+  item to the console's left rail, before drawing a count on a console screen
+  that also PAGES, before writing a test whose subject is a read still in flight,
+  before setting state at the top of an effect in this repo, and before assuming
+  a lapsed gym's console is read-only because its subscription says so.**
+  Builds `CARD-gym-attendance.md` §4b-2. **Web-only — no migration, no
+  `apps/api` file, no `packages/shared` change**; :28221 had already shipped the
+  routes and the ninth privilege. **THE COUNTS ARE THE SERVER'S** (ruling 14's
+  only load-bearing requirement, :27992 §3) and the fixture is what makes that
+  testable: a day whose `totals` say 300 while its page carries TWO.
+  **ONE CALL MADE FOR KD WITH ITS COST, AT THE GATE: the name search covers the
+  people LOADED and SAYS SO**, because the server has no name filter — a silent
+  "nobody by that name" for somebody on page three is the same lie as counting a
+  page and calling it the day. **A FIXTURE WENT RED BECAUSE THIS CARD ARRIVED**:
+  `staffView.test.js` used `attendance.read` itself as its stand-in for a
+  privilege the api grants and the web cannot draw, which is exactly what this
+  card fixed — **:28107 predicted the class and named two files, both in
+  `apps/api`; this was a THIRD, in the web.** Fixed on :21157's precedent with a
+  synthetic token plus a positive control that goes red if a tick box is deleted.
+  **THE FINDING IS MY OWN STALE-READ TEST GOING GREEN UNDER ITS MUTANT** — I hung
+  the FIRST read, so the abandoned one was cancelled by the effect's cleanup and
+  the window the guard protects was never entered; **the NEW read is the one that
+  must hang. Second round running in which a test written to hold a guarantee
+  passed under the defect** (:29117 §2 was the first). **16 mutants, 16 RED, 0
+  alive; `web` 1593/1593.** **NO SMOKE HAS EVER RUN ON ANY ATTENDANCE SURFACE
+  and T3 IS UNRUN on both halves — the `OWED.md` line does not tick.**
 - **:29117** — 2026-09-02 — **MY GYMS, T3 ROUND 2 (diff-only): ZERO
   Critical/High, THE PACKET SHIPS — four Low, every one a guarantee with no test,
   and TWO of the tests written to close them were green under the defect.**

@@ -1,6 +1,87 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ATTENDANCE, THE OWNER'S HALF (§4b-2) — BUILT. DECISIONS :29250.
+      The console's Attendance section, the Settings switch, and the tick box.
+      **WEB-ONLY: no migration, no `apps/api` file, no `packages/shared`
+      change** — :28221 had already shipped the routes and the ninth privilege.
+      **THE ATTENDANCE `OWED.md` LINE STILL DOES NOT TICK.** Only two things
+      hold it now, and they are the NEXT TWO PIECES OF WORK:
+        (a) **NO BROWSER SMOKE HAS EVER RUN ON ANY ATTENDANCE SURFACE, EITHER
+            HALF.** The sheet can now be written across BOTH, which is what the
+            §4b split was waiting for. This is the natural next card.
+        (b) **T3 IS UNRUN on this half AND on the server half.**
+
+  1. **THE COUNTS ARE THE SERVER'S AND THE SCREEN DERIVES NONE** — ruling 14's
+     only load-bearing requirement (:27992 §3). The fixture is what makes it
+     testable: a day whose `totals` say 300 people while its page carries TWO.
+     A screen counting its rows prints 2. **Do not "simplify" any count on this
+     screen into a `.length`.**
+  2. **THE NAME SEARCH COVERS THE PEOPLE LOADED, AND SAYS SO.** The server has
+     no name parameter. **This was put to Kd WITH ITS COST at the gate and
+     approved** — not discovered later. Own `OWED.md` line; **the fix is a `q`
+     on the day route, NEVER a bigger page** (that moves the cliff and drags a
+     paired `.max()` with it, :28452 §3).
+  3. **THE SCREEN STAMPS ITS ANSWER WITH THE QUESTION IT WAS FETCHED FOR** —
+     `consoleOrgs.js`'s rule 3, applied to a day. It replaced a synchronous
+     reset at the top of the effect, which lint refuses
+     (`react-hooks/set-state-in-effect`) and which was **two sources of truth**:
+     only the setter's TIMING kept the old day's people off screen. `attempt` is
+     part of that key so Try again gets both its re-read and its spinner.
+  4. **MY OWN STALE-READ TEST WAS GREEN UNDER ITS MUTANT AND THAT IS THE
+     FINDING.** I hung the FIRST read, so the abandoned one was cancelled by the
+     effect's cleanup and the window the guard protects was never entered. **The
+     NEW read is the one that must hang.** SECOND ROUND RUNNING that a test
+     written to hold a guarantee passed under the defect (:29117 §2 was the
+     first). **A regression test is finished when it FAILS under the revert.**
+  5. **A FIXTURE WENT RED BECAUSE THIS CARD ARRIVED.** `staffView.test.js` used
+     `attendance.read` ITSELF as its stand-in for "a privilege the api grants
+     and the web cannot draw" — this card drew it. **:28107 predicted the class
+     and named two files, both in `apps/api`; this was a THIRD, in the web.**
+     Now a synthetic token (`zzz.not-a-real-privilege`) plus a positive control
+     that goes RED if any tick box is deleted.
+  6. **READ-ONLY IS `org.consoleReadOnly === true`, NOT the subscription.** A
+     draft test set an `expired` subscription, greyed nothing, and sent me
+     looking for a defect in correct code. That null has three causes and two
+     are ignorance (:23711).
+  7. **`landingRoute.test.js`'s console-route COUNT moved 5 → 6**, which its own
+     comment says is the correct response to adding a route — the loop is the
+     guarantee, the number only proves the loop saw everything.
+
+PROVE: All on the shipping bytes. `web` **1593/1593 across 57 files**
+       (1524/55 before). Scoped: `consoleAttendance.render` 32/32 ·
+       `attendanceView` 28/28 · `settings.render` 123/123 · `staffView` 50/50.
+       `eslint --max-warnings=0` exit 0 on all **thirteen** touched files — it
+       caught the cascading render in (3). Root guards: `check-harnesses` **25
+       parse**, `check-decisions-index` **266 pointers, 1091 headings**, triggers
+       `--check` **up to date (847 from 227 of 365)**.
+       **AUDIT: 16 mutants, 16 RED, 0 ALIVE, every restore sha256 byte-exact** —
+       hashes taken BEFORE the first mutation, restored from copies OUTSIDE the
+       tree (:25567). All in :5857 4a's always-mutated columns; **NO database
+       mutant, because this card changes no server behaviour.** A4 was ALIVE on
+       the first pass — that is finding (4) — and A14 aborted on a drifted
+       anchor and was RE-AIMED rather than allow-listed (:15770).
+
+FILES: new `pages/console/Attendance.jsx` · `pages/console/attendanceView.js` ·
+       `components/console/AttendanceSettingsPanel.jsx` + two test files;
+       edited `components/console/ConsoleLayout.jsx` (fourth nav item) ·
+       `App.jsx` (one route) · `api/orgsApi.js` (`getAttendanceDay`) ·
+       `pages/console/staffView.js` (seventh tick box) ·
+       `pages/console/Settings.jsx` (mounts the switch) · three test files ·
+       records (`DECISIONS.md`, `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`
+       regenerated, `OWED.md`, `CARD-gym-attendance.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **TWO NEW `OWED.md` LINES, both deferred deliberately with their reason:**
+       🟡 the server-side name search · ⚪ two date pickers that are the same
+       control written twice (NOT extracted: sharing them means editing
+       `OpeningHoursPanel.jsx`, an 800-line file under five rounds of review, and
+       R1.1 says a card does not refactor a file it has no other business in).
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate.
+```
+
+```
 TASK: MY GYMS + ATTENDANCE (MEMBER HALF) — T3 ROUND 2 ANSWERED, DIFF-ONLY.
       **ZERO Critical/High ⇒ THE MEMBER HALF'S PACKET SHIPS** (:5348 rule 1).
       Four Low, all fixed. DECISIONS :29117. Escape hatch NOT armed.

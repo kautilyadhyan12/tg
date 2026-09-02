@@ -12,6 +12,7 @@ import {
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
   markGymAttendanceResponseSchema,
@@ -254,6 +255,39 @@ export const orgService = {
       markGymAttendanceResponseSchema,
       'your attendance',
       authApi.post(`/v1/orgs/${gymId}/attendance`, {}),
+    ),
+
+  /** GET /v1/orgs/:gymId/attendance — WHO CAME TO THE GYM ON ONE DAY, for the
+   *  console's Attendance section (:28107). Needs `attendance.read`, which every
+   *  role holds by default and an owner may untick.
+   *
+   *  **IT ANSWERS THREE THINGS AND THE SCREEN MAY DERIVE NONE OF THEM**
+   *  (:27992 §3, ruling 14): `summary` is one line per session counted over the
+   *  WHOLE day, `totals` is the day's visits and its DISTINCT people, and
+   *  `people` is one page of one-row-per-person. A screen that counted the page
+   *  it downloaded would be right on six rows and report the first page on four
+   *  hundred — and `totals.people` cannot be derived from `summary` at all,
+   *  because a member who came twice is in two of its rows.
+   *
+   *  `day` is the GYM's calendar date (`YYYY-MM-DD`); omitting it means the
+   *  gym's today, decided server-side in the gym's own zone rather than the
+   *  reader's (trap #8). `statuses` narrows to the unusual arrivals and takes
+   *  either wire spelling. `cursor` pages the PEOPLE only — the summary and the
+   *  totals are the same on every page, which is what stops them moving when
+   *  somebody presses Show more.
+   *
+   *  **IT SHARES ONE RATE-LIMIT BUCKET WITH THE HISTORY READ BELOW** — 600/hour
+   *  across both, one Redis key (`orgs_attendance_read`). Picking a member out
+   *  of the list is a history read, so it spends the same allowance as the day
+   *  list: sustained, that is one request every six seconds for everything this
+   *  screen does. **Nothing here may poll, refresh on focus, or run on a timer**,
+   *  and if this screen ever wants live-ish updates the limiter is what has to
+   *  change first (:28649 L-5). */
+  getAttendanceDay: (gymId, params) =>
+    readThrough(
+      gymAttendanceDayResponseSchema,
+      'who came in',
+      authApi.get(`/v1/orgs/${gymId}/attendance`, { params }),
     ),
 
   /** GET /v1/orgs/:gymId/attendance/history — the days somebody came.

@@ -1901,3 +1901,101 @@ describe('a permission this screen is too old to show', () => {
     expect(within(row).queryByText(/too old to show/i)).toBeNull();
   });
 });
+
+describe('the attendance switch', () => {
+  /** KD'S RULING (:26469 §1.4), and its place on this screen is ruling 17
+   *  (:28107): **the SWITCH configures the feature and stays on Settings, while
+   *  the LIST of who came is its own console section.** *"Settings is where a
+   *  gym CONFIGURES itself; a section is where it WORKS."* */
+  const drawAttendance = async () => {
+    drawSettings();
+    await openSection('Marking attendance');
+  };
+
+  it('is on, and says so on the closed heading', async () => {
+    drawSettings();
+    // :20338's requirement — a shut row still answers the question the owner
+    // opened Settings with, so the state is readable without opening anything.
+    expect(await screen.findByText(/Members can mark themselves in/i)).toBeTruthy();
+  });
+
+  it('says Switched off on the closed heading when the gym turned it off', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }], formerOrgs: [] },
+    });
+    drawSettings();
+    expect(await screen.findByText(/Switched off/i)).toBeTruthy();
+  });
+
+  it('sends the change on its own, with no Save button', async () => {
+    await drawAttendance();
+    const box = screen.getByLabelText(/Let members mark themselves in/i);
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { manualAttendanceEnabled: false });
+  });
+
+  /** THE SWITCH DRAWS FROM THE SERVER'S ANSWER, NOT FROM THE PRESS. A failed
+   *  save must leave it showing what the gym actually has — a toggle that
+   *  reported a state the server rejected is the one thing it must never do
+   *  (:5807: on screen and wrong). */
+  it('stays where it was when the save is refused, and says why', async () => {
+    orgService.updateOrg.mockRejectedValue(apiError(403, 'forbidden', 'You cannot change that.'));
+    await drawAttendance();
+    fireEvent.click(screen.getByLabelText(/Let members mark themselves in/i));
+    await waitFor(() => expect(screen.getByText(/You cannot change that./i)).toBeTruthy());
+    expect(screen.getByLabelText(/Let members mark themselves in/i).checked).toBe(true);
+  });
+
+  /** SAYS WHAT TURNING IT OFF ACTUALLY COSTS. Today this is the ONLY way a
+   *  visit can be recorded — the QR path is the phone app's (:26558, :26586) and
+   *  staff marking somebody present is not built (:27900) — so an owner should
+   *  read that here rather than discover it from an empty screen tomorrow. */
+  it('warns that switching it off stops attendance entirely', async () => {
+    await drawAttendance();
+    expect(screen.getByText(/stops attendance being recorded at all/i)).toBeTruthy();
+  });
+
+  /** A LAPSED GYM'S CONSOLE IS READ-ONLY (:24141, :23711) and this panel obeys
+   *  it like every other. The server refuses the write too — `updateOrg` goes
+   *  through `requireWritablePrivilege` — so this is the screen not offering a
+   *  control it knows will be refused, never the enforcement (R3.3). */
+  it('is not usable on a gym whose plan has lapsed', async () => {
+    // `consoleReadOnly` IS THE SERVER'S OWN THREE-STATE ANSWER and the lock is
+    // NOT derived from the subscription — `null` means "we could not ask" (a
+    // plain member, an older api) and must never grey anything out. A first
+    // draft of this test set an `expired` subscription and left the flag off,
+    // which greyed nothing and would have sent me looking for a defect in the
+    // panel; the panel was right and the fixture was not.
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }],
+        formerOrgs: [],
+      },
+    });
+    await drawAttendance();
+    const box = screen.getByLabelText(/Let members mark themselves in/i);
+    expect(box.disabled).toBe(true);
+    fireEvent.click(box);
+    expect(orgService.updateOrg).not.toHaveBeenCalled();
+  });
+
+  /** THE TICK BOX KD'S RULING 18 REQUIRES, without which *"the owner can change
+   *  it"* is a sentence with no control behind it (:28107). It is a READ, so it
+   *  sits high in `PRIVILEGE_COPY`'s least-powerful-first order. */
+  it('has a tick box on the Staff screen, worded for a person', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).getByLabelText(/See who came in/i)).toBeTruthy();
+  });
+
+  it('saves that tick like any other', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/See who came in/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
+    expect(orgService.updateStaffPrivileges.mock.calls[0][2].privileges).toContain('attendance.read');
+  });
+});

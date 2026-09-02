@@ -303,17 +303,55 @@ describe('what a row shows as ticked', () => {
   });
 
   it('carries a privilege this build has no words for, rather than stripping it', () => {
-    // THE LIVE CASE, not a hypothetical: `attendance.read` is granted by the api
-    // to every role (:28107) and this build has no tick box for it until the
-    // attendance web half ships. The design says such a tick is carried through
-    // a save UNCHANGED and announced — an owner who never saw it must not be
-    // able to strip it by pressing Save.
+    // A SYNTHETIC TOKEN NO VOCABULARY CAN EVER MINT, and that is the fix for a
+    // fixture that went stale because the future arrived — :21157's audit made
+    // exactly this change to `schemas.test.ts` and :28107 predicted the
+    // recurrence in writing.
+    //
+    // **This case used to name `attendance.read`**, on the reasoning that it was
+    // "the live case, not a hypothetical": the api granted it to every role and
+    // this build had no tick box for it. **The attendance web half shipped that
+    // tick box, so the live gap closed and this test went red — correctly, and
+    // for a reason that had nothing to do with the guarantee it exists to
+    // defend.**
+    //
+    // :28107 named two fixtures that would go stale this way (`schemas.test.ts`
+    // and `db.migration.test.ts`'s `legacySeven`, both in `apps/api`). **This is
+    // a THIRD, in the web, that the ruling did not name** — the class was right
+    // and the count was low, which is the argument for fixing the shape rather
+    // than the instance.
+    //
+    // The guarantee itself is unchanged and is not hypothetical: the api may
+    // grant a privilege a deployed web bundle has no words for, at any time, and
+    // an owner who never saw a tick must not be able to strip it by pressing
+    // Save. A synthetic name tests that permanently, because no future card can
+    // accidentally give this one a tick box.
+    const NEVER_MINTED = 'zzz.not-a-real-privilege';
     const drawable = privilegeChoices('trainer').map((c) => c.value);
-    const newest = [...ROLE_PRIVILEGES.trainer].filter((p) => !drawable.includes(p));
-    expect(newest.length).toBeGreaterThan(0);
-    const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] };
-    expect(unknownPrivileges(person)).toEqual(newest);
+    expect(drawable).not.toContain(NEVER_MINTED);
+
+    const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer, NEVER_MINTED] };
+    expect(unknownPrivileges(person)).toEqual([NEVER_MINTED]);
     expect(unknownPrivilegesNote(person)).not.toBeNull();
+  });
+
+  it('draws a tick box for every privilege the api grants a trainer — nothing is silently unnameable', () => {
+    // THE POSITIVE CONTROL, and it is what stops the case above going vacuous.
+    // A synthetic token proves the CARRY path works; it says nothing about
+    // whether a REAL privilege has been left without words. This asserts the
+    // other half: everything the api actually grants a trainer can be drawn and
+    // is therefore NOT reported as unknown.
+    //
+    // **It goes red if somebody deletes a tick box** — including the
+    // `attendance.read` one Kd's ruling 18 requires, without which "the owner
+    // can change it" is a sentence with no control behind it (:28107).
+    const drawable = privilegeChoices('trainer').map((c) => c.value);
+    for (const granted of ROLE_PRIVILEGES.trainer) {
+      expect(drawable).toContain(granted);
+    }
+    const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] };
+    expect(unknownPrivileges(person)).toEqual([]);
+    expect(unknownPrivilegesNote(person)).toBeNull();
   });
 
   it('is NEVER empty on that fallback — an empty row is the defect it exists to prevent', () => {
