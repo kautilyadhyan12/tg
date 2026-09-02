@@ -1906,8 +1906,22 @@ export const gymAttendancePersonSchema = z
      *  see"* sheet; `OrgVisibilitySheet.jsx` now names email, because a gym-
      *  facing field added without that is the breach its own header warns
      *  about. **A later chat must not add a second such field by citing this
-     *  one** — this is a ruling about EMAIL, not a licence. */
-    email: z.string(),
+     *  one** — this is a ruling about EMAIL, not a licence.
+     *
+     *  **`.default("")` AND NOT REQUIRED, AND THIS IS :12660's RULE PAID FOR A
+     *  SECOND TIME.** `orgsApi.js` treats a contract mismatch as a HARD
+     *  FAILURE, so a REQUIRED field destroys the whole screen during any
+     *  window where the web bundle is newer than the api — which is every
+     *  rolling deploy, and which happened here in DEVELOPMENT the moment the
+     *  field shipped against an api process started before it: the Attendance
+     *  screen answered *"The server sent something this screen couldn't read"*
+     *  and drew nothing at all. **Kd hit it.**
+     *
+     *  That is R4.4's expand-then-contract applied to a RESPONSE, and :12660
+     *  wrote it down in as many words for `formerOrgs`: a required field would
+     *  *"destroy the whole gym card during any web-newer-than-API window to add
+     *  one sentence"*. The screen draws no line for an empty address. */
+    email: z.string().default(""),
     visits: z.array(gymAttendanceVisitSchema).min(1).max(ATTENDANCE_VISITS_PER_PERSON),
   })
   .strict();

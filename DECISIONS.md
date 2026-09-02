@@ -31218,3 +31218,76 @@ restores sha256-verified.
 
 **STILL DOES NOT TICK: no browser smoke has run on any of this, and T3 is
 UNRUN.** The smoke sheet has been stale for four commits.
+
+### ADDENDUM, same session — THE EMAIL FIELD SHIPPED REQUIRED AND KILLED THE ATTENDANCE SCREEN IN KD'S BROWSER, WHICH IS :12660's RULE PAID FOR A SECOND TIME
+
+**Read before adding a field to ANY shared response schema, before assuming a
+render test can see a contract failure, and before restarting a dev server to
+make a bug go away.**
+
+*"The server sent something this screen couldn't read. Please try again."* — the
+whole Attendance screen, drawing nothing else.
+
+### 1 · THE CAUSE, MEASURED
+
+`email` was added to `gymAttendancePersonSchema` as **required**. The api process
+Kd's browser was talking to had been started BEFORE that commit, so it sent
+`{userId, displayName, visits}` and no email — **confirmed by curling the live
+route rather than reasoned about**: the response came back with no `email` key.
+`orgsApi.js` turns a contract mismatch into a HARD FAILURE by design, so the
+screen had nothing to draw.
+
+**:12660 HAD ALREADY WRITTEN THIS DOWN, FOR `formerOrgs`, IN THESE WORDS:** a
+required field would *"destroy the whole gym card during any web-newer-than-API
+window to add one sentence"*, which is why that field carries `.default([])`.
+**I added a required one four hours after citing that entry for something else.**
+It is R4.4's expand-then-contract applied to a RESPONSE.
+
+`email` is now `.default("")`, and the screen draws no line for an empty address.
+
+### 2 · THE PART WORTH MORE THAN THE FIX: MY FIRST GUARD WAS BLIND, AND I PROVED IT
+
+I wrote the regression test beside the SCREEN — *"still draws the whole screen
+when the server is older and sends none"* — and then reverted the fix to watch it
+fail. **It passed.**
+
+**The Attendance render suite mocks `orgService.getAttendanceDay`, which sits
+ABOVE `readThrough`. No schema runs in that file at all.** A contract failure is
+structurally invisible there, so a test written next to the screen can never see
+one — and would have sat there looking like protection.
+
+The guard moved to `orgsApi.test.js`, the layer where the parser actually runs,
+and **it goes RED under the revert** (*"response for who came in did not match
+its contract"*). Both render cases stay, because they prove the SCREEN's
+behaviour, which is a different claim.
+
+**THE SHAPE IS THE LESSON: a test can be in the wrong LAYER, not merely weak.**
+Round 5's `isExceptionStatus` deletion and round 5's backspace-regex were both
+caught by lint rather than by a test; this one was caught by deliberately
+reverting the fix. **Three rounds running, the suite could not see the defect on
+its own.**
+
+### 3 · AND THE RESTART WAS NOT THE FIX
+
+Restarting the api makes the symptom vanish and leaves the defect in the
+contract, ready for the next deploy where the web ships first. **The process was
+restarted only AFTER the schema was fixed** — and it took stopping a stale
+listener on port 3000 by pid, because a second `node` simply failed to bind while
+the old one kept answering `/health` 200. **A green health check is not evidence
+that the code you just wrote is running.**
+
+### Round log (addendum)
+
+`web` **1669/1669 across 58 files, exit 0** (+3) · `@app/shared` **52/52** ·
+`api` attendance **29/29** LOCAL · `tsc --noEmit` exit 0 on `@app/shared` ·
+`eslint --max-warnings=0` exit 0 on three web files and the shared one ·
+`vite build` exit 0 · three root guards green.
+
+**THE FIX WAS PROVEN BY REVERTING IT**: with `email` required again the new
+`orgsApi` case fails with the contract error and the render case passes — which
+is how the wrong-layer finding was made. `packages/shared/src/orgs.ts` restored
+and **sha256-verified identical** (`cde4ecb7…910b`) after both probes.
+
+**LIVE CHECK, on the restarted server:** `GET /v1/orgs/:gymId/attendance` now
+returns `owner | owner@example.com | 2 visit(s)` and `test | tes@example.com |
+1 visit(s)`.

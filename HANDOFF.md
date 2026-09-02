@@ -1,6 +1,45 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE EMAIL FIELD KILLED THE ATTENDANCE SCREEN, AND MY FIRST GUARD WAS IN
+      THE WRONG LAYER. DECISIONS :31222 (addendum to :31098).
+
+  1. **`email` SHIPPED REQUIRED; AN API OLDER THAN THE BUNDLE SENDS NONE; THE
+     SCREEN DIED.** *"The server sent something this screen couldn't read"* —
+     `orgsApi.js` treats a contract mismatch as a HARD failure by design.
+     **:12660 wrote this rule down for `formerOrgs`** (a required field
+     "destroys the whole gym card during any web-newer-than-API window") **and
+     I added one four hours after citing that entry.** Now `.default("")`.
+  2. **MY REGRESSION TEST WAS BLIND AND I PROVED IT BY REVERTING THE FIX — IT
+     PASSED.** The Attendance render suite mocks `orgService.getAttendanceDay`,
+     which is ABOVE `readThrough`: **no schema runs in that file at all.**
+     Moved to `orgsApi.test.js`, where it goes RED under the revert.
+     **A test can be in the wrong LAYER, not merely weak.** Third round running
+     where the suite could not see the defect on its own (lint caught the other
+     two).
+  3. **THE RESTART WAS NOT THE FIX.** It hides the symptom and leaves the
+     contract broken for the next deploy. Done AFTER the schema change — and it
+     needed the stale listener on :3000 killed BY PID, because a second process
+     fails to bind while the old one keeps answering `/health` 200.
+     **A green health check is not evidence that your code is running.**
+
+PROVE: `web` **1669/1669 / 58 files, exit 0** · `@app/shared` **52/52** · api
+       attendance **29/29** LOCAL · shared `tsc` exit 0 · eslint clean on three
+       web files + shared · `vite build` exit 0 · three root guards green.
+       **The fix proven by REVERTING it**; `packages/shared/src/orgs.ts`
+       restored and sha256-verified (`cde4ecb7…910b`) after both probes.
+       **LIVE:** the route now returns `owner | owner@example.com | 2 visit(s)`.
+
+FILES: `packages/shared/src/orgs.ts` · `apps/web/src/api/orgsApi.test.js` ·
+       `apps/web/src/pages/console/{Attendance.jsx,
+       consoleAttendance.render.test.jsx}` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS FIVE COMMITS STALE — rewrite it before asking him to
+       run anything. Then the smoke, then T3 round 1.**
+```
+
+```
 TASK: THE EMAIL IS RULED VISIBLE, AND THE CHART'S BARS WERE BEING STRETCHED.
       DECISIONS :31098. **No smoke on any of this, T3 UNRUN, the `OWED.md`
       line does NOT tick, and the smoke sheet is STALE for a FOURTH commit.**

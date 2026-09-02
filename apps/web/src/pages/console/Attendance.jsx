@@ -78,9 +78,15 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
               commit. Under the name rather than beside it: it is how a gym
               CONTACTS somebody, not how it recognises them, so it must not
               compete with the name on a four-hundred-row day. */}
-          <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {person.email}
-          </span>
+          {/* NO LINE FOR AN ABSENT ADDRESS. The contract defaults `email` to an
+              empty string so an api older than this bundle cannot kill the
+              screen (:12660, and see the field's own note) — and an empty line
+              here would be a blank row under every name on such a server. */}
+          {person.email ? (
+            <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              {person.email}
+            </span>
+          ) : null}
         </span>
         {/* KD, 2026-09-03: *"besides people say A visited 2 times"*. In WORDS,
             beside the name, and only when it is more than one — see

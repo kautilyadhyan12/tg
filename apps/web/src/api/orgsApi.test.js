@@ -398,6 +398,56 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     await expect(orgService.createOrg({})).rejects.toMatchObject({ isContractError: true });
   });
 
+  /** **THE OTHER DIRECTION, AND KD FOUND IT IN HIS BROWSER.** Every case above
+   *  proves the parser REFUSES a malformed body. This one proves it ACCEPTS an
+   *  older server's — the failure mode a strict contract creates rather than
+   *  catches.
+   *
+   *  `email` was shipped REQUIRED on 2026-09-03 and the api process running at
+   *  the time predated it, so the whole Attendance screen answered *"The server
+   *  sent something this screen couldn't read"* and drew nothing. :12660 had
+   *  already written the rule down for `formerOrgs` — a required field
+   *  "destroys the whole gym card during any web-newer-than-API window" — and
+   *  it was paid for a second time here.
+   *
+   *  **IT LIVES AT THIS LAYER BECAUSE THE RENDER TEST CANNOT SEE IT.** The
+   *  Attendance screen's suite mocks `orgService.getAttendanceDay`, which is
+   *  ABOVE `readThrough`, so no schema runs there at all — a case written next
+   *  to the screen passed with the field required, which is how this guard came
+   *  to be written in the wrong place first. */
+  it('ACCEPTS an attendance day from a server too old to send emails', async () => {
+    answerWith(authApi, {
+      attendance: {
+        day: '2026-09-02',
+        timezone: 'Europe/London',
+        clockFormat: '24h',
+        totals: { visits: 1, people: 1 },
+        summary: [],
+        people: [
+          {
+            userId: '11111111-1111-1111-1111-111111111111',
+            displayName: 'Priya Sharma',
+            visits: [
+              {
+                day: '2026-09-02',
+                markedAt: '2026-09-02T06:12:00.000Z',
+                method: 'manual',
+                hoursStatus: 'in_session',
+                session: null,
+              },
+            ],
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    const res = await orgService.getAttendanceDay('gym-1', {});
+    expect(res.data.attendance.people[0].displayName).toBe('Priya Sharma');
+    // Defaulted, so the screen has something to branch on rather than a
+    // missing key — and it draws no line for it.
+    expect(res.data.attendance.people[0].email).toBe('');
+  });
+
   /** T3 Low, and the class fix is the point: NONE of the four staff endpoints
    *  was parsed under test, while every other read on this client was. Deleting
    *  `readThrough` from `getStaff` left 223 tests green — and the consequence is

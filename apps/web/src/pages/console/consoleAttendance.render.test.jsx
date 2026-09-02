@@ -62,7 +62,26 @@ const visit = (markedAt, over = {}) => ({
   ...over,
 });
 
-const person = (userId, displayName, visits) => ({ userId, displayName, visits });
+/** **`email` IS OPTIONAL HERE ON PURPOSE, AND THAT IS THE POINT OF THE CASE
+ *  BELOW.** The contract defaults it to an empty string so an api older than
+ *  this bundle cannot kill the screen — omitting it from this helper's default
+ *  IS the older server, so every existing case in this file exercises that
+ *  path, and the two cases that pass one exercise the ruling. */
+const person = (userId, displayName, visits, email) => ({
+  userId,
+  displayName,
+  visits,
+  ...(email === undefined ? {} : { email }),
+});
+
+/** OPEN "Who came", which is a dropdown since Kd's 2026-09-03 instruction.
+ *  `ConsoleSection` arrives `forceOpen` here, so this is a no-op in practice and
+ *  exists so a case cannot silently depend on that default. */
+const openWhoCame = async () => {
+  const heading = await screen.findByRole('button', { name: /^Who came/ });
+  if (heading.getAttribute('aria-expanded') !== 'true') fireEvent.click(heading);
+  return heading;
+};
 
 const day = (over = {}) => ({
   data: {
@@ -596,5 +615,36 @@ describe('the day picker announces itself', () => {
       if (had) HTMLInputElement.prototype.showPicker = original;
       else delete HTMLInputElement.prototype.showPicker;
     }
+  });
+});
+
+describe("the member's email, which Kd ruled the gym can see", () => {
+  // KD, 2026-09-03 — a knowing deviation from Part 3 §2.4, with the join door's
+  // disclosure changed in the same commit.
+  it('draws it under the name', async () => {
+    api.getAttendanceDay.mockResolvedValue(
+      day({
+        people: [person('m1', 'Priya Sharma', [visit('2026-09-02T06:12:00.000Z')], 'priya@example.com')],
+      }),
+    );
+    drawScreen();
+    await openWhoCame();
+    expect(await screen.findByText('priya@example.com')).toBeTruthy();
+  });
+
+  // **THE CASE KD FOUND IN HIS OWN BROWSER.** The field shipped REQUIRED against
+  // an api process started before it; `orgsApi.js` treats a contract mismatch as
+  // a hard failure, so the screen drew *"The server sent something this screen
+  // couldn't read"* and nothing else. :12660 had written that rule down already
+  // — a required field destroys the whole card during any web-newer-than-api
+  // window — and this is it happening a second time.
+  it('still draws the whole screen when the server is older and sends none', async () => {
+    api.getAttendanceDay.mockResolvedValue(
+      day({ people: [person('m1', 'Priya Sharma', [visit('2026-09-02T06:12:00.000Z')])] }),
+    );
+    drawScreen();
+    await openWhoCame();
+    expect(await screen.findByText('Priya Sharma')).toBeTruthy();
+    expect(screen.queryByText(/couldn't read/i)).toBeNull();
   });
 });

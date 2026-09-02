@@ -1023,6 +1023,26 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   instrument that caught the defect.
   `web` 1666/1666 · `api` 767/767 local · SWEEPS C155–C178 (21 RED) and
   O241–O243 (3 RED). **No smoke; T3 UNRUN.**
+  **ADDENDUM `:31222`, same session — THE EMAIL FIELD SHIPPED REQUIRED AND
+  KILLED THE ATTENDANCE SCREEN IN KD'S BROWSER.** **Read before adding a field
+  to ANY shared response schema, before assuming a render test can see a
+  contract failure, and before restarting a dev server to make a bug go away.**
+  *"The server sent something this screen couldn't read"* — `orgsApi.js` treats
+  a contract mismatch as a HARD failure, so an api older than the bundle drew
+  nothing at all. **:12660 had written this down for `formerOrgs` in as many
+  words** — a required field *"destroys the whole gym card during any
+  web-newer-than-API window"* — **and I added one four hours after citing that
+  entry.** Now `.default("")`; R4.4's expand-then-contract applied to a RESPONSE.
+  **THE PART WORTH MORE THAN THE FIX: my first regression test was in the WRONG
+  LAYER and I proved it by reverting the fix — it PASSED.** The Attendance render
+  suite mocks `orgService.getAttendanceDay`, which is ABOVE `readThrough`, so no
+  schema runs there and a contract failure is structurally invisible. Moved to
+  `orgsApi.test.js`, where it goes RED under the revert. **A test can be in the
+  wrong layer, not merely weak** — and this is the third round running where the
+  suite could not see the defect by itself. **The restart was NOT the fix** and
+  came after the schema change; it also needed a stale listener on :3000 killed
+  by pid, since a second process fails to bind while the old one keeps answering
+  `/health` 200. `web` 1669/1669.
 - **:30867** — 2026-09-03 — **KD RULES THAT A GYM WITH SET HOURS REFUSES
   ATTENDANCE OUTSIDE THEM, REVERSING A CHAT'S CALL — plus six design
   instructions given from his own browser.** **Read before writing anything that
