@@ -2485,6 +2485,10 @@ export async function getOrgAttendanceDay(
       people: row.people.map((p) => ({
         userId: p.userId,
         displayName: p.displayName,
+        // Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with
+        // the join screen's disclosure changed in the same commit. See the
+        // field's own note in `packages/shared/src/orgs.ts`.
+        email: p.email,
         visits: p.visits.map(toAttendanceVisit),
       })),
       nextCursor: row.nextCursor,

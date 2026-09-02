@@ -441,8 +441,13 @@ describe('the chart, in pixels', () => {
   it('scales the tallest bar to the full height and a quiet week to nothing', () => {
     const g = chartGeometry(series);
     expect(g.max).toBe(40);
-    expect(g.bars[3].height).toBe(CHART_HEIGHT);
-    expect(g.bars[3].y).toBe(0);
+    // THE TALLEST BAR STOPS SHORT OF THE TOP, leaving room for its own number
+    // above it — see `CHART_CEILING`. A bar touching the ceiling reads as "off
+    // the scale", and on a gym's first week the busiest week is the ONLY week,
+    // so the maximum is whatever small number it happens to be.
+    expect(g.bars[3].height).toBeLessThan(CHART_HEIGHT);
+    expect(g.bars[3].height).toBeGreaterThan(CHART_HEIGHT * 0.7);
+    expect(g.bars[3].y).toBeGreaterThan(0);
     expect(g.bars[2].height).toBe(0);
   });
 

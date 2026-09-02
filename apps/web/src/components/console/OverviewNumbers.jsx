@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { ConsoleCard } from './ConsoleStates';
-import { isExceptionStatus, personTimes } from '../../pages/console/attendanceView';
+import { ConsoleCard, ConsoleSection } from './ConsoleStates';
+import { isExceptionStatus, peopleLabel, personTimes } from '../../pages/console/attendanceView';
 import {
   CHART_HEIGHT,
   adoptionLine,
@@ -136,11 +136,20 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
         </p>
       )}
 
+      {/* KD, 2026-09-03: *"add a open close thing like drop down"*, asked in the
+          same breath as *"Who came today shows two as of now what if there are
+          2000 3000 the whole page will be full?"*.
+
+          **THE LIST CANNOT GROW — IT IS CAPPED AT FIVE** (`previewPeople`), so a
+          gym of 3,000 draws the same five rows and a link. The fold is not what
+          bounds it; the cap is. What the fold buys is an owner who does not want
+          the names at all being able to put them away and keep the numbers.
+
+          `forceOpen` so it arrives OPEN and still folds — the names are the
+          thing he asked to be able to see at a glance. */}
       {shown.length === 0 ? null : (
         <div className="mt-5">
-          <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Who came today
-          </div>
+          <ConsoleSection title="Who came today" aside={peopleLabel(day?.totals?.people)} forceOpen>
           <div className="flex flex-col">
             {shown.map((person) => (
               <PersonRow
@@ -159,6 +168,7 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
             {hidden > 0 ? `${hidden} more — see everyone` : 'See times, days and everyone else'}
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
+          </ConsoleSection>
         </div>
       )}
 
@@ -304,6 +314,35 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
                   vectorEffect="non-scaling-stroke"
                 />
               </svg>
+
+              {/* THE NUMBER ABOVE ITS OWN BAR, and it is the answer to Kd's
+                  *"why is it so tall but only two people attanded?"*. The bars
+                  are scaled to the BUSIEST week in the series, so on a gym's
+                  first week the busiest week is the only week and three visits
+                  fill the chart. The scale on the left says so and is easy to
+                  miss; the figure ON the column cannot be. Drawn as HTML in the
+                  same flex row as the labels rather than as SVG text, because
+                  `preserveAspectRatio="none"` would stretch a glyph as badly as
+                  it stretched the bars. */}
+              <div className="flex" style={{ marginTop: -CHART_HEIGHT }} aria-hidden="true">
+                {geometry.bars.map((bar) => (
+                  <div
+                    key={`v-${bar.key}`}
+                    className="text-center"
+                    style={{
+                      flex: '1 1 0',
+                      height: CHART_HEIGHT,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: bar.visits === 0 ? 'transparent' : 'rgba(255,255,255,0.75)',
+                      paddingTop: Math.max(bar.y - 16, 0),
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {bar.visits === 0 ? '' : bar.visits}
+                  </div>
+                ))}
+              </div>
 
               <div className="flex mt-2">
                 {geometry.bars.map((bar) => (

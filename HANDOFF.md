@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE EMAIL IS RULED VISIBLE, AND THE CHART'S BARS WERE BEING STRETCHED.
+      DECISIONS :31098. **No smoke on any of this, T3 UNRUN, the `OWED.md`
+      line does NOT tick, and the smoke sheet is STALE for a FOURTH commit.**
+
+  1. **KD RULED THE MEMBER'S EMAIL VISIBLE TO THE GYM** — closing :30733 §5.
+     **A KNOWING DEVIATION FROM Part 3 §2.4** (R0.3), and **the join door's
+     disclosure changed in the SAME COMMIT**, which is the only thing that keeps
+     it from breaching a promise already made to every member.
+     `OrgVisibilitySheet.jsx`'s own header had predicted this exact failure.
+     **It is a ruling about EMAIL, not a licence for the next field.**
+  2. **O243 IS A PRIVACY MUTANT** — the email joined from the wrong column,
+     handing one member's address to a gym under another's name. Catchable ONLY
+     because the fixture asserts the address that member really registered with.
+  3. **A `not.toMatch(/email/i)` GUARD HAD TO BE NARROWED — two different
+     promises share one word.** The join panel still must not promise *"we'll
+     email you"* (nothing in this product sends anything); the sheet's new row
+     is about what the GYM SEES. **The narrowing carries a positive control** so
+     it cannot later be satisfied by deleting the disclosure.
+  4. **THE SLAB WAS GEOMETRY, NOT TASTE, AND HIS SCREENSHOT FOUND IT.**
+     `preserveAspectRatio="none"` stretches the 320-unit viewBox to ~1030px, so
+     a 26-unit bar drew ~84 REAL pixels. And bars scale to the busiest week,
+     which on a first week is the ONLY week — three visits filled the chart.
+     Narrower bar, a `CHART_CEILING`, and **the number drawn above its own bar**.
+     The labels are HTML, not svg text, for the same stretch reason.
+  5. **HIS SCALE QUESTIONS, ANSWERED FROM THE CODE AND NOT REASSURED.** Chart
+     cannot grow (fixed height, 8 columns). Dashboard list cannot grow (capped
+     at 5, count from the server). **The Attendance screen CAN** — 100 a page,
+     Show more APPENDS — so 3,000 members is 3,000 rows. Own `OWED.md` line;
+     the fold he asked for helps and does not fix it.
+  6. **THE `sql` BACKTICK TRAP, WALKED INTO A THIRD TIME** (:30094 §3b): a
+     backtick in a comment inside a `sql` template ENDS THE TEMPLATE, and the
+     TypeScript error points nowhere near it. Plain words in SQL comments.
+  7. **AND A PATCH SCRIPT WROTE `` INTO A JS REGEX AS A LITERAL BACKSPACE.**
+     `eslint`'s `no-control-regex` was the ONLY thing that saw it — **a weakened
+     `not.toMatch` passes a green suite perfectly.** Second round running where
+     lint, not a test, caught the defect.
+
+PROVE: `web` **1666/1666 / 58 files, exit 0** · `api` **767/767 / 50 files, exit
+       0**, LOCAL · `tsc` exit 0 on api and shared · eslint clean on 3 api, 6 web
+       and 1 shared file · `vite build` exit 0 · three root guards green.
+       **SWEEPS: web C155-C178 21 RED / 0 ALIVE (C161 ABORTED on the ceiling
+       change and was RE-ANCHORED, :15770); api O241-O243, 3 of 233, 3 RED.**
+
+FILES: `packages/shared/src/orgs.ts` · `apps/api/src/modules/orgs/{repo.ts,
+       service.ts}` · `apps/api/test/orgs.attendance.test.ts` ·
+       `apps/api/tools/mutate-orgs.mjs` ·
+       `apps/web/src/components/console/OverviewNumbers.jsx` ·
+       `apps/web/src/components/gym/{OrgVisibilitySheet.jsx,
+       joinGym.render.test.jsx}` · `apps/web/src/pages/console/{Attendance.jsx,
+       overviewView.js,overviewView.test.js}` ·
+       `apps/web/tools/mutate-console.mjs` · records. **No migration.**
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS FOUR COMMITS STALE.** It names tile wording, an
+       odd-arrival line, a "The day" section and a chart state that no longer
+       ship; Kd's own gym now REFUSES the mark its step 8 asks for; and it says
+       nothing about the email, the folds or the bar numbers. **Rewrite it, then
+       the smoke, then T3 round 1.**
+```
+
+```
 TASK: THE CHART COMES BACK, THE ATTENDANCE SCREEN LOSES TWO SECTIONS, AND THE
       DROPDOWN MOVES TO "Who came". DECISIONS :31008 (addendum to :30867).
       **No smoke has run, T3 UNRUN, the `OWED.md` line does NOT tick.**

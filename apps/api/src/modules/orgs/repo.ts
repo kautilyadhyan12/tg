@@ -4099,6 +4099,10 @@ export interface GymAttendanceSlotCountRow {
 export interface GymAttendancePersonRow {
   userId: string;
   displayName: string;
+  /** Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with the
+   *  join screen's disclosure changed in the same commit. The field's full note
+   *  is on the shared schema. */
+  email: string;
   visits: GymAttendanceVisitRow[];
 }
 
@@ -4200,6 +4204,7 @@ export async function getGymAttendanceDay(
     {
       user_id: string;
       display_name: string;
+      email: string;
       first_marked_at: Date;
       day: string;
       marked_at: Date;
@@ -4221,10 +4226,19 @@ export async function getGymAttendanceDay(
       ORDER BY first_marked_at, a.user_id
       LIMIT ${limit}
     )
-    SELECT v.user_id, v.display_name, v.first_marked_at, v.day, v.marked_at,
+    SELECT v.user_id, v.display_name, v.email, v.first_marked_at, v.day, v.marked_at,
            v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
     FROM (
-      SELECT p.user_id, u.display_name, p.first_marked_at,
+      -- EMAIL IS HERE BY A KD RULING OF 2026-09-03 AND IS A KNOWING DEVIATION
+      -- FROM Part 3 §2.4 (R0.3). That section lists what an org may see and
+      -- email is NOT on it; he ruled otherwise ("gym can see email also"). The
+      -- join screen's own disclosure was changed in the SAME commit, because a
+      -- field added to a gym-facing payload without re-reading §2.4 is exactly
+      -- how that promise gets broken silently -- OrgVisibilitySheet.jsx says so
+      -- in its own header. (No backticks in here: inside a sql template literal
+      -- one ends the template, which is :30094 section 3b and cost this file a
+      -- nine-line TypeScript error pointing nowhere near the cause.)
+      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,
              a.day::text AS day, a.marked_at, a.method, a.hours_status,
              a.session_opens_minute, a.session_closes_minute,
              -- THE PER-PERSON CEILING, ENFORCED RATHER THAN ASSERTED. Earliest
@@ -4249,6 +4263,7 @@ export async function getGymAttendanceDay(
       grouped.push({
         userId: r.user_id,
         displayName: r.display_name,
+        email: r.email,
         visits: [toAttendanceVisitRow(r)],
       });
     }

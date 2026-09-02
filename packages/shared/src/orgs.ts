@@ -1892,6 +1892,22 @@ export const gymAttendancePersonSchema = z
   .object({
     userId: z.string().uuid(),
     displayName: z.string(),
+    /** **A KNOWING DEVIATION FROM Part 3 §2.4, RULED BY KD ON 2026-09-03**
+     *  (*"gym can see email also"*), recorded as one per R0.3.
+     *
+     *  §2.4 is called *"a promise, not a setting"* and lists what an org may
+     *  see — workout activity, form scores, streaks — and **email is not on
+     *  it**. It is the ONLY field on this payload that is not something the
+     *  member did at the gym, and it is here because he ruled it, not because
+     *  an endpoint made it convenient.
+     *
+     *  **THE DISCLOSURE MOVED IN THE SAME COMMIT.** §2.4's promise is kept real
+     *  by three things, one of which is the join screen's *"What {org} can
+     *  see"* sheet; `OrgVisibilitySheet.jsx` now names email, because a gym-
+     *  facing field added without that is the breach its own header warns
+     *  about. **A later chat must not add a second such field by citing this
+     *  one** — this is a ruling about EMAIL, not a licence. */
+    email: z.string(),
     visits: z.array(gymAttendanceVisitSchema).min(1).max(ATTENDANCE_VISITS_PER_PERSON),
   })
   .strict();

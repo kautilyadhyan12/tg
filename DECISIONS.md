@@ -31094,3 +31094,127 @@ this addendum**, so the API suite is untouched by it.
 ALIVE.** **C178 ABORTED first**, its anchor gone with the gate I had added and
 then removed — **re-aimed at the deletion itself rather than allow-listed**
 (:15770), so it now fails if anybody hides the chart for a gym in its first week.
+
+## 2026-09-03 — KD RULES THE MEMBER'S EMAIL VISIBLE TO THE GYM, and his screenshot finds that the chart's bars were being STRETCHED into slabs
+
+**Read before adding ANY field to a gym-facing payload, before changing
+`OrgVisibilitySheet.jsx`, before quoting Part 3 §2.4's list as complete, before
+drawing an svg with `preserveAspectRatio="none"`, and before answering "will this
+screen explode with 3,000 members?" without measuring the caps.**
+
+Four things, from one message with a screenshot in it.
+
+### 1 · THE RULING: A GYM SEES ITS MEMBER'S EMAIL
+
+*"gym can see email also"*, answering the open question filed at `:30733` §5.
+
+**IT IS A KNOWING DEVIATION FROM Part 3 §2.4 AND IS RECORDED AS ONE (R0.3).**
+That section is titled *"the org-visibility boundary (a promise, not a
+setting)"*, lists what an org may see — workout activity, form scores, streaks —
+and **email is not on it.**
+
+**THE DISCLOSURE MOVED IN THE SAME COMMIT, AND THAT IS THE WHOLE OF WHY THIS IS
+NOT A BREACH.** §2.4 keeps its promise real through three things, one of which is
+the join screen's *"What {org} can see"* sheet. `OrgVisibilitySheet.jsx`'s own
+header warned about exactly this: *"add a row because a new endpoint exists — a
+field added to the roster without re-reading §2.4 is how the promise gets broken,
+and this list is where the breach would become visible."* The row is **first**,
+because it is the only thing on that list which is not something the member did
+at the gym.
+
+**O243 IS THE MUTANT AND IT IS A PRIVACY MUTANT**: it joins the email from the
+wrong column, handing one member's address to a gym under another member's name.
+It is catchable only because the fixture asserts **the address that member
+actually registered with** rather than that some string arrived.
+
+**A TEST HAD TO BE NARROWED, AND THE NARROWING NEEDED ITS OWN CONTROL.** The join
+panel carries a guard that the screen never promises *"we'll email you"* — still
+true, nothing in this product sends anything — written as a bare
+`not.toMatch(/email/i)` over the whole page. **Two different promises share one
+word**, so it went red on the disclosure row. It now bans the PROMISE
+(`/we'll email|email you|by email|emailed/i`) **and asserts the sheet's row is
+PRESENT**, so the narrowing cannot be used later to delete the disclosure and
+still pass.
+
+### 2 · THE SLAB WAS A GEOMETRY BUG, AND HIS SCREENSHOT IS WHAT FOUND IT
+
+*"orange square box why is it so tall but only two people attanded?"*
+
+**Two independent causes, both real:**
+
+1. **WIDTH.** The svg draws with `preserveAspectRatio="none"`, so its 320-unit
+   viewBox is stretched to the card's ~1030px — about **3×**. A bar 26 units wide
+   in a 40-unit column became roughly **84 real pixels**. That is the slab, and it
+   is not a taste question: the drawing was distorted by a factor nobody had
+   measured. `BAR_GAP` 7 → 13 makes the bar a little over a third of its column,
+   which survives the stretch as a bar.
+2. **HEIGHT.** Bars scale to the BUSIEST WEEK IN THE SERIES. On a gym's first
+   week the busiest week is the ONLY week, so **three visits fill the chart**.
+   The axis says `3` and is easy to miss. Two fixes: `CHART_CEILING` (0.82) keeps
+   the tallest bar off the top so it stops reading as *off the scale*, and **the
+   week's number is now drawn above its own bar** — a full-height column labelled
+   `3` cannot be misread as a crowd.
+
+The value labels are HTML in a flex row overlaying the chart, **not svg text, for
+the same reason the bars were wrong**: `preserveAspectRatio="none"` would stretch
+a glyph exactly as it stretched a rect.
+
+### 3 · HIS TWO SCALE QUESTIONS, ANSWERED FROM THE CODE
+
+*"lets say a almost 200 peoples attends then will these graphs become enomorously
+big and cover whole page"* and *"Who came today shows two as of now what if there
+are 2000 3000"*.
+
+**MEASURED, NOT REASSURED:**
+
+- **The chart cannot grow.** `CHART_HEIGHT` is 140 units and there are always
+  `OVERVIEW_WEEKS` = 8 columns. A week of 3 visits and a week of 3,000 draw the
+  same size; only the axis number changes.
+- **The dashboard's list cannot grow.** `OVERVIEW_PEOPLE_PREVIEW` = 5, and the
+  count above it is the server's whole-day figure, so a gym of 3,000 draws five
+  rows and a link reading *"2,995 more"*.
+- **The Attendance screen CAN grow, and that is the honest answer to his
+  question.** `ATTENDANCE_PAGE_LIMIT` = 100 per page and *Show more* appends, so
+  3,000 members is thirty presses and 3,000 rows in the DOM. **The fold he asked
+  for helps and does not fix it**; server-side name search already has an
+  `OWED.md` line (:29250 §2) and a new line records the paging itself.
+
+**The fold is on both lists now** (*"add a open close thing like drop down"*),
+`forceOpen` on each so they arrive open and can be put away.
+
+### 4 · THE TRAP I WALKED INTO, WHICH THIS REPO HAD ALREADY RECORDED
+
+**A BACKTICK IN A COMMENT INSIDE A `sql` TEMPLATE LITERAL ENDS THE TEMPLATE.**
+I wrote `` `OrgVisibilitySheet.jsx` `` into the attendance query's new comment and
+got three `TS1005 ',' expected` errors pointing at a line with no comma problem.
+**This is `:30094` §3(b) verbatim — *"done twice in one session"* — and it is now
+three times.** The standing rule stands and I did not follow it: **plain words or
+double quotes in SQL comments, never backticks.** The comment now says so where
+the next author will read it.
+
+**AND A SECOND TOOLING ONE, MINE:** a Python patch script wrote `\b` into a
+JavaScript regex as a literal **backspace** (`\x08`), silently turning
+`/\b14 days?\b/i` into a control-character regex that still parsed and still
+passed. **`eslint`'s `no-control-regex` caught it; no test did**, because the
+assertion it broke is a `not.toMatch` — a regex that matches nothing passes a
+negative assertion perfectly. **A weakened negative assertion is invisible to a
+green suite**, which is the same shape as the `isExceptionStatus` tests deleted
+in the previous commit and found only by an unused-import warning. Two rounds
+running, lint has been the only instrument that could see the defect.
+
+### Round log
+
+`web` **1666/1666 across 58 files, exit 0** · `api` **767/767 across 50 files,
+exit 0**, LOCAL (`127.0.0.1:5433` — `localhost` resolves to `::1` and fails) ·
+`tsc --noEmit` exit 0 on `api` and `@app/shared` · `eslint --max-warnings=0` exit
+0 on three api, six web and one shared file · `vite build` exit 0 · three root
+guards green.
+
+**SWEEPS, both stated SUBSETS.** Web `MUTATE_ONLY=C155…C178` — **21 RED, 0
+ALIVE**; **C161 ABORTED first**, its anchor moved by the `CHART_CEILING` change,
+and was **re-anchored rather than allow-listed** (:15770). API
+`MUTATE_ONLY=O241,O242,O243` — **3 of 233, 3 RED, 0 ALIVE**, every control GREEN,
+restores sha256-verified.
+
+**STILL DOES NOT TICK: no browser smoke has run on any of this, and T3 is
+UNRUN.** The smoke sheet has been stale for four commits.

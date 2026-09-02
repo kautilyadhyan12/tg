@@ -2350,8 +2350,8 @@ const MUTANTS = [
     suite: OVERVIEW_VIEW_SUITE,
     why: "THE TWO SERIES GET THEIR OWN SCALES AND THE PEOPLE LINE RIDES ABOVE THE VISITS BARS. visitors is a DISTINCT count over the rows visits counts, so it can never exceed them - a picture showing more people than visits is one that cannot happen, and it is exactly what an independently-scaled line draws on a week where members came twice",
     expect: "keeps the people line on or under the visits bars",
-    from: "      cy: CHART_HEIGHT - Math.round((visitors / max) * CHART_HEIGHT),",
-    to: "      cy: CHART_HEIGHT - Math.round((visitors / Math.max(1, ...rows.map((w) => count(w?.visitors)))) * CHART_HEIGHT),",
+    from: "      cy: CHART_HEIGHT - Math.round((visitors / max) * CHART_HEIGHT * CHART_CEILING),",
+    to: "      cy: CHART_HEIGHT - Math.round((visitors / Math.max(1, ...rows.map((w) => count(w?.visitors)))) * CHART_HEIGHT * CHART_CEILING),",
   },
   {
     id: 'C162',

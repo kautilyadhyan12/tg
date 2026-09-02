@@ -989,6 +989,40 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   the next card is the next feature of THAT STAGE, not the highest-priority item
   in the file — markers order work WITHIN a stage, never the stages.** §5 carries
   what is measurably left in the gym stage.
+- **:31098** — 2026-09-03 — **KD RULES THE MEMBER'S EMAIL VISIBLE TO THE GYM,
+  and his screenshot finds the chart's bars were being STRETCHED into slabs.**
+  **Read before adding ANY field to a gym-facing payload, before changing
+  `OrgVisibilitySheet.jsx`, before quoting Part 3 §2.4's list as complete, before
+  drawing an svg with `preserveAspectRatio="none"`, and before answering "will
+  this screen explode with 3,000 members?" without measuring the caps.**
+  **THE EMAIL IS A KNOWING DEVIATION FROM §2.4** — that section is *"a promise,
+  not a setting"* and email is not on its list — **and the join screen's
+  disclosure moved in the SAME commit**, which is what its own header had warned
+  would be the breach if it did not. **O243 is a PRIVACY mutant** (the email
+  joined from the wrong column) and is catchable only because the fixture asserts
+  the address the member actually registered with. **A `not.toMatch(/email/i)`
+  guard on the join panel had to be NARROWED — two different promises share one
+  word — and the narrowing carries a positive control so it cannot later be
+  satisfied by deleting the disclosure.**
+  **THE SLAB WAS GEOMETRY, NOT TASTE:** `preserveAspectRatio="none"` stretches
+  the 320-unit viewBox to ~1030px, so a 26-unit bar drew ~84 REAL pixels; and
+  bars scale to the busiest week, which on a first week is the ONLY week, so
+  three visits filled the chart. Fixed by a narrower bar, a `CHART_CEILING`, and
+  **the week's number drawn above its own bar** — a full-height column labelled
+  `3` cannot be misread.
+  **HIS SCALE QUESTIONS, ANSWERED FROM THE CODE:** the chart cannot grow (fixed
+  height, 8 columns); the dashboard list cannot grow (capped at 5, count from the
+  server); **the Attendance screen CAN** — 100 a page, *Show more* appends, so
+  3,000 members is 3,000 rows, and the fold helps without fixing it. Own
+  `OWED.md` line.
+  **AND THE TRAP THIS REPO HAD ALREADY RECORDED, WALKED INTO A THIRD TIME: a
+  backtick in a comment inside a `sql` template literal ENDS THE TEMPLATE**
+  (:30094 §3b). Plus: a patch script wrote `` into a JS regex as a literal
+  BACKSPACE, and **only `eslint` could see it — a weakened `not.toMatch` passes
+  a green suite perfectly.** Second round running where lint was the only
+  instrument that caught the defect.
+  `web` 1666/1666 · `api` 767/767 local · SWEEPS C155–C178 (21 RED) and
+  O241–O243 (3 RED). **No smoke; T3 UNRUN.**
 - **:30867** — 2026-09-03 — **KD RULES THAT A GYM WITH SET HOURS REFUSES
   ATTENDANCE OUTSIDE THEM, REVERSING A CHAT'S CALL — plus six design
   instructions given from his own browser.** **Read before writing anything that
@@ -4516,7 +4550,13 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   index line is not a cosmetic defect; it manufactures work for Kd and can
   re-open his own rulings.** Whoever closes an entry closes its index line in
   the same commit.
-- **:30733** — 2026-09-03 — **OPEN: MAY A GYM SEE A MEMBER'S EMAIL ADDRESS?**
+- ~~**:30733** — 2026-09-03 — **OPEN: MAY A GYM SEE A MEMBER'S EMAIL
+  ADDRESS?**~~ **CLOSED THE SAME DAY by Kd at `:31098` — YES.** *"gym can see
+  email also"*. A knowing deviation from Part 3 §2.4 (R0.3), and **the join
+  door's disclosure changed in the SAME COMMIT**, which is the only thing that
+  keeps it from being a breach of a promise already made. **This is a ruling
+  about EMAIL and not a licence** — the next gym-facing field needs its own.
+  Original question below, struck rather than deleted.
   Kd asked for the attendance detail to carry *"this person with name email"*.
   **Part 3 §2.4 is a PROMISE MADE TO THE MEMBER AT THE JOIN DOOR** — the join
   screen shows a *"What {org} can see"* sheet listing workout activity, form

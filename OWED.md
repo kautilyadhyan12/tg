@@ -34,6 +34,20 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
+- [ ] 🟡 **THE ATTENDANCE SCREEN'S PEOPLE LIST GROWS WITHOUT BOUND, and Kd asked
+      the question that found it** (2026-09-03, DECISIONS `:31098` §3):
+      *"Who came today shows two as of now what if there are 2000 3000 the whole
+      page will be full?"*. **Measured rather than reassured:** the CHART cannot
+      grow (fixed height, always 8 columns) and the DASHBOARD list cannot grow
+      (capped at five, with the count coming from the server) — **but the
+      console's Attendance screen pages at `ATTENDANCE_PAGE_LIMIT` = 100 and
+      *Show more* APPENDS**, so a 3,000-member gym is thirty presses and 3,000
+      rows in the DOM. **The collapsible section he asked for helps and does not
+      fix it.** What it needs: server-side name search (its own line, from
+      :29250 §2) and either windowing or a date/session filter that narrows
+      before the rows arrive. Nobody has a gym this size yet; the first one will
+      find it on a phone.
+
 - [ ] 🟡 **A GYM THAT FORGETS TO UPDATE ITS OPENING HOURS NOW LOCKS ITS MEMBERS
       OUT, and that is Kd's accepted cost rather than a defect** (2026-09-03,
       DECISIONS `:30867`). His ruling refuses "I'm here" outside a gym's declared
@@ -7336,6 +7350,13 @@ file and is stated so nobody reads these as lower priority than they are.
       circles gone, and **the chart drawn only once there is a week to compare
       against** — his *"random fat ass box"* was arithmetically correct and a
       one-column chart all the same.
+      **AND A FOURTH AND FIFTH PASS THE SAME DAY** (`:31008`, `:31098`): the
+      chart came back after I removed it in answer to a question, gained a
+      minimum visible bar so a week with one visit stops drawing as a week with
+      none, and had its bars un-stretched — Kd's screenshot showed a 26-unit bar
+      rendering ~84px wide under `preserveAspectRatio="none"`. **The member's
+      EMAIL is now visible to the gym by his ruling**, with the join door's
+      disclosure changed in the same commit.
       **THIS LINE STILL DOES NOT TICK: no smoke has run on this version and T3
       is UNRUN. The smoke sheet is STALE — it was written against tile wording
       and a chart that no longer ship.**

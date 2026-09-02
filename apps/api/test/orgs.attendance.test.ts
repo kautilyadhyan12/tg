@@ -105,7 +105,7 @@ interface AttendanceDay {
     visits: number;
     people: number;
   }[];
-  people: { userId: string; displayName: string; visits: Visit[] }[];
+  people: { userId: string; displayName: string; email: string; visits: Visit[] }[];
   nextCursor: string | null;
 }
 
@@ -326,6 +326,12 @@ d("gym attendance (real Postgres)", () => {
       expect(day.people).toHaveLength(1);
       expect(day.people[0]?.userId).toBe(member.userId);
       expect(day.people[0]?.displayName).toBe("Att h1-member");
+      // **THE EMAIL IS A KD RULING OF 2026-09-03 AND A KNOWING DEVIATION FROM
+      // Part 3 §2.4** (*"gym can see email also"*), whose join-door disclosure
+      // changed in the same commit. Asserted against the address this member
+      // actually registered with, so a field wired to the WRONG user — the
+      // caller's own, say — fails here rather than looking plausible.
+      expect(day.people[0]?.email).toBe(member.email);
       expect(day.people[0]?.visits).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,

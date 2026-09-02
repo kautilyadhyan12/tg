@@ -69,8 +69,18 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
         className="w-full text-left rounded-xl px-3 py-2.5 flex items-baseline gap-3 flex-wrap transition-colors"
         style={{ background: picked ? 'rgba(255,138,31,0.10)' : 'transparent' }}
       >
-        <span className="text-sm font-medium min-w-0 truncate" style={{ color: '#fff' }}>
-          {person.displayName}
+        <span className="min-w-0">
+          <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
+            {person.displayName}
+          </span>
+          {/* KD RULED THE EMAIL IN on 2026-09-03 — a knowing deviation from
+              Part 3 §2.4, whose join-door disclosure changed in the same
+              commit. Under the name rather than beside it: it is how a gym
+              CONTACTS somebody, not how it recognises them, so it must not
+              compete with the name on a four-hundred-row day. */}
+          <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            {person.email}
+          </span>
         </span>
         {/* KD, 2026-09-03: *"besides people say A visited 2 times"*. In WORDS,
             beside the name, and only when it is more than one — see

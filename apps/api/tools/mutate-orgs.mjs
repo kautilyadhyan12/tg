@@ -2912,6 +2912,15 @@ const MUTANTS = [
     from: '    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {',
     to: '    if (ctx.hoursStatus !== "in_session") {',
   },
+  {
+    id: 'O243',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE GYM IS SHOWN THE WRONG PERSON'S EMAIL. Kd ruled the email visible on 2026-09-03 - a knowing deviation from Part 3 section 2.4, the promise made at the join door - and a field joined from the wrong row hands one member's address to a gym under another member's name. That is a privacy defect wearing a correct-looking screen, and the only reason it is catchable is that the fixture asserts the address the member actually registered with rather than merely that some string arrived",
+    expect: "a member marks themselves present and the gym sees them by name",
+    from: "      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,",
+    to: "      SELECT p.user_id, u.display_name, u.display_name AS email, p.first_marked_at,",
+  },
 ];
 
 

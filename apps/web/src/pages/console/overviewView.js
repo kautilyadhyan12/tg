@@ -307,7 +307,23 @@ export function chartState(weeks) {
  *  width at all. */
 export const CHART_COLUMN = 40;
 export const CHART_HEIGHT = 140;
-const BAR_GAP = 7;
+/** **THE SLAB, AND IT IS A GEOMETRY BUG RATHER THAN A TASTE ONE.** Kd's
+ *  screenshot of 2026-09-03 shows one bar as a giant orange block for a week of
+ *  THREE visits — *"orange square box why is it so tall but only two people
+ *  attanded?"*.
+ *
+ *  Two causes, both fixed here. **WIDTH:** the svg is drawn with
+ *  `preserveAspectRatio="none"`, so this viewBox is stretched to whatever the
+ *  card is wide — about 1030px for a 320-unit box, roughly 3×. A bar that was
+ *  26 of a 40-unit column became ~84 REAL pixels across. The bar is now a
+ *  little over a third of its column, which survives that stretch as a bar
+ *  rather than a slab. **HEIGHT:** see `CHART_CEILING`. */
+const BAR_GAP = 13;
+/** The tallest bar stops short of the top, leaving room for its own number to
+ *  sit above it. A bar that touches the ceiling reads as "off the scale" — and
+ *  on a gym's first week the busiest week IS the only week, so the maximum is
+ *  whatever tiny number it happens to be. */
+const CHART_CEILING = 0.82;
 /** The floor under a non-zero bar — see `chartGeometry`. Six pixels is the
  *  smallest mark that still reads as a bar rather than as the track's own edge
  *  at this height. */
@@ -351,7 +367,7 @@ export function chartGeometry(weeks) {
      *  **ZERO STAYS EXACTLY ZERO.** The floor lifts non-zero weeks to something
      *  visible; it never lifts an empty one, because "nobody came" and "one
      *  person came" are the two things this must keep apart. */
-    const scaled = Math.round((visits / max) * CHART_HEIGHT);
+    const scaled = Math.round((visits / max) * CHART_HEIGHT * CHART_CEILING);
     const height = visits > 0 ? Math.max(scaled, MIN_VISIBLE_BAR) : 0;
     return {
       key: typeof row?.weekStart === 'string' ? row.weekStart : String(index),
@@ -363,7 +379,7 @@ export function chartGeometry(weeks) {
       width: barWidth,
       height,
       cx: index * CHART_COLUMN + CHART_COLUMN / 2,
-      cy: CHART_HEIGHT - Math.round((visitors / max) * CHART_HEIGHT),
+      cy: CHART_HEIGHT - Math.round((visitors / max) * CHART_HEIGHT * CHART_CEILING),
       // See `chartState`: the newest bucket is the current, PARTIAL week, by the
       // server's construction and not by a date this file worked out.
       isCurrent: index === rows.length - 1,

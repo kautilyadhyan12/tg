@@ -230,7 +230,20 @@ describe('the join panel', () => {
     await waitFor(() => expect(screen.getByText(/you've asked to join/i)).toBeTruthy());
 
     const page = document.body.textContent ?? '';
-    expect(page).not.toMatch(/email/i);
+    // **NARROWED 2026-09-03, AND THE NARROWING IS ITSELF A CLAIM THAT NEEDED A
+    // CONTROL.** This was a bare `not.toMatch(/email/i)` over the whole page,
+    // and it went red when Kd's ruling put "the email address you signed up
+    // with" into the visibility sheet on this same screen. **Two different
+    // promises share one word**: this test guards "we will email you", which is
+    // still false because nothing in this product sends anything; the sheet's
+    // row is about what the GYM can SEE.
+    //
+    // So the ban is on the PROMISE rather than on the word — and the positive
+    // control below is what stops that being a way to smuggle one back in: the
+    // sheet's row must be PRESENT, so a future edit cannot satisfy this test by
+    // deleting the disclosure instead.
+    expect(page).not.toMatch(/we'll email|email you|by email|emailed/i);
+    expect(page).toMatch(/email address you signed up with/i);
     expect(page).not.toMatch(/expire/i);
     expect(page).not.toMatch(/\b14 days?\b/i);
   });

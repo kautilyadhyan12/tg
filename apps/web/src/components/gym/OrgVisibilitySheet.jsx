@@ -34,7 +34,17 @@ import { Check, X } from 'lucide-react';
 // the generic version and the answer shows the named one — same list, same
 // component, no second copy to drift.
 
+// **THE EMAIL ROW IS A KD RULING OF 2026-09-03 AND A KNOWING DEVIATION FROM
+// §2.4** (*"gym can see email also"*). It is the one line here the spec does not
+// authorise, and it was added in the SAME COMMIT as the field itself — which is
+// the whole point of the paragraph above: a gym-facing field that arrives
+// without this row is the breach, and this list is where it becomes visible.
+//
+// It is FIRST because it is the only thing on the list that is not something
+// the member did at the gym, and a person deciding whether to join should read
+// it before the training rows.
 const CAN_SEE = [
+  'Your name and the email address you signed up with',
   'The days you trained, which exercises, your sets, reps, hold time and how long you went for',
   'Your form scores and which faults came up',
   'Your streak, and any challenges you take part in',
