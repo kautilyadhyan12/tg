@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW NUMBERS — KD MARKED HIMSELF IN AND FOUND TWO MORE.
+      DECISIONS :30733 (addendum 2 to :30399, same session). **THE `OWED.md`
+      LINE STILL DOES NOT TICK: no smoke on this version, T3 UNRUN.**
+
+  1. **HIS FIRST SENTENCE WAS THE FINDING AND I ANSWERED HIS SECOND.** He
+     marked in OUTSIDE opening hours, the member's screen said so, and the
+     owner's screen said `3 visits` with nothing to tell them apart. :30624's
+     class one commit later — the numbers were each checked alone.
+     `exceptionsNote` now names them; **`hours_unset` is NOT counted**
+     (:26736), and his own gym is the mixture that catches a version that did.
+  2. **THE PANEL LINKED NOWHERE.** Everything he asked for — names, times,
+     "came twice" — has been on the Attendance screen since :29250. A number an
+     owner cannot open is a dead end.
+  3. **MY FIRST REPLY WAS WORSE THAN THE DEFECT.** It opened *"the screen
+     you're describing is already built"* — true, and it answers his question
+     with a correction of it. The *invisible-control* memory used to explain a
+     defect away instead of to fix it. He answered *"do you even understood
+     what the fuck i said"*. **Say what is broken, then fix it; never lead with
+     what exists.**
+  4. **THE NAMES ARE NOW ON THE OVERVIEW** — a preview of five, count still the
+     SERVER's whole-day figure (fixture: 40 people over a page of six). This
+     changes his own :29961 ruling 3 split, AT HIS INSTRUCTION; `OWED.md`'s
+     people-lists line had already described this exact thing, so the TIMING
+     moved and not the design.
+  5. **EMAIL IS ASKED FOR AND NOT BUILT.** Part 3 §2.4 is a promise made at the
+     join door and email is not on it. **Open question at
+     `DECISIONS-INDEX.md` §2 — not an `OWED.md` line, nothing is deferred.**
+  6. **TWO MUTANTS SURVIVED THE FIRST PASS, NEITHER ALLOW-LISTED.** C171 was a
+     WEAK TEST OF MINE (only the all-of-them day, where the mutant reads the
+     same — :7104's PG1); C173 was aimed at DECORATION (a chevron: neither the
+     accessible name nor the href moves), **re-aimed at the DESTINATION**
+     (:15770).
+
+PROVE: `web` **1689/1689 across 58 files, exit 0** (1666 before) ·
+       `overviewView` 60/60 · `console.render` 106/106 · eslint clean on ten
+       files · `vite build` exit 0 · `node --check` · three root guards green.
+       **SWEEP a stated SUBSET of 196: `MUTATE_ONLY=C155…C176` — 22 RED, 0
+       ALIVE, 0 never ran.**
+
+FILES: `components/console/OverviewNumbers.jsx` (rewritten) ·
+       `pages/console/{overviewView.js,overviewView.test.js,Overview.jsx,
+       console.render.test.jsx}` · `pages/console/__fixtures__/overview.js` ·
+       the four other console suites (mock + quiet default) ·
+       `apps/web/tools/mutate-console.mjs` · records.
+       **NO `apps/api` AND NO `packages/shared` CHANGE** — the names reuse
+       `GET /v1/orgs/:gymId/attendance`, live since :28221.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS STALE** — `RUNBOOK/smoke-overview-numbers.md` was
+       written against the PREVIOUS tile wording (`1 person · 2 visits`) and
+       knows nothing about the odd-arrival line or the names. **Rewrite it
+       before asking him to run anything.**
+       **THEN T3 round 1**, still unrun.
+```
+
+```
 TASK: THE OVERVIEW-NUMBERS CARD — KD LOOKED AT THE SCREEN. DECISIONS :30624
       (an addendum to :30399, same session). **THE `OWED.md` LINE STILL DOES
       NOT TICK: the smoke has not been run on the redesigned screen and T3 is

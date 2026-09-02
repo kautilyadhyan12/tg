@@ -191,6 +191,116 @@ export function adoptionLine(month) {
   };
 }
 
+/** A TILE'S FIGURE, SPLIT INTO THE NUMBER AND THE WORDS UNDER IT.
+ *
+ *  **KD, 2026-09-03, LOOKING AT THE SHIPPED SCREEN: *"the problem is design …
+ *  its not looking good"*.** The first version put the whole sentence
+ *  — `1 person · 2 visits` — where the figure goes, so the thing an owner is
+ *  meant to read at a glance was a line of prose with two numbers in it and no
+ *  hierarchy between them. **A dashboard tile is a NUMBER and a caption.**
+ *
+ *  **PEOPLE IS THE HEADLINE AND VISITS IS THE CAPTION, which is his own
+ *  wording** — *"it should be like this many people came"*. `visits` is still
+ *  drawn, and still ONLY when it differs, which is `dayTotalsLine`'s rule
+ *  preserved: on the ordinary day where they are equal, printing both is noise
+ *  that trains an owner to stop reading the tile.
+ *
+ *  Nothing here counts anything — both figures arrive counted. */
+export function tileCounts(figures) {
+  const people = count(figures?.visitors);
+  const visits = count(figures?.visits);
+  return {
+    value: people,
+    unit: people === 1 ? 'person' : 'people',
+    detail: visits !== people ? visitsLabel(visits) : null,
+  };
+}
+
+/** HOW MANY OF TODAY'S VISITS WERE NOT DURING OPENING HOURS — the thing Kd
+ *  raised FIRST and the first version did not say anywhere.
+ *
+ *  **HIS REPORT, 2026-09-03:** he marked himself in, *"it correctly shows
+ *  attendance was marked outside opening hours"* on the member's screen — and
+ *  then the gym's own home screen said `3 visits` with nothing to distinguish
+ *  them. **An owner reads that as a busy morning.** All of his were outside the
+ *  gym's hours. That is a number on screen creating a false impression, which
+ *  is :5807 by way of :30624's lesson — the figure was true and the screen was
+ *  not.
+ *
+ *  **IT SUMS THE SERVER'S OWN WHOLE-DAY COUNTS, NEVER ROWS ON A PAGE.**
+ *  `summary` covers the entire day whatever page the people list is showing, so
+ *  this number does not move when somebody opens the full screen — the same
+ *  distinction `exceptionVisits` is built on, and the one Kd's ruling 14 turns
+ *  on (:27992 §3).
+ *
+ *  **`hours_unset` IS NOT AN EXCEPTION AND MUST NEVER BE COUNTED HERE**
+ *  (:26736): a gym that has never said when it is open has not been arrived at
+ *  oddly, and telling its owner that every visit was "outside opening hours"
+ *  would be false about all of them. His own gym has exactly that mixture — one
+ *  visit before hours were set, two outside them — so a version that counted
+ *  all three would look right on his screen and be wrong. */
+export function exceptionsNote(summary, totals) {
+  const rows = Array.isArray(summary) ? summary : [];
+  const per = (status) =>
+    rows.reduce((n, row) => (row?.hoursStatus === status ? n + count(row?.visits) : n), 0);
+  const outside = per('outside_hours');
+  const closed = per('closed_day');
+  const odd = outside + closed;
+  if (odd === 0) return null;
+
+  const where =
+    outside > 0 && closed > 0
+      ? 'outside your opening hours or on a day the gym was closed'
+      : outside > 0
+        ? 'outside your opening hours'
+        : 'on a day the gym was closed';
+
+  const all = count(totals?.visits);
+  // "All 3" only when it really is all of them — and `all` is the server's own
+  // whole-day total, so this cannot claim "all" off a page.
+  if (odd >= all && all > 0) {
+    return `All ${visitsLabel(all)} today were ${where}.`;
+  }
+  return `${odd} of today's ${visitsLabel(all)} were ${where}.`;
+}
+
+/** THE FEW NAMES THAT FIT UNDER THE NUMBERS — Kd's *"if wants to see details can
+ *  see this person with name … and if marked again then show came two times"*.
+ *
+ *  **THE LIST IS A PREVIEW AND THE COUNT IS NOT TAKEN FROM IT.** The screen
+ *  draws `totals.people`, which the server counted over the whole day, and this
+ *  hands back only the rows to show — so a gym of four hundred still reads the
+ *  right number above a list of five (:27992 §3's exact breakage).
+ *
+ *  **The server's order is kept.** It groups the day; the screen reads top to
+ *  bottom. */
+export const OVERVIEW_PEOPLE_PREVIEW = 5;
+
+export function previewPeople(people, max = OVERVIEW_PEOPLE_PREVIEW) {
+  const rows = Array.isArray(people) ? people.filter((p) => p !== null && typeof p === 'object') : [];
+  return rows.slice(0, max);
+}
+
+/** Is there anybody the preview is not showing? Answered from the server's own
+ *  whole-day count against what is on screen — never from `nextCursor` alone,
+ *  which is null on a day whose people all fit in one page but not in five
+ *  rows. */
+export function hiddenPeopleCount(totals, shown) {
+  const all = count(totals?.people);
+  const on = Array.isArray(shown) ? shown.length : 0;
+  return all > on ? all - on : 0;
+}
+
+/** Two letters for a face nobody has uploaded — the initials circle beside a
+ *  name. Non-Latin scripts keep their first character rather than being
+ *  transliterated or blanked. */
+export function initials(displayName) {
+  const parts = String(displayName ?? '').trim().split(/\s+/).filter((w) => w !== '');
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return [...parts[0]].slice(0, 2).join('').toUpperCase();
+  return `${[...parts[0]][0]}${[...parts[parts.length - 1]][0]}`.toUpperCase();
+}
+
 /** THE SENTENCE THAT STOPS TWO TRUE NUMBERS READING AS A CONTRADICTION.
  *
  *  **FOUND ON KD'S OWN SCREEN, 2026-09-03, and the shared contract had predicted

@@ -7312,8 +7312,14 @@ file and is stated so nobody reads these as lower priority than they are.
       The chart was redesigned in the same commit, and *"too simple"* was also a
       correctness finding: a zero-height bar draws NOTHING, so seven quiet weeks
       rendered as seven weeks that never happened.
-      **THIS LINE STILL DOES NOT TICK: no smoke has run on the redesigned
-      screen and T3 is UNRUN.**
+      **AND HE LOOKED AGAIN AFTER MARKING HIMSELF IN, WHICH FOUND TWO MORE**
+      (`:30733`): a visit made when the gym was SHUT counted as an ordinary
+      visit, with nothing on screen saying so — the member's own screen had told
+      him the truth — and the numbers linked NOWHERE, while the Attendance
+      screen has held the names and times since `:29250`. Both fixed: the odd
+      arrivals are named above the list, and the panel now reaches Attendance.
+      **THIS LINE STILL DOES NOT TICK: no smoke has run on this version and T3
+      is UNRUN.**
       ~~Also owed with it: the one-off backfill
       (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
       browser reads — until it runs, that gym's chart is eight empty weeks.~~
@@ -7339,7 +7345,13 @@ file and is stated so nobody reads these as lower priority than they are.
       source moves onto it.
 - [ ] 🟡 **THE GYM'S OVERVIEW HAS NO PEOPLE LISTS — the second half of the
       dashboard, split off at Kd's own instruction 2026-09-02 (DECISIONS
-      :29961 ruling 3).** Owed: **who came today** (names and times, a summary
+      :29961 ruling 3).**
+      **⚙️ ONE OF THEM SHIPPED EARLY, 2026-09-03, AT KD'S OWN INSTRUCTION
+      (`DECISIONS.md:30733` §4): "who came today" is ON the Overview** — a
+      preview of five, name and a chip per visit, above a link to the full day —
+      because he asked what a gym does with a count it cannot open. **The TIMING
+      moved, not the design: this line already described exactly that.** The rest
+      is untouched and still owed. Owed: ~~**who came today**~~ (names and times, a summary
       linking to the Attendance section that exists) · **when they come**
       (visits per opening session, off `gym_attendance.slot_key` and the stored
       session window — the staffing number) · **on a roll** (members on an

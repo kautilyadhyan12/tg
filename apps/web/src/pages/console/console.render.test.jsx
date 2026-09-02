@@ -13,7 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { WEEK_STARTS, overview } from './__fixtures__/overview';
+import { WEEK_STARTS, attendanceDay, attendee, overview } from './__fixtures__/overview';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -30,6 +30,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       removeCode: vi.fn(),
       getApplications: vi.fn(),
       getOverview: vi.fn(),
+      getAttendanceDay: vi.fn(),
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
@@ -207,6 +208,10 @@ beforeEach(() => {
   // (§4.1's "0 members ever" edge), which is the screen every test in this file
   // was written against. The numbers' own tests set their own payloads.
   orgService.getOverview.mockResolvedValue(overview());
+  // The names under the numbers read this. EMPTY is the truthful default here
+  // for the same reason the overview above is quiet: these fixtures have no
+  // attendance, so the preview draws nothing.
+  orgService.getAttendanceDay.mockResolvedValue(attendanceDay());
   // The three code-management calls resolve by default so a test about the
   // SCREEN does not fail on a mock that returns undefined. Each one that is
   // genuinely about a mutation sets its own.
@@ -1689,10 +1694,14 @@ describe("the gym's numbers", () => {
     expect(await screen.findByText('77%')).toBeTruthy();
     expect(screen.queryByText('43%')).toBeNull();
     expect(screen.getByText('12 of 28 members came in the last 30 days')).toBeTruthy();
-    // Today and this week each say the second number only because somebody came
-    // twice — and neither is derivable from the other.
-    expect(screen.getByText('7 people · 9 visits')).toBeTruthy();
-    expect(screen.getByText('22 people · 40 visits')).toBeTruthy();
+    // A TILE IS A NUMBER AND A CAPTION, not a sentence — Kd's 2026-09-03 design
+    // finding. The headline is PEOPLE (his own wording, "many people came") and
+    // the visits count is the caption under it, still drawn ONLY when the two
+    // differ. Neither is derivable from the other.
+    expect(screen.getAllByText('7').length).toBeGreaterThan(0);
+    expect(screen.getByText('9 visits')).toBeTruthy();
+    expect(screen.getAllByText('22').length).toBeGreaterThan(0);
+    expect(screen.getByText('40 visits')).toBeTruthy();
   });
 
   it('explains itself when somebody came and the members share did not move', async () => {
@@ -1720,7 +1729,9 @@ describe("the gym's numbers", () => {
     // wording problem.
     expect(await screen.findByText('0%')).toBeTruthy();
     expect(screen.getByText('0 of 2 members came in the last 30 days')).toBeTruthy();
-    expect(screen.getAllByText('1 person').length).toBeGreaterThan(0);
+    // The visitor is still on screen — one person, singular — which is what
+    // makes the pair read as a contradiction without the sentence below it.
+    expect(screen.getAllByText('person').length).toBeGreaterThan(0);
     expect(screen.getByText(/Free seats/)).toBeTruthy();
   });
 
@@ -1850,6 +1861,109 @@ describe("the gym's numbers", () => {
     expect(screen.queryByText(/turning up/i)).toBeNull();
     expect(screen.queryByText("You can't see this gym's attendance.")).toBeNull();
     expect(screen.queryByText('Try again')).toBeNull();
+  });
+
+  it('says when the gym was not even open, instead of just counting the visits', async () => {
+    // KD'S FIRST REPORT, 2026-09-03: he marked himself in outside the gym's
+    // hours, the member's screen said so, and this screen said "3 visits" with
+    // nothing to tell them apart — an owner reads that as a busy morning.
+    //
+    // THE FIXTURE IS HIS OWN GYM'S MIXTURE, deliberately: one visit from before
+    // hours were ever set, two outside them. `hours_unset` is NOT an exception
+    // (:26736 — a gym that never said when it opens has not been arrived at
+    // oddly), so the honest sentence is "2 of today's 3", and a version that
+    // counted all three would look right on a simpler fixture.
+    orgService.getOverview.mockResolvedValue(busy());
+    orgService.getAttendanceDay.mockResolvedValue(
+      attendanceDay({
+        totals: { visits: 3, people: 2 },
+        summary: [
+          { hoursStatus: 'hours_unset', session: null, visits: 1, people: 1 },
+          { hoursStatus: 'outside_hours', session: null, visits: 2, people: 2 },
+        ],
+      }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText("2 of today's 3 visits were outside your opening hours.")).toBeTruthy();
+  });
+
+  it('names who came, with the times, and shows somebody who came twice as twice', async () => {
+    // *"it should be like this many people came and then if wants to see details
+    // can see this person with name … and if marked again then show came two
+    // times again at this time"*.
+    orgService.getOverview.mockResolvedValue(busy());
+    orgService.getAttendanceDay.mockResolvedValue(
+      attendanceDay({
+        timezone: 'Asia/Kolkata',
+        totals: { visits: 3, people: 2 },
+        people: [
+          attendee('u-owner', 'Kd Owner', [
+            ['2026-09-02T04:02:00.000Z'],
+            ['2026-09-02T11:31:00.000Z', 'outside_hours'],
+          ]),
+          attendee('u-test', 'Rita Sen', [['2026-09-02T11:37:00.000Z', 'outside_hours']]),
+        ],
+      }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    // Two chips for the person who came twice — "came again at this time",
+    // which is what a chip per visit says without a sentence. The times are the
+    // GYM's, on the gym's clock: 04:02 UTC is 09:32 in Kolkata.
+    expect(screen.getByText('09:32')).toBeTruthy();
+    expect(screen.getAllByText(/17:01/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/17:07/).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the count the server sent above a preview that shows only a few', async () => {
+    // THE BREAKAGE RULING 14 NAMES (:27992 §3): a screen right on six rows and
+    // wrong on four hundred. The totals say 40 people while the page carries
+    // six, which is an answer no honest day produces — so a screen that counted
+    // its own rows prints 6, and the only way to pass is to draw what arrived.
+    orgService.getOverview.mockResolvedValue(busy());
+    orgService.getAttendanceDay.mockResolvedValue(
+      attendanceDay({
+        totals: { visits: 52, people: 40 },
+        people: Array.from({ length: 6 }, (_, i) =>
+          attendee(`u-${i}`, `Member ${i}`, [['2026-09-02T04:02:00.000Z']]),
+        ),
+        nextCursor: 'more',
+      }),
+    );
+    drawOverview();
+
+    // Five of the six are previewed, and the link carries the rest — 40 minus
+    // the five on screen, off the server's own total.
+    expect(await screen.findByText('Member 0')).toBeTruthy();
+    expect(screen.queryByText('Member 5')).toBeNull();
+    expect(screen.getByText(/35 more — see everyone/)).toBeTruthy();
+  });
+
+  it('is a way in to the full day, not a dead end', async () => {
+    // *"how can gym even get a correct information from it"* — a number an
+    // owner cannot open is useless. The panel's header reaches the Attendance
+    // screen, which has held the whole day since :29250.
+    orgService.getOverview.mockResolvedValue(busy());
+    drawOverview();
+
+    const links = await screen.findAllByRole('link', { name: /Attendance/ });
+    expect(links.some((a) => a.getAttribute('href') === '/console/iron-house/attendance')).toBe(true);
+  });
+
+  it('loses the names and keeps every number when only the day read fails', async () => {
+    // The names are a PREVIEW of a screen one click away, so their failure is
+    // silent — a second error card for a list the owner can open themselves
+    // would be noise beside the numbers' own failure, which IS reported.
+    orgService.getOverview.mockResolvedValue(busy());
+    orgService.getAttendanceDay.mockRejectedValue(offline());
+    drawOverview();
+
+    expect(await screen.findByText('77%')).toBeTruthy();
+    expect(screen.queryByText('Who came today')).toBeNull();
+    expect(screen.queryByText(/Couldn't reach the server/i)).toBeNull();
   });
 
   it('does not stack a second identical error card when the connection drops', async () => {

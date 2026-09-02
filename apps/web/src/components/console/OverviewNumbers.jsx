@@ -1,4 +1,7 @@
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { ConsoleCard } from './ConsoleStates';
+import { isExceptionStatus, personTimes } from '../../pages/console/attendanceView';
 import {
   CHART_HEIGHT,
   adoptionLine,
@@ -6,11 +9,14 @@ import {
   chartGeometry,
   chartState,
   crowdNote,
+  exceptionsNote,
+  hiddenPeopleCount,
+  initials,
   nothingRecordedSentence,
   numbersState,
-  todayLine,
+  previewPeople,
+  tileCounts,
   weekComparison,
-  weekLine,
 } from '../../pages/console/overviewView';
 
 // IS ANYBODY ACTUALLY TURNING UP — Part 3 §4.1's KPI row and its 8-week chart,
@@ -21,39 +27,48 @@ import {
 // read zero on a day forty people came through the door.
 //
 // **THIS COMPONENT DERIVES NO FIGURE.** Every number it draws was counted in SQL
-// over the whole gym — including the percentage — and the rules for WHICH
-// sentence to draw live next door in `overviewView.js`, where they are tested
-// without a browser. What is here is markup.
+// over the whole gym — including the percentage and the day's totals — and the
+// rules for WHICH sentence to draw live next door in `overviewView.js`, where
+// they are tested without a browser. What is here is markup.
+//
+// ── THE THIRD PASS, 2026-09-03, AND IT IS KD'S SECOND LOOK AT THE SAME SCREEN ─
+// *"the problem is design … its not looking good"*, and before that the finding
+// that matters: he marked himself in OUTSIDE the gym's opening hours, the
+// member's screen said so, **and this screen said `3 visits` with nothing to
+// tell them apart.** Plus: *"how can gym even get a correct information from
+// it … it should be like this many people came and then if wants to see details
+// can see this person with name … and if marked again then show came two times
+// again at this time."*
+//
+// Four things changed, and none of them is decoration:
+//
+//   1. **A TILE IS A NUMBER AND A CAPTION.** It was a sentence — `1 person · 2
+//      visits` — sitting where the figure goes, so nothing read at a glance.
+//   2. **THE ODD ARRIVALS ARE NAMED HERE**, not only on another screen. A count
+//      that silently folds in visits from when the gym was shut is a true number
+//      composing a false impression (:30624's class, one card old).
+//   3. **THE NAMES ARE ON THIS SCREEN.** `OWED.md`'s people-lists line already
+//      described this as *"who came today (names and times, a summary linking to
+//      the Attendance section that exists)"* — his split at :29961 ruling 3 put
+//      it in the next card, and he has now asked for it here. The count above it
+//      is still the SERVER's whole-day figure, so a preview of five sits under a
+//      correct number on a gym of four hundred.
+//   4. **THE NUMBERS ARE A WAY IN, NOT A DEAD END.** The header and the list
+//      both reach `Attendance`, which has held the full day — names, times as
+//      chips, an exceptions filter, one row per person — since :29250.
 //
 // **THE READ'S OUTCOME IS NOT THIS COMPONENT'S JOB.** `Overview.jsx` owns the
-// loading, failed and refused arms, exactly as it does for the codes and the
-// members panes: this is only ever handed a payload that arrived. A failed read
-// drawn as an empty gym is this project's most repeated defect and the whole
-// reason those arms are one level up.
-//
-// ── THE SECOND PASS, 2026-09-03, AFTER KD LOOKED AT IT ──────────────────────
-// He said it looked "too simple", and the screenshot showed two things rather
-// than one:
-//
-//   · the tiles were three labels floating in a wide empty card, with the big
-//     numbers left-aligned against nothing, and
-//   · **the chart was mostly INVISIBLE** — seven zero-height bars draw nothing
-//     at all, so eight weeks of history read as one lonely block and a diagonal
-//     line. A week with no visits is a FACT and it was being rendered as
-//     absence, which is the empty-vs-missing distinction this whole card is
-//     built around, arriving in the picture instead of the words.
-//
-// So: every column now has a visible track whether or not anybody came, the
-// bars sit on a baseline with a scale marker above them, the two series get a
-// legend, and the current week is banded so the short last bar reads as
-// unfinished rather than as a collapse. **No number changed, and no sentence
-// this screen is tested on changed.**
+// loading, failed and refused arms. A failed read drawn as an empty gym is this
+// project's most repeated defect and the whole reason those arms are one level
+// up. The people list is the ONE thing here that can be absent on its own — see
+// `people` below.
 const ORANGE = '#FF8A1F';
 const INK = 'rgba(255,255,255,0.92)';
 const MUTED = 'rgba(255,255,255,0.45)';
 const FAINT = 'rgba(255,255,255,0.28)';
+const HAIRLINE = 'rgba(255,255,255,0.07)';
 
-export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
+export default function OverviewNumbers({ overview, day, orgSlug, manualAttendanceEnabled }) {
   const state = numbersState(overview);
 
   // §4.1's own edge — *"org with 0 members ever → Overview IS the checklist +
@@ -61,10 +76,12 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
   // below becomes the screen, which is the owner's actual next move.
   if (state === 'none' || state === 'no-members') return null;
 
+  const attendanceHref = `/console/${orgSlug}/attendance`;
+
   if (state === 'nobody') {
     return (
       <ConsoleCard>
-        <Heading />
+        <Header href={attendanceHref} />
         <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
           {nothingRecordedSentence(manualAttendanceEnabled)}
         </p>
@@ -79,15 +96,28 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
   const geometry = chartGeometry(weeks);
   const collecting = chartState(weeks) === 'collecting';
 
+  // THE PEOPLE LIST IS THE ONE PANE THAT MAY BE ABSENT WITHOUT THE SCREEN
+  // SAYING SO. It is a SECOND read (`GET …/attendance`), and it is a preview of
+  // something reachable in one click from the header above it — so a gym whose
+  // day read blipped loses five names and keeps every number, rather than
+  // getting a second error card for a list it can open itself. The numbers'
+  // own failure is still reported, one level up.
+  const odd = day === null ? null : exceptionsNote(day.summary, day.totals);
+  const shown = day === null ? [] : previewPeople(day.people);
+  const hidden = day === null ? 0 : hiddenPeopleCount(day.totals, shown);
+
   return (
     <ConsoleCard>
-      <Heading />
+      <Header href={attendanceHref} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-        <Tile label="Today" value={todayLine(tiles.today)} />
+      <div
+        className="grid grid-cols-1 sm:grid-cols-3 mt-4"
+        style={{ borderTop: `1px solid ${HAIRLINE}` }}
+      >
+        <Tile label="Today" figures={tiles.today} />
         <Tile
           label="This week"
-          value={weekLine(tiles.week)}
+          figures={tiles.week}
           /* THE ARROW NEVER TRAVELS ALONE. `week.visits` is this gym-week SO FAR
              and `prevVisits` is the WHOLE of last week, so on a Tuesday a bare
              ▲▼ compares two days against seven and tells a healthy gym it is
@@ -109,11 +139,54 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
         </p>
       )}
 
+      {/* The thing Kd raised first: visits counted here that happened when the
+          gym was not open. Amber rather than red — it is a FACT about the day,
+          not a fault, and :26624 §4.4 records such a visit rather than refusing
+          it, so nothing here scolds anybody. */}
+      {odd === null ? null : (
+        <div
+          className="mt-4 rounded-xl px-3 py-2.5 text-xs"
+          style={{
+            background: 'rgba(255,138,31,0.07)',
+            border: '1px solid rgba(255,138,31,0.18)',
+            color: 'rgba(255,196,140,0.95)',
+          }}
+        >
+          {odd}
+        </div>
+      )}
+
+      {shown.length === 0 ? null : (
+        <div className="mt-5">
+          <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            Who came today
+          </div>
+          <div className="flex flex-col">
+            {shown.map((person) => (
+              <PersonRow
+                key={person.userId}
+                person={person}
+                timezone={day.timezone}
+                clockFormat={day.clockFormat}
+              />
+            ))}
+          </div>
+          <Link
+            to={attendanceHref}
+            className="inline-flex items-center gap-1 text-xs mt-2.5 font-medium"
+            style={{ color: ORANGE }}
+          >
+            {hidden > 0 ? `${hidden} more — see everyone` : 'See times, days and everyone else'}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
+
       {geometry === null ? null : (
-        <div className="mt-6">
-          <div className="flex items-end justify-between gap-4 flex-wrap mb-2">
+        <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
+          <div className="flex items-end justify-between gap-4 flex-wrap mb-3">
             <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              Visits a week, and how many different people
+              The last 8 weeks
             </div>
             <div className="flex items-center gap-4 text-xs" style={{ color: MUTED }}>
               <span className="flex items-center gap-1.5">
@@ -139,8 +212,8 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
                 the rows `visits` counts and can never exceed it, so the top of
                 the scale is always a VISITS figure. */}
             <div
-              className="flex flex-col justify-between text-xs flex-shrink-0"
-              style={{ height: CHART_HEIGHT, color: FAINT }}
+              className="flex flex-col justify-between text-xs flex-shrink-0 text-right"
+              style={{ height: CHART_HEIGHT, color: FAINT, minWidth: 18 }}
               aria-hidden="true"
             >
               <span>{geometry.max}</span>
@@ -172,8 +245,6 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
                   />
                 ))}
 
-                {/* A midline, so a bar can be read as "about half of the best
-                    week" without counting pixels. */}
                 <line
                   x1={0}
                   x2={geometry.width}
@@ -230,7 +301,6 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
                   />
                 ))}
 
-                {/* The floor the bars stand on. Drawn last so nothing covers it. */}
                 <line
                   x1={0}
                   x2={geometry.width}
@@ -276,34 +346,62 @@ export default function OverviewNumbers({ overview, manualAttendanceEnabled }) {
   );
 }
 
-function Heading() {
+/** The heading, and the way out of it. A number an owner cannot open is a dead
+ *  end — Kd's *"how can gym even get a correct information from it"* — so the
+ *  panel's title carries the route to the full day. */
+function Header({ href }) {
   return (
-    <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-      Who&apos;s turning up
+    <div className="flex items-center justify-between gap-3">
+      <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        Who&apos;s turning up
+      </div>
+      <Link
+        to={href}
+        className="inline-flex items-center gap-0.5 text-xs font-medium flex-shrink-0"
+        style={{ color: ORANGE }}
+      >
+        Attendance
+        <ChevronRight className="w-3.5 h-3.5" />
+      </Link>
     </div>
   );
 }
 
 const ARROW = { up: '▲', down: '▼' };
 
-/** One figure and the sentence under it, each on its own surface.
+/** ONE FIGURE AND ITS CAPTION.
  *
- *  The panel is what Kd's *"too simple"* was about: three numbers left-aligned
- *  in one wide box read as a paragraph rather than as three separate answers.
+ *  Takes EITHER `figures` (a counted pair, split by `tileCounts`) or a ready
+ *  `value` — the percentage is already a string the server decided, and running
+ *  it through the pair-splitter would be pretending it is a count of people.
+ *
  *  `direction` only ever arrives beside a `note` that explains the comparison —
  *  see the call site. */
-function Tile({ label, value, note, direction }) {
+function Tile({ label, figures, value, note, direction }) {
+  const counted = figures === undefined ? null : tileCounts(figures);
   return (
     <div
-      className="rounded-xl p-3 flex flex-col"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+      className="px-4 py-3.5 flex flex-col"
+      style={{ borderBottom: `1px solid ${HAIRLINE}` }}
     >
       <div className="text-xs uppercase tracking-wide" style={{ color: MUTED }}>
         {label}
       </div>
-      <div className="text-2xl font-bold mt-1 leading-tight" style={{ color: INK }}>
-        {value}
+      <div className="flex items-baseline gap-1.5 mt-1.5">
+        <span className="text-3xl font-bold leading-none" style={{ color: INK }}>
+          {counted === null ? value : counted.value}
+        </span>
+        {counted === null ? null : (
+          <span className="text-sm" style={{ color: MUTED }}>
+            {counted.unit}
+          </span>
+        )}
       </div>
+      {counted?.detail ? (
+        <div className="text-xs mt-1" style={{ color: FAINT }}>
+          {counted.detail}
+        </div>
+      ) : null}
       {note ? (
         <div className="text-xs mt-1.5 leading-snug" style={{ color: MUTED }}>
           {direction === 'up' || direction === 'down' ? (
@@ -318,6 +416,52 @@ function Tile({ label, value, note, direction }) {
           {note}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** ONE PERSON AND THE TIMES THEY CAME — Kd's *"if marked again then show came
+ *  two times again at this time"*, which is what a chip per visit says without
+ *  a sentence.
+ *
+ *  The same shape the Attendance screen draws, deliberately: two surfaces
+ *  describing one visit two ways is the defect that file's own header warns
+ *  about, so the chips come from `personTimes` and an unusual arrival is marked
+ *  with a WORD rather than a colour. */
+function PersonRow({ person, timezone, clockFormat }) {
+  const chips = personTimes(person, { timezone, clockFormat });
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span
+        aria-hidden="true"
+        className="flex items-center justify-center flex-shrink-0 rounded-full text-xs font-semibold"
+        style={{ width: 28, height: 28, background: 'rgba(255,138,31,0.14)', color: ORANGE }}
+      >
+        {initials(person.displayName)}
+      </span>
+      <span className="text-sm truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>
+        {person.displayName}
+      </span>
+      <span className="flex items-center gap-1.5 flex-wrap ml-auto justify-end">
+        {chips.map((chip, i) => (
+          <span
+            key={`${person.userId}-${i}-${chip.markedAt}`}
+            className="rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap"
+            style={
+              isExceptionStatus(chip.hoursStatus)
+                ? { background: 'rgba(255,138,31,0.12)', color: 'rgba(255,196,140,0.95)' }
+                : { background: 'rgba(255,255,255,0.06)', color: MUTED }
+            }
+          >
+            {chip.time}
+            {isExceptionStatus(chip.hoursStatus) ? (
+              <span style={{ color: FAINT }}>
+                {chip.hoursStatus === 'closed_day' ? ' · closed' : ' · outside hours'}
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </span>
     </div>
   );
 }

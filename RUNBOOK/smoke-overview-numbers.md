@@ -1,15 +1,14 @@
 # SMOKE — the gym's numbers on the console home screen
 
-**What this checks:** the numbers that now sit at the top of your gym's home
-screen — how many people came today, how many this week, and the eight-week
-chart underneath. Built 2026-09-03 (`DECISIONS.md:30399`), redesigned the same
-day after Kd looked at it (`:30399` addendum), on top of the server half from
-2026-09-02 (`:30094`).
+**What this checks:** the panel at the top of a gym's home screen — how many
+people came, who they were, whether the gym was even open when they arrived, and
+the eight-week chart. Built 2026-09-03 (`DECISIONS.md:30399`) and rebuilt twice
+the same day after Kd looked at it (`:30624`, `:30733`).
 
-**Why it matters:** these are the first numbers this product has ever shown a gym
-owner about their own gym. Every one of them is counted on the server; the screen
-is only allowed to draw them. The tests prove the arithmetic — what nobody had
-ever done is look at it, and the first look found a real defect.
+**Why it matters:** both rebuilds came from him opening the screen, not from a
+test. The suite was green and the screen was still wrong — first two correct
+numbers reading as a contradiction, then a visit made when the gym was shut
+counted as an ordinary visit.
 
 ---
 
@@ -23,20 +22,16 @@ ever done is look at it, and the first look found a real defect.
   corepack pnpm --filter web exec vite
   ```
 - **Your sign-in:** `owner@example.com` / **`Smoke2026!`**
-  The old password was not written down anywhere and nobody knew it, so it was
-  reset on 2026-09-03 and the new one is proven to work (a real sign-in returned
-  200). **This is written down here so the next run does not lose it again.**
-- **Nothing was invented for this sheet.** The numbers below were read out of
-  your database, and every visit they mention is one you made yourself.
+- **Nothing was set up for this sheet.** Every number below was read out of your
+  database just now, and every visit in it is one you made yourself.
 
-**TWO of your gyms are used, and they are used for different things** — the sheet
-says which at each step, because they are in different time zones and their days
-have not rolled over together:
+**Two of your gyms are used, and for different things** — they are in different
+time zones, so their days have not rolled over together:
 
-| Gym | Its own date right now | What it is good for |
+| Gym | Its own date | Why this sheet uses it |
 |---|---|---|
-| **owner** (*new yprk*) | 2 September | it has 2 members, so the 30-day tile and its explanation appear |
-| **Smoke Test Gym** | 3 September | nobody has come today yet, so you can watch a number move |
+| **owner** (*new yprk*) | 2 September | three visits, two of them outside opening hours, two different people, and it has members — every part of the panel is switched on |
+| **Smoke Test Gym** | 3 September | quiet, so you can watch a number move |
 
 ---
 
@@ -51,148 +46,143 @@ have not rolled over together:
 
 ---
 
-## PART A — the numbers, on the gym that has members
+## PART A — the panel, on the gym with real activity
 
 Sign in at **A**, then open **B**.
 
-### 1 · The box is there
+### 1 · Three panels, each a number
 
-✅ Under the plan card there is a box headed **"Who's turning up"**, holding
-three panels side by side.
+✅ A box headed **"Who's turning up"**, with three panels under it. Each shows a
+**big number** with a small word beside it — not a sentence.
 
-### 2 · Today
+| Panel | Big number | Small word | Line under it |
+|---|---|---|---|
+| Today | **2** | people | `3 visits` |
+| This week | **2** | people | `3 visits`, then "Nothing was recorded last week." |
+| Last 30 days | **33%** | — | "1 of 3 members came in the last 30 days" |
 
-✅ **Today** reads **`1 person`** — the visit you made during the attendance
-smoke.
+❌ If a panel reads `2 people · 3 visits` as one line of text, you are looking at
+the old version — hard-reload with **Ctrl+Shift+R**.
 
-### 3 · This week
+### 2 · The "Free seats" line
 
-✅ **This week** reads **`1 person`**, and under it **"Nothing was recorded last
-week."**
+✅ Under the three panels: a line starting **"Free seats —"**.
 
-❌ An up or down arrow with **no words** beside it is a defect. This week is two
-days old and last week was seven, so an arrow alone would be comparing two
-different lengths and telling you something untrue.
+This is the fix from your first screenshot: 2 people came today, yet only 1 of 3
+members came this month. Both true — one of the visitors is on the owner's free
+seat, which is left out of the members' share.
 
-### 4 · Last 30 days — and the sentence under the row
+### 3 · ⚠️ The gym was not open — the thing you spotted
 
-✅ **Last 30 days** reads **`0%`**, with **"0 of 2 members came in the last 30
-days"** under it.
+✅ An **amber box** saying: **"2 of today's 3 visits were outside your opening
+hours."**
 
-✅ **Below all three panels** there is a line beginning **"Free seats —"**.
+**This is the defect you found.** You marked yourself in outside opening hours,
+your member screen said so, and this screen just said "3 visits" as if the gym
+had been busy.
 
-**This is the fix from your screenshot.** Both numbers were already correct and
-together they read like the screen contradicting itself: *somebody came today*,
-yet *no members came this month*. The reason is that the person who came was
-**you, on the owner's free seat**, and a free seat is deliberately left out of
-the members' share — otherwise every gym would look busier than it is. Nothing
-was hidden to tidy this up; the screen now says why.
+❌ If it says **3** instead of 2, that is wrong: your earliest visit today
+(03:32) was made *before* the gym had any opening hours set at all, and "we never
+said when we're open" is not the same as "you came when we were shut". A gym that
+has never filled in its hours must never be told its members arrived oddly.
 
-❌ If the two numbers are there but the "Free seats" line is missing, that is the
-defect returning.
+### 4 · Who came today — names and times
 
-### 5 · The chart
+✅ A section headed **"Who came today"** with two rows:
 
-✅ **Eight columns**, each faintly visible even where nobody came — a quiet week
-is a fact, not a blank.
-✅ Numbers **on the left** marking the top and bottom of the scale.
-✅ A **key** on the right: a small orange square for *visits*, a short line for
-*different people*.
-✅ Only the **last** column is filled, and it is **lighter** than the rest — that
-is the "this week isn't finished" shading.
-✅ Under the chart: **"This is your first week of attendance — the chart fills in
-as the weeks pass."**
+| | |
+|---|---|
+| **owner** | `03:32`  ·  `17:01 — outside hours` |
+| **test** | `17:07 — outside hours` |
 
-### 6 · Hover the columns
+✅ Each name has a small orange circle with their initials.
+✅ **owner has TWO time chips** — that is "came twice", visible without reading a
+sentence.
+✅ The chips for the outside-hours visits are amber and say so; the 03:32 one is
+plain grey.
 
-Rest your mouse on the **last** column.
+### 5 · The way through to everything
 
-✅ **"This week so far: 1 visit, 1 person"**.
+✅ Top-right of the panel: an **Attendance →** link.
+✅ Under the names: **"See times, days and everyone else →"**.
 
-Hover any empty column.
+Click either one. ✅ You land on the full Attendance screen, with the whole day,
+a filter for the unusual arrivals, and a search by name. Click a person there and
+you get their own history.
 
-✅ **"Week of «some date»: 0 visits, 0 people"** — a real week with a real zero.
+**This is what was missing when you asked "how can a gym get correct information
+from it" — the number was a dead end.**
 
-❌ If the last column says "Week of …" instead of **"This week so far"**, tell me:
-that column is short because the week is not over, and it has to say so.
+### 6 · The chart
 
----
-
-## PART B — watch a number move
-
-Now switch gyms, because at *Smoke Test Gym* the day has already rolled over and
-nobody has come yet.
-
-### 7 · Look first
-
-Open **C**.
-
-✅ **Today** reads **`0 people`**.
-✅ **This week** reads **`1 person`**.
-✅ There is **no "Last 30 days" panel and no percentage anywhere** — that gym has
-no members other than your own free seat, so there is no share to report. Seeing
-**`0%`** there would be the bug.
-
-### 8 · Mark yourself in
-
-Open **D** (My Gyms) and tap the button to mark yourself in at **Smoke Test
-Gym**.
-
-✅ It confirms you have been marked in.
-
-### 9 · Back to the numbers
-
-Return to **C** and **reload (F5)**.
-
-✅ **Today** now reads **`1 person`**.
-✅ **This week** now reads **`1 person · 2 visits`**.
-
-Two visits, one person — you came yesterday and again today. **It only shows the
-second number when they differ**, which is how "somebody came twice" is visible
-at a glance.
-
-❌ If This week says `2 people`, that is wrong: two visits by you are still one
-person.
-
-### 10 · The chart again
-
-✅ Hovering the last column now says **"This week so far: 2 visits, 1 person"**.
+✅ **Eight columns you can see**, including the empty ones. A scale on the left
+(top number and `0`). A key on the right: orange square = *visits*, line =
+*different people*. The **last column is lighter** — that is "this week isn't
+finished".
+✅ Hover the last column → **"This week so far: 3 visits, 2 people"**.
+✅ Hover an empty one → **"Week of «date»: 0 visits, 0 people"**.
 
 ---
 
-## PART C — what happens when it cannot load
+## PART B — watch it move
 
-### 11 · Pull the plug
+Open **C** (Smoke Test Gym).
 
-With a gym's home screen open, turn your **Wi-Fi off** and reload the page.
+### 7 · Before
 
-✅ **One** red failure card with a **Try again** button — not two, not four.
-✅ **No numbers box showing zeros.**
+✅ **Today** reads **1** / person. **This week** reads **1** / person with
+`2 visits` under it.
+✅ **No percentage anywhere** — that gym has no paying members, so there is no
+share to report. `0%` there would be the bug.
+✅ **No amber box** — that gym has never set opening hours, so nothing about its
+visits is unusual.
+✅ **"Who came today"** shows **owner** with one chip, `01:30`, plain grey.
 
-❌ Zeros over a failed load is the most repeated defect in this project's
-history: it tells an owner nobody came when the truth is we could not ask.
+### 8 · Mark yourself in again
 
-### 12 · Put it back
+Open **D** and tap the button for **Smoke Test Gym**.
 
-Turn Wi-Fi on and press **Try again**.
+### 9 · After
 
-✅ The screen fills in again with the same numbers as step 9.
+Back to **C**, reload (**F5**).
+
+✅ **Today** now reads **1** / person with **`2 visits`** underneath — you came
+twice today.
+✅ **"Who came today"** shows **owner** with **two chips** now.
+
+❌ If Today's big number becomes **2**, that is wrong — two visits by you is
+still one person, and that distinction is what the whole feature rests on.
+
+---
+
+## PART C — when it cannot load
+
+### 10 · Wi-Fi off, reload
+
+✅ **One** red card with **Try again** — not two, not four.
+✅ **No panel showing zeros.**
+
+### 11 · Wi-Fi on, press Try again
+
+✅ Everything comes back as in step 9.
 
 ---
 
 ## What this sheet does NOT cover, and why
 
-Written down rather than left for somebody to assume later:
-
-- **The up/down arrow against last week.** Neither gym has visits in two
-  different weeks yet, so there is nothing to compare and the screen correctly
-  says so. It becomes reachable next week.
-- **A full eight-week chart.** Same reason — one week of history exists.
-- **The "nobody has come at all" screen**, which needs a gym with members and no
-  visits.
-- **What a trainer sees when the owner unticks "See who came in".** That needs a
+- **The up/down arrow against last week** — neither gym has visits in two
+  different weeks yet, so the screen correctly says "Nothing was recorded last
+  week" instead. Reachable next week.
+- **A full eight-week chart** — one week of history exists.
+- **A gym with lots of people** — the names list previews five and links to the
+  rest. Your busiest day has two.
+- **What a trainer sees when the owner unticks "See who came in"** — needs a
   second person's account.
+- **A member's email address** — deliberately not shown. Part 3 §2.4 is a promise
+  made to members at the join door listing what a gym can see, and email is not
+  on it. **This is an open question for you** (`DECISIONS-INDEX.md` §2), not an
+  oversight.
 
-All four are held by the automated tests and the mutation audit
-(`DECISIONS.md:30399`, mutants C155–C168) — which is not the same as somebody
+These are held by tests and by the mutation audit
+(`DECISIONS.md:30733`, mutants C155–C176) — which is not the same as somebody
 having looked at them, and this line says so on purpose.

@@ -30729,3 +30729,137 @@ assertion agrees with it anyway.**
 
 **STILL DOES NOT TICK: no browser smoke has run on the redesigned screen, and T3
 is UNRUN.**
+
+### ADDENDUM 2, same session — KD MARKED HIMSELF IN AND THE SCREEN COUNTED IT AS AN ORDINARY VISIT, THEN ASKED WHAT A GYM IS SUPPOSED TO DO WITH A NUMBER IT CANNOT OPEN
+
+**Read before putting a COUNT on any console screen, before drawing a figure
+that folds together things a gym would act on differently, before treating
+"who came" as a screen a gym will go looking for, and before answering a design
+complaint with a link to something already built.**
+
+His words, in order, because the order is the finding: *"i signed in as a member
+a marked attandance it correctly shows attandance was marked outside opening
+hours **but then** in gym portal i checked it is showing this — Today 1 person ·
+2 visits"* … *"think about it there will be multiple people who will mark
+attandance how will things actly looklike do you not think about design at all"*
+… *"how can gym even get a correct information from it, it should be like this
+many people came and then if wants to see details can see this person with name
+email can at this time and if marked again then show came two times gain at this
+time"* … and then *"the problem is design use some of your design skills its not
+looking good also"*.
+
+**THREE THINGS WERE WRONG AND THE CHAT FIRST ANSWERED ONLY ONE OF THEM.**
+
+### 1 · THE ONE HE PUT FIRST, AND THE ONE I MISSED: A VISIT WHEN THE GYM WAS SHUT COUNTED AS AN ORDINARY VISIT
+
+The member's own screen told him the truth — *marked outside opening hours* —
+and **this screen said `3 visits` with nothing to tell them apart.** An owner
+reads that as a busy morning. **It is :30624's class again, one commit later: a
+figure that is true and a screen that is not**, and it arrived through exactly
+the door that entry named — the numbers were checked one at a time.
+
+Now `exceptionsNote` states it above the names: *"2 of today's 3 visits were
+outside your opening hours."* **`hours_unset` IS NOT COUNTED** (:26736 — a gym
+that never said when it opens has not been arrived at oddly), and **his own gym
+is the mixture that catches a version which did**: one visit from before hours
+existed, two outside them. **C169**, **C170**, **C171** — the last aimed at the
+word *"All"*, which the first draft of its test could not see.
+
+### 2 · A COUNT WITH NO WAY IN IS USELESS, AND MY FIRST REPLY TO HIM WAS WORSE THAN THE DEFECT
+
+**The Attendance screen has held everything he asked for since `:29250`** —
+names, times as chips, "came twice" at a glance, an exceptions filter, one row
+per person, a click through to one member's own history. **The numbers panel
+linked to none of it.** A number an owner cannot open is a dead end, and the
+panel shipped as one.
+
+**THE PROCESS FAILURE IS MINE AND IS THE PART TO KEEP.** My first reply opened
+with *"The screen you're describing is already built"* and a link. **True, and it
+reads as "you did not look properly"** — it answers the question he asked with a
+correction of the question. **The memory this repo already carries says exactly
+this** (*invisible control before removing a visible one*: he blames the control
+he can SEE, so check what was invisible first) — **and I used it to explain the
+defect away rather than to fix it.** He replied *"do you even understood what the
+fuck i said"*, which is the accurate grade for that answer.
+
+Fixed: the panel's header carries the route (**C173**, re-aimed — see the Round
+log), and the names are on the Overview itself.
+
+### 3 · "MANY PEOPLE WILL USE IT" — THE TILE WAS A SENTENCE WHERE A FIGURE GOES
+
+`1 person · 2 visits` sat where the number belongs, so nothing read at a glance
+and two different quantities carried equal weight. **A tile is a NUMBER and a
+caption.** PEOPLE is the headline — *"it should be like this many people came"*
+is his own wording — and the visits count is the caption, still drawn **only**
+when the two differ, which is `dayTotalsLine`'s rule preserved rather than
+dropped. **C176.**
+
+### 4 · THE NAMES MOVE ONTO THE OVERVIEW, AND THAT IS A CHANGE TO HIS OWN SPLIT
+
+`:29961` ruling 3 put the people lists in the NEXT card — **his call at that
+gate.** He has now asked for them here, so *"who came today"* ships on the
+Overview as a preview of five with an initials circle, the name, and a chip per
+visit. **`OWED.md`'s people-lists line had already described precisely this** —
+*"who came today (names and times, a summary linking to the Attendance section
+that exists)"* — so what moved is the TIMING, not the design, and that line is
+amended rather than ticked: the rest of it (when they come · on a roll ·
+slipping away · the checklist · the cheer) is untouched and still owed.
+
+**THE COUNT ABOVE THE LIST IS THE SERVER'S WHOLE-DAY FIGURE AND THE LIST IS A
+PREVIEW.** That distinction is ruling 14's only load-bearing requirement
+(`:27992` §3) and the fixture is built to catch its absence: **totals saying 40
+people over a page carrying six**, an answer no honest day produces (`:29250`
+§3's shape). **C172.**
+
+**NO SERVER CHANGE.** It reuses `GET /v1/orgs/:gymId/attendance`, live since
+`:28221` and the same route the screen it links to already reads. **It spends the
+attendance bucket** (600/hour, shared — `:28649` L-5): one read per console open,
+inside that by a wide margin, and **nothing on this panel may poll or refresh on
+focus.**
+
+**ITS FAILURE IS SILENT, DELIBERATELY.** The names are a preview of a screen one
+click away, so a blipped day read costs five names and no numbers — a second
+error card for a list the owner can open themselves is noise beside the numbers'
+own failure, which IS reported. **C175** is the collapse of that distinction.
+
+### 5 · EMAIL WAS ASKED FOR AND IS NOT BUILT, WHICH IS A RULING AND NOT AN OVERSIGHT
+
+He asked for *"name email"*. **Part 3 §2.4 is a promise made to the member at
+join time** — the join screen shows a *"What {org} can see"* sheet — and it lists
+workout activity, form scores and streaks. **Email is not on it.** This repo's own
+console test already pins that boundary with a member row carrying four forbidden
+fields and an assertion that none reaches the screen.
+
+**It is put to Kd as a ruling with its cost and NOT quietly built** (R0.2): the
+gym sees the NAME, and changing that changes what every existing member was
+promised at the door. **No `OWED.md` line — it is an open question, not a
+deferral, and `DECISIONS-INDEX.md` §2 is where it sits until he answers.**
+
+### Round log (addendum 2)
+
+`web` **1689/1689 across 58 files, exit 0** (1666 before; +23 — 18 pure, 5
+render). `overviewView` **60/60** · `console.render` **106/106**. `eslint
+--max-warnings=0` exit 0 on ten files · `vite build` exit 0 · `node --check` on
+the harness · three root guards green with REAL exit codes (:13247).
+
+**SWEEP, a stated SUBSET of 196: `MUTATE_ONLY=C155…C176` — 22 mutants, 22 RED, 0
+ALIVE, 0 never ran**, every control GREEN and tallied, restores sha256-verified.
+
+**TWO SURVIVED THE FIRST PASS AND NEITHER WAS ALLOW-LISTED.**
+**C171 was a WEAK TEST OF MINE:** the *"says all only when it really is all"*
+case asserted only the all-of-them day, where the sentence and its mutant are
+identical — :7104's PG1, *a guard whose only tested failure is "it did not fire"
+is satisfied by a door that is simply shut*. It now checks both directions.
+**C173 was a BADLY-AIMED MUTANT:** it deleted the chevron beside the word
+*Attendance*, which is DECORATION — neither the accessible name nor the `href`
+moves — so it was ALIVE for a reason with nothing to do with the guarantee.
+**Re-aimed at the DESTINATION** (:15770 — re-aim, never allow-list), and RED.
+
+**A `String.replace` ANCHOR SPANNING TWO JSX LINES COULD NOT BE PATCHED FROM A
+SHELL HEREDOC** — three attempts matched nothing, because of the escaped `\n`
+inside a quoted string inside a quoted heredoc. Fixed by rewriting the mutant's
+row LINE BY LINE rather than by matching its text. The one-line-anchor rule
+(:4267, :17676) arriving as a *tooling* problem rather than a harness one.
+
+**STILL DOES NOT TICK: no browser smoke has run on this version, and T3 is
+UNRUN.**

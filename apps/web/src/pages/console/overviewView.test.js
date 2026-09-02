@@ -14,9 +14,15 @@ import {
   chartGeometry,
   chartState,
   crowdNote,
+  exceptionsNote,
   hasAnyActivity,
+  hiddenPeopleCount,
+  initials,
   nothingRecordedSentence,
   numbersState,
+  OVERVIEW_PEOPLE_PREVIEW,
+  previewPeople,
+  tileCounts,
   todayLine,
   weekAxisLabel,
   weekComparison,
@@ -247,6 +253,153 @@ describe('the last 30 days', () => {
     expect(adoptionLine({ visitors: 1, members: 1, adoptionPct: 100 }).text).toBe(
       '1 of 1 member came in the last 30 days',
     );
+  });
+});
+
+describe('a tile is a number and a caption', () => {
+  // KD, 2026-09-03: *"the problem is design … its not looking good"*. The first
+  // version put `1 person · 2 visits` where the FIGURE goes, so the thing an
+  // owner reads at a glance was a line of prose with two numbers in it.
+  it('leads with the people count, which is the number he asked for', () => {
+    expect(tileCounts({ visits: 3, visitors: 2 })).toEqual({
+      value: 2,
+      unit: 'people',
+      detail: '3 visits',
+    });
+  });
+
+  // `dayTotalsLine`'s rule, preserved through the redesign: on the ordinary day
+  // where nobody came twice, printing the same number twice is noise that
+  // trains an owner to stop reading the tile.
+  it('says nothing about visits when they are the same number', () => {
+    expect(tileCounts({ visits: 2, visitors: 2 }).detail).toBeNull();
+  });
+
+  it('gets the singular right, on the screen an owner opens every morning', () => {
+    expect(tileCounts({ visits: 1, visitors: 1 })).toEqual({
+      value: 1,
+      unit: 'person',
+      detail: null,
+    });
+    expect(tileCounts({ visits: 2, visitors: 1 }).detail).toBe('2 visits');
+  });
+
+  it('reads a quiet day as a real zero', () => {
+    expect(tileCounts({ visits: 0, visitors: 0 })).toEqual({
+      value: 0,
+      unit: 'people',
+      detail: null,
+    });
+  });
+});
+
+describe('the visits that happened when the gym was not open', () => {
+  const slot = (hoursStatus, visits) => ({ hoursStatus, session: null, visits, people: visits });
+
+  // KD'S FIRST REPORT, and the fixture is his own gym's mixture: one visit from
+  // before hours were ever set, two outside them.
+  it('counts the odd arrivals and leaves the rest alone', () => {
+    const note = exceptionsNote(
+      [slot('hours_unset', 1), slot('outside_hours', 2)],
+      { visits: 3, people: 2 },
+    );
+    expect(note).toBe("2 of today's 3 visits were outside your opening hours.");
+  });
+
+  // `hours_unset` IS NOT AN EXCEPTION (:26736). A gym that never said when it
+  // opens has not been arrived at oddly, and telling its owner every visit was
+  // "outside opening hours" would be false about all of them.
+  it('says nothing at all about a gym that has never set its hours', () => {
+    expect(exceptionsNote([slot('hours_unset', 4)], { visits: 4, people: 3 })).toBeNull();
+  });
+
+  it('says nothing when every visit landed in a session', () => {
+    expect(exceptionsNote([slot('in_session', 9)], { visits: 9, people: 7 })).toBeNull();
+    expect(exceptionsNote([], { visits: 0, people: 0 })).toBeNull();
+  });
+
+  // BOTH DIRECTIONS, BECAUSE A ONE-SIDED CASE IS SATISFIED BY A SENTENCE THAT
+  // ALWAYS SAYS "all" — C171 was ALIVE against the first version of this test,
+  // which only checked the all-of-them day, where the two spellings are
+  // identical. :7104's PG1: a guard whose only tested failure is "it did not
+  // fire" is satisfied by a door that is simply shut.
+  it('says "all" only when it really is all of them', () => {
+    expect(exceptionsNote([slot('outside_hours', 3)], { visits: 3, people: 2 }))
+      .toBe('All 3 visits today were outside your opening hours.');
+    const partial = exceptionsNote([slot('outside_hours', 2)], { visits: 9, people: 6 });
+    expect(partial).toBe("2 of today's 9 visits were outside your opening hours.");
+    expect(partial).not.toMatch(/^All/);
+  });
+
+  it('names a closed day as a closed day, and the mixture as both', () => {
+    expect(exceptionsNote([slot('closed_day', 2)], { visits: 2, people: 2 }))
+      .toBe('All 2 visits today were on a day the gym was closed.');
+    expect(exceptionsNote([slot('closed_day', 1), slot('outside_hours', 1)], { visits: 4, people: 3 }))
+      .toBe("2 of today's 4 visits were outside your opening hours or on a day the gym was closed.");
+  });
+
+  // THE COUNT IS THE SERVER'S WHOLE-DAY FIGURE, never rows on a page — the
+  // distinction Kd's ruling 14 turns on (:27992 §3). `summary` covers the whole
+  // day whatever page the people list is showing, so this number does not move
+  // when somebody opens the full screen.
+  it('does not move when the people list is paged', () => {
+    const summary = [slot('outside_hours', 2)];
+    const totals = { visits: 40, people: 30 };
+    expect(exceptionsNote(summary, totals)).toBe("2 of today's 40 visits were outside your opening hours.");
+  });
+});
+
+describe('the few names under the numbers', () => {
+  const people = Array.from({ length: 9 }, (_, i) => ({ userId: `u${i}`, displayName: `M${i}`, visits: [] }));
+
+  it('previews five and keeps the server order', () => {
+    const shown = previewPeople(people);
+    expect(shown).toHaveLength(OVERVIEW_PEOPLE_PREVIEW);
+    expect(shown.map((p) => p.userId)).toEqual(['u0', 'u1', 'u2', 'u3', 'u4']);
+  });
+
+  it('survives a missing or malformed list rather than throwing', () => {
+    expect(previewPeople(null)).toEqual([]);
+    expect(previewPeople([null, undefined, { userId: 'u', displayName: 'A', visits: [] }])).toHaveLength(1);
+  });
+
+  // THE COUNT IS NOT TAKEN FROM THE PREVIEW. A gym of four hundred still reads
+  // the right number above a list of five — :27992 §3's exact breakage.
+  it('works out how many are not on screen from the server total', () => {
+    expect(hiddenPeopleCount({ people: 40 }, previewPeople(people))).toBe(35);
+  });
+
+  it('hides nobody when everybody fits', () => {
+    expect(hiddenPeopleCount({ people: 3 }, [1, 2, 3])).toBe(0);
+    // A total SMALLER than the page is not a negative remainder — it is a
+    // server and a screen disagreeing, and the honest answer is "none hidden".
+    expect(hiddenPeopleCount({ people: 2 }, [1, 2, 3])).toBe(0);
+    expect(hiddenPeopleCount(null, [1])).toBe(0);
+  });
+});
+
+describe('the letters in the circle beside a name', () => {
+  it('takes the first and last name', () => {
+    expect(initials('Kd Owner')).toBe('KO');
+    expect(initials('Rita Sen')).toBe('RS');
+    expect(initials('Anil Kumar Das')).toBe('AD');
+  });
+
+  it('takes two letters from a single name', () => {
+    expect(initials('owner')).toBe('OW');
+  });
+
+  // Non-Latin scripts keep their own first character rather than being
+  // transliterated or blanked — a member whose name this cannot abbreviate must
+  // still get a circle with something in it.
+  it('keeps a non-Latin name rather than blanking it', () => {
+    expect(initials('অনিল দাস')).toBe('অদ');
+  });
+
+  it('never renders an empty circle', () => {
+    expect(initials('')).toBe('?');
+    expect(initials(null)).toBe('?');
+    expect(initials(undefined)).toBe('?');
   });
 });
 

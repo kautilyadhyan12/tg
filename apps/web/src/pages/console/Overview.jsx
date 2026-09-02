@@ -129,6 +129,30 @@ export default function Overview() {
   // the screen — and `isRetryable` already knows a 403 is permanent, which is
   // what stops a Try again being offered for a button nobody can press.
   const [overview, setOverview] = useState({ loading: true, error: null, retryable: true, data: null });
+  // WHO CAME TODAY — the names under the numbers, added 2026-09-03 at Kd's
+  // instruction after he looked at the shipped screen: *"how can gym even get a
+  // correct information from it … it should be like this many people came and
+  // then if wants to see details can see this person with name … and if marked
+  // again then show came two times again at this time"*.
+  //
+  // **IT IS THE EXISTING ATTENDANCE READ, NOT A NEW ENDPOINT.**
+  // `GET /v1/orgs/:gymId/attendance` has served the day's people, their times
+  // and the whole-day totals since :28221, and it is the same route the
+  // Attendance screen this panel links to already uses. No server change.
+  //
+  // **A FAILURE HERE IS SILENT, and that is deliberate — the same reasoning as
+  // the waiting count above.** These names are a PREVIEW of a screen reachable
+  // in one click from the panel's own header; a second error card for a list the
+  // owner can open themselves would be noise beside the numbers' own failure,
+  // which IS reported. What must never happen is the reverse — the numbers
+  // failing quietly — and that arm is separate.
+  //
+  // **IT SPENDS THE ATTENDANCE BUCKET** (`orgs_attendance_read`, 600/hour per
+  // account, shared with the day and history reads — :28649 L-5). One read per
+  // console open is inside that by a wide margin; **nothing here may poll,
+  // refresh on focus or run on a timer**, and if this panel ever wants live
+  // updates the limiter is what has to change first.
+  const [day, setDay] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
 
@@ -145,7 +169,12 @@ export default function Overview() {
       // so one row is enough and ninety would be wasted on a phone.
       orgService.getApplications(gymId, { limit: 1 }),
       orgService.getOverview(gymId),
-    ]).then(([codesOutcome, membersOutcome, waitingOutcome, overviewOutcome]) => {
+      // No `day` and no `cursor`: the server decides which day is "today" in the
+      // GYM's own zone (trap #8), and the first page is what a preview needs.
+      // The query schema is `.strict()` and takes no `limit`, so the page size
+      // is the server's; `previewPeople` decides how many reach the screen.
+      orgService.getAttendanceDay(gymId, {}),
+    ]).then(([codesOutcome, membersOutcome, waitingOutcome, overviewOutcome, dayOutcome]) => {
       if (cancelled) return;
       setCodes(
         codesOutcome.status === 'fulfilled'
@@ -187,6 +216,7 @@ export default function Overview() {
               data: null,
             },
       );
+      setDay(dayOutcome.status === 'fulfilled' ? (dayOutcome.value.data?.attendance ?? null) : null);
     });
     return () => {
       cancelled = true;
@@ -198,6 +228,7 @@ export default function Overview() {
     setMembers({ loading: true, error: null, retryable: true, page: null });
     setWaiting(null);
     setOverview({ loading: true, error: null, retryable: true, data: null });
+    setDay(null);
     setAttempt((n) => n + 1);
   };
 
@@ -318,6 +349,8 @@ export default function Overview() {
       {!overview.loading && overview.error === null ? (
         <OverviewNumbers
           overview={overview.data}
+          day={day}
+          orgSlug={orgSlug}
           /* "Nobody came" and "nobody COULD come" are different sentences with
              different next moves, and the switch is what tells them apart
              (`emptyDayReason`'s rule, one screen over). It rides on the org row

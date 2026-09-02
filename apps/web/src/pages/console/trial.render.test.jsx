@@ -21,7 +21,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { overview } from './__fixtures__/overview';
+import { attendanceDay, overview } from './__fixtures__/overview';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -33,6 +33,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getCodes: vi.fn(),
       getApplications: vi.fn(),
       getOverview: vi.fn(),
+      getAttendanceDay: vi.fn(),
       startTrial: vi.fn(),
     },
   };
@@ -132,6 +133,10 @@ function quietTheRestOfTheScreen() {
   // complimentary one, which `month.members` excludes — so it draws nothing at
   // all and this suite sees the screen it was written against.
   orgService.getOverview.mockResolvedValue(overview());
+  // The names under the numbers read this. EMPTY is the truthful default here
+  // for the same reason the overview above is quiet: these fixtures have no
+  // attendance, so the preview draws nothing.
+  orgService.getAttendanceDay.mockResolvedValue(attendanceDay());
 }
 
 /** The console as a person meets it: the shell (which owns §4.2's slot) with a

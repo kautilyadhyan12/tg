@@ -24,6 +24,44 @@ export const WEEK_STARTS = [
   '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31',
 ];
 
+/** `GET /v1/orgs/:gymId/attendance` — the day the Overview previews under its
+ *  numbers, added 2026-09-03 with the names.
+ *
+ *  **EMPTY BY DEFAULT for the same reason the overview above is quiet:** the
+ *  suites that merely RENDER this screen have no attendance, so the preview
+ *  draws nothing and they see the screen they were written against.
+ *
+ *  **`totals` IS NOT DERIVED FROM `people`, HERE OR ANYWHERE.** They are set
+ *  independently on purpose — a fixture whose totals always agree with its page
+ *  cannot catch a screen that counts the page (:27992 §3, and :29250 §3's
+ *  fixture, which hands the Attendance screen 300 people beside a page of two). */
+export const attendanceDay = ({ totals, summary, people, nextCursor, timezone, clockFormat } = {}) => ({
+  data: {
+    attendance: {
+      day: '2026-09-02',
+      timezone: timezone ?? 'America/Chicago',
+      clockFormat: clockFormat ?? '24h',
+      totals: { visits: 0, people: 0, ...totals },
+      summary: summary ?? [],
+      people: people ?? [],
+      nextCursor: nextCursor ?? null,
+    },
+  },
+});
+
+/** One person and the times they came, in the shape the wire uses. `markedAt`
+ *  is an INSTANT and the zone comes off the day above it, because every time on
+ *  this screen is the GYM's (trap #8). */
+export const attendee = (userId, displayName, visits) => ({
+  userId,
+  displayName,
+  visits: visits.map(([markedAt, hoursStatus = 'in_session']) => ({
+    markedAt,
+    hoursStatus,
+    method: 'manual',
+  })),
+});
+
 export const overview = ({ today, week, month, weeks, timezone } = {}) => ({
   data: {
     overview: {

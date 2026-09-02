@@ -4373,6 +4373,35 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   scale, a legend and a banded current week. **Also: `owner@example.com`'s
   password was recorded NOWHERE, was reset to a written-down one and proven by a
   real sign-in.** `web` 1666/1666; SWEEP C155–C168, 14 RED.
+  **ADDENDUM 2 `:30733`, same session — HE MARKED HIMSELF IN OUTSIDE HIS GYM'S
+  HOURS AND THE SCREEN COUNTED IT AS AN ORDINARY VISIT, THEN ASKED WHAT A GYM
+  DOES WITH A NUMBER IT CANNOT OPEN.** **Read before putting a COUNT on any
+  console screen, before drawing a figure that folds together things a gym would
+  act on differently, before treating "who came" as a screen a gym will go
+  looking for, and before answering a design complaint with a link to something
+  already built.** THREE defects, and the chat's first reply answered one.
+  **(1)** The member's screen said *outside opening hours*; the owner's said
+  `3 visits` with nothing to tell them apart — :30624's class one commit later.
+  `exceptionsNote` now says *"2 of today's 3 visits were outside your opening
+  hours"*, and **`hours_unset` is NOT counted** (:26736) — his own gym is the
+  mixture that catches a version which did (**C169–C171**).
+  **(2)** The panel linked NOWHERE, while the Attendance screen has held names,
+  times and "came twice" since :29250. **THE PROCESS FAILURE IS THE CHAT'S: it
+  opened with *"the screen you're describing is already built"*, which answers
+  his question with a correction of it** — the *invisible control* memory used
+  to explain a defect away instead of to fix it. He replied *"do you even
+  understood what the fuck i said"*. Header now carries the route (**C173**).
+  **(3)** `1 person · 2 visits` sat where the FIGURE goes; a tile is a number and
+  a caption, people leading (**C176**).
+  **THE NAMES MOVE ONTO THE OVERVIEW, CHANGING HIS OWN :29961 RULING 3 SPLIT at
+  his instruction** — a preview of five, count still the SERVER's whole-day
+  figure (**C172**, fixture: 40 people over a page of six). No server change;
+  reuses `GET …/attendance` and spends its 600/hour bucket, so **nothing here may
+  poll**. Its failure is silent by design (**C175**).
+  **EMAIL WAS ASKED FOR AND IS NOT BUILT** — Part 3 §2.4 is a promise made at the
+  join door and email is not on it; open question at §2, not a deferral.
+  `web` 1689/1689; SWEEP C155–C176, **22 RED — two survived the first pass, one a
+  weak test of mine and one a mutant aimed at DECORATION, neither allow-listed.**
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
@@ -4422,6 +4451,16 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   index line is not a cosmetic defect; it manufactures work for Kd and can
   re-open his own rulings.** Whoever closes an entry closes its index line in
   the same commit.
+- **:30733** — 2026-09-03 — **OPEN: MAY A GYM SEE A MEMBER'S EMAIL ADDRESS?**
+  Kd asked for the attendance detail to carry *"this person with name email"*.
+  **Part 3 §2.4 is a PROMISE MADE TO THE MEMBER AT THE JOIN DOOR** — the join
+  screen shows a *"What {org} can see"* sheet listing workout activity, form
+  scores and streaks — **and email is not on it**; `console.render.test.jsx`
+  pins the boundary with a member row carrying forbidden fields and asserts none
+  reaches the screen. **The gym sees the NAME today.** Changing this changes what
+  every existing member was told, so it is his to rule and was not built
+  quietly (R0.2). **Not an `OWED.md` line — nothing is deferred, a question is
+  open.** Check before adding ANY field to a member-facing gym surface.
 - **:11534** — 2026-08-19 — **OPEN: WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE
   COMES FROM.** Three options priced and put to Kd — film a real person ·
   motion-capture an expert clip onto a rigged 3D model (**possible; his
