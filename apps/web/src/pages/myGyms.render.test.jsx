@@ -37,7 +37,9 @@ vi.mock('../hooks/useXp', () => ({ useXp: () => ({ xp: null }) }));
 
 const MyGyms = (await import('./MyGyms')).default;
 const Sidebar = (await import('../components/common/Sidebar')).default;
-const { resetConsoleOrgs } = await import('./console/consoleOrgs');
+const { consoleOrgsRegainedFocus, resetConsoleOrgs, subscribeConsoleOrgs } = await import(
+  './console/consoleOrgs'
+);
 
 const GYM = {
   id: 'g1',
@@ -159,6 +161,35 @@ describe('the nav item', () => {
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
     expect(api.getMine).toHaveBeenCalledTimes(1);
     fireEvent(window, new Event('focus'));
+    fireEvent(window, new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(api.getMine).toHaveBeenCalledTimes(1);
+  });
+
+  // T3 ROUND 2, F1 — THE OTHER HALF OF C/H-3, WHICH NOTHING HELD. That fix has
+  // two parts: `{ watch: false }` keeps the member app out of the window watch
+  // (the case above), and stopping keyed on WATCHERS rather than on all
+  // listeners is what stops a quiet member subscriber holding that watch OPEN
+  // after the last console screen has gone. Reverting the second half to
+  // `listeners.size === 0` left every web test green.
+  //
+  // IT CANNOT LIVE IN `consoleOrgs.test.js`, which is where the review proposed
+  // putting it: that file runs in NODE, so `startWatching` returns early for
+  // want of a `window`, no listener is ever attached, and the case would pass
+  // under the fix AND under the revert. That is :25567's shape — a suggested fix
+  // that leaves the finding behind — so it lives here, where there is a DOM.
+  it('lets go of the window watch when the last console screen does, with the member app still subscribed', async () => {
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(api.getMine).toHaveBeenCalledTimes(1);
+
+    // A console screen opens beside it — the only kind of subscriber that ever
+    // asks for the focus re-read — and then closes again.
+    const closeConsoleScreen = subscribeConsoleOrgs(() => {});
+    closeConsoleScreen();
+
+    // The member app is still subscribed, and nothing should be listening.
     fireEvent(window, new Event('focus'));
     document.dispatchEvent(new Event('visibilitychange'));
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
@@ -347,5 +378,68 @@ describe('saying you are here', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(screen.getByText(/couldn't record that just now/i)).toBeTruthy());
+  });
+
+  // ── T3 ROUND 2 REGRESSIONS ────────────────────────────────────────────────
+  // Both round-1 fixes that shipped with nothing holding them. Neither was
+  // wrong; each was a guarantee one ordinary edit could take away in silence,
+  // which is :5348 rule 4's definition of the gap a green suite hides.
+
+  // T3 ROUND 2, F2. Round 1's L-4 made the MARK's zone and clock win over the
+  // pair the history read brought back — the fresher of two answers about the
+  // same gym. **Nothing could tell the two precedences apart**: every fixture
+  // sent `UTC` and `24h` on BOTH answers, so the test data made the defect and
+  // the fix identical (:20712's own trap, and :4856 — the fixture is part of
+  // the claim). The two answers now disagree, which is the only way to ask.
+  it('draws the new chip on the clock the MARK came back with, not the read’s', async () => {
+    api.getAttendanceHistory.mockResolvedValue(history([], { clockFormat: '24h' }));
+    api.markAttendance.mockResolvedValue(marked({ clockFormat: '12h' }));
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+
+    await waitFor(() => expect(screen.getByText('6:12 AM')).toBeTruthy());
+    // The stale pair winning would spell the same minute the other way.
+    expect(screen.queryByText('06:12')).toBeNull();
+  });
+
+  // T3 ROUND 2, F4. A visit must never follow the member onto a DIFFERENT gym.
+  // What guarantees that is the `key` on the card in `MyGyms.jsx` — React throws
+  // the panel away when the gym changes, so no state can cross — and the review
+  // proposed patching the panel instead. :20712 ruled that shape out: a
+  // per-field reset fixes the field somebody remembered and leaves the next one,
+  // while the key covers the taps, the history and every field added later.
+  // **The key is the fix and it was already there; what was missing is this**,
+  // so a key changed to a position or a constant cannot re-arm the class in
+  // silence. The assertion is the GUARANTEE, not the mechanism: either fix
+  // satisfies it, and neither being present fails it.
+  //
+  // **THE RE-READ MUST BE A BACKGROUND ONE, AND THE FIRST DRAFT OF THIS TEST WAS
+  // VACUOUS FOR WANT OF THAT.** Written with `refreshConsoleOrgs` — a FOREGROUND
+  // read — the store publishes `loading` first, `MyGyms` swaps the whole list for
+  // its spinner, and the panel is destroyed by the arm change rather than by the
+  // key: the positional-key mutant stayed ALIVE and the test passed for a reason
+  // that had nothing to do with what it claims. A background read never
+  // publishes `loading` (the store's rule 1), so the list stays on screen and
+  // the KEY is the only thing deciding whether the panel is reused.
+  //
+  // Nothing in the member app calls this today — that is what `watch: false`
+  // bought — so this drives the store directly to put the screen in the state a
+  // later edit could create. That is the finding: unreachable now, one edit away.
+  it('never carries a visit across to a different gym', async () => {
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+    await waitFor(() => expect(screen.getByText('06:12')).toBeTruthy());
+
+    // Their list becomes a gym they have never marked in at, without the screen
+    // ever leaving the list arm.
+    const other = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club' };
+    api.getMine.mockResolvedValue({ data: { orgs: [other], formerOrgs: [] } });
+    consoleOrgsRegainedFocus();
+
+    await waitFor(() => expect(screen.getByText('Bar Bell Club')).toBeTruthy());
+    expect(screen.queryByText('Iron House')).toBeNull();
+    expect(screen.queryByText('06:12')).toBeNull();
   });
 });

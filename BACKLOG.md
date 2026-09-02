@@ -36,6 +36,66 @@ side a finding falls on, it is Critical/High.
 
 ## Log
 
+### My Gyms + attendance, the MEMBER half — T3 round 2, diff-only (DECISIONS :29117)
+
+Reviews `c64ce5f`. **ZERO Critical/High ⇒ the packet SHIPS** (:5348 rule 1) and
+**FOUR Low.** Escape hatch NOT armed — round 1 found three Critical/High in this
+subsystem and this round finds none. Kd approved the whole list before any code
+changed (*"fix all"*). All four fixed in this round.
+
+**All four are one shape and it is round 1's own lesson pointed at round 1's own
+fixes**: a guarantee the code KEEPS correctly with nothing HOLDING it there.
+Nothing a member can see is wrong; four ordinary edits could each make something
+wrong in silence.
+
+- [x] **C/H-3's second half had no test** — `consoleOrgs.js:122`. Reverting
+      `watchers.size === 0` to `listeners.size === 0` left all 1521 web tests
+      green: with a quiet member subscriber still attached when the last console
+      screen closes, the mutant leaves the window watch ON and the member app
+      re-reads on every focus — the C/H-3 defect returning by the back door.
+      Not reachable today (`Sidebar` and the console screens never coexist), so
+      Low. **THE REVIEW'S SUGGESTED HOME FOR THE TEST WOULD NOT HAVE WORKED and
+      that is the part to keep: `consoleOrgs.test.js` runs in NODE**, so
+      `startWatching` returns early for want of a `window`, no listener is ever
+      attached, and the case passes under the fix AND under the revert (:25567 —
+      *a review's suggested fix is not the whole of its finding*). It is in
+      `myGyms.render.test.jsx`, where there is a DOM. Mutant R1 is RED on it and
+      on nothing else. — found 2026-09-02, round 2 — fixed this commit
+- [x] **Round 1's L-4 had no test, because no fixture ever disagreed with
+      itself** — `myGyms.render.test.jsx`. Every fixture sent `UTC` and `24h` on
+      BOTH the history read and the mark, so nothing could tell the two
+      precedences apart and reverting L-4 left `myGyms.render` 19/19 and
+      `attendanceView` 24/24 green (:4856 — *the fixture is part of the claim*).
+      The two now disagree: read on the 24-hour clock, mark on the 12-hour one,
+      and the chip must read `6:12 AM`. Mutant R2 is RED. — found 2026-09-02,
+      round 2 — fixed this commit
+- [x] **An audit sentence that claimed more than it measured** —
+      `DECISIONS.md:29091` and `c64ce5f`'s commit message: *"6 mutants … each
+      undoes one fix, which is rule 3's evidence"*, written about six mutants
+      over SEVEN fixes. C/H-3's watchers keying and L-4 had neither mutant nor
+      test. Corrected in place at `:29091` (struck, not deleted) with the honest
+      claim in its place — the six hold all three **Critical/High** fixes, which
+      is what :5348 rule 3 asks for. The commit message cannot be edited, so the
+      record is where a later reader will find it. — found 2026-09-02, round 2 —
+      fixed this commit
+- [x] **A visit could follow a member onto a different gym, and nothing said
+      the `key` was what stopped it** — `AttendancePanel.jsx` resets no state
+      when `gym` changes. Unreachable today because `MyGyms.jsx` keys each card
+      on `gym.id`, so no panel instance ever changes gym. **The review proposed
+      `setMarked([])` in the effect; :20712 ruled that shape out** — a per-field
+      reset fixes the field somebody remembered and leaves the next one, and here
+      it would have cleared the taps while leaving `history.visits`, a whole list
+      of another gym's visits. **The class fix is the key and it was already
+      there; what was missing was anything holding it.** The key now says it is
+      load-bearing, the panel states the requirement on its CALLER, and the test
+      pins the GUARANTEE not the mechanism. **MY OWN FIRST DRAFT OF THAT TEST WAS
+      VACUOUS**: driven with `refreshConsoleOrgs` — a FOREGROUND read — the store
+      publishes `loading`, `MyGyms` swaps the list for its spinner, and the panel
+      dies of the arm change rather than the key; the positional-key mutant
+      stayed ALIVE and the suite was green. A BACKGROUND read keeps the list on
+      screen and makes the key the only thing deciding. Mutant R3 RED on the
+      second attempt. — found 2026-09-02, round 2 — fixed this commit
+
 ### My Gyms + attendance, the MEMBER half — T3 round 1 (DECISIONS :28976)
 
 Reviews `b59fe05`. **THREE Critical/High** (they are in the entry, not here) and

@@ -7863,6 +7863,15 @@ file and is stated so nobody reads these as lower priority than they are.
       the three were things a member could SEE and be told falsely — a history
       of one day drawn off a read that never answered, and a visit erased by a
       read that was already in flight. **T3 is still UNRUN on the server half.**
+      **T3 ROUND 2 RAN 2026-09-02 (`DECISIONS.md:29117`) AND THE MEMBER HALF'S
+      REVIEW IS NOW CLOSED: ZERO Critical/High, so THAT PACKET SHIPS** (:5348
+      rule 1) — four Low, all fixed, all in `BACKLOG.md`, escape hatch not armed.
+      Every one was a guarantee the code kept correctly with **nothing holding it
+      there**, including C/H-3's own second half; three mutants now hold them.
+      **THIS LINE STILL DOES NOT TICK, and "the packet ships" is a statement
+      about that diff only.** What holds it: **the OWNER's half is unbuilt** · **no
+      browser smoke has EVER run on any attendance surface, either half** · **T3
+      is unrun on the server half.**
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,
@@ -7907,6 +7916,26 @@ file and is stated so nobody reads these as lower priority than they are.
       changed**, i.e. when the member is on Settings → Gym, where
       `GymMembershipCard` already reads `/v1/orgs/mine` and could feed the store
       — **the same card as the line above, and to be done with it.**
+- [ ] ⚪ **A GYM THAT CHANGES ITS TIME ZONE LEAVES OLD VISITS WITH A DATE AND A
+      TIME THAT DESCRIBE DIFFERENT DAYS.** Raised 2026-09-02 by the member half's
+      T3 round 2 (`DECISIONS.md:29117` §4) as an observation, **not a finding of
+      that round — it PRE-DATES the whole attendance web half.** Every row's
+      `day` was computed on the SERVER, in the zone the gym had **at write
+      time**, and is stored; every chip beside it is rendered from `markedAt` in
+      the gym's **current** zone. While a gym never moves zone the two agree
+      exactly, which is why nothing on screen is wrong today and this is ⚪. Move
+      a gym across a date line and an old visit can print a date from the old
+      zone above a clock time from the new one. **It is NOT round 1's L-4
+      returning** — that only picks the fresher of two answers about the gym as
+      it is NOW, so it improves the choice without creating this class.
+      **THE ONE THING NOT TO DO: re-bucket the stored `day` in the browser.** The
+      server owns the day (`slot_key` and the UNIQUE are derived from it,
+      :27992 §1) and a client that recomputes it disagrees with the constraint —
+      and with the owner's screen, which reads the same rows. **The honest fixes
+      are server-side and are a card of their own:** either stamp each row with
+      the zone it was written in and render each row in its own, or accept the
+      drift and say so in the copy. **It reaches the OWNER's screen too**, so it
+      belongs with the console's Attendance section rather than as a patch here.
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

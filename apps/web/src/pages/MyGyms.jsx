@@ -95,6 +95,15 @@ export default function MyGyms() {
         </div>
       ) : (
         gyms.map((gym) => (
+          // KEYED BY THE GYM'S OWN ID, AND THAT IS LOAD-BEARING RATHER THAN
+          // ROUTINE (T3 round 2, F4). React throws the card away when the gym
+          // changes, so `AttendancePanel` cannot carry ANY state from one gym to
+          // the next — the taps it is holding, the history it read, and every
+          // field somebody adds later, **without that future field's author
+          // having to know this ever happened.** That is :20712's ruling: the
+          // class fix is the key, never a per-field reset inside the panel.
+          // A key changed to a position or a constant re-arms the whole class
+          // silently, which is why `myGyms.render.test.jsx` now pins it.
           <div
             key={`my-gym-${gym.id}`}
             className="rounded-2xl p-4"

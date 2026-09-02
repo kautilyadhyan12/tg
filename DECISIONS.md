@@ -29088,16 +29088,161 @@ on `@app/shared` AND on `api` — run because this round edits a comment in
 it; the diff there is a comment and the runs prove it.
 `eslint --max-warnings=0` exit 0 on all nine touched files.
 
-**AUDIT — 6 mutants, 6 RED, 0 ALIVE, every restore sha256 byte-exact.** Each one
+**AUDIT — 6 mutants, 6 RED, 0 ALIVE, every restore sha256 byte-exact.** ~~Each one
 UNDOES a fix, so each is :5348 rule 3's evidence that the fix carries a test that
-fails without it: **F1** draws the list off a failed read · **F2** draws the
+fails without it~~ **— CORRECTED 2026-09-02 BY ROUND 2's F3, AND THE SENTENCE IS
+THE DEFECT, NOT THE SWEEP. Seven fixes shipped and six mutants ran, so "each one
+undoes a fix" is true of the six and reads as a claim about the seven.** Two
+guarantees had no mutant and no test: **C/H-3's SECOND HALF** (stopping keyed on
+WATCHERS, not on all listeners — the half that stops a quiet member subscriber
+holding the window watch open) and **L-4** (the mark's clock winning over the
+read's). Both are now pinned; see the round-2 entry below. **What the six DO
+cover, which is the honest claim: all three Critical/High fixes are held by a
+test that fails without them** (:5348 rule 3 asks for exactly that and no more) —
+**F1** draws the list off a failed read · **F2** draws the
 read's list alone again · **F3** subscribes the console's way · **F4** sorts
 `visitDays` ascending (the mutant round 1's fixture was blind to) · **F5** takes
 the removed label · **F6** adds a second `My Gym` pointing somewhere innocent,
 which only the words ban can catch. Every mutant names the test that caught it in
 the run output.
+**THE COMMIT MESSAGE ON `c64ce5f` CARRIES THE SAME SENTENCE AND CANNOT BE
+EDITED** — it is recorded here instead, which is the only place a later reader
+will look.
 
 **NOT DONE and owed: a diff-only round 2** (:5348 rule 2 — it covers only these
 fixes and the surfaces they touch), and **the browser smoke, which has still
 never run on any attendance surface.** Both C/H-1 and C/H-2 are defects a
 click-through would have surfaced.
+
+## 2026-09-02 — MY GYMS, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — four Low, every one of them a guarantee with no test, and both the review's suggested fix and my own first attempt at one were green under the defect
+
+**Read before writing a store test that needs a `window`, before driving a list
+change in a render test with a FOREGROUND read, before resetting per-gym state
+inside a panel rather than keying its mount site, and before quoting
+`DECISIONS.md:29091`'s "each one undoes a fix" as covering every fix round 1
+shipped.**
+
+Fresh-chat review of `c64ce5f` (`DECISIONS.md:28976`), diff-only (:5348 rule 2).
+**ZERO Critical/High ⇒ THE PACKET SHIPS.** Four Low, all fixed here and logged in
+`BACKLOG.md`; none bought a round (:5348 rule 1). **Escape hatch NOT armed** —
+round 1 found three Critical/High in this subsystem and round 2 finds none, so
+the two-rounds-running trigger does not fire.
+
+**ALL FOUR ARE ONE SHAPE, and it is the shape round 1's own lesson predicted.**
+Round 1 ended by recording that *"0 alive is a statement about the mutants you
+chose"*. Round 2's four findings are that sentence pointed at the fixes
+themselves: every one is a guarantee the code **keeps correctly** and **nothing
+holds there**. Nothing a member can see is wrong today; four ordinary edits could
+each make something wrong in silence.
+
+### 1 · THE REVIEW'S OWN SUGGESTED FIX WAS GREEN UNDER THE DEFECT, AND THIS IS THE PART TO KEEP
+
+**F1 — C/H-3's second half had no test.** That fix has two parts:
+`{ watch: false }` keeps the member app out of the window watch, and **stopping
+keyed on WATCHERS rather than on all listeners** is what stops a quiet member
+subscriber holding that watch OPEN after the last console screen closes.
+Reverting `consoleOrgs.js:122` to `listeners.size === 0` left every web test
+green, and the review verified it is not an equivalent mutant.
+
+**THE REVIEW SAID TO PUT THE TEST IN `consoleOrgs.test.js`. THAT FILE RUNS IN
+NODE.** `vitest.config.js` gives jsdom to `*.render.test.jsx` and nothing else,
+so `startWatching` returns early for want of a `window`, **no listener is ever
+attached, and the case would have passed under the fix AND under the revert** —
+a test written to close a hole, itself unable to see it. :25567's recorded shape
+(*taking a review's suggested fix as the whole of its finding*), arriving in the
+round that cites it. The test lives in `myGyms.render.test.jsx`, where there is a
+DOM, and it is RED under the revert and under nothing else.
+
+**STANDING: before writing a test into a file you did not choose, check what
+ENVIRONMENT that file runs in.** A store guarded by
+`typeof window === 'undefined'` is untestable in the suite that owns the store.
+
+### 2 · MY OWN FIRST TEST FOR F4 WAS VACUOUS, AND ONLY THE MUTANT SAID SO
+
+**F4 — a visit could follow a member onto another gym.** `AttendancePanel` resets
+nothing when `gym` changes. Unreachable today because `MyGyms.jsx` keys each card
+on `gym.id`, so no instance ever changes gym.
+
+**THE REVIEW PROPOSED `setMarked([])` IN THE EFFECT AND THAT IS THE WRONG
+INSTRUMENT** (:20712, ruled on exactly this): a per-field reset fixes the field
+somebody remembered and leaves the next one — here it would have cleared the taps
+and left `history.visits`, a whole list of another gym's visits, doing the same
+thing. **The class fix is the key and it was already there. What was missing was
+anything holding it**, so a key changed to a position or a constant re-arms the
+whole class silently. The `key` now says it is load-bearing, the panel's header
+states the requirement on its CALLER, and the test pins the guarantee rather than
+the mechanism — either fix satisfies it, neither being present fails it.
+
+**AND THE FIRST DRAFT OF THAT TEST PASSED UNDER THE MUTANT.** It changed the gym
+list with `refreshConsoleOrgs` — a FOREGROUND read — which publishes `loading`,
+so `MyGyms` swapped the whole list for its spinner and **the panel was destroyed
+by the arm change rather than by the key**. Positional-key mutant: ALIVE, suite
+green, and the test would have shipped claiming a guarantee it never touched. A
+BACKGROUND read never publishes `loading` (the store's rule 1), the list stays on
+screen, and the key becomes the only thing deciding whether the panel is reused.
+RED immediately.
+
+**STANDING, and it is :20712's own trigger read back at me — *a fixture in which
+the defect and the fix are indistinguishable*. Two of this round's four tests
+were nearly that**, one from the review's suggestion and one from my own hand.
+**A regression test is not finished when it passes; it is finished when it fails
+under the revert.** Both were caught by running the mutant, neither by reading
+the test.
+
+### 3 · THE OTHER TWO
+
+**F2 — L-4 had no test, because every fixture agreed with itself.** Round 1 made
+the mark's zone and clock win over the pair the history read brought back. Every
+fixture in the suite sent `UTC` and `24h` on **both** answers, so no test could
+tell the two precedences apart (:4856 — *the fixture is part of the claim*). The
+two now disagree: a read on the 24-hour clock, a mark on the 12-hour one, and the
+chip must read `6:12 AM`.
+
+**F3 — round 1's audit sentence claimed more than it measured.** *"Each one
+undoes a fix"* was written about six mutants over seven fixes. It is corrected in
+place at `:29091` rather than deleted, with the honest claim in its place: the
+six hold all three **Critical/High** fixes, which is what :5348 rule 3 asks for.
+The same sentence is in `c64ce5f`'s commit message and cannot be edited there.
+
+### 4 · WHAT IS STILL NOT DONE, so nobody reads "the packet ships" as the card closing
+
+The packet shipping is a statement about **this diff**. **The `OWED.md`
+attendance line still does not tick**, and three things are why: the OWNER's half
+of §4b is unbuilt (the console's Attendance section, the Settings switch, the
+`PRIVILEGE_COPY` tick box) · **no browser smoke has ever run on any attendance
+surface, either half** · and **T3 is still unrun on the server half**.
+
+**ONE THING THE REVIEW RAISED THAT IS NOT THIS ROUND'S AND IS NOW TRACKED:** the
+list renders every time in the gym's CURRENT zone while each `day` was computed
+server-side in the zone the gym had at write time, so a gym that changes zone
+leaves old rows' date labels and their time chips describing different calendar
+days. Pre-existing, not created by L-4 (which only picks the fresher of two
+CURRENT answers). Own `OWED.md` line rather than a fix inside a fix round
+(:5348 rule 6).
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1524/1524 across 55 files** (1521
+before; +3). Scoped: `myGyms.render` **22/22** (19 before). `eslint
+--max-warnings=0` exit 0 on all three touched source files. No `packages/shared`
+change and no server file, so :28395's fan-out does not apply and `web` is the
+whole of the suite that could move.
+
+**AUDIT — 3 mutants, 3 RED, 0 ALIVE, every restore sha256 byte-exact**, verified
+against hashes taken BEFORE the first mutation and re-checked after each restore.
+Restores were made from copies outside the working tree, **never `git checkout
+--`**, because this round's own uncommitted work was in those files (:25567).
+Each mutant undoes exactly one of the three fixes that changed behaviour or
+covered it: **R1** keys stopping on all listeners again (F1) · **R2** gives the
+held stale clock precedence again (F2) · **R3** keys the gym card on its POSITION
+(F4). Each was RED on its own test and on no other. **R3 was ALIVE on the first
+attempt and that is recorded in §2 rather than tidied away** — it is the round's
+most useful finding about its own instrument.
+
+**Files:** `apps/web/src/pages/MyGyms.jsx` (the key's comment) ·
+`components/gym/AttendancePanel.jsx` (the caller requirement, header only — no
+behaviour change) · `pages/myGyms.render.test.jsx` (+3 cases) · records
+(`DECISIONS.md` including the `:29091` correction, `DECISIONS-INDEX.md` §1B,
+`DECISIONS-TRIGGERS.md` regenerated, `OWED.md`, `BACKLOG.md`, `HANDOFF.md`).
+**No source file changed behaviour this round** — three of the four fixes are
+tests and one is the record.

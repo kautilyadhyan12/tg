@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: MY GYMS + ATTENDANCE (MEMBER HALF) — T3 ROUND 2 ANSWERED, DIFF-ONLY.
+      **ZERO Critical/High ⇒ THE MEMBER HALF'S PACKET SHIPS** (:5348 rule 1).
+      Four Low, all fixed. DECISIONS :29117. Escape hatch NOT armed.
+      **THE ATTENDANCE `OWED.md` LINE STILL DOES NOT TICK** — see OPEN.
+      NEXT: the OWNER's half (§4b-2), then the smoke over both halves.
+
+  1. **ALL FOUR LOW WERE THE SAME SHAPE: a guarantee the code KEEPS correctly
+     with NOTHING HOLDING IT THERE** — round 1's own "0 alive is a statement
+     about the mutants you chose", pointed at round 1's own fixes. Nothing a
+     member could see was wrong. Three mutants now hold them.
+  2. **THE REVIEW'S SUGGESTED HOME FOR A TEST WOULD HAVE BEEN GREEN UNDER THE
+     DEFECT. `consoleOrgs.test.js` RUNS IN NODE** — `vitest.config.js` gives
+     jsdom to `*.render.test.jsx` and nothing else — so `startWatching` returns
+     early for want of a `window` and the case passes under fix AND revert.
+     **Check what ENVIRONMENT a file runs in before writing a test into it.**
+  3. **MY OWN FIRST TEST FOR F4 WAS VACUOUS AND ONLY THE MUTANT SAID SO.**
+     Driven with `refreshConsoleOrgs` (FOREGROUND), the store publishes
+     `loading`, `MyGyms` swaps the list for its spinner, and the panel dies of
+     the ARM CHANGE rather than the key — positional-key mutant ALIVE, suite
+     green. `consoleOrgsRegainedFocus` (background) keeps the list on screen.
+     **A regression test is finished when it FAILS under the revert, not when
+     it passes.**
+  4. **`key={my-gym-${gym.id}}` IN `MyGyms.jsx` IS LOAD-BEARING**, not routine:
+     it is the ONLY thing stopping `AttendancePanel` carrying one gym's visits
+     onto another. **Do NOT "fix" that class with `setMarked([])` inside the
+     panel** — :20712 ruled that shape out and it would leave `history.visits`
+     behind. Requirement now stated in the panel's own header, for its CALLER.
+  5. **ROUND 1's AUDIT SENTENCE IS CORRECTED IN PLACE AT :29091** — "each one
+     undoes a fix" was six mutants over SEVEN fixes. The honest claim: the six
+     hold all three **Critical/High** fixes, which is all rule 3 asks.
+     `c64ce5f`'s commit message carries the old sentence and cannot be edited.
+  6. **NO SOURCE FILE CHANGED BEHAVIOUR THIS ROUND** — three of the four fixes
+     are tests, one is the record; the two source edits are comments.
+
+PROVE: All on the shipping bytes. `web` **1524/1524 across 55 files** (1521
+       before; +3). Scoped: `myGyms.render` **22/22** (19 before). `eslint
+       --max-warnings=0` exit 0 on all three touched files. Root guards:
+       `check-harnesses` **25 parse**, `check-decisions-index` **265 pointers,
+       1081 headings**, triggers `--check` **up to date (840 from 226 of 364)**.
+       No `packages/shared` or server change, so :28395's fan-out does not apply
+       and `web` is the whole of the suite that could move.
+       **AUDIT: 3 mutants, 3 RED, 0 ALIVE, every restore sha256 byte-exact** —
+       hashes taken BEFORE the first mutation, re-checked after each restore,
+       and restored from copies OUTSIDE the tree (never `git checkout --`,
+       :25567 — this round's own uncommitted work was in those files). R1 keys
+       stopping on all listeners · R2 gives the stale clock precedence · R3 keys
+       the card on its POSITION. **R3 was ALIVE first time** (see 3).
+
+FILES: `apps/web/src/pages/MyGyms.jsx` (key comment) ·
+       `components/gym/AttendancePanel.jsx` (header only) ·
+       `pages/myGyms.render.test.jsx` (+3 cases) · records (`DECISIONS.md`
+       incl. the :29091 correction, `DECISIONS-INDEX.md` §1B,
+       `DECISIONS-TRIGGERS.md` regenerated, `OWED.md`, `BACKLOG.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE ATTENDANCE LINE DOES NOT TICK. Three things hold it: the OWNER's
+       half is UNBUILT** (console Attendance section :28107, the Settings
+       switch, the `PRIVILEGE_COPY` tick box — without which "the owner can
+       change it" is a false sentence) · **NO BROWSER SMOKE HAS EVER RUN ON ANY
+       ATTENDANCE SURFACE, either half** · **T3 UNRUN on the SERVER half.**
+       NEW ⚪ OWED LINE: a gym that changes time zone leaves old visits' stored
+       `day` (written in the OLD zone) beside chips rendered in the NEW one.
+       Pre-dates this card; **do not re-bucket the day in the browser** — the
+       server owns it and the owner's screen reads the same rows.
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate.
+```
+
+```
 TASK: MY GYMS + ATTENDANCE (MEMBER HALF) — T3 ROUND 1 ANSWERED. THREE
       Critical/High and FOUR Low, ALL SEVEN FIXED. DECISIONS :28976.
       **THE PACKET DOES NOT SHIP THIS ROUND (:5348 rule 1) — A DIFF-ONLY ROUND 2

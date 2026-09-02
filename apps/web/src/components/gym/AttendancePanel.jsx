@@ -19,6 +19,15 @@ import { markedSentence, mergeVisits, visitDays, withVisit } from './attendanceV
 // really happened, and hiding them because the gym stopped taking new ones
 // would remove a thing Kd ruled in.
 //
+// THIS PANEL MUST BE MOUNTED ONE PER GYM, KEYED BY THE GYM'S ID, and that is a
+// requirement on the CALLER rather than a detail of it (T3 round 2, F4).
+// Nothing in here resets when `gym` changes — not the taps it is holding, not
+// the history it read — because :20712 ruled that a per-field reset fixes the
+// field somebody remembered and leaves the next one behind. `MyGyms.jsx` keys
+// the card on `gym.id`, so React throws this away rather than handing gym B a
+// panel holding gym A's visits. A second mount site that keys on anything else
+// re-arms that, and no type or lint rule can see it.
+//
 // NOTHING HERE POLLS, RE-READS ON FOCUS, OR RUNS ON A TIMER, and that is a
 // SERVER constraint rather than a style choice: this read and the console's
 // day list share ONE rate-limit bucket — 600 an hour between them, one Redis

@@ -1325,6 +1325,33 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:29117** — 2026-09-02 — **MY GYMS, T3 ROUND 2 (diff-only): ZERO
+  Critical/High, THE PACKET SHIPS — four Low, every one a guarantee with no test,
+  and TWO of the tests written to close them were green under the defect.**
+  **Read before writing a store test that needs a `window`, before driving a list
+  change in a render test with a FOREGROUND read, before resetting per-gym state
+  inside a panel rather than keying its mount site, and before quoting
+  `DECISIONS.md:29091`'s "each one undoes a fix" as covering every fix round 1
+  shipped.** Escape hatch NOT armed (round 1 had three C/H here, round 2 has
+  none). **F1 — C/H-3's second half (stopping keyed on WATCHERS) had no test, and
+  the review's suggested home for one, `consoleOrgs.test.js`, runs in NODE**: no
+  `window`, so `startWatching` returns early and the case would pass under the
+  fix AND under the revert. It lives in `myGyms.render.test.jsx` instead.
+  :25567's shape, in the round that cites it. **F4 — the review proposed
+  `setMarked([])` inside the panel; :20712 ruled that shape out** (a per-field
+  reset leaves the next field — here `history.visits`). **The class fix is the
+  `key` on the card and it was already there; what was missing was anything
+  holding it.** **AND THE FIRST DRAFT OF THAT TEST WAS VACUOUS**: driven with a
+  FOREGROUND read, the store publishes `loading`, `MyGyms` swaps the list for its
+  spinner, and the panel dies of the arm change rather than the key — the
+  positional-key mutant stayed ALIVE. A background read keeps the list on screen
+  and makes the key the only thing deciding. **STANDING: a regression test is not
+  finished when it passes, only when it FAILS under the revert.** F2 pins L-4 (no
+  fixture had ever disagreed with itself — both answers were `UTC`/`24h`); F3
+  corrects `:29091`'s audit sentence in place. **3 mutants, 3 RED, 0 alive;
+  `web` 1524/1524. No source file changed behaviour.** **THE `OWED.md`
+  ATTENDANCE LINE STILL DOES NOT TICK** — the owner's half is unbuilt, no browser
+  smoke has run on either half, and T3 is unrun on the server half.
 - **:28976** — 2026-09-02 — **MY GYMS, T3 ROUND 1: THREE Critical/High, the
   packet does NOT ship this round — and the card's own 7-mutant sweep had missed
   both visible defects.** **Read before touching `AttendancePanel`'s history
