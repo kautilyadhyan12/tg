@@ -2192,6 +2192,15 @@ then; none may be hidden or reduced to close the gap.
       figures quoted before this was noticed were whole-suite runs wearing a
       scoped label. **The form that works is `test:local <file>`** (no `--`).
       `-t` filters are unaffected, which is why the mutation sweep never hit it.
+      **A THIRD FAILING FILE SEEN ONCE, 2026-09-02 (DECISIONS :30236), AND
+      RECORDED RATHER THAN SHRUGGED OFF BECAUSE THIS LINE NAMES ONLY TWO.** A
+      full local run failed `workouts.sync.test.ts` at `beforeAll` with a **500
+      from `/v1/auth/register`** — not a global-count assertion, which is the
+      only shape above. It did NOT reproduce: the file passes 23/23 scoped and
+      the next full run was 767/767. **Unexplained, so it is written down**; if
+      it recurs, the thing to check first is whether the register path exhausts
+      the connection pool under four workers, which would make it a DIFFERENT
+      defect from the seed race and not part of this line.
 - [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
       **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
       line said was needed. `durationSeconds` (the on-screen workout timer) and
