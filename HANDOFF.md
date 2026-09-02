@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW-NUMBERS CARD'S PLAN GATE. DECISIONS :29961. **KD RULED FOUR
+      THINGS AND TWO OF THEM HE VOLUNTEERED.** Records only; no code, no test,
+      no `src` file. **`CARD-gym-overview-numbers.md` IS WRITTEN AND UNAPPROVED
+      — THE GATE IS NOT PASSED** (:26777: an approval covers what was ON SCREEN
+      when it was given, and he has not yet seen the file list, the migration
+      SQL or the test list).
+
+  1. **THE TILES COUNT VISITS, NOT WORKOUTS — a KNOWING DEVIATION from Part 3
+     §4.1, put to him costed and accepted** (R0.3). Ships: visits this week ·
+     members who came in 30 days · adoption %. The argument to re-read before
+     anybody "restores" the spec tile: **a workout exists only if the member
+     ALSO logged their training, so a workout tile can read zero on a day forty
+     people came through the door.** Nothing stops being recorded — the
+     workout-side columns are still written nightly, on :26469 §1.1's own
+     reasoning about `avg_form_score`.
+  2. **THE FIFTH :26469 §6 QUESTION IS ANSWERED: a workout counts for a gym on
+     the SAME GYM-DAY as the visit** — live membership covering that day AND an
+     attendance row at that gym that day. :27900 withheld it from the attendance
+     gate and sent it here, and it arrived. **The rejected arm needed an
+     invented N** (R0.2). **Cost he was shown first: a morning tap plus an
+     evening workout AT HOME counts for the gym.**
+  3. **THE CARD IS SPLIT — numbers first, people lists second, his call.** The
+     lists (who came today · when they come · on a roll · slipping away ·
+     roster · the checklist) are a second card with its own `OWED.md` line.
+  4. **HE ADDED THE CHEER HIMSELF and then chose its shape: emoji + a
+     ready-made line, ONE TAP, one per member per week, NO free text** — the
+     typing arm was costed and refused, agreeing with his own PACT ruling
+     (:18128). **AND THE FACT UNDER IT, measured not recalled: NOTHING IN THIS
+     PRODUCT SENDS ANYTHING** — no mailer, no SMTP, no notifications table in
+     `apps/api/src`. A cheer is STORED and read on `My Gyms` (:28822), the shape
+     `nudgeApplication` already uses. **STANDING: here "send" means "write
+     something a screen will show".**
+  5. **THE INDEX HEADER WAS LYING ABOUT ITS OWN SIZE AND MEASURING CAUGHT IT.**
+     It read 992 · 1,153 · 2,203 while the COMMITTED files were 1,046 · 1,179 ·
+     2,283 — 80 lines of drift in the header whose next paragraph says
+     *"re-measure whenever you add a line here"*. **So the previous day's
+     recorded +179 was itself against a stale base.** Now 1,051 · 1,208 · 58 =
+     **2,317**, and both deltas are computed from `git show HEAD:` and `wc -l`
+     rather than from the header's own previous figures.
+
+PROVE: no code changed. Guards, REAL exit codes (not `tail`'s — :13247):
+       `check-harnesses` · `check-decisions-index` · triggers `--check`
+       (872 phrases from 232 of 370 rulings).
+
+FILES: `DECISIONS.md`, `DECISIONS-INDEX.md` §1 + header, `DECISIONS-TRIGGERS.md`
+       (regenerated), `OWED.md` (one line amended, three added),
+       `CARD-gym-overview-numbers.md` (new, UNAPPROVED), this file.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed.
+       **NEXT: KD APPROVES OR CORRECTS `CARD-gym-overview-numbers.md`.** Its §7
+       names exactly what he is being asked to approve — the scope (§3), the
+       migration AS SQL (§4a.1, T5/R4.4) and the split (§2.3). The four rulings
+       in §2 are already his and are not re-openable.
+       **THE FIRST TRAP THE BUILD MUST NOT WALK INTO** (both in the card's §5):
+       `org_member_stats` counts workouts ANYWHERE, which :26469 §1.3 forbids
+       showing a gym; and a per-day DISTINCT count cannot be summed across days
+       — **no test whose fixture has one visit per person can see that one.**
+```
+
+
+```
 TASK: THE ATTENDANCE CARD IS CLOSED. DECISIONS :29870. **KD RAN SMOKE SHEET
       PARTS C AND D AT THE BROWSER AND REPORTED "all passed"** — the last gate
       on `CARD-gym-attendance.md`. **THE `OWED.md` ATTENDANCE LINE TICKS.**

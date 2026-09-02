@@ -4,18 +4,34 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **992 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,051 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,153 lines** (~680 at the split; 797 on
+2. **§1 below — STANDING RULES. 1,208 lines** (~680 at the split; 797 on
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,203 lines, MEASURED 2026-09-01 (thirteenth measurement
-that day) and not estimated** (992 + 1,153 + 58). **THE TWELFTH MEASUREMENT IS THE
+**ALWAYS-READ TOTAL: 2,317 lines, MEASURED 2026-09-02 and not estimated**
+(1,051 + 1,208 + 58). **THE FOURTEENTH MEASUREMENT ANSWERS THE QUESTION THE
+THIRTEENTH ASKED — "whether the NEXT card's gate costs this much" — AND THE
+ANSWER IS NO: +34, against the previous day's +179.** What it bought is the same
+class of thing: a Kd RULING at a plan gate, four answers, one of them a knowing
+spec deviation and one a feature he added himself — the entry class :24813 sends
+to §1.
+**AND MEASURING IT CAUGHT THE HEADER LYING ABOUT ITSELF, WHICH IS WORTH MORE
+THAN THE DELTA.** The three figures above read **992 · 1,153 · 2,203** while the
+COMMITTED files were **1,046 · 1,179 · 2,283** — 80 lines of drift accumulated
+since the day before, in the header whose own next paragraph says *"Re-measure
+whenever you add a line here"*. **So the +179 the thirteenth measurement recorded
+was itself against a stale base**, and the honest reading of both days is that
+the growth is real but nobody had re-run the command since. **Both deltas above
+are computed from `git show HEAD:` and `wc -l`, not from the previous figures in
+this header** — which is the only way a number here can be trusted, and is the
+lesson :22497 already paid for once.
+**THE TWELFTH MEASUREMENT IS THE
 REASSURING ONE: the attendance card — a full server half, migration, three
 routes and a new suite — added SIX lines here, all of them trigger phrases,
 because its record is a CARD record and went to §1B where :24813 sends it. The
@@ -1283,6 +1299,35 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   here" button and the days you came.** The OWNER's half — the console
   Attendance section, the Settings switch, the tick box — is NOT built, no smoke
   has run and T3 is UNRUN, so the attendance `OWED.md` line does not tick.
+- **:29961** — 2026-09-02 — **KD RULES THE GYM'S DASHBOARD AT THE
+  OVERVIEW-NUMBERS GATE: the tiles count VISITS not workouts, a workout counts
+  for a gym on the SAME GYM-DAY as the visit, the card splits
+  numbers-then-lists, and a gym cheers a member with ONE TAP and no typing.**
+  The :26469 §6 / :27900 gate, held and answered. **Read before building the
+  console's Overview numbers or the nightly rollup, before writing any figure
+  onto `org_daily_stats`, before joining a workout to an attendance, before
+  designing the gym's "on a roll" list or any message a gym sends a member, and
+  before assuming Part 3 §4.1's KPI row still names the tiles that ship.**
+  **RULING 1 is a KNOWING DEVIATION from §4.1** — *"Workouts this week"* is
+  replaced by **visits this week · members who came in 30 days · adoption %**,
+  because a workout exists only if a member also LOGGED their training, so that
+  tile can read zero on a day forty people came through the door. **Nothing
+  stops being recorded**: the workout-side columns are still written nightly on
+  :26469 §1.1's own reasoning. **RULING 2 is his sentence made physical** —
+  a live membership covering that day AND an attendance row at that gym on the
+  same gym-day; the rejected arm (*"within N hours"*) needed a constant nobody
+  ruled (R0.2). **Its cost is on the record because he was shown it: a morning
+  tap plus an evening workout AT HOME counts for the gym.** **RULING 4 — the
+  cheer is an emoji plus a ready-made line, capped one per member per week, NO
+  free text**, agreeing with his own PACT ruling (:18128) for a different
+  reason. **AND THE FACT UNDER IT: nothing in this product SENDS anything** —
+  no mailer, no SMTP, no notifications table (measured), so a cheer is STORED
+  and read on `My Gyms` (:28822), the shape `nudgeApplication` already uses.
+  **STANDING: in this product "send" means "write something a screen will
+  show".** Two traps carried forward: `org_member_stats` counts workouts
+  ANYWHERE (:26469 §1.3 forbids showing that to a gym), and a per-day DISTINCT
+  count cannot be summed across days. `CARD-gym-overview-numbers.md` is WRITTEN
+  AND UNAPPROVED; **the gate is not passed** (:26777).
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

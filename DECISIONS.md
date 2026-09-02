@@ -29957,3 +29957,136 @@ opposite answers, decided by what is doing the reading.
 halves built, each reviewed to zero Critical/High on a diff-only round
 (:28649 · :29117 · :29740), and the browser sheet complete (8/8 core at :29410,
 Parts C and D here).
+
+## 2026-09-02 — KD RULES THE GYM'S DASHBOARD AT THE OVERVIEW-NUMBERS GATE: the tiles count VISITS and not workouts, a workout counts for a gym on the SAME GYM-DAY as the visit, the card splits numbers-then-lists, and a gym can cheer a member with ONE TAP and no typing
+
+**Read before building the console's Overview numbers or the nightly rollup,
+before writing any figure onto `org_daily_stats`, before joining a workout to an
+attendance, before designing the gym's "on a roll" list or any message a gym
+sends a member, and before assuming Part 3 §4.1's KPI row still names the tiles
+that ship.** The :26469 §6 / :27900 gate, held and answered. Records only; no
+code changed by this entry, and `CARD-gym-overview-numbers.md` is WRITTEN AND
+UNAPPROVED.
+
+### 1 · FOUR ANSWERS, AND TWO OF THEM HE VOLUNTEERED
+
+1. **THE TILES COUNT VISITS, NOT WORKOUTS** — *"yes i agree with you"*, on a
+   DEVIATION PROPOSAL put to him with both arms costed. Part 3 §4.1's *"Workouts
+   this week"* does not ship; **visits this week · members who came in 30 days ·
+   adoption %** do. His own heading at :26469 is *"THE GYM'S NUMBERS ARE
+   ATTENDANCE NUMBERS"*; this is that ruling reaching a screen.
+2. **A WORKOUT COUNTS FOR A GYM ON THE SAME GYM-DAY AS THE VISIT** — the fifth
+   :26469 §6 question, which :27900 deliberately withheld from the attendance
+   gate and sent here. He took the recommended arm over *"only within N hours"*.
+3. **THE CARD SPLITS: numbers first, people lists second** — *"i agree with your
+   recommendation"*, shown the cost of one card carrying both.
+4. **A GYM CAN CHEER A MEMBER ON, ONE TAP, NO FREE TEXT** — his own addition,
+   unprompted, then his choice between two costed arms.
+
+### 2 · RULING 1 — WHY A WORKOUT-SHAPED TILE WOULD HAVE LIED
+
+**The argument he was shown, and it is the one to re-read before anybody
+"restores" the spec's tile:** every member who walks in and taps *"I'm here"*
+makes a visit, while a workout exists only if that member ALSO logged their
+training. **So a workout tile can read zero on a day forty people came through
+the door** — a true number answering a question nobody asked, printed where an
+owner is looking for whether their gym is busy.
+
+**NOTHING IS REMOVED AND NOTHING STOPS BEING RECORDED, which is the same move
+Kd himself made at :26469 §1.1 over `avg_form_score`.** `workouts`, `sets`,
+`total_reps`, `minutes`, `avg_form_score` and `scored_sets` are still written
+nightly under ruling 2's predicate, because the column exists, it costs one
+expression, and **a history nobody recorded cannot be recovered later.** The
+Reports card is their reader. The no-removal rule is untouched: this is scope on
+a screen that has never had a number on it.
+
+**IT IS A KNOWING DEVIATION FROM A SPEC LINE, RECORDED AS ONE (R0.3).** Whoever
+next reads Part 3 §4.1 will find a KPI row naming four tiles of which none now
+ships as written — one struck by Kd (:26469 §1.1), one replaced here, two
+redefined onto attendance.
+
+### 3 · RULING 2 — THE LINK IS A DAY, AND THE ALTERNATIVE WAS AN INVENTED NUMBER
+
+**RULED: a workout counts for a gym when its owner held a live membership
+covering that day AND has an attendance row at that gym on the SAME day, in the
+gym's own clock.** Two conditions, both his: §2.1's membership interval (:26469
+§1.2's *"was a member that day"*) and the presence condition that ruling added.
+
+**It is his own sentence made physical**, which is why it beat the alternative on
+more than taste: *"only within N hours of the scan"* is more accurate and
+**requires picking N, which nobody has ruled** — the R0.2 invention this gate
+exists to prevent. The day grain also matches the column attendance already
+stores: `gym_attendance.day` is a date in the gym's zone, so the join needs no
+second derivation of what "that day" means.
+
+**THE COST IS ON THE RECORD BECAUSE HE WAS SHOWN IT BEFORE HE CHOSE: a member
+who taps "I'm here" in the morning and trains at HOME that night has that home
+workout counted for the gym.** :26469 §1.3 says a gym is never shown what a
+member did away from it; this rule admits a bounded exception in exchange for not
+inventing a constant, and it is stated here rather than discovered by whoever
+first notices the numbers disagree.
+
+### 4 · RULING 4 — THE CHEER, AND THE THING IT MUST NOT PRETEND TO BE
+
+His words: *"if some mebers comes to gym reguraly and maintains a continous
+streak the gym can send inpiring things like emojy short message etc what about
+this ?"*
+
+**RULED: an emoji plus a ready-made line, ONE TAP, capped at one per member per
+week. No free-text box.** The alternative — letting the owner type — was put to
+him with its full cost (a length cap, a rate limit, a report path for the member,
+and an operator view of what was sent; a card of its own) and he took the presets.
+**It agrees with his own PACT design, where he ruled *"no free text ever, only
+one-tap compliments"* (:18128)** — the second time he has chosen that shape, and
+the reason is not identical (there it was stranger-safety, here it is that
+nothing in this product moderates anything), so both belong on the record.
+
+**WHAT HE WAS TOLD BEFORE RULING, and it is the part a later chat will need:
+NOTHING IN THIS PRODUCT SENDS ANYTHING.** Measured this session, not recalled: no
+`sendEmail`, no mailer, no SMTP client and no notifications table anywhere in
+`apps/api/src`. :19016 §4 already named *"no email is ever sent"* as one of four
+conflicts inside his own build order. **So a cheer is STORED, not sent** — the
+same shape `nudgeApplication` already uses, where a "nudge" is a timestamp the
+other side's screen reads. The member sees it on `My Gyms` (:28822), and it
+becomes a real push for free at stage 6 with nothing rebuilt.
+
+**STANDING, and it generalises past this feature: in this product "send" means
+"write something a screen will show".** A card that promises a member will be
+NOTIFIED is promising a channel that does not exist.
+
+### 5 · WHAT THE SPLIT PUTS WHERE, SO NEITHER HALF GOES MISSING
+
+**This card (`CARD-gym-overview-numbers.md`, written and unapproved):** migration
+`0020` (two columns on `org_daily_stats`, which has had **no writer and no reader
+since `0001_init` — 6 grep hits in `apps/api/src`, measured, all schema, comments
+or privacy-list entries**) · the nightly rollup in the gym's own clock ·
+`GET /v1/orgs/:gymId/overview` · three tiles and the 8-week chart.
+
+**The next card:** who came today · when they come (visits per session) · **on a
+roll + the cheer** · slipping away · this week's roster · the activation
+checklist. **Each has an `OWED.md` line in this commit** — a deferral in prose
+alone is how work gets silently lost, and this session created four of them.
+
+### 6 · THE TWO TRAPS THE PLAN NAMES, RECORDED HERE BECAUSE THEY OUTLIVE IT
+
+1. **`org_member_stats` counts workouts ANYWHERE** (`0001_init.sql:612-625`,
+   `workouts_30d`), which is the one thing :26469 §1.3 forbids showing a gym.
+   The view has existed unread since day one and it is the obvious thing to reach
+   for when a screen needs per-member figures. **Nothing on the gym's numbers may
+   read it.**
+2. **A per-day DISTINCT count cannot be summed across days.** `org_daily_stats`
+   will carry `visitors` per day; *"how many different people came in 30 days"*
+   must be computed live from `gym_attendance` or it double-counts everybody who
+   came twice — **and no test whose fixture has one visit per person can see the
+   difference.**
+
+### Round log
+
+**No code. No test. No `src` file.** This commit carries: this entry, its
+`DECISIONS-INDEX.md` §1 line, the regenerated `DECISIONS-TRIGGERS.md`, four
+`OWED.md` lines, `CARD-gym-overview-numbers.md` (written, UNAPPROVED) and
+`HANDOFF.md`.
+
+**The gate is not passed.** Kd has ruled the four questions; he has not yet seen
+or approved the file list, the migration SQL or the test list, and :26777 is the
+recorded cost of treating a feature-shape approval as a code gate.

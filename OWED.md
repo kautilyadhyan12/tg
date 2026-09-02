@@ -7261,6 +7261,74 @@ file and is stated so nobody reads these as lower priority than they are.
       attendance card** and cannot start before it. (c) **A "trained anywhere"
       count is NEVER shown**; the chat's offer to display both was rejected.
       `org_daily_stats` still has no writer as of this line.
+      **UNBLOCKED 2026-09-02: the attendance card CLOSED** (`bcf0586`,
+      DECISIONS :29870), which is the condition (b) named.
+      **AND KD RULED FOUR MORE THINGS AT THIS CARD'S OWN PLAN GATE THE SAME DAY
+      (DECISIONS :29961), which change what this line owes again.**
+      (d) **THE TILES COUNT VISITS, NOT WORKOUTS** — a knowing DEVIATION from
+      §4.1 put to him and accepted (R0.3): **visits this week · members who came
+      in 30 days · adoption %**. A workout exists only if a member ALSO logged
+      their training, so a workout tile can read zero on a day forty people came
+      through the door. **Nothing stops being recorded** — the workout-side
+      columns are still written nightly, on :26469 §1.1's own reasoning.
+      (e) **A WORKOUT COUNTS FOR A GYM ON THE SAME GYM-DAY AS THE VISIT** —
+      :26469 §6's fifth question, which :27900 withheld from the attendance gate
+      and sent here. Live membership covering that day AND an attendance row at
+      that gym on that day. The rejected arm (*"within N hours"*) needed a
+      constant nobody ruled (R0.2). **Cost he was shown before choosing: a
+      morning tap plus an evening workout AT HOME counts for the gym.**
+      (f) **THE CARD IS SPLIT, numbers first and the people lists second** —
+      his call, shown the cost of one card carrying both. **This line now owes
+      the NUMBERS half only**; the lists have their own line below.
+      (g) **THE AT-RISK LIST AND ITS NUDGE MOVE TO THAT SECOND CARD.** The list
+      is buildable there (it names who to call); the NUDGE BUTTON stays blocked
+      on push, which does not exist.
+      **THE BUILD PLAN IS WRITTEN AND UNAPPROVED: `CARD-gym-overview-numbers.md`**
+      (2026-09-02) — migration `0020` (two columns on `org_daily_stats`), the
+      nightly rollup in the gym's own clock, `GET /v1/orgs/:gymId/overview`, the
+      three tiles and the 8-week chart. **NOTHING IS BUILT** and the gate is not
+      passed (:26777).
+- [ ] 🟡 **THE GYM'S OVERVIEW HAS NO PEOPLE LISTS — the second half of the
+      dashboard, split off at Kd's own instruction 2026-09-02 (DECISIONS
+      :29961 ruling 3).** Owed: **who came today** (names and times, a summary
+      linking to the Attendance section that exists) · **when they come**
+      (visits per opening session, off `gym_attendance.slot_key` and the stored
+      session window — the staffing number) · **on a roll** (members on an
+      attendance streak, beside the cheer below) · **slipping away** (§4.1's
+      at-risk list, redefined onto VISITS per :26469 rather than the spec's
+      workouts-anywhere) · **this week's roster** (joined · left · still
+      waiting) · **§5.1's activation checklist**. **Not started, no document
+      yet** (`CARD-gym-overview-people.md` when it is written). **THE TRAP THAT
+      MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
+      `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
+      a gym — it is the obvious thing to reach for on exactly these screens.
+      **And every count comes from the SERVER** (:27992 §3, :29250).
+- [ ] 🟡 **A GYM CANNOT CHEER A MEMBER ON — Kd's own addition at the
+      overview-numbers gate, 2026-09-02 (DECISIONS :29961 ruling 4), tracked
+      NOWHERE before this line (grep-verified).** His words: *"if some mebers
+      comes to gym reguraly and maintains a continous streak the gym can send
+      inpiring things like emojy short message etc"*. **RULED: an emoji plus a
+      READY-MADE line, ONE TAP, capped at one per member per week. NO free-text
+      box** — the "let the owner type" arm was costed (length cap · rate limit ·
+      a report path · an operator view of what was sent) and refused, agreeing
+      with his own PACT ruling (:18128, *"no free text ever"*) for a different
+      reason. **BUILT IN THE PEOPLE-LISTS CARD, beside "on a roll".**
+      **THE FACT THAT SHAPES IT: nothing in this product SENDS anything** — no
+      mailer, no SMTP, no notifications table (measured 2026-09-02). So a cheer
+      is **STORED and read on `My Gyms`** (:28822), the shape `nudgeApplication`
+      already uses, and it becomes a real push for free at stage 6 with nothing
+      rebuilt. **A card that promises a member will be NOTIFIED is promising a
+      channel that does not exist.**
+- [ ] ⚪ **`org_live_counters` IS NOT BUILT and the Overview reads "today" live
+      from Postgres instead (chat's call at the overview-numbers gate,
+      2026-09-02, with its cost stated).** Part 3 §3.2 specifies a Redis key with
+      a 5-minute TTL for today's tiles. The card reads the count live against
+      `gym_attendance_gym_day_idx`, which is **EXACT rather than up-to-five-
+      minutes stale**, at one indexed count per page load. **A cache is a
+      performance answer to a load nobody has measured, and a stale "today" tile
+      is a number that is wrong on screen (:5807).** Revisit when a real gym's
+      load exists — not before, and never by making the tile stale to save a
+      query nobody has timed.
 - [ ] 🟡 **THE §4.0 WIZARD IS ONE STEP OF SIX: size/plan/trial, logo upload,
       team invites and the QR poster PDF are all UNBUILT (deferred with the
       console screen, 2026-08-18).** Built: step 1 (name · city · org type ·
