@@ -1257,6 +1257,32 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   definition of a liar. **Written down instead of waited for.**
   **STANDING: "add a privilege" is a MIGRATION in this repo, not a list edit** —
   DDL CHECK, backfill, role templates, tick box, and two fixtures.
+- **:28822** — 2026-09-02 — **KD PUTS A MEMBER SECTION CALLED `My Gyms` IN THE
+  LEFT NAV, AND IT IS NOT THE `My Gym` HE DELETED ON 2026-08-19.** **Read before
+  adding an item to the member `Sidebar`'s nav list, before reading
+  `loginDoorCrossing.render.test.jsx`'s member-sidebar case as a ban on the
+  WORDS "my gym", before running `apps/web/tools/mutate-login-door.mjs` (it
+  ABORTS on a drifted anchor), before adding a second reader of
+  `/v1/orgs/mine` in the member app, and before drawing an attendance time or
+  date on any surface.** His words: *"whenever a user joins a gym and gym
+  approves them a new option will appear besides the other option in left called
+  my gyms"*, and *"it will appear only after a gym approves a memebr joining"*.
+  **THE DIFFERENCE FROM :11616 IS THE DESTINATION**: the removed item pointed at
+  `/console` (the owner's console — that crossing stays shut, both ways, login
+  page's two doors only); this points at `/my-gyms`, a member screen. **JOINING
+  STAYS IN SETTINGS — Kd ruled it when the chat proposed moving it**, so a
+  waiting person sees exactly what they saw before. **The test pinning :11616
+  changed MEANING and that is this card's dangerous edit**: a ban on the words
+  became a ban on the DESTINATION, with a positive control asserting the
+  crossing absent *while the new item is on screen*. **FINDING, pre-existing and
+  not this card's: `mutate-login-door.mjs` has been unrunnable since 2026-08-28**
+  (`99687c5` moved the console's sign-out into `useConsoleSignOut`; D13 anchors
+  on the inline version) — the pre-check aborted rather than lying, but nobody
+  ran it for five days. Own `OWED.md` line; D15 was run BY HAND instead and is
+  RED on both cases. **Member half of `CARD-gym-attendance.md` §4b: the "I'm
+  here" button and the days you came.** The OWNER's half — the console
+  Attendance section, the Settings switch, the tick box — is NOT built, no smoke
+  has run and T3 is UNRUN, so the attendance `OWED.md` line does not tick.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

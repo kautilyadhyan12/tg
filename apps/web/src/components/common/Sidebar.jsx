@@ -9,6 +9,11 @@ import {
   ChevronLeft, ChevronRight, Flame, Footprints,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMyGyms } from '../../hooks/useMyGyms';
+// `My Gyms` — Kd, 2026-09-02. The list below is deliberately NOT moved with it:
+// the removal ruling's comment and the mutation harness that guards it both
+// point at this file. See `sidebarNav.js` for why the two items are different.
+import { navWithMyGyms } from './sidebarNav';
 
 const navItems = [
   { to: '/dashboard',       icon: LayoutDashboard, label: 'Dashboard'  },
@@ -40,6 +45,12 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
   const { user, logout } = useAuth();
   const navigate          = useNavigate();
   const { triggerTransition } = useTransition();
+  // WHICH GYMS AM I IN? The shared answer to `/v1/orgs/mine`, asked once for the
+  // whole session and kept — see `useMyGyms`. A failed read means no item, which
+  // is the safe direction: the screen is still reachable by its address, and the
+  // alternative (drawing it for everybody) would put a member's section in front
+  // of people who are not in a gym.
+  const { gyms } = useMyGyms();
   // Level comes from GET /v1/gamification/me, NOT from the auth user — that
   // shape has no `level` field, so the previous `user?.level || 1` rendered a
   // fabricated "Level 1" for everyone. `null` = unknown and shows an em dash.
@@ -216,7 +227,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
         style={{ padding: collapsed ? '12px 8px' : '12px' }}
       >
         <div className="space-y-0.5">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navWithMyGyms(navItems, gyms.length).map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

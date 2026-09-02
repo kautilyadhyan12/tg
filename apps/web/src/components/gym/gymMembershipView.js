@@ -121,6 +121,25 @@ export function gymStatusRows({ applications, orgs, formerOrgs } = {}) {
   return rows.sort((a, b) => order[a.kind] - order[b.kind]);
 }
 
+/** THE GYMS THIS PERSON ACTUALLY BELONGS TO — the member-side twin of
+ *  `manageableOrgs` in `consoleView.js`, and the gate on Kd's ruling of
+ *  2026-09-02: **My Gyms appears once a gym has APPROVED them**, never while
+ *  they are waiting.
+ *
+ *  `/v1/orgs/mine` carries every gym the caller has any relationship with, so
+ *  the filter is `isMember` and nothing else. **An owner who does not train at
+ *  their own gym is not a member of it** and gets no section — which is right:
+ *  everything in there is a member's own (their visits, their gym's hours), and
+ *  the owner's view of the same gym is the console, behind the other door.
+ *
+ *  **`=== true` rather than truthiness**, matching `gymStatusRows` above: a
+ *  field this client cannot read must never be promoted into a membership. */
+export function memberOrgs(orgs) {
+  return (Array.isArray(orgs) ? orgs : []).filter(
+    (org) => org?.isMember === true && typeof org?.id === 'string' && typeof org?.name === 'string',
+  );
+}
+
 /** CAN THIS PERSON REMIND THE GYM RIGHT NOW? (:11385 mechanic 3, once a day.)
  *
  *  **The server is the enforcement and this is only the button's state.** The

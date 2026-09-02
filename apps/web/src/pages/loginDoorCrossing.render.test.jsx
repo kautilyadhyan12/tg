@@ -40,9 +40,29 @@ vi.mock('react-hot-toast', () => ({
   default: { error: vi.fn(), success: vi.fn() },
 }));
 
+// THE GYM LIST IS MOCKED BECAUSE THE SIDEBAR NOW ASKS FOR IT. `My Gyms` (Kd,
+// 2026-09-02) is drawn only for a member, so this suite can put a person on
+// either side of that gate — and the positive case is the one that matters
+// here: the new item must NOT be a way across the crossing this file guards.
+const orgs = { getMine: vi.fn(), getHours: vi.fn() };
+vi.mock('../api/orgsApi', () => ({
+  orgService: orgs,
+  errorText: (_err, fallback) => fallback,
+}));
+
 const ConsoleLayout = (await import('../components/console/ConsoleLayout')).default;
 const Sidebar = (await import('../components/common/Sidebar')).default;
 const Onboarding = (await import('./Onboarding')).default;
+const { resetConsoleOrgs } = await import('./console/consoleOrgs');
+
+const MEMBER_OF = {
+  id: 'g1',
+  name: 'Iron House',
+  slug: 'iron-house',
+  isMember: true,
+  manualAttendanceEnabled: true,
+  staffRole: null,
+};
 
 // Landing markers rather than a spied `useNavigate`: the real router resolves
 // the real path, so a destination that is not a route fails here instead of
@@ -81,8 +101,16 @@ const drawOnboarding = () =>
 
 beforeEach(() => {
   authState.logout.mockClear();
+  resetConsoleOrgs();
+  // Nobody's gyms by default — the state every assertion in this file except
+  // the two `My Gyms` cases is about.
+  orgs.getMine.mockReset().mockResolvedValue({ data: { orgs: [], formerOrgs: [] } });
+  orgs.getHours.mockReset().mockResolvedValue({ data: { hours: { mode: 'unset' } } });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetConsoleOrgs();
+});
 
 describe('the gym console', () => {
   // TWO exits render, and the count is the assertion. The shell draws a desktop
@@ -140,7 +168,15 @@ describe('the gym console', () => {
 describe('the member sidebar', () => {
   it('offers NO way into the gym console', () => {
     drawSidebar();
-    expect(screen.queryByText(/my gym/i)).toBeNull();
+    // The removed item read `My Gym` and pointed at /console. **THE DESTINATION
+    // IS THE ASSERTION, NOT THE WORDS**, and that changed on 2026-09-02: Kd
+    // ruled a MEMBER section called `My Gyms` into this same list, so a test
+    // banning the phrase would now fail on a screen he asked for — and, worse,
+    // would read to the next chat as though his 2026-08-19 ruling had been
+    // reversed. The two items are told apart by where they GO: `/console` is
+    // the crossing and stays shut; `/my-gyms` is a member screen about the
+    // member's own gym. Re-adding the old shortcut under any name still fails
+    // here, which is what the ruling actually protects.
     const toConsole = Array.from(document.querySelectorAll('a[href]')).filter((a) =>
       a.getAttribute('href').startsWith('/console'),
     );
@@ -153,6 +189,20 @@ describe('the member sidebar', () => {
     drawSidebar();
     expect(screen.getByText('Dashboard')).toBeTruthy();
     expect(screen.getByText('Settings')).toBeTruthy();
+  });
+
+  // THE POSITIVE CONTROL FOR THE ASSERTION ABOVE. Without it, "no link to the
+  // console" is also satisfied by a sidebar that draws no gym item at all — so
+  // the case that could hide a re-opened crossing is the one where a gym item
+  // IS on screen. It is here rather than in the My Gyms suite because it is
+  // this file's ruling that it could break.
+  it('draws My Gyms for a member WITHOUT opening the crossing', async () => {
+    orgs.getMine.mockResolvedValue({ data: { orgs: [MEMBER_OF], formerOrgs: [] } });
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    const links = Array.from(document.querySelectorAll('a[href]'));
+    expect(links.some((a) => a.getAttribute('href') === '/my-gyms')).toBe(true);
+    expect(links.filter((a) => a.getAttribute('href').startsWith('/console'))).toHaveLength(0);
   });
 });
 

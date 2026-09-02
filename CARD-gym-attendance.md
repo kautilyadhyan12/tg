@@ -2,8 +2,19 @@
 
 **Status: §4a (SERVER HALF) BUILT 2026-09-01 — `DECISIONS.md:28221`. Migration
 `0019` reviewed as SQL by Kd and approved before anything else was written
-(T5/R4.4). §4b (WEB HALF) IS UNBUILT, T3 IS UNRUN, and there is no screen so no
-smoke was offered.**
+(T5/R4.4). §4b (WEB HALF) IS SPLIT IN TWO, with Kd told before he approved,
+because one chat cannot hold two screens and two switches: its MEMBER HALF IS
+BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS UNBUILT. T3 IS
+UNRUN on both and NO BROWSER SMOKE HAS RUN on either.**
+
+**AND KD RULED A SECOND THING ON 2026-09-02, at the plan gate for §4b: the
+member's gym features get their OWN SECTION in the member app's left nav,
+called `My Gyms`, which appears ONLY once a gym has approved them** — *"it will
+appear only after a gym approves a memebr joining"*. **Joining stays where it
+is**, on Settings → Gym: *"gym card in settings will be there user will join
+thriugh there"*. **It is NOT the `My Gym` he removed on 2026-08-19 (:11616),
+which pointed at the gym-owner CONSOLE — that crossing stays shut in both
+directions.** Full ruling and the reasoning at `DECISIONS.md:28822`.
 Rulings: `DECISIONS.md` :26469 + addenda :26558, :26586 · the hours rulings
 :26624, :26684, :26736 (attendance is stamped with the session it fell in) ·
 **and Kd's answers at this gate on 2026-09-01, across four passes: five
@@ -439,14 +450,30 @@ union, whose mutant must turn an XP test red and not only a streak test. Local
 Postgres (`test:local`), per :13659, and the harness prints which database it
 used.
 
-### 4b — WEB HALF (a separate chat, after 4a's T3)
+### 4b — WEB HALF (SPLIT IN TWO, 2026-09-02)
 
-- The member's gym card gets the **"I'm here"** button, and after a tap it says
+**4b-1 — THE MEMBER'S HALF: BUILT 2026-09-02, `DECISIONS.md:28822`.** The
+`My Gyms` section Kd ruled the same day, the **"I'm here"** button and the
+sentence it answers with, and the days they came. **Everything below marked
+"(built)" shipped there; everything else is 4b-2, the OWNER's half, and is
+UNBUILT** — the console's Attendance section, the manual switch on Settings, and
+the tick box. **The split is chat size and nothing else** (Part I §1: one card,
+one chat; this section is two screens and two switches), and Kd was told before
+he approved.
+
+- **(built)** The member's gym card gets the **"I'm here"** button, and after a tap it says
   what was recorded — including the session, or that the gym said it was closed.
   **It is absent, not greyed, when the gym has the switch off** — a dead button
   with no explanation is the defect :24141 named.
-- **The member's own history**: a short list of the days they came, on the same
-  card, newest first.
+- **(built)** **The member's own history**: a short list of the days they came,
+  on the same card, newest first. **It lives inside `My Gyms` rather than on the
+  dashboard card — Kd's 2026-09-02 ruling, made at this gate.**
+- **(built, and it was NOT in this card when it was written)** **`My Gyms` — a
+  new item in the MEMBER app's left nav**, shown only once a gym has approved
+  them, holding the gym's opening times and the two bullets above. **Read
+  `DECISIONS.md:28822` before touching that nav list: the item Kd REMOVED from
+  it on 2026-08-19 pointed at the console, and telling the two apart is what
+  keeps :11616 intact.**
 - Console → **a section of its own called "Attendance"** — ruling 17, his words:
   *"a new option besides gym memebr settings etc"*. **A fourth item in the left
   rail**, which today holds exactly three: `Gym`, `Members`, and `Settings`

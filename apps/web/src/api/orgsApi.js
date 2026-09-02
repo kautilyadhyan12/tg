@@ -12,7 +12,9 @@ import {
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
+  markGymAttendanceResponseSchema,
   joinOrgResponseSchema,
   removeGymClosureResponseSchema,
   setGymHoursResponseSchema,
@@ -225,6 +227,51 @@ export const orgService = {
       // than a fix for a live hole, and a segment that is safe only because of
       // where its caller happens to get it is one refactor from not being.
       authApi.delete(`/v1/orgs/${gymId}/closures/${encodeURIComponent(day)}`),
+    ),
+
+  /** POST /v1/orgs/:gymId/attendance — "I'm here" (Kd :26469, :27900).
+   *
+   *  **THE BODY IS EMPTY AND MUST STAY EMPTY.** The server decides the day, the
+   *  method, the hours status and the session, because every one of them grants
+   *  something (R3.1): a client that could name its own day could mark itself
+   *  present for last Tuesday. The request schema is `.strict()`, so a field
+   *  added here hopefully would be answered 400 rather than quietly ignored.
+   *  `{}` is sent for the same reason the trial and the confirm taps send it —
+   *  Fastify refuses a request that declares JSON and carries nothing.
+   *
+   *  **Safe under `authApi`'s 401 replay, and the server is what makes it so**
+   *  (R10.2): the write is idempotent on (gym, member, gym-day, slot), so a
+   *  replay answers with the FIRST visit rather than recording a second. Nothing
+   *  here adds a network-failure retry and nothing may — without that server-side
+   *  idempotence this would be a POST with no Idempotency-Key.
+   *
+   *  Refusals arrive as their own statuses and the screen prints the server's
+   *  sentence: the gym has the manual switch off, the caller is not a live
+   *  member, or the gym has been closed down (:25771). A member of a gym whose
+   *  PLAN has lapsed can still mark — Kd ruled it, and :22215 arm A agrees. */
+  markAttendance: (gymId) =>
+    readThrough(
+      markGymAttendanceResponseSchema,
+      'your attendance',
+      authApi.post(`/v1/orgs/${gymId}/attendance`, {}),
+    ),
+
+  /** GET /v1/orgs/:gymId/attendance/history — the days somebody came.
+   *
+   *  **ONE ROUTE, TWO AUDIENCES, AND THE CALLER NAMES NOBODY HERE** (:28055).
+   *  With no `userId` it answers the CALLER'S OWN history, which is what Kd
+   *  ruled a member sees (:27900); staff holding `attendance.read` may pass a
+   *  `userId` to read one member out of the day list, and that is the console's
+   *  call in its own card, not this screen's.
+   *
+   *  **IT SHARES ONE RATE-LIMIT BUCKET WITH THE GYM-SIDE DAY READ** — 600/hour
+   *  across both, one Redis key (`orgs_attendance_read`, `routes.ts`). Nothing
+   *  here may poll, refresh on focus, or re-read on a timer. */
+  getAttendanceHistory: (gymId, params) =>
+    readThrough(
+      gymAttendanceHistoryResponseSchema,
+      'your visits',
+      authApi.get(`/v1/orgs/${gymId}/attendance/history`, { params }),
     ),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:

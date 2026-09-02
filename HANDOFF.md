@@ -1,6 +1,79 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ATTENDANCE §4b, THE MEMBER HALF — BUILT. DECISIONS :28822. Kd ruled a
+      NEW THING at this gate: `My Gyms`, a member-app nav item, appears once a
+      gym APPROVES somebody. §4b is now SPLIT: the OWNER's half (console
+      Attendance section, Settings switch, staff tick box) is UNBUILT and is the
+      next chat. T3 UNRUN on both halves; NO SMOKE has run on either.
+
+  1. **`My Gyms` IS NOT THE `My Gym` KD DELETED ON 2026-08-19 (:11616), AND A
+     CHAT THAT CONFLATES THEM WILL "FIX" THE GUARD ON HIS RULING.** The removed
+     one pointed at `/console`; this points at `/my-gyms`, a member screen. The
+     crossing stays shut both ways.
+  2. **THE TEST PINNING :11616 CHANGED MEANING AND THAT WAS THIS CARD'S RISKIEST
+     EDIT.** `loginDoorCrossing.render.test.jsx` banned the WORDS `/my gym/i` in
+     the sidebar; it now bans the DESTINATION (`/console`), with a positive
+     control that draws `My Gyms` and asserts the crossing absent in that state.
+     **Do not restore the text ban** — it fails on a screen Kd asked for.
+  3. **JOINING STAYS IN SETTINGS. Kd rejected the chat's proposal to move it**
+     — *"gym card in settings will be there user will join thriugh there"*. A
+     waiting person's screen is unchanged.
+  4. ⚠️ **`apps/web/tools/mutate-login-door.mjs` HAS BEEN UNRUNNABLE SINCE
+     2026-08-28 AND THIS CARD FOUND IT BY RUNNING IT.** D13 anchors on
+     `ConsoleLayout`'s inline `handleSignOut`, which `99687c5` moved into
+     `useConsoleSignOut`. It ABORTS the whole table before writing (the
+     pre-check working). NOT re-anchored here — different subject, and a
+     careless re-aim is :28221's recorded defect. Own `OWED.md` line. **D15 was
+     hand-run instead: RED on both cases, restore byte-exact.**
+  5. **NOTHING RE-READS AFTER A MARK, AND THAT IS THE SERVER'S CONSTRAINT.**
+     Both attendance reads share ONE limiter (600/hour, one Redis key) with the
+     console's day list. The mark's own response carries the visit, so it is
+     written into the list on screen (`withVisit`, deduped on day+markedAt).
+  6. **`hours_unset` MUST CLAIM NOTHING ABOUT OPENING HOURS** (:26736). Its
+     test asserts an ABSENCE (`not.toMatch(/hour|open|clos|session|outside/i)`),
+     not one string, so a reworded sentence still fails.
+  7. **THE SIDEBAR READS THE CONSOLE'S STORE (`consoleOrgs.js`) AND THAT IS NOT
+     A CROSSING** — a shared store, not a shared door; it inherits the
+     user-stamping that protects a gym's shared front-desk browser.
+
+PROVE: `web` **1511/1511 across 55 files** on the shipping bytes (1472/53
+       before). Scoped: `attendanceView` 18/18 · `gymMembershipView` 30/30 ·
+       `myGyms.render` 15/15 · `loginDoorCrossing.render` 10/10. `eslint
+       --max-warnings=0` exit 0 on all thirteen touched files. Root guards:
+       `check-harnesses` **25 scripts parse**, `check-decisions-index` **263
+       pointers resolve, 1069 headings**, triggers `--check` **up to date (831
+       from 224 of 362)**.
+       **AUDIT: 7 mutants, 7 RED, 0 ALIVE, every restore sha256 byte-exact**,
+       plus D15 by hand. No DB mutant — this card changes no server behaviour
+       (:5857 rule 4a). M1/M2 open the approval gate from the rule AND from the
+       screen · M3 drops the double-tap dedupe · M4 drops the day grouping ·
+       M5 gives `hours_unset` the outside-hours sentence · M6 draws the button
+       where the owner switched it off · M7 draws a failed read as empty.
+       **No api or shared suite is quoted and none was needed: no server file,
+       no migration, no `packages/shared` change** (:28395's lesson, applied by
+       checking rather than by habit).
+
+FILES: new `apps/web/src/pages/MyGyms.jsx` ·
+       `components/gym/{AttendancePanel.jsx,attendanceView.js}` ·
+       `components/common/sidebarNav.js` · `hooks/useMyGyms.js` · two new test
+       files; edited `App.jsx` · `api/orgsApi.js` ·
+       `components/common/Sidebar.jsx` · `components/gym/gymMembershipView.js`
+       · `pages/loginDoorCrossing.render.test.jsx` ·
+       `components/gym/gymMembershipView.test.js` · records
+       (`DECISIONS.md`, `DECISIONS-INDEX.md`, `DECISIONS-TRIGGERS.md`
+       regenerated, `OWED.md`, `CARD-gym-attendance.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       untouched and uncommitted again this session.
+       **THE SMOKE IS NOW POSSIBLE AND HAS NOT RUN** — this is the first
+       attendance surface a browser can reach. The sheet is owed to Kd with the
+       owner's half, since half the steps (switch the button off) need it.
+       **STILL OWED: how a workout LINKS to an attendance** — the
+       Overview-numbers card's gate, not this one.
+```
+
+```
 TASK: ATTENDANCE, SERVER HALF — T3 ROUND 2 (diff-only) IS DONE AND THE PACKET
       SHIPS. DECISIONS :28649. `CARD-gym-attendance.md` §4a is CLOSED; §4b (the
       web half) is UNBUILT and is the next chat.

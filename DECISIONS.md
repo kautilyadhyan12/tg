@@ -28818,3 +28818,157 @@ under a filter, answered by reading the count rather than the colour.
 **THE FULL api SUITE IS NOT QUOTED AND THAT IS DELIBERATE** — the pre-existing
 `seed()` flake `CLAUDE.md` and :13746 document. Scoped runs are what the figures
 above are.
+
+## 2026-09-02 — MY GYMS: KD PUTS A MEMBER SECTION IN THE LEFT NAV, AND IT IS NOT THE `My Gym` HE DELETED — plus the login-door harness has been unrunnable for five days and nobody noticed
+
+**Read before adding an item to the member `Sidebar`'s nav list, before reading
+`loginDoorCrossing.render.test.jsx`'s member-sidebar case as a ban on the WORDS
+"my gym", before running `apps/web/tools/mutate-login-door.mjs` (it ABORTS —
+§4), before adding a second reader of `/v1/orgs/mine` in the member app, before
+drawing an attendance time or date on any surface, and before re-reading a list
+after an attendance write.**
+
+**KD'S RULING, in his words:** *"whenever a user joins a gym and gym approves
+them a new option will appear besides the other option in left called my gyms
+where the other features will be there"*, and, correcting a misreading the same
+minute, *"gym card in settings will be there user will join thriugh there and
+once gym approves only then a my gym feature will appear in the memebrs ... it
+will appear only after a gym approves a memebr joining"*.
+
+### 1 · IT IS NOT THE ITEM HE REMOVED, AND THAT IS THE FIRST THING TO GET RIGHT
+
+`My Gym` sat in this exact list until Kd deleted it on 2026-08-19 (:11616), so a
+chat asked to add one back should stop. **It is a different item and the
+difference is the DESTINATION.** The removed one pointed at `/console` — a
+shortcut into the gym OWNER's console, which is the crossing he shut in both
+directions, leaving the login page's two doors as the only way across. This one
+points at `/my-gyms`, a MEMBER screen about the member's own gym. **:11616 is
+untouched: no link to `/console` exists anywhere in the member app, and the
+suite asserts it with the new item on screen.**
+
+**HE ALSO RULED WHERE JOINING STAYS, unprompted, when the chat proposed moving
+it:** the code box and the waiting/refused/removed states stay on Settings →
+Gym. **So nothing moved out from under anybody** — a person waiting sees exactly
+what they saw before, in the place they already know, and this section is what
+appears on the far side of the gym's approval. The chat had put "move it into My
+Gyms" as its recommendation and he rejected the premise.
+
+### 2 · THE TEST THAT PINNED :11616 HAD TO CHANGE ITS MEANING, AND THAT IS THE DANGEROUS PART OF THIS CARD
+
+`loginDoorCrossing.render.test.jsx` asserted `queryByText(/my gym/i)` is null in
+the member sidebar. **That assertion would now fail on a screen Kd asked for**,
+and a chat that "fixed" it by deleting the case would have removed the guard on
+a Kd ruling to make room for another one.
+
+**IT WAS REPLACED BY THE GUARANTEE THE RULING ACTUALLY MAKES: no link to
+`/console`.** The words were a proxy; the destination is the thing. A positive
+control was added beside it — a member WITH a gym draws `My Gyms`, and the
+crossing is asserted absent *in that state* — because "no console link" is also
+satisfied by a sidebar drawing no gym item at all, so the case that could hide a
+re-opened crossing is exactly the one where a gym item is on screen.
+
+**D15 WAS RUN BY HAND AND IS RED ON BOTH CASES** (§4 says why by hand):
+restoring `My Gym` pointing at `/console` fails the original guarantee AND the
+new positive control. Restore sha256 byte-exact.
+
+### 3 · THE SIDEBAR SHARES THE CONSOLE'S KEPT ANSWER, AND THAT IS NOT A CROSSING
+
+The gate is `isMember` off `/v1/orgs/mine` — the server's own answer to "did a
+gym approve them" — read through `consoleOrgs.js`, the store :16331 built. A
+shared STORE is not a shared DOOR: :11616 is about a link somebody clicks.
+**What it buys is rule 3 of that store** — the kept answer is stamped with the
+user it was fetched for, so a gym's shared front-desk browser cannot show the
+next person the last one's gyms — and a second implementation of that guarantee
+is the thing :1239 exists to prevent.
+
+**COST, STATED NOT HIDDEN: `GymMembershipCard` still makes its own
+`/v1/orgs/mine` read on the Dashboard and on Settings, so those screens now ask
+twice.** Converting it needs the applications read too and is its own card; it
+has an `OWED.md` line rather than being done quietly here.
+
+### 4 · THE FINDING NOBODY WAS LOOKING FOR: `mutate-login-door.mjs` HAS BEEN UNRUNNABLE SINCE 2026-08-28
+
+Running it aborts before writing a byte: **D13's anchor matches nothing.** It
+anchors on an inline `handleSignOut` in `ConsoleLayout.jsx` that :23257 moved
+into `useConsoleSignOut` on 2026-08-28 (`99687c5`), and `git status` proves this
+card never touched that file. **The whole-table pre-check did exactly its job —
+it refused rather than reporting a no-op as ALIVE (:13336) — but a guard that
+only speaks when run says nothing for five days when nobody runs it.**
+
+**THE HARNESS IS NOT RE-ANCHORED HERE, deliberately.** D13's subject is the
+console's sign-out, which this card does not touch, and re-aiming it means
+moving the mutant to a different target file — the kind of edit :28221 recorded
+going wrong (a sibling pair re-anchored by PATTERN became one mutant reporting
+twice). It has its own `OWED.md` line naming the commit that broke it.
+**STANDING: a mutation harness is only as live as its last run, and every
+harness anchored on a file drifts when that file is refactored — the refactor's
+own card is where they should be re-aimed.**
+
+### 5 · WHAT THE MEMBER SEES, AND THE ONE SENTENCE THAT SAYS NOTHING
+
+`/my-gyms` draws one card per gym: the name, `GymHoursNote` (the same reader the
+dashboard card and the owner's panel use), the **"I'm here"** button, and the
+days they came.
+
+- **FIVE STATUSES, FIVE SENTENCES, AND `hours_unset` CLAIMS NOTHING ABOUT
+  OPENING HOURS** (:26736). Its test asserts the ABSENCE of any such claim
+  (`not.toMatch(/hour|open|clos|session|outside/i)`) rather than one exact
+  string, so a reworded sentence that smuggles the claim back in still fails.
+  Nothing scolds: :26624 §4.4 records an odd arrival rather than refusing it.
+- **THE BUTTON IS ABSENT, NEVER GREYED, when the gym has the switch off**
+  (ruling 4, :24141) — and **the history stays**, because those visits happened.
+  Only an explicit `false` hides it: the contract defaults the field to `true`,
+  so an api older than the bundle cannot make a gym's only way in disappear.
+- **A DAY THEY CAME TWICE IS ONE ROW WITH TWO TIMES** — Kd's ruling 12 (:27992
+  §1) on the member's own side, the same shape the owner's screen will use.
+- **EVERY TIME IS THE GYM'S, ON THE GYM'S CLOCK.** The zone is passed explicitly
+  into `Intl` and never left to the reader (:8156's trap), and the minutes go
+  through `clockLabel` — the one formatter the hours screens use — so two
+  screens cannot spell one minute two ways. An unreadable zone draws NO time
+  rather than one computed some other way, and never removes the day.
+- **A TAP DOES NOT CAUSE A SECOND REQUEST.** The mark's response carries the
+  whole visit, so it is written into the list on screen (`withVisit`, deduped on
+  `day`+`markedAt` because a second tap in one session returns the FIRST visit).
+  **This is the rate limit, not a preference:** both attendance reads share one
+  bucket — 600/hour, one Redis key — with the console's day list (:28649).
+
+### 6 · WHAT IS NOT BUILT, so nobody reads this as the card closing
+
+The OWNER's half of §4b: the console's **Attendance** section (:28107), the
+manual switch on Settings, and the *"See who came in"* tick box in
+`PRIVILEGE_COPY` — **without which "the owner can change it" is a false
+sentence**. §4b was split in two on chat-size grounds, with Kd told before he
+approved. **No browser smoke has been run** and **T3 is UNRUN**, so the
+`OWED.md` attendance line does not tick.
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1511/1511 across 55 files**
+(1472/53 before; +33 new and +6 appended). Scoped: `attendanceView` 18/18 ·
+`gymMembershipView` 30/30 · `myGyms.render` 15/15 · `loginDoorCrossing.render`
+10/10. `eslint --max-warnings=0` exit 0 on all thirteen touched files — it
+caught `react-refresh/only-export-components` on the first shape of this card (a
+helper exported from `Sidebar.jsx`), which is why `sidebarNav.js` exists, and
+why `navItems` itself deliberately did NOT move with it: the removal ruling's
+comment and D15's anchor both live in `Sidebar.jsx`.
+
+**AUDIT — 7 mutants, 7 RED, 0 ALIVE, every restore sha256 byte-exact**, plus D15
+by hand. All in :5857 rule 4a's always-mutated columns and NO database mutant,
+because this card changes no server behaviour. M1/M2 open the approval gate
+(`isMember === true` becomes `!== undefined`) and are watched from the rule AND
+from the screen — a rule tested one layer above the screen is not tested where
+it lives. M3 removes the double-tap dedupe. M4 removes the day grouping (one row
+per tap). M5 gives `hours_unset` the outside-hours sentence — the :5807 defect
+this card was most likely to ship. M6 draws the button where the owner switched
+it off. M7 makes a failed read draw the empty state (:8267/:8343).
+
+**Files:** new `apps/web/src/pages/MyGyms.jsx` ·
+`components/gym/AttendancePanel.jsx` · `components/gym/attendanceView.js` (+
+test) · `components/common/sidebarNav.js` · `hooks/useMyGyms.js` ·
+`pages/myGyms.render.test.jsx`; edited `App.jsx` (one route) · `api/orgsApi.js`
+(two calls) · `components/common/Sidebar.jsx` ·
+`components/gym/gymMembershipView.js` (+ test) ·
+`pages/loginDoorCrossing.render.test.jsx`. No server file, no migration, no
+`packages/shared` change — so :28395's "a change inside `packages/shared` is a
+change to every package that imports it" does not apply and `web` is the whole
+of the suite that could move.

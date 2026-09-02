@@ -7844,6 +7844,46 @@ file and is stated so nobody reads these as lower priority than they are.
       arriving through the very feature that made returning twice possible. The
       per-slot `visits` and `people` are provably EQUAL (the UNIQUE admits one
       visit per person per slot); only the day totals differ.
+      **§4b's MEMBER HALF BUILT 2026-09-02** (`DECISIONS.md:28822`), and **§4b
+      was SPLIT IN TWO on chat-size grounds with Kd told before he approved**:
+      the member's *"I'm here"* button, the sentence it answers with, and the
+      days they came — inside **`My Gyms`, a new item in the MEMBER's left nav
+      that Kd ruled the same day**, shown only once a gym has approved them.
+      **It is NOT the `My Gym` he removed on 2026-08-19 (:11616): that pointed
+      at `/console` and this points at a member screen** — the crossing stays
+      shut and the suite asserts it with the new item on screen.
+      ⚠️ **STILL OWED, AND THIS LINE DOES NOT TICK: THE OWNER'S HALF** — the
+      console's **Attendance** section (:28107, a fourth nav item), the manual
+      switch on **Settings**, and the *"See who came in"* **TICK BOX** in
+      `PRIVILEGE_COPY`, **without which "the owner can change it" is a false
+      sentence**. Plus: **no browser smoke has been run on either half** and
+      **T3 is UNRUN on both.**
+- [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
+      SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
+      run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,
+      because :23257 (`99687c5`) moved `ConsoleLayout`'s inline `handleSignOut`
+      into `useConsoleSignOut` and the mutant still anchors on the inline copy.
+      **The whole-table pre-check behaved correctly** — it refused rather than
+      reporting a no-op as ALIVE (:13336) — **so nothing is wrong with the
+      instrument's design; what is owed is the re-aim**: D13 moves to
+      `useConsoleSignOut.js`, which needs a new `TARGETS` entry, and
+      **re-anchoring by MEANING and not by pattern** (:28221 — a sibling pair
+      re-anchored by pattern became one mutant reporting twice). Until then
+      **D12–D17 cannot run at all**, so Kd's 2026-08-19 crossing ruling and the
+      questionnaire's exit have no mutation cover. **D15 was hand-run 2026-09-02
+      and was RED on both cases**, so the crossing half is spot-verified, not
+      covered. **STANDING: a harness is only as live as its last run.**
+- [ ] ⚪ **THE MEMBER APP NOW ASKS `/v1/orgs/mine` TWICE ON THE DASHBOARD.**
+      Raised 2026-09-02 (`DECISIONS.md:28822` §3). The sidebar reads the kept
+      answer in `consoleOrgs.js` (so the `My Gyms` item is decided once per
+      session and survives a screen change), while `GymMembershipCard` still
+      makes its own direct read on the Dashboard and on Settings. **No defect —
+      both answers come from the same endpoint and neither can be stale in a way
+      the other is not** — it is one wasted request per screen that draws the
+      card. **The fix is moving that card onto the store, which also needs
+      `/v1/orgs/applications/mine` in the store** (the card reads both and
+      settles them separately), so it is a card of its own rather than a line in
+      somebody else's.
 - [ ] 🟡 **THE IN-APP QR SCANNER IS A MOBILE-APP FEATURE AND IS DEFERRED TO THE
       ANDROID CARD — Kd ruling 2026-08-31 (DECISIONS :26558):** *"well scanner
       is for mobile app not for browser"*. **Read before building any QR/barcode

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gymStatusRows, nudgeState } from './gymMembershipView';
+import { gymStatusRows, memberOrgs, nudgeState } from './gymMembershipView';
 
 // The rules that stop the app saying two things about one gym.
 //
@@ -302,5 +302,40 @@ describe('nudgeState', () => {
     // whereas a wrong `false` strands a waiting person with no way to ask, over
     // a value this code merely failed to parse.
     expect(nudgeState(waiting('whenever'), now).ready).toBe(true);
+  });
+});
+
+// THE GATE ON KD'S RULING OF 2026-09-02 — `My Gyms` appears once a gym has
+// APPROVED somebody, and never while they are waiting. Everything behind that
+// item is a member's own (their visits, their gym's hours), so the question it
+// asks is membership and nothing else.
+describe('which gyms a person is actually a member of', () => {
+  it('keeps the gyms they belong to', () => {
+    const mine = { ...org('g1', 'Iron House'), isMember: true };
+    expect(memberOrgs([mine])).toEqual([mine]);
+  });
+
+  it('drops a gym they only STAFF, which is the console s side of the door', () => {
+    const staffed = { ...org('g2', 'Barbell Club'), isMember: false, staffRole: 'owner' };
+    expect(memberOrgs([staffed])).toEqual([]);
+  });
+
+  // `=== true`, matching `gymStatusRows`: a field this client cannot read must
+  // never be promoted into a membership.
+  it('drops a row whose membership flag cannot be read', () => {
+    expect(memberOrgs([{ ...org('g3', 'Gym'), isMember: 'yes' }])).toEqual([]);
+    expect(memberOrgs([{ ...org('g4', 'Gym'), isMember: undefined }])).toEqual([]);
+  });
+
+  it('drops a row with no id or no name rather than drawing a blank card', () => {
+    expect(memberOrgs([{ isMember: true, name: 'No id' }])).toEqual([]);
+    expect(memberOrgs([{ isMember: true, id: 'g5' }])).toEqual([]);
+  });
+
+  // A FAILED READ CONTRIBUTES NOTHING rather than throwing — the same
+  // null-tolerance every rule in this file has.
+  it('answers an empty list for anything that is not a list', () => {
+    expect(memberOrgs(null)).toEqual([]);
+    expect(memberOrgs(undefined)).toEqual([]);
   });
 });

@@ -25,6 +25,7 @@ import Nutrition       from './pages/Nutrition';
 import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
 import JoinGym         from './pages/JoinGym';
+import MyGyms          from './pages/MyGyms';
 import Running         from './pages/Running';
 import RunPlanner      from './pages/RunPlanner';
 import ActiveRun       from './pages/ActiveRun';
@@ -135,6 +136,21 @@ export default function App() {
             <Route path="/settings" element={
               <ProtectedRoute>
                 <AppLayout><Settings /></AppLayout>
+              </ProtectedRoute>
+            } />
+            {/* MY GYMS — Kd's ruling of 2026-09-02: the section appears in the
+                member's own left nav once a gym has APPROVED them, and holds
+                the gym-member features (opening times today, attendance).
+                A MEMBER SCREEN, not a way into the console: `/console` is
+                behind the other door and the 2026-08-19 crossing ruling
+                (:11616) is untouched — see the note in `Sidebar.jsx`.
+                Reachable by address for anyone signed in, which is why the
+                screen has its own "you're not in a gym yet" state rather than
+                relying on the nav item being hidden (R3.3's habit: hiding is
+                never the enforcement, and here the server refuses the reads). */}
+            <Route path="/my-gyms" element={
+              <ProtectedRoute>
+                <AppLayout><MyGyms /></AppLayout>
               </ProtectedRoute>
             } />
             {/* The address a gym's poster points at — the web twin of Part 6
