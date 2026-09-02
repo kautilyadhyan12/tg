@@ -1,6 +1,80 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE ATTENDANCE CARD IS CLOSED. DECISIONS :29870. **KD RAN SMOKE SHEET
+      PARTS C AND D AT THE BROWSER AND REPORTED "all passed"** — the last gate
+      on `CARD-gym-attendance.md`. **THE `OWED.md` ATTENDANCE LINE TICKS.**
+      Records only; no code changed by that commit (`bcf0586`).
+      **THE CARD'S FULL GATE RECORD: three halves built, each reviewed to ZERO
+      Critical/High on a diff-only round** (server :28649 · member :29117 ·
+      owner :29740, escape hatch never armed on any) **and the browser sheet
+      complete** (8/8 core :29410 · Parts C and D :29870).
+
+  1. **IT RAN ON THE SHIPPING BYTES AND THAT WAS VERIFIED, NOT ASSERTED** —
+     `git diff HEAD --name-only` over `apps/web/src`, `packages/shared/src` and
+     `apps/api/src` returned empty against `8eacc54` (:14956, :15198).
+  2. **THE STEP WORTH MORE THAN THE REST: Part D was OPTIONAL and he ran it.**
+     It is the ONLY observation this product has of Kd's ruling 12 (:27992 §1 —
+     a second visit in a different session counts again) **at a screen**: one
+     row, two time chips, `1 person · 2 visits`. **That string could not have
+     come from the defect it catches** — `dayTotalsLine` prints the second
+     number only when it DIFFERS, so a screen that had collapsed two visits into
+     one renders `1 person` and stops (:7104's PG1).
+  3. **THE REUSABLE FINDING IS THE SHEET'S OWN SETUP SECTION.** It said *"both
+     servers are already running"*. **The API was DOWN** — measured before
+     handover (web 5173 → 200, health 3000 → **000**, netstat showing 5173 as
+     the only listener). Started, both 200, then the steps went over. **A setup
+     section is a claim with a shelf life and NOTHING IN THIS REPO GOES RED WHEN
+     A PROCESS STOPS.** It was true when written hours earlier, which is what
+     makes it dangerous. :5041 one level up — there a step failed innocently,
+     here the whole sheet would have died at step 1. **Check the setup; never
+     quote it.**
+  4. **`--env-file=.env` IS RIGHT FOR A BROWSER SMOKE AND WRONG FOR A SUITE**
+     (:13659) — same file, opposite answers, decided by what is doing the
+     reading. CLAUDE.md's appendix says why: Kd's own gyms live on that branch.
+  5. **TWO STEPS WERE STRENGTHENED BEFORE HANDOVER, NOT AFTER A BAD RESULT.**
+     Step 15's *"the button is gone"* is absence-shaped and satisfied by a blank
+     screen (:21751), so the member's earlier visit being STILL LISTED is now
+     asserted FIRST as the positive control — which also pins the ruling that
+     matters more than the button: **switching marking off must not erase
+     history.** Step 17 was *"confirm the wording exists somewhere"*, which
+     cannot discriminate; his own staff row draws **"What you can do"**
+     (`StaffPanel.jsx:380`) with boxes greyed by `ownerRow` (`:412`), so it is
+     concrete now, with the greying stated up front (:5041).
+  6. **WHAT THE TICK DOES NOT COVER:** the QR scan path (the phone app's
+     entirely — :26558, :26586, own `OWED.md` line) · staff marking somebody
+     present (:27900, *"not now"*) · a second gym's owner · anything on a phone.
+     **The chat observed none of steps 14–20** — the ordinary shape of this
+     gate, and no step needed a terminal command, so :23535's failure mode
+     cannot apply. **A REPORTED RUN, not :27415's declaration.**
+
+PROVE: no code changed. Guards, REAL exit codes (not `tail`'s — :13247):
+       `check-harnesses` 25 scripts · `check-decisions-index` 270 pointers /
+       1115 headings · triggers `--check` up to date, 867 from 231 of 369.
+
+FILES: `DECISIONS.md`, `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`,
+       `OWED.md`, `CARD-gym-attendance.md`, `RUNBOOK/smoke-attendance.md`,
+       this file.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed.
+       **NEXT CARD — CHAINED, NOT CHOSEN, AND IT NEEDS KD'S PLAN GATE:** the
+       console **Overview's numbers** (Part 3 §4.1's tiles + 8-week chart) and
+       the **nightly rollup** that writes `org_daily_stats`. **:26469 and
+       :26624 both sequence it directly after this card** — *"sessions →
+       attendance → the numbers"* — and :26385 §5 lists it first among what is
+       left in the gym stage. **RE-MEASURED THIS SESSION rather than recalled
+       (V4): `org_daily_stats` still has NO WRITER AND NO READER** — six hits in
+       `apps/api/src`, being its own schema file plus `archiveSweep`'s comment
+       and two privacy-list entries. **CARRY TO ITS GATE: :27900 deliberately
+       did NOT put "how a workout LINKS to an attendance" to Kd and sends it
+       here** — a rollup-time join on the gym's day, his to rule. Also
+       :26469 §1 (*"average form score not needed"* — three tiles, not four) and
+       §3 (*"trained anywhere" is NEVER shown*).
+```
+
+
+```
 TASK: ATTENDANCE, THE OWNER'S HALF — T3 ROUND 2 (diff-only). DECISIONS :29740.
       **ZERO Critical/High ⇒ THE PACKET SHIPS** (:5348 rule 1). Two Low, both
       fixed, both in `BACKLOG.md`. Escape hatch NOT armed (round 1 had two
