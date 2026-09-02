@@ -29866,3 +29866,94 @@ carried round 1's "nine assertions" unchecked, which is five.
 packet ships. **The attendance `OWED.md` line still does NOT tick**, and one
 thing now holds it: **sheet Parts C and D are unrun** (:29410 — Part D is
 flagged in the sheet as the one path its author could not verify).
+
+## 2026-09-02 — SHEET PARTS C AND D PASS AT KD'S BROWSER AND THE ATTENDANCE LINE TICKS — the first and only observation this product has of "came twice" on a screen, and the sheet's own setup section had gone stale under it
+
+**Read before citing `smoke-attendance.md` as covering anything, before ticking a
+gate on a sheet whose setup section you have not re-checked, before quoting a
+smoke's "both servers are already running", and before reading this tick as
+covering the QR path or a phone.**
+
+Kd ran steps 14–20 at the browser on 2026-09-02 and reported **"all passed"**.
+That was the last gate on `CARD-gym-attendance.md`. **The `OWED.md` attendance
+line TICKS on this commit**, naming `8eacc54` (owner's half + both review
+rounds) and `98f2688` (the smoke and the visible-date fix).
+
+**IT RAN ON THE SHIPPING BYTES AND THAT WAS VERIFIED, NOT ASSERTED** —
+`git diff HEAD --name-only -- apps/web/src packages/shared/src apps/api/src`
+returned empty against `8eacc54` (:14956, :15198: nothing ticks that a browser
+has not seen on the bytes that ship).
+
+### 1 · WHAT THE PASS COVERS, AND THE ONE STEP WORTH MORE THAN THE REST
+
+**Part D was optional and he ran it anyway.** It is the ONLY observation this
+project has ever had of Kd's own ruling 12 (:27992 §1 — *"if a member again comes
+in different slot … owner can see that the member attended two times"*) **at a
+screen**: one member, two sessions, **ONE ROW WITH TWO TIME CHIPS**, and the
+day's count reading **`1 person · 2 visits`**.
+
+**THAT ✅ COULD NOT HAVE BEEN SATISFIED BY THE WRONG THING, which is what makes
+it worth having** (:7104's PG1, and :25326's shape where one sweep's `expired: 0`
+had two possible causes). `dayTotalsLine` prints the second number **only when it
+differs from the first** (`attendanceView.js:164-171`), so a day holding a single
+visit renders `1 person` and nothing else. **A screen that had silently collapsed
+the two visits into one could not have produced the string he read.** Likewise
+the two lines in the day's shape — one *"Before opening times were set"*, one for
+the session — are `hoursStatus` values stored at write time, so they are evidence
+the FIRST visit kept its own slot after hours were later declared, which is the
+whole reason `slot_key` exists.
+
+**STEP 15's ABSENCE-SHAPED ✅ WAS GIVEN ITS POSITIVE CONTROL BEFORE IT WAS
+HANDED OVER** (:21751 — never a bare *"nothing appears"*). *"The **I'm here**
+button is gone"* is satisfied by a blank screen, a failed read, or a broken
+route. So the step asserts **first** that the member's earlier visit is still
+listed — which requires the gym card to have rendered — and only then that the
+button is absent. The pair also carries the ruling that matters more than the
+button: **switching a gym's marking off must not erase history that already
+happened.**
+
+### 2 · THE SETUP SECTION HAD GONE STALE, AND IT IS THE REUSABLE FINDING
+
+**The sheet said "Both servers are already running." The API was DOWN.** Measured
+before handing the steps over: web on 5173 answered 200, `\health` on 3000
+answered `000`, and `netstat` showed 5173 as the only listener. Started, both
+200, then the steps went over.
+
+**A SMOKE SHEET'S SETUP SECTION IS A CLAIM WITH A SHELF LIFE.** :5041 already
+records that a step failing for an innocent reason teaches people to ignore
+steps; this is the same defect one level up — the whole sheet failing at step 1
+for a reason that is nobody's bug. **The sentence was TRUE when written, hours
+earlier, which is exactly why it is dangerous: nothing in the repo goes red when
+a running process stops.** Check the setup, never quote it.
+
+**The correct env for a browser smoke is `--env-file=.env`, and that is not the
+same call as for a test run.** `apps/api/.env` points at the Neon branch
+deliberately — CLAUDE.md's appendix says so in as many words, *"because Kd's own
+test gyms and accounts live there and his browser smokes read them"* — while a
+SUITE or a mutation sweep must be pointed at local Postgres (:13659). Same file,
+opposite answers, decided by what is doing the reading.
+
+### 3 · WHAT NOBODY MAY READ INTO THIS TICK
+
+- **The QR scan path has never been in a browser and never will be** — it is the
+  phone app's entirely (:26558, :26586). This line ticks for the web work.
+- **Staff marking somebody present is not built** (:27900, *"not now"*).
+- **No second gym's owner, and no phone, has seen any of it.**
+- **The chat observed none of steps 14–20.** That is the ordinary shape of this
+  gate — Kd runs, reports, the record says who did which. **No step needed a
+  terminal command**, so :23535's failure mode (a step requiring the chat's own
+  action being recorded as passed while the chat had not acted) cannot apply
+  here; every step was a browser click he could make alone. **This is a REPORTED
+  RUN, not :27415's DECLARATION** — he ran them and said what happened, rather
+  than asking for a pass to be written.
+
+### Round log
+
+**No code changed.** Records only: this entry, `OWED.md`'s tick,
+`RUNBOOK/smoke-attendance.md`'s RESULT block, `CARD-gym-attendance.md`,
+`DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`, `HANDOFF.md`.
+
+**The card is CLOSED.** Every gate on `CARD-gym-attendance.md` is now met: three
+halves built, each reviewed to zero Critical/High on a diff-only round
+(:28649 · :29117 · :29740), and the browser sheet complete (8/8 core at :29410,
+Parts C and D here).

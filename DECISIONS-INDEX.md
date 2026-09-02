@@ -1325,6 +1325,25 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:29870** — 2026-09-02 — **SHEET PARTS C AND D PASS AT KD'S BROWSER AND THE
+  ATTENDANCE `OWED.md` LINE TICKS — the card is CLOSED.** **Read before citing
+  `smoke-attendance.md` as covering anything, before ticking a gate on a sheet
+  whose setup section you have not re-checked, before quoting a smoke's "both
+  servers are already running", and before reading this tick as covering the QR
+  path or a phone.** Kd ran steps 14–20 and reported *"all passed"*, on the
+  shipping bytes of `8eacc54` — **verified with `git diff HEAD --name-only` over
+  the three `src` trees returning empty, not asserted** (:14956, :15198).
+  **Part D was optional and he ran it: the ONLY observation this product has of
+  ruling 12 (:27992 §1) at a screen — one row, two time chips,
+  `1 person · 2 visits`** — and that string could not have come from a day with
+  one visit, because `dayTotalsLine` prints the second number only when it
+  differs. **THE REUSABLE FINDING IS THE SHEET'S OWN SETUP: it said both servers
+  were running and the API was DOWN**, measured before handover (5173 → 200,
+  3000 → 000). **A setup section is a claim with a shelf life and nothing in the
+  repo goes red when a process stops** — :5041 one level up. Also records that
+  `--env-file=.env` is RIGHT for a browser smoke and WRONG for a suite (:13659):
+  same file, opposite answers, decided by what is reading. **A REPORTED RUN, not
+  :27415's declaration.**
 - **:29740** — 2026-09-02 — **ATTENDANCE, THE OWNER'S HALF, T3 ROUND 2
   (diff-only): ZERO Critical/High, THE PACKET SHIPS — and both Lows are round 1's
   own account of itself.** **Read before quoting :29500 §3's mechanism (STRUCK —

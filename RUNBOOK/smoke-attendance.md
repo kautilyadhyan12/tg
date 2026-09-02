@@ -192,3 +192,41 @@ for the session.
 Just tell me the step numbers that passed and any that did not, with what you saw
 instead. **A failure here is worth more than a pass** — it is the first time any
 of this has been in front of a person.
+
+---
+
+## RESULT
+
+**PARTS A AND B — PASSED 8/8, 2026-09-02**, run by the chat against the real
+server and reported at `DECISIONS.md:29410`.
+
+**PARTS C AND D — PASSED, 2026-09-02, run by KD at the browser** on the shipping
+bytes of `8eacc54`, reported as *"all passed"*. **THE SHEET IS THEREFORE COMPLETE
+AND THE `OWED.md` ATTENDANCE LINE TICKS.**
+
+**WHAT THAT PASS COVERS AND WHAT IT DOES NOT, so nobody reads it as wider than it
+is** (:23535's rule — the record says what happened):
+
+- **Steps 14–20 were run by Kd and reported by him; the chat observed none of
+  them.** That is the ordinary shape of this gate, not a weakness — no step
+  needed a terminal command, so :23535's failure mode (a step requiring the
+  chat's action reported as passed while the chat had not acted) cannot apply
+  here. Every step was a browser click he could make alone.
+- **Part D was optional and he ran it anyway**, which is the part worth having:
+  it is the only observation this project has of Kd's ruling 12 at a screen — one
+  member, two sessions, **one row with two time chips and a count reading
+  `1 person · 2 visits`**. `dayTotalsLine` prints the second number ONLY when it
+  differs from the first, so that ✅ could not have been satisfied by a day with
+  one visit.
+- **It was run on the bytes of `8eacc54`** — verified with
+  `git diff HEAD --name-only -- apps/web/src packages/shared/src apps/api/src`
+  returning empty, not asserted (:14956, :15198: nothing ticks that the browser
+  has not seen on the shipping bytes).
+- **The API server was DOWN when the steps were handed over** and this sheet's
+  *"both servers are already running"* was stale. Started before he began, both
+  answering 200. **A sheet's setup section ages** (:5041) — check it rather than
+  quoting it.
+
+**STILL NOT COVERED BY ANY BROWSER RUN, and none of it is this card's:** the QR
+path (phone app, :26558/:26586) · staff marking somebody present (:27900, "not
+now") · a second gym's owner · anything on a phone.

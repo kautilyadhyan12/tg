@@ -7697,7 +7697,13 @@ file and is stated so nobody reads these as lower priority than they are.
       failed**, which is :5807 — a user shown something false — arriving through
       a correct server. The screen must either say what happened or refuse the
       out-of-range date before sending.
-- [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
+- [x] 🟡 **ATTENDANCE / QR CHECK-IN.** ✅ **DONE 2026-09-02** — commits `8eacc54`
+      (owner's half + both review rounds), `98f2688` (smoke + the visible-date
+      fix), and the halves before them. **THE WEB HALVES ARE COMPLETE AND
+      VERIFIED IN A BROWSER; the QR half is the phone app's and keeps its own
+      line below** (:26558, :26586 — *"drop the scan part completely from web"*),
+      so this ticks for what was ever web work, not for the scanner. Kd:
+      a QR printed and stuck on the door;
       registered members scan it to mark attendance. **Zero spec hits for
       `attendance` or `check-in`** — but the mechanism is half-designed already:
       Part 6 §2 has QR posters and an `aihg://org/join?code=` deep link for
@@ -7940,8 +7946,26 @@ file and is stated so nobody reads these as lower priority than they are.
       the section COUNT — **which counts SECTIONS only; a greying panel drawn as
       a plain `ConsoleCard` (the `Members.jsx:343` shape) is invisible to it,
       measured, and the test now says so.**
-      **SO WHAT NOW HOLDS THIS LINE, AND IT IS ONE THING: SHEET PARTS C AND D
-      (above). Every review gate on this card is met; the browser gate is not.**
+      ✅ **NOTHING HOLDS IT ANY LONGER — THIS LINE TICKS, 2026-09-02.** **SHEET
+      PARTS C AND D RAN AND PASSED**, by Kd at the browser, on the shipping bytes
+      of `8eacc54` (verified with `git diff HEAD --name-only` over the three
+      `src` trees returning empty, not asserted — :14956, :15198). **The switch
+      turns marking off and the member's button GOES while their past visits
+      STAY; the permission box reads "See who came in"; and Part D — which he ran
+      though it was optional — is the only observation this project has of Kd's
+      ruling 12 at a screen: one member, two sessions, ONE ROW WITH TWO TIME
+      CHIPS and a count reading `1 person · 2 visits`.** That second number is
+      printed only when it differs from the first, so the ✅ could not have been
+      met by a day with one visit.
+      **HE RAN THEM AND REPORTED THEM; THE CHAT OBSERVED NONE** — the ordinary
+      shape of this gate, and no step needed a terminal command, so :23535's
+      failure mode (a step needing the chat's action recorded as passed) cannot
+      apply. **The API was DOWN when the steps were handed over and the sheet's
+      "both servers are running" was stale** — started first, both 200. A sheet's
+      setup section ages (:5041).
+      **WHAT NO BROWSER HAS SEEN, so nobody reads the tick as wider: the QR scan
+      path (phone), staff marking somebody present (:27900, "not now"), a second
+      gym's owner, and anything on a phone.**
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,

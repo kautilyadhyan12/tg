@@ -9,11 +9,16 @@ BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS BUILT 2026-09-02
 **EVERY HALF HAS NOW PASSED ITS REVIEW GATE, each on a diff-only round 2 finding
 ZERO Critical/High** (:5348 rule 1) — server `:28452` → `:28649` · member
 `:28976` → `:29117` · owner `:29500` → `:29740`. **The escape hatch never armed
-on any of them.** **THE BROWSER GATE IS WHAT REMAINS: the smoke passed 8 of 8 on
-the core (`DECISIONS.md:29410`) and SHEET PARTS C AND D ARE STILL UNRUN** — the
-Settings switch end-to-end, and the came-twice case, **Part D flagged in the
-sheet as the one path its author could not verify**. Nothing ticks until they
-run.**
+on any of them.**
+✅ **THE BROWSER GATE IS MET TOO AND THIS CARD IS CLOSED, 2026-09-02.** The smoke
+passed **8 of 8 on the core** (`DECISIONS.md:29410`) and **PARTS C AND D PASSED
+at Kd's browser** on the shipping bytes of `8eacc54` (`DECISIONS.md:29870`) — the
+Settings switch end to end, and the came-twice case he ran though it was
+optional, which is **the only observation this product has of ruling 12 at a
+screen**. **The `OWED.md` attendance line TICKS.**
+**WHAT IS STILL NOT BUILT AND IS NOT THIS CARD'S:** the QR scan path (the phone
+app's entirely — :26558, :26586) and staff marking somebody present (:27900,
+*"not now"*). Both keep their own lines.
 
 **CORRECTED 2026-09-02 — THIS BLOCK SAID "T3 IS UNRUN ON THE SERVER HALF" AND
 THAT HAS BEEN FALSE SINCE THE MORNING IT WAS WRITTEN.** The server half ran
