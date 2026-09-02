@@ -1,6 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE ATTENDANCE SMOKE — CORE PASSED 8/8, first browser evidence for ANY
+      attendance surface. DECISIONS :29410. Sheet: `RUNBOOK/smoke-attendance.md`.
+      **THE `OWED.md` ATTENDANCE LINE STILL DOES NOT TICK.** Two things hold it:
+        (a) **SHEET PARTS C AND D ARE UNRUN** — the Settings switch (off → the
+            member's button goes → past visits STAY → on) and the CAME-TWICE
+            case (one row, two times). **Part D is flagged IN the sheet as the
+            one path I could not verify myself** (an auth rate limit I tripped),
+            so claim nothing about it in either direction.
+        (b) **T3 UNRUN on the owner's half AND on the server half.**
+
+  1. **KD ASKED TO DELETE A CONTROL AND THE REAL DEFECT WAS A DIFFERENT ONE
+     BEING INVISIBLE.** He said the date arrows confused him and should go, then
+     one message later: *"oh its there working i did not see that"* — the date
+     box had opened a calendar all along. **The arrows were the part he COULD
+     see, so they took the blame.** Removal was put to him WITH ITS COST and he
+     chose *"make it obvious"*. The box now has a calendar icon, a pointer
+     cursor and a `<label>` wrapper; **THE ARROWS STAY and a test pins that**,
+     because a chat reading only his first message would delete them.
+     **STANDING: diagnose what was invisible before removing what was visible.**
+  2. **THE DATABASE HIS BROWSER READS WAS ON MIGRATION 15 OF 19** — fourth
+     recurrence of :15927. Four additive migrations applied with his yes and
+     verified by reading the database back, not by trusting the tool's success
+     line (:20222). 0019's backfill is what made the tab appear at all.
+  3. **THE AUTH LIMITER I TRIPPED WHILE PROBING WOULD HAVE HIT HIM TOO** — it
+     keys on IP and his browser is on this machine. Caught only because I
+     verified the new password instead of assuming it. Cleared by restarting the
+     API. **A smoke's setup can leave a trap for the smoke.**
+  4. **I RESET the password on `owner@example.com` and `man@example.com`** (he
+     had forgotten it). The value is in the chat only, never in a file.
+  5. **I LEFT ~3 throwaway gyms and ~6 `probe-…@example.com` accounts** on the
+     dev branch from walking the chain over the real HTTP API. Not his, on none
+     of his screens.
+
+PROVE: `web` **1596/1596 across 57 files** (1593 before; +3 for the picker).
+       `eslint --max-warnings=0` exit 0 on both touched files. Root guards:
+       `check-harnesses` 25 parse, `check-decisions-index` **267 pointers, 1096
+       headings**, triggers `--check` up to date (**851 from 228 of 366**).
+       The three new cases pin the affordance as BEHAVIOUR — clicking the ICON
+       must call `showPicker` — because an assertion that an icon exists would
+       pass on an icon nobody can click.
+
+FILES: `apps/web/src/pages/console/Attendance.jsx` ·
+       `pages/console/consoleAttendance.render.test.jsx` (+3) ·
+       new `RUNBOOK/smoke-attendance.md` · records (`DECISIONS.md`,
+       `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`, `OWED.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NEXT: finish sheet Parts C and D, then T3 on the owner's half and on the
+       server half.** Only then does the attendance line tick.
+```
+
+```
 TASK: ATTENDANCE, THE OWNER'S HALF (§4b-2) — BUILT. DECISIONS :29250.
       The console's Attendance section, the Settings switch, and the tick box.
       **WEB-ONLY: no migration, no `apps/api` file, no `packages/shared`

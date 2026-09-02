@@ -29406,3 +29406,93 @@ on a drifted anchor and was re-aimed rather than allow-listed (:15770).
 `pages/console/staffView.test.js` (the stale fixture, §4) ·
 `pages/landingRoute.test.js` (the route count, 5 → 6, which its own comment says
 is the correct response to adding a route).
+
+## 2026-09-02 — THE ATTENDANCE SMOKE PASSES 8 OF 8 ON THE CORE, THE FIRST TIME ANY ATTENDANCE SURFACE HAS BEEN IN FRONT OF A PERSON — and Kd asked for a control to be REMOVED when the real defect was that a different one was invisible
+
+**Read before removing a control a person says confused them, before designing a
+date picker anywhere in this product, before citing `smoke-attendance.md` as
+covering the switch or the tick box, and before assuming the database a browser
+reads is migrated.**
+
+Kd ran the sheet's core at the browser and reported **"all passe"**. It is the
+first browser evidence for `My Gyms` (:28822), its two review rounds (:28976,
+:29117) and the owner's half (:29250).
+
+### 1 · WHAT PASSED, AND WHAT THIS DOES NOT COVER
+
+**Eight steps, both halves, one account** (`owner@example.com` is both owner and
+member of *Smoke Test Gym*): the `My Gyms` nav item · the card and its **I'm
+here** button · the tap, answering **"You're marked in."** with **no claim about
+opening hours** (:26736 at the screen — the gym has never set any) · a second tap
+answering **"already marked in"** with still ONE time · the console's fourth nav
+item · the day's shape and the owner seeing his own name · the count staying at
+**1 person** after two taps (ruling 14's derived-count defect, absent) · and
+**yesterday saying nobody came rather than repeating today's row**.
+
+**NOT RUN, so the `OWED.md` line still does not tick:** the Settings **switch**
+(off → the member's button disappears while their past visits stay → on) and the
+**came-twice** case (one row, two times). Both are written into
+`RUNBOOK/smoke-attendance.md` as Parts C and D.
+**Part D was flagged in the sheet as the one path I could NOT verify myself** —
+an auth rate limit I had tripped while probing — and it stays unrun, so nothing
+about it is claimed either way.
+
+### 2 · THE SETUP WAS MINE AND IT IS DECLARED, NOT LEFT TO BE DISCOVERED
+
+:27810 §3's shape. **The Neon branch Kd's browser reads was on migration 15 of
+19** — no `gym_attendance`, no `manual_attendance_enabled`, no `attendance.read`
+in the DDL CHECK — so every attendance screen would have 500'd on step 1. **This
+is the FOURTH recurrence of :15927** (:21157 was the third and predicted more).
+Four additive migrations were applied with his yes, verified by reading the
+database back rather than by trusting the tool's own success line (:20222), and
+**0019's backfill did its job: both stored privilege sets gained
+`attendance.read`**, which is why the tab appeared at all.
+
+Also declared: **three throwaway gyms and ~6 `probe-…@example.com` accounts**
+created while walking the chain over the real HTTP API, and **a password reset on
+`owner@example.com` and `man@example.com`** (he had forgotten it) to a value
+recorded only in the chat, never in a file.
+
+**AND THE LIMITER I TRIPPED WOULD HAVE HIT HIM TOO** — it keys on IP and his
+browser is on the same machine. Found by testing the new password and getting a
+429; fixed by restarting the API. **A smoke's setup can leave a trap FOR the
+smoke, and the only reason this one was caught is that the new password was
+verified rather than assumed.**
+
+### 3 · THE FINDING, AND IT IS ABOUT WHAT A PERSON CAN SEE
+
+Kd's first instruction after passing was to **REMOVE the ‹ › arrows** beside the
+date: *"i think this arrows need to be removed < > i got confused"*. His second
+message, one exchange later, gave the actual cause: *"oh its there working i did
+not see that"* — **the date box had opened a calendar all along, and he had never
+found it.**
+
+**The arrows were not the defect. An invisible control was**, and the arrows were
+merely the part he COULD see, so they took the blame.
+
+**Removing them was put to him with its cost** — *"what about yesterday?"* is an
+owner's commonest question and one click today, against open-calendar-find-
+yesterday-click — **and he chose the other repair: *"make it obvious"*.** The box
+now carries a calendar icon, a pointer cursor, and a `<label>` wrapper so a click
+anywhere in it reaches the input. **The arrows stay**, with a test pinning that
+they do, because a later chat reading only his first message would delete them.
+
+**STANDING: a control nobody can SEE is indistinguishable from one that does not
+exist, and the first fix a person asks for will be aimed at whatever they CAN
+see. Diagnose what was invisible before removing what was visible.** :19560's
+rule is what made this land correctly — a preference stated mid-flow gets a
+recommendation with its cost, never a diff.
+
+### Round log
+
+**PROVE, on the shipping bytes.** `web` **1596/1596 across 57 files** (1593
+before; +3 for the picker). `eslint --max-warnings=0` exit 0 on both touched
+files. The three new cases pin the affordance as BEHAVIOUR rather than styling —
+**clicking the ICON must call `showPicker`**, which an assertion that an icon
+merely exists would pass on an icon nobody can click — plus a positive control
+that both arrows survive, and a browser with no `showPicker` still typing.
+
+**Files:** `apps/web/src/pages/console/Attendance.jsx` (the picker) ·
+`pages/console/consoleAttendance.render.test.jsx` (+3) · new
+`RUNBOOK/smoke-attendance.md` · records.
+

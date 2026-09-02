@@ -625,3 +625,68 @@ describe('trying again after a failed read', () => {
     expect(screen.queryByText(/couldn't load who came in/i)).toBeNull();
   });
 });
+
+describe('the day picker announces itself', () => {
+  /** KD AT THE SCREEN, 2026-09-02 (the attendance smoke). He ran the sheet, then
+   *  asked for the ‹ › arrows to be REMOVED because they confused him — and the
+   *  cause was the opposite of what it looked like: *"oh its there working i did
+   *  not see that"*. The calendar had been reachable all along behind a bare box
+   *  with no affordance, so the arrows read as the only way to move.
+   *
+   *  Removing them was put to him WITH ITS COST ("what about yesterday?" is an
+   *  owner's commonest question, one click today) and he chose the other repair:
+   *  *"make it obvious"*. **These pin the obvious-ness as BEHAVIOUR rather than
+   *  as styling**, because a test that asserted an icon exists would pass on an
+   *  icon nobody can click. */
+  it('opens the calendar when the icon beside the date is clicked, not just the box', async () => {
+    const showPicker = vi.fn();
+    const had = Object.prototype.hasOwnProperty.call(HTMLInputElement.prototype, 'showPicker');
+    const original = HTMLInputElement.prototype.showPicker;
+    HTMLInputElement.prototype.showPicker = showPicker;
+    try {
+      drawScreen();
+      await waitFor(() => expect(screen.getByLabelText('Day')).toBeTruthy());
+      // The icon is decorative, so it is reached through the control that wraps
+      // it — a <label>, which forwards a click on ANY of its area to the input.
+      const box = screen.getByLabelText('Day').closest('label');
+      expect(box).not.toBeNull();
+      const icon = box.querySelector('svg');
+      expect(icon).not.toBeNull();
+
+      fireEvent.click(icon);
+      expect(showPicker).toHaveBeenCalled();
+    } finally {
+      if (had) HTMLInputElement.prototype.showPicker = original;
+      else delete HTMLInputElement.prototype.showPicker;
+    }
+  });
+
+  /** THE ARROWS STAY, and this is the positive control on the decision above.
+   *  Kd asked for them to go and then chose not to; a later chat reading only
+   *  his first message would delete them. */
+  it('still offers both arrows beside the calendar', async () => {
+    drawScreen();
+    await waitFor(() => expect(screen.getByLabelText('Day')).toBeTruthy());
+    expect(screen.getByLabelText(/previous day/i)).toBeTruthy();
+    expect(screen.getByLabelText(/next day/i)).toBeTruthy();
+  });
+
+  /** A browser that has no `showPicker` must still let somebody TYPE a date —
+   *  the try/catch is what makes that true, and a throw escaping it would take
+   *  the click handler down with it. */
+  it('does not break on a browser with no calendar API', async () => {
+    const had = Object.prototype.hasOwnProperty.call(HTMLInputElement.prototype, 'showPicker');
+    const original = HTMLInputElement.prototype.showPicker;
+    HTMLInputElement.prototype.showPicker = () => { throw new Error('unsupported'); };
+    try {
+      drawScreen();
+      await waitFor(() => expect(screen.getByLabelText('Day')).toBeTruthy());
+      fireEvent.click(screen.getByLabelText('Day'));
+      fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-08-30' } });
+      await waitFor(() => expect(screen.getByLabelText('Day').value).toBe('2026-08-30'));
+    } finally {
+      if (had) HTMLInputElement.prototype.showPicker = original;
+      else delete HTMLInputElement.prototype.showPicker;
+    }
+  });
+});

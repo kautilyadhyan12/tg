@@ -7891,6 +7891,20 @@ file and is stated so nobody reads these as lower priority than they are.
       has EVER run on any attendance surface, either half, and T3 is UNRUN on
       this half and on the server half.** The smoke sheet is owed and can now be
       written across BOTH halves, which is what §4b's split was waiting for.
+      **THE SMOKE'S CORE RAN 2026-09-02 AND PASSED 8 OF 8**
+      (`RUNBOOK/smoke-attendance.md`, `DECISIONS.md:29410`) — the FIRST browser
+      evidence for any attendance surface, covering both halves from one account:
+      the nav item, the button, *"You're marked in."* with **no claim about
+      opening hours**, the second tap staying ONE visit, the console's fourth nav
+      item, the owner seeing the day, **the count staying at 1 person after two
+      taps**, and yesterday saying nobody came.
+      ⚠️ **THIS LINE STILL DOES NOT TICK AND TWO THINGS HOLD IT:**
+      **(a) the sheet's PARTS C AND D ARE UNRUN** — the Settings switch (off →
+      the member's button disappears while their past visits stay → on) and the
+      **came-twice** case (one row, two times, ruling 12 at the screen). Part D
+      was flagged IN the sheet as the one path the chat could not verify itself
+      (an auth rate limit), so nothing about it is claimed in either direction.
+      **(b) T3 IS UNRUN on the owner's half AND on the server half.**
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,

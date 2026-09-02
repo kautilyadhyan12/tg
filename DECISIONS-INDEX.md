@@ -1325,6 +1325,33 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:29410** — 2026-09-02 — **THE ATTENDANCE SMOKE PASSES 8 OF 8 ON THE CORE —
+  the first browser evidence for ANY attendance surface — and Kd asked for a
+  control to be REMOVED when the real defect was that a different one was
+  INVISIBLE.** **Read before removing a control a person says confused them,
+  before designing a date picker anywhere in this product, before citing
+  `smoke-attendance.md` as covering the switch or the tick box, and before
+  assuming the database a browser reads is migrated.** Both halves, one account.
+  Passed: the `My Gyms` item · **I'm here** · *"You're marked in."* with **no
+  claim about opening hours** (:26736 at the screen) · a second tap saying
+  already-marked with ONE time · the console's fourth nav item · the owner seeing
+  the day · **the count staying at 1 person after two taps** · yesterday saying
+  nobody came. **NOT RUN and the `OWED.md` line does NOT tick: the Settings
+  SWITCH and the CAME-TWICE case** (sheet Parts C and D; D was flagged in the
+  sheet as the one path I could not verify myself).
+  **SETUP DECLARED (:27810 §3): the Neon branch was on migration 15 of 19 —
+  FOURTH recurrence of :15927** — plus three throwaway gyms, ~6 probe accounts,
+  and a password reset. **The auth limiter I tripped while probing would have hit
+  KD TOO** (it keys on IP, same machine); caught only because the new password
+  was verified rather than assumed.
+  **THE FINDING: he asked to delete the ‹ › arrows, then said *"oh its there
+  working i did not see that"* — the date box had opened a calendar all along.
+  The arrows were not the defect; they were the part he COULD see, so they took
+  the blame.** Removal was put to him with its cost and he chose *"make it
+  obvious"* instead. **STANDING: a control nobody can SEE is indistinguishable
+  from one that does not exist, and the first fix a person asks for will be aimed
+  at whatever they CAN see — diagnose what was invisible before removing what was
+  visible.**
 - **:29250** — 2026-09-02 — **ATTENDANCE, THE OWNER'S HALF: the console gets an
   Attendance section, the Settings switch, and the tick box without which Kd's
   own *"the owner can change it"* was a false sentence.** **Read before adding an

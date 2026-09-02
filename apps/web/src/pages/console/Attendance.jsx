@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -455,7 +455,25 @@ function AttendanceDay({ org }) {
           learned the hard way: an HTML `min` is a CONSTRAINT, not a hint, and a
           date outside it makes the field silently refuse with no event and no
           sentence. Attendance is a history, so the past is the normal
-          direction. */}
+          direction.
+
+          **THE CALENDAR IS ANNOUNCED RATHER THAN HIDDEN, AND THAT IS KD AT THE
+          SCREEN (2026-09-02, the attendance smoke).** He ran the sheet, then
+          said the arrows confused him and asked for them removed — and the real
+          cause was the opposite of what it looked like: *"oh its there working i
+          did not see that"*. **The calendar had been reachable all along, behind
+          a bare box with no affordance**, so the two arrows beside it read as
+          the only way to move and the middle control read as decoration.
+          **Removing the arrows was put to him with its cost — "what about
+          yesterday?" is an owner's commonest question and one click today — and
+          he chose to make the box obvious instead** (*"make it obvious"*).
+          So: a calendar ICON inside it, a pointer cursor, and the whole thing
+          wrapped in a `<label>` so a click anywhere in it reaches the input and
+          opens the picker.
+          **STANDING, and it is why this is written here rather than in a commit
+          message: a control nobody can SEE is indistinguishable from one that
+          does not exist, and the first fix a person asks for will be aimed at
+          whatever they CAN see.** The arrows were never the defect. */}
       <ConsoleCard>
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -467,25 +485,37 @@ function AttendanceDay({ org }) {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <input
-            type="date"
-            value={day}
-            onChange={(e) => setDay(e.target.value)}
-            aria-label="Day"
-            onClick={(e) => {
-              try {
-                e.currentTarget.showPicker();
-              } catch {
-                /* older browser, or not user-activated — typing still works */
-              }
-            }}
-            className="rounded-xl px-3 py-2 text-sm"
+          {/* A LABEL, not a div: clicking the icon or the padding is forwarded
+              to the input as a click, so the whole control opens the calendar
+              rather than only the few pixels of the native indicator. */}
+          <label
+            className="rounded-xl px-3 py-2 flex items-center gap-2 cursor-pointer"
             style={{
               background: 'rgba(255,255,255,0.05)',
-              color: '#fff',
               border: '1px solid rgba(255,255,255,0.10)',
             }}
-          />
+          >
+            <CalendarDays
+              className="w-4 h-4 flex-shrink-0"
+              style={{ color: '#FF8A1F' }}
+              aria-hidden="true"
+            />
+            <input
+              type="date"
+              value={day}
+              onChange={(e) => setDay(e.target.value)}
+              aria-label="Day"
+              onClick={(e) => {
+                try {
+                  e.currentTarget.showPicker();
+                } catch {
+                  /* older browser, or not user-activated — typing still works */
+                }
+              }}
+              className="bg-transparent border-0 p-0 text-sm outline-none cursor-pointer"
+              style={{ color: '#fff', colorScheme: 'dark' }}
+            />
+          </label>
           <button
             type="button"
             onClick={() => setDay((d) => addDays(d, 1))}
