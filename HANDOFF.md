@@ -1,6 +1,163 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ATTENDANCE, THE OWNER'S HALF — T3 ROUND 2 (diff-only). DECISIONS :29740.
+      **ZERO Critical/High ⇒ THE PACKET SHIPS** (:5348 rule 1). Two Low, both
+      fixed, both in `BACKLOG.md`. Escape hatch NOT armed (round 1 had two
+      Criticals, this has none). Kd approved the finding list first ("ok").
+      **EVERY HALF OF THIS CARD HAS NOW PASSED ITS REVIEW GATE**, each on a
+      diff-only round 2 finding zero: server :28649 · member :29117 · owner
+      :29740.
+      **THE `OWED.md` ATTENDANCE LINE STILL DOES NOT TICK, AND NOW ONE THING
+      HOLDS IT: SHEET PARTS C AND D ARE UNRUN** (:29410) — the Settings switch
+      end to end (off → the member's button goes → past visits STAY → on) and
+      the CAME-TWICE case. **Part D is flagged IN the sheet as the one path its
+      author could not verify** (an auth rate limit), so claim nothing about it
+      in either direction. **That browser run is the next work and it is KD'S.**
+
+  1. **NEITHER FINDING IS IN THE APP, AND THAT IS THE ROUND'S SHAPE.** No `src/`
+     component, no `apps/api` file, no migration, no `packages/shared` change —
+     two test-file comments and five records. **Both Lows are round 1's own
+     account of ITSELF**, which is where this card's remaining risk actually
+     sat: its seven CODE fixes were independently re-mutated and all seven hold.
+  2. **ROUND 1's RECORDED CAUSE OF ITS OWN CRITICAL WAS FALSE — L-1, and it is
+     the one to read.** It said nine screen-wide `getAllByText(READ_ONLY_NOTE)`
+     assertions were STRUCTURALLY BLIND because Settings mounts four panels
+     sharing one sentence. **A closed `ConsoleSection` UNMOUNTS**
+     (`ConsoleStates.jsx:114-118`, its own comment says so) **and every case
+     opens exactly ONE section**, so those assertions were scoped already.
+     Measured: kill `GymDetailsPanel`'s note and one of the nine goes RED.
+     **THE TRUE REASON IS A MISSING CASE, NOT A BLIND INSTRUMENT — no test ever
+     opened the attendance section with a note assertion in it — and the two
+     have DIFFERENT REMEDIES**, which is why a wrong cause is worth a finding
+     even when the fix it produced was right.
+  3. **THE FIGURES AND THE MAP WERE BOTH WRONG.** FIVE assertions take that
+     shape, TEN mention the note, **all in ONE file** (`settings.render` had
+     ZERO before round 1); and `settings.render:162`'s "five panels" is FOUR.
+     **The review said the false sentence lived in THREE places; there were
+     SEVEN** — found by grepping, not by reading the review — **and the two it
+     missed are `OWED.md` and `HANDOFF.md`, the records Kd and the next chat
+     actually read.** Third recorded time (:23928 L-1, :24559 L-1): **a
+     correction's MAP is a claim exactly like its figure.**
+  4. **A GUARD CLAIMING MORE REACH THAN IT HAS — L-2.** The new class guard said
+     a fifth panel "cannot arrive uncovered". **It counts `aria-expanded`, so it
+     sees SECTIONS, not panels**: a probe `ConsoleCard` with a `disabled` button
+     and no note left all 164 cases GREEN. **`Members.jsx:343` already has that
+     shape.** Fixed as the BOUNDARY, not a wider count — widening means giving
+     the shared `ConsoleCard` a test handle, another card's diff (R1.1).
+  5. **THE INSTRUMENT NOTE: the reviewer used `git checkout --` to restore a
+     mutant and DISCARDED an uncommitted round-1 fix.** :25567 §3 ruled this two
+     days earlier — `core.autocrlf` makes it a rewrite, and a clean `git status`
+     is a claim about content after normalisation, never about bytes. **This
+     round used scratchpad snapshots and hash-verified both restores.**
+
+PROVE: see the commit's run — `web` full suite, `eslint --max-warnings=0` on the
+       two changed files, the two probes (P1 RED ×2, P2 164/164 GREEN, both
+       restored and both restores sha256-verified), and the three root guards.
+
+FILES: `apps/web/src/pages/console/readOnlyConsole.render.test.jsx` ·
+       `pages/console/settings.render.test.jsx` · records (`DECISIONS.md`,
+       `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`, `BACKLOG.md`,
+       `OWED.md`, `CARD-gym-attendance.md`, this file).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed here.
+       **NEXT: sheet Parts C and D, in a browser, by Kd.** Nothing on this card
+       ticks until they run — no review round can substitute for them (:14956,
+       :15198: nothing ticks that the browser has not seen on the shipping
+       bytes).
+```
+
+
+```
+TASK: ATTENDANCE, THE OWNER'S HALF — T3 ROUND 1 FIXED. DECISIONS :29500.
+      ⚠️ **SUPERSEDED BY THE BLOCK ABOVE (:29740, round 2, 2026-09-02): that
+      round found ZERO Critical/High, so the packet SHIPS and the round 2 this
+      block calls owed HAS RUN. Read the top block for current status; this one
+      is history.**
+      TWO Critical/High + five Low, all seven fixed. **THE PACKET DOES NOT SHIP
+      THIS ROUND** (:5348 rule 1) — **A DIFF-ONLY ROUND 2 IS OWED and is the
+      next piece of work.** Escape hatch NOT armed (:29117 found zero).
+      **THE ATTENDANCE `OWED.md` LINE STILL DOES NOT TICK.** Two things hold it:
+        (a) **SHEET PARTS C AND D ARE STILL UNRUN** (:29410) — unchanged by this
+            round, and Part D is flagged in the sheet as the one path its author
+            could not verify.
+        (b) **THE DIFF-ONLY ROUND 2 on this half.**
+      **THE SERVER HALF IS NOT IN SCOPE FOR IT** — it shipped its round at
+      :28649, and rule 2 forbids a fresh full pass over a shipped packet.
+
+  1. ~~**THE FINDING WORTH MORE THAN EITHER FIX, AND IT IS A CLASS: nine
+     assertions across two files pinned the read-only sentence with
+     `getAllByText(READ_ONLY_NOTE).length > 0` — a claim about the whole
+     SCREEN.** Settings mounts FOUR panels and writes that sentence ONCE, so as
+     soon as any one of them renders it, all nine are green for all four.~~
+     **— STRUCK BY T3 ROUND 2 (`DECISIONS.md:29740` L-1), WHICH MEASURED IT: a
+     closed `ConsoleSection` is UNMOUNTED and every case opens exactly one, so
+     those assertions were scoped in practice. Killing `GymDetailsPanel`'s note
+     turns one of the nine RED. The figures were wrong as well — FIVE of that
+     shape, TEN mentioning the note, all in ONE file.** **The attendance panel
+     shipped greying its switch and saying nothing, and the real reason is
+     plainer: no test ever opened that section with a note assertion in it — a
+     missing CASE, not a blind INSTRUMENT.** The guard is per-panel (scoped
+     through `ConsoleSection`'s own `aria-controls`) and asserts the section
+     COUNT — **which sees SECTIONS only: a greying panel drawn as a plain
+     `ConsoleCard` is invisible to it, measured, and that boundary is now
+     written into the test.**
+  2. **ONE KEYSTROKE KILLED THREE CONTROLS.** Clearing the date box sent `?day=`
+     (refused by the route's own regex → the owner read `day: invalid_string`),
+     made `addDays('', ±1)` answer `''` so BOTH arrows went dead, and left Try
+     again re-sending the same refused request for ever. Fixed at the SOURCE —
+     the box refuses to go empty — **deliberately not `OpeningHoursPanel`'s
+     `closureDay === ''` guards**, because there an empty box is a legitimate
+     starting state and here `day` is seeded from `gymToday` and never is.
+  3. **TWO STATUS LINES SAID THE SERVER HALF WAS UNREVIEWED. IT HAD SHIPPED ITS
+     ROUND AT :28649.** The reviewer read them, believed them, and paid for a
+     fresh full pass over work already reviewed twice. **STANDING: whoever closes
+     a round closes every line that states its status, in the SAME commit — a
+     stale status line BUYS WORK, it does not merely misinform.** Both corrected.
+  4. **L-1 IS RECORDED AS ARGUABLY C/H AND WAS NOT RE-GRADED.** The empty-day
+     sentence blamed the switch for a list the FILTER had emptied — a cause that
+     did not cause it, which is :5807's shape. Fixed under the review's own Low
+     tag because the packet was already held and everything is fixed either way
+     (:5307). **A future round meeting this shape should call it C/H on sight.**
+
+PROVE: `web` **1612/1612 across 57 files** (1596 before; +16) · `@app/shared`
+       **52/52** (51 before; +1) · `eslint --max-warnings=0` exit 0 on all seven
+       touched web files · `tsc --noEmit` exit 0 in `@app/shared` **and PROVEN
+       REAL by planting a type error** in the very test file it must cover
+       (caught at `schemas.test.ts(522,7)`, removed, file restored
+       byte-identical). Root guards: `check-harnesses` 25 parse ·
+       `check-decisions-index` **268 pointers, 1104 headings** · triggers
+       `--check` up to date (**857 from 229 of 367**).
+       **SEVEN MUTANTS, ALL RED, ALL RESTORED AND THE RESTORE VERIFIED** with
+       `git diff --stat` rather than the tool's own word (:19803). M1 is the one
+       to know: it kills the note in the attendance panel and **the other three
+       panels stay GREEN**, which is the discrimination the new class guard
+       exists for. M2 printed the defect itself — `expected '' to match
+       /^\d{4}-\d{2}-\d{2}$/`, an arrow issuing a read for a day that is not a
+       day.
+
+FILES: `apps/web/src/components/console/AttendanceSettingsPanel.jsx` ·
+       `pages/console/Attendance.jsx` · `pages/console/attendanceView.js` ·
+       `pages/console/attendanceView.test.js` ·
+       `pages/console/consoleAttendance.render.test.jsx` (+4) ·
+       `pages/console/readOnlyConsole.render.test.jsx` (+9) ·
+       `pages/console/settings.render.test.jsx` (+2) ·
+       `packages/shared/test/schemas.test.ts` (+1) · records (`DECISIONS.md`,
+       `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`, `BACKLOG.md`,
+       `OWED.md`, `CARD-gym-attendance.md`, this file).
+       **No `apps/api` file, no migration, no `packages/shared/src` change** —
+       the only server-side edit in the whole packet is a TEST.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed here.
+       **NEXT: the diff-only T3 round 2 on this half** — **:29500 §6 lists the
+       three shapes it must probe, and all three RECURRED in round 1**, so a
+       round-2 prompt that omits them is repeating a known-blind pass. **Then
+       sheet Parts C and D.** Only then does the attendance line tick.
+```
+
+```
 TASK: THE ATTENDANCE SMOKE — CORE PASSED 8/8, first browser evidence for ANY
       attendance surface. DECISIONS :29410. Sheet: `RUNBOOK/smoke-attendance.md`.
       **THE `OWED.md` ATTENDANCE LINE STILL DOES NOT TICK.** Two things hold it:
@@ -9,7 +166,12 @@ TASK: THE ATTENDANCE SMOKE — CORE PASSED 8/8, first browser evidence for ANY
             case (one row, two times). **Part D is flagged IN the sheet as the
             one path I could not verify myself** (an auth rate limit I tripped),
             so claim nothing about it in either direction.
-        (b) **T3 UNRUN on the owner's half AND on the server half.**
+        (b) ~~**T3 UNRUN on the owner's half AND on the server half.**~~
+            **CORRECTED 2026-09-02: the SERVER half's T3 ran twice — round 1
+            `DECISIONS.md:28452` (four Critical/High) and round 2 `:28649`
+            (diff-only, ZERO, packet ships). This line was false when written.**
+            The owner's half then ran **round 1** (`:29500`): TWO Critical/High
+            and five Low, all fixed, so **a DIFF-ONLY ROUND 2 IS OWED** on it.
 
   1. **KD ASKED TO DELETE A CONTROL AND THE REAL DEFECT WAS A DIFFERENT ONE
      BEING INVISIBLE.** He said the date arrows confused him and should go, then

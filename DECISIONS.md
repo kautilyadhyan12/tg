@@ -29496,3 +29496,373 @@ that both arrows survive, and a browser with no `showPicker` still typing.
 `pages/console/consoleAttendance.render.test.jsx` (+3) · new
 `RUNBOOK/smoke-attendance.md` · records.
 
+
+## 2026-09-02 — ATTENDANCE, THE OWNER'S HALF, T3 ROUND 1: TWO Critical/High, THE PACKET DOES NOT SHIP — the sixth panel to grey a control was the first to say nothing, and one keystroke in the date box killed three controls at once
+
+**Read before adding a panel to the console's Settings screen, before greying
+ANY control anywhere in this console, before putting a `type="date"` on any
+screen in this product, before deriving a screen's state from an input a person
+can CLEAR, before writing an assertion about a sentence that appears once on a
+screen with several panels, and before quoting `CARD-gym-attendance.md` or
+`HANDOFF.md` on whether a half has been reviewed.**
+
+**TWO Critical/High, both in the owner's WEB half, both fixed. The packet does
+NOT ship this round** (:5348 rule 1) — a diff-only round 2 is owed. Five Low,
+all fixed, all in `BACKLOG.md`. **The escape hatch is NOT armed**: the previous
+round in this subsystem (:29117, My Gyms round 2) found zero Critical/High, so
+:5348's two-consecutive trigger does not fire.
+
+### 1. C/H-1 — THE SIXTH GREYED PANEL WAS THE FIRST ONE WITH NO SENTENCE
+
+`AttendanceSettingsPanel.jsx` carried `disabled={readOnly || saving}` and never
+rendered `READ_ONLY_NOTE`. Grep-verified: five panels import it (`GymDetailsPanel`,
+`JoinCodesPanel`, `OpeningHoursPanel`, `StaffPanel`, `Members`); this one did not.
+
+**What an owner met:** a lapsed gym's manager opens Settings → *Marking
+attendance*, finds the section's only control dead, and — unlike every
+neighbouring section — nothing beside it says why. **`ConsoleSection` rows
+collapse**, so somebody who opens only this one gets a greyed box under no
+explanation at all. :24141 §3(c) shipped the per-panel note IN ADDITION to
+`ConsoleLayout`'s red strip, deliberately, which is why this is Critical/High
+rather than cosmetic: the strip is not the answer the ruling gave.
+
+**The card required exactly this and said so** (`CARD-gym-attendance.md`:
+*"obeying readOnly like every other panel (:24141, :24376)"*). **The disable half
+shipped; the sentence half did not, and every test on the screen was green.**
+
+### 2. C/H-2 — CLEARING THE DATE BOX STRANDED THE SCREEN, AND BOTH ARROWS WENT DEAD
+
+`onChange={(e) => setDay(e.target.value)}` accepted `''`. A `type="date"` clears
+on Backspace in Chrome and carries an explicit ✕ in Firefox, so this is one
+keystroke, not an exotic input.
+
+**ONE KEYSTROKE TOOK OUT THREE CONTROLS AT ONCE, which is what makes it
+Critical rather than a rough edge:**
+
+- the read went out as `?day=` → `attendanceDayQuerySchema`'s
+  `/^\d{4}-\d{2}-\d{2}$/` refuses it → `parseOr400` answers 400 with
+  `message: "day: invalid_string"` → `errorText` passes the string straight
+  through → **the owner reads `day: invalid_string`**, a schema field name and a
+  zod issue code, in front of the beginner this playbook is written for (K1's
+  ban list, verbatim);
+- `addDays('', ±1)` returns `''` unchanged (`hoursView.js` answers the input on
+  an unparseable date), so **BOTH arrows issued no read at all**;
+- **Try again re-sent the same refused request for ever.**
+
+The only way out was retyping into the box Kd had told us the day before he
+could not see (:29410). **Fixed at the source** — the box refuses to go empty —
+**rather than with four guards downstream**, because `day` is seeded from
+`gymToday` and is never legitimately empty. React restores the previous value
+into a controlled input whose `onChange` declined the new one, so the box shows
+the day it still holds; **measured in jsdom under React 19, not assumed.**
+
+**IT IS DELIBERATELY NOT `OpeningHoursPanel`'s SHAPE.** That panel guards
+`closureDay === ''` at its two call sites (`:430`, `:842`) and is right to: there
+an empty box is the legitimate starting state of a form nobody has filled in.
+**Copying a neighbouring guard's SHAPE without its REASON is :15534's recorded
+defect** — here the honest invariant is that the value is never empty at all.
+
+### 3. THE TEST THAT SHOULD HAVE CAUGHT C/H-1 AND STRUCTURALLY COULD NOT
+
+⚠️ **THE MECHANISM BELOW IS FALSE AND IS STRUCK BY T3 ROUND 2 (`:29740`, L-1),
+WHICH MEASURED IT. The FIX was right; the REASON given for it was not, and the
+wrong reason is kept struck rather than deleted because it is the lesson**
+(BACKLOG.md:2248's precedent — a recorded CAUSE that was false, in four
+documents). **The true reason, and the corrected figures, are in §3a below.**
+
+~~**This is the part worth more than either fix.** Nine assertions across two
+files pinned the read-only sentence as
+`expect(screen.getAllByText(READ_ONLY_NOTE).length).toBeGreaterThan(0)` — **a
+claim about the whole SCREEN.** Settings mounts FOUR panels and the sentence is
+written ONCE, so **as soon as any one panel renders it, every such assertion is
+green for all four.** A sixth panel that greys a control and says nothing passes
+every one of them, for ever.~~
+
+`settings.render.test.jsx`'s own case is the sharper example: its docstring reads
+*"this panel obeys it like every other"* and it asserts only
+`box.disabled === true` and that `updateOrg` was not called. **It was green under
+the defect and could never have seen it.**
+
+**THE GUARD IS PER-PANEL AND LISTS ITS SUBJECTS** (:5348 rule 5). A new
+`describe` in `readOnlyConsole.render.test.jsx` walks all four greying Settings
+sections — gym details, when we're open, marking attendance, staff — asserting
+`READ_ONLY_NOTE` **inside each section's own body** on a lapsed gym and **absent
+from it** on a paying one. The scope handle is `ConsoleSection`'s own
+`aria-controls`, so nothing guesses at a class name. **And it asserts the COUNT
+of sections**, because a fifth panel added without a line in that list would be a
+fifth panel nobody is checking — the exact way this one arrived.
+
+**M7 proves the count assertion discriminates**: hiding the attendance panel took
+it to 3 and it went red.
+
+### 3a. WHAT ACTUALLY HAPPENED — added by round 2, which measured every figure above
+
+**`ConsoleSection` UNMOUNTS a closed body** (`ConsoleStates.jsx:114-118`, its own
+comment: *"Closed means UNMOUNTED here"*) **and every case on this screen opens
+exactly ONE section.** So a screen-wide `getAllByText` on Settings only ever had
+one panel's body to search: those assertions were scoped in practice, and were
+never "green for all four". **Measured, not argued: killing `GymDetailsPanel`'s
+note turned `readOnlyConsole.render.test.jsx`'s *"cannot be saved, and the reason
+is above the boxes"* — one of the nine round 1 named as structurally blind — RED,
+along with the new class case. 2 failed, 37 passed.**
+
+**THE TRUE REASON C/H-1 SHIPPED IS PLAINER, AND IT IS A DIFFERENT LESSON: no
+test ever opened the attendance section with a note assertion in it.** A missing
+CASE, not a blind INSTRUMENT. That distinction matters to the next chat, because
+the two have different remedies — a blind instrument is rebuilt, a missing case
+is written, and round 1 did both while believing it was doing only the first.
+
+**THE FIGURES WERE WRONG TOO, and the review carried round 1's number rather than
+re-deriving it** (:23928 — a figure a review hands you is corrected, not
+carried). Measured on `HEAD`: **FIVE** assertions take the
+`getAllByText(READ_ONLY_NOTE).length > 0` shape and **TEN** mention the note at
+all — **every one of them in `readOnlyConsole.render.test.jsx`**, not "across two
+files". `settings.render.test.jsx` had **ZERO** occurrences of `READ_ONLY_NOTE`
+before round 1 added them, which the same §3 half-knew: its next paragraph
+correctly describes that file's case as asserting `box.disabled` and nothing
+else. **`settings.render.test.jsx:162`'s "five panels" was wrong in the other
+direction — Settings mounts FOUR** (`Settings.jsx:127,150,175,203`), which this
+card's own count assertion pins at 4.
+
+### 4. THE STALE STATUS LINES, AND WHY THEY ARE NOT A TIDINESS FINDING
+
+`CARD-gym-attendance.md:10` and `HANDOFF.md:12` both said **"T3 UNRUN on the
+server half"**. It has run twice — `:28452` (round 1, four Critical/High) and
+`:28649` (round 2, diff-only, ZERO, packet ships) — and the lines were false the
+morning they were written, surviving two later commits.
+
+**THE COST IS MEASURED, NOT HYPOTHETICAL: the reviewer read them, believed them,
+and ran a fresh full pass over a half this project had already paid to review
+twice.** :16702's stale index line manufactured work for Kd; this manufactured a
+review round. **Whoever closes a round closes every line that states its status,
+in the same commit.** Both corrected here, struck rather than deleted.
+
+### 5. THE FIVE LOW, ALL FIXED, NONE BOUGHT A ROUND (`BACKLOG.md`)
+
+**L-1 · the empty day named the wrong reason.** `emptyDayReason` tested the
+switch before the filter, so a gym with the button off, looking at a day that had
+200 visits before it was switched off, with the exceptions filter on, was told
+*"Nobody can mark themselves in — the button is switched off"*. **True about the
+gym, wrong about the list**, and it points the owner at Settings when the thing
+emptying their list is the control beside it. Order reversed.
+**RECORDED FOR THE NEXT CHAT: this was tagged Low by the review and it is
+arguably :5807 Critical/High** — a sentence on screen explaining an empty list
+with a cause that did not cause it. It changed nothing about the outcome (the
+packet was already held, and every finding is fixed either way, :5307), so it was
+fixed under the review's own tag rather than re-graded after the fact. **A future
+round meeting this shape should call it C/H on sight.**
+
+**L-2 · a Try again that could never work.** `ConsoleFailed` offered a retry on
+the 403 this screen actually meets — `attendance.read` unticked — where no amount
+of pressing re-grants a privilege. Now `isRetryable`, the same predicate the
+Overview's two panes ask. The SENTENCE stays and is the server's own; what goes
+is the button's implied promise.
+
+**L-3 · a dead control still inviting the click.** The whole row is a `<label>`,
+so `cursor-pointer` covered the words as well as the box while `readOnly ||
+saving`. Now one `locked` predicate drives the guard, the `disabled` and the
+cursor, so the three cannot drift.
+
+**L-4 · effect deps that read as load-bearing.** `[gymId, readKey, day,
+statusesParam]` — the last two are already inside `readKey`. They stay (the
+effect READS them and `react-hooks/exhaustive-deps` requires it; removing one
+fails lint at `--max-warnings=0`) and now carry a comment saying so. **A comment,
+not a removal, and the reason is written down so the next reader does not try.**
+
+**L-5 · a second spelling of one default.** `org.manualAttendanceEnabled !==
+false` re-implemented `myOrgSchema`'s `.default(true)`. Correct that day and free
+to disagree later: flip the contract's default and the panel would still draw the
+switch ON. The panel now reads the boolean the contract guarantees, the two
+console fixtures state the field like they already state `country`'s default, and
+**the default gained its first observer in `packages/shared`** — under the old
+code, changing it broke nothing anywhere.
+
+### 6. WHAT ROUND 2 MUST PROBE, because all three shapes recurred here
+
+1. **A note assertion must be scoped WITHIN its panel.** A
+   `.toBeGreaterThan(0)` over a screen is what let C/H-1 through.
+2. **A regression test must be watched RED under the revert**, not merely green
+   with the fix (:5105).
+3. **A precedence test needs a fixture where BOTH conditions are true.**
+   `attendanceView.test.js:257` was named *"whatever else is true"* over the one
+   fixture in which nothing else IS true — :26947's shape, a test whose NAME is
+   wider than its coverage, for the fifth recorded time.
+
+### Round log
+
+**Findings:** 2 Critical/High, 5 Low, 3 tests that stayed green under their own
+subject. All fixed. Nothing deferred; no `OWED.md` line opened by this round.
+
+**Every finding was re-verified against the shipping bytes before a line was
+changed** rather than taken from the review (an agent's report is not a source).
+The `day: invalid_string` chain was walked through the schema, the route's
+`parseOr400` and `errorText` in the files, and `addDays('')`'s answer was read
+out of `hoursView.js:445-450`.
+
+**SEVEN MUTANTS, ALL RED, ALL RESTORED AND THE RESTORE VERIFIED** (`git diff
+--stat` clean on the reverted file, :19803's lesson — not the tool's own word):
+
+| # | mutant | what went red |
+|---|---|---|
+| M1 | `{readOnly ?` → `{false ?` on the note | `settings.render` "says WHY it is greyed" · `readOnlyConsole` "marking attendance" — **and the other three panels stayed GREEN**, which is the discrimination the class guard exists for |
+| M2 | the empty-date guard removed | "sends no read for an empty date" (2 calls, not 1) · "keeps both arrows working" — **the second printed the defect itself: `expected '' to match /^\d{4}-\d{2}-\d{2}$/`, i.e. the arrow issued a read for a day that is not a day** |
+| M3 | `emptyDayReason` order restored | "blames the filter, not the switch" |
+| M4 | `onRetry` unconditional | "offers no Try again when the server refused the privilege" |
+| M5 | `.default(true)` → `.default(false)` in `@app/shared` | "supplies the attendance switch's default when an older api omits it" |
+| M6 | `cursor-pointer` unconditional | "is not usable on a gym whose plan has lapsed" |
+| M7 | the attendance panel hidden from `Settings` | "draws exactly these four sections and no fifth one nobody is checking" (3, not 4) |
+
+**PROVE, final bytes:** `web` **1612/1612 across 57 files** (1596 before; +16) ·
+`@app/shared` **52/52** (51 before; +1) · `eslint --max-warnings=0` exit 0 on all
+seven touched web files · `tsc --noEmit` exit 0 in `@app/shared` **and PROVEN
+REAL by planting a type error in the test file it is meant to cover** — it was
+caught at `test/schemas.test.ts(522,7)`, then removed and the file restored
+byte-identical. Root guards: `check-harnesses` 25 parse · `check-decisions-index`
+267 pointers / 1096 headings · triggers `--check` up to date. **No `apps/api`
+file, no migration, no `packages/shared/src` change** — the only server-side edit
+is a TEST.
+
+**Files:** `apps/web/src/components/console/AttendanceSettingsPanel.jsx` ·
+`pages/console/Attendance.jsx` · `pages/console/attendanceView.js` ·
+`pages/console/attendanceView.test.js` ·
+`pages/console/consoleAttendance.render.test.jsx` ·
+`pages/console/readOnlyConsole.render.test.jsx` ·
+`pages/console/settings.render.test.jsx` ·
+`packages/shared/test/schemas.test.ts` · records (`DECISIONS.md`,
+`DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`, `BACKLOG.md`, `OWED.md`,
+`CARD-gym-attendance.md`, `HANDOFF.md`).
+
+**NOTHING TICKS.** The attendance `OWED.md` line still does not tick, and what
+holds it is unchanged plus one: **sheet Parts C and D are unrun** (:29410 —
+Part D is flagged in the sheet as the one path its author could not verify) ·
+**this packet's diff-only round 2 is owed.**
+
+## 2026-09-02 — ATTENDANCE, THE OWNER'S HALF, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and both Lows are round 1's own account of itself, one explaining the defect with a mechanism that does not exist and one claiming a guard reaches further than it does
+
+**Read before quoting `:29500` §3's mechanism (it is STRUCK — §3a replaces it),
+before explaining why a test failed to catch something, before asserting a COUNT
+of console sections as a guard against new panels, before reading a screen-wide
+`getAllByText` on a screen whose sections COLLAPSE, and before taking a review's
+MAP of where a false sentence lives as complete.**
+
+Reviews the fixes in `:29500` (diff-only, :5348 rule 2). **ZERO Critical/High ⇒
+THE PACKET SHIPS** (:5348 rule 1). Two Low, both fixed here, both logged in
+`BACKLOG.md` — checked by opening the file, not by citing it (:15010's L-6).
+**Escape hatch NOT armed:** round 1 found two Criticals in this subsystem and
+this round finds none, so :5348's two-consecutive trigger does not fire. Kd
+approved the finding list before a byte was written (*"ok"*).
+
+**NEITHER LOW IS IN THE APP.** No `src/` behaviour changed, no `apps/api` file,
+no migration, no `packages/shared` change. Both findings are in what round 1
+wrote ABOUT itself — which is where this card's remaining risk actually was,
+because round 1's seven fixes were all independently re-mutated by the reviewer
+and every one of them holds.
+
+### 1 · L-1 — THE RECORDED CAUSE OF C/H-1 IS FALSE, AND A FALSE CAUSE HAS A DIFFERENT REMEDY FROM A TRUE ONE
+
+Round 1 recorded that nine assertions of the form
+`getAllByText(READ_ONLY_NOTE).length > 0` were **structurally blind**: Settings
+mounts four panels sharing one sentence, so any one of them satisfied all nine.
+
+**IT DOES NOT WORK THAT WAY, AND THE PROBE IS ONE LINE.** `ConsoleSection`
+UNMOUNTS a closed body — `ConsoleStates.jsx:114-118`, whose own comment reads
+*"Closed means UNMOUNTED here"* — and **every case on this screen opens exactly
+ONE section**. So a screen-wide query on Settings only ever had one panel's body
+to search. **Measured: `{readOnly ?` to `{false ?` on `GymDetailsPanel`'s note
+turned `readOnlyConsole.render.test.jsx`'s *"cannot be saved, and the reason is
+above the boxes rather than beside the button"* — one of the nine round 1 named
+as blind — RED. 2 failed, 37 passed.**
+
+**THE TRUE REASON IS PLAINER AND IS A DIFFERENT LESSON: no test ever opened the
+attendance section with a note assertion in it.** A missing CASE, not a blind
+INSTRUMENT. **The two have different remedies** — an instrument is rebuilt, a
+case is written — and round 1 did both while believing it was doing only the
+first. The per-panel guard it built is still the right thing; what was wrong is
+the story of why it was needed, and that story is what a future chat inherits.
+
+**THE FIGURES WERE WRONG IN BOTH DIRECTIONS.** Measured on `HEAD`: **FIVE**
+assertions take that shape, **TEN** mention the note at all, and **all ten are in
+one file** — `settings.render.test.jsx` held **ZERO** occurrences of
+`READ_ONLY_NOTE` before round 1 added them, so "across two files" was never true.
+Round 1 half-knew this: the very next paragraph of §3 correctly describes that
+file's case as asserting `box.disabled` and nothing else. In the other direction,
+`settings.render.test.jsx:162` said Settings *"mounts five panels"*; it mounts
+**FOUR** (`Settings.jsx:127,150,175,203`), the number this card's own count
+assertion pins.
+
+**THE MAP WAS A CLAIM AND IT WAS WRONG — THIRD RECORDED TIME** (:23928 L-1,
+:24559 L-1). **The review named THREE places holding the false sentence. There
+are SEVEN**, found by grepping rather than by reading the review: `DECISIONS.md`
+§3 · `OWED.md:7924` · `HANDOFF.md:16` · `DECISIONS-INDEX.md:1338` ·
+`readOnlyConsole.render.test.jsx:922` · `settings.render.test.jsx:161` ·
+`settings.render.test.jsx:2029`. **The two the review missed are both records Kd
+and the next chat actually read.** Corrected in all seven, **struck rather than
+overwritten** (:20587), and the wrong diagnosis is deliberately kept visible —
+`BACKLOG.md:2248`'s precedent, where a false recorded CAUSE in four documents was
+kept struck because the wrong diagnosis IS the lesson.
+
+### 2 · L-2 — THE COUNT GUARD'S CLAIM OUTRAN ITS REACH, WHICH IS :26947's SHAPE IN A COMMENT
+
+`readOnlyConsole.render.test.jsx` said *"a fifth panel added to Settings without
+a line here is a fifth panel nobody is checking — so the count is asserted too"*.
+**The count filters on `aria-expanded`, which only a `ConsoleSection` heading
+carries. It counts SECTIONS, not panels.**
+
+**Measured rather than reasoned** (:19960 — a guard whose only proof is that the
+code looks right): a probe `ConsoleCard` holding one `disabled` button and no
+note was added to `Settings.jsx`, and **all 164 cases in the two files stayed
+green**. The shape is not hypothetical — **`Members.jsx:343-347` greys Remove and
+writes the note in a bare `<div>`**, so this console already contains a greying
+panel the count could never see.
+
+**THE FIX IS THE BOUNDARY, NOT A WIDER COUNT, AND THE REASON IS R1.1.** Counting
+every panel means giving `ConsoleCard` a test handle; it is a shared component
+with callers across the console, and a Low fix round contains only the fix
+(:5348 rule 6). **So the comment now says what the count reaches, what it does
+not, that a probe proved it, and where the uncovered shape already lives** —
+which is the whole of :27659's *"a comment that says what a test guarantees"*.
+
+### 3 · THE INSTRUMENT NOTE, BECAUSE IT RECURRED AND THE REPO HAD ALREADY RULED ON IT
+
+The reviewer restored its first mutant with `git checkout --` and **discarded an
+uncommitted round-1 fix**, then rebuilt the file by hand. **:25567 §3 is exactly
+this and is two days old**: on this machine `core.autocrlf` makes
+`git checkout --` a rewrite, not a restore, and **a clean `git status` is a claim
+about content after normalisation, never about bytes**. The standing command is
+`git show HEAD:<file> > <file>`, verified with `sha256sum`.
+
+**THIS ROUND USED SCRATCHPAD SNAPSHOTS INSTEAD AND VERIFIED BOTH RESTORES BY
+HASH** — `GymDetailsPanel.jsx` back to `8c4a37e0…983e` and `Settings.jsx` to
+`d99c0647…d80a`, each with an empty `git status`, since both files are otherwise
+untouched by this card. **The tree was independently re-baselined before any
+edit: 232/232 across the card's four suites (39 + 125 + 68), the same figure the
+review reported**, so the rebuilt file is sound.
+
+### Round log
+
+**Findings:** 0 Critical/High, 2 Low. Both fixed. Nothing deferred; no `OWED.md`
+line opened by this round.
+
+**Every finding was re-measured here before a line was changed** rather than
+taken from the review (an agent's report is not a source) — and **both of the
+review's own figures moved under that**: its "three places" became seven, and it
+carried round 1's "nine assertions" unchecked, which is five.
+
+**TWO PROBES, BOTH RESTORED AND BOTH RESTORES HASH-VERIFIED:**
+
+| # | probe | result |
+|---|---|---|
+| P1 | `{readOnly ?` to `{false ?` on `GymDetailsPanel`'s note | **RED ×2** — the pre-existing *"cannot be saved"* case AND the new class case, which is what disproves round 1's "structurally blind" |
+| P2 | a fifth greying panel added to `Settings.jsx` as a plain `ConsoleCard` | **164/164 GREEN** — the count guard and the per-panel loop are both blind to it |
+
+**Files:** `apps/web/src/pages/console/readOnlyConsole.render.test.jsx` ·
+`apps/web/src/pages/console/settings.render.test.jsx` · records
+(`DECISIONS.md`, `DECISIONS-INDEX.md` §1B, `DECISIONS-TRIGGERS.md`,
+`BACKLOG.md`, `OWED.md`, `HANDOFF.md`, `CARD-gym-attendance.md`).
+**No `src/` component, no `apps/api` file, no migration, no
+`packages/shared` change.**
+
+**WHAT TICKS AND WHAT DOES NOT.** The owner's-half **REVIEW GATE IS MET** — this
+packet ships. **The attendance `OWED.md` line still does NOT tick**, and one
+thing now holds it: **sheet Parts C and D are unrun** (:29410 — Part D is
+flagged in the sheet as the one path its author could not verify).

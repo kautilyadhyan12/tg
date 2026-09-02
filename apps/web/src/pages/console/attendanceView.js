@@ -247,9 +247,19 @@ export function searchCoversEverybody(nextCursor) {
  *  A FAILED READ IS NOT IN THIS LIST and must never reach it: the screen branches
  *  on its own read status first, and a dropped request draws an error card with a
  *  Try again. Answering "nobody came" for a request that never arrived is the
- *  defect, not the empty state. */
+ *  defect, not the empty state.
+ *
+ *  **THE FILTER IS ASKED FIRST, AND THE ORDER IS THE WHOLE OF THIS FUNCTION**
+ *  (T3 round 1, L-1). Two of these can be true at once: a gym that has switched
+ *  the button off can still be looking at a day that HAD two hundred visits
+ *  before it was switched off, with the exceptions filter on and emptying the
+ *  list. Answering `switch-off` there says something TRUE about the gym and
+ *  the WRONG thing about the list in front of the owner — the sentence points
+ *  at Settings when the fix is the filter beside it, and this function's only
+ *  job is naming the reason THIS list is empty. The switch answers for a day
+ *  with nothing in it; the filter answers for a day it emptied. */
 export function emptyDayReason({ manualAttendanceEnabled, totals, filtered }) {
-  if (manualAttendanceEnabled === false) return 'switch-off';
   if (filtered === true && Number.isInteger(totals?.visits) && totals.visits > 0) return 'filtered';
+  if (manualAttendanceEnabled === false) return 'switch-off';
   return 'nobody';
 }

@@ -254,10 +254,37 @@ describe('the name search', () => {
 describe('why the day is empty', () => {
   // THREE CASES, THREE SENTENCES. They look identical in the data and only one
   // of them is a problem — the :8267/:8343 class this project has shipped once.
-  it('says the switch is off when it is off, whatever else is true', () => {
+  it('says the switch is off when that is why there is nothing to show', () => {
     expect(
       emptyDayReason({ manualAttendanceEnabled: false, totals: { visits: 0, people: 0 }, filtered: false }),
     ).toBe('switch-off');
+    // The filter is ON but narrowed nothing, because the day had nothing in it.
+    // The switch is still the answer.
+    expect(
+      emptyDayReason({ manualAttendanceEnabled: false, totals: { visits: 0, people: 0 }, filtered: true }),
+    ).toBe('switch-off');
+  });
+
+  /** **THE CASE THE OLD TEST'S NAME CLAIMED AND ITS FIXTURE COULD NOT SEE**
+   *  (T3 round 1, L-1). It read *"whatever else is true"* over
+   *  `visits: 0, filtered: false` — the one fixture in which nothing else IS
+   *  true — so it was green under both orders and could never observe the
+   *  precedence it was named for. :26947's shape: a test whose NAME is wider
+   *  than its coverage.
+   *
+   *  Both conditions hold here at once, which is the only fixture that grades
+   *  the order: a gym that switched the button off, looking back at a day that
+   *  had two hundred visits before it did, with the exceptions filter on. The
+   *  switch sentence would be TRUE and would point the owner at Settings when
+   *  the thing emptying their list is the control beside it. */
+  it('blames the filter, not the switch, when both are true and the filter is what emptied it', () => {
+    expect(
+      emptyDayReason({
+        manualAttendanceEnabled: false,
+        totals: { visits: 200, people: 180 },
+        filtered: true,
+      }),
+    ).toBe('filtered');
   });
 
   it('never says nobody came on a day that had visits and a filter on', () => {

@@ -4,11 +4,27 @@
 `0019` reviewed as SQL by Kd and approved before anything else was written
 (T5/R4.4). §4b (WEB HALF) IS SPLIT IN TWO, with Kd told before he approved,
 because one chat cannot hold two screens and two switches: its MEMBER HALF IS
-BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS UNBUILT.
-T3 ROUND 1 RAN ON THE MEMBER HALF (`DECISIONS.md:28976`): THREE Critical/High
-and FOUR Low, all seven fixed, so that packet does NOT ship its round and a
-DIFF-ONLY ROUND 2 IS OWED. T3 is UNRUN on the server half. NO BROWSER SMOKE HAS
-RUN on either.**
+BUILT 2026-09-02 (`DECISIONS.md:28822`) and its OWNER HALF IS BUILT 2026-09-02
+(`DECISIONS.md:29250`).
+**EVERY HALF HAS NOW PASSED ITS REVIEW GATE, each on a diff-only round 2 finding
+ZERO Critical/High** (:5348 rule 1) — server `:28452` → `:28649` · member
+`:28976` → `:29117` · owner `:29500` → `:29740`. **The escape hatch never armed
+on any of them.** **THE BROWSER GATE IS WHAT REMAINS: the smoke passed 8 of 8 on
+the core (`DECISIONS.md:29410`) and SHEET PARTS C AND D ARE STILL UNRUN** — the
+Settings switch end-to-end, and the came-twice case, **Part D flagged in the
+sheet as the one path its author could not verify**. Nothing ticks until they
+run.**
+
+**CORRECTED 2026-09-02 — THIS BLOCK SAID "T3 IS UNRUN ON THE SERVER HALF" AND
+THAT HAS BEEN FALSE SINCE THE MORNING IT WAS WRITTEN.** The server half ran
+**round 1** (`DECISIONS.md:28452`, four Critical/High, all fixed) and **round 2**
+(`DECISIONS.md:28649`, diff-only, ZERO Critical/High — **that packet SHIPS**).
+The line survived two later commits to this file. **Found by the owner's-half T3
+round 1, which read it, and it cost that reviewer a fresh pass over a half the
+repo had already paid to review twice** — a stale status line does not merely
+misinform, it BUYS WORK. Whoever closes a review round closes every line that
+states its status, in the same commit (:16702's rule for the index, applied to a
+card).
 
 **AND KD RULED A SECOND THING ON 2026-09-02, at the plan gate for §4b: the
 member's gym features get their OWN SECTION in the member app's left nav,

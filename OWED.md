@@ -7904,7 +7904,44 @@ file and is stated so nobody reads these as lower priority than they are.
       **came-twice** case (one row, two times, ruling 12 at the screen). Part D
       was flagged IN the sheet as the one path the chat could not verify itself
       (an auth rate limit), so nothing about it is claimed in either direction.
-      **(b) T3 IS UNRUN on the owner's half AND on the server half.**
+      **(b)** ~~T3 IS UNRUN on the owner's half AND on the server half.~~
+      **CORRECTED AND ADVANCED 2026-09-02 (`DECISIONS.md:29500`). The SERVER
+      half's T3 ran twice** — `:28452` (round 1, four Critical/High) and `:28649`
+      (round 2, diff-only, ZERO, **that packet SHIPS**) — **so the words above
+      were false when written, and they were read and believed by the owner's-half
+      reviewer, who then paid for a fresh full pass over it. A stale status line
+      does not merely misinform; it BUYS WORK.**
+      ~~**THE OWNER'S HALF THEN RAN ROUND 1: TWO Critical/High, five Low, all
+      seven fixed, so THAT PACKET DOES NOT SHIP ITS ROUND and a DIFF-ONLY ROUND 2
+      IS OWED**~~ **— ROUND 2 RAN 2026-09-02 (`DECISIONS.md:29740`): ZERO
+      Critical/High, so THE OWNER'S HALF SHIPS and EVERY HALF OF THIS CARD HAS
+      NOW PASSED ITS REVIEW GATE** (server `:28649` · member `:29117` · owner
+      `:29740`), **each on a diff-only round 2, escape hatch never armed on any
+      of them.** Round 2's two Low were both round 1's own account of itself — a
+      false recorded cause and a guard claiming more reach than it has — and
+      neither is in the app.
+      Both Criticals were things an OWNER could see: **a greyed switch with no
+      sentence** — the sixth panel to grey a control and the first to explain
+      nothing, which :24141 §3(c) requires per panel and not only in the page's
+      red strip — and **a cleared date box stranding the whole screen**, one
+      keystroke taking out both arrows, the read (`day: invalid_string` printed at
+      the owner) and Try again together.
+      ~~**THE CARRY-FORWARD FOR ANY FUTURE CONSOLE PANEL, because it is a class
+      and not a case: nine assertions pinned the read-only sentence per SCREEN
+      (`getAllByText(...).length > 0`), and Settings mounts four panels that share
+      one sentence — so any ONE of them satisfied all nine.**~~ **— STRUCK BY T3
+      ROUND 2 (`DECISIONS.md:29740` L-1). A closed `ConsoleSection` is UNMOUNTED
+      and every case opens exactly one, so those assertions were already scoped;
+      killing a neighbouring panel's note turns one of them RED. FIVE take that
+      shape, TEN mention the note, all in ONE file. THE REAL CARRY-FORWARD IS
+      SMALLER AND TRUER: no test ever opened the attendance section with a note
+      assertion in it — a missing CASE, not a blind INSTRUMENT.** The guard is
+      per-panel, scoped through `ConsoleSection`'s `aria-controls`, and asserts
+      the section COUNT — **which counts SECTIONS only; a greying panel drawn as
+      a plain `ConsoleCard` (the `Members.jsx:343` shape) is invisible to it,
+      measured, and the test now says so.**
+      **SO WHAT NOW HOLDS THIS LINE, AND IT IS ONE THING: SHEET PARTS C AND D
+      (above). Every review gate on this card is met; the browser gate is not.**
 - [ ] 🟡 **`apps/web/tools/mutate-login-door.mjs` IS UNRUNNABLE AND HAS BEEN
       SINCE 2026-08-28.** Found 2026-09-02 (`DECISIONS.md:28822` §4) by trying to
       run it. It ABORTS before writing a byte — **D13's anchor matches nothing**,

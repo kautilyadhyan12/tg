@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
+import { READ_ONLY_NOTE } from '../../pages/console/billingView';
 import { ConsoleSection } from './ConsoleStates';
 
 // MARKING ATTENDANCE — the owner's on/off switch, Kd's ruling (:26469 §1.4):
@@ -30,12 +31,27 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
   // switch draws from the kept org row, so a failed save leaves it showing what
   // the gym actually has rather than what was attempted — the one thing a
   // toggle must never get wrong.
-  const enabled = org.manualAttendanceEnabled !== false;
+  //
+  // **READ AS THE BOOLEAN THE CONTRACT GUARANTEES, NOT AS `!== false`** (T3
+  // round 1, L-5). `myOrgSchema` declares `manualAttendanceEnabled` with
+  // `.default(true)` and `orgsApi` parses every `/v1/orgs/mine` through it, so
+  // the key is on every row this console holds — exactly as the `country`
+  // default is. Coercing here would be a SECOND spelling of that default, and
+  // the two would answer differently the day the contract's changed: the schema
+  // would say `false` and this panel would still draw the switch on. One
+  // declaration, in the contract (:28452 §3's drift class).
+  const enabled = org.manualAttendanceEnabled;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  /** THE ONE PREDICATE THE GUARD, THE `disabled` AND THE CURSOR ALL ASK, so
+   *  they cannot drift into disagreeing about whether this control is live —
+   *  a dead switch under a pointer cursor still invites the click it will
+   *  ignore (T3 round 1, L-3). */
+  const locked = readOnly || saving;
+
   const toggle = async () => {
-    if (readOnly || saving) return;
+    if (locked) return;
     const next = !enabled;
     setSaving(true);
     setError(null);
@@ -69,17 +85,39 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
       title="Marking attendance"
       summary={enabled ? 'Members can mark themselves in' : 'Switched off'}
     >
+      {/* THE GREYED SWITCH IS EXPLAINED WHERE IT SITS, and this panel is the
+          SIXTH to grey a control on a gym with no plan (:24141 §3(c), :24376).
+          The five before it — join codes, the confirm queue, the roster's
+          Remove, the staff list, the gym's details, the opening hours — all
+          write this same sentence beside their own dead controls, and the
+          console's red strip at the top of the page is IN ADDITION to it
+          rather than instead of it. **A disabled control with no nearby
+          sentence states nothing at all**, and `ConsoleSection` rows collapse,
+          so an owner who opens only this one would otherwise get a greyed box
+          under no explanation whatsoever. Shipped with the disable half at
+          :29250 and missed; found by T3 round 1 (C/H-1).
+
+          ABOVE the words that describe the switch, not beside it — the
+          placement `GymDetailsPanel` and `OpeningHoursPanel` already use, and
+          the one :24141 named ("the reason is above the boxes rather than
+          beside the button"). */}
+      {readOnly ? (
+        <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {READ_ONLY_NOTE}
+        </p>
+      ) : null}
+
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
         When this is on, a member opening their gym in the app can tap
         &ldquo;I&apos;m here&rdquo; and you&apos;ll see them under Attendance.
       </p>
 
-      <label className="flex items-start gap-3 mt-3 cursor-pointer">
+      <label className={`flex items-start gap-3 mt-3 ${locked ? '' : 'cursor-pointer'}`}>
         <input
           type="checkbox"
           checked={enabled}
           onChange={toggle}
-          disabled={readOnly || saving}
+          disabled={locked}
           className="mt-0.5"
         />
         <span className="min-w-0">

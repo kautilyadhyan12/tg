@@ -53,6 +53,10 @@ const { orgService } = await import('../../api/orgsApi');
 // One store, shared by the shell and the screen inside it and re-read on window
 // focus — so it survives `cleanup()` and must be emptied between tests.
 const { resetConsoleOrgs } = await import('./consoleOrgs');
+// THE SENTENCE ITSELF, never a copy of its words. :19960's rule — an assertion
+// typed out by hand goes green against a screen that says something else the
+// day the constant is reworded.
+const { READ_ONLY_NOTE } = await import('./billingView');
 const Settings = (await import('./Settings')).default;
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 // Imported to be mounted DIRECTLY, which is the only way one of its guarantees
@@ -77,6 +81,12 @@ const ORG = {
   staffRole: 'owner',
   isMember: true,
   joinedAt: '2026-08-18T09:00:00.000Z',
+  // `myOrgSchema` declares this with `.default(true)`, so — exactly like
+  // `country` above — every row the console holds carries the key whether the
+  // api sent it or not. Stated in the fixture rather than left to a coercion in
+  // the panel, which would be a second spelling of one default (T3 round 1,
+  // L-5).
+  manualAttendanceEnabled: true,
 };
 
 const OWNER = {
@@ -143,6 +153,36 @@ const drawSettings = () =>
  *  the START of it. */
 const openSection = async (title) => {
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}`) }));
+};
+
+/** THE BODY OF ONE SECTION, so an assertion about a panel cannot be satisfied by
+ *  a different panel on the same screen.
+ *
+ *  **ROUND 1 WROTE A FALSE REASON HERE AND ROUND 2 CORRECTED IT.** It said C/H-1
+ *  survived because Settings *"mounts five panels"* sharing one sentence, so a
+ *  screen-wide `getAllByText(READ_ONLY_NOTE).length > 0` was green for all of
+ *  them. **Both halves were wrong.** Settings mounts FOUR panels (`Settings.jsx`
+ *  :127, :150, :175, :203 — the count this file's own sibling case asserts), and
+ *  a closed `ConsoleSection` is UNMOUNTED, so a case that opens one section had
+ *  only that section's body to search. **The real reason is that no test opened
+ *  the attendance section with a note assertion in it** — a missing case, not a
+ *  blind instrument. Kept and corrected rather than deleted: a wrong diagnosis
+ *  left standing is how the next chat inherits a false premise.
+ *
+ *  Scoping is still right, for the reason above this line rather than that one:
+ *  `ConsoleSection` publishes the handle — the heading button points at its own
+ *  body with `aria-controls` — so there is no need to guess at a class name. */
+const sectionBody = async (title) => {
+  const heading = await screen.findByRole('button', { name: new RegExp(`^${title}`) });
+  const bodyId = heading.getAttribute('aria-controls');
+  // A shut section has no body and deliberately no `aria-controls` (:24141's
+  // sibling fix — an attribute promising a screen reader an element that does
+  // not exist). Reaching here with null means the section was never opened,
+  // and saying so beats an unhelpful `getElementById(null)`.
+  expect(bodyId).toBeTruthy();
+  const body = document.getElementById(bodyId);
+  expect(body).toBeTruthy();
+  return within(body);
 };
 
 const drawStaff = async () => {
@@ -1979,6 +2019,48 @@ describe('the attendance switch', () => {
     expect(box.disabled).toBe(true);
     fireEvent.click(box);
     expect(orgService.updateOrg).not.toHaveBeenCalled();
+    // AND IT STOPS INVITING THE CLICK IT WILL IGNORE (T3 round 1, L-3). The
+    // whole row is a `<label>`, so the pointer cursor covered the words as well
+    // as the box — an affordance offered by a control that cannot act.
+    expect(box.closest('label').className).not.toMatch(/cursor-pointer/);
+  });
+
+  /** **THE GREYED SWITCH SAYS WHY, INSIDE ITS OWN SECTION** — :24141 §3(c), and
+   *  the regression test for T3 round 1's C/H-1 (:5348 rule 3).
+   *
+   *  The case above ships the disable half and is green without the sentence,
+   *  which is exactly how this shipped: five panels grey a control and write
+   *  `READ_ONLY_NOTE` beside it, this one greyed and wrote nothing, and an owner
+   *  opening only this row met a dead switch under no explanation at all.
+   *
+   *  **SCOPED TO THE SECTION, AND ROUND 2 CORRECTED WHY.** This used to say a
+   *  screen-wide `getAllByText(...).length > 0` is satisfied by any OTHER
+   *  panel's copy of the sentence. It is not, on this screen: a closed
+   *  `ConsoleSection` is unmounted, so only the section a case opens is there to
+   *  find. Scoping is worth having anyway — it is what makes the assertion say
+   *  *this* panel rather than *the screen* — but the thing that let C/H-1 ship
+   *  was that no case opened THIS section at all, which is what the case below
+   *  is. */
+  it('says WHY it is greyed, in this section rather than only in the strip at the top', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }],
+        formerOrgs: [],
+      },
+    });
+    await drawAttendance();
+    const panel = await sectionBody('Marking attendance');
+    expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();
+  });
+
+  /** THE POSITIVE CONTROL, one field apart — without it the case above is
+   *  satisfied by a panel that prints the sentence to every gym on earth,
+   *  including the ones whose switch works perfectly (:7104's PG1). */
+  it('says nothing of the sort on a gym that is paying', async () => {
+    await drawAttendance();
+    const panel = await sectionBody('Marking attendance');
+    expect(panel.queryByText(READ_ONLY_NOTE)).toBeNull();
+    expect(screen.getByLabelText(/Let members mark themselves in/i).disabled).toBe(false);
   });
 
   /** THE TICK BOX KD'S RULING 18 REQUIRES, without which *"the owner can change

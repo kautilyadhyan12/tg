@@ -448,6 +448,43 @@ describe("privileges a newer server knows and this build does not", () => {
     }
   });
 
+  /** **THE ATTENDANCE SWITCH'S DEFAULT IS DECLARED HERE AND NOWHERE ELSE** (T3
+   *  round 1, L-5). `AttendanceSettingsPanel` used to read
+   *  `manualAttendanceEnabled !== false`, which is a SECOND spelling of this
+   *  `.default(true)` — correct on the day it was written and free to disagree
+   *  with the contract afterwards, since flipping the default here would leave
+   *  the panel still drawing the switch ON. The panel now reads the boolean, so
+   *  this default is the only declaration and needs its own observer.
+   *
+   *  The fixture omits the key deliberately: an api older than this bundle sends
+   *  nothing, and the console must not conclude a gym switched attendance off. */
+  it("supplies the attendance switch's default when an older api omits it", () => {
+    const parsed = myOrgsResponseSchema.safeParse({
+      orgs: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          slug: "iron-house",
+          name: "Iron House",
+          city: null,
+          orgType: "gym",
+          timezone: "Asia/Kolkata",
+          locale: "en",
+          currencyDisplay: "INR",
+          status: "active",
+          staffRole: "manager",
+          privileges: ["members.read"],
+          isMember: true,
+          joinedAt: null,
+        },
+      ],
+      formerOrgs: [],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.orgs[0]?.manualAttendanceEnabled).toBe(true);
+    }
+  });
+
   it("STILL REFUSES an unknown privilege on the way IN — the server's own vocabulary", () => {
     // The positive control for the pair above: leniency is scoped to READS.
     // Without this, "accept anything" would pass both tests and would let a

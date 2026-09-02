@@ -127,6 +127,10 @@ const baseOrg = {
   ownerTrialUsed: null,
   isMember: true,
   joinedAt: '2026-08-18T09:00:00.000Z',
+  // `.default(true)` in `myOrgSchema`, so every parsed row carries it — the
+  // attendance switch reads the boolean rather than coercing one (T3 round 1,
+  // L-5).
+  manualAttendanceEnabled: true,
 };
 
 /** The gym after its trial ended: no live subscription, and the server's own
@@ -325,6 +329,19 @@ function typeInto(el, value) {
 async function openSection(name) {
   const heading = await screen.findByRole('button', { name: new RegExp(name, 'i') });
   heading.click();
+}
+
+/** The body of ONE section, through the handle `ConsoleSection` already
+ *  publishes: its heading points at its own body with `aria-controls`. See the
+ *  class guard at the foot of this file for why every note assertion needs
+ *  scoping. */
+async function sectionBody(name) {
+  const heading = await screen.findByRole('button', { name: new RegExp(name, 'i') });
+  const bodyId = heading.getAttribute('aria-controls');
+  expect(bodyId).toBeTruthy();
+  const body = document.getElementById(bodyId);
+  expect(body).toBeTruthy();
+  return within(body);
 }
 
 beforeEach(() => {
@@ -894,4 +911,87 @@ describe('a step already open when the gym lapses', () => {
     expect(screen.getByRole('radio', { name: /trainer/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /^cancel$/i }).disabled).toBe(false);
   });
+});
+
+// ── THE CLASS GUARD: every greying Settings panel says WHY, in its own body ──
+
+/** **THIS IS THE TEST THAT SHOULD HAVE CAUGHT T3 ROUND 1's C/H-1 AND
+ *  STRUCTURALLY COULD NOT** (:5348 rule 5 — a bug CLASS gets an automated check,
+ *  so a class found once cannot silently return).
+ *
+ *  **THE REASON WRITTEN HERE BY ROUND 1 WAS WRONG, AND ROUND 2 MEASURED IT.**
+ *  It said the old assertions — `getAllByText(READ_ONLY_NOTE).length > 0`, a
+ *  claim about the whole SCREEN — were structurally blind, because Settings
+ *  mounts four panels sharing one sentence so any ONE of them satisfied all of
+ *  them. **That is not what happens.** `ConsoleSection` UNMOUNTS a closed body
+ *  (`ConsoleStates.jsx:114-118`, its own comment: *"Closed means UNMOUNTED
+ *  here"*) and every case here opens exactly ONE section, so on Settings the
+ *  screen-wide query only ever had one panel's body to find. Measured: kill
+ *  `GymDetailsPanel`'s note and *"cannot be saved, and the reason is above the
+ *  boxes"* — one of the assertions round 1 called blind — goes RED.
+ *
+ *  **THE TRUE REASON IS PLAINER AND IS THE ONE TO CARRY: no test ever opened
+ *  the attendance section with a note assertion in it.** Not a broken
+ *  instrument — a missing case. The corrected figure, since round 1's was wrong
+ *  too: FIVE assertions take that `getAllByText` shape and ten mention the note
+ *  at all, **all of them in this file**; `settings.render` had none before
+ *  round 1 (`git show HEAD~:…` — zero occurrences).
+ *
+ *  A per-panel loop is still the durable shape, and the LIST is what makes it
+ *  durable: a fifth SECTION added to Settings without a line here is a section
+ *  nobody is checking — so the count is asserted too. `ConsoleSection`'s
+ *  `aria-controls` is the scope; nothing here guesses at a class name.
+ *
+ *  **WHAT THE COUNT CANNOT SEE, NAMED RATHER THAN IMPLIED (round 2, L-2).** It
+ *  filters on `aria-expanded`, which only a `ConsoleSection` heading carries —
+ *  so it counts SECTIONS, not panels. A fifth panel that greys a control inside
+ *  a plain `ConsoleCard` adds no heading and this describe stays green.
+ *  **Measured, not reasoned: a probe card with one `disabled` button and no note
+ *  was added to `Settings.jsx` and all 164 cases in this file and
+ *  `settings.render` stayed green.** That shape is not hypothetical —
+ *  `Members.jsx:343-347` greys Remove and writes the note in a bare `<div>`.
+ *  Widening the count means giving `ConsoleCard` a test handle, which is a
+ *  shared component and another card's diff (R1.1); the boundary is written
+ *  down instead, because a guard whose claim outruns its reach is :26947's
+ *  shape and this comment was that.
+ *
+ *  It asserts BOTH directions per panel, because a component that printed the
+ *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
+describe('every Settings panel that greys a control explains itself, in its own section', () => {
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'marking attendance', 'staff'];
+
+  it('draws exactly these four sections and no fifth one nobody is checking', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(LAPSED));
+    renderConsole(Settings, '/console/iron-house/settings');
+    await screen.findByTestId('console-banner');
+
+    // `ConsoleSection` is the only thing on this screen whose heading controls a
+    // body, so counting those headings counts the SECTIONS — and only those. A
+    // greying panel drawn as a plain `ConsoleCard` carries no heading and is
+    // invisible here; the docstring above says so and says why.
+    const headings = screen
+      .getAllByRole('button')
+      .filter((el) => el.getAttribute('aria-expanded') !== null);
+    expect(headings).toHaveLength(GREYING_SECTIONS.length);
+  });
+
+  for (const name of GREYING_SECTIONS) {
+    it(`says why inside “${name}” on a gym with no plan`, async () => {
+      orgService.getMine.mockResolvedValue(mineIs(LAPSED));
+      renderConsole(Settings, '/console/iron-house/settings');
+
+      await openSection(name);
+      const panel = await sectionBody(name);
+      expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();
+    });
+
+    it(`says nothing of the sort inside “${name}” on a paying gym`, async () => {
+      orgService.getMine.mockResolvedValue(mineIs(PAYING));
+      renderConsole(Settings, '/console/iron-house/settings');
+
+      await openSection(name);
+      const panel = await sectionBody(name);
+      expect(panel.queryByText(READ_ONLY_NOTE)).toBeNull();
+    });
+  }
 });

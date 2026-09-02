@@ -3317,3 +3317,97 @@ its name and comments and observed neither.
       own option count so a sixth status moves it automatically. Scalars keep
       `z.string()` deliberately — for `day` or `cursor` a repeated key really is
       ambiguous. **M-E** and **M-F** are RED on different lines.
+- [x] An empty day named the wrong reason — `pages/console/attendanceView.js` —
+      found 2026-09-02, attendance owner's-half T3 round 1 (L-1) — fixed this
+      commit. `emptyDayReason` tested the SWITCH before the FILTER, so a gym
+      with the button off, looking back at a day that had 200 visits before it
+      was switched off, with the exceptions filter on, read *"Nobody can mark
+      themselves in — the button is switched off"*. **True about the gym and
+      wrong about the list**, pointing the owner at Settings when the thing
+      emptying their list is the control beside it. Order reversed. **The test
+      guarding it was itself the :26947 shape** — named *"whatever else is
+      true"* over the one fixture (`visits: 0, filtered: false`) in which
+      nothing else IS true, so it was green under both orders. **M3** is RED.
+      **Recorded rather than re-graded: this is arguably :5807 Critical/High**
+      (a sentence explaining an empty list with a cause that did not cause it);
+      it was fixed under the review's own Low tag because the packet was already
+      held and every finding is fixed either way (:5307). A future round meeting
+      this shape should call it C/H on sight.
+- [x] A Try again that could never work — `pages/console/Attendance.jsx` —
+      found 2026-09-02, attendance owner's-half T3 round 1 (L-2) — fixed this
+      commit. `ConsoleFailed` offered a retry on the 403 this screen actually
+      meets: `attendance.read` unticked, where no amount of pressing re-grants a
+      privilege. Now `isRetryable`, the predicate `Overview.jsx:251,298` already
+      asks — **the third caller, which is why that helper was moved out of
+      `Overview` into `orgsApi` in the first place**. The SENTENCE stays and is
+      the server's own; what goes is the button's implied promise. Ships with
+      its positive control: an OFFLINE failure must KEEP the button, and does.
+      **M4** is RED.
+- [x] A dead control still inviting the click —
+      `components/console/AttendanceSettingsPanel.jsx` — found 2026-09-02,
+      attendance owner's-half T3 round 1 (L-3) — fixed this commit. The whole
+      row is a `<label>`, so `cursor-pointer` covered the words as well as the
+      box while `readOnly || saving`. One `locked` predicate now drives the
+      guard in `toggle`, the `disabled` and the cursor, so the three cannot
+      drift into disagreeing about whether the control is live. **M6** is RED.
+- [x] Effect deps that read as load-bearing — `pages/console/Attendance.jsx` —
+      found 2026-09-02, attendance owner's-half T3 round 1 (L-4) — fixed this
+      commit, **with a comment rather than a removal, and the reason is the
+      fix**: `day` and `statusesParam` are already inside `readKey`, but the
+      effect READS them to build the request and `react-hooks/exhaustive-deps`
+      requires every value it reads — at `--max-warnings=0` removing either
+      fails lint. The comment says so, so the next reader does not try it and
+      discover that for themselves.
+- [x] A second spelling of one default —
+      `components/console/AttendanceSettingsPanel.jsx` — found 2026-09-02,
+      attendance owner's-half T3 round 1 (L-5) — fixed this commit.
+      `org.manualAttendanceEnabled !== false` re-implemented `myOrgSchema`'s
+      `.default(true)`: correct on the day it was written and free to disagree
+      afterwards, since flipping the contract's default would leave the panel
+      still drawing the switch ON. The panel now reads the boolean the contract
+      guarantees; the two console fixtures state the field the way they already
+      state `country`'s default; and **the default gained its FIRST observer**
+      in `packages/shared/test/schemas.test.ts` — under the old code, changing
+      it broke nothing anywhere in the repo. **M5** is RED. This is :28452 §3's
+      drift class, one layer up: there it was two declarations of a bound, here
+      two declarations of a default.
+- [x] The recorded CAUSE of C/H-1 was false, in seven places —
+      `DECISIONS.md` §3 · `OWED.md` · `HANDOFF.md` · `DECISIONS-INDEX.md` ·
+      `pages/console/readOnlyConsole.render.test.jsx` ·
+      `pages/console/settings.render.test.jsx` (twice) — found 2026-09-02,
+      attendance owner's-half T3 round 2 (L-1) — fixed this commit. Round 1 said
+      nine assertions of the shape `getAllByText(READ_ONLY_NOTE).length > 0`
+      were **structurally blind** because Settings mounts four panels sharing one
+      sentence. **Measured: `ConsoleSection` UNMOUNTS a closed body**
+      (`ConsoleStates.jsx:114-118`, its own comment says so) **and every case
+      opens exactly ONE section**, so a screen-wide query had only that panel's
+      body to search. Killing `GymDetailsPanel`'s note turns *"cannot be saved,
+      and the reason is above the boxes"* — one of the nine named as blind — RED
+      (2 failed, 37 passed). **The true reason is a missing CASE, not a blind
+      INSTRUMENT: no test ever opened the attendance section with a note
+      assertion in it** — and the two have different remedies, which is why a
+      false cause is worth a finding. **Figures corrected both ways: FIVE
+      assertions take that shape, TEN mention the note, all in ONE file
+      (`settings.render` had ZERO before round 1); and `settings.render:162`'s
+      "five panels" is FOUR.** **The review's MAP named three places and there
+      are seven** — third recorded time (:23928 L-1, :24559 L-1), and the two it
+      missed are records Kd and the next chat actually read. Struck rather than
+      overwritten (:20587), wrong diagnosis kept visible on `BACKLOG.md:2248`'s
+      precedent.
+- [x] A guard whose claim outran its reach —
+      `pages/console/readOnlyConsole.render.test.jsx` — found 2026-09-02,
+      attendance owner's-half T3 round 2 (L-2) — fixed this commit. The class
+      guard said *"a fifth panel added to Settings without a line here is a fifth
+      panel nobody is checking — so the count is asserted too"*. **The count
+      filters on `aria-expanded`, which only a `ConsoleSection` heading carries:
+      it counts SECTIONS, not panels.** Proven with a probe rather than reasoned
+      (:19960) — a `ConsoleCard` holding one `disabled` button and no note was
+      added to `Settings.jsx` and **all 164 cases in the two files stayed
+      green**. Not hypothetical: **`Members.jsx:343-347` greys Remove and writes
+      the note in a bare `<div>`**. **Fixed as the BOUNDARY, not a wider count** —
+      widening means giving the shared `ConsoleCard` a test handle, which is
+      another card's diff (R1.1, :5348 rule 6) — so the comment now states what
+      the count reaches, what it does not, that a probe proved it, and where the
+      uncovered shape already lives (:27659's rule about comments that say what a
+      test guarantees). :26947's shape, arriving in a comment rather than a test
+      name.

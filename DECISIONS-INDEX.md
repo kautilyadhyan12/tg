@@ -1325,6 +1325,51 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:29740** — 2026-09-02 — **ATTENDANCE, THE OWNER'S HALF, T3 ROUND 2
+  (diff-only): ZERO Critical/High, THE PACKET SHIPS — and both Lows are round 1's
+  own account of itself.** **Read before quoting :29500 §3's mechanism (STRUCK —
+  §3a replaces it), before explaining why a test failed to catch something,
+  before asserting a COUNT of console sections as a guard against new panels,
+  before reading a screen-wide `getAllByText` on a screen whose sections
+  COLLAPSE, and before taking a review's MAP of where a false sentence lives as
+  complete.** Escape hatch NOT armed (round 1 had two Criticals, this has none).
+  **L-1: round 1's recorded CAUSE of its own Critical is false** — closed
+  `ConsoleSection`s UNMOUNT and every case opens exactly one, so the assertions
+  it called structurally blind were scoped already; killing `GymDetailsPanel`'s
+  note turns one of them RED. **The true reason is a missing CASE, not a blind
+  INSTRUMENT — different remedies, which is why it matters.** Figures corrected
+  in both directions (FIVE of that shape, TEN mentioning the note, all in ONE
+  file; Settings mounts FOUR panels, not five). **The review's MAP said three
+  places; there were SEVEN** — third recorded time (:23928, :24559). **L-2: the
+  count guard counts SECTIONS, not panels** — a greying panel in a plain
+  `ConsoleCard` is invisible to it, proven with a probe, and `Members.jsx:343`
+  already has that shape; the boundary is written down rather than widened
+  (R1.1). **No `src/` component, no api, no migration, no shared change.**
+- **:29500** — 2026-09-02 — **ATTENDANCE, THE OWNER'S HALF, T3 ROUND 1: TWO
+  Critical/High, THE PACKET DOES NOT SHIP — the sixth panel to grey a control
+  was the first to say nothing, and one keystroke in the date box killed three
+  controls at once.** **Read before adding a panel to the console's Settings
+  screen, before greying ANY control anywhere in this console, before putting a
+  `type="date"` on any screen in this product, before deriving a screen's state
+  from an input a person can CLEAR, before writing an assertion about a sentence
+  that appears once on a screen with several panels, and before quoting
+  `CARD-gym-attendance.md` or `HANDOFF.md` on whether a half has been
+  reviewed.** Five Low, all fixed, all in `BACKLOG.md`; escape hatch NOT armed
+  (:29117 found zero). ~~**The finding worth more than either fix is §3: NINE
+  assertions across two files pinned the read-only sentence with
+  `getAllByText(...).length > 0`, a claim about the whole SCREEN — Settings
+  mounts four panels and writes the sentence once, so any ONE of them satisfies
+  all nine, for ever.**~~ **— §3's MECHANISM IS STRUCK BY ROUND 2 (:29740) AND
+  §3a CARRIES THE MEASURED REPLACEMENT: closed sections UNMOUNT and every case
+  opens one, so those assertions were scoped already; FIVE take that shape, TEN
+  mention the note, all in ONE file; and the real reason C/H-1 shipped is that
+  no test opened the attendance section with a note assertion in it — a missing
+  CASE, not a blind INSTRUMENT.** The class guard is per-panel, scoped through
+  `ConsoleSection`'s own `aria-controls`, and asserts the section COUNT so a
+  fifth SECTION cannot arrive uncovered. **§4 corrects two
+  status lines that said the SERVER half was unreviewed when it had shipped its
+  round at :28649 — they cost this reviewer a full pass over work already paid
+  for twice, so a stale status line BUYS WORK rather than merely misinforming.**
 - **:29410** — 2026-09-02 — **THE ATTENDANCE SMOKE PASSES 8 OF 8 ON THE CORE —
   the first browser evidence for ANY attendance surface — and Kd asked for a
   control to be REMOVED when the real defect was that a different one was

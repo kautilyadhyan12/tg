@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { addDays, closureDateLabel, gymToday } from './hoursView';
@@ -339,6 +339,7 @@ function AttendanceDay({ org }) {
     forKey: null,
     day: null,
     error: null,
+    retryable: true,
     people: [],
     nextCursor: null,
   });
@@ -359,6 +360,7 @@ function AttendanceDay({ org }) {
           forKey: readKey,
           day: answer ?? null,
           error: null,
+          retryable: true,
           people: answer?.people ?? [],
           nextCursor: answer?.nextCursor ?? null,
         });
@@ -370,6 +372,14 @@ function AttendanceDay({ org }) {
           forKey: readKey,
           day: null,
           error: errorText(err, "We couldn't load who came in."),
+          // A REFUSAL IS NOT A RETRY (T3 round 1, L-2). The refusal this screen
+          // meets is `attendance.read` having been unticked, and no amount of
+          // pressing re-grants a privilege — `isRetryable` answers false on a
+          // 403 and on the permanent 409s. The SENTENCE is still the server's
+          // own and still true; what would be false is the button's implied
+          // promise. Same predicate and same reasoning as the Overview's two
+          // panes.
+          retryable: isRetryable(err),
           people: [],
           nextCursor: null,
         });
@@ -377,6 +387,12 @@ function AttendanceDay({ org }) {
     return () => {
       cancelled = true;
     };
+    // `readKey` IS THE IDENTITY OF THIS READ; `day` and `statusesParam` are
+    // already inside it and neither can move without moving it. They are listed
+    // because the effect READS them to build the request and
+    // `react-hooks/exhaustive-deps` requires every value it reads — not because
+    // either is load-bearing on its own (T3 round 1, L-4). Removing one would
+    // change nothing about when this runs and would fail lint.
   }, [gymId, readKey, day, statusesParam]);
 
   // AN ANSWER TO A DIFFERENT QUESTION IS NOT AN ANSWER. Until the read for the
@@ -503,7 +519,32 @@ function AttendanceDay({ org }) {
             <input
               type="date"
               value={day}
-              onChange={(e) => setDay(e.target.value)}
+              /* **AN EMPTY BOX IS REFUSED AT THE SOURCE, AND THAT IS THE WHOLE
+                 FIX** (T3 round 1, C/H-2). A `type="date"` clears on Backspace
+                 in Chrome and has an explicit ✕ in Firefox, so `''` is one
+                 keystroke away — and every consumer of `day` breaks on it at
+                 once: `addDays('', ±1)` answers `''` unchanged (`hoursView`
+                 returns the input on an unparseable date), so BOTH arrows go
+                 dead; the read sends `?day=` which
+                 `attendanceDayQuerySchema`'s regex refuses, so the screen
+                 prints the server's `day: invalid_string` — a schema field
+                 name and a zod issue code, in front of the person this app is
+                 written for (K1). Try again re-sends the same failing request
+                 for ever, and the only way out is retyping into the box Kd had
+                 just told us he could not see (:29410).
+                 Keeping `day` a valid calendar string is what keeps the arrows,
+                 the retry and the read all working, so the guard belongs here
+                 rather than as four guards downstream. React restores the
+                 previous value into a controlled input whose onChange declined
+                 the new one, so the box shows the day it still holds.
+                 **This is deliberately NOT `OpeningHoursPanel`'s shape**
+                 (`closureDay === ''` guards at its two call sites): there an
+                 empty box is a legitimate starting state for a form nobody has
+                 filled in, and here `day` is seeded from `gymToday` and must
+                 never be empty at all. */
+              onChange={(e) => {
+                if (e.target.value !== '') setDay(e.target.value);
+              }}
               aria-label="Day"
               onClick={(e) => {
                 try {
@@ -542,7 +583,10 @@ function AttendanceDay({ org }) {
           `attendance.read` having been unticked, and inventing a friendlier
           reason would be guessing at which. */}
       {fresh && state.status === 'failed' ? (
-        <ConsoleFailed message={state.error} onRetry={() => setAttempt((a) => a + 1)} />
+        <ConsoleFailed
+          message={state.error}
+          onRetry={state.retryable ? () => setAttempt((a) => a + 1) : undefined}
+        />
       ) : null}
 
       {fresh && state.status === 'ready' && answer !== null ? (

@@ -19,10 +19,19 @@ const api = {
   getAttendanceHistory: vi.fn(),
   updateOrg: vi.fn(),
 };
-vi.mock('../../api/orgsApi', () => ({
-  orgService: api,
-  errorText: (_err, fallback) => fallback,
-}));
+// THE NETWORK IS MOCKED; THE MODULE'S PURE HELPERS ARE NOT. `isRetryable` is the
+// rule deciding whether a failed read gets a Try again, and a hand-written copy
+// of it in this factory would be a second declaration of exactly the thing the
+// screen is being tested for. `errorText` stays overridden so the cases below
+// can assert one sentence instead of every provider of one.
+vi.mock('../../api/orgsApi', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    orgService: api,
+    errorText: (_err, fallback) => fallback,
+  };
+});
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -426,6 +435,56 @@ describe('the day, and moving between days', () => {
     expect(second.day < first.day).toBe(true);
   });
 
+  /** **CLEARING THE BOX MUST NOT STRAND THE SCREEN** — the regression test for
+   *  T3 round 1's C/H-2 (:5348 rule 3). A `type="date"` clears on Backspace in
+   *  Chrome and carries an explicit ✕ in Firefox, so an empty value is one
+   *  keystroke away and is not an exotic input.
+   *
+   *  **UNDER THE DEFECT ONE KEYSTROKE TOOK OUT THREE CONTROLS AT ONCE**, which
+   *  is why it was Critical rather than a rough edge: the read went out as
+   *  `?day=`, which `attendanceDayQuerySchema`'s regex refuses, so the screen
+   *  printed the server's own `day: invalid_string` at the owner (K1's ban list,
+   *  verbatim); `addDays('', ±1)` answers `''` unchanged so BOTH arrows stopped
+   *  issuing reads; and Try again re-sent the same refused request for ever. The
+   *  only way out was retyping into the box Kd had just told us he could not see
+   *  (:29410).
+   *
+   *  It asserts the READ was never issued rather than that no error appeared —
+   *  an assertion about the error card would also pass on a screen that sent the
+   *  bad request and merely worded the refusal better. */
+  it('sends no read for an empty date, and keeps the day it had', async () => {
+    drawScreen();
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalled());
+    const box = screen.getByLabelText('Day');
+    const opened = box.value;
+    expect(opened).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    fireEvent.change(box, { target: { value: '' } });
+
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Day').value).toBe(opened);
+  });
+
+  /** THE OTHER TWO CONTROLS THE DEFECT KILLED, and they are a separate case
+   *  because the assertion above cannot see them: a screen that swallowed the
+   *  empty value into state while leaving the arrows reading from it would pass
+   *  the first test and still be stranded. */
+  it('keeps both arrows working after somebody clears the box', async () => {
+    drawScreen();
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalled());
+    const [, first] = api.getAttendanceDay.mock.calls[0];
+
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '' } });
+    fireEvent.click(screen.getByLabelText(/previous day/i));
+
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(2));
+    const [, second] = api.getAttendanceDay.mock.calls[1];
+    // A REAL DAY, AND THE ONE BEFORE THE DAY IT HELD. Asserting only that a
+    // second read happened would pass on `?day=` going out again.
+    expect(second.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(second.day < first.day).toBe(true);
+  });
+
   // The hours card learned this the hard way: an HTML `min` is a CONSTRAINT,
   // not a hint, and a date outside it makes the field silently refuse with no
   // event and no sentence. Attendance is a history, so the past is the normal
@@ -623,6 +682,39 @@ describe('trying again after a failed read', () => {
     await waitFor(() => expect(screen.getByText('Priya Sharma')).toBeTruthy());
     expect(api.getAttendanceDay).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/couldn't load who came in/i)).toBeNull();
+  });
+
+  /** **NO BUTTON WHERE PRESSING IT CANNOT HELP** (T3 round 1, L-2). The refusal
+   *  this screen actually meets is `attendance.read` having been unticked, and
+   *  no amount of pressing re-grants a privilege. The SENTENCE stays — it is the
+   *  server's own and it is true — and what goes is the button's implied promise
+   *  that trying again might work. Same `isRetryable` the Overview's two panes
+   *  ask. */
+  it('offers no Try again when the server refused the privilege', async () => {
+    api.getAttendanceDay.mockRejectedValue({
+      response: {
+        status: 403,
+        data: { error: 'forbidden', message: 'You cannot see attendance for this gym.', requestId: 'r' },
+      },
+    });
+    drawScreen();
+    // THE ERROR CARD IS STILL DRAWN — this is about the button, never about
+    // swallowing the refusal. (The sentence reads as the fallback here only
+    // because `errorText` is stubbed at the top of the file; in the browser it
+    // is the server's own.)
+    await waitFor(() => expect(screen.getByText(/couldn't load who came in/i)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+  });
+
+  /** THE POSITIVE CONTROL — offline is the case that MUST keep the button, and
+   *  without this the case above is satisfied by a screen that never offers one
+   *  (:7104's PG1). A request that never reached the server carries no status
+   *  and no body, so the bound stays `true`. */
+  it('still offers it when the request never reached the server', async () => {
+    api.getAttendanceDay.mockRejectedValue(new Error('offline'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText(/couldn't load who came in/i)).toBeTruthy());
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy();
   });
 });
 
