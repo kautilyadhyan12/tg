@@ -24,6 +24,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
+import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers } from "./modules/privacy/purge.js";
@@ -56,6 +57,7 @@ export const DPDP_PURGE_JOB = "dpdp.purge";
 export const ORGS_SWEEP_JOB = "orgs.join_sweep";
 export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
 export const ORGS_ARCHIVE_JOB = "orgs.archive";
+export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -187,6 +189,42 @@ try {
   process.exit(1);
 }
 
+// THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
+// **THE ONLY SCHEDULE ON THIS QUEUE THAT IS NOT NIGHTLY, AND THE REASON IS THE
+// WHOLE POINT OF THE JOB.** §3.2 asks for "nightly at 02:00 **org TZ**", and no
+// single UTC time is 02:00 everywhere: a gym in Assam and a gym in New York
+// close their days ten and a half hours apart. So this runs EVERY HOUR and the
+// job itself rolls only the gyms whose own clock is in the 02:00 hour — one
+// schedule, twenty-four cheap runs, every gym closed in its own zone. That is
+// the property :26469 §5 says makes both gyms correct in one product.
+//
+// Minute 15 keeps it off all four minutes above, for the reason those blocks
+// already give: one worker process runs them all, and stacking them makes a slow
+// job look like a late one in the logs.
+//
+// A RUN THAT FINDS NOTHING IS THE NORMAL CASE and costs one indexed scan: 23 of
+// every 24 runs match no gym at all until this product has gyms in many zones.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_ROLLUP_JOB,
+    { pattern: "15 * * * *" },
+    {
+      name: ORGS_ROLLUP_JOB,
+      opts: {
+        // R3.5: the job RECOMPUTES each day from the source tables and upserts,
+        // so a retry produces identical rows rather than doubled ones.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the gym rollup schedule");
+  process.exit(1);
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -206,7 +244,8 @@ const worker = new Worker(
       job.name !== DPDP_PURGE_JOB &&
       job.name !== ORGS_SWEEP_JOB &&
       job.name !== ORGS_TRIAL_SWEEP_JOB &&
-      job.name !== ORGS_ARCHIVE_JOB
+      job.name !== ORGS_ARCHIVE_JOB &&
+      job.name !== ORGS_ROLLUP_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -250,6 +289,20 @@ const worker = new Worker(
       const closed = await archiveLapsedGyms({ sql, log });
       log.info(
         { ...closed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Returns here for the same reason as its three siblings: one statement,
+    // so the run either applied or raised, and a raise is already an unhandled
+    // rejection that lands the job on the failed set. There is no
+    // "succeeded but not really" state for the purge's certification check
+    // below to have an opinion about.
+    if (job.name === ORGS_ROLLUP_JOB) {
+      const rolled = await rollUpGymDays({ sql, log });
+      log.info(
+        { ...rolled, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

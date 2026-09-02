@@ -30,6 +30,7 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgOverviewResponseSchema,
   orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
   orgStaffResponseSchema,
@@ -51,6 +52,7 @@ import type {
   GymAttendanceHistoryResponse,
   GymAttendanceVisit,
   MarkGymAttendanceResponse,
+  OrgOverviewResponse,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -2498,6 +2500,62 @@ export async function getOrgAttendanceHistory(
       clockFormat: row.clockFormat,
       visits: row.visits.map(toAttendanceVisit),
       nextCursor: row.nextCursor,
+    },
+  });
+}
+
+/** THE GYM'S NUMBERS — Part 3 §4.1's Overview, and Kd's :29961 ruling 1 (the
+ *  tiles count VISITS).
+ *
+ *  **GATED ON `attendance.read`, NOT ON `members.read`.** These figures ARE the
+ *  attendance figures, so an owner who unticks a trainer's attendance box and
+ *  then watches that trainer read the day's visit totals off the Overview has a
+ *  tick box that does not do what it says — :13803's precedent, restated at
+ *  :21157 and again when the privilege was minted (:28107 §2).
+ *
+ *  **NOT behind `requireWritablePrivilege`**, deliberately: that helper refuses a
+ *  gym with no live plan, and Part 3 §4.2's read-only console still DRAWS in full
+ *  (:23711 — *"it seals nobody out"*). A lapsed gym's owner is being asked to
+ *  pay; showing them a blank screen where their numbers were is the argument
+ *  against paying.
+ *
+ *  **THE ONLY ARITHMETIC ON THIS PATH IS THE PERCENTAGE, AND IT IS DONE HERE
+ *  RATHER THAN ON THE SCREEN** (R3.1; :27992 §3). A client that divided
+ *  `visitors` by `members` itself would be one rounding rule away from
+ *  disagreeing with every other surface that ever prints adoption. */
+export async function getOrgOverview(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<OrgOverviewResponse> {
+  await requirePrivilege(deps, gymId, userId, "attendance.read");
+
+  const row = await repo.getOrgOverview(deps.sql, { gymId });
+  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+
+  /** **NULL AND NOT ZERO WHEN THERE ARE NO MEMBERS.** A gym nobody has joined
+   *  has no adoption to state, and "0%" would tell an owner on their first day
+   *  that their members are ignoring them. :8267's class — the difference
+   *  between "no answer" and "the answer is none" — and it is also the divide
+   *  this line exists to not perform. */
+  const adoptionPct =
+    row.members === 0 ? null : Math.round((row.monthVisitors * 100) / row.members);
+
+  return orgOverviewResponseSchema.parse({
+    overview: {
+      timezone: row.timezone,
+      today: row.today,
+      tiles: {
+        today: { visits: row.todayVisits, visitors: row.todayVisitors },
+        week: {
+          visits: row.weekVisits,
+          visitors: row.weekVisitors,
+          prevVisits: row.prevWeekVisits,
+          prevVisitors: row.prevWeekVisitors,
+        },
+        month: { visitors: row.monthVisitors, members: row.members, adoptionPct },
+      },
+      weeks: row.weeks,
     },
   });
 }

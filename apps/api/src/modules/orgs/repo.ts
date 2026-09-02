@@ -22,6 +22,8 @@ import {
   gymAttendanceMethodSchema,
   gymClockFormatSchema,
   gymHoursModeSchema,
+  OVERVIEW_MONTH_DAYS,
+  OVERVIEW_WEEKS,
   orgApplicationStatusSchema,
   orgRoleSchema,
   orgStatusSchema,
@@ -4329,4 +4331,164 @@ export function parseAttendanceCursor(
   // The empty-id case is subsumed: an empty string fails the pattern too.
   if (Number.isNaN(markedAt.getTime()) || !ATTENDANCE_CURSOR_UUID.test(id)) return null;
   return { markedAt, id };
+}
+
+/** ── THE GYM'S NUMBERS (Part 3 §4.1) ────────────────────────────────────────
+ *
+ *  **EVERY FIGURE HERE IS READ LIVE FROM `gym_attendance`, NOT FROM THE NIGHTLY
+ *  `org_daily_stats`, AND THAT IS A DECISION WITH TWO REASONS** (both recorded
+ *  in `modules/orgs/rollup.ts`'s header, which is where the other half lives):
+ *
+ *    1. **A DISTINCT COUNT CANNOT BE SUMMED.** The chart's line is *"how many
+ *       different people came that week"*. Adding up seven daily figures counts
+ *       a Monday-and-Thursday member twice. Once the line has to read raw rows,
+ *       the bars reading them too is one query rather than two sources that can
+ *       disagree at their seam.
+ *    2. **A NIGHTLY TABLE IS PARTIAL FOR PART OF EVERY DAY.** Rendering a
+ *       not-yet-written day as zero is a false number on a screen (:5807).
+ *
+ *  The rollup is still written, and when `gym_attendance` becomes deletable
+ *  under DPDP (it is on the UNRULED half of that list today —
+ *  `modules/privacy/tables.ts`) this reader moves onto it, because a live read
+ *  would then silently rewrite a gym's history.
+ *
+ *  **THE DAY IS PINNED ONCE AND THREADED THROUGH EVERY QUERY BELOW.**
+ *  `getGymAttendanceDay` sets the precedent and the reason is the same: four
+ *  queries each asking Postgres for "today" can straddle a midnight in the
+ *  gym's zone and answer about two different days in one response. */
+export interface OrgOverviewRow {
+  timezone: string;
+  today: string;
+  todayVisits: number;
+  todayVisitors: number;
+  weekVisits: number;
+  weekVisitors: number;
+  prevWeekVisits: number;
+  prevWeekVisitors: number;
+  monthVisitors: number;
+  members: number;
+  weeks: { weekStart: string; visits: number; visitors: number }[];
+}
+
+export async function getOrgOverview(
+  sql: SqlOrTx,
+  input: { gymId: string; weeks?: number; monthDays?: number },
+): Promise<OrgOverviewRow | null> {
+  const weeks = input.weeks ?? OVERVIEW_WEEKS;
+  const monthDays = input.monthDays ?? OVERVIEW_MONTH_DAYS;
+
+  const gymRows = await sql<{ timezone: string; today: string }[]>`
+    SELECT g.timezone, (now() AT TIME ZONE g.timezone)::date::text AS today
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  /** THE WEEK STARTS ON MONDAY BECAUSE POSTGRES' `date_trunc('week')` DOES, and
+   *  it is computed in SQL from the pinned day rather than in JS — one calendar,
+   *  and the one the chart's buckets are already grouped by. A second
+   *  implementation in JavaScript is a second answer to "which Monday". */
+  const tiles = await sql<
+    {
+      today_visits: string;
+      today_visitors: string;
+      week_visits: string;
+      week_visitors: string;
+      prev_week_visits: string;
+      prev_week_visitors: string;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             date_trunc('week', ${gym.today}::date)::date AS week_start,
+             date_trunc('week', ${gym.today}::date)::date - 7 AS prev_week_start,
+             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
+               AS series_start
+    )
+    SELECT
+      count(*) FILTER (WHERE a.day = b.today) AS today_visits,
+      count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,
+      count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,
+      count(DISTINCT a.user_id) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
+      count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
+        AS prev_week_visits,
+      count(DISTINCT a.user_id)
+        FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
+        AS prev_week_visitors
+    FROM b
+    LEFT JOIN gym_attendance a
+      ON a.gym_id = ${input.gymId} AND a.day >= b.series_start AND a.day <= b.today`;
+  const t = tiles[0];
+  // Unreachable: `b` is a one-row CTE and the join is a LEFT JOIN, so this
+  // aggregate always produces exactly one row — zeros when nobody has ever come.
+  if (t === undefined) throw new Error("overview tiles vanished");
+
+  /** THE SERIES IS GENERATED AND THE COUNTS ARE JOINED ONTO IT, never the other
+   *  way round: a week nobody came to must draw a ZERO BAR rather than vanish
+   *  and shift every other bar left. Oldest first so a chart reads left to
+   *  right without reversing. */
+  const series = await sql<{ week_start: string; visits: string; visitors: string }[]>`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
+               AS series_start
+    ),
+    s AS (
+      SELECT (b.series_start + (n * 7)) AS week_start, b.today
+      FROM b CROSS JOIN generate_series(0, ${weeks}::int - 1) AS n
+    )
+    SELECT s.week_start::text AS week_start,
+           -- "count(a.id)" and NOT "count(*)": this is a LEFT JOIN, so a week
+           -- nobody came to still produces one all-NULL row, and "count(*)"
+           -- would report that empty week as ONE visit.
+           count(a.id) AS visits,
+           count(DISTINCT a.user_id) AS visitors
+    FROM s
+    LEFT JOIN gym_attendance a
+      ON a.gym_id = ${input.gymId}
+     AND a.day >= s.week_start
+     AND a.day < s.week_start + 7
+     AND a.day <= s.today
+    GROUP BY s.week_start
+    ORDER BY s.week_start`;
+
+  /** ADOPTION'S TWO HALVES, COUNTED OVER THE SAME POPULATION SO THE RATIO CANNOT
+   *  EXCEED 100%.
+   *
+   *  **The denominator excludes the owner's complimentary seat**, exactly as the
+   *  roster's own count does (Part 3 §4.0 step 6 — it is not a customer whose
+   *  attendance measures anything), and the numerator is restricted to the SAME
+   *  set. Counting every visitor against only paying members is how a gym gets
+   *  told 120% of it turned up. */
+  const adoption = await sql<{ members: string; month_visitors: string }[]>`
+    WITH m AS (
+      SELECT user_id FROM gym_members
+      WHERE gym_id = ${input.gymId} AND removed_at IS NULL AND complimentary = false
+    )
+    SELECT (SELECT count(*) FROM m) AS members,
+           (SELECT count(DISTINCT a.user_id)
+              FROM gym_attendance a JOIN m ON m.user_id = a.user_id
+             WHERE a.gym_id = ${input.gymId}
+               AND a.day > ${gym.today}::date - ${monthDays}::int
+               AND a.day <= ${gym.today}::date) AS month_visitors`;
+  const ad = adoption[0];
+  // Unreachable for the reason above: both halves are scalar sub-selects.
+  if (ad === undefined) throw new Error("overview adoption vanished");
+
+  return {
+    timezone: gym.timezone,
+    today: gym.today,
+    todayVisits: Number(t.today_visits),
+    todayVisitors: Number(t.today_visitors),
+    weekVisits: Number(t.week_visits),
+    weekVisitors: Number(t.week_visitors),
+    prevWeekVisits: Number(t.prev_week_visits),
+    prevWeekVisitors: Number(t.prev_week_visitors),
+    monthVisitors: Number(ad.month_visitors),
+    members: Number(ad.members),
+    weeks: series.map((w) => ({
+      weekStart: w.week_start,
+      visits: Number(w.visits),
+      visitors: Number(w.visitors),
+    })),
+  };
 }

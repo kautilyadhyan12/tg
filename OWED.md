@@ -7283,11 +7283,25 @@ file and is stated so nobody reads these as lower priority than they are.
       (g) **THE AT-RISK LIST AND ITS NUDGE MOVE TO THAT SECOND CARD.** The list
       is buildable there (it names who to call); the NUDGE BUTTON stays blocked
       on push, which does not exist.
-      **THE BUILD PLAN IS WRITTEN AND UNAPPROVED: `CARD-gym-overview-numbers.md`**
-      (2026-09-02) — migration `0020` (two columns on `org_daily_stats`), the
-      nightly rollup in the gym's own clock, `GET /v1/orgs/:gymId/overview`, the
-      three tiles and the 8-week chart. **NOTHING IS BUILT** and the gate is not
-      passed (:26777).
+      **THE BUILD PLAN IS `CARD-gym-overview-numbers.md`, APPROVED BY KD
+      2026-09-02** (*"approve"*), migration `0020` reviewed as SQL first.
+      **⚙️ THE SERVER HALF IS BUILT — DECISIONS `:30094`.** Migration `0020`
+      (`visits`, `visitors`, read back out of `information_schema` after
+      applying) · `modules/orgs/rollup.ts` on a FIFTH `rollups` scheduler at
+      `15 * * * *`, rolling each gym when its OWN clock reads 02 ·
+      `tools/orgs-rollup.ts` · `GET /v1/orgs/:gymId/overview` on
+      `attendance.read`. PROVE and the 11-mutant sweep at that entry.
+      **THIS LINE STILL DOES NOT TICK: the web half is unbuilt, no smoke has run
+      and T3 is UNRUN.** Also owed with it: the one-off backfill
+      (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
+      browser reads — until it runs, that gym's chart is eight empty weeks.
+      **AND ONE THING NOBODY MAY READ INTO IT: `org_daily_stats` now has a WRITER
+      AND STILL NO READER.** The Overview's figures are read LIVE from
+      `gym_attendance`, because a distinct count cannot be summed across days and
+      a nightly table is partial for part of every day (:5807). The aggregate is
+      the durable record — Reports' source, and what survives the day
+      `gym_attendance` becomes deletable under DPDP, which is when the chart's
+      source moves onto it.
 - [ ] 🟡 **THE GYM'S OVERVIEW HAS NO PEOPLE LISTS — the second half of the
       dashboard, split off at Kd's own instruction 2026-09-02 (DECISIONS
       :29961 ruling 3).** Owed: **who came today** (names and times, a summary

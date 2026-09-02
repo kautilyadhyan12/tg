@@ -2013,3 +2013,107 @@ export const markGymAttendanceResponseSchema = z
   })
   .strict();
 export type MarkGymAttendanceResponse = z.infer<typeof markGymAttendanceResponseSchema>;
+
+/** ── THE GYM'S NUMBERS (Part 3 §4.1's Overview) ─────────────────────────────
+ *
+ *  **THE TILES COUNT VISITS AND NOT WORKOUTS, WHICH IS A KNOWING DEVIATION FROM
+ *  §4.1 AND KD'S OWN CALL** (`DECISIONS.md:29961` ruling 1, on his heading at
+ *  :26469 — *"THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS"*). §4.1's KPI row names
+ *  *"Active members (30d) · Workouts this week · Adoption % · Avg form score"*;
+ *  the fourth was struck by him at :26469 §1.1 and the second is replaced here.
+ *  **The reason, so nobody "restores" the spec's tile:** a workout exists only
+ *  if the member ALSO logged their training, so a workout-shaped tile can read
+ *  ZERO on a day forty people came through the door.
+ *
+ *  **NOTHING STOPPED BEING RECORDED.** `org_daily_stats` still writes every
+ *  workout-side column nightly, under the same ruling's presence rule. */
+export const OVERVIEW_WEEKS = 8;
+/** §3.2's *"Active member (Nd): ≥ 1 … in the last N days (org TZ)"* and its
+ *  *"Adoption %: active_30d ÷ current members"*, with "≥ 1 synced workout"
+ *  reading "≥ 1 visit" per the ruling above. Quoted, not recalled (Part 0 #4). */
+export const OVERVIEW_MONTH_DAYS = 30;
+
+/** ONE BAR AND ONE POINT OF THE 8-WEEK CHART. `weekStart` is the GYM's Monday in
+ *  the GYM's zone, which is why it travels as `YYYY-MM-DD` and never as an
+ *  instant (trap #8).
+ *
+ *  **`visits` AND `visitors` ARE DIFFERENT QUESTIONS AND THE CHART DRAWS BOTH** —
+ *  bars and a line — because they answer *"how busy was it"* and *"how many
+ *  different people"*, which diverge exactly when members come more than once a
+ *  week. **`visitors` is a DISTINCT count over the week and cannot be assembled
+ *  from daily figures**: summing seven days counts a Monday-and-Thursday member
+ *  twice, which is the mistake `org_daily_stats`' shape invites and no fixture
+ *  with one visit per person can see (:29961 §6.2). */
+export const orgOverviewWeekSchema = z
+  .object({
+    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    visits: z.number().int().min(0),
+    visitors: z.number().int().min(0),
+  })
+  .strict();
+export type OrgOverviewWeek = z.infer<typeof orgOverviewWeekSchema>;
+
+/** WHAT `GET /v1/orgs/:gymId/overview` ANSWERS.
+ *
+ *  **EVERY FIGURE IS COMPUTED BY THE SERVER AND A CLIENT MUST RENDER RATHER
+ *  THAN DERIVE** — R3.1, and Kd's ruling 14 restated (:27992 §3): a screen that
+ *  counts what it downloaded is right on a fixture of six and reports the first
+ *  PAGE on a gym of four hundred. There is deliberately no total here that a
+ *  client could reach by adding the others up. */
+export const orgOverviewSchema = z
+  .object({
+    timezone: z.string().min(1),
+    /** The gym's own date, so a screen never has to work out which day "today"
+     *  is for a gym eleven hours away. */
+    today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    tiles: z
+      .object({
+        /** Live, not from the nightly record: "how many have come in so far" is
+         *  a question about a day still in progress. */
+        today: z
+          .object({
+            visits: z.number().int().min(0),
+            visitors: z.number().int().min(0),
+          })
+          .strict(),
+        /** This gym-week so far, and the whole of the one before it — §4.1's
+         *  *"Δ vs previous period (▲▼, org TZ weeks)"*. **The comparison is
+         *  deliberately UNEVEN and a screen must say so**: on a Tuesday it is
+         *  two days against seven, and a bare arrow would be a false claim that
+         *  the gym is collapsing. */
+        week: z
+          .object({
+            visits: z.number().int().min(0),
+            visitors: z.number().int().min(0),
+            prevVisits: z.number().int().min(0),
+            prevVisitors: z.number().int().min(0),
+          })
+          .strict(),
+        month: z
+          .object({
+            /** Current members who came at least once in the last
+             *  `OVERVIEW_MONTH_DAYS` gym-days. */
+            visitors: z.number().int().min(0),
+            /** The denominator, served rather than taken from the roster screen:
+             *  two screens deriving one ratio from two reads is how they come to
+             *  disagree. Excludes the owner's complimentary seat, exactly as the
+             *  roster's own count does — and `visitors` is scoped to the SAME
+             *  population, so the ratio can never exceed 100%. */
+            members: z.number().int().min(0),
+            /** **NULL WHEN THE GYM HAS NO MEMBERS, NEVER 0.** A gym nobody has
+             *  joined has no adoption, and printing "0%" would tell an owner
+             *  their members are ignoring them on the day they opened (:8267's
+             *  class — an empty page is not the same sentence as a zero). */
+            adoptionPct: z.number().int().min(0).max(100).nullable(),
+          })
+          .strict(),
+      })
+      .strict(),
+    /** Oldest first, so a chart draws it left to right without reversing. */
+    weeks: z.array(orgOverviewWeekSchema).max(OVERVIEW_WEEKS),
+  })
+  .strict();
+export type OrgOverview = z.infer<typeof orgOverviewSchema>;
+
+export const orgOverviewResponseSchema = z.object({ overview: orgOverviewSchema });
+export type OrgOverviewResponse = z.infer<typeof orgOverviewResponseSchema>;

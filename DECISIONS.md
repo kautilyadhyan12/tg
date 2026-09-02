@@ -30090,3 +30090,145 @@ alone is how work gets silently lost, and this session created four of them.
 **The gate is not passed.** Kd has ruled the four questions; he has not yet seen
 or approved the file list, the migration SQL or the test list, and :26777 is the
 recorded cost of treating a feature-shape approval as a code gate.
+
+## 2026-09-02 — THE GYM'S DAY GETS WRITTEN DOWN: the first writer `org_daily_stats` has ever had, the Overview's numbers on top of it, and a duplicate mutant id the harness could not see
+
+**Read before touching `modules/orgs/rollup.ts` or `getOrgOverview`, before adding
+a job to the `rollups` queue, before reading `org_daily_stats` for anything a
+screen draws, before writing a backtick inside a `sql` template literal, before
+numbering a new mutant from the ids at the END of `mutate-orgs.mjs`, and before
+assuming the gym's numbers come from the nightly table.** Kd approved
+`CARD-gym-overview-numbers.md` (*"approve"*) and migration `0020` as SQL before a
+byte was written. **§4a, the SERVER half, ships. The web half is unbuilt, no
+smoke has run, T3 is UNRUN, and the `OWED.md` line does not tick.**
+
+### 1 · WHAT SHIPS
+
+`modules/orgs/rollup.ts` — `rollUpGymDays` — recomputes, for each gym and each of
+the last seven days that have FINISHED in that gym's own clock, one
+`org_daily_stats` row: `visits` and `visitors` from `gym_attendance`, the
+workout-side columns under Kd's ruling 2, and the roster's joins and leaves.
+Registered as a FIFTH `upsertJobScheduler` on the existing `rollups` queue at
+`15 * * * *`, with `tools/orgs-rollup.ts` (`--now`, `--days`, `--all-hours`) as
+the by-hand door. Migration **`0020`** adds `visits` and `visitors`; its journal
+entry is in the same commit (:28221 §6).
+
+`GET /v1/orgs/:gymId/overview` — Part 3 §3.3's own route name — serves the three
+tiles and the 8-week series, gated on `attendance.read`.
+
+**THE TABLE HAD NO WRITER AND NO READER SINCE `0001_init`** — six grep hits in
+`apps/api/src`, measured, all schema, comments or privacy-list entries. It has a
+writer now.
+
+### 2 · THE FIVE CALLS MADE IN THE SOURCE, SO NOBODY RE-DERIVES THEM
+
+1. **THE ROUTE READS `gym_attendance` LIVE AND NOT THE NIGHTLY TABLE, AND THE
+   PLAN SAID OTHERWISE UNTIL THE QUERY WAS WRITTEN.** `CARD-gym-overview-numbers.md`
+   §4a.4 said *"`visits` summed out of `org_daily_stats`"*. **Writing it produced
+   the reason it cannot work: the chart's LINE is "how many different people came
+   that week", and a distinct count cannot be summed** — seven daily `visitors`
+   counts a Monday-and-Thursday member twice. Once the line reads raw rows, the
+   bars reading them too is one query instead of two sources that can disagree at
+   their seam. Second reason, the same one the Redis cache was refused for: **a
+   nightly table is PARTIAL for part of every day**, and drawing a not-yet-written
+   day as zero is a false number (:5807). **The rollup is still written** — the
+   workout join is too expensive per page load and is Reports' source;
+   `gym_attendance` is on the UNRULED half of the DPDP list, so the day Kd rules
+   it deletable a live-reading chart silently rewrites a gym's history and the
+   aggregate is what survives. **When that ruling lands, the chart's source moves
+   onto the table.** The plan was corrected rather than quietly diverged from.
+2. **HOURLY, AND THE JOB PICKS ITS OWN GYMS.** §3.2 asks for *"nightly at 02:00
+   **org TZ**"* and **no single UTC time is 02:00 everywhere**. So the schedule is
+   hourly and the statement filters
+   `EXTRACT(HOUR FROM (now AT TIME ZONE g.timezone)) = 2` — one schedule,
+   twenty-four cheap runs, every gym closed in its own zone, which is the property
+   :26469 §5 says makes a New York gym and an Assam gym both correct. Minute 15
+   keeps it off the four existing schedules' minutes, for the reason those blocks
+   already give.
+3. **SEVEN FINISHED DAYS EVERY RUN, NOT ONE.** Workouts arrive from an OFFLINE
+   QUEUE (R10.3): a Monday workout can reach the server on Wednesday, and a job
+   that only ever computed yesterday would leave it permanently under-counted with
+   nothing anywhere to say so. Seven also heals a week-long worker outage. **TODAY
+   IS NEVER WRITTEN** — a partial day that looks whole is the same false number as
+   a missing one.
+4. **`attendance.read`, NEVER `members.read`.** These figures ARE the attendance
+   figures, so an owner who unticks a trainer's attendance box and then watches
+   that trainer read the day's visit totals off the Overview has a tick box that
+   does not do what it says (:13803's precedent, restated at :21157 and :28107).
+   **NOT behind `requireWritablePrivilege`**: that helper refuses a gym with no
+   live plan, and §4.2's read-only console still DRAWS in full (:23711) — showing
+   a lapsed gym's owner a blank screen where their numbers were is the argument
+   against paying.
+5. **THE MEMBERSHIP INTERVAL IS REDUNDANT TODAY AND IS KEPT.** An attendance row
+   can only be made by a live member, so "was present" already implies "was a
+   member". Kd's ruling names both conditions, staff marking is *"not now"* rather
+   than never (:27900) and is a second writer with a different actor, and the
+   suite proves the condition by inserting a visit for somebody removed
+   beforehand — **a row the mark route could not have produced.**
+
+### 3 · THE AUDIT FOUND THREE THINGS AND TWO OF THEM ARE MINE
+
+**(a) I SHIPPED A DUPLICATE MUTANT ID, THE SWEEP RAN IT TWICE, AND EVERY GUARD IN
+THE HARNESS WAS GREEN.** New rows were numbered from the ids at the END of
+`mutate-orgs.mjs` — **the table is not in id order, and `O217` already existed
+900 lines above.** The run printed two `O217 RED` lines with different `why`
+texts. Nothing failed, nothing was skipped; the damage was to the RECORD:
+`MUTATE_ONLY=O217` would have run both for ever and every document citing that id
+would have been ambiguous with no way to tell which. **Rows renumbered to
+O228–O238, and the class is closed with a guard** that aborts on a repeated id
+and names the number to renumber above — **proven by causing it** (a deliberate
+collision aborted with exit 2; the file was restored and sha256-verified). It is
+the third guard in this harness whose subject is the harness itself.
+
+**(b) A BACKTICK INSIDE A `sql` TEMPLATE LITERAL SILENTLY ENDS THE TEMPLATE, AND
+I DID IT TWICE IN ONE SESSION.** This repo's comment style quotes identifiers in
+backticks; inside a `` sql`…` `` template that terminates the string, and the
+error TypeScript reports is nine lines of *"Module declaration names may only use
+' or \" quoted strings"* pointing nowhere near the cause. The second time it got
+past `tsc` (which had been run BEFORE the edit) and was caught by esbuild inside
+the test run. **Standing: SQL comments inside a template literal use plain words
+or double quotes, never backticks.**
+
+**(c) TWO FIXTURE REFUSALS THAT WERE THE DATABASE DOING ITS JOB.** A scored set
+was refused by `workout_sets_engine_provenance_check` — a set carrying a form
+score must name the engine and definition that graded it — and `addStaff`
+answered 404 to a manager who had not joined the gym first (:14401's rule:
+authority requires a membership). **Both were the fixture being wrong about the
+product, not the product being wrong**, and both are now written into the test so
+the next author does not rediscover them.
+
+### 4 · WHAT DOES NOT TICK, AND WHAT NOBODY MAY READ INTO THIS
+
+- **No screen exists yet**, so there is NO SMOKE — the web half carries it.
+- **T3 IS UNRUN.**
+- **`org_daily_stats` HAS A WRITER AND STILL NO READER.** Nothing in the product
+  draws from it today, by the decision in §2.1. It is a durable record and must
+  not be quoted as feeding the Overview.
+- **The backfill has not been run against Kd's Neon branch.**
+  `tools/orgs-rollup.ts --all-hours --days=70` is a step of the web half, because
+  a chart of eight empty weeks is what an unrun backfill looks like.
+- The worker's job-name list and its branch list still move together only by
+  their own comment — no test observes the pairing, which is true of all four
+  existing jobs and is not this card's to change (R1.1).
+
+### Round log
+
+**PROVE, all LOCAL (`localhost:5433`, per :13659) and all on the final bytes:**
+`orgs.overview` **12/12** (new file) · `db.migration` **16/16** (+1) ·
+`orgs.routes` + `orgs.attendance` **176/176** in one invocation · `@app/shared`
+**52/52** · `web` **1612/1612** (shared changed — :28395's lesson) ·
+`tsc --noEmit` exit 0 on `api` and `@app/shared`, and **PROVEN REAL by planting a
+type error** (2 errors, restore sha256-verified) · `eslint --max-warnings=0` clean
+on ten api files and one shared file · the three root guards green with REAL exit
+codes (:13247): `check-harnesses` 25 scripts · `check-decisions-index` 271
+pointers / 1123 headings · triggers `--check` up to date.
+
+**SWEEP, a stated SUBSET of 228: `MUTATE_ONLY=O228…O238` — 11 mutants, 11 RED,
+0 ALIVE, 0 never ran**, every control GREEN and tallied, restores sha256-verified
+after every mutant, and the mass-write detector clean over 409 fingerprinted rows.
+Every row sits in :5857 rule 4a's *"numbers a user sees"* column.
+
+**Migration `0020` was read back out of `information_schema` after applying**
+(:28221 §6 — *"applied successfully" is not evidence that anything ran*): both
+columns present, `integer`, `NOT NULL`, default `0`, over a table holding **0
+rows**, so the default's claim is about nothing.

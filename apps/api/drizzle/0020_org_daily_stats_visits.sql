@@ -1,0 +1,67 @@
+-- THE GYM'S DAY GETS WRITTEN DOWN (Kd rulings 2026-08-31 :26469 and 2026-09-02
+-- :29961). Expand-only, forward-only, no backfill inside the DDL (R4.4).
+--
+-- Reviewed as SQL by Kd before anything else was written (T5, R4.4) — he was
+-- shown these two statements and answered "approve".
+--
+-- **HAND-WRITTEN, for `0016`–`0019`'s recorded reason and not by preference.**
+-- `drizzle/meta/` stops at `0012_snapshot.json`, so `drizzle-kit generate` diffs
+-- today's schema against one eight migrations old and re-emits everything since,
+-- dying on an already-existing column (42701). This is the EIGHTH hand-written
+-- migration in a row; the snapshot debt has its own `OWED.md` line and this does
+-- NOT fix it and must not be read as fixing it.
+--
+-- **AND ITS JOURNAL ENTRY IS PART OF THIS COMMIT** (:28221 §6): a `.sql` file
+-- that `drizzle/meta/_journal.json` does not name is INVISIBLE to
+-- `drizzle-kit migrate`, which then prints "migrations applied successfully"
+-- having applied nothing. That failure is silent and green, so the columns are
+-- read back out of `pg_catalog` by the migration test rather than trusted.
+--
+-- 1 · WHY `org_daily_stats` NEEDS TWO NEW COLUMNS AT ALL.
+--
+--    The table has existed since `0001_init` (its DDL is at `0001_init.sql:498`)
+--    and has had **NO WRITER AND NO READER EVER** — 6 grep hits in
+--    `apps/api/src` on 2026-09-02, every one of them its own schema file, a
+--    comment, or a privacy-list entry. It was designed from Part 4 §3.11 before
+--    attendance existed, so its columns describe WORKOUTS and MEMBERSHIP and it
+--    has nowhere to put the thing Kd has since ruled the gym's numbers ARE.
+--
+--    :26469, his own heading: *"THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS"*.
+--
+-- 2 · WHY TWO AND NOT ONE, WHICH IS THE PART A LATER CHAT WILL BE TEMPTED TO
+--    UNDO.
+--
+--    `visits` counts ROWS. `visitors` counts DISTINCT PEOPLE. They differ
+--    exactly when somebody came twice in a day, which Kd's ruling 12 (:27992 §1)
+--    made possible ON PURPOSE — *"if a member again comes in different slot and
+--    gives attandance taht also count and owner can see that the member attended
+--    two times"* — and the UNIQUE on `(gym_id, user_id, day, slot_key)` is what
+--    lets both be true at once.
+--
+--    **NEITHER IS DERIVABLE FROM THE OTHER, AND `visitors` IS NOT SUMMABLE
+--    ACROSS DAYS.** Adding a week of `visitors` counts a person who came on
+--    Monday and Thursday twice. Any "how many different people in N days"
+--    question is a DISTINCT count over `gym_attendance` and can never be
+--    assembled from this table. Written here because the table's shape invites
+--    exactly that mistake and no test whose fixture has one visit per person can
+--    see it (:29961 §6.2).
+--
+-- 3 · `NOT NULL DEFAULT 0` IS HONEST HERE AND WOULD NOT BE ON A TABLE WITH
+--    HISTORY.
+--
+--    A default backfills every existing row with a claim. This table has never
+--    been written, so the claim it makes is about no rows at all — verified by
+--    the migration test, which reads the count before and after. On PostgreSQL
+--    16 (the `pgvector/pgvector:pg16` image the dev compose runs, and Neon)
+--    adding a column with a constant default is a catalogue-only change and
+--    rewrites no table.
+--
+--    The remaining columns are untouched and keep their Part 4 §3.11 meanings.
+--    They are still WRITTEN nightly, under :29961 ruling 2's predicate — a
+--    workout counts for a gym when its owner held a live membership covering
+--    that day AND has an attendance row at that gym on the same gym-day. Kd
+--    ruled the average-form tile off the SCREEN (:26469 §1.1) and the column
+--    keeps accruing behind it, on his own reasoning: **a history nobody recorded
+--    cannot be recovered later.**
+ALTER TABLE "org_daily_stats" ADD COLUMN "visits" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "org_daily_stats" ADD COLUMN "visitors" integer DEFAULT 0 NOT NULL;

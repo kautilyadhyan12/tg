@@ -397,6 +397,41 @@ export function registerOrgRoutes(
     },
   );
 
+  /** THE GYM'S NUMBERS — Part 3 §3.3 names this route verbatim, and §4.1 is the
+   *  screen it feeds. Kd's :29961 ruling 1 decides what the tiles COUNT.
+   *
+   *  **A BUCKET OF ITS OWN RATHER THAN THE ATTENDANCE ONE, and the reason is in
+   *  that bucket's own comment:** `attendanceReadLimit` is deliberately shared
+   *  between the two attendance reads so one screen's polling is bounded as a
+   *  whole. This is a DIFFERENT screen — the console's landing page, hit once per
+   *  visit by everyone who opens it — and putting it in the same bucket would
+   *  mean an owner scrolling the Attendance list could spend the budget that
+   *  draws their own home screen.
+   *
+   *  600/hour per account is one open every six seconds sustained; the 3,000 per
+   *  IP is `attendanceReadLimit`'s figure and for its recorded reason — a gym's
+   *  whole staff sit behind one address, so the IP dimension cannot do the
+   *  per-account job here (:28649). */
+  const overviewReadLimit = createDualRateLimit({
+    name: "orgs_overview_read",
+    max: 600,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.get(
+    "/v1/orgs/:gymId/overview",
+    { preHandler: [app.authenticate, overviewReadLimit] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const overview = await service.getOrgOverview(orgDeps, requireUserId(req), params.gymId);
+      return reply.status(200).send(overview);
+    },
+  );
+
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
     const orgs = await service.listMyOrgs(orgDeps, requireUserId(req));
     return reply.status(200).send(orgs);

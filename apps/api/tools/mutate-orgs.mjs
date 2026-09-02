@@ -99,6 +99,11 @@ const TARGETS = {
   // alone) are deliberately two functions, and nothing but a mutant can observe
   // that they still are. Rows aimed here carry `suite: GAMIFICATION_SUITE`.
   gamification: { file: resolve(ROOT, 'apps/api/src/modules/gamification/repo.ts') },
+  // THE GYM'S DAY. The nightly rollup is the only place Kd's :29961 ruling 2
+  // exists in code (a workout counts for a gym when its owner was a member
+  // that day AND was present in the gym), and it writes numbers an owner
+  // reads. Rows aimed here carry `suite: OVERVIEW_SUITE`.
+  rollup: { file: resolve(ROOT, 'apps/api/src/modules/orgs/rollup.ts') },
 };
 
 /** The clock's guarantees live in their own suite. Every row that names the
@@ -133,6 +138,14 @@ const PLANS_SUITE = 'test/orgs.plans.test.ts';
  *  then READS BACK. A `seed` row that forgot this would run the routes suite,
  *  which never asserts a price, and report a RED that means nothing (:4718 F2). */
 const SEED_SUITE = 'test/db.migration.test.ts';
+
+/** The gym's numbers live in their own suite, for the same reason and with the
+ *  same failure mode as every constant above: a `rollup` row that forgot this
+ *  would run the routes suite, which never runs the job at all, and report a
+ *  RED that has nothing to do with the mutation (:4718 F2). The two `repo`/
+ *  `service` rows aimed at the OVERVIEW route name it too — the routes suite
+ *  reads no tile and would go green over every one of them. */
+const OVERVIEW_SUITE = 'test/orgs.overview.test.ts';
 
 /** OPENING HOURS (Kd 2026-08-31). Its own suite because its guarantees need
  *  fixtures the routes suite has none of — a gym at UTC+14 whose "today" is a
@@ -2756,6 +2769,112 @@ const MUTANTS = [
     from: "    SELECT DISTINCT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day\n    FROM workouts WHERE user_id = ${userId} ORDER BY day ASC`;",
     to: "    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day\n    FROM workouts WHERE user_id = ${userId}\n    UNION\n    SELECT day::text AS day FROM gym_attendance WHERE user_id = ${userId}\n    ORDER BY day ASC`;",
   },
+  // ── THE GYM'S NUMBERS (Kd :26469 and :29961) ───────────────────────────────
+  //
+  // Every row below sits in :5857 rule 4a's "NUMBERS A USER SEES" column, which
+  // is the one that is always mutated. The gym owner's whole screen is these
+  // figures; a wrong one is :5807 Critical/High on its face, and NONE of them
+  // has any other observer — no type, no constraint and no other suite can tell
+  // `count(*)` from `count(DISTINCT user_id)`.
+  {
+    id: 'O228',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "KD'S RULING 2, HALF ONE: every MEMBER becomes 'present', so a workout done at HOME counts for the gym. This is the exact thing :26469 sec 1.3 forbids showing a gym, and the mutant is invisible to every other assertion because visits and visitors come from a different CTE",
+    expect: 'counts a workout for the gym ONLY when the member was present',
+    from: "      SELECT DISTINCT t.gym_id, t.day, a.user_id\n      FROM target t\n      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day",
+    to: "      SELECT DISTINCT t.gym_id, t.day, a.user_id\n      FROM target t\n      JOIN gym_members a ON a.gym_id = t.gym_id",
+  },
+  {
+    id: 'O229',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "KD'S RULING 2, HALF TWO: the membership interval goes, so a person the gym removed months ago still adds workouts to its numbers. The condition is redundant TODAY (only a live member can mark themselves in), which is precisely why nothing but a mutant can prove it is still there for the day staff marking lands",
+    expect: 'counts a workout for the gym ONLY when the member was present',
+    from: "        AND m.joined_at < t.day_end\n        AND (m.removed_at IS NULL OR m.removed_at > t.day_start)\n",
+    to: "",
+  },
+  {
+    id: 'O230',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "THE DISTINCT COUNT THIS CARD IS MOST LIKELY TO SHIP WRONG: `visitors` becomes a row count, so a member who came to two sessions is TWO people. It is silent on every gym where nobody comes twice - which is every fixture that does not deliberately produce the divergence (:29961 sec 6.2)",
+    expect: 'two sessions is TWO visits and ONE visitor',
+    from: "             count(DISTINCT a.user_id)::int AS visitors",
+    to: "             count(*)::int AS visitors",
+  },
+  {
+    id: 'O231',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "THE HOUR FILTER GOES, so every gym in the world is rolled every hour instead of at 02:00 in its own zone. Nothing user-visible breaks immediately, which is what makes it worth a row: the job silently stops being the thing Part 3 sec 3.2 specifies, and the only observer is a fixture holding two gyms in different zones",
+    expect: 'rolls only the gyms whose OWN clock is in the 02:00 hour',
+    from: "        AND (${allHours}::boolean\n             OR EXTRACT(HOUR FROM (${now}::timestamptz AT TIME ZONE g.timezone))::int\n                = ${ROLLUP_LOCAL_HOUR}::int)",
+    to: "        AND (${allHours}::boolean OR true)",
+  },
+  {
+    id: 'O232',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "TRAP #8, THE ONE THIS REPO HAS ALREADY BEEN BITTEN BY (:26812 sec 2(a)): the workout is bucketed by the SERVER's date instead of the gym's, so a gym far from UTC has its training credited to the wrong day for part of every day",
+    expect: "credits a workout to the GYM's day",
+    from: "        AND (w.started_at AT TIME ZONE t.timezone)::date = p.day",
+    to: "        AND w.started_at::date = p.day",
+  },
+  {
+    id: 'O233',
+    target: 'rollup',
+    suite: OVERVIEW_SUITE,
+    why: "THE UPSERT STOPS RECOMPUTING one column and keeps whatever was written first. A workout synced late (R10.3's offline queue) is then never counted, permanently, with nothing anywhere to say so - and every row count, every idempotence check by row count, and every fresh-day assertion still passes",
+    expect: 'picks up a workout that synced LATE',
+    from: "      workouts = EXCLUDED.workouts,",
+    to: "      workouts = org_daily_stats.workouts,",
+  },
+  {
+    id: 'O234',
+    target: 'repo',
+    suite: OVERVIEW_SUITE,
+    why: "THE SAME DISTINCT DEFECT ON THE SCREEN RATHER THAN IN THE RECORD: the Overview's `today` tile reports VISITS under the word people, so a gym of 40 members who each came twice is told 80 people came",
+    expect: 'serves the tiles and eight weeks',
+    from: "      count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,",
+    to: "      count(*) FILTER (WHERE a.day = b.today) AS today_visitors,",
+  },
+  {
+    id: 'O235',
+    target: 'repo',
+    suite: OVERVIEW_SUITE,
+    why: "THE 8-WEEK CHART'S BARS: `count(*)` over a LEFT JOIN counts the all-NULL row of a week nobody came to, so every empty week draws ONE visit. A gym that has just opened sees a chart claiming eight weeks of custom it never had",
+    expect: 'serves the tiles and eight weeks',
+    from: "           count(a.id) AS visits,",
+    to: "           count(*) AS visits,",
+  },
+  {
+    id: 'O236',
+    target: 'repo',
+    suite: OVERVIEW_SUITE,
+    why: "ADOPTION'S DENOMINATOR GAINS THE OWNER'S COMPLIMENTARY SEAT while its numerator does not, so the percentage is wrong for every gym and can never reach 100 - the two halves counted over different populations, which is the defect the query's own comment exists to prevent",
+    expect: 'serves the tiles and eight weeks',
+    from: "      WHERE gym_id = ${input.gymId} AND removed_at IS NULL AND complimentary = false",
+    to: "      WHERE gym_id = ${input.gymId} AND removed_at IS NULL",
+  },
+  {
+    id: 'O237',
+    target: 'service',
+    suite: OVERVIEW_SUITE,
+    why: "A GYM NOBODY HAS JOINED IS TOLD ITS ADOPTION IS 0%, which reads as 'your members are ignoring you' on the day it opened. :8267's class - 'no answer' and 'the answer is none' are different sentences - and the only place in this path where a number is computed rather than counted",
+    expect: 'answers adoption as NULL, never 0%',
+    from: "    row.members === 0 ? null : Math.round((row.monthVisitors * 100) / row.members);",
+    to: "    row.members === 0 ? 0 : Math.round((row.monthVisitors * 100) / row.members);",
+  },
+  {
+    id: 'O238',
+    target: 'service',
+    suite: OVERVIEW_SUITE,
+    why: "THE TICK BOX STOPS MEANING ANYTHING: the numbers are gated on `members.read` instead of `attendance.read`, so an owner who unticks a trainer's attendance box watches that trainer read the day's visit totals off the Overview anyway (:13803's precedent, restated at :21157 and :28107)",
+    expect: "refuses a stranger's gym with 404",
+    from: "): Promise<OrgOverviewResponse> {\n  await requirePrivilege(deps, gymId, userId, \"attendance.read\");",
+    to: "): Promise<OrgOverviewResponse> {\n  await requirePrivilege(deps, gymId, userId, \"members.read\");",
+  },
 ];
 
 
@@ -2928,6 +3047,34 @@ for (const m of MUTANTS) {
   if (!Object.hasOwn(TARGETS, m.target)) {
     abort(`${m.id}: names target '${m.target}', which is not in TARGETS. Nothing has been written yet.`);
   }
+}
+
+/** IDS MUST BE UNIQUE, AND THIS GUARD EXISTS BECAUSE THE TABLE IS NOT SORTED BY
+ *  THEM.
+ *
+ *  **Found by causing it (2026-09-02, the overview card).** New rows were
+ *  numbered from the ids at the END of the file, which are not the highest ones
+ *  — `O217` already existed 900 lines above — so the sweep ran TWO different
+ *  mutants under one id and printed two `O217 RED` lines, each with a different
+ *  `why`. Everything else about that run was correct, which is what makes it
+ *  worth a guard: nothing went red, nothing was skipped, and the only damage was
+ *  to the RECORD. `MUTATE_ONLY=O217` would have run both for ever, and every
+ *  document citing that id would have been ambiguous with no way to tell.
+ *
+ *  Runs over MUTANTS rather than SELECTED, like the target check above and for
+ *  the same reason: a subset run still proves the whole table is sane. */
+const seenIds = new Set();
+for (const m of MUTANTS) {
+  if (seenIds.has(m.id)) {
+    abort(
+      `${m.id} appears TWICE in this table. The rows are not in id order, so a new row numbered from ` +
+      `the end of the file can collide with one higher up. \`MUTATE_ONLY=${m.id}\` would run both and ` +
+      `every record citing it would be ambiguous. Renumber above ${
+        String(Math.max(...MUTANTS.map((x) => Number(x.id.slice(1)))))
+      }. Nothing has been written yet.`,
+    );
+  }
+  seenIds.add(m.id);
 }
 
 const originals = new Map(

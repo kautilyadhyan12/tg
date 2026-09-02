@@ -998,6 +998,44 @@ d("0001_init on a real database", () => {
     expect(refused).toBe(true);
   });
 
+  /** `0020` GIVES THE GYM'S DAY SOMEWHERE TO PUT ATTENDANCE, and this test is
+   *  the readback :28221 §6 made mandatory: a hand-written migration the
+   *  journal does not name is INVISIBLE to `drizzle-kit migrate`, which then
+   *  prints *"migrations applied successfully"* having applied nothing. The
+   *  failure is silent and GREEN, so the columns are asked of `pg_catalog`
+   *  rather than assumed from the presence of a `.sql` file.
+   *
+   *  **THE DEFAULT IS HONEST ONLY BECAUSE THE TABLE WAS EMPTY.** A `DEFAULT 0`
+   *  backfills every existing row with a claim — "nobody came that day" — and
+   *  `org_daily_stats` had NO WRITER at all before this card, so the claim is
+   *  about no rows. That is asserted rather than remembered: any row that
+   *  predated the migration would carry a fabricated zero. */
+  it("0020's visit columns exist on the deployed database and invented no history", async () => {
+    const cols = await sql<
+      { column_name: string; data_type: string; is_nullable: string; column_default: string | null }[]
+    >`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_name = 'org_daily_stats' AND column_name IN ('visits', 'visitors')
+      ORDER BY column_name`;
+    expect(cols.map((c) => c.column_name)).toEqual(["visitors", "visits"]);
+    for (const col of cols) {
+      expect(col.data_type).toBe("integer");
+      expect(col.is_nullable).toBe("NO");
+      expect(col.column_default).toBe("0");
+    }
+
+    // The rollup writes `visits`/`visitors` and leaves `avg_form_score` NULL for
+    // a day nobody was graded on — so a row whose scored_sets is 0 must not be
+    // carrying a fabricated 0.0 average. Asserted over whatever the suite finds
+    // rather than over a fixture: this is a guarantee about the WRITER, and a
+    // row written by any other means would break it just as badly.
+    const fabricated = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM org_daily_stats
+      WHERE scored_sets = 0 AND avg_form_score IS NOT NULL`;
+    expect(fabricated[0]?.n).toBe(0);
+  });
+
   /** `hours_mode` DEFAULTS TO `unset` AND NOTHING BACKFILLED IT — :26736's rule
    *  made checkable. A migration that helpfully wrote `'scheduled'` onto
    *  existing rows, or a DDL default of anything else, is how every gym in the

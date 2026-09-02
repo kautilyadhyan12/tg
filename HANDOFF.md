@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW-NUMBERS CARD, §4a — THE SERVER HALF. DECISIONS :30094.
+      Kd approved `CARD-gym-overview-numbers.md` (*"approve"*) with migration
+      `0020` reviewed as SQL first. **THE `OWED.md` LINE DOES NOT TICK: the web
+      half is unbuilt, no smoke has run, T3 is UNRUN.**
+
+  1. **`org_daily_stats` HAS A WRITER FOR THE FIRST TIME SINCE `0001_init`** —
+     `modules/orgs/rollup.ts`, a FIFTH scheduler on the `rollups` queue at
+     `15 * * * *`, plus `tools/orgs-rollup.ts`. Migration `0020` adds `visits`
+     and `visitors`, with its journal entry in the same commit and the columns
+     READ BACK out of `information_schema` afterwards (:28221 §6).
+  2. **AND IT STILL HAS NO READER, WHICH IS A DECISION AND NOT AN OVERSIGHT.**
+     `GET /v1/orgs/:gymId/overview` reads `gym_attendance` LIVE. The plan said
+     otherwise and **writing the query produced the reason it could not work: a
+     DISTINCT count cannot be summed across days** — the chart's line is "how
+     many different people came that week" and seven daily figures count a
+     Monday-and-Thursday member twice. Second reason: a nightly table is PARTIAL
+     for part of every day, and drawing a not-yet-written day as zero is :5807.
+     **The rollup is still written** — Reports needs the expensive workout join,
+     and `gym_attendance` sits on the UNRULED half of the DPDP list, so the day
+     it becomes deletable the chart's source moves onto the aggregate.
+  3. **THE AUDIT'S REUSABLE FINDING IS MINE: A DUPLICATE MUTANT ID THAT EVERY
+     GUARD IN THE HARNESS PASSED.** `mutate-orgs.mjs` is NOT in id order —
+     `O217` already existed 900 lines above the end of the file — so the sweep
+     ran two different mutants under one id and printed two `O217 RED` lines.
+     Nothing failed; the damage was to the RECORD, since `MUTATE_ONLY=O217`
+     would have run both for ever. Renumbered O228–O238, **and a duplicate-id
+     guard added and PROVEN BY CAUSING IT** (exit 2, file restored and
+     sha256-verified).
+  4. **A BACKTICK INSIDE A `sql` TEMPLATE LITERAL SILENTLY ENDS THE TEMPLATE**,
+     and this repo's comment style is full of them. Done twice in one session;
+     the second escaped `tsc` because tsc had been run BEFORE the edit, and
+     esbuild caught it inside the test run. Plain words or double quotes in SQL
+     comments.
+  5. **TWO FIXTURE REFUSALS WERE THE DATABASE WORKING**, not the code:
+     `workout_sets_engine_provenance_check` (a scored set must name the engine
+     and definition that graded it) and `addStaff` answering 404 to somebody who
+     had not joined the gym first (:14401).
+
+PROVE: all LOCAL (`localhost:5433`, :13659), all on the final bytes.
+       `orgs.overview` 12/12 (new) · `db.migration` 16/16 (+1) · `orgs.routes` +
+       `orgs.attendance` 176/176 · `@app/shared` 52/52 · `web` 1612/1612
+       (shared changed — :28395) · tsc exit 0 on api and shared, PROVEN REAL by
+       planting a type error · eslint clean on ten api files + one shared ·
+       three root guards green with REAL exit codes (:13247).
+       **SWEEP a stated SUBSET of 228: O228–O238, 11 RED, 0 ALIVE, 0 never ran**,
+       every control GREEN and tallied, restores sha256-verified.
+
+FILES: `apps/api/drizzle/0020_org_daily_stats_visits.sql` + `meta/_journal.json` ·
+       `src/db/schema/orgAnalytics.ts` · `src/modules/orgs/{rollup.ts,repo.ts,
+       service.ts,schemas.ts,routes.ts}` · `src/worker.ts` ·
+       `tools/{orgs-rollup.ts,mutate-orgs.mjs}` ·
+       `test/{orgs.overview.test.ts,db.migration.test.ts}` ·
+       `packages/shared/src/orgs.ts` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed.
+       **NEXT: §4b, THE WEB HALF** — three tiles and the 8-week chart on
+       `pages/console/Overview.jsx`, with `overviewView.js` pure beside it. The
+       card's §4b names the four empty states, and they are the thing to get
+       right: *"we have no data"* and *"the answer is zero"* are different
+       sentences (:8267, :8343, :26736).
+       **AND A STEP THAT IS NOT OPTIONAL: run the backfill**
+       (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
+       browser reads before asking him to smoke anything, or his chart is eight
+       empty weeks — :15927's recurrence, three times over.
+```
+
+
+```
 TASK: THE OVERVIEW-NUMBERS CARD'S PLAN GATE. DECISIONS :29961. **KD RULED FOUR
       THINGS AND TWO OF THEM HE VOLUNTEERED.** Records only; no code, no test,
       no `src` file. **`CARD-gym-overview-numbers.md` IS WRITTEN AND UNAPPROVED

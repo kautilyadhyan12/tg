@@ -1,9 +1,13 @@
 # CARD — the gym's numbers: the nightly rollup and the Overview's tiles
 
-**Status: WRITTEN AND UNAPPROVED, 2026-09-02. NOTHING IS BUILT.** This document
-is the BUILD plan the gate inspects (:26777 — *"he had approved a FEATURE SHAPE
-and had never seen a file list, migration, test list or risk list"*). Branch
-`web-repoint`, as every gym card has been.
+**Status: APPROVED 2026-09-02 (*"approve"*) · §4a SERVER HALF BUILT 2026-09-02,
+`DECISIONS.md:30094`.** Migration `0020` was reviewed as SQL by Kd before
+anything else was written (T5/R4.4) — both statements were put in front of him
+and he approved them. **§4b (the web half) is NOT built, no smoke has run and T3
+is UNRUN, so the `OWED.md` line does not tick.** This document is the BUILD plan
+the gate inspected (:26777 — *"he had approved a FEATURE SHAPE and had never seen
+a file list, migration, test list or risk list"*). Branch `web-repoint`, as every
+gym card has been.
 
 **It is CHAINED, not chosen.** :26469 and :26624 both sequence it directly after
 attendance — *"sessions → attendance → the numbers"* — and :26385 §5 lists it
@@ -271,9 +275,24 @@ counts come from the server or they are wrong"*):
 }
 ```
 
-- `today` — live from `gym_attendance` (§3.2's deferral, with its reason).
-- `week` / `weeks` — `visits` summed out of `org_daily_stats`; `visitors`
-  distinct-counted live (§4a.1's warning).
+- **EVERY FIGURE IS READ LIVE FROM `gym_attendance`. THE ROUTE READS NOTHING
+  FROM `org_daily_stats`, AND THAT CHANGED DURING THE BUILD — it is recorded
+  here rather than left for a reader to notice.** This section first said
+  *"`visits` summed out of `org_daily_stats`; `visitors` distinct-counted live"*.
+  Writing it produced the reason it cannot work: **the chart's LINE is "how many
+  different people came that week", and a distinct count cannot be summed** —
+  seven daily `visitors` counts a Monday-and-Thursday member twice. Once the line
+  has to read raw rows, the bars reading them too is one query instead of two
+  sources that can disagree at their seam. The second reason is the same one the
+  cache was refused for: **a nightly table is PARTIAL for part of every day**, and
+  rendering a not-yet-written day as zero is a false number (:5807).
+  **The rollup is still built and still written**, for the three reasons in
+  `rollup.ts`'s header — the workout-side join is too expensive per page load and
+  is what Reports needs; `gym_attendance` sits on the UNRULED half of the DPDP
+  list, so the day it becomes deletable a live-reading chart silently rewrites a
+  gym's history and this aggregate is what survives; and §3.2 specifies it.
+  **When that ruling lands the chart's source moves onto the table**, which is
+  what it is being written for.
 - `adoptionPct` — §3.2's definition: 30-day visitors ÷ current members.
   **NULL when the gym has no members**, never 0 and never a divide — a zero here
   is a false statement about a gym nobody has joined yet.

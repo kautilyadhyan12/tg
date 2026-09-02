@@ -134,6 +134,13 @@
       "when": 1788220800002,
       "tag": "0019_gym_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788220800003,
+      "tag": "0020_org_daily_stats_visits",
+      "breakpoints": true
     }
   ]
 }
