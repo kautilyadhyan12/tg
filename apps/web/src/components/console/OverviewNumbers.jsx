@@ -9,9 +9,7 @@ import {
   chartGeometry,
   chartState,
   crowdNote,
-  exceptionsNote,
   hiddenPeopleCount,
-  initials,
   nothingRecordedSentence,
   numbersState,
   previewPeople,
@@ -102,7 +100,6 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
   // day read blipped loses five names and keeps every number, rather than
   // getting a second error card for a list it can open itself. The numbers'
   // own failure is still reported, one level up.
-  const odd = day === null ? null : exceptionsNote(day.summary, day.totals);
   const shown = day === null ? [] : previewPeople(day.people);
   const hidden = day === null ? 0 : hiddenPeopleCount(day.totals, shown);
 
@@ -139,23 +136,6 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
         </p>
       )}
 
-      {/* The thing Kd raised first: visits counted here that happened when the
-          gym was not open. Amber rather than red — it is a FACT about the day,
-          not a fault, and :26624 §4.4 records such a visit rather than refusing
-          it, so nothing here scolds anybody. */}
-      {odd === null ? null : (
-        <div
-          className="mt-4 rounded-xl px-3 py-2.5 text-xs"
-          style={{
-            background: 'rgba(255,138,31,0.07)',
-            border: '1px solid rgba(255,138,31,0.18)',
-            color: 'rgba(255,196,140,0.95)',
-          }}
-        >
-          {odd}
-        </div>
-      )}
-
       {shown.length === 0 ? null : (
         <div className="mt-5">
           <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
@@ -182,7 +162,16 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
         </div>
       )}
 
-      {geometry === null ? null : (
+      {collecting ? (
+        /* §4.1's *"empty (< 1 wk data): friendly 'first week collecting'"*, and
+           it is now the WHOLE of this zone rather than a caption under a
+           one-bar chart. A picture of a single week is not a trend; the honest
+           thing is to say so and draw nothing. */
+        <p className="text-xs mt-5 pt-4" style={{ color: MUTED, borderTop: `1px solid ${HAIRLINE}` }}>
+          Your first week of attendance — the eight-week chart appears once there is a week to compare against.
+        </p>
+      ) : null}
+      {geometry === null || collecting ? null : (
         <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
           <div className="flex items-end justify-between gap-4 flex-wrap mb-3">
             <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
@@ -331,15 +320,6 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
             </div>
           </div>
 
-          {collecting ? (
-            /* Part 3 §4.1's chart state — *"empty (< 1 wk data): friendly 'first
-               week collecting'"*. Said UNDER the chart rather than instead of
-               it: this week's bar is real and is worth seeing; what is not there
-               yet is anything to compare it against. */
-            <p className="text-xs mt-3" style={{ color: MUTED }}>
-              This is your first week of attendance — the chart fills in as the weeks pass.
-            </p>
-          ) : null}
         </div>
       )}
     </ConsoleCard>
@@ -369,7 +349,16 @@ function Header({ href }) {
 
 const ARROW = { up: '▲', down: '▼' };
 
-/** ONE FIGURE AND ITS CAPTION.
+/** ONE FIGURE, AND THE DASHBOARD SAYS NOTHING ABOUT VISITS.
+ *
+ *  **KD, 2026-09-03: *"no of visit need not to show in main dashboard, only
+ *  besides people say A visited 2 times like that in attendance page"*.** So the
+ *  headline is PEOPLE and the visit count does not appear here at all — a
+ *  dashboard answers *how many came*, and *who came twice* is a fact about a
+ *  PERSON, which belongs beside that person's name. `tileCounts` still returns
+ *  `detail` because the Attendance screen's own rows use the same distinction;
+ *  this surface simply does not draw it.
+ *
  *
  *  Takes EITHER `figures` (a counted pair, split by `tileCounts`) or a ready
  *  `value` — the percentage is already a string the server decided, and running
@@ -397,11 +386,6 @@ function Tile({ label, figures, value, note, direction }) {
           </span>
         )}
       </div>
-      {counted?.detail ? (
-        <div className="text-xs mt-1" style={{ color: FAINT }}>
-          {counted.detail}
-        </div>
-      ) : null}
       {note ? (
         <div className="text-xs mt-1.5 leading-snug" style={{ color: MUTED }}>
           {direction === 'up' || direction === 'down' ? (
@@ -432,13 +416,6 @@ function PersonRow({ person, timezone, clockFormat }) {
   const chips = personTimes(person, { timezone, clockFormat });
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span
-        aria-hidden="true"
-        className="flex items-center justify-center flex-shrink-0 rounded-full text-xs font-semibold"
-        style={{ width: 28, height: 28, background: 'rgba(255,138,31,0.14)', color: ORANGE }}
-      >
-        {initials(person.displayName)}
-      </span>
       <span className="text-sm truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>
         {person.displayName}
       </span>

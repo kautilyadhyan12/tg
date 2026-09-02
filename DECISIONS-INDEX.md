@@ -989,6 +989,45 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   the next card is the next feature of THAT STAGE, not the highest-priority item
   in the file — markers order work WITHIN a stage, never the stages.** §5 carries
   what is measurably left in the gym stage.
+- **:30867** — 2026-09-03 — **KD RULES THAT A GYM WITH SET HOURS REFUSES
+  ATTENDANCE OUTSIDE THEM, REVERSING A CHAT'S CALL — plus six design
+  instructions given from his own browser.** **Read before writing anything that
+  RECORDS a visit, before quoting :26624 §4.4's *"recorded and marked, never
+  refused"*, before putting a visit count on the console's Overview, before
+  adding a section to the Attendance screen, before drawing a chart for a gym
+  with one week of history, and before putting initials or an avatar anywhere in
+  this console.** His words: *"if a gym has set certain times not 24 hour then if
+  a memeber comes outside of time should not be able to press i am here"*.
+  **SUPERSEDES :26624 §4.4, WHICH WAS A CHAT'S CALL AND NOT HIS** — checked
+  before building (:19560's lesson). **The cost is now his and is real: a gym
+  that forgets to update its hours locks its members out.** What bounds it:
+  `hours_unset` and `open_24h` are still ADMITTED (:26736's "no answer" ≠
+  "closed", now load-bearing for a WRITE — **O242** goes RED on over-firing) ·
+  the refusal NAMES the day's real opening times · a dated closure reports no
+  sessions at all, because a closure wins over the pattern (:26684) · checked
+  inside the transaction under the gym lock. **The two tests that asserted the
+  old behaviour became the regression tests, and both now also assert NOTHING
+  WAS WRITTEN.**
+  **THE DESIGN INSTRUCTIONS:** visit counts leave the dashboard (*"only besides
+  people say A visited 2 times like that in attandance page"*) · `visited 2
+  times` beside the name and nothing for a single visit (**C177**) · the
+  odd-arrival line comes off the dashboard, and `exceptionsNote` was DELETED
+  with its tests and three mutants rather than left as dead surface (:8156's
+  round-6 F10) · **the Attendance screen's *"nobody is turned away for it"*
+  became FALSE the moment he ruled, found while removing the other line**
+  (:7298) · "The day" is a dropdown, COLLAPSED not deleted because a
+  five-session gym needs it · the initials circles go.
+  **THE CHART: his suspicion was wrong and his instinct was right** — the eight
+  buckets were checked against his database and were exactly correct, and a
+  picture of one filled column is not a trend, so §4.1's *"first week
+  collecting"* state now replaces the chart instead of captioning it
+  (**C178**, ALIVE on its first run: the test asserted the sentence appeared and
+  never that the chart had gone).
+  `web` 1685/1685 · `api` 767/767 local · SWEEPS C155–C178 (21 RED) and
+  O241/O242 (2 RED). **Two instrument findings: a BACKTICK in a `-t` filter is
+  shell command substitution and the ASCII guard cannot see it, and the dev
+  Postgres needs `127.0.0.1` because `localhost` resolves to `::1`.**
+  **No smoke has run on any of it; T3 UNRUN.**
 - **:26469** — 2026-08-31 — **KD RULES THE GYM'S NUMBERS ARE ATTENDANCE NUMBERS:
   the door check-in is built FIRST, "trained anywhere" is NEVER shown, and
   attendance has TWO ways in with the gym able to tell them apart.** **Read

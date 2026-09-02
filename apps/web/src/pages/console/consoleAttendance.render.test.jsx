@@ -167,9 +167,23 @@ describe('the nav item', () => {
   });
 });
 
+/** OPEN "The day", which is a DROPDOWN since Kd's 2026-09-03 instruction
+ *  (*"these things will become big with memebrs so need drop down"*).
+ *
+ *  **`ConsoleSection` UNMOUNTS a closed body** (`ConsoleStates.jsx` — *"Closed
+ *  means UNMOUNTED here"*), so these cases open it the way a person does rather
+ *  than asserting against content no one can see — :6008's precedent, and the
+ *  reason that component chose unmounting over hiding in the first place. */
+const openTheDay = async () => {
+  const heading = await screen.findByRole('button', { name: /^The day/ });
+  if (heading.getAttribute('aria-expanded') !== 'true') fireEvent.click(heading);
+  return heading;
+};
+
 describe('the shape of the day', () => {
   it('draws one line per session with the server’s own count', async () => {
     drawScreen();
+    await openTheDay();
     await waitFor(() => expect(screen.getByText('06:00 – 07:00')).toBeTruthy());
     // SCOPED TO THE ROW. "2 people" is legitimately on this screen twice — the
     // day's headline and this session's line — and on a one-session day they
@@ -213,6 +227,7 @@ describe('the shape of the day', () => {
   // had stopped rendering entirely would pass this too.
   it('says visits beside people only when they differ', async () => {
     drawScreen();
+    await openTheDay();
     await waitFor(() => expect(screen.getByText('06:00 – 07:00')).toBeTruthy());
     expect(screen.queryByText(/2 people · 2 visits/)).toBeNull();
   });
@@ -220,6 +235,7 @@ describe('the shape of the day', () => {
   it('draws the times on the GYM’s clock when the gym chose 12-hour', async () => {
     api.getAttendanceDay.mockResolvedValue(day({ clockFormat: '12h' }));
     drawScreen();
+    await openTheDay();
     await waitFor(() => expect(screen.getByText('6:00 AM – 7:00 AM')).toBeTruthy());
   });
 });
@@ -316,6 +332,7 @@ describe('the unusual arrivals', () => {
       }),
     );
     drawScreen();
+    await openTheDay();
     await waitFor(() => expect(screen.getByText('Before opening times were set')).toBeTruthy());
     expect(screen.queryByText(/outside opening hours or on a closed day/)).toBeNull();
   });

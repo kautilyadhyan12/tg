@@ -14,7 +14,6 @@ import {
   chartGeometry,
   chartState,
   crowdNote,
-  exceptionsNote,
   hasAnyActivity,
   hiddenPeopleCount,
   initials,
@@ -290,62 +289,6 @@ describe('a tile is a number and a caption', () => {
       unit: 'people',
       detail: null,
     });
-  });
-});
-
-describe('the visits that happened when the gym was not open', () => {
-  const slot = (hoursStatus, visits) => ({ hoursStatus, session: null, visits, people: visits });
-
-  // KD'S FIRST REPORT, and the fixture is his own gym's mixture: one visit from
-  // before hours were ever set, two outside them.
-  it('counts the odd arrivals and leaves the rest alone', () => {
-    const note = exceptionsNote(
-      [slot('hours_unset', 1), slot('outside_hours', 2)],
-      { visits: 3, people: 2 },
-    );
-    expect(note).toBe("2 of today's 3 visits were outside your opening hours.");
-  });
-
-  // `hours_unset` IS NOT AN EXCEPTION (:26736). A gym that never said when it
-  // opens has not been arrived at oddly, and telling its owner every visit was
-  // "outside opening hours" would be false about all of them.
-  it('says nothing at all about a gym that has never set its hours', () => {
-    expect(exceptionsNote([slot('hours_unset', 4)], { visits: 4, people: 3 })).toBeNull();
-  });
-
-  it('says nothing when every visit landed in a session', () => {
-    expect(exceptionsNote([slot('in_session', 9)], { visits: 9, people: 7 })).toBeNull();
-    expect(exceptionsNote([], { visits: 0, people: 0 })).toBeNull();
-  });
-
-  // BOTH DIRECTIONS, BECAUSE A ONE-SIDED CASE IS SATISFIED BY A SENTENCE THAT
-  // ALWAYS SAYS "all" — C171 was ALIVE against the first version of this test,
-  // which only checked the all-of-them day, where the two spellings are
-  // identical. :7104's PG1: a guard whose only tested failure is "it did not
-  // fire" is satisfied by a door that is simply shut.
-  it('says "all" only when it really is all of them', () => {
-    expect(exceptionsNote([slot('outside_hours', 3)], { visits: 3, people: 2 }))
-      .toBe('All 3 visits today were outside your opening hours.');
-    const partial = exceptionsNote([slot('outside_hours', 2)], { visits: 9, people: 6 });
-    expect(partial).toBe("2 of today's 9 visits were outside your opening hours.");
-    expect(partial).not.toMatch(/^All/);
-  });
-
-  it('names a closed day as a closed day, and the mixture as both', () => {
-    expect(exceptionsNote([slot('closed_day', 2)], { visits: 2, people: 2 }))
-      .toBe('All 2 visits today were on a day the gym was closed.');
-    expect(exceptionsNote([slot('closed_day', 1), slot('outside_hours', 1)], { visits: 4, people: 3 }))
-      .toBe("2 of today's 4 visits were outside your opening hours or on a day the gym was closed.");
-  });
-
-  // THE COUNT IS THE SERVER'S WHOLE-DAY FIGURE, never rows on a page — the
-  // distinction Kd's ruling 14 turns on (:27992 §3). `summary` covers the whole
-  // day whatever page the people list is showing, so this number does not move
-  // when somebody opens the full screen.
-  it('does not move when the people list is paged', () => {
-    const summary = [slot('outside_hours', 2)];
-    const totals = { visits: 40, people: 30 };
-    expect(exceptionsNote(summary, totals)).toBe("2 of today's 40 visits were outside your opening hours.");
   });
 });
 

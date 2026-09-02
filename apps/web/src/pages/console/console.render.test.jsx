@@ -1698,10 +1698,17 @@ describe("the gym's numbers", () => {
     // finding. The headline is PEOPLE (his own wording, "many people came") and
     // the visits count is the caption under it, still drawn ONLY when the two
     // differ. Neither is derivable from the other.
+    // A TILE IS A NUMBER AND A CAPTION, AND THE DASHBOARD SAYS NOTHING ABOUT
+    // VISITS — Kd, 2026-09-03: *"no of visit need not to show in main dashboard,
+    // only besides people say A visited 2 times like that in attendance page"*.
+    // So the headline is PEOPLE and the visit counts are deliberately ABSENT
+    // here; `visited 2 times` lives beside a person on the Attendance screen,
+    // which is where a repeat visit is a fact about somebody rather than a
+    // second number on a dashboard.
     expect(screen.getAllByText('7').length).toBeGreaterThan(0);
-    expect(screen.getByText('9 visits')).toBeTruthy();
     expect(screen.getAllByText('22').length).toBeGreaterThan(0);
-    expect(screen.getByText('40 visits')).toBeTruthy();
+    expect(screen.queryByText('9 visits')).toBeNull();
+    expect(screen.queryByText('40 visits')).toBeNull();
   });
 
   it('explains itself when somebody came and the members share did not move', async () => {
@@ -1795,6 +1802,14 @@ describe("the gym's numbers", () => {
     expect(await screen.findByText(/first week of attendance/)).toBeTruthy();
     // And no arrow over a week there is nothing to compare against.
     expect(screen.getByText('Nothing was recorded last week.')).toBeTruthy();
+    // AND NO CHART. Kd, looking at exactly this state: *"are the graph even
+    // correct or just some random fat ass box that makes any shapes"* — it WAS
+    // correct (seven empty weeks and three visits, checked against the
+    // database), and a picture of ONE week is not a trend. §4.1 asks for the
+    // collecting STATE here, so drawing both answers its own question twice.
+    // C178 was ALIVE against the first version of this case, which asserted the
+    // sentence appeared and never that the chart had gone.
+    expect(screen.queryByRole('img', { name: /Visits a week/ })).toBeNull();
   });
 
   it('tells a gym with members and no visits that nobody has come — not that they had none', async () => {
@@ -1861,31 +1876,6 @@ describe("the gym's numbers", () => {
     expect(screen.queryByText(/turning up/i)).toBeNull();
     expect(screen.queryByText("You can't see this gym's attendance.")).toBeNull();
     expect(screen.queryByText('Try again')).toBeNull();
-  });
-
-  it('says when the gym was not even open, instead of just counting the visits', async () => {
-    // KD'S FIRST REPORT, 2026-09-03: he marked himself in outside the gym's
-    // hours, the member's screen said so, and this screen said "3 visits" with
-    // nothing to tell them apart — an owner reads that as a busy morning.
-    //
-    // THE FIXTURE IS HIS OWN GYM'S MIXTURE, deliberately: one visit from before
-    // hours were ever set, two outside them. `hours_unset` is NOT an exception
-    // (:26736 — a gym that never said when it opens has not been arrived at
-    // oddly), so the honest sentence is "2 of today's 3", and a version that
-    // counted all three would look right on a simpler fixture.
-    orgService.getOverview.mockResolvedValue(busy());
-    orgService.getAttendanceDay.mockResolvedValue(
-      attendanceDay({
-        totals: { visits: 3, people: 2 },
-        summary: [
-          { hoursStatus: 'hours_unset', session: null, visits: 1, people: 1 },
-          { hoursStatus: 'outside_hours', session: null, visits: 2, people: 2 },
-        ],
-      }),
-    );
-    drawOverview();
-
-    expect(await screen.findByText("2 of today's 3 visits were outside your opening hours.")).toBeTruthy();
   });
 
   it('names who came, with the times, and shows somebody who came twice as twice', async () => {

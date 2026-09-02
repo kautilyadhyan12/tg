@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE DOOR SHUT OUTSIDE OPENING HOURS, AND SIX DESIGN CHANGES ON
+      THE TWO SCREENS. DECISIONS :30867. **THE SMOKE SHEET IS STALE, no smoke
+      has run on this version, T3 is UNRUN, the `OWED.md` line does NOT tick.**
+
+  1. **THE RULING REVERSES :26624 §4.4 — WHICH WAS A CHAT'S CALL, NOT KD'S**,
+     and that was CHECKED before building (:19560). *"if a gym has set certain
+     times not 24 hour then if a memeber comes outside of time should not be
+     able to press i am here"*. **`hours_unset` and `open_24h` still admit**
+     (:26736 for a WRITE; **O242** RED on over-firing) · the refusal names the
+     day's real hours · a dated closure lists NONE (:26684) · checked in the
+     transaction under the gym lock.
+  2. **THE COST IS HIS AND IS ON `OWED.md`**: a gym that forgets to update its
+     hours locks its members out, and nothing tells the owner it is happening.
+  3. **A SENTENCE HIS RULING MADE FALSE, found while removing another one.**
+     The Attendance screen said *"Recorded as normal — nobody is turned away for
+     it"*. People ARE turned away now. :7298's class.
+  4. **`exceptionsNote` WAS DELETED, not left dead** — its only caller was the
+     dashboard line he asked to remove; its tests and mutants C169–C171 went
+     with it (:8156's round-6 F10: dead surface with tests reads as protection).
+  5. **THE CHART WAS CORRECT AND HE WAS STILL RIGHT.** Buckets checked against
+     his database: seven zeros then 3/2. A one-column chart is not a trend, so
+     §4.1's collecting state now REPLACES it. **C178 was ALIVE first run** — the
+     test asserted the sentence appeared, never that the chart had gone.
+  6. **TWO INSTRUMENT TRAPS.** A BACKTICK in a mutant's `-t` filter is shell
+     command substitution and the ASCII guard cannot see it (a backtick is
+     ASCII) — the abort blames the test. And the dev Postgres needs
+     **`127.0.0.1:5433`**: `localhost` resolves to `::1` and fails
+     `ECONNREFUSED`. Docker Desktop had also stopped mid-session; restarted and
+     confirmed by `docker ps` before any verdict was believed.
+
+PROVE: `web` **1685/1685 / 58 files, exit 0** · `api` **767/767 / 50 files,
+       exit 0**, LOCAL · api `tsc` exit 0 · eslint clean on 3 api + 8 web files
+       · `vite build` exit 0 · three root guards green.
+       **SWEEPS: web `MUTATE_ONLY=C155…C178` 21 RED / 0 ALIVE; api
+       `MUTATE_ONLY=O241,O242` 2 of 232, 2 RED / 0 ALIVE.** Database mutants ran
+       because this card CHANGES SERVER BEHAVIOUR (:5857 rule 4a).
+
+FILES: `apps/api/src/modules/orgs/{repo.ts,service.ts}` ·
+       `apps/api/test/orgs.attendance.test.ts` · `apps/api/tools/mutate-orgs.mjs`
+       · `apps/web/src/components/console/OverviewNumbers.jsx` ·
+       `apps/web/src/pages/console/{overviewView.js,overviewView.test.js,
+       Attendance.jsx,attendanceView.js,attendanceView.test.js,
+       console.render.test.jsx,consoleAttendance.render.test.jsx}` ·
+       `apps/web/tools/mutate-console.mjs` · records.
+       **NO migration and NO `packages/shared` change.**
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **EMAIL BESIDE A NAME is still unanswered** — `DECISIONS-INDEX.md` §2,
+       :30733 §5. Part 3 §2.4 is a promise made at the join door.
+       **NEXT: REWRITE `RUNBOOK/smoke-overview-numbers.md`** — it describes tile
+       wording, an odd-arrival line and a chart that no longer ship, and Kd's own
+       gym now REFUSES the mark that step 8 asks for. **Then the smoke, then
+       T3 round 1.**
+```
+
+```
 TASK: THE OVERVIEW NUMBERS — KD MARKED HIMSELF IN AND FOUND TWO MORE.
       DECISIONS :30733 (addendum 2 to :30399, same session). **THE `OWED.md`
       LINE STILL DOES NOT TICK: no smoke on this version, T3 UNRUN.**

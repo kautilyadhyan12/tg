@@ -210,6 +210,27 @@ export function personTimes(person, { timezone, clockFormat } = {}) {
     .filter((chip) => chip.time !== '');
 }
 
+/** `visited 2 times` — said beside the NAME, in words, for anybody who came
+ *  more than once.
+ *
+ *  **KD, 2026-09-03: *"only besides people say A visited 2 times like that in
+ *  attendance page"*.** The chips have always carried it — two chips IS two
+ *  visits — but that asks an owner to count small boxes, and this screen exists
+ *  because a four-hundred-tap day must be readable at a glance (:27992 §3).
+ *
+ *  **NOTHING FOR A SINGLE VISIT.** *"visited 1 time"* beside every ordinary
+ *  member is noise on the row it is meant to make legible, and the label exists
+ *  to mark the exception.
+ *
+ *  It counts the person's OWN visits, which is the one count on this screen that
+ *  is not a whole-day figure and is not meant to be: the row IS the person, so
+ *  their chips are the complete set. The day's totals still come from the
+ *  server, untouched by this. */
+export function repeatVisitLabel(person) {
+  const visits = Array.isArray(person?.visits) ? person.visits.length : 0;
+  return visits > 1 ? `visited ${visits} times` : '';
+}
+
 /** NAME SEARCH, and it is a plain case-insensitive contains.
  *
  *  **IT CAN ONLY EVER SEARCH WHAT HAS BEEN LOADED, AND THE SCREEN SAYS SO WHEN

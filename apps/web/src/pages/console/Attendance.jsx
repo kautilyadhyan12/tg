@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleCard, ConsoleSection, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { addDays, closureDateLabel, gymToday } from './hoursView';
 import {
   EXCEPTION_STATUSES,
@@ -14,6 +14,7 @@ import {
   matchesName,
   peopleLabel,
   personTimes,
+  repeatVisitLabel,
   searchCoversEverybody,
   slotLabel,
   sortedSummary,
@@ -77,6 +78,14 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
         <span className="text-sm font-medium min-w-0 truncate" style={{ color: '#fff' }}>
           {person.displayName}
         </span>
+        {/* KD, 2026-09-03: *"besides people say A visited 2 times"*. In WORDS,
+            beside the name, and only when it is more than one — see
+            `repeatVisitLabel`. The chips below still carry the times. */}
+        {repeatVisitLabel(person) === '' ? null : (
+          <span className="text-xs" style={{ color: '#FFB347' }}>
+            {repeatVisitLabel(person)}
+          </span>
+        )}
         <span className="flex items-center gap-1.5 flex-wrap">
           {chips.map((chip, i) => (
             // KEYED BY THE INSTANT AND ITS POSITION. Two visits cannot share a
@@ -597,18 +606,18 @@ function AttendanceDay({ org }) {
               EVERY NUMBER HERE IS THE SERVER'S, counted over the whole day in
               SQL — never over the page below, which is the specific breakage
               the ruling names. */}
-          <ConsoleCard>
-            <div className="flex items-baseline justify-between gap-3 flex-wrap">
-              <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                The day
-              </p>
-              {/* The second number appears ONLY when it differs from the first,
-                  i.e. when somebody came twice — Kd's ruling 12. */}
-              <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-                {dayTotalsLine(answer.totals)}
-              </p>
-            </div>
-
+          {/* KD, 2026-09-03: *"The day in attandance what is even the need of
+              that already there is Who came, also these things will become big
+              with memebrs so need drop down"*. **He is right about the second
+              half and the first half is why it is COLLAPSED rather than
+              deleted:** a gym with one session repeats what "Who came" already
+              says, and a gym with five sessions is the only place the shape of
+              a 400-tap day is legible at all — which is ruling 14's own first
+              requirement. `ConsoleSection` keeps the day's TOTAL on the closed
+              heading, so the number an owner glances at survives the fold
+              (`ConsoleStates.jsx` — *"the one number an owner glances at is
+              still there without opening anything"*). */}
+          <ConsoleSection title="The day" aside={dayTotalsLine(answer.totals)}>
             {summary.length === 0 ? (
               <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 Nothing to show for this day.
@@ -634,7 +643,7 @@ function AttendanceDay({ org }) {
                 ))}
               </ul>
             )}
-          </ConsoleCard>
+          </ConsoleSection>
 
           {/* ── THE EXCEPTIONS, NEXT, BECAUSE THEY ARE WHAT AN OWNER LOOKS FOR ─
               A CONTROL, not a badge on a person: the visit is unusual, the
@@ -652,8 +661,17 @@ function AttendanceDay({ org }) {
                   <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
                     {visitsLabel(oddVisits)} outside opening hours or on a closed day
                   </p>
+                  {/* **THIS SENTENCE USED TO SAY *"Recorded as normal —
+                      nobody is turned away for it"* AND KD'S RULING OF
+                      2026-09-03 MADE IT FALSE.** Marking outside opening hours
+                      is now REFUSED, so these rows are history: visits recorded
+                      before the rule, or at a gym that had set no hours yet. A
+                      true sentence that outlives the condition that raised it is
+                      :7298's class, and this one would have kept promising
+                      something the product had stopped doing. */}
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    Recorded as normal — nobody is turned away for it.
+                    Recorded before your gym set these hours, or before arrivals
+                    outside them were turned away.
                   </p>
                 </div>
                 <button

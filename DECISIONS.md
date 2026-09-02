@@ -30863,3 +30863,144 @@ row LINE BY LINE rather than by matching its text. The one-line-anchor rule
 
 **STILL DOES NOT TICK: no browser smoke has run on this version, and T3 is
 UNRUN.**
+
+## 2026-09-03 — KD RULES THAT A GYM WITH SET HOURS REFUSES ATTENDANCE OUTSIDE THEM, REVERSING A CHAT'S CALL — and six design instructions on the two screens, given from his own browser
+
+**Read before writing anything that RECORDS a visit, before quoting :26624 §4.4's
+*"recorded and marked, never refused"*, before putting a visit count on the
+console's Overview, before adding a section to the Attendance screen, before
+drawing a chart for a gym with one week of history, and before putting initials
+or an avatar anywhere in this console.**
+
+Kd marked himself in from a member account, read his own console, and gave seven
+instructions in one message. **One of them is a RULING that reverses a decision
+this repo had already recorded; the other six are design.** Nothing here was
+asked as a question — he had the screen in front of him.
+
+### 1 · THE RULING: OUTSIDE OPENING HOURS, THE BUTTON REFUSES
+
+His words: *"if a gym has set certain times not 24 hour then if a memeber comes
+outside of time should not be able to press i am here"*.
+
+**THIS REVERSES `:26624` §4.4 — AND THAT WAS A CHAT'S CALL, NOT HIS.** It sits
+under that entry's own heading *"THE CALLS I AM MAKING RATHER THAN ASKING"*:
+*"Attendance outside opening hours is RECORDED AND MARKED, never refused. A gym
+that forgot to update its hours must not lock its own members out."* **Checked
+before building rather than assumed** — had it been a Kd ruling this would have
+needed putting back to him (:19560's lesson, where his musing was mistaken for
+law and he stopped it).
+
+**THE COST THE OLD CALL WAS PROTECTING AGAINST IS REAL AND IS NOW HIS TO OWN: a
+gym that forgets to update its hours locks its members out.** What makes that
+survivable is the shape of the refusal:
+
+- **It fires ONLY where the gym has actually answered.** `hours_unset` and
+  `open_24h` are admitted exactly as before — a gym that has never said when it
+  opens has said nothing to enforce, and refusing there would invent a rule
+  nobody set. **This is :26736's "no answer" ≠ "closed" distinction becoming
+  load-bearing for a WRITE rather than for a sentence**, and **O242** is the
+  mutant that holds it: making the check `!== "in_session"` refuses those gyms
+  and goes RED. That is the direction a lock's tests usually miss (:7104's PG1 —
+  a door that is simply shut satisfies every assertion that it fires).
+- **The refusal says when the gym IS open**: *"Your gym is open 06:00–07:00
+  today — attendance opens then."* A bare no leaves a member at a door with no
+  idea when to come back.
+- **A dated closure reports NO sessions even when the weekday pattern has them**,
+  because a closure WINS over the pattern (:26684) — listing the usual hours on a
+  day the gym has declared shut is the false sentence the refusal exists to
+  avoid.
+- **Checked inside the transaction and under the gym lock**, like every other
+  decision on that path: a gym editing its timetable between the context read and
+  the insert would otherwise admit a visit the rule had just refused.
+
+**THE TWO TESTS THAT ASSERTED THE OLD BEHAVIOUR BECAME THE REGRESSION TESTS FOR
+THE NEW ONE** — they were the honest place for it, and both now also assert that
+**nothing was written**: a refusal that still records the visit would be the
+worst of both, the member told no and the owner's numbers counting them anyway.
+
+### 2 · SIX DESIGN INSTRUCTIONS, AND ONE OF THEM WAS A DEFECT
+
+1. **Visit counts leave the dashboard.** *"no of visit need not to show in main
+   dashboard only besides people say A visited 2 times like that in attandance
+   page"*. A dashboard answers *how many came*; *who came twice* is a fact about
+   a PERSON and belongs beside that person. **C176** holds the headline as
+   people.
+2. **`visited 2 times` beside the name, in words**, on the Attendance screen —
+   and **nothing at all for a single visit** (**C177**), because the label marks
+   the exception and *"visited 1 times"* on every ordinary row is noise on the
+   thing it was added to make legible.
+3. **The odd-arrival line comes off the dashboard.** *"remove these what are
+   these even doing"* — and the ruling above is why it is coherent rather than a
+   loss: no new outside-hours visit can be created. `exceptionsNote` had no
+   caller left and was DELETED with its tests and its three mutants; dead surface
+   with test coverage reads as protection and is not (:8156's round-6 F10).
+4. **A SENTENCE HIS RULING MADE FALSE, found while removing the other one.** The
+   Attendance screen's exceptions control said *"Recorded as normal — nobody is
+   turned away for it."* **From this commit, people ARE turned away.** Rewritten
+   to say what those rows now are — history from before the rule, or from a gym
+   that had set no hours. :7298's class, and it would have kept promising
+   something the product had stopped doing.
+5. **"The day" becomes a dropdown.** *"what is even the need of that already
+   there is Who came also these things will become big with memebrs so need drop
+   down"*. **Collapsed, not deleted, and the second half of his sentence is
+   why**: a one-session gym repeats what "Who came" says, a five-session gym is
+   the only place a 400-tap day is legible — ruling 14's own first requirement.
+   `ConsoleSection` keeps the day's total on the closed heading, so the number an
+   owner glances at survives the fold.
+6. **The initials circles go.** *"OW / owner what the fuck is ow shit"* — two
+   letters standing in for a name nobody asked to have abbreviated.
+
+### 3 · THE CHART: HIS SUSPICION WAS WRONG AND HIS INSTINCT WAS RIGHT
+
+*"are the graph even correct or just some random fat ass box that makes any
+shapes"*.
+
+**MEASURED AGAINST HIS DATABASE, NOT DEFENDED**: the eight buckets are
+`0,0,0,0,0,0,0` and `3 visits / 2 people` — exactly what the chart drew. **It was
+correct.** And a picture of one filled column is not a trend, which is what he
+was actually looking at.
+
+**Part 3 §4.1 already said so** — *"empty (< 1 wk data): friendly 'first week
+collecting' state"* — and the first version drew the collecting sentence AND the
+chart, answering its own question twice. **The chart now appears only once there
+is a past to compare against.** **C178** is the mutation back, and it was ALIVE
+on its first run: the collecting test asserted the sentence APPEARED and never
+that the chart had gone.
+
+### 4 · WHAT WAS NOT DONE, AND WHY
+
+**Email beside a name is still not built** and is still the open question filed
+at `:30733` §5 — Part 3 §2.4 is a promise made at the join door. He has not
+answered it and it was not quietly built.
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1685/1685 across 58 files, exit 0**
+· `api` **767/767 across 50 files, exit 0**, LOCAL (`127.0.0.1:5433`, :13659) ·
+`tsc --noEmit` exit 0 on `api` · `eslint --max-warnings=0` exit 0 on three api
+files and eight web files · `vite build` exit 0 · three root guards green with
+REAL exit codes (:13247).
+
+**SWEEPS, both stated SUBSETS.** Web: `MUTATE_ONLY=C155…C178` (C169–C171 deleted
+with the function they aimed at) — **21 mutants, 21 RED, 0 ALIVE**. API:
+`MUTATE_ONLY=O241,O242` — **2 of 232, 2 RED, 0 ALIVE**. Every control GREEN,
+restores sha256-verified. **Database mutants ran because this card CHANGES SERVER
+BEHAVIOUR** (:5857 rule 4a), which the previous three commits did not.
+
+**TWO INSTRUMENT FINDINGS, both mine.**
+**(a) A BACKTICK IN A MUTANT'S `-t` FILTER IS COMMAND SUBSTITUTION.** The harness
+runs `vitest -t "…"` through `execSync`, so a filter naming a test by its
+backticked identifier — ``a scheduled gym records `in_session` …`` — is expanded
+by the shell and matches NOTHING. The abort said *"that filter matches no test"*
+and was right for a reason with nothing to do with the test. **The existing ASCII
+guard does not catch it: a backtick is ASCII.** Both filters now name their test
+without one; no other mutant in either harness uses a backtick in `expect`
+(grep-verified, 0 in both).
+**(b) `localhost` RESOLVES TO `::1` AND THE DEV POSTGRES IS BOUND ON IPv4.**
+`127.0.0.1:5433` is the address a sweep must be given; `localhost` failed with
+`ECONNREFUSED ::1:5433` while `test:local` was fine. **And Docker Desktop had
+stopped between the suite run and the sweep** — restarted, containers confirmed
+up by `docker ps`, before any verdict was believed.
+
+**STILL DOES NOT TICK: no browser smoke has run on any of this, and T3 is
+UNRUN.** The smoke sheet is stale again and says so at the top of `HANDOFF.md`.

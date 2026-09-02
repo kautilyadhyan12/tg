@@ -2270,6 +2270,42 @@ function toAttendanceVisit(row: repo.GymAttendanceVisitRow): GymAttendanceVisit 
 const MANUAL_ATTENDANCE_OFF_MESSAGE =
   "This gym doesn't take attendance from the web. Scanning arrives with the phone app.";
 
+/** `06:00` on the gym's own clock — 24-hour, always, and NOT the gym's
+ *  `clockFormat`.
+ *
+ *  **This is a SERVER string and the server has no business rendering a gym's
+ *  chosen clock**: every 12-hour label in this product comes from `clockLabel`
+ *  in the web bundle, and a second spelling of one minute is the defect that
+ *  file's own header names. A refusal message is the one place a time must
+ *  travel as text rather than as minutes, so it uses the unambiguous form. */
+function clock24(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** WHAT A MEMBER IS TOLD WHEN THEY TAP "I'm here" AND THE GYM IS SHUT.
+ *
+ *  Kd's ruling of 2026-09-03. **It never scolds and it always says what to do
+ *  next** — the sentence a person reads at a locked door should be the opening
+ *  times, not a refusal on its own, and a gym whose pattern has no sessions
+ *  today gets a different sentence from one that is simply between them. */
+function gymClosedMessage(outcome: {
+  hoursStatus: "outside_hours" | "closed_day";
+  todayHours: { opensMinute: number; closesMinute: number }[];
+}): string {
+  if (outcome.hoursStatus === "closed_day") {
+    return "Your gym is closed today, so attendance isn't open.";
+  }
+  if (outcome.todayHours.length === 0) {
+    return "Your gym isn't open today, so attendance isn't open.";
+  }
+  const windows = outcome.todayHours
+    .map((h) => `${clock24(h.opensMinute)}–${clock24(h.closesMinute)}`)
+    .join(", ");
+  return `Your gym is open ${windows} today — attendance opens then.`;
+}
+
 /** A PAGE MARKER WE CANNOT READ IS A 400, NEVER A SILENT "START AGAIN".
  *
  *  Both attendance reads take a cursor and both must fail the same way: serving
@@ -2391,6 +2427,8 @@ export async function markOrgAttendance(
       });
     case "manual_disabled":
       throw new OrgsError(409, "manual_attendance_off", MANUAL_ATTENDANCE_OFF_MESSAGE);
+    case "closed":
+      throw new OrgsError(409, "gym_closed_now", gymClosedMessage(outcome));
     case "not_found":
       // Unreachable in practice — the gate above read the org — but a gym
       // deleted between that read and this write must not surface as a 500.

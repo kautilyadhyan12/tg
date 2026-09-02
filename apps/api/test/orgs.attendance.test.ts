@@ -540,12 +540,28 @@ d("gym attendance (real Postgres)", () => {
       expect(closed.statusCode).toBe(200);
 
       const afterClose = await mark(org.org.id, other.cookies);
-      const visit = (JSON.parse(afterClose.body) as { visit: Visit }).visit;
-      // AND IT IS RECORDED, NEVER REFUSED (:26624 §4.4, :26684): a member who
-      // turned up on a day the gym shut at short notice is a real thing that
-      // happened, and refusing would show them something false about their gym.
-      expect(afterClose.statusCode).toBe(200);
-      expect(visit.hoursStatus).toBe("closed_day");
+      // AND IT IS NOW REFUSED — KD'S RULING OF 2026-09-03, which REVERSES the
+      // chat's call at :26624 §4.4 (*"recorded and marked, never refused"*).
+      // His words: *"if a gym has set certain times not 24 hour then if a member
+      // comes outside of time should not be able to press i am here"*, and a
+      // dated closure is the same question answered by the gym itself.
+      //
+      // **THE MESSAGE DOES NOT LIST THE WEEKDAY'S USUAL HOURS**, because a dated
+      // closure WINS over the weekly pattern (:26684) — telling a member to come
+      // at six on a day the gym has said it is shut is the false sentence this
+      // refusal exists to avoid.
+      expect(afterClose.statusCode).toBe(409);
+      const closedBody = JSON.parse(afterClose.body) as { error: string; message: string };
+      expect(closedBody.error).toBe("gym_closed_now");
+      expect(closedBody.message).toBe("Your gym is closed today, so attendance isn't open.");
+
+      // AND NOTHING WAS WRITTEN. A refusal that still records the visit would be
+      // the worst of both: the member is told no and the owner's numbers count
+      // them anyway.
+      const afterRows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_attendance
+        WHERE gym_id = ${org.org.id} AND user_id = ${other.userId}`;
+      expect(afterRows[0]?.n).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );
@@ -601,8 +617,24 @@ d("gym attendance (real Postgres)", () => {
       );
       expect(setShut.statusCode).toBe(200);
       const miss = await mark(org.org.id, outside.cookies);
-      expect(miss.statusCode).toBe(200);
-      expect((JSON.parse(miss.body) as { visit: Visit }).visit.hoursStatus).toBe("outside_hours");
+      // REFUSED, per Kd's 2026-09-03 ruling — see the closed-day case above.
+      expect(miss.statusCode).toBe(409);
+      const missBody = JSON.parse(miss.body) as { error: string; message: string };
+      expect(missBody.error).toBe("gym_closed_now");
+      // **AND IT SAYS WHEN THE GYM IS OPEN.** A bare "no" leaves a member at a
+      // door with no idea when to come back, so the refusal carries the day's
+      // real window — computed here from the fixture's own `far`, not copied
+      // from the implementation.
+      const hh = String(Math.floor(far / 60)).padStart(2, "0");
+      const mm = String(far % 60).padStart(2, "0");
+      expect(missBody.message).toContain(`${hh}:${mm}`);
+      expect(missBody.message).toContain("attendance opens then");
+
+      // NOTHING WAS WRITTEN.
+      const missRows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_attendance
+        WHERE gym_id = ${org.org.id} AND user_id = ${outside.userId}`;
+      expect(missRows[0]?.n).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );

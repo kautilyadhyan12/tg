@@ -34,6 +34,17 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
+- [ ] 🟡 **A GYM THAT FORGETS TO UPDATE ITS OPENING HOURS NOW LOCKS ITS MEMBERS
+      OUT, and that is Kd's accepted cost rather than a defect** (2026-09-03,
+      DECISIONS `:30867`). His ruling refuses "I'm here" outside a gym's declared
+      hours, reversing the chat's call at `:26624` §4.4 whose stated reason was
+      exactly this. **Bounded already**: a gym with NO hours set, or on 24-hour,
+      is unaffected, and the refusal names the day's real opening times. **What
+      does not exist is any way for the GYM to notice** — no alert to an owner
+      whose members are being turned away, and no override at the door. Revisit
+      when a real gym is on it; the first complaint will be a member standing in
+      a gym that changed its timetable and did not say so.
+
 - [x] ⏰🔴 **Groq COACH_MODEL migration — DONE 2026-07-22, merged as PR #44**
       (merge `ad3b1ee`), ahead of the 2026-08-16 decommission of
       `llama-3.1-8b-instant`. Default flipped to `openai/gpt-oss-20b` and the
@@ -7318,8 +7329,16 @@ file and is stated so nobody reads these as lower priority than they are.
       him the truth — and the numbers linked NOWHERE, while the Attendance
       screen has held the names and times since `:29250`. Both fixed: the odd
       arrivals are named above the list, and the panel now reaches Attendance.
+      **AND HE OPENED IT A THIRD TIME AFTER MARKING HIMSELF IN, WHICH PRODUCED
+      A RULING AND SIX DESIGN CHANGES** (`:30867`): visit counts off the
+      dashboard, `visited 2 times` beside the name on Attendance, the
+      odd-arrival line removed, "The day" collapsed to a dropdown, the initials
+      circles gone, and **the chart drawn only once there is a week to compare
+      against** — his *"random fat ass box"* was arithmetically correct and a
+      one-column chart all the same.
       **THIS LINE STILL DOES NOT TICK: no smoke has run on this version and T3
-      is UNRUN.**
+      is UNRUN. The smoke sheet is STALE — it was written against tile wording
+      and a chart that no longer ship.**
       ~~Also owed with it: the one-off backfill
       (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
       browser reads — until it runs, that gym's chart is eight empty weeks.~~

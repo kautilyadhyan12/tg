@@ -82,6 +82,7 @@ const HOURS_NOTE_SUITE = 'src/components/gym/gymHours.render.test.jsx';
  *  (`RENDER_SUITE` above) because the numbers are a pane on a screen that
  *  already had one, not a screen of their own. */
 const OVERVIEW_VIEW_SUITE = 'src/pages/console/overviewView.test.js';
+const ATTENDANCE_VIEW_SUITE = 'src/pages/console/attendanceView.test.js';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -133,6 +134,7 @@ const TARGETS = {
   hoursview: { file: resolve(ROOT, 'apps/web/src/pages/console/hoursView.js') },
   hourspanel: { file: resolve(ROOT, 'apps/web/src/components/console/OpeningHoursPanel.jsx') },
   hoursnote: { file: resolve(ROOT, 'apps/web/src/components/gym/GymHoursNote.jsx') },
+  attendanceview: { file: resolve(ROOT, 'apps/web/src/pages/console/attendanceView.js') },
   // THE GYM'S NUMBERS (Kd :29961 ruling 1 - the tiles count VISITS, not
   // workouts), added 2026-09-03 with the web half. TWO targets for one feature,
   // because a mutant is a claim about ONE call site (:15770): the view file
@@ -2416,33 +2418,6 @@ const MUTANTS = [
   },
 
   {
-    id: 'C169',
-    target: 'overviewview',
-    suite: RENDER_SUITE,
-    why: "THE VISITS THAT HAPPENED WHEN THE GYM WAS SHUT GO BACK TO BEING COUNTED SILENTLY. Kd's first report of 2026-09-03: he marked himself in outside his gym's opening hours, the member's screen said so, and the owner's home screen said 3 visits with nothing to tell them apart - which an owner reads as a busy morning. A true figure composing a false impression, :30624's class, one commit old",
-    expect: "says when the gym was not even open",
-    from: "  if (odd === 0) return null;",
-    to: "  return null;",
-  },
-  {
-    id: 'C170',
-    target: 'overviewview',
-    suite: OVERVIEW_VIEW_SUITE,
-    why: "hours_unset IS COUNTED AS AN ODD ARRIVAL. A gym that has never said when it is open has not been arrived at oddly - :26736 - so this tells every such owner that all their visits were outside opening hours, a sentence that is false about all of them. Kd's own gym is the mixture that catches it: one visit before hours were set, two outside them",
-    expect: "says nothing at all about a gym that has never set its hours",
-    from: "  const outside = per('outside_hours');",
-    to: "  const outside = per('outside_hours') + per('hours_unset');",
-  },
-  {
-    id: 'C171',
-    target: 'overviewview',
-    suite: OVERVIEW_VIEW_SUITE,
-    why: "THE WORD ALL IS CLAIMED FOR A DAY WHERE IT IS NOT ALL. An owner reading all 3 visits today were outside your opening hours on a day when two of nine were is being told something false about their own gym, and the figure it leans on is the server's whole-day total",
-    expect: "says \"all\" only when it really is all of them",
-    from: "  if (odd >= all && all > 0) {",
-    to: "  if (odd > 0) {",
-  },
-  {
     id: 'C172',
     target: 'overviewview',
     suite: RENDER_SUITE,
@@ -2486,6 +2461,24 @@ const MUTANTS = [
     expect: "leads with the people count",
     from: "    value: people,",
     to: "    value: visits,",
+  },
+  {
+    id: 'C177',
+    target: 'attendanceview',
+    suite: ATTENDANCE_VIEW_SUITE,
+    why: "SOMEBODY WHO CAME ONCE IS LABELLED visited 1 times. Kd asked for besides people say A visited 2 times, and the label exists to mark the EXCEPTION - printing it on every ordinary member is noise on the row it was added to make legible, and it gets the grammar wrong on the screen an owner opens every morning",
+    expect: "says nothing at all for somebody who came once",
+    from: "  return visits > 1 ? `visited ${visits} times` : '';",
+    to: "  return `visited ${visits} times`;",
+  },
+  {
+    id: 'C178',
+    target: 'overviewnumbers',
+    suite: RENDER_SUITE,
+    why: "THE ONE-BAR CHART COMES BACK. Kd, looking at a gym with a single week of history: are the graph even correct or just some random fat ass box that makes any shapes. It WAS correct - seven empty weeks and three visits, checked against the database - and a picture of one week is not a trend. Part 3 section 4.1 asks for the first week collecting STATE here, so drawing the chart as well answers its own question twice",
+    expect: "says it is still collecting",
+    from: "      {geometry === null || collecting ? null : (",
+    to: "      {geometry === null ? null : (",
   },
 ];
 

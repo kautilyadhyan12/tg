@@ -3901,6 +3901,29 @@ export type MarkAttendanceOutcome =
       clockFormat: GymClockFormat;
     }
   | { kind: "manual_disabled" }
+  /** THE GYM IS NOT OPEN RIGHT NOW — Kd's ruling of 2026-09-03, which REVERSES
+   *  :26624 §4.4. That was a CHAT'S CALL ("attendance outside opening hours is
+   *  RECORDED AND MARKED, never refused"), listed under *"the calls I am making
+   *  rather than asking"*, and he has now made the opposite one: *"if a gym has
+   *  set certain times not 24 hour then if a member comes outside of time
+   *  should not be able to press i am here"*.
+   *
+   *  **IT FIRES ONLY WHERE THE GYM HAS ACTUALLY ANSWERED.** `hours_unset` and
+   *  `open_24h` are NOT refused — a gym that has never said when it opens has
+   *  said nothing to enforce, and refusing there would invent a rule the gym
+   *  never set (:26736's distinction between "no answer" and "closed", now
+   *  load-bearing for a WRITE rather than only for a sentence).
+   *
+   *  `todayHours` carries the day's real sessions so the refusal can say when
+   *  the gym IS open — a bare "no" leaves a member standing at a door with no
+   *  idea when to come back. */
+  | {
+      kind: "closed";
+      hoursStatus: Extract<GymAttendanceHoursStatus, "outside_hours" | "closed_day">;
+      todayHours: { opensMinute: number; closesMinute: number }[];
+      timezone: string;
+      clockFormat: GymClockFormat;
+    }
   | { kind: "not_found" };
 
 /** RECORD THAT SOMEBODY IS HERE.
@@ -3946,6 +3969,34 @@ export async function markGymAttendance(
     const ctx = await readAttendanceContext(tx, input.gymId);
     if (ctx === null) return { kind: "not_found" };
     if (input.method === "manual" && !ctx.manualEnabled) return { kind: "manual_disabled" };
+
+    // KD'S RULING, 2026-09-03 — see the `closed` arm of `MarkAttendanceOutcome`.
+    // Checked INSIDE the transaction and under the gym lock, like every other
+    // decision here: the hours and the closure are read by `readAttendanceContext`
+    // above, and a gym editing its timetable between that read and this insert
+    // would otherwise admit a visit the rule had just refused.
+    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {
+      const todayHours = await tx<{ opens_minute: number; closes_minute: number }[]>`
+        SELECT h.opens_minute, h.closes_minute
+        FROM gym_hours h
+        WHERE h.gym_id = ${input.gymId}
+          AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE ${ctx.timezone}))::int
+        ORDER BY h.opens_minute`;
+      return {
+        kind: "closed",
+        hoursStatus: ctx.hoursStatus,
+        // A CLOSED DAY REPORTS NO SESSIONS EVEN IF THE WEEKLY PATTERN HAS THEM.
+        // A dated closure WINS over the pattern (:26684), so listing the
+        // weekday's usual hours would tell a member to come at six on a day the
+        // gym has said it is shut.
+        todayHours:
+          ctx.hoursStatus === "closed_day"
+            ? []
+            : todayHours.map((h) => ({ opensMinute: h.opens_minute, closesMinute: h.closes_minute })),
+        timezone: ctx.timezone,
+        clockFormat: ctx.clockFormat,
+      };
+    }
 
     const slotKey = slotKeyFor(ctx.hoursStatus, ctx.opensMinute, ctx.closesMinute);
     const inserted = await tx<{ one: number }[]>`

@@ -21,6 +21,7 @@ import {
   slotLabel,
   sortedSummary,
   visitsLabel,
+  repeatVisitLabel,
 } from './attendanceView';
 
 const session = (opensMinute, closesMinute) => ({ id: `s${opensMinute}`, opensMinute, closesMinute });
@@ -313,5 +314,31 @@ describe('why the day is empty', () => {
     expect(
       emptyDayReason({ manualAttendanceEnabled: undefined, totals: { visits: 0, people: 0 }, filtered: false }),
     ).toBe('nobody');
+  });
+});
+
+describe('somebody who came more than once', () => {
+  const person = (n) => ({ userId: 'u1', displayName: 'A', visits: Array.from({ length: n }, () => ({})) });
+
+  // KD, 2026-09-03: *"only besides people say A visited 2 times like that in
+  // attendance page"*. The chips have always carried it — two chips IS two
+  // visits — but that asks an owner to count small boxes on a four-hundred-tap
+  // day.
+  it('says how many times, in words', () => {
+    expect(repeatVisitLabel(person(2))).toBe('visited 2 times');
+    expect(repeatVisitLabel(person(5))).toBe('visited 5 times');
+  });
+
+  // The label marks the EXCEPTION. "visited 1 times" beside every ordinary
+  // member is noise on the row it exists to make legible — and it is not even
+  // grammatical.
+  it('says nothing at all for somebody who came once', () => {
+    expect(repeatVisitLabel(person(1))).toBe('');
+  });
+
+  it('says nothing rather than throwing on a row it cannot read', () => {
+    expect(repeatVisitLabel({ visits: [] })).toBe('');
+    expect(repeatVisitLabel({})).toBe('');
+    expect(repeatVisitLabel(null)).toBe('');
   });
 });

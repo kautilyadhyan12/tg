@@ -2894,6 +2894,24 @@ const MUTANTS = [
     from: "      count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)\n        AS prev_week_visits,",
     to: "      count(*) FILTER (WHERE a.day >= b.week_start AND a.day < b.week_start)\n        AS prev_week_visits,",
   },
+  {
+    id: 'O241',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "A MEMBER CAN MARK THEMSELVES IN WHEN THE GYM IS SHUT. KD'S RULING OF 2026-09-03, which REVERSES the chat's call at :26624 section 4.4 (recorded and marked, never refused): if a gym has set certain times not 24 hour then if a member comes outside of time should not be able to press i am here. Deleting this arm records the visit again, which is now both a false state for the member and a visit the owner's numbers count",
+    expect: "a scheduled gym records",
+    from: '    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {',
+    to: '    if (false) {',
+  },
+  {
+    id: 'O242',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE REFUSAL OVER-FIRES ONTO A GYM THAT HAS NEVER SET ITS HOURS. hours_unset and open_24h must still be admitted - a gym that has said nothing has nothing to enforce, and refusing there invents a rule the gym never set (:26736's distinction between no answer and closed, now load-bearing for a WRITE). This is the direction a lock's test usually misses: :7104's PG1, a door that is simply shut satisfies every assertion that it fires",
+    expect: "a gym that has never set hours records",
+    from: '    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {',
+    to: '    if (ctx.hoursStatus !== "in_session") {',
+  },
 ];
 
 

@@ -216,54 +216,6 @@ export function tileCounts(figures) {
   };
 }
 
-/** HOW MANY OF TODAY'S VISITS WERE NOT DURING OPENING HOURS — the thing Kd
- *  raised FIRST and the first version did not say anywhere.
- *
- *  **HIS REPORT, 2026-09-03:** he marked himself in, *"it correctly shows
- *  attendance was marked outside opening hours"* on the member's screen — and
- *  then the gym's own home screen said `3 visits` with nothing to distinguish
- *  them. **An owner reads that as a busy morning.** All of his were outside the
- *  gym's hours. That is a number on screen creating a false impression, which
- *  is :5807 by way of :30624's lesson — the figure was true and the screen was
- *  not.
- *
- *  **IT SUMS THE SERVER'S OWN WHOLE-DAY COUNTS, NEVER ROWS ON A PAGE.**
- *  `summary` covers the entire day whatever page the people list is showing, so
- *  this number does not move when somebody opens the full screen — the same
- *  distinction `exceptionVisits` is built on, and the one Kd's ruling 14 turns
- *  on (:27992 §3).
- *
- *  **`hours_unset` IS NOT AN EXCEPTION AND MUST NEVER BE COUNTED HERE**
- *  (:26736): a gym that has never said when it is open has not been arrived at
- *  oddly, and telling its owner that every visit was "outside opening hours"
- *  would be false about all of them. His own gym has exactly that mixture — one
- *  visit before hours were set, two outside them — so a version that counted
- *  all three would look right on his screen and be wrong. */
-export function exceptionsNote(summary, totals) {
-  const rows = Array.isArray(summary) ? summary : [];
-  const per = (status) =>
-    rows.reduce((n, row) => (row?.hoursStatus === status ? n + count(row?.visits) : n), 0);
-  const outside = per('outside_hours');
-  const closed = per('closed_day');
-  const odd = outside + closed;
-  if (odd === 0) return null;
-
-  const where =
-    outside > 0 && closed > 0
-      ? 'outside your opening hours or on a day the gym was closed'
-      : outside > 0
-        ? 'outside your opening hours'
-        : 'on a day the gym was closed';
-
-  const all = count(totals?.visits);
-  // "All 3" only when it really is all of them — and `all` is the server's own
-  // whole-day total, so this cannot claim "all" off a page.
-  if (odd >= all && all > 0) {
-    return `All ${visitsLabel(all)} today were ${where}.`;
-  }
-  return `${odd} of today's ${visitsLabel(all)} were ${where}.`;
-}
-
 /** THE FEW NAMES THAT FIT UNDER THE NUMBERS — Kd's *"if wants to see details can
  *  see this person with name … and if marked again then show came two times"*.
  *
