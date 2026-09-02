@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
+import OverviewNumbers from '../../components/console/OverviewNumbers';
 import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
@@ -23,13 +24,31 @@ import {
 // (active members 30d, workouts this week, adoption %, average form score), an
 // eight-week trend chart and an at-risk list.
 //
-// NONE OF THAT IS HERE, and the reason is not scope: §3.2 says every one of
+// ~~NONE OF THAT IS HERE, and the reason is not scope: §3.2 says every one of
 // those widgets reads `org_daily_stats`, `org_live_counters` or
 // `org_member_stats`, and not one of the three exists. There is no worker
 // building them and no route serving them. A tile drawn over that would print a
 // number nobody computed — which is the one thing the severity rule names
-// outright. They have their own owed line; this screen shows what is TRUE
-// today: who the gym is, the code that lets people in, and how many are in.
+// outright.~~ **— SPENT 2026-09-02. The numbers are here** (`OverviewNumbers`,
+// off `GET /v1/orgs/:gymId/overview`), and what they count is NOT what §4.1
+// says:
+//
+//   · **VISITS, NOT WORKOUTS** — Kd's ruling at :29961, a knowing deviation from
+//     §4.1 he was shown and took. A workout exists only if the member ALSO
+//     logged their training, so a workout tile can read zero on a day forty
+//     people came through the door.
+//   · **Average form score is not built** — struck by him at :26469 §1.1. The
+//     nightly job still WRITES the column, because a history nobody recorded
+//     cannot be recovered.
+//   · **The at-risk list and the rest of the people lists are the NEXT card**,
+//     which is his split at :29961 ruling 3: numbers first, lists second.
+//
+// **`org_daily_stats` HAS A WRITER NOW AND STILL NO READER, and that is a
+// decision rather than an oversight** (:30094 §2.1): a per-day DISTINCT count
+// cannot be summed across days, and a nightly table is partial for part of every
+// day. The route reads `gym_attendance` live. The aggregate is the durable
+// record — Reports' source, and what survives the day attendance rows become
+// deletable under DPDP, which is when this chart's source moves onto it.
 //
 // THE §4.2 BANNER USED TO BE ABSENT FOR THE SAME REASON AND IS NOT ANY MORE.
 // This comment said "its states are read off `subscriptions`, and billing does
@@ -42,8 +61,8 @@ import {
 // (:5748): this is the file somebody opens to ask why the console shows no
 // banner.
 //
-// The KPI tiles above are untouched by any of that — `org_daily_stats` and its
-// two siblings still do not exist.
+// ~~The KPI tiles above are untouched by any of that — `org_daily_stats` and its
+// two siblings still do not exist.~~ **— spent by the same card; see above.**
 
 /* ROUND 2 Low-4's "would pressing Try again change anything?" predicate MOVED to
    `orgsApi.js` beside `errorStatus` (T3 round 2 L-5). It was private here, the
@@ -98,6 +117,18 @@ export default function Overview() {
   // simply absent, and the Members screen states its own case when they open
   // it.
   const [waiting, setWaiting] = useState(null);
+  // THE NUMBERS ARE A FOURTH INDEPENDENTLY-AUTHORISED READ, and they are the
+  // clearest case on this screen for why L-3 above split the outcomes at all.
+  //
+  // `GET /v1/orgs/:gymId/overview` is gated on `attendance.read` — the ninth
+  // privilege, default-on for all three roles and one an owner may UNTICK
+  // (:28107 §2). So a real, reachable person meets a 403 here while every other
+  // pane answers 200, and collapsing that into the screen's fate would take a
+  // trainer's whole console away because their gym hid the attendance figures
+  // from them. A refused read draws NOTHING — §4b: they lose the numbers, not
+  // the screen — and `isRetryable` already knows a 403 is permanent, which is
+  // what stops a Try again being offered for a button nobody can press.
+  const [overview, setOverview] = useState({ loading: true, error: null, retryable: true, data: null });
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
 
@@ -113,7 +144,8 @@ export default function Overview() {
       // an exact figure over the whole queue rather than this page's length —
       // so one row is enough and ninety would be wasted on a phone.
       orgService.getApplications(gymId, { limit: 1 }),
-    ]).then(([codesOutcome, membersOutcome, waitingOutcome]) => {
+      orgService.getOverview(gymId),
+    ]).then(([codesOutcome, membersOutcome, waitingOutcome, overviewOutcome]) => {
       if (cancelled) return;
       setCodes(
         codesOutcome.status === 'fulfilled'
@@ -140,6 +172,21 @@ export default function Overview() {
           ? (waitingOutcome.value.data?.pendingCount ?? null)
           : null,
       );
+      setOverview(
+        overviewOutcome.status === 'fulfilled'
+          ? {
+              loading: false,
+              error: null,
+              retryable: true,
+              data: overviewOutcome.value.data?.overview ?? null,
+            }
+          : {
+              loading: false,
+              error: errorText(overviewOutcome.reason, "We couldn't load this gym's numbers."),
+              retryable: isRetryable(overviewOutcome.reason),
+              data: null,
+            },
+      );
     });
     return () => {
       cancelled = true;
@@ -150,6 +197,7 @@ export default function Overview() {
     setCodes({ loading: true, error: null, retryable: true, list: null });
     setMembers({ loading: true, error: null, retryable: true, page: null });
     setWaiting(null);
+    setOverview({ loading: true, error: null, retryable: true, data: null });
     setAttempt((n) => n + 1);
   };
 
@@ -244,6 +292,39 @@ export default function Overview() {
           redesign ruling). Left alone rather than deleted, on the same reasoning
           that left the other per-panel keys standing. */}
       <TrialCard key={org.id} org={org} />
+
+      {/* ── The numbers, on their own outcome ──────────────────────────── */}
+      {/* NO SPINNER OF ITS OWN, deliberately. All four reads are issued in one
+          `allSettled` and land in one `.then`, so every pane on this screen
+          flips at the same instant — a second spinner beside the codes one
+          would be two pieces of furniture for one wait. What must never be
+          silent is a FAILURE, and that is the arm below.
+
+          THE DUPLICATE IS SUPPRESSED THE WAY ROUND 2's Low-4 established: when
+          the connection drops, all four reads fail with the same sentence, and
+          the fix for two identical error cards was never to give the third and
+          fourth one each. The codes pane is the canonical one — it sits under
+          this and is the screen's subject — so this draws only a failure the
+          owner has not already been told about.
+
+          A REFUSAL DRAWS NOTHING AT ALL. `isRetryable` is false for a 403, and
+          a trainer whose gym unticked their attendance box is not missing
+          anything they can act on; a red card on every visit to their own home
+          screen would be noise about a decision their owner made. */}
+      {!overview.loading && overview.error !== null && overview.retryable
+      && overview.error !== codes.error && overview.error !== members.error ? (
+        <ConsoleFailed message={overview.error} onRetry={retry} />
+      ) : null}
+      {!overview.loading && overview.error === null ? (
+        <OverviewNumbers
+          overview={overview.data}
+          /* "Nobody came" and "nobody COULD come" are different sentences with
+             different next moves, and the switch is what tells them apart
+             (`emptyDayReason`'s rule, one screen over). It rides on the org row
+             this screen already holds — no read of its own. */
+          manualAttendanceEnabled={org.manualAttendanceEnabled}
+        />
+      ) : null}
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

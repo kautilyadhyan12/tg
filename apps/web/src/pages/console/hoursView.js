@@ -495,7 +495,12 @@ export function hoursSummary(hours) {
   return "You haven't said when your gym is open. Members aren't shown anything about opening times until you do.";
 }
 
-const MONTH_SHORT = [
+/** EXPORTED so the console spells a month in exactly ONE place. The Overview's
+ *  chart axis needs `18 Aug` where `closureDateLabel` below builds
+ *  `Sun 20 Sep 2026`, and the shared thing is the TABLE, not the sentence —
+ *  taking a short label by cutting up this function's output would be a second
+ *  date format pretending to be the first. */
+export const MONTH_SHORT = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];

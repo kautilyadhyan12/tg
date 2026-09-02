@@ -3439,10 +3439,15 @@ its name and comments and observed neither.
       server-half T3 round 1 (L-3) — fixed this commit. It gave `--now` as the
       flag that ignores the hour filter and the backfill as `--now --days=70`.
       Shipped, **`--all-hours` ignores the filter** and `--now=<ISO>` sets the
-      instant, so a bare `--now` is dropped, the filter stays ON, and a chat
-      following the card hands Kd eight empty weeks — :15927's fourth
-      recurrence. `HANDOFF.md` and `DECISIONS.md:30094` §4 carried the right
-      command, which is the only reason this was not higher.
+      instant, so a bare `--now` is dropped, the filter stays ON, and ~~a chat
+      following the card hands Kd eight empty weeks~~ **the backfill matches
+      almost no gyms** — :15927's fourth recurrence. `HANDOFF.md` and
+      `DECISIONS.md:30094` §4 carried the right command, which is the only
+      reason this was not higher.
+      **THE "eight empty weeks" HALF IS STRUCK, 2026-09-03 (`DECISIONS.md:30399`
+      §3): the chart reads `gym_attendance` LIVE, so no backfill has ever gated
+      anything a person can see.** The flag finding stands; its consequence was
+      inherited from the design the same commit had abandoned.
 - [x] The ▲▼ arrow's previous-week figures had no assertion and no mutant —
       `apps/api/test/orgs.overview.test.ts` — found 2026-09-02, gym-overview
       server-half T3 round 1 (L-4) — fixed this commit. `prevVisits`/

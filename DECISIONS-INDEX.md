@@ -4283,7 +4283,7 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   **SERVER HALF ONLY. No screen, so NO SMOKE; T3 UNRUN; the `OWED.md` line does
   not tick.** PROVE and the sweep's figures at `:30094`'s Round log.
 
-- **:30236** — 2026-09-02 — **THE GYM'S NUMBERS, SERVER HALF, T3 ROUND 1: ZERO
+- **:30243** — 2026-09-02 — **THE GYM'S NUMBERS, SERVER HALF, T3 ROUND 1: ZERO
   Critical/High, THE PACKET SHIPS** — nine Low from the review, a TENTH found
   while fixing them, **all ten fixed in the round** with `BACKLOG.md` lines; no
   round 2 owed (:5348 rule 1, :28649's correction). Escape hatch NOT armed —
@@ -4315,7 +4315,45 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   §4b chat builds from.
   **STILL DOES NOT TICK: no screen, so no smoke; the backfill has NOT been run
   against Kd's branch; `org_daily_stats` has a writer and still no reader.**
-  PROVE and the sweep's figures at `:30236`'s Round log.
+  PROVE and the sweep's figures at `:30243`'s Round log.
+- **:30399** — 2026-09-03 — **THE GYM'S NUMBERS REACH A SCREEN: three tiles, an
+  8-week chart drawn by hand, and a "run the backfill first" instruction four
+  documents carried that was never true.** Builds `CARD-gym-overview-numbers.md`
+  §4b; web-only, nothing on the server changed. **Read before adding a pane to
+  the console's Overview, before drawing a chart anywhere in this product,
+  before printing a gym's DATE on any screen, before writing an empty state that
+  says a gym has never done something, before quoting the overview backfill as a
+  prerequisite for anything, and before adding a fourth read to a screen whose
+  reads already share one `Promise.allSettled`.**
+  **THE FINDING IS THE INSTRUCTION THIS CARD WAS HANDED: "run the backfill or
+  his chart is eight empty weeks" — in `HANDOFF.md` twice, `OWED.md`,
+  `DECISIONS.md:30208` and the card — is FALSE, and was on the day it was
+  written.** The backfill writes `org_daily_stats`; the chart reads
+  `gym_attendance` LIVE, which is :30094 §2.1's own decision, forty lines above
+  §4's instruction in the same entry. Measured: one `INSERT`, no `SELECT`
+  anywhere. Struck in all five places, still owed, gates nothing.
+  **`recharts` WAS REJECTED ON EVIDENCE** — it is already a dependency and its
+  three existing screens are all untested, because `ResponsiveContainer`
+  measures a parent that jsdom gives zero width; the chart is hand-drawn SVG off
+  a pure `chartGeometry`, so the arithmetic is unit-tested and every bar's
+  `<title>` is what the render test reads. **Both series share ONE scale**
+  (`visitors` is a DISTINCT count over the rows `visits` counts, so a second
+  scale draws more people than visits — **C161**).
+  **THE CARD'S OWN EMPTY-STATE WORDING COULD NOT BE WRITTEN HONESTLY:** it asked
+  for *"nobody has ever come"* off a payload covering EIGHT WEEKS (:8343's
+  class), so the sentence names its window — **C157**. A gym with NO members but
+  somebody through the door still draws its numbers, because `month.members`
+  excludes a complimentary seat and hiding a true figure is the empty-state
+  defect reversed (**C159**). A 403 draws NOTHING (**C166**): `attendance.read`
+  is untickable-off by an owner, so a refused trainer is a real person.
+  **THE AUDIT'S FINDING IS THE CHAT'S OWN — C155 ALIVE on the first sweep**: the
+  unit test served `adoptionPct: 43` beside 12 of 28, which IS 12/28, so a
+  client-side division agreed with it (:20712's class). The render test written
+  the same hour used 77 and was RED throughout. **Third round running in which a
+  test written to hold a guarantee passed under its removal** (:29117 §2,
+  :29250 §5).
+  **STILL DOES NOT TICK: no browser smoke has run and T3 is UNRUN.** PROVE
+  (`web` 1659/1659, exit 0) and the 12-mutant subset at `:30399`'s Round log.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

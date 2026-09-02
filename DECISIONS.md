@@ -30205,8 +30205,15 @@ the next author does not rediscover them.
   draws from it today, by the decision in §2.1. It is a durable record and must
   not be quoted as feeding the Overview.
 - **The backfill has not been run against Kd's Neon branch.**
-  `tools/orgs-rollup.ts --all-hours --days=70` is a step of the web half, because
-  a chart of eight empty weeks is what an unrun backfill looks like.
+  ~~`tools/orgs-rollup.ts --all-hours --days=70` is a step of the web half, because
+  a chart of eight empty weeks is what an unrun backfill looks like.~~
+  **— THE REASON IS FALSE AND CONTRADICTS §2.1 ABOVE, struck 2026-09-03 by the
+  web half (`:30399` §3). The backfill writes `org_daily_stats`; §2.1 is the
+  decision that the chart reads `gym_attendance` LIVE, so an unrun backfill
+  changes nothing on any screen.** The backfill is still owed and still worth
+  running — it is the durable record — but it gates nothing. Kept struck rather
+  than deleted: it was written in the same entry that recorded the correction it
+  contradicts, which is the part worth seeing.
 - The worker's job-name list and its branch list still move together only by
   their own comment — no test observes the pairing, which is true of all four
   existing jobs and is not this card's to change (R1.1).
@@ -30329,7 +30336,13 @@ window was **3 days** where the code ships **7**, and it gave the backfill as
 `--now --days=70` when **`--all-hours`** is the flag that ignores the hour
 filter and `--now=<ISO>` sets the instant — so a bare `--now` is dropped, the
 filter stays ON, and the backfill matches only whichever gyms happen to read
-02:xx at that moment. **A chat following the card hands Kd eight empty weeks**:
+02:xx at that moment. ~~**A chat following the card hands Kd eight empty
+weeks**~~ **— the FLAG finding stands and its CONSEQUENCE does not; struck
+2026-09-03 by the web half (`:30399` §3), which measured that the chart reads
+`gym_attendance` live, so no backfill has ever gated a single pixel.** The round
+corrected the flag and inherited the sentence around it from the design :30094
+§2.1 had already abandoned — **a correction that stops at the half it was
+looking at**, which is this section's own lesson arriving inside this section.
 :15927's fourth recurrence, and the tool's own comment already names the outcome
 (*"the backfill silently does almost nothing"*). The same commit had corrected
 §4a.4's divergence and written *"The plan was corrected rather than quietly
@@ -30382,3 +30395,228 @@ nothing in this diff can reach the registration path — **but that is a shape
 **WHAT STILL DOES NOT TICK:** no screen exists, so **no smoke** · the backfill
 has **not** been run against Kd's Neon branch · `org_daily_stats` has a writer
 and still **no reader** · the overview card's `OWED.md` line does not tick.
+
+## 2026-09-03 — THE GYM'S NUMBERS REACH A SCREEN: three tiles, an 8-week chart drawn by hand, and a "run the backfill first" instruction that four documents carried and that was never true
+
+**Read before adding a pane to the console's Overview, before drawing a chart
+anywhere in this product, before printing a gym's DATE on any screen, before
+writing an empty state that says a gym has never done something, before quoting
+the overview backfill as a prerequisite for anything, and before adding a fourth
+read to a screen whose reads already share one `Promise.allSettled`.**
+
+Builds `CARD-gym-overview-numbers.md` §4b, the half `:30094` left. **NOTHING ON
+THE SERVER CHANGED** — `:30094` shipped the migration, the rollup and the route,
+so this is web-only: no migration, no `apps/api` file, no `packages/shared`
+change. **The `OWED.md` line does NOT tick: no smoke has run and T3 is UNRUN.**
+
+### 1 · WHAT AN OWNER NOW SEES
+
+A numbers zone above the join code, headed *"Who's turning up"*: **today**, **this
+week** with its comparison, **the last 30 days** with the adoption percentage, and
+**an 8-week chart — bars for visits, a line for how many different people**. Kd's
+`:29961` ruling 1 all the way to a screen: they count VISITS, not workouts.
+
+`overviewView.js` holds every sentence and every "should this be drawn at all"
+question, pure and tested without a browser; `OverviewNumbers.jsx` is markup;
+`Overview.jsx` owns the read's outcome, as it already does for its other three.
+
+### 2 · THE CHART IS HAND-DRAWN SVG, AND `recharts` WAS REJECTED ON EVIDENCE
+
+`recharts` is already a dependency and three screens use it, so reaching for it
+would have been the obvious move and needed no approval. **It was rejected
+because every one of those three screens is UNTESTED, and measuring why explains
+it: `ResponsiveContainer` measures its parent, jsdom gives everything a width of
+zero, and the chart renders nothing at all in a test.** A chart drawn that way
+could not have had one assertion on it — on a card whose whole risk is a number
+being wrong on screen.
+
+What ships instead is a `viewBox` SVG whose geometry comes out of a pure function
+(`chartGeometry`), so **the arithmetic is unit-tested and the picture is
+queryable**: every bar carries a `<title>` naming its week and its two figures,
+which is simultaneously the hover text, what a screen reader gets, and what the
+render test asserts.
+
+**BOTH SERIES SHARE ONE SCALE, and that is a truth requirement rather than a
+style choice.** `visitors` is a DISTINCT count over the rows `visits` counts, so
+it can never exceed them; on two scales the line rides above the bars and shows
+an owner more people than visits — a picture that cannot happen. **C161 is that
+mutation and it is RED.**
+
+### 3 · THE FINDING: "RUN THE BACKFILL OR HIS CHART IS EIGHT EMPTY WEEKS" WAS FALSE IN FOUR DOCUMENTS, AND IT WAS THE FIRST THING THIS CARD WAS TOLD TO DO
+
+`HANDOFF.md` (twice), `OWED.md:7304`, `DECISIONS.md:30208` and
+`CARD-gym-overview-numbers.md` §4a.3 all said the same thing: run
+`tools/orgs-rollup.ts --all-hours --days=70` against Kd's branch **before asking
+him to smoke anything, or his chart is eight empty weeks.** `:30243` §5 had just
+corrected that instruction's FLAG and graded it *"not cosmetic"*.
+
+**The backfill writes `org_daily_stats`. The chart reads `gym_attendance` LIVE.**
+So the backfill cannot change one pixel of what Kd sees, and could not on the day
+the sentence was written. Measured rather than reasoned: **one
+`INSERT INTO org_daily_stats` in the whole repo and no `SELECT` anywhere**, outside
+schema files, comments and the privacy list.
+
+**THE SHAPE IS WORTH MORE THAN THE FACT, because it is not carelessness.**
+`:30094` §2.1 is the entry that DECIDED the route reads attendance live — it is
+titled as a correction of the plan and ends *"The plan was corrected rather than
+quietly diverged from"* — and §4 of that same entry, forty lines later, tells the
+next chat to run the backfill or hand Kd empty weeks. **The correction was made in
+one half of the document and the instruction built on the old design survived in
+the other.** `:30243` then read that instruction, found a real defect IN it, fixed
+the flag, and carried the surrounding sentence forward unexamined — **a
+correction that stops at the half it was looking at**, which is :30243 §5's own
+lesson landing inside :30243 §5.
+
+**Struck, not deleted, in all five places** (:20587, and :29740's precedent where
+a wrong recorded cause was kept visible in seven documents): the two `HANDOFF.md`
+blocks, `OWED.md`, `BACKLOG.md`'s round entry, `DECISIONS.md:30208` and
+`:30332`, plus the card. **The backfill is STILL OWED and still worth running** —
+`org_daily_stats` is the durable record Reports will read, and the day DPDP makes
+attendance rows deletable it becomes the chart's only possible source — **but it
+gates nothing, and a chat must not spend Kd's Neon branch on it before a smoke.**
+:7298's class: a sentence that outlives the condition that raised it.
+
+### 4 · THE EMPTY STATES, AND THE ONE THE CARD ASKED FOR THAT CANNOT BE WRITTEN HONESTLY
+
+§4b names four. Three are built as written. The fourth is not, and the departure
+is declared rather than quietly made:
+
+**The card says *"Members but nobody has ever come"* → *"Nobody has marked
+attendance yet"*. This payload covers EIGHT WEEKS and cannot answer "ever".** A
+gym busy nine weeks ago and quiet since would be told nobody has ever come, which
+is :8343 exactly — the round where a fix for a rare false sentence shipped a
+false sentence for everybody. **The alternative was a new server fact
+(`hasAnyAttendance`), which is what :8343 itself did — and that is a server
+change, i.e. a different card.** So the sentence names the window it can see:
+***"Nobody has marked attendance in the last 8 weeks."*** **C157 is the mutation
+back to "yet" and it is RED.**
+
+The other three: a failed read draws the failure card with Try again and never a
+zero · a gym nobody has joined draws NOTHING, which is §4.1's own edge (*"0
+members ever → Overview IS the checklist + poster CTA, no sad empty charts"*) ·
+and a gym in its first week gets §4.1's *"first week collecting"* **under** the
+chart rather than instead of it, because this week's bar is real and what is
+missing is anything to compare it against.
+
+**A FIFTH STATE THE CARD DID NOT NAME, AND IT IS THE ORDER THE PREDICATE ASKS ITS
+QUESTIONS IN.** `month.members` counts CURRENT, non-complimentary members, so a
+gym whose only seat is the owner's complimentary one reads **0** — and if that
+owner has marked themselves in, *"2 people came today"* is TRUE. Asking the
+members question first hides a true number to honour an empty-state rule, which
+is the empty-state defect pointed the other way. **C159.**
+
+### 5 · A 403 IS SILENT, AND THAT IS THE FOURTH READ'S WHOLE REASON FOR HAVING ITS OWN OUTCOME
+
+`GET /v1/orgs/:gymId/overview` is gated on `attendance.read` — default-on for all
+three roles and one an owner may UNTICK (`:28107` §2). So a **real, reachable
+person** meets a 403 here while the screen's other three reads answer 200, which
+is a sharper version of the case `:10596`'s L-3 split these outcomes for.
+The refusal draws **nothing at all**: `isRetryable` already knows a 403 is
+permanent, and a red card with a Try again on every visit to a trainer's own home
+screen would be noise about a decision their owner made. §4b's words: they lose
+the NUMBERS, not the screen. **C166.**
+
+The duplicate-error suppression is `:10596`'s round-2 Low-4 extended: offline,
+all four reads fail with the same sentence, and the fix for two identical error
+cards was never to give the third and fourth one each.
+
+### 6 · THE AUDIT'S FINDING IS MINE, AND IT IS THE THIRD TIME IN THREE CARDS
+
+**C155 was ALIVE on the first sweep.** It makes `adoptionLine` DIVIDE instead of
+reading the percentage the server counted — ruling 14's one load-bearing
+requirement — and my own unit test passed under it, because its fixture served
+`adoptionPct: 43` beside 12 of 28 members. **12/28 rounds to 43.** The served
+value and the client's own arithmetic were the same number, so the assertion
+agreed with both. :20712's class: a fixture in which the defect and the fix are
+indistinguishable.
+
+The render test written the same afternoon had it right — it serves **77%** beside
+12 of 28, an answer no honest gym produces (:29250 §3's shape) — so **C163, the
+same mutation at the other call site, was RED from the start.** One file over, in
+the same hour, with the same author. Fixed by giving the pure test the same
+impossible fixture; C155 is RED.
+
+**THIRD ROUND RUNNING IN WHICH A TEST WRITTEN TO HOLD A GUARANTEE PASSED UNDER
+ITS REMOVAL** — `:29117` §2 and `:29250` §5 are the other two, and both were also
+found by a mutant rather than by a reviewer. **STANDING, now earned three times:
+a regression test is not finished when it passes, only when it FAILS under the
+revert.**
+
+### 7 · THE SMALL CALLS, so nobody re-derives them
+
+- **`weekAxisLabel` builds `18 Aug` from the string's own parts, with no `Date`
+  in it.** A gym's Monday has no instant, and `new Date('2026-08-18')` is UTC
+  midnight rendered in whoever is READING — trap #8, and the defect
+  `closureDateLabel` was hand-built to avoid one card ago. **C162 is the
+  mutation back to `toLocaleDateString` and it is RED, observably as a DAY SHIFT
+  because the test asserts the first of a month** (C154, the same mutation on the
+  closure label, can only observe the FORMAT — its suite pins a zone where the
+  shift does not appear).
+- **`MONTH_SHORT` is now exported from `hoursView.js`** rather than copied. The
+  shared thing is the TABLE, not the sentence; cutting a short label out of
+  `closureDateLabel`'s output would be a second date format pretending to be the
+  first.
+- **Today and this week reuse `dayTotalsLine`** from the Attendance screen. It is
+  the same question off a different endpoint, and two screens describing one day
+  two ways is what that file's own header warns about. The field names differ
+  (`visitors` here, `people` there); the question does not.
+- **No spinner of its own.** All four reads land in one `.then`, so every pane on
+  the screen flips at the same instant and a second spinner is two pieces of
+  furniture for one wait. What must never be silent is a failure, and that arm
+  is separate.
+- **A duplicate-id guard is ported into `mutate-console.mjs`** from
+  `mutate-orgs.mjs` (`:30094` §3a). That harness is not in id order either — 152
+  rows, highest id C154 — so the same silent collision was one careless
+  renumbering away. **Proven by causing it** (exit 2, restore sha256-identical).
+
+### 8 · WHAT DOES NOT TICK
+
+- **NO BROWSER SMOKE HAS RUN on this screen.** `RUNBOOK/smoke-overview-numbers.md`
+  is written and unrun.
+- **T3 IS UNRUN.**
+- **The smoke cannot reach three of the states above on Kd's own gym** — the
+  ▲▼ comparison, a full 8-week chart, and the no-members case all need history
+  or a gym he does not have. Stated in the sheet rather than papered over; they
+  are held by tests and by C156/C159/C160/C161.
+- **The backfill is still unrun** (§3 — and it gates nothing).
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1659/1659 across 58 files, exit 0**
+(1612/56 before — +47, +2 files: 37 pure, 10 render). Scoped: `overviewView`
+**37/37** · `console.render` **99/99** (89 before). `eslint --max-warnings=0`
+**exit 0** on all twelve touched web files. `vite build` **exit 0**.
+`node --check` on the harness. **No `packages/shared` and no `apps/api` change**,
+so `:28395`'s fan-out does not apply and `web` is the whole of the suite that
+could move. Root guards, real exit codes (`:13247`): `check-harnesses` **25
+scripts** · `check-decisions-index` **273 pointers, 1136 headings** · triggers
+`--check` **up to date**.
+
+**AUDIT — a stated SUBSET of 186: `MUTATE_ONLY=C155…C166`, 12 mutants, 12 RED, 0
+ALIVE, 0 never ran**, all twelve controls GREEN and tallied, restores
+sha256-verified after every mutant, and the harness printed its own *"THIS IS NOT
+A FULL SWEEP"*. **C155 was ALIVE on the first pass and §6 is that finding.** No
+database mutant: this card changes no server behaviour (`:5857` rule 4a, and
+`:29250`'s precedent). Every row sits in 4a's *"numbers a user sees"* or *"on
+screen and false"* columns; wording, layout and colours are deliberately not
+mutated.
+
+**Ids numbered from the true ceiling in use (C154), not from the file's last
+row** — `:30094`'s duplicate-id lesson, applied by adding its guard rather than
+by being careful.
+
+**Files.** New: `pages/console/overviewView.js` ·
+`pages/console/overviewView.test.js` · `pages/console/__fixtures__/overview.js` ·
+`components/console/OverviewNumbers.jsx`. Edited:
+`pages/console/Overview.jsx` · `pages/console/hoursView.js` (one export) ·
+`api/orgsApi.js` (`getOverview`) · `pages/console/console.render.test.jsx` ·
+the four other suites that render the Overview (`gymSwitch`, `planPrompt`,
+`trial`, `readOnlyConsole` — two lines each: the mock and the quiet default) ·
+`apps/web/tools/mutate-console.mjs` · `RUNBOOK/smoke-overview-numbers.md` ·
+records.
+
+**A SHARED FIXTURE RATHER THAN FOUR COPIES.** Five suites render this screen and
+every one of them now issues this read whether or not the numbers are its
+subject. `__fixtures__/overview.js` is the payload in one place — four copies is
+four places for a shape to drift from the contract, and only one of them would be
+the file somebody remembers to update.

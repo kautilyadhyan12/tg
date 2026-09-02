@@ -78,6 +78,11 @@ const HOURS_VIEW_SUITE = 'src/pages/console/hoursView.test.js';
 const HOURS_PANEL_SUITE = 'src/components/console/openingHours.render.test.jsx';
 const HOURS_NOTE_SUITE = 'src/components/gym/gymHours.render.test.jsx';
 
+/** THE GYM'S NUMBERS, added 2026-09-03. The render suite is the console's own
+ *  (`RENDER_SUITE` above) because the numbers are a pane on a screen that
+ *  already had one, not a screen of their own. */
+const OVERVIEW_VIEW_SUITE = 'src/pages/console/overviewView.test.js';
+
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
   api: { file: resolve(ROOT, 'apps/web/src/api/orgsApi.js') },
@@ -128,6 +133,13 @@ const TARGETS = {
   hoursview: { file: resolve(ROOT, 'apps/web/src/pages/console/hoursView.js') },
   hourspanel: { file: resolve(ROOT, 'apps/web/src/components/console/OpeningHoursPanel.jsx') },
   hoursnote: { file: resolve(ROOT, 'apps/web/src/components/gym/GymHoursNote.jsx') },
+  // THE GYM'S NUMBERS (Kd :29961 ruling 1 - the tiles count VISITS, not
+  // workouts), added 2026-09-03 with the web half. TWO targets for one feature,
+  // because a mutant is a claim about ONE call site (:15770): the view file
+  // decides WHICH sentence and WHERE a bar goes, and the panel decides what
+  // reaches a screen at all.
+  overviewview: { file: resolve(ROOT, 'apps/web/src/pages/console/overviewView.js') },
+  overviewnumbers: { file: resolve(ROOT, 'apps/web/src/components/console/OverviewNumbers.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -2275,12 +2287,138 @@ const MUTANTS = [
     from: "  return `${short} ${String(Number(date))} ${MONTH_SHORT[Number(month) - 1]} ${year}`;",
     to: "  return parsed.toLocaleDateString();",
   },
+
+  {
+    id: 'C155',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE SCREEN WORKS THE PERCENTAGE OUT ITSELF instead of drawing the one the server counted. Ruling 14's only load-bearing requirement (:27992 section 3): every figure on a console screen is counted in SQL over the whole gym, and a client that divides is one rounding rule away from disagreeing with every other surface that ever prints adoption. The fixture is deliberately one no honest gym produces - 12 of 28 is 43 per cent and the server says 77 - which is :29250 section 3's shape and the only reason this is observable at all",
+    expect: "reads the percentage the server computed and never divides",
+    from: "  const pct = month?.adoptionPct;",
+    to: "  const pct = count(month?.members) === 0 ? null : Math.round((count(month?.visitors) * 100) / count(month?.members));",
+  },
+  {
+    id: 'C156',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE ARROW TRAVELS ALONE. week.visits is this gym-week SO FAR and prevVisits is the WHOLE of the week before, so on a Tuesday a bare up-or-down arrow compares two days against seven and tells a healthy gym it is collapsing - :5807 on its face, a number on screen that is wrong. The requirement is the card's (section 4b) and it got there because the server half's review found it living only in a comment in packages/shared, which is not somewhere the screen's author reads",
+    expect: "never hands back a direction without a sentence naming both ends",
+    from: "  return { direction, text: `so far, against ${visitsLabel(prev)} in the whole of last week` };",
+    to: "  return { direction, text: '' };",
+  },
+  {
+    id: 'C157',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE EMPTY STATE MAKES A CLAIM ABOUT ALL TIME OFF A PAYLOAD THAT COVERS EIGHT WEEKS. :8343 is this project's recorded cost of exactly that - a sentence about a history the server was never asked about - and the false case here is a gym that was busy nine weeks ago and quiet since, told nobody has ever come",
+    expect: "names the window it can actually see",
+    from: "  return `Nobody has marked attendance in the last ${OVERVIEW_WEEKS} weeks.`;",
+    to: "  return 'Nobody has marked attendance yet.';",
+  },
+  {
+    id: 'C158',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "A GYM WHOSE BUTTON IS OFF IS TOLD NOBODY CAME. Two different situations with two different next moves collapse into one sentence, and the one it picks points the owner at their members when the answer is the switch in Settings - emptyDayReason's rule one screen over, where the same three-way distinction is already load-bearing",
+    expect: "points at the switch when the switch is what is stopping them",
+    from: "  if (manualAttendanceEnabled === false) {",
+    to: "  if (false) {",
+  },
+  {
+    id: 'C159',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "A TRUE NUMBER IS HIDDEN TO HONOUR AN EMPTY-STATE RULE. month.members counts CURRENT non-complimentary members, so a gym whose only seat is the owner's complimentary one reads zero - and if that owner has marked themselves in, two people came today is TRUE. Asking the members question first draws nothing over a gym that has something to say, which is the empty-state defect pointed the other way",
+    expect: "draws the numbers for a gym with no members but somebody through the door",
+    from: "  if (hasAnyActivity(overview)) return 'ready';",
+    to: "  if (count(overview?.tiles?.month?.members) === 0) return 'no-members';",
+  },
+  {
+    id: 'C160',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE UNFINISHED WEEK STOPS SAYING SO. The last bar is this week SO FAR and is short because the week is not over; a chart whose final column is always the runt teaches an owner to read a weekly collapse that is not there - the same defect as the bare arrow one panel up, and the reason the bar's own sentence says which one it is",
+    expect: "marks the newest bucket as this week, and only that one",
+    from: "      isCurrent: index === rows.length - 1,",
+    to: "      isCurrent: false,",
+  },
+  {
+    id: 'C161',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE TWO SERIES GET THEIR OWN SCALES AND THE PEOPLE LINE RIDES ABOVE THE VISITS BARS. visitors is a DISTINCT count over the rows visits counts, so it can never exceed them - a picture showing more people than visits is one that cannot happen, and it is exactly what an independently-scaled line draws on a week where members came twice",
+    expect: "keeps the people line on or under the visits bars",
+    from: "      cy: CHART_HEIGHT - Math.round((visitors / max) * CHART_HEIGHT),",
+    to: "      cy: CHART_HEIGHT - Math.round((visitors / Math.max(1, ...rows.map((w) => count(w?.visitors)))) * CHART_HEIGHT),",
+  },
+  {
+    id: 'C162',
+    target: 'overviewview',
+    suite: OVERVIEW_VIEW_SUITE,
+    why: "THE AXIS LABEL GOES BACK TO BEING RESOLVED THROUGH A ZONE. A gym's Monday is a calendar date with no instant in it, and new Date of a bare YYYY-MM-DD is UTC midnight - so a locale formatter prints the previous day to every reader west of the gym. Trap number 8, and C154 is the same mutation on the closure label one file over: this one IS observable as a day shift, because the test asserts the first of a month",
+    expect: "writes a gym Monday the way a person does",
+    from: "  return `${String(Number(date))} ${name}`;",
+    to: "  return new Date(weekStart).toLocaleDateString();",
+  },
+  {
+    id: 'C163',
+    target: 'overviewnumbers',
+    suite: RENDER_SUITE,
+    why: "THE PANEL DIVIDES INSTEAD OF DRAWING. C155's defect at the other call site (:15770 - a mutant is a claim about ONE call site): the view file could be perfect and the screen still print its own arithmetic. Same fixture, same tell - 43 per cent appears where the server said 77",
+    expect: "draws the figures the server sent",
+    from: "          <Tile label=\"Last 30 days\" value={`${adoption.pct}%`} note={adoption.text} />",
+    to: "          <Tile label=\"Last 30 days\" value={`${Math.round((tiles.month.visitors * 100) / tiles.month.members)}%`} note={adoption.text} />",
+  },
+  {
+    id: 'C164',
+    target: 'overviewnumbers',
+    suite: RENDER_SUITE,
+    why: "A GYM WITH MEMBERS AND NOBODY THROUGH THE DOOR FALLS THROUGH TO THE TILES AND READS 0 people beside 0 per cent. We have no data and the answer is zero are different sentences, and printing the second for the first is the defect :8267 was raised on and :26736 caught one card ago before it shipped",
+    expect: "tells a gym with members and no visits that nobody has come",
+    from: "  if (state === 'nobody') {",
+    to: "  if (false) {",
+  },
+  {
+    id: 'C165',
+    target: 'overview',
+    suite: RENDER_SUITE,
+    why: "A FAILED NUMBERS READ GOES SILENT. The pane draws nothing and says nothing, so an owner whose connection dropped simply has no numbers and no way to ask for them again - :12660 is the citation and it is the anti-silence rule: no reviewer, test or mutant flags an ABSENT sentence, a person does",
+    expect: "offers a Try again when the numbers fail on their own",
+    from: "        <ConsoleFailed message={overview.error} onRetry={retry} />",
+    to: "        null",
+  },
+  {
+    id: 'C166',
+    target: 'overview',
+    suite: RENDER_SUITE,
+    why: "A TRAINER THEIR GYM REFUSED IS SHOWN A RED CARD AND A Try again ON EVERY VISIT TO THEIR OWN HOME SCREEN. The read is gated on attendance.read, which is default-on for all three roles and one an owner may UNTICK (:28107 section 2), so this 403 is reachable by a real person - and isRetryable already knows a 403 is permanent, which is what stops a button being offered that cannot work",
+    expect: "takes the numbers away from a trainer their gym refused",
+    from: "      {!overview.loading && overview.error !== null && overview.retryable",
+    to: "      {!overview.loading && overview.error !== null && true",
+  },
 ];
 
 const abort = (msg) => {
   console.error(`\nABORT — ${msg}`);
   process.exit(2);
 };
+
+// A REPEATED ID IS AN ABORT, PORTED FROM `apps/api/tools/mutate-orgs.mjs`
+// 2026-09-03 (:30094 section 3a, where it cost a real run). That harness shipped
+// a duplicate id because rows were numbered from the ids at the END of the file
+// and THE TABLE IS NOT IN ID ORDER — this one is not either (152 rows, highest
+// id C154). Every guard in the harness stayed green: nothing failed and nothing
+// was skipped, the damage was to the RECORD, since `MUTATE_ONLY=C217` would run
+// two different mutants for ever and every document citing that id would be
+// ambiguous with no way to tell which. :5348 rule 5 — a class found once gets a
+// permanent check rather than another careful fix.
+const seenIds = new Set();
+for (const m of MUTANTS) {
+  if (seenIds.has(m.id)) {
+    abort(`${m.id} appears twice in the table. Number the new row above the HIGHEST id in use, which is not the last row of this file.`);
+  }
+  seenIds.add(m.id);
+}
 
 // Checked for the WHOLE table before a byte is written (:5199).
 for (const m of MUTANTS) {

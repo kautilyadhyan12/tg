@@ -26,6 +26,7 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgOverviewResponseSchema,
   orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
   orgStaffResponseSchema,
@@ -306,6 +307,33 @@ export const orgService = {
       gymAttendanceHistoryResponseSchema,
       'your visits',
       authApi.get(`/v1/orgs/${gymId}/attendance/history`, { params }),
+    ),
+
+  /** GET /v1/orgs/:gymId/overview — Part 3 §4.1's numbers, and Kd's :29961
+   *  ruling 1: they count VISITS, not workouts.
+   *
+   *  **GATED ON `attendance.read`, NOT ON `members.read`** — these ARE the
+   *  attendance figures, so a trainer whose attendance box an owner unticked
+   *  must not read the day's visit totals off the console's landing page
+   *  (:13803's precedent, restated when the privilege was minted at :28107 §2).
+   *  A refusal here is a permanent 403 and `isRetryable` above already says so,
+   *  which is what stops the screen offering a Try again that cannot work.
+   *
+   *  **EVERY FIGURE ARRIVES COMPUTED, INCLUDING THE PERCENTAGE** (:27992 §3).
+   *  There is deliberately no total in the payload a client could reach by
+   *  adding the others up, and `adoptionPct` is `null` — never 0 — for a gym
+   *  nobody has joined.
+   *
+   *  **IT HAS ITS OWN RATE-LIMIT BUCKET** (`orgs_overview_read`, 600/hour per
+   *  account) and does NOT share the attendance reads' one, deliberately: this
+   *  is the console's landing page, opened by everybody who opens the console,
+   *  and sharing would let one owner scrolling the Attendance list spend the
+   *  budget that draws their own home screen. Nothing here may poll. */
+  getOverview: (gymId) =>
+    readThrough(
+      orgOverviewResponseSchema,
+      "your gym's numbers",
+      authApi.get(`/v1/orgs/${gymId}/overview`),
     ),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:

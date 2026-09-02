@@ -47,6 +47,7 @@ import appSource from '../../App.jsx?raw';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, Link } from 'react-router-dom';
+import { overview } from './__fixtures__/overview';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -57,6 +58,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMembers: vi.fn(),
       getCodes: vi.fn(),
       getApplications: vi.fn(),
+      getOverview: vi.fn(),
       getPlans: vi.fn(),
       startTrial: vi.fn(),
       /** ADDED 2026-09-01: the member's gym card now carries a `GymHoursNote`,
@@ -245,6 +247,11 @@ beforeEach(() => {
   });
   orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
   orgService.getApplications.mockResolvedValue({ data: { items: [], nextCursor: null, pendingCount: 0 } });
+  // The numbers zone reads this. QUIET IS THE TRUTHFUL DEFAULT for these
+  // fixtures — no attendance, and a roster whose only seat is the owner's
+  // complimentary one, which `month.members` excludes — so it draws nothing at
+  // all and this suite sees the screen it was written against.
+  orgService.getOverview.mockResolvedValue(overview());
   orgService.getPlans.mockResolvedValue({
     data: {
       plans: [{ code: 'org_b1_us_m', priceLabel: '$35', currency: 'USD', interval: 'month', seatCap: 300 }],

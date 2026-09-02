@@ -13,6 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { WEEK_STARTS, overview } from './__fixtures__/overview';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -28,6 +29,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       rotateCode: vi.fn(),
       removeCode: vi.fn(),
       getApplications: vi.fn(),
+      getOverview: vi.fn(),
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
@@ -197,6 +199,14 @@ beforeEach(() => {
   // Nobody waiting, by default: every test that is not about the queue should
   // see the screen it saw before the queue existed.
   orgService.getApplications.mockResolvedValue(queue([]));
+  // THE NUMBERS ARE QUIET BY DEFAULT, AND THAT IS THE TRUTHFUL DEFAULT FOR
+  // THESE FIXTURES rather than a convenience. `ORG`'s only seat is `ownerSeat`,
+  // which is `complimentary` — and `month.members` counts current
+  // NON-complimentary members, so 0 is what the server would answer for this
+  // gym — with no attendance anywhere. The zone therefore draws nothing at all
+  // (§4.1's "0 members ever" edge), which is the screen every test in this file
+  // was written against. The numbers' own tests set their own payloads.
+  orgService.getOverview.mockResolvedValue(overview());
   // The three code-management calls resolve by default so a test about the
   // SCREEN does not fail on a mock that returns undefined. Each one that is
   // genuinely about a mutation sets its own.
@@ -1636,5 +1646,182 @@ describe('a gym you have just made', () => {
     // The sentence a FIRST-TIME owner was reading, seconds after making their
     // first gym.
     expect(screen.queryByText(/don't run a gym yet/i)).toBeNull();
+  });
+});
+
+// ── The gym's numbers ───────────────────────────────────────────────────────
+//
+// Part 3 §4.1's KPI row and 8-week chart, and Kd's :29961 ruling 1: they count
+// VISITS and not workouts. The pure rules are proved in `overviewView.test.js`;
+// these prove the SCREEN — that its four states are four different sentences,
+// that a refusal costs the numbers and not the screen, and that every figure on
+// it came off the wire.
+describe("the gym's numbers", () => {
+  // A gym with people in it, whose figures deliberately DISAGREE with anything a
+  // screen could work out for itself — see the "computes nothing" case below.
+  const busy = () =>
+    overview({
+      today: { visits: 9, visitors: 7 },
+      week: { visits: 40, visitors: 22, prevVisits: 38, prevVisitors: 20 },
+      month: { visitors: 12, members: 28, adoptionPct: 77 },
+      weeks: [
+        { weekStart: '2026-07-13', visits: 10, visitors: 6 },
+        { weekStart: '2026-07-20', visits: 20, visitors: 11 },
+        { weekStart: '2026-07-27', visits: 0, visitors: 0 },
+        { weekStart: '2026-08-03', visits: 40, visitors: 18 },
+        { weekStart: '2026-08-10', visits: 30, visitors: 15 },
+        { weekStart: '2026-08-17', visits: 25, visitors: 14 },
+        { weekStart: '2026-08-24', visits: 35, visitors: 17 },
+        { weekStart: '2026-08-31', visits: 8, visitors: 7 },
+      ],
+    });
+
+  it('draws the figures the server sent, and works none of them out itself', async () => {
+    // THE FIXTURE IS DELIBERATELY ONE NO HONEST GYM PRODUCES — 12 of 28 is 43%,
+    // and the server says 77%. :29250 §3's shape (a day whose totals say 300
+    // while its page carries two): a screen that divided would print 43, and
+    // the only way to pass is to render what arrived. Ruling 14's one
+    // load-bearing requirement (:27992 §3), which the card names as the
+    // difference between being right on six rows and wrong on four hundred.
+    orgService.getOverview.mockResolvedValue(busy());
+    drawOverview();
+
+    expect(await screen.findByText('77%')).toBeTruthy();
+    expect(screen.queryByText('43%')).toBeNull();
+    expect(screen.getByText('12 of 28 members came in the last 30 days')).toBeTruthy();
+    // Today and this week each say the second number only because somebody came
+    // twice — and neither is derivable from the other.
+    expect(screen.getByText('7 people · 9 visits')).toBeTruthy();
+    expect(screen.getByText('22 people · 40 visits')).toBeTruthy();
+  });
+
+  it('says what the up arrow is comparing, because the two weeks are not the same length', async () => {
+    // :5807 on its face if it did not: `week.visits` is this gym-week SO FAR and
+    // `prevVisits` is the WHOLE of last week, so on a Tuesday a bare arrow
+    // compares two days against seven and tells a healthy gym it is collapsing.
+    orgService.getOverview.mockResolvedValue(busy());
+    drawOverview();
+
+    expect(await screen.findByText(/so far, against 38 visits in the whole of last week/)).toBeTruthy();
+  });
+
+  it('draws a bar for every week including the empty ones, and says which one is unfinished', async () => {
+    orgService.getOverview.mockResolvedValue(busy());
+    drawOverview();
+
+    // The `<title>` is what a hover and a screen reader get, and it carries the
+    // whole bar — so it is also what pins the figures to their week.
+    expect(await screen.findByText('Week of 13 Jul: 10 visits, 6 people')).toBeTruthy();
+    // The quiet week draws a zero bar rather than vanishing and shifting every
+    // other bar left.
+    expect(screen.getByText('Week of 27 Jul: 0 visits, 0 people')).toBeTruthy();
+    // THE LAST COLUMN IS SHORT BECAUSE THE WEEK IS NOT OVER. A chart whose final
+    // bar is always the runt teaches an owner to read a collapse that is not
+    // there — the same defect as the bare arrow, one panel down.
+    expect(screen.getByText('This week so far: 8 visits, 7 people')).toBeTruthy();
+    expect(screen.queryByText(/Week of 31 Aug/)).toBeNull();
+  });
+
+  it('says it is still collecting while there is nothing to compare this week against', async () => {
+    orgService.getOverview.mockResolvedValue(
+      overview({
+        today: { visits: 4, visitors: 4 },
+        week: { visits: 14, visitors: 9, prevVisits: 0, prevVisitors: 0 },
+        month: { visitors: 9, members: 20, adoptionPct: 45 },
+        weeks: [
+          ...WEEK_STARTS.slice(0, 7).map((weekStart) => ({ weekStart, visits: 0, visitors: 0 })),
+          { weekStart: '2026-08-31', visits: 14, visitors: 9 },
+        ],
+      }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText(/first week of attendance/)).toBeTruthy();
+    // And no arrow over a week there is nothing to compare against.
+    expect(screen.getByText('Nothing was recorded last week.')).toBeTruthy();
+  });
+
+  it('tells a gym with members and no visits that nobody has come — not that they had none', async () => {
+    // :8267/:8343's class. "We have no data" and "the answer is zero" are
+    // different sentences, and the window is NAMED because this payload cannot
+    // answer "has anybody ever come".
+    orgService.getOverview.mockResolvedValue(
+      overview({ month: { visitors: 0, members: 12, adoptionPct: 0 } }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText('Nobody has marked attendance in the last 8 weeks.')).toBeTruthy();
+    expect(screen.queryByText('0%')).toBeNull();
+    expect(screen.queryByText('0 people')).toBeNull();
+  });
+
+  it('points a gym whose button is off at the switch instead', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }] },
+    });
+    orgService.getOverview.mockResolvedValue(
+      overview({ month: { visitors: 0, members: 12, adoptionPct: 0 } }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText(/the switch is off in Settings/)).toBeTruthy();
+    expect(screen.queryByText(/Nobody has marked attendance/)).toBeNull();
+  });
+
+  it('draws no numbers at all for a gym nobody has joined — the join code is the screen', async () => {
+    // §4.1's own edge: "org with 0 members ever → Overview IS the checklist +
+    // poster CTA (no sad empty charts)".
+    drawOverview(); // the default payload: no members, nothing recorded
+
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(screen.queryByText(/turning up/i)).toBeNull();
+    expect(screen.queryByText(/Nobody has marked attendance/)).toBeNull();
+  });
+
+  it('offers a Try again when the numbers fail on their own, and never draws zeros over a failed read', async () => {
+    orgService.getOverview.mockRejectedValue(apiError(500, 'server_error', 'Something went wrong.'));
+    drawOverview();
+
+    expect(await screen.findByText('Something went wrong.')).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+    // The rest of the screen is untouched — the numbers are one pane, not the
+    // page.
+    expect(within(screen.getByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(screen.queryByText(/turning up/i)).toBeNull();
+  });
+
+  it('takes the numbers away from a trainer their gym refused, and leaves them the screen', async () => {
+    // The read is gated on `attendance.read` — default-on for all three roles
+    // and one an owner may UNTICK (:28107 §2), so this 403 is reachable by a
+    // real person. `isRetryable` says a 403 is permanent, so no Try again is
+    // offered for a button that cannot work; §4b: they lose the NUMBERS, not
+    // the screen.
+    orgService.getOverview.mockRejectedValue(
+      apiError(403, 'forbidden', "You can't see this gym's attendance."),
+    );
+    drawOverview();
+
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(screen.queryByText(/turning up/i)).toBeNull();
+    expect(screen.queryByText("You can't see this gym's attendance.")).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
+
+  it('does not stack a second identical error card when the connection drops', async () => {
+    // ROUND 2's Low-4, one pane later: when everything fails the same way, the
+    // fix for two identical error cards was never to give the third and fourth
+    // one each.
+    orgService.getCodes.mockRejectedValue(offline());
+    orgService.getMembers.mockRejectedValue(offline());
+    orgService.getOverview.mockRejectedValue(offline());
+    drawOverview();
+
+    // The sentence offline actually produces — `errorText`'s own branch for a
+    // request that never reached the server, which is the whole point: all
+    // three panes fail with the SAME words, so a screen that drew one card each
+    // would say it three times.
+    const cards = await screen.findAllByText(/Couldn't reach the server/i);
+    expect(cards).toHaveLength(1);
+    expect(screen.getAllByText('Try again')).toHaveLength(1);
   });
 });

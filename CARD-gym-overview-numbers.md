@@ -256,9 +256,22 @@ look like a late one in the logs.
 
 `tools/orgs-rollup.ts` runs it by hand — **`--all-hours`** (ignore the hour
 filter) and `--days=N` (widen the window) — on `tools/trial-sweep.ts`'s
-precedent. **Its first job is the backfill**: **`--all-hours --days=70`** once,
+precedent. ~~**Its first job is the backfill**: **`--all-hours --days=70`** once,
 so a gym with attendance history recorded before this card gets an 8-week chart
-rather than eight empty bars.
+rather than eight empty bars.~~
+
+> **CORRECTED AGAIN BY THE WEB HALF, 2026-09-03, AND THIS TIME IT IS THE
+> CONSEQUENCE THAT WAS FALSE RATHER THAN THE FLAG.** The backfill writes
+> `org_daily_stats`. **The chart reads `gym_attendance` LIVE** — §4a.4's own
+> correction, recorded at `DECISIONS.md:30094` §2.1 in the same commit — so a
+> gym's 8-week chart is complete whether or not the backfill has ever run, and
+> an unrun backfill changes nothing anybody can see. Re-measured: one
+> `INSERT INTO org_daily_stats` in the repo, no `SELECT` anywhere.
+> **The backfill is still worth running** (it is the durable record Reports
+> will read, and the day DPDP makes attendance rows deletable it becomes the
+> chart's only possible source) — **but it is not a prerequisite for anything,
+> and three documents said it was.** The note below corrected the FLAG and left
+> the sentence around it pointing at the design the same commit had abandoned.
 
 > **CORRECTED AFTER THE BUILD, and this one would have cost Kd a smoke.** This
 > line gave the flag as `--now` and the backfill as `--now --days=70`. Shipped,

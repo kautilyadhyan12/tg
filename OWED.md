@@ -2192,7 +2192,7 @@ then; none may be hidden or reduced to close the gap.
       figures quoted before this was noticed were whole-suite runs wearing a
       scoped label. **The form that works is `test:local <file>`** (no `--`).
       `-t` filters are unaffected, which is why the mutation sweep never hit it.
-      **A THIRD FAILING FILE SEEN ONCE, 2026-09-02 (DECISIONS :30236), AND
+      **A THIRD FAILING FILE SEEN ONCE, 2026-09-02 (DECISIONS :30243), AND
       RECORDED RATHER THAN SHRUGGED OFF BECAUSE THIS LINE NAMES ONLY TWO.** A
       full local run failed `workouts.sync.test.ts` at `beforeAll` with a **500
       from `/v1/auth/register`** — not a global-count assertion, which is the
@@ -7300,10 +7300,26 @@ file and is stated so nobody reads these as lower priority than they are.
       `15 * * * *`, rolling each gym when its OWN clock reads 02 ·
       `tools/orgs-rollup.ts` · `GET /v1/orgs/:gymId/overview` on
       `attendance.read`. PROVE and the 11-mutant sweep at that entry.
-      **THIS LINE STILL DOES NOT TICK: the web half is unbuilt, no smoke has run
-      and T3 is UNRUN.** Also owed with it: the one-off backfill
+      **⚙️ THE WEB HALF IS BUILT TOO — DECISIONS `:30399`.** Three tiles, the
+      8-week chart and the four empty states on the console's Overview
+      (`OverviewNumbers.jsx`, `overviewView.js` pure beside it). **THIS LINE
+      STILL DOES NOT TICK: no smoke has run and T3 is UNRUN.**
+      ~~Also owed with it: the one-off backfill
       (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
-      browser reads — until it runs, that gym's chart is eight empty weeks.
+      browser reads — until it runs, that gym's chart is eight empty weeks.~~
+      **— THE CONSEQUENCE IS FALSE AND WAS FALSE THE DAY IT WAS WRITTEN. The
+      backfill writes `org_daily_stats`; the chart reads `gym_attendance` LIVE
+      (:30094 §2.1's own correction), so an unrun backfill changes NOTHING a
+      person can see.** Re-measured 2026-09-03 while building the web half: one
+      `INSERT INTO org_daily_stats` in the whole repo and no `SELECT` at all,
+      outside schema files, comments and the privacy list. **The sentence is a
+      survivor of the plan the same commit corrected** — §4a.4 said the chart
+      summed the nightly table, writing the query proved it could not, and this
+      instruction was left pointing at the old design in four documents. **The
+      backfill is STILL OWED and is still worth running** — it is the durable
+      record Reports will read — **but it is NOT a smoke prerequisite and must
+      not hold one up.** :7298's class: a sentence that outlived the condition
+      that raised it.
       **AND ONE THING NOBODY MAY READ INTO IT: `org_daily_stats` now has a WRITER
       AND STILL NO READER.** The Overview's figures are read LIVE from
       `gym_attendance`, because a distinct count cannot be summed across days and

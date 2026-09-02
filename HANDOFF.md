@@ -1,8 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW-NUMBERS CARD, §4b — THE WEB HALF. DECISIONS :30399.
+      Three tiles, the 8-week chart and the empty states on the console's
+      Overview. WEB-ONLY: no migration, no `apps/api` file, no
+      `packages/shared` change. **THE `OWED.md` LINE DOES NOT TICK: no smoke
+      has run and T3 is UNRUN.**
+
+  1. **THE INSTRUCTION THIS CARD WAS HANDED WAS FALSE, IN FOUR DOCUMENTS.**
+     *"Run the backfill or his chart is eight empty weeks"* — HANDOFF twice,
+     `OWED.md`, `DECISIONS.md:30208`, the card. **The backfill writes
+     `org_daily_stats`; the chart reads `gym_attendance` LIVE**, which is
+     :30094 §2.1's own decision forty lines above :30094 §4's instruction.
+     Measured: one `INSERT`, no `SELECT` anywhere. **Struck in all five
+     places; still owed, gates nothing.** DO NOT run it before a smoke.
+  2. **`recharts` REJECTED ON EVIDENCE** — already a dependency, and all three
+     screens using it are UNTESTED because `ResponsiveContainer` measures a
+     parent jsdom gives zero width. Hand-drawn SVG off a pure `chartGeometry`;
+     each bar's `<title>` is the hover text, the screen-reader text AND what
+     the render test asserts. One scale for both series (**C161**).
+  3. **THE CARD'S OWN EMPTY-STATE WORDING COULD NOT SHIP.** It asked for
+     *"nobody has ever come"* off a payload covering EIGHT WEEKS — :8343's
+     class. Ships as *"in the last 8 weeks"* (**C157**). The honest fix for
+     "ever" is a server fact, i.e. a different card.
+  4. **C155 WAS ALIVE ON THE FIRST SWEEP AND IT WAS MY OWN TEST.** Its fixture
+     served `adoptionPct: 43` beside 12 of 28 — which IS 12/28 — so a
+     client-side division agreed with it (:20712). The render test written the
+     same hour used **77** and was RED throughout. **Third round running in
+     which a test written to hold a guarantee passed under its removal**
+     (:29117 §2, :29250 §5).
+  5. **A duplicate-id guard ported into `mutate-console.mjs`** (:30094 §3a) —
+     that table is not in id order either (152 rows, top id C154). **Proven by
+     causing it**, exit 2, restore sha256-identical.
+
+PROVE: `web` **1659/1659 across 58 files, exit 0** (1612/56 before) ·
+       `overviewView` 37/37 · `console.render` 99/99 · eslint
+       `--max-warnings=0` exit 0 on twelve files · `vite build` exit 0 ·
+       `node --check` on the harness · three root guards green with REAL exit
+       codes (:13247): 25 scripts · 274 pointers / 1146 headings · triggers up
+       to date. **SWEEP a stated SUBSET of 186: `MUTATE_ONLY=C155…C166` —
+       12 RED, 0 ALIVE, 0 never ran**, twelve controls GREEN, restores
+       sha256-verified.
+
+FILES: `pages/console/{overviewView.js,overviewView.test.js,Overview.jsx,
+       hoursView.js,console.render.test.jsx}` ·
+       `pages/console/__fixtures__/overview.js` ·
+       `components/console/OverviewNumbers.jsx` · `api/orgsApi.js` ·
+       four other console suites (two lines each: the mock + the quiet
+       default) · `apps/web/tools/mutate-console.mjs` ·
+       `RUNBOOK/smoke-overview-numbers.md` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       and deliberately not committed.
+       **NEXT: THE SMOKE** — `RUNBOOK/smoke-overview-numbers.md`, 11 steps,
+       written against Kd's REAL gym state (one visit on 2026-09-02, no paying
+       members) so every ✅ is a number he can check rather than a shape.
+       **THEN T3 round 1**, which is unrun.
+       **AFTER THAT: the PEOPLE LISTS** — the second half of the dashboard
+       (:29961 ruling 3) — who came today · when they come · on a roll ·
+       slipping away · the activation checklist, plus **Kd's one-tap cheer**
+       (ruling 4), which is STORED and read on `My Gyms` because nothing in
+       this product sends anything.
+```
+
+```
 TASK: THE OVERVIEW-NUMBERS CARD, §4a — T3 ROUND 1 AND ITS FIX ROUND.
-      DECISIONS :30236. **ZERO Critical/High: the packet SHIPS** (:5348 rule 1).
+      DECISIONS :30243. **ZERO Critical/High: the packet SHIPS** (:5348 rule 1).
       Nine Low from the review, a TENTH found while fixing them, **all ten
       FIXED in this round.** **NO ROUND 2 IS OWED** — a Low buys no round, and
       Kd was told that rather than asked (:28649's correction, one card on).
@@ -75,10 +138,13 @@ OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd'
        `pages/console/Overview.jsx`, `overviewView.js` pure beside it. §4b now
        names FIVE things, not four: the four empty states **plus the uneven week
        comparison**, which is :5807 if the screen draws a bare arrow.
-       **AND THE STEP THAT IS NOT OPTIONAL: run the backfill**
+       ~~**AND THE STEP THAT IS NOT OPTIONAL: run the backfill**
        (`tools/orgs-rollup.ts --all-hours --days=70` — the CORRECTED flag)
        against the branch Kd's browser reads before asking him to smoke
-       anything, or his chart is eight empty weeks.
+       anything, or his chart is eight empty weeks.~~ **— STRUCK 2026-09-03 by
+       the §4b chat (:30399 §3): the chart reads `gym_attendance` LIVE, so the
+       backfill gates NOTHING a person can see. Still owed, no longer a
+       prerequisite.**
 ```
 
 ```
@@ -143,10 +209,12 @@ OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd'
        card's §4b names the four empty states, and they are the thing to get
        right: *"we have no data"* and *"the answer is zero"* are different
        sentences (:8267, :8343, :26736).
-       **AND A STEP THAT IS NOT OPTIONAL: run the backfill**
+       ~~**AND A STEP THAT IS NOT OPTIONAL: run the backfill**
        (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
        browser reads before asking him to smoke anything, or his chart is eight
-       empty weeks — :15927's recurrence, three times over.
+       empty weeks — :15927's recurrence, three times over.~~ **— STRUCK
+       2026-09-03 (:30399 §3): the chart reads `gym_attendance` LIVE. Still
+       owed; gates nothing.**
 ```
 
 
