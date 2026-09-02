@@ -446,6 +446,26 @@ describe('the chart, in pixels', () => {
     expect(g.bars[2].height).toBe(0);
   });
 
+  // A WEEK SOMEBODY CAME MUST NOT DRAW AS A WEEK NOBODY CAME. Kd, 2026-09-03:
+  // *"just asked to be correct accurate and beautiful"*. Against a busy week of
+  // 40 a single visit rounds to 3px and reads as the flat track behind it — the
+  // number right, the picture saying its opposite.
+  it('draws a week with one visit as visibly more than nothing', () => {
+    const g = chartGeometry([week('2026-08-24', 40, 20), week('2026-08-31', 1, 1)]);
+    const quiet = g.bars[1];
+    expect(Math.round((1 / 40) * CHART_HEIGHT)).toBeLessThan(6);
+    expect(quiet.height).toBeGreaterThanOrEqual(6);
+    expect(quiet.y).toBeLessThan(CHART_HEIGHT);
+  });
+
+  // AND ZERO STAYS EXACTLY ZERO, which is the half that makes the floor honest:
+  // "nobody came" and "one person came" are the two things it must keep apart.
+  it('never lifts an empty week off the floor', () => {
+    const g = chartGeometry([week('2026-08-24', 40, 20), week('2026-08-31', 0, 0)]);
+    expect(g.bars[1].height).toBe(0);
+    expect(g.bars[1].y).toBe(CHART_HEIGHT);
+  });
+
   // ONE SCALE FOR BOTH SERIES, and this is the assertion that holds it there.
   // `visitors` is a DISTINCT count over the rows `visits` counts, so it can
   // never exceed them; on two scales the line could ride ABOVE the bars and show

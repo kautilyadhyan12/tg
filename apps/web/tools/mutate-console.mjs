@@ -2475,10 +2475,10 @@ const MUTANTS = [
     id: 'C178',
     target: 'overviewnumbers',
     suite: RENDER_SUITE,
-    why: "THE ONE-BAR CHART COMES BACK. Kd, looking at a gym with a single week of history: are the graph even correct or just some random fat ass box that makes any shapes. It WAS correct - seven empty weeks and three visits, checked against the database - and a picture of one week is not a trend. Part 3 section 4.1 asks for the first week collecting STATE here, so drawing the chart as well answers its own question twice",
+    why: "THE CHART DISAPPEARS FOR A GYM IN ITS FIRST WEEK — WHICH IS THE MISTAKE THIS MUTANT EXISTS TO RE-INTRODUCE, AND IT WAS MINE. Kd asked whether the chart was CORRECT and I answered by deleting it in exactly this state; he corrected it: did not asked the chart to be removed but just asked to be correct accurate and beautiful. The no-removal rule is absolute. The flat columns are TRUE and this week bar is real, so the collecting sentence explains them rather than replacing them",
     expect: "says it is still collecting",
-    from: "      {geometry === null || collecting ? null : (",
-    to: "      {geometry === null ? null : (",
+    from: "      {geometry === null ? null : (",
+    to: "      {geometry === null || collecting ? null : (",
   },
 ];
 

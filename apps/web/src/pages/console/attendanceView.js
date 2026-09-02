@@ -22,6 +22,17 @@
 // the DAY, exactly when somebody came twice, which is what Kd's ruling 12 made
 // possible on purpose.
 //
+// **THREE HELPERS WERE DELETED HERE ON 2026-09-03** — `slotLabel`,
+// `sortedSummary` and `exceptionVisits` — when Kd removed the two sections they
+// served: *"remove these things not needed and doing nothing: The day, 2 visits
+// outside opening hours or on a closed day"*. Dead surface WITH test coverage
+// reads as protection and is not (:8156's round-6 F10), so they went with their
+// tests rather than being left for somebody to find and trust.
+//
+// `isExceptionStatus` and `EXCEPTION_STATUSES` STAY: a chip on a person's row
+// still marks an odd arrival, which is a fact about that visit rather than the
+// control he removed.
+//
 // EVERY TIME IS THE GYM'S, ON THE GYM'S CLOCK, and this file does not spell one
 // itself — `visitTimeLabel` comes from the member's half and `clockLabel` from
 // the hours screens, so the three surfaces that print a gym's minutes cannot
@@ -29,7 +40,6 @@
 // deliberate and is the direction that already exists (the member's file imports
 // `clockLabel` from here): ONE implementation beats tidy layering, and two
 // spellings of one minute is the defect the card names.
-import { clockLabel } from './hoursView';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
 
 /** WHO SEES THE ATTENDANCE SECTION — Kd's ruling 18 (:28107): *"also stafs can
@@ -70,74 +80,6 @@ export function isExceptionStatus(status) {
   return EXCEPTION_STATUSES.includes(status);
 }
 
-/** WHAT ONE LINE OF THE DAY'S SHAPE IS CALLED.
- *
- *  A session prints its window on the gym's clock — `06:00 – 07:00` — and the
- *  four non-session states print a sentence instead. **The words never scold**
- *  (:26624 §4.4, :26684): a visit outside hours was RECORDED and marked, never
- *  refused, and the owner is reading a fact about their gym rather than a
- *  complaint about a member.
- *
- *  A session whose window cannot be read falls back to the plain words rather
- *  than printing an empty dash pair — the same choice `markedSentence` makes on
- *  the member's side. */
-export function slotLabel(row, clockFormat) {
-  if (row?.hoursStatus === 'in_session') {
-    const opens = clockLabel(row?.session?.opensMinute, clockFormat);
-    const closes = clockLabel(row?.session?.closesMinute, clockFormat);
-    if (opens !== '' && closes !== '') return `${opens} – ${closes}`;
-    return 'In a session';
-  }
-  if (row?.hoursStatus === 'open_24h') return 'Open 24 hours';
-  if (row?.hoursStatus === 'outside_hours') return 'Outside opening hours';
-  if (row?.hoursStatus === 'closed_day') return 'On a day the gym was closed';
-  if (row?.hoursStatus === 'hours_unset') return 'Before opening times were set';
-  // A state a NEWER server knows and this bundle does not. It is drawn as a
-  // line with its count rather than dropped, because dropping it would make the
-  // lines on screen add up to less than the day's own total with nothing saying
-  // why — a client must never invent a meaning, and must not hide a real one.
-  return 'Other';
-}
-
-/** THE ORDER THE DAY IS READ IN: sessions first, earliest to latest, then the
- *  non-session states in a fixed order.
- *
- *  **Sorted here rather than trusted from the wire**, and that is not a
- *  contradiction of "never re-sort the server's list" on the member's side: THAT
- *  list is ordered by an instant the server computed, and this one is a GROUPING
- *  whose natural reading order is the gym's own timetable. The server groups; the
- *  screen reads top to bottom.
- *
- *  **A COPY IS SORTED, NEVER THE ARGUMENT** — an in-place `sort` would reorder
- *  the caller's own state and, on a list held in React state, mutate it without
- *  a re-render.
- *
- *  Ties break on the closing minute and then on the label, so two sessions that
- *  open at the same minute have a stable order rather than one that depends on
- *  the sort's implementation. */
-const STATUS_ORDER = ['in_session', 'open_24h', 'hours_unset', 'outside_hours', 'closed_day'];
-
-export function sortedSummary(summary, clockFormat) {
-  const rows = Array.isArray(summary) ? summary.filter((r) => r !== null && typeof r === 'object') : [];
-  const rank = (row) => {
-    const at = STATUS_ORDER.indexOf(row?.hoursStatus);
-    // An unknown state sorts LAST rather than first: `indexOf` answers -1, and
-    // -1 would put a state this bundle cannot name above the gym's own sessions.
-    return at === -1 ? STATUS_ORDER.length : at;
-  };
-  return [...rows].sort((a, b) => {
-    const byStatus = rank(a) - rank(b);
-    if (byStatus !== 0) return byStatus;
-    const aOpens = a?.session?.opensMinute ?? -1;
-    const bOpens = b?.session?.opensMinute ?? -1;
-    if (aOpens !== bOpens) return aOpens - bOpens;
-    const aCloses = a?.session?.closesMinute ?? -1;
-    const bCloses = b?.session?.closesMinute ?? -1;
-    if (aCloses !== bCloses) return aCloses - bCloses;
-    return slotLabel(a, clockFormat).localeCompare(slotLabel(b, clockFormat));
-  });
-}
-
 /** `34 people` / `1 person`. The singular matters more than it looks: a gym's
  *  quiet session reads `1 people` otherwise, on the screen an owner opens every
  *  morning. */
@@ -168,28 +110,6 @@ export function dayTotalsLine(totals) {
     return `${people} · ${visitsLabel(totals.visits)}`;
   }
   return people;
-}
-
-/** HOW MANY VISITS WERE UNUSUAL — the number on the control that filters to
- *  them.
- *
- *  **THIS IS THE ONE PLACE THIS FILE ADDS ANYTHING UP, AND IT IS SUMMING THE
- *  SERVER'S OWN WHOLE-DAY COUNTS — never rows on a page.** `summary` covers the
- *  entire day whatever page the people list is showing, so this number does not
- *  move when an owner presses Show more. That is the distinction ruling 14 turns
- *  on: summing `summary` is reading the server's answer; summing `people` would
- *  be counting the page.
- *
- *  It counts VISITS rather than distinct people on purpose: two people cannot be
- *  added across slots without double-counting anybody who was odd twice, and the
- *  server only promises a distinct count for the whole day, not per subset. The
- *  label beside it says "visits" for exactly this reason. */
-export function exceptionVisits(summary) {
-  const rows = Array.isArray(summary) ? summary : [];
-  return rows.reduce((total, row) => {
-    if (!isExceptionStatus(row?.hoursStatus)) return total;
-    return total + (Number.isInteger(row?.visits) ? row.visits : 0);
-  }, 0);
 }
 
 /** ONE PERSON'S TIMES, in the order the server sent them, as the chips that

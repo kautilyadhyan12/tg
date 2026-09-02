@@ -12,14 +12,11 @@ import {
   canReadAttendance,
   dayTotalsLine,
   emptyDayReason,
-  exceptionVisits,
   isExceptionStatus,
   matchesName,
   peopleLabel,
   personTimes,
   searchCoversEverybody,
-  slotLabel,
-  sortedSummary,
   visitsLabel,
   repeatVisitLabel,
 } from './attendanceView';
@@ -43,75 +40,6 @@ describe('who may see the section', () => {
     expect(canReadAttendance([])).toBe(false);
     expect(canReadAttendance(null)).toBe(false);
     expect(canReadAttendance(undefined)).toBe(false);
-  });
-});
-
-describe('what a line of the day is called', () => {
-  it('prints a session as its window, on the gym’s chosen clock', () => {
-    const row = slot('in_session', { session: session(360, 420) });
-    expect(slotLabel(row, '24h')).toBe('06:00 – 07:00');
-    expect(slotLabel(row, '12h')).toBe('6:00 AM – 7:00 AM');
-  });
-
-  it('falls back to words when a session’s window cannot be read', () => {
-    // Rather than printing an empty pair of dashes — the same choice the
-    // member's `markedSentence` makes.
-    expect(slotLabel(slot('in_session', { session: null }), '24h')).toBe('In a session');
-  });
-
-  it('gives each non-session state its own sentence, and none of them scold', () => {
-    expect(slotLabel(slot('open_24h'), '24h')).toBe('Open 24 hours');
-    expect(slotLabel(slot('outside_hours'), '24h')).toBe('Outside opening hours');
-    expect(slotLabel(slot('closed_day'), '24h')).toBe('On a day the gym was closed');
-    // :26736 — "nobody has set hours" is NOT "closed", and this label must not
-    // claim the gym was shut or that the member arrived oddly.
-    expect(slotLabel(slot('hours_unset'), '24h')).toBe('Before opening times were set');
-    expect(slotLabel(slot('hours_unset'), '24h')).not.toMatch(/clos|outside/i);
-  });
-
-  it('draws a state a newer server knows rather than dropping it', () => {
-    // Dropping it would make the lines on screen add up to less than the day's
-    // own total with nothing saying why.
-    expect(slotLabel(slot('something_new'), '24h')).toBe('Other');
-  });
-});
-
-describe('the order the day is read in', () => {
-  it('puts sessions first, earliest to latest, then the other states', () => {
-    const rows = [
-      slot('closed_day'),
-      slot('in_session', { session: session(1020, 1080) }),
-      slot('outside_hours'),
-      slot('in_session', { session: session(360, 420) }),
-      slot('open_24h'),
-    ];
-    expect(sortedSummary(rows, '24h').map((r) => slotLabel(r, '24h'))).toEqual([
-      '06:00 – 07:00',
-      '17:00 – 18:00',
-      'Open 24 hours',
-      'Outside opening hours',
-      'On a day the gym was closed',
-    ]);
-  });
-
-  it('sorts an unknown state LAST, never above the gym’s own sessions', () => {
-    // `indexOf` answers -1 for a state this bundle cannot name, and -1 would
-    // rank it above everything.
-    const rows = [slot('brand_new'), slot('in_session', { session: session(360, 420) })];
-    expect(sortedSummary(rows, '24h').map((r) => r.hoursStatus)).toEqual(['in_session', 'brand_new']);
-  });
-
-  it('does not reorder the array it was given', () => {
-    // An in-place sort would mutate a caller's React state without a re-render.
-    const rows = [slot('closed_day'), slot('in_session', { session: session(360, 420) })];
-    const before = [...rows];
-    sortedSummary(rows, '24h');
-    expect(rows).toEqual(before);
-  });
-
-  it('survives junk in the list rather than throwing', () => {
-    expect(sortedSummary([null, undefined, slot('open_24h')], '24h')).toHaveLength(1);
-    expect(sortedSummary(null, '24h')).toEqual([]);
   });
 });
 
@@ -147,44 +75,6 @@ describe('the counts, which are the server’s', () => {
     ];
     expect(summary.reduce((t, r) => t + r.people, 0)).toBe(37);
     expect(dayTotalsLine(totals)).not.toContain('37 people');
-  });
-});
-
-describe('the exceptions', () => {
-  it('counts outside-hours and closed-day visits, and nothing else', () => {
-    const summary = [
-      slot('in_session', { session: session(360, 420), visits: 30, people: 30 }),
-      slot('outside_hours', { visits: 4, people: 4 }),
-      slot('closed_day', { visits: 2, people: 2 }),
-      slot('open_24h', { visits: 9, people: 9 }),
-      slot('hours_unset', { visits: 7, people: 7 }),
-    ];
-    expect(exceptionVisits(summary)).toBe(6);
-  });
-
-  // :26736, AND IT IS THE ONE THAT WOULD BE A FALSE SENTENCE ABOUT EVERY VISIT
-  // AT EVERY GYM WITH NO TIMETABLE. A gym that has never said when it is open
-  // has not been arrived at oddly; it has not answered.
-  it('never counts hours_unset, open_24h or in_session as unusual', () => {
-    expect(isExceptionStatus('hours_unset')).toBe(false);
-    expect(isExceptionStatus('open_24h')).toBe(false);
-    expect(isExceptionStatus('in_session')).toBe(false);
-    expect(isExceptionStatus('outside_hours')).toBe(true);
-    expect(isExceptionStatus('closed_day')).toBe(true);
-    expect(EXCEPTION_STATUSES).not.toContain('hours_unset');
-    expect(exceptionVisits([slot('hours_unset', { visits: 12, people: 12 })])).toBe(0);
-  });
-
-  it('sums the SERVER’s whole-day rows, so paging cannot move it', () => {
-    // The number must not change when an owner presses Show more — which is
-    // guaranteed by summing `summary` (the whole day) rather than `people` (the
-    // page). Handed a summary alone, with no page at all, it still answers.
-    expect(exceptionVisits([slot('outside_hours', { visits: 400, people: 380 })])).toBe(400);
-  });
-
-  it('survives a missing or malformed summary', () => {
-    expect(exceptionVisits(null)).toBe(0);
-    expect(exceptionVisits([{ hoursStatus: 'outside_hours' }])).toBe(0);
   });
 });
 
@@ -340,5 +230,29 @@ describe('somebody who came more than once', () => {
     expect(repeatVisitLabel({ visits: [] })).toBe('');
     expect(repeatVisitLabel({})).toBe('');
     expect(repeatVisitLabel(null)).toBe('');
+  });
+});
+
+describe('which arrivals are unusual', () => {
+  // **THIS TEST CAME BACK, AND WHY IT LEFT IS THE POINT.** Kd removed the
+  // exceptions FILTER on 2026-09-03, and deleting its describe block took this
+  // with it — but `isExceptionStatus` is still live code: it marks a chip on a
+  // person's row, which is a fact about a visit rather than the control he
+  // removed. **Only `eslint` noticed**, as an unused import, which is a thin
+  // thread to hang live behaviour on.
+  it('names the two states an owner is actually looking for', () => {
+    expect(isExceptionStatus('outside_hours')).toBe(true);
+    expect(isExceptionStatus('closed_day')).toBe(true);
+    expect(EXCEPTION_STATUSES).toEqual(['outside_hours', 'closed_day']);
+  });
+
+  // `hours_unset` IS NOT AN EXCEPTION (:26736): a gym that never said when it
+  // opens has not been arrived at oddly, and a chip reading "outside hours" on
+  // every visit to such a gym is false about all of them.
+  it('never counts a gym with no timetable, or an ordinary arrival', () => {
+    expect(isExceptionStatus('hours_unset')).toBe(false);
+    expect(isExceptionStatus('in_session')).toBe(false);
+    expect(isExceptionStatus('open_24h')).toBe(false);
+    expect(isExceptionStatus(undefined)).toBe(false);
   });
 });

@@ -306,8 +306,12 @@ export function chartState(weeks) {
  *  pass — which also means it renders identically in a test, where nothing has a
  *  width at all. */
 export const CHART_COLUMN = 40;
-export const CHART_HEIGHT = 120;
+export const CHART_HEIGHT = 140;
 const BAR_GAP = 7;
+/** The floor under a non-zero bar — see `chartGeometry`. Six pixels is the
+ *  smallest mark that still reads as a bar rather than as the track's own edge
+ *  at this height. */
+const MIN_VISIBLE_BAR = 6;
 
 /** BARS FOR VISITS, A LINE FOR HOW MANY DIFFERENT PEOPLE — Part 3 §4.1's chart,
  *  with §4.1's "workouts" reading "visits" per Kd's ruling.
@@ -334,7 +338,21 @@ export function chartGeometry(weeks) {
   const bars = rows.map((row, index) => {
     const visits = count(row?.visits);
     const visitors = count(row?.visitors);
-    const height = Math.round((visits / max) * CHART_HEIGHT);
+    /** A WEEK SOMEBODY CAME MUST NOT DRAW AS A WEEK NOBODY CAME.
+     *
+     *  **This is the accuracy fix Kd asked for** (*"just asked to be correct
+     *  accurate and beautiful"*). On a busy gym's scale — one week of 40 against
+     *  a week of 1 — the quiet week rounds to **3 pixels** and reads as the flat
+     *  track behind it. The number is right and the picture says something
+     *  false, which is this card's own recurring defect (:30624, :30733) in its
+     *  third form: not a wrong figure, not two figures side by side, but a
+     *  figure DRAWN as its opposite.
+     *
+     *  **ZERO STAYS EXACTLY ZERO.** The floor lifts non-zero weeks to something
+     *  visible; it never lifts an empty one, because "nobody came" and "one
+     *  person came" are the two things this must keep apart. */
+    const scaled = Math.round((visits / max) * CHART_HEIGHT);
+    const height = visits > 0 ? Math.max(scaled, MIN_VISIBLE_BAR) : 0;
     return {
       key: typeof row?.weekStart === 'string' ? row.weekStart : String(index),
       label: weekAxisLabel(row?.weekStart),

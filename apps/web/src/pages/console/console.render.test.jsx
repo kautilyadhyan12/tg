@@ -1799,17 +1799,15 @@ describe("the gym's numbers", () => {
     );
     drawOverview();
 
-    expect(await screen.findByText(/first week of attendance/)).toBeTruthy();
+    expect(await screen.findByText(/Your first week/)).toBeTruthy();
     // And no arrow over a week there is nothing to compare against.
     expect(screen.getByText('Nothing was recorded last week.')).toBeTruthy();
-    // AND NO CHART. Kd, looking at exactly this state: *"are the graph even
-    // correct or just some random fat ass box that makes any shapes"* — it WAS
-    // correct (seven empty weeks and three visits, checked against the
-    // database), and a picture of ONE week is not a trend. §4.1 asks for the
-    // collecting STATE here, so drawing both answers its own question twice.
-    // C178 was ALIVE against the first version of this case, which asserted the
-    // sentence appeared and never that the chart had gone.
-    expect(screen.queryByRole('img', { name: /Visits a week/ })).toBeNull();
+    // **AND THE CHART IS STILL DRAWN.** A previous version of this card REMOVED
+    // it in this state and Kd corrected that: *"did not asked the chart to be
+    // removed but just asked to be correct accurate and beautiful"*. The flat
+    // columns are true and this week's bar is real; the sentence explains them
+    // rather than replacing them.
+    expect(screen.getByRole('img', { name: /Visits a week/ })).toBeTruthy();
   });
 
   it('tells a gym with members and no visits that nobody has come — not that they had none', async () => {

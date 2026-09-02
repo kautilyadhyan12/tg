@@ -162,16 +162,20 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
         </div>
       )}
 
-      {collecting ? (
-        /* §4.1's *"empty (< 1 wk data): friendly 'first week collecting'"*, and
-           it is now the WHOLE of this zone rather than a caption under a
-           one-bar chart. A picture of a single week is not a trend; the honest
-           thing is to say so and draw nothing. */
-        <p className="text-xs mt-5 pt-4" style={{ color: MUTED, borderTop: `1px solid ${HAIRLINE}` }}>
-          Your first week of attendance — the eight-week chart appears once there is a week to compare against.
-        </p>
-      ) : null}
-      {geometry === null || collecting ? null : (
+      {/* **THE CHART IS ALWAYS DRAWN, AND REMOVING IT WAS MY OWN OVERREACH.**
+          Kd asked whether it was CORRECT — *"are the graph even correct or just
+          some random fat ass box that makes any shapes"* — and I answered by
+          DELETING it, which he then had to correct: *"did not asked the chart to
+          be removed but just asked to be correct accurate and beautiful"*.
+          **The no-removal rule is absolute and I broke it on the strength of a
+          question**, which is :19560's failure — reading a remark as an
+          instruction — pointed the other way.
+
+          **IT WAS CORRECT ALL ALONG**: its eight buckets were checked against
+          his own database, seven zeros then 3 visits / 2 people. What was wrong
+          was that a mostly-empty chart LOOKED broken, and a drawing problem gets
+          a drawing answer — see the minimum bar height in `chartGeometry`. */}
+      {geometry === null ? null : (
         <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
           <div className="flex items-end justify-between gap-4 flex-wrap mb-3">
             <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
@@ -320,6 +324,15 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
             </div>
           </div>
 
+          {collecting ? (
+            /* §4.1's *"empty (< 1 wk data): friendly 'first week collecting'"*.
+               It sits UNDER the chart and explains the flat columns rather than
+               replacing them: those columns are TRUE, and a gym in its first
+               week should still see its own week on the board. */
+            <p className="text-xs mt-3" style={{ color: MUTED }}>
+              Your first week — the earlier columns fill in as the weeks pass.
+            </p>
+          ) : null}
         </div>
       )}
     </ConsoleCard>

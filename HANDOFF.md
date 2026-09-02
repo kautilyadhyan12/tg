@@ -1,6 +1,57 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CHART COMES BACK, THE ATTENDANCE SCREEN LOSES TWO SECTIONS, AND THE
+      DROPDOWN MOVES TO "Who came". DECISIONS :31008 (addendum to :30867).
+      **No smoke has run, T3 UNRUN, the `OWED.md` line does NOT tick.**
+
+  1. **I REMOVED THE CHART IN ANSWER TO A QUESTION AND KD QUOTED THE RULE AT
+     ME.** He asked whether it was CORRECT; I measured it (it was), then deleted
+     it on my own design opinion. `CLAUDE.md` opens with the no-removal rule and
+     it is absolute — a question is not a ruling and there was no cited option.
+     **:19560 reversed: there a chat took his musing FOR a ruling; here I took
+     my own opinion for one.** Chart restored. **C178 re-aimed at the deletion
+     itself** — it now goes RED if anybody hides the chart in a gym's first week.
+  2. **"ACCURATE" WAS A REAL DEFECT: a week somebody came drew as a week nobody
+     came.** One visit against a busy 40 = 3px, indistinguishable from the flat
+     track. `MIN_VISIBLE_BAR` 6px; **zero stays exactly zero**, both directions
+     tested. Third form of this card's recurring defect — a right number DRAWN
+     as its opposite (:30399 wrong number, :30624 two right numbers adjacent).
+  3. **HE REMOVED "The day" AND THE EXCEPTIONS CONTROL OUTRIGHT.** Last round I
+     COLLAPSED "The day" on my own judgement that a five-session gym needs it;
+     he said remove, twice. Dropdown moved onto **"Who came"** (`forceOpen`, so
+     it arrives open and still folds).
+  4. **THREE HELPERS DIED WITH THEIR CALLERS** — `slotLabel`, `sortedSummary`,
+     `exceptionVisits` — with their tests (:8156 round-6 F10).
+  5. **THE SLIP WORTH KEEPING: deleting every `describe` that mentioned a dead
+     helper also deleted the tests for `isExceptionStatus`, WHICH IS LIVE.**
+     Nothing went red; the suite passed with a guarantee newly unguarded, and
+     the ONLY signal was `eslint` reporting an unused import in the test file.
+     **A test deleted alongside its neighbours leaves no red anywhere.**
+     Restored, with that reason written above it.
+
+PROVE: `web` **1666/1666 / 58 files, exit 0** (1685 before — 19 fewer, all tests
+       of surface Kd removed; +4 new) · eslint clean on eight web files ·
+       `vite build` exit 0 · three root guards green.
+       **SWEEP `MUTATE_ONLY=C155…C178` — 21 RED, 0 ALIVE.** C178 ABORTED first,
+       its anchor gone with the gate I added and removed; **re-aimed, not
+       allow-listed** (:15770). **No `apps/api` change in this round.**
+
+FILES: `apps/web/src/pages/console/{Attendance.jsx,attendanceView.js,
+       attendanceView.test.js,consoleAttendance.render.test.jsx,
+       console.render.test.jsx,overviewView.js,overviewView.test.js}` ·
+       `apps/web/src/components/console/OverviewNumbers.jsx` ·
+       `apps/web/tools/mutate-console.mjs` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **EMAIL BESIDE A NAME is still unanswered** (`DECISIONS-INDEX.md` §2).
+       **THE SMOKE SHEET IS STALE AND HAS BEEN FOR THREE COMMITS** — it names
+       tile wording, an odd-arrival line, a chart state and a "The day" section
+       that no longer ship, and Kd's own gym now REFUSES the mark its step 8
+       asks for. **Rewrite it before asking him to run anything. Then T3.**
+```
+
+```
 TASK: KD RULES THE DOOR SHUT OUTSIDE OPENING HOURS, AND SIX DESIGN CHANGES ON
       THE TWO SCREENS. DECISIONS :30867. **THE SMOKE SHEET IS STALE, no smoke
       has run on this version, T3 is UNRUN, the `OWED.md` line does NOT tick.**

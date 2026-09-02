@@ -6,19 +6,13 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { ConsoleCard, ConsoleSection, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { addDays, closureDateLabel, gymToday } from './hoursView';
 import {
-  EXCEPTION_STATUSES,
   dayTotalsLine,
   emptyDayReason,
-  exceptionVisits,
   isExceptionStatus,
   matchesName,
-  peopleLabel,
   personTimes,
   repeatVisitLabel,
   searchCoversEverybody,
-  slotLabel,
-  sortedSummary,
-  visitsLabel,
 } from './attendanceView';
 
 // WHO CAME IN — the console's Attendance section.
@@ -307,15 +301,18 @@ function AttendanceDay({ org }) {
   // one zone looking at a gym in another must open the gym's own day; `gymToday`
   // is the same reader the hours screens use.
   const [day, setDay] = useState(() => gymToday(timezone));
-  // The exceptions filter, as the server's own parameter rather than a client
-  // predicate: filtering rows already downloaded would narrow the PAGE and leave
-  // the counts describing the day, which is two different questions on screen at
-  // once.
-  const [onlyExceptions, setOnlyExceptions] = useState(false);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
 
-  const statusesParam = onlyExceptions ? EXCEPTION_STATUSES.join(',') : undefined;
+  /** THE EXCEPTIONS FILTER WAS REMOVED BY KD ON 2026-09-03 and the parameter is
+   *  kept as an explicit `undefined` rather than deleted from the read.
+   *
+   *  **The route still accepts `statuses` and still filters** — that is server
+   *  behaviour this card did not touch, and the day it gets a second reader
+   *  (Reports, or the phone) it must not have quietly rotted. What is gone is
+   *  the CONTROL, which is what he pointed at: with the door now shut outside
+   *  opening hours, the rows it filtered to can only be history. */
+  const statusesParam = undefined;
   /** Bumped by Try again. It is part of the key below rather than a dependency
    *  of its own so that ONE mechanism does both jobs: a retry is a new question
    *  as far as this screen is concerned, so the held error stops being fresh,
@@ -457,8 +454,6 @@ function AttendanceDay({ org }) {
   const answer = fresh ? state.day : null;
   const clockFormat = answer?.clockFormat ?? org.clockFormat ?? '24h';
   const zone = answer?.timezone ?? timezone;
-  const summary = sortedSummary(answer?.summary, clockFormat);
-  const oddVisits = exceptionVisits(answer?.summary);
   const shown = people.filter((p) => matchesName(p, search));
   const everybodyLoaded = searchCoversEverybody(nextCursor);
 
@@ -606,96 +601,21 @@ function AttendanceDay({ org }) {
               EVERY NUMBER HERE IS THE SERVER'S, counted over the whole day in
               SQL — never over the page below, which is the specific breakage
               the ruling names. */}
-          {/* KD, 2026-09-03: *"The day in attandance what is even the need of
-              that already there is Who came, also these things will become big
-              with memebrs so need drop down"*. **He is right about the second
-              half and the first half is why it is COLLAPSED rather than
-              deleted:** a gym with one session repeats what "Who came" already
-              says, and a gym with five sessions is the only place the shape of
-              a 400-tap day is legible at all — which is ruling 14's own first
-              requirement. `ConsoleSection` keeps the day's TOTAL on the closed
-              heading, so the number an owner glances at survives the fold
-              (`ConsoleStates.jsx` — *"the one number an owner glances at is
-              still there without opening anything"*). */}
-          <ConsoleSection title="The day" aside={dayTotalsLine(answer.totals)}>
-            {summary.length === 0 ? (
-              <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                Nothing to show for this day.
-              </p>
-            ) : (
-              <ul className="mt-2 flex flex-col gap-1">
-                {summary.map((row, i) => (
-                  <li
-                    // Keyed on the window and its position: a gym that rewrites
-                    // its timetable mid-day can produce two rows carrying the
-                    // same frozen window, and a duplicate sibling key drops a
-                    // fiber (:20867).
-                    key={`${row.hoursStatus}-${row.session?.opensMinute ?? 'x'}-${row.session?.closesMinute ?? 'x'}-${i}`}
-                    className="flex items-baseline justify-between gap-3"
-                  >
-                    <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                      {slotLabel(row, clockFormat)}
-                    </span>
-                    <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                      {peopleLabel(row.people)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </ConsoleSection>
+          {/* ── THE PEOPLE, ONE ROW EACH ─────────────────────────────────────
+              KD, 2026-09-03: *"remove these things not needed and doing nothing:
+              The day, 2 visits outside opening hours … Show only these, add the
+              drop down in Who came"*. **So this screen is now ONE section**, and
+              the dropdown he asked for is on it.
 
-          {/* ── THE EXCEPTIONS, NEXT, BECAUSE THEY ARE WHAT AN OWNER LOOKS FOR ─
-              A CONTROL, not a badge on a person: the visit is unusual, the
-              member is not in trouble, and :26624 §4.4 exists precisely so
-              nobody is refused for one. It narrows the list through the SERVER's
-              own parameter, so the rows and the count keep answering the same
-              question.
-
-              Drawn only when there ARE some — a permanent "0 unusual arrivals"
-              control is a thing to read past every morning. */}
-          {oddVisits > 0 || onlyExceptions ? (
-            <ConsoleCard>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                    {visitsLabel(oddVisits)} outside opening hours or on a closed day
-                  </p>
-                  {/* **THIS SENTENCE USED TO SAY *"Recorded as normal —
-                      nobody is turned away for it"* AND KD'S RULING OF
-                      2026-09-03 MADE IT FALSE.** Marking outside opening hours
-                      is now REFUSED, so these rows are history: visits recorded
-                      before the rule, or at a gym that had set no hours yet. A
-                      true sentence that outlives the condition that raised it is
-                      :7298's class, and this one would have kept promising
-                      something the product had stopped doing. */}
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    Recorded before your gym set these hours, or before arrivals
-                    outside them were turned away.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOnlyExceptions((on) => !on)}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold whitespace-nowrap"
-                  style={
-                    onlyExceptions
-                      ? { background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }
-                      : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }
-                  }
-                >
-                  {onlyExceptions ? 'Show everyone' : 'Show only these'}
-                </button>
-              </div>
-            </ConsoleCard>
-          ) : null}
-
-          {/* ── THE PEOPLE, ONE ROW EACH ─────────────────────────────────────── */}
-          <ConsoleCard>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                Who came
-              </p>
+              **IT IS `forceOpen`, WHICH MEANS OPEN AND STILL FOLDABLE.** A
+              section that opened SHUT would hide the only thing left on the
+              screen behind a tap — `ConsoleSection` latches `forceOpen` into
+              its own open state on first render, so this arrives open and an
+              owner can fold it away over a long list. That is the prop's second
+              use, not a repurposing: it exists so a section holding something
+              the owner needs to see cannot be missed. */}
+          <ConsoleSection title="Who came" aside={dayTotalsLine(answer.totals)} forceOpen>
+            <div className="flex items-center justify-end gap-3 flex-wrap">
               <label className="flex items-center gap-2 rounded-xl px-3 py-1.5"
                 style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <Search className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.45)' }} />
@@ -719,7 +639,12 @@ function AttendanceDay({ org }) {
                 reason={emptyDayReason({
                   manualAttendanceEnabled: org.manualAttendanceEnabled,
                   totals: answer.totals,
-                  filtered: onlyExceptions,
+                  // THE EXCEPTIONS FILTER IS GONE (Kd, 2026-09-03), so no list
+                  // on this screen can be emptied by one. The parameter stays in
+                  // `emptyDayReason` because the reason it exists — two of these
+                  // can be true at once and the ORDER decides which sentence an
+                  // owner reads — is the finding, not the filter.
+                  filtered: false,
                 })}
               />
             ) : (
@@ -783,7 +708,7 @@ function AttendanceDay({ org }) {
                 ) : null}
               </>
             )}
-          </ConsoleCard>
+          </ConsoleSection>
         </>
       ) : null}
     </div>
