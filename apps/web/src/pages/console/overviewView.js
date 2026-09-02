@@ -191,6 +191,34 @@ export function adoptionLine(month) {
   };
 }
 
+/** THE SENTENCE THAT STOPS TWO TRUE NUMBERS READING AS A CONTRADICTION.
+ *
+ *  **FOUND ON KD'S OWN SCREEN, 2026-09-03, and the shared contract had predicted
+ *  the exact sentence pair.** His console drew *"Today · 1 person"* directly
+ *  beside *"Last 30 days · 0% — 0 of 2 members came in the last 30 days"*. Both
+ *  figures are correct and they count DIFFERENT POPULATIONS: `today.visitors`
+ *  is every attendee, while `month.visitors` and its denominator are current
+ *  members the gym is charged for — so the person who came was the owner, on a
+ *  complimentary seat, and is deliberately not in the share.
+ *
+ *  **A reader cannot know that, and what they see is a screen disagreeing with
+ *  itself** — :5807's test is not "is it on screen", it is "is it on screen AND
+ *  wrong", and a pair of true numbers arranged into a false impression is the
+ *  same defect wearing two hats. `orgs.ts`'s own comment named it before the
+ *  screen existed: *"a screen that draws them side by side WITHOUT SAYING SO"*.
+ *
+ *  **It appears ONLY when the two actually disagree**, which is the difference
+ *  between an explanation and noise: somebody has come recently, the gym HAS
+ *  countable members, and none of them is who came. */
+export function crowdNote(tiles) {
+  const members = count(tiles?.month?.members);
+  if (members === 0) return null;
+  if (count(tiles?.month?.visitors) > 0) return null;
+  const cameRecently = count(tiles?.today?.visitors) > 0 || count(tiles?.week?.visitors) > 0;
+  if (!cameRecently) return null;
+  return 'Free seats — the owner’s, and anyone the gym isn’t charged for — are counted above but not in this share.';
+}
+
 /** IS THERE A TREND TO DRAW YET?
  *
  *  Part 3 §4.1's own chart state: *"empty (< 1 wk data): friendly 'first week

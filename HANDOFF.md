@@ -1,6 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE OVERVIEW-NUMBERS CARD — KD LOOKED AT THE SCREEN. DECISIONS :30624
+      (an addendum to :30399, same session). **THE `OWED.md` LINE STILL DOES
+      NOT TICK: the smoke has not been run on the redesigned screen and T3 is
+      UNRUN.**
+
+  1. **HE SAID IT LOOKED "TOO SIMPLE" AND THE SCREENSHOT CARRIED A
+     Critical/High HE DID NOT MENTION.** *"Today · 1 person"* beside *"Last 30
+     days · 0% — 0 of 2 members came"*. **Both figures correct**: the visitor
+     held a `complimentary` seat, which the share excludes at BOTH ends.
+     `packages/shared/src/orgs.ts` had named this exact sentence pair before
+     the screen existed and the card answered it by using the words "people"
+     and "members" — **which is not enough on a real screen**. Fixed as
+     `crowdNote`, drawn ONLY when the two disagree; both numbers still draw
+     (no-removal). **C167/C168.**
+  2. **THE SEVERITY IS THE REUSABLE PART: every figure passed :5807 and the
+     SCREEN was false.** Grading per-figure would have called it Low.
+  3. **"TOO SIMPLE" WAS ALSO A CORRECTNESS FINDING.** A zero-height bar draws
+     NOTHING, so seven quiet weeks rendered as seven weeks that had not
+     happened — empty-vs-missing, arriving in the PICTURE after being got right
+     in every sentence. Tracks behind every column, a baseline, a scale, a
+     legend, dots on the line, the current week banded.
+  4. **NONE OF THE INSTRUMENTS COULD SEE IT** — 1,659 green tests, 12 RED
+     mutants, clean lint and build. Every asserted string was correct; the
+     defect was two correct strings being ADJACENT, and no mutation of the code
+     produces it. Fourth recorded time a person at a screen found what the
+     suite structurally could not.
+  5. **`owner@example.com`'s PASSWORD WAS RECORDED NOWHERE** (and
+     `smoke-dashboard-stats.md:211` says so). Reset to `Smoke2026!`, **proven
+     by a real sign-in returning 200**, and written into the sheet.
+  6. **THE SHEET NOW USES TWO GYMS AND SAYS WHY**: `owner` (America/Mendoza,
+     has members → shows the 30-day tile) and `smoke-test-gym` (Asia/Calcutta,
+     no visit today → the only one where marking in can move a number). One gym
+     would have given a step that could not fail.
+
+PROVE: `web` **1666/1666 across 58 files, exit 0** (1659 before) ·
+       `overviewView` 42/42 · `console.render` 101/101 · eslint clean on four
+       files · `vite build` exit 0 · three root guards green.
+       **SWEEP a stated SUBSET of 188: `MUTATE_ONLY=C155…C168` — 14 RED, 0
+       ALIVE, 0 never ran.** The redesign moved NO mutant anchor (C163/C164
+       matched unchanged), which is the check that a markup rewrite did not
+       quietly un-aim the audit.
+
+FILES: `components/console/OverviewNumbers.jsx` (rewritten) ·
+       `pages/console/{overviewView.js,overviewView.test.js,
+       console.render.test.jsx}` · `apps/web/tools/mutate-console.mjs` ·
+       `RUNBOOK/smoke-overview-numbers.md` (rewritten) · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NEXT: THE SMOKE, 12 steps, and then T3 round 1.**
+```
+
+```
 TASK: THE OVERVIEW-NUMBERS CARD, §4b — THE WEB HALF. DECISIONS :30399.
       Three tiles, the 8-week chart and the empty states on the console's
       Overview. WEB-ONLY: no migration, no `apps/api` file, no

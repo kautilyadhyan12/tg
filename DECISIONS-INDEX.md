@@ -4354,6 +4354,25 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   :29250 §5).
   **STILL DOES NOT TICK: no browser smoke has run and T3 is UNRUN.** PROVE
   (`web` 1659/1659, exit 0) and the 12-mutant subset at `:30399`'s Round log.
+  **ADDENDUM `:30624`, same session — KD LOOKED AT IT AND THE FIRST LOOK FOUND
+  WHAT 1,659 TESTS AND 12 MUTANTS COULD NOT: two CORRECT numbers arranged into a
+  FALSE screen.** **Read before putting two counts of DIFFERENT POPULATIONS on
+  one screen, before grading a finding Low because every figure in it is true,
+  and before calling a screen finished because its strings are asserted.**
+  His console drew *"Today · 1 person"* beside *"Last 30 days · 0% — 0 of 2
+  members came"*. Both correct: the visitor held a `complimentary` seat, which
+  the share excludes at BOTH ends. **`packages/shared/src/orgs.ts` had named this
+  exact sentence pair before the screen existed, and the card answered it with
+  the words "people" and "members" — which is not enough on a real screen.**
+  Fixed Critical/High as `crowdNote`, a sentence that appears only when the two
+  actually disagree; both figures still draw (**C167**, **C168**).
+  **"TOO SIMPLE" WAS ALSO A CORRECTNESS FINDING:** a zero-height bar draws
+  NOTHING, so seven quiet weeks rendered as seven weeks that had not happened —
+  the empty-versus-missing distinction the whole card is built on, arriving in
+  the picture after being got right in every sentence. Tracks, a baseline, a
+  scale, a legend and a banded current week. **Also: `owner@example.com`'s
+  password was recorded NOWHERE, was reset to a written-down one and proven by a
+  real sign-in.** `web` 1666/1666; SWEEP C155–C168, 14 RED.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

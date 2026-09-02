@@ -1695,6 +1695,51 @@ describe("the gym's numbers", () => {
     expect(screen.getByText('22 people · 40 visits')).toBeTruthy();
   });
 
+  it('explains itself when somebody came and the members share did not move', async () => {
+    // THE SCREEN KD SAW ON 2026-09-03, reproduced exactly: "Today · 1 person"
+    // beside "Last 30 days · 0% — 0 of 2 members came". Both numbers are the
+    // server's and both are correct — the visitor held a complimentary owner's
+    // seat, which the share's numerator AND denominator exclude — and the pair
+    // reads as a screen disagreeing with itself. `packages/shared/src/orgs.ts`
+    // predicted this exact pairing before the screen existed.
+    orgService.getOverview.mockResolvedValue(
+      overview({
+        today: { visits: 1, visitors: 1 },
+        week: { visits: 1, visitors: 1, prevVisits: 0, prevVisitors: 0 },
+        month: { visitors: 0, members: 2, adoptionPct: 0 },
+        weeks: [
+          ...WEEK_STARTS.slice(0, 7).map((weekStart) => ({ weekStart, visits: 0, visitors: 0 })),
+          { weekStart: '2026-08-31', visits: 1, visitors: 1 },
+        ],
+      }),
+    );
+    drawOverview();
+
+    // Both true figures are still drawn — nothing is hidden to tidy up the
+    // contradiction, which would be the no-removal rule broken to fix a
+    // wording problem.
+    expect(await screen.findByText('0%')).toBeTruthy();
+    expect(screen.getByText('0 of 2 members came in the last 30 days')).toBeTruthy();
+    expect(screen.getAllByText('1 person').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Free seats/)).toBeTruthy();
+  });
+
+  it('does not explain a gap that is not there', async () => {
+    // The same shape with a COUNTED member as the visitor: the two figures
+    // agree, so the sentence would be noise about nothing.
+    orgService.getOverview.mockResolvedValue(
+      overview({
+        today: { visits: 1, visitors: 1 },
+        week: { visits: 1, visitors: 1, prevVisits: 0, prevVisitors: 0 },
+        month: { visitors: 1, members: 2, adoptionPct: 50 },
+      }),
+    );
+    drawOverview();
+
+    expect(await screen.findByText('50%')).toBeTruthy();
+    expect(screen.queryByText(/Free seats/)).toBeNull();
+  });
+
   it('says what the up arrow is comparing, because the two weeks are not the same length', async () => {
     // :5807 on its face if it did not: `week.visits` is this gym-week SO FAR and
     // `prevVisits` is the WHOLE of last week, so on a Tuesday a bare arrow

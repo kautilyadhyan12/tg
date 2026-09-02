@@ -30620,3 +30620,112 @@ every one of them now issues this read whether or not the numbers are its
 subject. `__fixtures__/overview.js` is the payload in one place — four copies is
 four places for a shape to drift from the contract, and only one of them would be
 the file somebody remembers to update.
+
+### ADDENDUM, same session — KD LOOKED AT IT, AND THE FIRST LOOK FOUND WHAT 1,659 TESTS AND 12 MUTANTS COULD NOT: TWO CORRECT NUMBERS ARRANGED INTO A FALSE SCREEN
+
+**Read before putting two counts of DIFFERENT POPULATIONS on one screen, before
+grading a finding Low because every figure in it is true, and before calling a
+screen finished because its strings are asserted.**
+
+He sent a screenshot and said it *"looks too simple"*. The design half is §B
+below. **The half he did not mention is the one that mattered.**
+
+### A · THE DEFECT, WHICH NOBODY HAD REPORTED
+
+His console drew, side by side:
+
+> **Today · 1 person**  |  **Last 30 days · 0%** — *0 of 2 members came in the
+> last 30 days*
+
+**Every figure is correct.** Measured on his database rather than reasoned: the
+one visit belongs to `owner@example.com`, whose seat is `complimentary = true`;
+the denominator's two members are `user@example.com` and `user2@example.com`,
+neither of whom came. `today.visitors` counts EVERY attendee and `month`'s two
+figures count only current, non-complimentary members — **a distinction
+`packages/shared/src/orgs.ts` had written down before the screen existed, naming
+this exact sentence pair**: *"an owner who marked themselves in '2 people came
+today' beside '1 member came this month'"*.
+
+**IT WAS PREDICTED, IT WAS DOCUMENTED, AND IT SHIPPED ANYWAY.** The card's author
+read that comment and answered it by using the words *"people"* and *"members"*
+in the two tiles, and recorded that as sufficient in `:30399` §7. **On a real
+screen it is not: nobody reads two tiles as two populations, they read them as
+one gym, and the gym appears to be contradicting itself.**
+
+**THE SEVERITY IS THE PART TO CARRY FORWARD.** Every individual number passes
+:5807's test — none is false. The SCREEN is false. **:5807's rule is "on screen
+AND wrong", and an arrangement of true figures can be wrong**; grading per-figure
+would have called this Low and left it. Fixed as Critical/High.
+
+**The fix is a sentence, not a hidden number** (the no-removal rule): both
+figures still draw, with `crowdNote` under the row — *"Free seats — the owner's,
+and anyone the gym isn't charged for — are counted above but not in this
+share."* **It appears ONLY when the two actually disagree** (members exist,
+none of them came, somebody did), which is what separates an explanation from
+noise. **C167** removes it, **C168** makes it permanent; both RED.
+
+### B · THE DESIGN, AND WHY "TOO SIMPLE" WAS ALSO A CORRECTNESS FINDING
+
+The screenshot showed eight weeks of history rendering as **one lonely block and
+a diagonal line**. A week nobody came to has a bar of height zero, and a
+zero-height rect draws NOTHING — **so seven quiet weeks looked like seven weeks
+that had not happened.** That is the empty-versus-missing distinction this entire
+card is built around, arriving in the PICTURE after being got right in every
+sentence.
+
+Every column now has a visible track whether or not anybody came; the bars sit on
+a baseline with a scale marker beside them and a midline behind them; the two
+series get a legend and the line gets dots; the current week's column is banded
+and its label emphasised, so the short last bar reads as unfinished rather than
+as a collapse; and the three tiles get their own surfaces instead of floating as
+left-aligned text in a wide card. **No figure changed and no asserted sentence
+changed** — `web` went 1659 → 1666 on the new cases alone.
+
+### C · WHAT THIS SAYS ABOUT THE INSTRUMENTS, measured rather than felt
+
+At the moment he opened that page the packet had **1,659 green tests, 12 RED
+mutants, a clean lint, a clean build and three green root guards.** None of them
+could see this, and it is worth being precise about why: **every test asserted a
+string that was correct, and the defect was in two correct strings being
+adjacent.** There is no mutation of the code that produces it — the code was
+doing what it was told.
+
+**This is the fourth time this project has recorded that a person at a screen
+found what the suite structurally could not** (:5551, :12660, :5807's own two
+defects, and now this), and the second where the finding was a RELATIONSHIP
+between two correct things rather than a wrong thing. **It is the argument for
+the SMOKE gate, and it arrived before the smoke was even run.**
+
+### D · WHAT ELSE CHANGED IN THIS COMMIT
+
+- **`owner@example.com`'s password was reset to `Smoke2026!` and WRITTEN INTO THE
+  SHEET.** It was recorded nowhere and nobody knew it —
+  `smoke-dashboard-stats.md:211` says so in as many words — so the smoke account
+  was one forgotten password from being unusable. Proven by a real sign-in (200),
+  not by the hash being written.
+- **The smoke sheet now runs on TWO gyms and says why.** `owner` is in
+  `America/Mendoza` and `smoke-test-gym` in `Asia/Calcutta`, so their days have
+  not rolled over together: the first has members and shows the 30-day tile, the
+  second has no visit today and is therefore the only one where marking in can
+  make a number MOVE. A sheet that used one gym would have had a step that could
+  not fail.
+
+### Round log (addendum)
+
+`web` **1666/1666 across 58 files, exit 0** (1659 before; +7 — five pure, two
+render). `overviewView` **42/42** · `console.render` **101/101**. `eslint
+--max-warnings=0` exit 0 on the four touched files. `vite build` exit 0.
+**SWEEP, a stated SUBSET of 188: `MUTATE_ONLY=C155…C168` — 14 mutants, 14 RED, 0
+ALIVE, 0 never ran**, every control GREEN, restores sha256-verified. The
+redesign moved no mutant anchor: C163's and C164's matched unchanged, which is
+the check that the markup rewrite did not quietly un-aim the audit.
+
+**A FIXTURE OF MINE WAS WRONG AGAIN AND THE TEST CAUGHT IT IMMEDIATELY** — the
+five new pure cases passed their payload at the top level instead of under
+`tiles`, so `crowdNote` saw an all-zero gym and returned null. It failed loudly
+rather than passing vacuously, which is the difference between this and §6's
+C155: **a fixture that cannot produce the defect is only dangerous when the
+assertion agrees with it anyway.**
+
+**STILL DOES NOT TICK: no browser smoke has run on the redesigned screen, and T3
+is UNRUN.**

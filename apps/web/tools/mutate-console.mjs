@@ -2396,6 +2396,24 @@ const MUTANTS = [
     from: "      {!overview.loading && overview.error !== null && overview.retryable",
     to: "      {!overview.loading && overview.error !== null && true",
   },
+  {
+    id: 'C167',
+    target: 'overviewview',
+    suite: RENDER_SUITE,
+    why: "TWO TRUE NUMBERS GO BACK TO COMPOSING A FALSE IMPRESSION. Found on Kd's own console 2026-09-03: Today said 1 person while Last 30 days said 0 per cent, 0 of 2 members came - correct, because the visitor held a complimentary owner's seat that the share excludes at both ends, and unreadable as anything but a screen contradicting itself. The shared contract named this exact pairing before the screen existed. :5807's test is not is it on screen, it is is it on screen AND wrong, and an arrangement of true figures can be",
+    expect: "explains itself when somebody came and the members share did not move",
+    from: "  const cameRecently = count(tiles?.today?.visitors) > 0 || count(tiles?.week?.visitors) > 0;",
+    to: "  const cameRecently = false;",
+  },
+  {
+    id: 'C168',
+    target: 'overviewview',
+    suite: RENDER_SUITE,
+    why: "THE EXPLANATION APPEARS OVER A GYM WITH NOTHING TO EXPLAIN. A note about free seats printed under a share that a counted member DID move is noise pointing at a discrepancy the owner cannot see - the same failure as an empty state firing on a screen that is not empty, and the reason this sentence is conditional rather than permanent",
+    expect: "does not explain a gap that is not there",
+    from: "  if (count(tiles?.month?.visitors) > 0) return null;",
+    to: "  if (false) return null;",
+  },
 ];
 
 const abort = (msg) => {

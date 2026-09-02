@@ -2,13 +2,14 @@
 
 **What this checks:** the numbers that now sit at the top of your gym's home
 screen — how many people came today, how many this week, and the eight-week
-chart underneath. Built 2026-09-03 (`DECISIONS.md:30399`), on top of the server
-half from 2026-09-02 (`:30094`).
+chart underneath. Built 2026-09-03 (`DECISIONS.md:30399`), redesigned the same
+day after Kd looked at it (`:30399` addendum), on top of the server half from
+2026-09-02 (`:30094`).
 
 **Why it matters:** these are the first numbers this product has ever shown a gym
 owner about their own gym. Every one of them is counted on the server; the screen
-is only allowed to draw them. The tests prove the arithmetic — what nobody has
-ever done is look at it.
+is only allowed to draw them. The tests prove the arithmetic — what nobody had
+ever done is look at it, and the first look found a real defect.
 
 ---
 
@@ -16,31 +17,26 @@ ever done is look at it.
 
 **The whole sheet is yours to run start to finish. No pauses, no commands.**
 
-I have already done the setup, and it is written down here rather than left for
-you to discover:
-
 - **Both servers are already running.** If you need to restart them:
   ```
   cd apps/api && node --import tsx --env-file=.env src/index.ts
   corepack pnpm --filter web exec vite
   ```
-- **Nothing was added to your database for this sheet.** I looked at what is
-  already there and wrote the expected numbers from it. The one visit it talks
-  about is the real one you made yourself during the attendance smoke yesterday.
-- **Your account:** `owner@example.com` — you know the password. It is both the
-  **owner** of *Smoke Test Gym* and a **member** of it, which is what lets one
-  run cover both ends.
+- **Your sign-in:** `owner@example.com` / **`Smoke2026!`**
+  The old password was not written down anywhere and nobody knew it, so it was
+  reset on 2026-09-03 and the new one is proven to work (a real sign-in returned
+  200). **This is written down here so the next run does not lose it again.**
+- **Nothing was invented for this sheet.** The numbers below were read out of
+  your database, and every visit they mention is one you made yourself.
 
-**What your gym looks like right now, so you can tell a right answer from a
-wrong one:**
+**TWO of your gyms are used, and they are used for different things** — the sheet
+says which at each step, because they are in different time zones and their days
+have not rolled over together:
 
-| | |
-|---|---|
-| Today at your gym | Thursday 3 September |
-| Visits ever recorded | **one**, on Wednesday 2 September |
-| The week that visit is in | this one (weeks start on Monday) |
-| The week before | nothing at all |
-| Members who pay | **none** — your own seat is a free owner's seat |
+| Gym | Its own date right now | What it is good for |
+|---|---|---|
+| **owner** (*new yprk*) | 2 September | it has 2 members, so the 30-day tile and its explanation appear |
+| **Smoke Test Gym** | 3 September | nobody has come today yet, so you can watch a number move |
 
 ---
 
@@ -49,131 +45,138 @@ wrong one:**
 | # | Where | Link |
 |---|---|---|
 | A | Sign in | http://localhost:5173/login |
-| B | **Your gym's home screen** (the numbers) | http://localhost:5173/console/smoke-test-gym |
-| C | **My Gyms** (where you tap "I'm here") | http://localhost:5173/my-gyms |
+| B | **The "owner" gym** | http://localhost:5173/console/owner |
+| C | **Smoke Test Gym** | http://localhost:5173/console/smoke-test-gym |
+| D | **My Gyms** (where you tap "I'm here") | http://localhost:5173/my-gyms |
 
 ---
 
-## PART A — what the numbers say before you touch anything
+## PART A — the numbers, on the gym that has members
 
-### 1 · Sign in and open your gym
+Sign in at **A**, then open **B**.
 
-Go to **A**, sign in, then open **B**.
+### 1 · The box is there
 
-✅ Under your gym's name there is a box headed **"Who's turning up"**.
-
-❌ If there is no such box at all, stop here and tell me — everything below
-depends on it.
+✅ Under the plan card there is a box headed **"Who's turning up"**, holding
+three panels side by side.
 
 ### 2 · Today
 
-Look at the **Today** figure inside that box.
-
-✅ It reads **`0 people`**.
-
-That is the right answer, not a broken one: your one visit was yesterday, and
-nobody has marked themselves in today yet. You are about to change it in Part B.
+✅ **Today** reads **`1 person`** — the visit you made during the attendance
+smoke.
 
 ### 3 · This week
 
-Look at **This week**.
-
-✅ It reads **`1 person`**, and underneath it says **"Nothing was recorded last
+✅ **This week** reads **`1 person`**, and under it **"Nothing was recorded last
 week."**
 
-❌ If there is an up or down arrow with no words next to it, that is a defect —
-tell me. The two weeks are not the same length (this week is three days old, last
-week was seven), so an arrow on its own would be telling you something untrue.
+❌ An up or down arrow with **no words** beside it is a defect. This week is two
+days old and last week was seven, so an arrow alone would be comparing two
+different lengths and telling you something untrue.
 
-### 4 · The tile that is deliberately NOT there
+### 4 · Last 30 days — and the sentence under the row
 
-✅ There is **no "Last 30 days" tile and no percentage anywhere.**
+✅ **Last 30 days** reads **`0%`**, with **"0 of 2 members came in the last 30
+days"** under it.
 
-Your gym has no paying members — your own seat is a free owner's seat — so there
-is no share of members to report. The app is meant to say **nothing** here rather
-than print **0%**, which would read as "your members are ignoring you" on a gym
-that simply has none yet.
+✅ **Below all three panels** there is a line beginning **"Free seats —"**.
 
-❌ If you see **`0%`**, that is the defect this step exists to catch.
+**This is the fix from your screenshot.** Both numbers were already correct and
+together they read like the screen contradicting itself: *somebody came today*,
+yet *no members came this month*. The reason is that the person who came was
+**you, on the owner's free seat**, and a free seat is deliberately left out of
+the members' share — otherwise every gym would look busier than it is. Nothing
+was hidden to tidy this up; the screen now says why.
+
+❌ If the two numbers are there but the "Free seats" line is missing, that is the
+defect returning.
 
 ### 5 · The chart
 
-Below the tiles there is a row of bars with a line over it, and a row of dates
-underneath.
+✅ **Eight columns**, each faintly visible even where nobody came — a quiet week
+is a fact, not a blank.
+✅ Numbers **on the left** marking the top and bottom of the scale.
+✅ A **key** on the right: a small orange square for *visits*, a short line for
+*different people*.
+✅ Only the **last** column is filled, and it is **lighter** than the rest — that
+is the "this week isn't finished" shading.
+✅ Under the chart: **"This is your first week of attendance — the chart fills in
+as the weeks pass."**
 
-✅ There are **eight** date labels, ending with a date at the right-hand end.
-✅ Only the **last** bar has any height. The other seven are flat.
-✅ Under the chart it says **"This is your first week of attendance — the chart
-fills in as the weeks pass."**
+### 6 · Hover the columns
 
-### 6 · Hover the bars
+Rest your mouse on the **last** column.
 
-Rest your mouse on the **last** bar (the one with height) and wait a second for
-the little tooltip.
+✅ **"This week so far: 1 visit, 1 person"**.
 
-✅ It says **"This week so far: 1 visit, 1 person"**.
+Hover any empty column.
 
-Now hover any of the flat bars.
+✅ **"Week of «some date»: 0 visits, 0 people"** — a real week with a real zero.
 
-✅ It says **"Week of «some date»: 0 visits, 0 people"** — a real week with a
-real zero, not a blank.
-
-❌ If the last bar says "Week of …" instead of **"This week so far"**, tell me.
-That bar is short because the week is not finished, and it has to say so — or
-every Monday your gym will look like it has collapsed.
+❌ If the last column says "Week of …" instead of **"This week so far"**, tell me:
+that column is short because the week is not over, and it has to say so.
 
 ---
 
-## PART B — mark yourself in, and watch the numbers move
+## PART B — watch a number move
 
-### 7 · Say "I'm here"
+Now switch gyms, because at *Smoke Test Gym* the day has already rolled over and
+nobody has come yet.
 
-Open **C** (My Gyms) and tap the button that marks you in at *Smoke Test Gym*.
+### 7 · Look first
 
-✅ The screen confirms you have been marked in, the way it did in the attendance
-smoke.
+Open **C**.
 
-### 8 · Back to the numbers
+✅ **Today** reads **`0 people`**.
+✅ **This week** reads **`1 person`**.
+✅ There is **no "Last 30 days" panel and no percentage anywhere** — that gym has
+no members other than your own free seat, so there is no share to report. Seeing
+**`0%`** there would be the bug.
 
-Go back to **B** and **reload the page** (F5).
+### 8 · Mark yourself in
+
+Open **D** (My Gyms) and tap the button to mark yourself in at **Smoke Test
+Gym**.
+
+✅ It confirms you have been marked in.
+
+### 9 · Back to the numbers
+
+Return to **C** and **reload (F5)**.
 
 ✅ **Today** now reads **`1 person`**.
 ✅ **This week** now reads **`1 person · 2 visits`**.
 
-That second line is the interesting one. Two visits, one person — because you
-came yesterday and again today. **It only shows the second number when they
-differ**, which is how "somebody came twice" is visible at a glance.
+Two visits, one person — you came yesterday and again today. **It only shows the
+second number when they differ**, which is how "somebody came twice" is visible
+at a glance.
 
-❌ If This week reads `2 people`, that is wrong — two visits by you are still one
-person, and that distinction is the one your whole attendance feature rests on.
+❌ If This week says `2 people`, that is wrong: two visits by you are still one
+person.
 
-### 9 · The chart again
+### 10 · The chart again
 
-Hover the last bar once more.
-
-✅ It now says **"This week so far: 2 visits, 1 person"**.
+✅ Hovering the last column now says **"This week so far: 2 visits, 1 person"**.
 
 ---
 
 ## PART C — what happens when it cannot load
 
-### 10 · Pull the plug
+### 11 · Pull the plug
 
-With your gym's home screen open, turn your **Wi-Fi off** (or put the browser's
-dev-tools network into Offline), then reload the page.
+With a gym's home screen open, turn your **Wi-Fi off** and reload the page.
 
-✅ You get **one** red failure card with a **Try again** button — not two, not
-four.
-✅ You do **not** see the numbers box showing zeros.
+✅ **One** red failure card with a **Try again** button — not two, not four.
+✅ **No numbers box showing zeros.**
 
-❌ Zeros over a failed load is the single most repeated defect in this project's
-history: it tells an owner nobody came when in truth we could not ask.
+❌ Zeros over a failed load is the most repeated defect in this project's
+history: it tells an owner nobody came when the truth is we could not ask.
 
-### 11 · Put it back
+### 12 · Put it back
 
-Turn Wi-Fi back on and press **Try again**.
+Turn Wi-Fi on and press **Try again**.
 
-✅ The screen fills in again, with the same numbers as step 8.
+✅ The screen fills in again with the same numbers as step 9.
 
 ---
 
@@ -181,17 +184,15 @@ Turn Wi-Fi back on and press **Try again**.
 
 Written down rather than left for somebody to assume later:
 
-- **The up/down arrow against last week.** Your gym has no history before this
-  week, so there is nothing to compare against and the screen correctly says so.
-  Reaching it needs a gym with two weeks of visits, which yours will have next
-  week.
+- **The up/down arrow against last week.** Neither gym has visits in two
+  different weeks yet, so there is nothing to compare and the screen correctly
+  says so. It becomes reachable next week.
 - **A full eight-week chart.** Same reason — one week of history exists.
-- **The "nobody has come" and "no members yet" screens.** Your gym has both a
-  visit and a member, so neither state can be reached from your account without
-  making a throwaway gym.
+- **The "nobody has come at all" screen**, which needs a gym with members and no
+  visits.
 - **What a trainer sees when the owner unticks "See who came in".** That needs a
   second person's account.
 
-All four are held by the automated tests and by the mutation audit
-(`DECISIONS.md:30399`, mutants C155–C166) — which is not the same as somebody
+All four are held by the automated tests and the mutation audit
+(`DECISIONS.md:30399`, mutants C155–C168) — which is not the same as somebody
 having looked at them, and this line says so on purpose.

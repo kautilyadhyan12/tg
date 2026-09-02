@@ -13,6 +13,7 @@ import {
   barTitle,
   chartGeometry,
   chartState,
+  crowdNote,
   hasAnyActivity,
   nothingRecordedSentence,
   numbersState,
@@ -246,6 +247,46 @@ describe('the last 30 days', () => {
     expect(adoptionLine({ visitors: 1, members: 1, adoptionPct: 100 }).text).toBe(
       '1 of 1 member came in the last 30 days',
     );
+  });
+});
+
+describe('the two numbers that can disagree without either being wrong', () => {
+  // THE SCREEN KD ACTUALLY SAW, 2026-09-03: "Today · 1 person" beside
+  // "Last 30 days · 0% — 0 of 2 members came". Both true — the visitor held a
+  // complimentary owner's seat, which `month`'s two figures exclude — and the
+  // pair reads as a screen disagreeing with itself.
+  const owner = { tiles: { today: { visits: 1, visitors: 1 }, month: { visitors: 0, members: 2, adoptionPct: 0 } } };
+
+  it('explains the gap when somebody came and the share did not move', () => {
+    expect(crowdNote(quiet(owner).tiles)).toMatch(/Free seats/);
+  });
+
+  it('says nothing when a counted member is the one who came', () => {
+    const tiles = quiet({ tiles: { ...owner.tiles, month: { visitors: 1, members: 2, adoptionPct: 50 } } }).tiles;
+    expect(crowdNote(tiles)).toBeNull();
+  });
+
+  it('says nothing when nobody has come recently at all', () => {
+    const tiles = quiet({ tiles: { month: { visitors: 0, members: 2, adoptionPct: 0 } } }).tiles;
+    expect(crowdNote(tiles)).toBeNull();
+  });
+
+  // No members means no share is drawn at all, so there is no pair to explain
+  // and the sentence would be about nothing.
+  it('says nothing when there is no share on screen to disagree with', () => {
+    const tiles = quiet({ tiles: { today: { visits: 1, visitors: 1 } } }).tiles;
+    expect(tiles.month.members).toBe(0);
+    expect(crowdNote(tiles)).toBeNull();
+  });
+
+  it('is reached from the week as well as from today', () => {
+    const tiles = quiet({
+      tiles: {
+        week: { visits: 3, visitors: 2, prevVisits: 0, prevVisitors: 0 },
+        month: { visitors: 0, members: 2, adoptionPct: 0 },
+      },
+    }).tiles;
+    expect(crowdNote(tiles)).toMatch(/Free seats/);
   });
 });
 

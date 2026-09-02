@@ -7302,8 +7302,18 @@ file and is stated so nobody reads these as lower priority than they are.
       `attendance.read`. PROVE and the 11-mutant sweep at that entry.
       **⚙️ THE WEB HALF IS BUILT TOO — DECISIONS `:30399`.** Three tiles, the
       8-week chart and the four empty states on the console's Overview
-      (`OverviewNumbers.jsx`, `overviewView.js` pure beside it). **THIS LINE
-      STILL DOES NOT TICK: no smoke has run and T3 is UNRUN.**
+      (`OverviewNumbers.jsx`, `overviewView.js` pure beside it).
+      **AND KD LOOKED AT IT THE SAME DAY, WHICH FOUND A Critical/High NOTHING IN
+      THE SUITE COULD SEE** (`:30624`): *"Today · 1 person"* drawn beside
+      *"Last 30 days · 0% — 0 of 2 members came"*, both figures CORRECT — the
+      visitor held a free owner's seat, which the share excludes at both ends —
+      and the two together reading as a screen contradicting itself. Fixed with
+      a sentence that appears only when they disagree; both numbers still draw.
+      The chart was redesigned in the same commit, and *"too simple"* was also a
+      correctness finding: a zero-height bar draws NOTHING, so seven quiet weeks
+      rendered as seven weeks that never happened.
+      **THIS LINE STILL DOES NOT TICK: no smoke has run on the redesigned
+      screen and T3 is UNRUN.**
       ~~Also owed with it: the one-off backfill
       (`tools/orgs-rollup.ts --all-hours --days=70`) against the branch Kd's
       browser reads — until it runs, that gym's chart is eight empty weeks.~~
