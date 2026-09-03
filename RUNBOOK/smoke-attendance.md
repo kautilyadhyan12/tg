@@ -1,47 +1,46 @@
 # SMOKE — attendance, both halves
 
-**What this checks:** a member telling their gym *"I'm here"*, and the gym seeing
-who came. It covers **both halves in one run** — the member's `My Gyms` screen
-(built 2026-09-02, `DECISIONS.md:28822`, reviewed at `:28976` and `:29117`) and
-the owner's console **Attendance** section (`DECISIONS.md:29250`).
+**What this checks:** a member telling their gym *"I'm here"*, the gym refusing
+that when it is shut, and the gym seeing who came. It covers the member's
+**My Gyms** screen and the owner's console **Attendance** section.
 
-**Why it matters more than usual:** every attendance surface has shipped without
-a single browser click. The member half's review found two defects a
-click-through would have caught — a history that showed one day instead of
-months, and a visit that vanished — and both were found by reading code, not by
-looking at a screen.
+**Why it was rewritten (2026-09-03):** the previous version was eleven commits
+old and several of its ✅ named things that are no longer on screen — the day's
+shape section and the odd-arrival line were both **removed at Kd's instruction**
+that day, and the button now REFUSES outside opening hours instead of recording
+a marked visit. **Every ✅ below was checked against the code as it stands, not
+remembered.**
 
 ---
 
 ## Before you start
 
-**The whole sheet is yours to run start to finish. No pauses, no commands.**
+**The whole sheet is yours to run start to finish. There is nothing for you to
+type into a terminal.** If a page will not load, say so and the servers get
+restarted — that is my job, not a step.
 
-I have already done the setup, and it is written down here rather than left for
-you to discover:
+**Your account:** `owner@example.com`. It is the **owner** of the gym called
+**owner**, and a **member of both gyms**, which is what lets one run cover both
+halves.
 
-- **Your database was four migrations behind and I brought it up to date**
-  (2026-09-02, with your yes). Nothing was deleted — it added the *who came in*
-  table, the on/off switch column, and the opening-hours tables. Both your gyms
-  automatically gained the new *"See who came in"* permission.
-- **I created three throwaway gyms and about six `probe-…@example.com` accounts**
-  while checking the server end to end. They are not yours and appear on none of
-  your screens. Ignore them.
-- **Neither of your gyms has ever been on a plan**, so the console will ask you
-  to start the free trial before it lets you do anything. **That is step 2 and it
-  is expected** — it is not a bug, and both your accounts still have their one
-  trial available.
+**THE TWO GYMS ARE DIFFERENT ON PURPOSE, and this is the part to read before
+you start** — the state below was read out of the database while writing this,
+not assumed:
 
-**Your account:** `owner@example.com` — you know the password. This one account
-is both the **owner** of *Smoke Test Gym* and a **member** of it, which is what
-lets one run cover both halves.
+| | **owner** | **Smoke Test Gym** |
+|---|---|---|
+| Its clock | Argentina, shown as **4:00 PM** | India, shown as **16:00** |
+| Opening hours | **Set**, a timetable for all seven days | **Never set** — nobody has answered |
+| Plan | On the free trial | **None, and it cannot start one** |
+| You are | Owner **and** member | Member only |
 
-**Both servers are already running.** If you need to restart them:
+**So all console work happens on the gym called `owner`.** Do not open Smoke
+Test Gym's console: your one free trial is already spent on the other gym, so it
+will only show you a subscribe prompt with nowhere to go. That is correct
+behaviour, not a fault, and it is not what this sheet is for.
 
-```
-cd apps/api && node --import tsx --env-file=.env src/index.ts
-corepack pnpm --filter web exec vite
-```
+**Nothing below depends on what time it is.** You will switch the gym between
+open and shut yourself, so every ✅ is true whenever you run it.
 
 ---
 
@@ -50,183 +49,183 @@ corepack pnpm --filter web exec vite
 | # | Where | Link |
 |---|---|---|
 | A | Sign in | http://localhost:5173/login |
-| B | Your gym's console | http://localhost:5173/console/smoke-test-gym |
-| C | **Attendance** (the new section) | http://localhost:5173/console/smoke-test-gym/attendance |
-| D | Console settings | http://localhost:5173/console/smoke-test-gym/settings |
-| E | **My Gyms** (the member screen) | http://localhost:5173/my-gyms |
+| B | **My Gyms** (the member screen) | http://localhost:5173/my-gyms |
+| C | **Attendance** (the owner's section) | http://localhost:5173/console/owner/attendance |
+| D | Console settings | http://localhost:5173/console/owner/settings |
 
 ---
 
-## PART A — the member says "I'm here"
+## PART A — what the member's card says
 
-**1 · Sign in.** Open **link A**, choose the **member** door, sign in as
-`owner@example.com`.
-✅ You land in the app (dashboard), not the console.
+**1 · Sign in.** Open **link A**, choose the **member** door, sign in.
+✅ You land in the app, not the console.
 
-**2 · The nav item exists.** Look at the left-hand menu.
-✅ There is an item called **My Gyms**, below the others.
-❌ If it is missing, stop and tell me — that is the whole feature failing to
-appear.
+**2 · The nav item.** Look at the left menu.
+✅ There is an item called **My Gyms**.
 
-**3 · Open it.** Click **My Gyms** (or open **link E**).
-✅ You see a card headed **Smoke Test Gym**.
-✅ On it: a button reading **I'm here**.
-✅ Under the heading *"Days you came"* it says **you haven't marked yourself in
-here yet** — because nobody ever has.
+**3 · Open it** (**link B**).
+✅ **Two** gym cards: one headed **owner**, one headed **Smoke Test Gym**.
 
-**4 · Tap the button.** Click **I'm here**.
-✅ A line appears saying **"You're marked in."** and nothing more.
-✅ **It must NOT mention opening hours** — not "outside hours", not "closed",
-nothing about times. This gym has never set opening hours, and *"nobody has
-answered"* is not *"you came at a strange time"*. **A sentence about hours here
-is a real defect — tell me.**
-✅ A date appears under *"Days you came"* with a time beside it, e.g. `11:42`.
-✅ **The time should be the time it is now where your gym is** (this gym's zone
-is Kolkata) on a 24-hour clock.
+**4 · The gym that has never set hours.** Find the **Smoke Test Gym** card.
+✅ It says **nothing at all about opening times** — no times, no weekday list,
+and above all **not the word "Closed"**.
+❌ If it says the gym is closed, stop and tell me. Nobody has ever set hours for
+that gym, and *"nobody has answered"* is not *"we are shut"*.
 
-**5 · Tap it a second time.**
-✅ The line changes to **"You're already marked in."**
-✅ **Still only ONE time chip on that day** — not two. You came once; the second
-tap was the same visit.
+**5 · What the button is for.** On that same card, look just above the button.
+✅ A small heading **ATTENDANCE**, and under it
+**"Pressing this marks your attendance at the gym."**
+✅ The **I'm here** button is bright and clickable.
 
-**6 · Reload the page** (F5).
-✅ The day and its time are **still there** — it was really saved, not just drawn.
+**6 · The gym that has set hours.** Find the **owner** card.
+✅ A line beginning **Today:** followed by that gym's hours for today, on a
+**12-hour clock** — so **7:40 AM – 9:40 AM**, not `07:40`.
+✅ Under it, the seven weekdays with their times.
 
 ---
 
-## PART B — the gym sees who came
+## PART B — the button refuses when the gym is shut
 
-**7 · Cross to the console.** Sign out, open **link A** again, and this time
-choose the **gym owner** door. Sign in as the same `owner@example.com`.
-*(The two doors are the only way across — that is deliberate.)*
+*This is Kd's ruling of 2026-09-03: "if a gym has set certain times not 24 hour
+then if a memeber comes outside of time should not be able to press i am here".*
 
-**8 · Start the trial.** You will be shown a prompt you cannot dismiss, asking
-you to start the free trial.
-✅ Start it. The console becomes usable.
-*(Expected, not a fault: this gym has never been on a plan.)*
+**7 · Shut the gym for today.** Owner door → **link D** → the section **When
+we're open** → under **Closed on a date**, pick **today** and save.
+✅ It appears in the list of closures.
 
-**9 · The new section exists.** Look at the left rail.
-✅ There are now **four** items: Gym · Members · **Attendance** · Settings.
+**8 · Look at the member's card.** Member door → **link B** → the **owner** card.
+✅ At the top of that card it now says **Closed today**.
+✅ The **I'm here** button is **faded, and clicking it does nothing.**
+✅ Under the button: **"Your gym is closed today, so attendance isn't open."**
+❌ If it says *"isn't open right now"* instead, tell me — that is the wrong one
+of two sentences, and telling them apart is the whole point of this step.
 
-**10 · Open Attendance** (**link C**).
-✅ A heading **Attendance** and today's date.
-✅ **The day's shape first**: a line reading **"Before opening times were set"**
-with **1 person** beside it.
-✅ Below it, under **Who came**, **one row** with **your own name** and **one
-time chip** — the same time you saw in step 4.
-✅ **No red marks, no warnings.** Nobody did anything wrong.
+**9 · Open the gym around the clock.** Owner door → **link D** → **When we're
+open** → **remove today's closure**, then choose **Open 24 hours** and save.
+✅ The section's summary reads **"Your gym is open 24 hours."**
 
-**11 · The number is the gym's, not the page's.** Look at the count in the top
-right of the day card.
-✅ It reads **1 person** — and *not* two, even though you tapped twice.
+**10 · The button comes back.** Member door → **link B** → the **owner** card.
+✅ It says **Open 24 hours** and lists no weekdays.
+✅ **I'm here** is bright again.
+✅ Press it. A line appears saying you are marked in, and it mentions the gym
+being open 24 hours.
+✅ A date appears under **Days you came** with a time beside it, on the
+**12-hour** clock.
 
-**12 · Open your own history.** Click your name in the list.
-✅ A panel opens under it headed **"— when they came"** showing the day you came.
+**11 · Press it a second time.**
+✅ The line changes to say you are **already** marked in.
+✅ **Still only ONE time** on that day — you came once.
+
+**12 · Reload the page.**
+✅ The day and its time are still there. It was really saved.
+
+**13 · Your timetable survived.** Owner door → **link D** → **When we're open**
+→ choose **Set opening times**.
+✅ **Your whole week is still there**, every day, exactly as it was before step 9
+— nothing to retype.
+✅ Save it, so the gym is back on its timetable.
+❌ If the days are empty, stop and tell me. That is the defect you found on
+2026-09-03 coming back.
+
+---
+
+## PART C — the gym sees who came
+
+**14 · Open Attendance.** Owner door → **link C**.
+✅ A heading **Attendance**, and under it
+**"Who came in, by day. Times are your gym's own."**
+✅ A date, with **‹** and **›** arrows either side of it.
+
+**15 · One section, and it folds.** Below the date.
+✅ **One** section headed **Who came**, already open, with a count beside the
+heading.
+✅ Click the heading. **It closes.** Click again. **It opens.**
+❌ If clicking does nothing, tell me — that is the dropdown fault from
+2026-09-03 returning.
+
+**16 · Your own row.** In that section.
+✅ **One row with your name**, and **your email address underneath it**.
+✅ **No circle with initials** beside the name — those were removed.
+✅ One or more time chips on the row, showing when you came.
+
+**17 · Somebody who came twice.** If your row has more than one time chip:
+✅ Beside the name it says **visited 2 times** in words.
+✅ If a row has only ONE chip, it says **nothing** of the kind — no
+*"visited 1 times"*.
+
+**18 · Open one person's history.** Click your name.
+✅ A panel opens underneath showing the days that person came.
 ✅ Click the ✕ to close it.
 
-**13 · Move a day back.** Click the **‹** arrow beside the date.
+**19 · Move a day back.** Click **‹**.
 ✅ The date changes to yesterday.
-✅ It says **nobody has marked themselves in on this day yet** — *not* an error,
-and *not* your name carried over from today.
-✅ Click **›** to come back to today; your row is there again.
+✅ If nobody came that day it says so plainly — **not** an error, and **not**
+your name carried over from today.
+✅ Click **›** to return to today; your row is back.
+
+**20 · Search.** Type part of your name into **Search by name**.
+✅ Your row stays. Type something nobody is called.
+✅ A sentence saying nobody by that name came in — again, not an error.
 
 ---
 
-## PART C — the switch and the permission
+## PART D — the switch and the permission
 
-**14 · Turn marking off.** Open **link D** (Settings). Find the section headed
-**Marking attendance**.
-✅ The shut heading already tells you the state: **"Members can mark themselves
-in"**.
+**21 · Turn marking off.** Owner door → **link D** → the section **Marking
+attendance**.
+✅ Its closed heading already tells you the state.
 ✅ Open it and untick **"Let members mark themselves in"**.
-✅ The heading now reads **"Switched off"**.
+✅ The heading changes to say it is switched off.
 
-**15 · Check the member's side went with it.** Sign out, sign in through the
-**member** door, open **link E**.
-✅ The **I'm here** button is **GONE** — not greyed out, gone.
-✅ **Your visit from step 4 is still listed.** It really happened; switching the
-gym's button off must not erase your history.
+**22 · Check the member's side went with it.** Member door → **link B** → the
+**owner** card.
+✅ The **I'm here** button is **GONE** — not faded, gone.
+✅ **The "Pressing this marks your attendance" line is gone with it** — an
+explanation of a button that is not there would be a sentence about nothing.
+✅ **Your visits are still listed.** They really happened; switching the gym's
+button off must not erase your history.
 
-**16 · Turn it back on.** Owner door → **link D** → tick it again.
-✅ Back to *"Members can mark themselves in"*, and the button returns on the
-member screen.
+**23 · Turn it back on.** Owner door → **link D** → tick it again.
+✅ The button returns on the member screen.
 
-**17 · The permission box.** Still on **link D**, open the **Staff** section.
-✅ In the list of what a staff member can do there is a box reading **"See who
-came in"**.
-*(Your gym has only you on staff, so there may be nothing to tick it against —
-if so, just confirm the wording exists somewhere on that screen and move on.)*
-
----
-
-## PART D — optional, and the one step I could NOT test myself
-
-**Skip this if you are short of time.** Everything above I ran end to end against
-the real server before writing it. **This part I could not** — I hit a login
-limit while probing and could not observe it. So if it misbehaves, that is
-genuine new information rather than a step I got wrong.
-
-**What it checks:** Kd's own ruling that *"if a member comes in a different slot
-that counts again and the owner can see they attended two times"* — one row, two
-times.
-
-**18 · Give the gym opening hours.** Owner door → **link D** → **When we're
-open** → set today's hours to a window that **includes right now** (say an hour
-either side of the current time), and save.
-
-**19 · Mark in again.** Member door → **link E** → **I'm here**.
-✅ This time it should say **"You're marked in — the … session."** naming the
-window.
-
-**20 · Look at the gym's view.** Owner door → **link C**.
-✅ **ONE row with your name, carrying TWO time chips** — not two rows.
-✅ The day's count now reads **1 person · 2 visits** — the two numbers differ,
-which is the whole point of the ruling.
-✅ **Two lines** in the day's shape: one *"Before opening times were set"*, one
-for the session.
+**24 · The permission box.** Still on **link D**, open the **Staff** section.
+✅ Somewhere in the list of what a staff member may do, there is a box reading
+**"See who came in"**.
 
 ---
 
 ## Reporting back
 
-Just tell me the step numbers that passed and any that did not, with what you saw
-instead. **A failure here is worth more than a pass** — it is the first time any
-of this has been in front of a person.
+Tell me the step numbers that passed and any that did not, **with what you saw
+instead**. A failure here is worth more than a pass.
+
+**If you stop part-way, say where you stopped** rather than "all passed" — on
+2026-09-03 a step was abandoned mid-way and the sentence it covered went
+unobserved for two more commits before anybody noticed.
 
 ---
 
 ## RESULT
 
-**PARTS A AND B — PASSED 8/8, 2026-09-02**, run by the chat against the real
-server and reported at `DECISIONS.md:29410`.
+**NOT YET RUN.** This sheet was rewritten 2026-09-03 against the screens as they
+stand after `a1c5005`, `dba7cbe`, `00c2699` and the rulings at `DECISIONS.md`
+`:30867`, `:31008`, `:31098`, `:31295`, `:31352` and `:31508`.
 
-**PARTS C AND D — PASSED, 2026-09-02, run by KD at the browser** on the shipping
-bytes of `8eacc54`, reported as *"all passed"*. **THE SHEET IS THEREFORE COMPLETE
-AND THE `OWED.md` ATTENDANCE LINE TICKS.**
+**WHAT THE PREVIOUS VERSION'S PASS COVERED, kept because it is real and must not
+be re-claimed by this sheet** (`:29410`, `:29870`): parts A and B passed 8/8 on
+2026-09-02 and parts C and D passed the same day at Kd's browser, on the bytes of
+`8eacc54`. **Those screens have since changed** — the day's shape section and the
+odd-arrival line were removed, the button learned to refuse, the email arrived
+beside the name and the initials went — **so that pass says nothing about the
+steps above and is not carried forward.**
 
-**WHAT THAT PASS COVERS AND WHAT IT DOES NOT, so nobody reads it as wider than it
-is** (:23535's rule — the record says what happened):
+**ALREADY OBSERVED SINCE, and deliberately NOT re-numbered into this sheet**
+(`:31633`, `:31856`): the refusal outside opening hours, the *"closed today"*
+sentence, the *"Pressing this marks your attendance"* line, and the timetable
+surviving a switch to 24 hours. **They are steps 8, 10, 5 and 13 here.** Running
+them again costs a minute and is worth it — they were observed one at a time, on
+three different commits, never as one run.
 
-- **Steps 14–20 were run by Kd and reported by him; the chat observed none of
-  them.** That is the ordinary shape of this gate, not a weakness — no step
-  needed a terminal command, so :23535's failure mode (a step requiring the
-  chat's action reported as passed while the chat had not acted) cannot apply
-  here. Every step was a browser click he could make alone.
-- **Part D was optional and he ran it anyway**, which is the part worth having:
-  it is the only observation this project has of Kd's ruling 12 at a screen — one
-  member, two sessions, **one row with two time chips and a count reading
-  `1 person · 2 visits`**. `dayTotalsLine` prints the second number ONLY when it
-  differs from the first, so that ✅ could not have been satisfied by a day with
-  one visit.
-- **It was run on the bytes of `8eacc54`** — verified with
-  `git diff HEAD --name-only -- apps/web/src packages/shared/src apps/api/src`
-  returning empty, not asserted (:14956, :15198: nothing ticks that the browser
-  has not seen on the shipping bytes).
-- **The API server was DOWN when the steps were handed over** and this sheet's
-  *"both servers are already running"* was stale. Started before he began, both
-  answering 200. **A sheet's setup section ages** (:5041) — check it rather than
-  quoting it.
-
-**STILL NOT COVERED BY ANY BROWSER RUN, and none of it is this card's:** the QR
-path (phone app, :26558/:26586) · staff marking somebody present (:27900, "not
-now") · a second gym's owner · anything on a phone.
+**STILL NOT COVERED BY ANY BROWSER RUN, and none of it is this sheet's:** the QR
+path (phone app) · staff marking somebody present · a second gym's owner ·
+anything on a phone.

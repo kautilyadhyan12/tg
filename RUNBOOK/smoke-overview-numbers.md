@@ -1,5 +1,36 @@
 # SMOKE — the gym's numbers on the console home screen
 
+> ## ⚠️ STALE — DO NOT RUN AS WRITTEN (marked 2026-09-03)
+>
+> **It passed, and then the screen changed underneath it the same day.** Kd's
+> rulings at `DECISIONS.md:30867` and `:31008` removed two things this sheet
+> tells you to look for, so a run today would report failures that are not
+> failures. **Named rather than left to be discovered:**
+>
+> - **Step 3's amber box is GONE.** *"2 of today's 3 visits were outside your
+>   opening hours"* came off the dashboard at his instruction — *"remove these
+>   what are these even doing"* — and `exceptionsNote` was deleted with it.
+>   Grep-verified: no such string anywhere in the panel or its view file.
+>   **It is coherent rather than a loss, because the button now REFUSES outside
+>   opening hours, so no new odd arrival can be created.** Where an existing one
+>   still shows is the Attendance screen, on the visit's own chip.
+> - **Step 4's initials circles are GONE** — *"OW / owner what the fuck is ow
+>   shit"*. Grep-verified: nothing renders them.
+> - **Step 6's chart gained a sentence.** On a gym in its first week it now also
+>   reads **"Your first week — the earlier columns fill in as the weeks pass."**
+>   under the columns.
+>
+> **AND ITS NUMBERS WERE NEVER SAFE TO ASSERT.** Every ✅ in Part A names a
+> literal — `2 people`, `3 visits`, `33%`, `03:32` — against a database that is
+> shared, seeded and added to. They were true on 2026-09-03 and are not a
+> property of the screen. A rewrite must express them as relationships (*"the
+> big number is people, the caption is visits, and they differ"*) the way
+> `smoke-attendance.md` now does.
+>
+> **Its `OWED.md` line carries the rewrite.** Parts B and C are unaffected by
+> either ruling. **The recorded PASS below stands for the bytes it was run on
+> and is not carried forward** (:29870).
+
 **What this checks:** the panel at the top of a gym's home screen — how many
 people came, who they were, whether the gym was even open when they arrived, and
 the eight-week chart. Built 2026-09-03 (`DECISIONS.md:30399`) and rebuilt twice

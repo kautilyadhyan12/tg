@@ -131,6 +131,36 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       read. `ConsoleSection`'s `defaultOpen` is the console's answer to the same
       problem (:31295) and is the pattern to follow, not `forceOpen`.
 
+- [ ] 🟡 **`RUNBOOK/smoke-overview-numbers.md` IS STALE AND IS MARKED SO AT THE
+      TOP** (2026-09-03). Two of its ✅ name things Kd removed the same day it
+      passed — **the dashboard's amber *"outside your opening hours"* box**
+      (`:30867` §2.3, deleted with `exceptionsNote`) and **the initials
+      circles** (§2.6) — and its chart step predates the *"Your first week"*
+      sentence (`:31008` §2). All three grep-verified. **A run today would
+      report failures that are not failures**, which is why the banner names
+      them rather than leaving them to be found.
+      **THE DEEPER PROBLEM IS ITS SHAPE, not those three steps:** every ✅ in
+      Part A asserts a LITERAL — `2 people`, `3 visits`, `33%`, `03:32` —
+      against a database that is shared, seeded and added to, so they were true
+      of one afternoon rather than of the screen (:26012, :25326). **The rewrite
+      expresses them as relationships**, the way `smoke-attendance.md` was
+      rewritten on 2026-09-03: the big number is PEOPLE, the caption is VISITS,
+      and the test is that they DIFFER. Parts B and C are unaffected.
+
+- [ ] ⚪ **`initials()` IN `overviewView.js` HAS NO CALLER AND KEEPS ITS TESTS**
+      (2026-09-03, found while rewriting the smoke sheets). Kd had the initials
+      circles removed from the console (`:30867` §2.6) and the helper survived
+      the removal — grep-verified: nothing under `apps/web/src` imports it
+      except its own test file, which still asserts four cases. **That is the
+      exact shape `:30867` §2.3 named when `exceptionsNote` was deleted rather
+      than left — *"dead surface with test coverage reads as protection and is
+      not"*** — and `:31008` §3 records three sibling helpers dying with their
+      callers in the same session while this one did not. **Not deleted here
+      (R1.1: this session's task was the smoke sheets), and NOT to be deleted
+      casually either:** `:31008`'s own slip was deleting the tests of a LIVE
+      helper alongside a dead one, caught only by `eslint` noticing an unused
+      import. Check callers, then remove the function and its cases together.
+
 - [ ] ⚪ **A MEMBER WITH `/my-gyms` OPEN DOES NOT SEE THEIR GYM CHANGE ITS
       HOURS UNTIL THEY REFRESH** (2026-09-03, T3 round 1 on `:31352`). The hours
       are read once per mount; the 30-second tick moves the CLOCK, not the data.
