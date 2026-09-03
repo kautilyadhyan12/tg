@@ -145,11 +145,12 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
           bounds it; the cap is. What the fold buys is an owner who does not want
           the names at all being able to put them away and keep the numbers.
 
-          `forceOpen` so it arrives OPEN and still folds — the names are the
-          thing he asked to be able to see at a glance. */}
+          ~~`forceOpen` so it arrives OPEN and still folds~~ — **`forceOpen`
+          PINS a section open and this control could not be closed at all;
+          Kd found it by clicking. `defaultOpen` seeds the state instead.** */}
       {shown.length === 0 ? null : (
         <div className="mt-5">
-          <ConsoleSection title="Who came today" aside={peopleLabel(day?.totals?.people)} forceOpen>
+          <ConsoleSection title="Who came today" aside={peopleLabel(day?.totals?.people)} defaultOpen>
           <div className="flex flex-col">
             {shown.map((person) => (
               <PersonRow

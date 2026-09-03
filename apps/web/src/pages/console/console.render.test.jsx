@@ -1906,6 +1906,32 @@ describe("the gym's numbers", () => {
     expect(screen.getAllByText(/17:07/).length).toBeGreaterThan(0);
   });
 
+  it('lets an owner fold the names away, and unfold them again', async () => {
+    // KD, 2026-09-03: *"the drop down is not working i clcik here bu it does not
+    // open close"* — found on the Attendance screen, and this list shipped with
+    // the SAME wrong prop. `forceOpen` PINS a section open; `defaultOpen` seeds
+    // it. **The assertion is the CLOSING**, because a case that only checks it
+    // arrives open passes under the defect.
+    orgService.getOverview.mockResolvedValue(busy());
+    orgService.getAttendanceDay.mockResolvedValue(
+      attendanceDay({
+        totals: { visits: 1, people: 1 },
+        people: [attendee('u-1', 'Kd Owner', [['2026-09-02T04:02:00.000Z']])],
+      }),
+    );
+    drawOverview();
+
+    const heading = await screen.findByRole('button', { name: /^Who came today/ });
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+
+    fireEvent.click(heading);
+    expect(screen.getByText('Kd Owner')).toBeTruthy();
+  });
+
   it('keeps the count the server sent above a preview that shows only a few', async () => {
     // THE BREAKAGE RULING 14 NAMES (:27992 §3): a screen right on six rows and
     // wrong on four hundred. The totals say 40 people while the page carries

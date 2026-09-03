@@ -2480,6 +2480,15 @@ const MUTANTS = [
     from: "      {geometry === null ? null : (",
     to: "      {geometry === null || collecting ? null : (",
   },
+  {
+    id: 'C179',
+    target: 'states',
+    suite: RENDER_SUITE,
+    why: "A SECTION THAT STARTS OPEN CAN NEVER BE CLOSED AGAIN - the defect Kd found by clicking on 2026-09-03: the drop down is not working i clcik here bu it does not open close. isOpen is open OR forceOpen, so pinning it true makes the tap flip a flag the OR immediately overrides. defaultOpen seeds the state instead; seeding from false again makes the prop inert and both attendance lists arrive CLOSED, and a case that only checked the section ARRIVES open would pass under it, which is exactly how it shipped",
+    expect: "lets an owner fold the names away",
+    from: "  const [open, setOpen] = useState(defaultOpen);",
+    to: "  const [open, setOpen] = useState(false);",
+  },
 ];
 
 const abort = (msg) => {

@@ -1,6 +1,43 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE DROPDOWN COULD NOT BE CLOSED. DECISIONS :31295 (addendum 2 to
+      :31098). Web-only: no `apps/api`, no `packages/shared`, no migration.
+
+  1. **ONE OPERATOR.** `ConsoleSection` computes `isOpen = open || forceOpen`,
+     so a section rendered with `forceOpen` permanently true can NEVER close —
+     the tap flips `open` and the `||` overrides it. **Dead on BOTH attendance
+     lists from the moment each shipped**, and Kd found it by clicking.
+  2. **`forceOpen` IS THE ANTI-SILENCE RULE (:12660), NOT "START OPEN"** — its
+     own docblock says a section holding something the owner must see *"cannot
+     be tapped shut over it"*. That is what I asked for by using it and the
+     opposite of what he asked for. **`defaultOpen` now seeds `useState`.**
+  3. **I WROTE "arrives open and still folds" BESIDE EACH LIST AND NEVER
+     OPERATED EITHER.** A comment about behaviour is a claim (V1); :19960's
+     shape in prose. Both struck in place (:20587).
+  4. **THE TEST THAT WOULD NOT HAVE CAUGHT IT is the one I would have written:
+     a case asserting the section ARRIVES OPEN passes under the defect.** Both
+     new cases assert the CLOSING — `aria-expanded` false and the names gone,
+     since closed means UNMOUNTED. **Proven by putting `forceOpen` back**
+     (`expected 'true' to be 'false'`). **C179** is the standing mutant.
+     **STANDING: for a two-state control, assert the state it is NOT in when you
+     find it.**
+
+PROVE: `web` **1671/1671 / 58 files, exit 0** (+2) · eslint clean on five web
+       files · `vite build` exit 0 · three root guards green.
+       **SWEEP `MUTATE_ONLY=C155…C179` — 22 RED, 0 ALIVE.**
+
+FILES: `apps/web/src/components/console/{ConsoleStates.jsx,
+       OverviewNumbers.jsx}` · `apps/web/src/pages/console/{Attendance.jsx,
+       console.render.test.jsx,consoleAttendance.render.test.jsx}` ·
+       `apps/web/tools/mutate-console.mjs` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS SIX COMMITS STALE — rewrite it before asking him to
+       run anything. Then the smoke, then T3 round 1.**
+```
+
+```
 TASK: THE EMAIL FIELD KILLED THE ATTENDANCE SCREEN, AND MY FIRST GUARD WAS IN
       THE WRONG LAYER. DECISIONS :31222 (addendum to :31098).
 

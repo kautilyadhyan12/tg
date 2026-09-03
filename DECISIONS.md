@@ -31291,3 +31291,60 @@ and **sha256-verified identical** (`cde4ecb7…910b`) after both probes.
 **LIVE CHECK, on the restarted server:** `GET /v1/orgs/:gymId/attendance` now
 returns `owner | owner@example.com | 2 visit(s)` and `test | tes@example.com |
 1 visit(s)`.
+
+### ADDENDUM 2, same session — THE DROPDOWN I SHIPPED COULD NOT BE CLOSED, AND BOTH MY COMMENTS SAID IT COULD
+
+**Read before reaching for `ConsoleSection`'s `forceOpen`, before writing a test
+that a control ARRIVES in a state, and before describing a control's behaviour
+in a comment without operating it.**
+
+*"the drop down is not working i clcik here bu it does not open close"*.
+
+### 1 · THE DEFECT IS ONE OPERATOR
+
+`ConsoleSection` computes `const isOpen = open || forceOpen`. **With `forceOpen`
+permanently true, `isOpen` is permanently true**: the click flips `open` and the
+`||` overrides it on the same render. The control was dead on BOTH lists — the
+Attendance screen's *Who came* and the dashboard's *Who came today* — from the
+moment each shipped.
+
+**`forceOpen` IS NOT "START OPEN", AND ITS OWN DOCUMENTATION SAYS SO.** It exists
+for the anti-silence rule (:12660): a section holding an error the owner must see
+**cannot be tapped shut over it**. That is the behaviour I asked for by using it,
+and it is the opposite of what Kd asked for.
+
+`defaultOpen` now seeds `useState` instead of overriding it. Two props, two
+jobs, and the difference written where the next caller reads it.
+
+### 2 · WHAT I WROTE ABOUT IT WAS FALSE, TWICE, IN THE CODE
+
+Beside each list I wrote that `forceOpen` means *"open and still foldable"* and
+that it *"arrives open and an owner can fold it away over a long list"*. **Both
+sentences were false when written and neither was ever operated.** They are
+struck in place rather than rewritten — :20587's convention, and the wrong claim
+is the lesson.
+
+**A comment describing behaviour is a claim (V1) and I made it twice without
+running the control.** :19960's *"a guard whose only proof is that the code looks
+right"*, arriving in prose instead of in a guard.
+
+### 3 · THE TEST THAT WOULD NOT HAVE CAUGHT IT, AND THE ONE THAT DOES
+
+**A case asserting the section ARRIVES OPEN passes under the defect perfectly** —
+it arrives open either way. That is precisely the test I would have written, and
+it is why nothing was red.
+
+Both new cases **assert the CLOSING**: click the heading, `aria-expanded` must be
+`false` and the names must be gone (closed means UNMOUNTED here). **Proven by
+putting `forceOpen` back**: `expected 'true' to be 'false'`, restored after.
+**C179** is the standing mutant — it makes `defaultOpen` inert — and is RED.
+
+**STANDING: for a control with two states, the assertion is the state it is NOT
+in when you find it.** Arriving-open is free; closing is the guarantee.
+
+### Round log (addendum 2)
+
+`web` **1671/1671 across 58 files, exit 0** (+2). `eslint --max-warnings=0` exit
+0 on five web files · `vite build` exit 0 · three root guards green. **SWEEP a
+stated SUBSET: `MUTATE_ONLY=C155…C179` — 22 mutants, 22 RED, 0 ALIVE.** No
+`apps/api` and no `packages/shared` change.

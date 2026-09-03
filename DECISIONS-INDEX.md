@@ -1043,6 +1043,24 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   came after the schema change; it also needed a stale listener on :3000 killed
   by pid, since a second process fails to bind while the old one keeps answering
   `/health` 200. `web` 1669/1669.
+  **ADDENDUM 2 `:31295`, same session — THE DROPDOWN I SHIPPED COULD NOT BE
+  CLOSED, AND BOTH MY COMMENTS SAID IT COULD.** **Read before reaching for
+  `ConsoleSection`'s `forceOpen`, before writing a test that a control ARRIVES
+  in a state, and before describing a control's behaviour in a comment without
+  operating it.** *"the drop down is not working i clcik here bu it does not
+  open close"*. **One operator: `isOpen = open || forceOpen`**, so pinning it
+  true makes the tap flip a flag the `||` overrides — dead on BOTH attendance
+  lists from the moment each shipped. **`forceOpen` is the anti-silence rule
+  (:12660), not "start open", and its own docblock says so**; `defaultOpen` now
+  seeds `useState` instead. **I wrote "arrives open and still folds" beside each
+  list and never operated either** — a comment about behaviour is a claim (V1),
+  :19960's shape in prose; both struck in place (:20587).
+  **AND THE TEST THAT WOULD NOT HAVE CAUGHT IT: a case asserting the section
+  ARRIVES OPEN passes under the defect perfectly.** Both new cases assert the
+  CLOSING, proven by putting `forceOpen` back (`expected 'true' to be 'false'`).
+  **STANDING: for a two-state control, the assertion is the state it is NOT in
+  when you find it.** **C179** is the standing mutant. `web` 1671/1671; SWEEP
+  C155–C179, 22 RED.
 - **:30867** — 2026-09-03 — **KD RULES THAT A GYM WITH SET HOURS REFUSES
   ATTENDANCE OUTSIDE THEM, REVERSING A CHAT'S CALL — plus six design
   instructions given from his own browser.** **Read before writing anything that

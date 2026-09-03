@@ -648,3 +648,29 @@ describe("the member's email, which Kd ruled the gym can see", () => {
     expect(screen.queryByText(/couldn't read/i)).toBeNull();
   });
 });
+
+describe('the Who came dropdown', () => {
+  // **KD FOUND THIS BY CLICKING** (2026-09-03): *"the drop down is not working i
+  // clcik here bu it does not open close"*. It shipped with `forceOpen`, which
+  // PINS a section open — `isOpen` is `open || forceOpen`, so the tap flipped
+  // `open` and the `||` put it straight back. The control was dead and two
+  // comments claimed it "arrives open and still folds".
+  //
+  // **THE ASSERTION IS THE CLOSING, NOT THE OPENING.** A case that only checked
+  // it arrives open passes under the defect perfectly — which is how it shipped.
+  it('arrives open and CLOSES when you click the heading', async () => {
+    drawScreen();
+    const heading = await screen.findByRole('button', { name: /^Who came/ });
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByText('Priya Sharma')).toBeTruthy();
+
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('false');
+    // Closed means UNMOUNTED here, so the names are gone rather than hidden.
+    expect(screen.queryByText('Priya Sharma')).toBeNull();
+
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Priya Sharma')).toBeTruthy();
+  });
+});

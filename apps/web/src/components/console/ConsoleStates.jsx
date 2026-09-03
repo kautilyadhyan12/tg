@@ -87,8 +87,30 @@ export function ConsoleCard({ children, className = '' }) {
  *  is the citation: no reviewer, test or mutant flags an ABSENT sentence, a
  *  person does. A section holding something the owner needs to see opens itself
  *  and cannot be tapped shut over it. */
-export function ConsoleSection({ title, summary, aside, children, forceOpen = false }) {
-  const [open, setOpen] = useState(false);
+/** **`defaultOpen` STARTS OPEN. `forceOpen` PINS OPEN. THEY ARE NOT THE SAME
+ *  PROP AND CONFLATING THEM SHIPPED A DEAD CONTROL** (Kd, 2026-09-03: *"the
+ *  drop down is not working i clcik here bu it does not open close"*).
+ *
+ *  `isOpen` below is `open || forceOpen`, so a section rendered with
+ *  `forceOpen` permanently true can NEVER be closed — the click flips `open`
+ *  and the `||` puts it straight back. That is exactly what `forceOpen` is FOR
+ *  (the anti-silence rule: a section holding an error the owner must see cannot
+ *  be dismissed over it), and it is the wrong tool for *"this list should be
+ *  open when you arrive"*. Two attendance lists shipped with it, and the
+ *  comments beside them claimed they "arrive open and still fold" — **false,
+ *  and Kd found it by clicking.**
+ *
+ *  `defaultOpen` seeds the state instead of overriding it, so the heading
+ *  toggles like any other. */
+export function ConsoleSection({
+  title,
+  summary,
+  aside,
+  children,
+  forceOpen = false,
+  defaultOpen = false,
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
   const isOpen = open || forceOpen;
 

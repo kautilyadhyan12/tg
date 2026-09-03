@@ -623,14 +623,15 @@ function AttendanceDay({ org }) {
               drop down in Who came"*. **So this screen is now ONE section**, and
               the dropdown he asked for is on it.
 
-              **IT IS `forceOpen`, WHICH MEANS OPEN AND STILL FOLDABLE.** A
-              section that opened SHUT would hide the only thing left on the
-              screen behind a tap — `ConsoleSection` latches `forceOpen` into
-              its own open state on first render, so this arrives open and an
-              owner can fold it away over a long list. That is the prop's second
-              use, not a repurposing: it exists so a section holding something
-              the owner needs to see cannot be missed. */}
-          <ConsoleSection title="Who came" aside={dayTotalsLine(answer.totals)} forceOpen>
+              ~~**IT IS `forceOpen`, WHICH MEANS OPEN AND STILL FOLDABLE.**~~
+              **FALSE, AND KD FOUND IT BY CLICKING** (*"the drop down is not
+              working i clcik here bu it does not open close"*). `forceOpen`
+              PINS a section open — `isOpen` is `open || forceOpen`, so the tap
+              flipped `open` and the `||` put it straight back. It exists for
+              the anti-silence rule and is the wrong tool for "start open".
+              **`defaultOpen` seeds the state instead**, so this arrives open
+              and the heading toggles like any other. */}
+          <ConsoleSection title="Who came" aside={dayTotalsLine(answer.totals)} defaultOpen>
             <div className="flex items-center justify-end gap-3 flex-wrap">
               <label className="flex items-center gap-2 rounded-xl px-3 py-1.5"
                 style={{ background: 'rgba(255,255,255,0.05)' }}>
