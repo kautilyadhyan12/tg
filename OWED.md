@@ -48,20 +48,27 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       `/v1/orgs/mine` carries enough to decide it without a second read.
       **🔴 because a user-facing control lies about what it will do.**
 
-- [ ] ❓ **A MEMBER SEES THEIR GYM'S DAY, NOT THEIR OWN, AND KD READ IT AS A
-      BUG.** Same session: *"is the timimng wrong it is showing wednesaday but
+- [ ] ⚪ ~~❓ **A MEMBER SEES THEIR GYM'S DAY, NOT THEIR OWN, AND KD READ IT AS A
+      BUG.**~~ **NOT A DEFECT — KD CLOSED IT HIMSELF THE SAME EVENING:
+      *"i agree my fault"*.** He had set that test gym to Argentina. **The
+      behaviour is correct and stays**; what survives is only the small copy
+      question in (b) below, on which he has NOT ruled.
+      Original report: *"is the timimng wrong it is showing wednesaday but
       it is thrusday"*. **MEASURED, and it is not obviously a defect:** the
       `owner` gym's `timezone` is **`America/Mendoza`**, where it was
       **21:11 on Wednesday** while his own clock read 05:28 Thursday
       (`now()` UTC 2026-09-03 00:11). So the screen is showing the GYM's day,
       which is what every ruling on this product requires (trap #8, :26469 §5).
-      **TWO THINGS TO SETTLE AND THEY ARE DIFFERENT:** (a) is that gym's
-      timezone simply WRONG — did he pick Mendoza by accident on a test gym, in
-      which case there is no bug at all; and (b) even when it is right, a member
-      reading "Wednesday" on a Thursday has no way to know why — **the screen
-      never says whose clock it is on.** (b) is a real copy gap whatever the
-      answer to (a). **Do not "fix" this by switching to the reader's zone** —
-      that is the trap this product has kept out of every attendance surface.
+      ~~**(a) is that gym's timezone simply WRONG**~~ — **ANSWERED: yes, his
+      own test gym, his own words. No code was wrong.**
+      **(b) STILL OPEN AND HIS TO RULE, worth about one sentence of copy: even
+      when the zone is right, a member reading "Wednesday" on their Thursday has
+      no way to know why — the screen never says WHOSE CLOCK it is on.** Cheap
+      to answer ("times are your gym's own", which the console already says on
+      its own attendance screen) and not worth a card by itself; do it beside
+      the next member-facing attendance change. **Do NOT "fix" it by switching
+      to the reader's zone** — that is the trap this product has kept out of
+      every attendance surface, and (a) is the proof it works.
 
 - [ ] 🟡 **THE ATTENDANCE SCREEN'S PEOPLE LIST GROWS WITHOUT BOUND, and Kd asked
       the question that found it** (2026-09-03, DECISIONS `:31098` §3):
