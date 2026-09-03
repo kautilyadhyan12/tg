@@ -31852,3 +31852,68 @@ reading. **Three of Kd's four remain unbuilt.**
 **No `src` change in `apps/web`, no `packages/shared` change, no migration** —
 the two code fixes are both in `apps/api` and everything else is a test or a
 record.
+
+## 2026-09-03 — THE CLOSED-DAY STEP RUNS AND THE 🔴 "I'm here" LINE TICKS — the one sentence on that screen no human had ever seen
+
+**Read before citing the "I'm here" gate as verified, before letting one step
+stand in for a sheet, and before assuming a card's earlier steps still cover a
+screen that has been committed to since.**
+
+Kd ran the last outstanding step at his browser on 2026-09-03 and reported
+**PASS**: a closure dated today, and the member's card reads *"Your gym is closed
+today, so attendance isn't open."* rather than *"isn't open right now"*. **That
+is the two refusals told apart on screen**, which is :26684 §3's ordering — a
+dated closure beats the weekly pattern — **observed rather than only mutated**.
+The 🔴 line ticks on this commit, naming `a1c5005`, `dba7cbe`, `cfca936` and
+`00c2699`.
+
+### 1 · WHY ONE STEP COULD STAND IN FOR A SHEET, and it is a claim rather than a convenience
+
+Three sittings on three different commits: **steps 1–5 on `a1c5005`, 6a–6d on
+`dba7cbe`, this one on `00c2699`.** :27810 and :25707 both require the scope to
+be argued, and :14956 is the recorded cost of getting it wrong — a fix landing
+under a step that had already passed.
+
+**MEASURED, not asserted** (`git diff --name-only a1c5005 HEAD`): the only
+non-test file under `apps/web/src` to change across that whole span is
+`hoursView.js`, whose `hoursDraft` drives the console FORM — **`GymHoursNote` and
+`AttendancePanel` do not call it at all**, so nothing steps 1–4 looked at moved.
+The console screen it does drive was re-observed afterwards by 6b/6c. **The T3
+fix round changed no web source whatsoever**: three test files, the harness, and
+two server files whose changes are an audit column and a struck comment, neither
+reaching a screen.
+
+**So every ✅ on this card was observed on bytes that differ from `HEAD` only
+where they cannot touch it.** That sentence is the whole of the scope claim, and
+it is checkable by anybody who reruns the command.
+
+### 2 · WHAT THE STEP PROVED THAT NO TEST COULD
+
+`C185` mutates the closure check and a render case asserts the sentence, so the
+BRANCH was covered. **What had never been observed is the pair of sentences being
+different on a real screen** — and the failure mode they guard against is the two
+collapsing into one, which every fixture in the suite would still pass because
+each asserts its own string in isolation. **A human reading both, one after the
+other, on the same card, is the instrument that catches a merge.** It is the
+argument for the SMOKE gate existing, in the same shape :12660 recorded it: the
+defect nobody's test could see, found by somebody looking.
+
+### 3 · WHAT THIS DOES NOT CLOSE
+
+**The `:31508` timetable card was never an `OWED.md` line** — it was a defect
+found mid-smoke and fixed the same day, so it closes with its own record and this
+one rather than with a tick. **Three of Kd's four remain unbuilt**, each with a
+line: the calendar for "Days you came" (blocked on a date window the member's
+attendance history does not have), the fire on the days attended, and folding the
+member card's Mon–Sun list.
+
+### Round log
+
+**No code in this commit.** Records only: this entry, its index line, the tick and
+its evidence, and the handoff.
+
+**What the pass rests on, named so it cannot be over-quoted:** the `owner` gym on
+the Neon dev branch (`America/Mendoza`, `12h`), api restarted on the committed
+bytes before the step ran — **pid 7420, started after `00c2699`** — web on
+`:5173` throughout. `@app/shared` is consumed from source, so no build step sat
+between the commit and his browser.

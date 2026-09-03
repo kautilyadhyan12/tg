@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CLOSED-DAY STEP RAN AND THE 🔴 "I'm here" LINE TICKS. DECISIONS
+      `:31856`. **BOTH OF TODAY'S CARDS ARE CLOSED — PROVE, Kd's browser, and
+      T3 round 1 with zero Critical/High.** Nothing is outstanding on them.
+      **START HERE: the next work is the THREE things Kd approved and nobody has
+      built — all on `OWED.md`, and the first one is BLOCKED on a server change
+      nobody has made.**
+
+  1. **WHAT HE SAW:** a closure dated today, and the member's card reads *"Your
+     gym is closed today, so attendance isn't open."* rather than *"isn't open
+     right now"* — the two refusals told apart on screen, which is :26684 §3's
+     ordering OBSERVED and not merely mutated.
+  2. **WHY IT MATTERED, AND IT IS THE ARGUMENT FOR THE SMOKE GATE:** `C185` and
+     a render case already covered the BRANCH. **What no test could see is the
+     two sentences being DIFFERENT on one real screen — the failure mode is them
+     collapsing into one, and every fixture would still pass, each asserting its
+     own string in isolation.** :12660's shape.
+  3. **THE SCOPE CLAIM IS MEASURED, because one step stood in for a sheet**
+     (:27810, :25707, and :14956 is the cost of getting it wrong). Three
+     sittings on three commits; `git diff --name-only a1c5005 HEAD` shows the
+     only non-test `apps/web/src` file to move is `hoursView.js`, whose
+     `hoursDraft` drives the console FORM and is called by neither
+     `GymHoursNote` nor `AttendancePanel` — and that console screen was
+     re-observed by 6b/6c. **The T3 fix round changed no web source at all.**
+  4. **`:31508` (the timetable) was never an `OWED.md` line** — a defect found
+     mid-smoke and fixed the same day — so it closes with its records, not a
+     tick.
+
+PROVE: no code in this commit; records only. The step ran on the committed bytes
+       — api restarted as **pid 7420 after `00c2699`**, web on `:5173`
+       throughout, `@app/shared` consumed from SOURCE so no build sat between
+       the commit and his browser.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE NEXT THREE, IN ORDER, ALL KD-APPROVED 2026-09-03:**
+       **(a) the CALENDAR for "Days you came" with FIRE on days attended —
+       AND IT CANNOT BE BUILT AS THINGS STAND**: the member's attendance history
+       takes `userId` and `cursor` and NOTHING else, so no screen can ask for
+       "September". A date window comes first, and `/v1/workouts` already has
+       one (`from`/`to`, :4434) to copy rather than invent.
+       `components/progress/WorkoutCalendar.jsx` is the shape to follow and
+       already imports `Flame`. **(b)** folding the member card's Mon–Sun list —
+       **tap, never hover** (:26586, members are on phones).
+       **THE SMOKE SHEET IS ELEVEN COMMITS STALE** and none of today's three
+       sheets was ever written into it — all were handed over in chat.
+```
+
+```
 TASK: T3 ROUND 1 ON BOTH OF TODAY'S CARDS — ZERO Critical/High, THE PACKET
       SHIPS. DECISIONS `:31710`. Six Low, ALL FIXED in that commit and logged in
       `BACKLOG.md`; none bought another round (:5348 rule 1). Escape hatch NOT

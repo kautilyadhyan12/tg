@@ -34,10 +34,30 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
-- [ ] 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS — KD'S
-      RULING IS ONLY HALF BUILT.** ~~**BUILT 2026-09-03** (DECISIONS `:31352`)~~
-      — **THE CODE IS BUILT AND THE LINE DOES NOT TICK: no browser smoke has
-      run and T3 is UNRUN.** The button is now greyed with a true sentence
+- [x] 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS — KD'S
+      RULING IS ONLY HALF BUILT. DONE 2026-09-03**, commits `a1c5005` (the
+      gate), `dba7cbe` (the timetable the smoke destroyed on its way through),
+      `cfca936` + `00c2699` (the T3 round and its six Low fixes). **All three
+      gates met: PROVE · Kd's browser · T3 round 1 with ZERO Critical/High**
+      (`:31352`, `:31508`, `:31633`, `:31710`).
+      **THE LAST STEP RAN 2026-09-03 AND IT IS THE ONE THAT HAD NEVER BEEN
+      SEEN:** a closure dated today, and the card reads *"Your gym is closed
+      today, so attendance isn't open."* rather than *"isn't open right now"* —
+      the two refusals told apart on screen, which is the branch order (:26684
+      §3, a dated closure beats the pattern) observed rather than merely
+      mutated.
+      **THE SCOPE CLAIM, MADE EXPLICITLY BECAUSE ONE STEP IS STANDING IN FOR A
+      SHEET** (:27810, :25707): steps 1–5 ran on `a1c5005`, 6a–6d on `dba7cbe`,
+      this one on `00c2699`. **The only non-test `apps/web/src` file to change
+      across that span is `hoursView.js`** (`git diff --name-only`), whose
+      `hoursDraft` drives the console FORM and is not reached by `GymHoursNote`
+      or `AttendancePanel` at all — and the console screen it does drive was
+      re-observed afterwards by 6b/6c. **The T3 fix round changed no web source
+      whatsoever**, only tests and two server files (an audit column and a
+      comment), neither of which reaches a screen. So every ✅ was observed on
+      bytes that differ from `HEAD` only where they cannot touch it.
+      ~~**THE CODE IS BUILT AND THE LINE DOES NOT TICK: no browser smoke has
+      run and T3 is UNRUN.**~~ The button is now greyed with a true sentence
       whenever the gym is shut, it comes back to life at opening time without a
       reload, and every state the screen cannot decide leaves it PRESSABLE so
       the server keeps the last word (:24141 §3a). `web` 1697/1697; mutants
@@ -49,8 +69,10 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       line. **THE CLOSED-DAY REFUSAL WAS NEVER SEEN** — the only step covering it
       was abandoned mid-way when he lost his timetable, and its replacement had a
       different subject (`:23535`'s rule: an operator's "all passed" covers what
-      they did). **What is left: that one closure step, then a fresh chat runs
-      T3 round 1** — and T3 alone would hold this line open anyway.
+      they did). ~~**What is left: that one closure step, then a fresh chat runs
+      T3 round 1**~~ — **BOTH DONE the same day: T3 at `:31710` (zero
+      Critical/High) and the closure step at the top of this line. Left in place
+      rather than deleted because naming the gap is what got it run.**
       Found by him at his own browser 2026-09-03:
       *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am
       here button was still there which i told you to disable if it does not

@@ -14,8 +14,15 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,574 lines, MEASURED 2026-09-03 and not estimated**
-(1,115 + 1,385 + 74). **THE TWENTIETH MEASUREMENT IS A T3 ROUND PLUS SIX FIXES:
+**ALWAYS-READ TOTAL: 2,577 lines, MEASURED 2026-09-03 and not estimated**
+(1,118 + 1,385 + 74). **THE TWENTY-FIRST MEASUREMENT CLOSES A CARD — a smoke
+step, a 🔴 tick and its evidence: +3, all trigger phrases, §1 and §2 unmoved.**
+**FIVE MEASUREMENTS IN ONE DAY, and the day is the clearest evidence the split
+works that anybody has taken: +5 (a card), +45 (a KD RULING), +4 (a smoke), +4
+(a review), +3 (a tick) — 61 lines, of which 45 are the one ruling.** Everything
+else became a pointer. That ratio, not the total, is what the 2026-08-28 split
+was for.
+**THE TWENTIETH MEASUREMENT IS A T3 ROUND PLUS SIX FIXES:
 +4, all of them trigger phrases, §1 and §2 unmoved** — the round record went to
 §1B, where :24813 sends it. **Four measurements in one day now — a card, a
 ruling, a smoke and a review — reading +5, +45, +4, +4**, and the shape is the
@@ -4702,7 +4709,30 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   screen open not seeing an hours change until reload**, **editing days then
   saving 24 hours discarding the edit**, and **the two `/hours` reads failing
   independently**. `api` 768/768 LOCAL · `web` 1704/1704 · SWEEPS O244–O247
-  (4 RED) and **C180–C190 (11 RED)**. **The closed-day smoke is still owed.**
+  (4 RED) and **C180–C190 (11 RED)**. ~~**The closed-day smoke is still
+  owed.**~~ **RUN the same day at `:31856`; the 🔴 line TICKS.**
+- **:31856** — 2026-09-03 — **THE CLOSED-DAY STEP RUNS AND THE 🔴 "I'm here"
+  LINE TICKS.** **Read before citing the "I'm here" gate as verified, before
+  letting one step stand in for a sheet, and before assuming a card's earlier
+  steps still cover a screen that has been committed to since.** Kd ran it at his
+  browser: a closure dated today, and the card reads *"Your gym is closed today,
+  so attendance isn't open."* rather than *"isn't open right now"* — **the two
+  refusals told apart on screen, which is :26684 §3's ordering observed rather
+  than only mutated.** Ticks naming `a1c5005`, `dba7cbe`, `cfca936`, `00c2699`.
+  **THE SCOPE CLAIM IS MEASURED, NOT ASSERTED** (:27810, :25707, and :14956 is
+  the cost of getting it wrong): three sittings on three commits, and
+  `git diff --name-only a1c5005 HEAD` shows the ONLY non-test `apps/web/src` file
+  to change is `hoursView.js` — whose `hoursDraft` drives the console FORM and is
+  never called by `GymHoursNote` or `AttendancePanel`, with that console screen
+  re-observed by 6b/6c afterwards. **The T3 fix round changed no web source at
+  all.** So every ✅ was observed on bytes differing from `HEAD` only where they
+  cannot reach it.
+  **WHAT THE STEP PROVED THAT NO TEST COULD:** the branch had `C185` and a render
+  case, but **the two sentences being DIFFERENT on one real screen had never been
+  seen — and the failure mode is the two collapsing into one, which every fixture
+  would still pass, each asserting its own string in isolation.** :12660's shape:
+  the defect no test can see, found by somebody looking. **The `:31508` timetable
+  card was never an `OWED.md` line** and closes with its records instead.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
