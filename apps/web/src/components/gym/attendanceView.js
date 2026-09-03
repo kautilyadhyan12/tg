@@ -277,3 +277,182 @@ export function visitDays(visits, { timezone, clockFormat } = {}) {
   }
   return days;
 }
+
+// ── THE CALENDAR (Kd, 2026-09-03 — DECISIONS `:31508`) ──────────────────────
+//
+// *"a user might cam 7 days a week that way the records on this section will
+// also become very long and overwhelming so need better design ... i think a
+// calander with dates when you went to gym is good and a day with attandance
+// will have a fire effect"*.
+//
+// **A MONTH GRID IS A FIXED HEIGHT HOWEVER OFTEN SOMEBODY COMES, which is the
+// actual problem he named** — the list above grows without bound. 🔥 already
+// means a STREAK in this product (`badges.ts`, :27900), so the symbol reads
+// correctly rather than being invented for this screen.
+//
+// **EVERY DATE HERE IS THE GYM'S, AND THAT IS THE WHOLE REASON THESE HELPERS
+// TAKE A MONTH RATHER THAN COMPUTING ONE.** `gym_attendance.day` is stamped in
+// the gym's zone at write time, the server's window filters that column
+// (DECISIONS `:31921`), and `gymToday(timezone)` is what the panel anchors
+// "this month" on. A grid built from the BROWSER's month would disagree with
+// the rows it is drawing for any member not in their gym's zone — the window
+// and the grid answering differently about one visit, which is the defect the
+// server half's §1 exists to prevent, arriving on the client instead.
+
+/** THE MONTH A `YYYY-MM` STRING NAMES, or null. The panel holds its position as
+ *  this pair rather than as a `Date`, because a `Date` carries a zone and an
+ *  instant it has no business having here: a month on this screen is two
+ *  calendar strings the server is asked for, and nothing more. */
+export function parseMonthKey(key) {
+  if (typeof key !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})$/.exec(key);
+  if (m === null) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (!Number.isInteger(year) || year < 1 || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+/** The `YYYY-MM` a gym day belongs to — a pure string slice, deliberately not a
+ *  `Date` round trip, so a day this app never parses cannot be shifted by one. */
+export function monthKeyOfDay(day) {
+  if (typeof day !== 'string') return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day.slice(0, 7) : null;
+}
+
+/** Step a month key by whole months, staying a string. `step` is ±1 in the only
+ *  two callers (the two arrows) but the year rollover is the part that has to be
+ *  right, and it is the arithmetic a hand-rolled `month - 1` gets wrong at
+ *  January. */
+export function shiftMonthKey(key, step) {
+  const parsed = parseMonthKey(key);
+  if (parsed === null || !Number.isInteger(step)) return key;
+  // Months as a count since year 0, so a rollover in either direction is one
+  // division rather than two branches nobody tests the second of.
+  const total = parsed.year * 12 + (parsed.month - 1) + step;
+  if (total < 0) return key;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
+/** THE HALF-OPEN WINDOW THIS MONTH IS ASKED FOR — `from` inclusive, `to`
+ *  exclusive, exactly the shape the server took on 2026-09-03 (`:31921`).
+ *
+ *  **`to` IS THE FIRST OF THE NEXT MONTH AND NOT THE LAST OF THIS ONE.** That is
+ *  what makes adjacent months TILE: August's `to` IS September's `from`, so a
+ *  visit belongs to exactly one of them. Computing "the last day of the month"
+ *  here would be calendar arithmetic this screen does not need to do, and
+ *  February would be the day it got it wrong. */
+export function monthWindow(key) {
+  const parsed = parseMonthKey(key);
+  if (parsed === null) return null;
+  const next = shiftMonthKey(key, 1);
+  return { from: `${key}-01`, to: `${next}-01` };
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** `September 2026`, or '' for a key this file cannot read.
+ *
+ *  **HAND-BUILT RATHER THAN `toLocaleDateString`, and it is :8156's trap.** A
+ *  locale-formatted month renders in whoever is READING, and every other date on
+ *  this card is the gym's — `closureDateLabel` beside it was hand-built for the
+ *  same reason. A month is also the one label here with no instant behind it at
+ *  all, so handing it to `Intl` would mean inventing a midnight to format. */
+export function monthLabel(key) {
+  const parsed = parseMonthKey(key);
+  if (parsed === null) return '';
+  return `${MONTH_NAMES[parsed.month - 1]} ${String(parsed.year)}`;
+}
+
+/** ONE MONTH AS A GRID, WITH THE DAYS SOMEBODY CAME MARKED.
+ *
+ *  Returns `{ key, label, leading, cells }` — `leading` is how many blanks come
+ *  before the 1st so the month starts under the right weekday, and each cell is
+ *  `{ day, date, came, times, future }`.
+ *
+ *  **THE WEEK STARTS ON MONDAY, matching `hoursView.js`'s `WEEKDAYS`** — the
+ *  same card already draws a Mon–Sun opening-hours list two lines above this
+ *  grid, and two different week starts on one card is the kind of disagreement
+ *  nobody reports as a bug and everybody notices.
+ *
+ *  **EVERY DATE IS BUILT AS A STRING AND COMPARED AS A STRING.** No `Date` is
+ *  constructed for a cell: `YYYY-MM-DD` is fixed-width and zero-padded, so its
+ *  lexical order IS its calendar order, and the alternative — `new Date(y, m, d)`
+ *  — is the reader's local midnight, which is the one thing every comment in
+ *  this file says not to use for a gym's day. `isoWeekdayOfDay` parses at UTC
+ *  explicitly and is the existing helper for exactly this.
+ *
+ *  **`future` IS RELATIVE TO THE GYM'S TODAY, passed in.** A member reading at
+ *  23:00 in London on the 3rd is looking at a gym in Assam where it is already
+ *  the 4th; greying by the reader's clock would dim a day the gym has already
+ *  had. Null `today` greys nothing, because an unknown zone must not remove
+ *  days from the grid (the same admit-on-unknown direction as
+ *  `attendanceShutReason`). */
+export function monthGrid(key, visits, { timezone, clockFormat, today = null } = {}) {
+  const parsed = parseMonthKey(key);
+  if (parsed === null) return null;
+
+  const rows = visitDays(visits, { timezone, clockFormat });
+  const byDay = new Map(rows.map((row) => [row.day, row]));
+
+  // Days in the month WITHOUT a Date: the 1st of the next month minus a day is
+  // a rollover this file already owns, and `new Date(y, m, 0)` is local time.
+  const daysInMonth = (() => {
+    const leap = (parsed.year % 4 === 0 && parsed.year % 100 !== 0) || parsed.year % 400 === 0;
+    return [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][parsed.month - 1];
+  })();
+
+  const first = `${key}-01`;
+  // ISO weekday is 1..7 Mon..Sun, so `- 1` blanks put the 1st under its column.
+  const leadingWeekday = isoWeekdayOfDay(first);
+  const leading = leadingWeekday === null ? 0 : leadingWeekday - 1;
+
+  const cells = [];
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    const date = `${key}-${String(d).padStart(2, '0')}`;
+    const row = byDay.get(date);
+    cells.push({
+      day: d,
+      date,
+      // THE DAY'S OWN LABEL, so whatever OPENS a day has a heading without
+      // rebuilding one. `visitDays` already computes it through
+      // `closureDateLabel` — the hand-built formatter the whole card uses so a
+      // date is never spelled in the reader's locale (:8156).
+      label: row?.label ?? closureDateLabel(date),
+      came: row !== undefined,
+      // The TIMES the day carries, so a tap has something to open. A visit whose
+      // instant could not be read contributes no chip and still leaves `came`
+      // true — the day is a fact off the wire, a chip is a rendering of it.
+      times: row?.times ?? [],
+      future: typeof today === 'string' && today !== '' ? date > today : false,
+    });
+  }
+
+  return { key, label: monthLabel(key), leading, cells };
+}
+
+/** WHAT AN EMPTY MONTH SAYS, AND IT IS ABOUT THE MONTH RATHER THAN ABOUT EVER.
+ *
+ *  **A CONDITION CAUSED BY OTHER MONTHS MUST NOT BE PRINTED AS A SENTENCE ABOUT
+ *  THIS ONE** — the calendar's own recorded defect, twice (:4267 F1, :4355 F4).
+ *  The list this replaces said *"You haven't marked yourself in here yet"*,
+ *  which was true of a list holding EVERYTHING. Over a month grid the same
+ *  sentence is FALSE for anybody stepping back past the month they joined, and
+ *  stepping back is the ordinary way this screen gets used.
+ *
+ *  **AND THE HONEST VERSION CANNOT BE RECOVERED BY ASKING HARDER: a windowed
+ *  read cannot see other months, so "you have never come here" is not a fact
+ *  this screen holds.** It is not softened, it is dropped — a sentence a screen
+ *  cannot support is not a sentence it may print (:5807). What replaces it is
+ *  true in both cases, and the CURRENT month gets the warmer wording because
+ *  "yet" is only true looking forward. */
+export function emptyMonthNote(key, { current = false } = {}) {
+  const label = monthLabel(key);
+  if (label === '') return 'No visits to show.';
+  return current === true ? 'No visits yet this month.' : `No visits in ${label}.`;
+}

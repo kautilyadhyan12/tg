@@ -117,8 +117,14 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       `GET /v1/orgs/:gymId/attendance/history`, half-open so months tile, in GYM
       DAYS rather than :4434's instants — the reasoning is on the schema and a
       chat that "corrects" it to instants re-introduces the defect it thinks it
-      is fixing. **What remains on this line is the SCREEN**: the month grid, the
-      arrows, and 🔥 on the days attended. No web file has moved.
+      is fixing. ~~**What remains on this line is the SCREEN**: the month grid,
+      the arrows, and 🔥 on the days attended. No web file has moved.~~
+      **THE SCREEN IS BUILT TOO, 2026-09-03 (DECISIONS `:32197`)** — the month
+      grid with 🔥 on every day attended, arrows that step months, and the times
+      behind a tap on the day, which is the cost stated below and accepted.
+      **THE LINE STILL DOES NOT TICK: no browser smoke has run and T3 is
+      UNRUN**, and this repo does not tick a user-facing line on a green suite
+      (:15927 — a card's PROVE is not evidence the app RUNS).
       **Cost stated to Kd before he chose:** a square in a grid cannot show that
       somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
       the day — the same place the workout calendar puts them.
@@ -9391,3 +9397,20 @@ file and is stated so nobody reads these as lower priority than they are.
       was the attendance date window, and it already touches this file to add a
       target and eight mutants. Widening an approved plan mid-card is the drift
       R1.1/S4 exist to stop — Kd was told and can overrule.
+
+- [ ] ⚪ **THIS APP'S MODALS AND SHEETS HAVE NO FOCUS TRAP, AS A CLASS**
+      (2026-09-03, raised by the calendar's day sheet — DECISIONS `:32197`).
+      **Read before adding any overlay to `apps/web`, and before quoting a jsdom
+      render test as evidence that a dialog behaves for somebody using a
+      keyboard.** `WorkoutCalendar`'s `SessionDetail`, the forced plan prompt and
+      the calendar's new `DaySheet` all open over the page with no `role="dialog"`,
+      no focus move, no `Escape` handler and no trap — so a keyboard or
+      screen-reader user tabs straight through into the page behind them.
+      **NOT invented on the card that noticed it (R1.1)**: the sheet was built to
+      match `SessionDetail` exactly, which is what :26586 and the `OWED.md`
+      calendar line both asked for, and giving ONE overlay a trap would make the
+      app inconsistent while leaving the class open.
+      **THE INSTRUMENT PROBLEM IS THE REASON THIS IS ⚪ RATHER THAN A QUICK FIX:**
+      :23578 records that a jsdom test cannot prove keyboard behaviour, so a trap
+      written today ships as an unobserved guarantee — the thing this repo keeps
+      finding. Whoever takes it decides how it is watched FIRST.

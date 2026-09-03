@@ -1,6 +1,73 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD'S CALENDAR REACHES A SCREEN — the month grid with fire on the days
+      attended. DECISIONS `:32197`, the web half of `:31508` consuming
+      `:31921`'s window. **NO SERVER FILE MOVED.**
+      **START HERE: the card needs KD'S BROWSER (`RUNBOOK/smoke-my-gyms-calendar.md`,
+      12 steps, written and UNRUN) and then T3. The `OWED.md` calendar line does
+      NOT tick until both have happened.**
+
+  1. **THE MONTH IS THE GYM'S, taken from the hours read this card already
+     makes** — which is what keeps it at ONE request per month, where learning
+     the zone from a first unwindowed read would cost two on every mount. A
+     month from the reader's clock is the client half of the defect the server
+     card was arranged to prevent (**C191**), and it is invisible to anybody
+     testing in their own gym's zone.
+  2. **THE DEFECT THIS CARD CREATED, AND ONLY A PROBE CAUGHT IT:** gating the
+     history read on the hours read makes it land AFTER a quick tap, so its
+     whole object replaced `clockFormat` and undid T3 round 1's L-4 — the setter
+     was untouched and still correct, and nothing in the diff looked wrong.
+     **STANDING: two answers about one thing held in one object are ordered by
+     whichever response lands last, which is not a decision anybody made.**
+  3. **THE LIST'S EMPTY SENTENCE COULD NOT COME WITH US.** *"You haven't marked
+     yourself in here yet"* is FALSE for anybody stepping back past the month
+     they joined (:4267 F1, :4355 F4, twice on the workout calendar), and a
+     windowed read cannot recover the honest version — so it is DROPPED rather
+     than softened. **A failed read now says so where the list drew nothing**: a
+     grid has arrows, and drawing nothing removes the only way to reach a month
+     that would have loaded. Deliberate, recorded, and the old silence was
+     reasoned rather than accidental.
+  4. **THE SWEEP IS THE PART TO READ. First run 10 RED / 2 ALIVE, both survivors
+     defects in MY TESTS:** two asserted something true for a different reason
+     (the grid's date index, not the stamp), and one guarantee was held by a PAIR
+     of arrow handlers so neither single deletion was observable (:28221 §3(d)) —
+     the answer was one `stepMonth`, not a cleverer mutant.
+  5. **AND TWO INSTRUMENT LESSONS: a fixture that did not behave**
+     (`mockImplementationOnce` chained after `mockResolvedValueOnce` left the
+     first read never resolving — measured, two renders and no third), **and a
+     test that passed two times in three.** `waitFor` under faked `Date` races a
+     promise resolving off a click; `act` is the instrument there. Five for five
+     afterwards.
+
+PROVE: `web` **1734/1734 across 58 files** · `attendanceView` 59/59 (+21) ·
+       `myGyms.render` 44/44 (+11), the file run THREE times with no flake after
+       the `act` fix and the repaired case five times alone · `vite build` green
+       in 35.14s · `eslint --max-warnings=0` exit 0 on the four touched files ·
+       `check-harnesses` 25 parse · index 285 pointers · triggers rebuilt.
+       **SWEEP a stated SUBSET of 219: twelve mutants, 12 RED, 0 ALIVE, 0 never
+       ran**, controls GREEN and tallied first, restores sha256 byte-exact.
+       No `apps/api` or `packages/shared` file changed, so :28395 does not apply
+       in the other direction either.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **TWO NEW `OWED.md` LINES:** the app's overlays have no focus trap as a
+       CLASS (⚪, raised here, deliberately not invented on this card), and the
+       harness-diagnosis line from `:31921` §4 is still open.
+       **WHAT HAS NO OBSERVER, stated:** the greying of future days is pinned in
+       the pure layer only — nothing asserts the panel passes the gym's today
+       into it (:28976's lesson, cosmetic-but-true so stated rather than fixed);
+       and the arrows against the shared 600/hour bucket are a benchmark, not a
+       test.
+       **NEXT, in order: (a)** Kd's browser on the 12-step sheet. **(b)** T3
+       round 1. **(c)** folding the member card's Mon–Sun hours list — **tap,
+       never hover** (:26586), `ConsoleSection`'s `defaultOpen` and NOT
+       `forceOpen` (:31295) — the last of the three things he approved on
+       2026-09-03.
+       **THE SMOKE SHEET INDEX IS STILL STALE** — fourteen commits now.
+```
+
+```
 TASK: THE DATE WINDOW, T3 ROUND 1 — ZERO Critical/High, THE PACKET SHIPS.
       DECISIONS `:32114` (addendum inside `:31921`). Two Low, BOTH FIXED in the
       round and logged in `BACKLOG.md`; neither bought another round (:5348

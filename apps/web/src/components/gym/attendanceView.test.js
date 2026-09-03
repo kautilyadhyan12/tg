@@ -9,7 +9,14 @@ import {
   attendanceShutReason,
   markedSentence,
   mergeVisits,
+  emptyMonthNote,
+  monthGrid,
+  monthKeyOfDay,
+  monthLabel,
+  monthWindow,
+  parseMonthKey,
   sessionWindowLabel,
+  shiftMonthKey,
   visitDays,
   visitMinutes,
   visitTimeLabel,
@@ -438,5 +445,176 @@ describe('whether the button may be pressed', () => {
     for (const sentence of [GYM_CLOSED_TODAY_MESSAGE, GYM_SHUT_NOW_MESSAGE]) {
       expect(sentence).not.toMatch(/\d/);
     }
+  });
+});
+
+// ── THE CALENDAR (Kd, 2026-09-03 — `:31508`) ────────────────────────────────
+// A month grid is a fixed height however often somebody comes, which is the
+// problem he named. Everything below is arithmetic on CALENDAR STRINGS: no
+// `Date` is built for a cell, because a `Date` is the reader's local midnight
+// and every date on this card is the GYM's.
+describe('the month a grid is asked for', () => {
+  it('reads a month key and refuses anything that is not one', () => {
+    expect(parseMonthKey('2026-09')).toEqual({ year: 2026, month: 9 });
+    for (const bad of ['2026-13', '2026-00', '2026-9', '26-09', '2026-09-01', '', null, 7]) {
+      expect(parseMonthKey(bad)).toBeNull();
+    }
+  });
+
+  it('takes the month off a gym day without parsing it as a date', () => {
+    expect(monthKeyOfDay('2026-09-02')).toBe('2026-09');
+    // A day this app never parses cannot be shifted by one, which is the whole
+    // reason this is a slice rather than a `Date` round trip.
+    expect(monthKeyOfDay('2026-02-31')).toBe('2026-02');
+    for (const bad of ['2026-09', 'yesterday', '', null]) expect(monthKeyOfDay(bad)).toBeNull();
+  });
+
+  // THE ROLLOVER IS THE PART A HAND-ROLLED `month - 1` GETS WRONG, and it is
+  // wrong at exactly one place in the year, which is why both ends are driven.
+  it('steps months across a year boundary in both directions', () => {
+    expect(shiftMonthKey('2026-09', 1)).toBe('2026-10');
+    expect(shiftMonthKey('2026-09', -1)).toBe('2026-08');
+    expect(shiftMonthKey('2026-12', 1)).toBe('2027-01');
+    expect(shiftMonthKey('2026-01', -1)).toBe('2025-12');
+    // Twelve steps is a year, which no off-by-one survives.
+    let key = '2026-01';
+    for (let i = 0; i < 12; i += 1) key = shiftMonthKey(key, 1);
+    expect(key).toBe('2027-01');
+  });
+
+  it('leaves a key it cannot read alone rather than inventing one', () => {
+    expect(shiftMonthKey('nonsense', 1)).toBe('nonsense');
+    expect(shiftMonthKey('2026-09', 1.5)).toBe('2026-09');
+  });
+
+  // **HALF-OPEN, SO ADJACENT MONTHS TILE** — the server's own shape
+  // (DECISIONS `:31921`). August's `to` IS September's `from`, so a visit
+  // belongs to exactly one month and stepping loses nothing between two
+  // requests.
+  it('asks for a half-open window whose end is the next month s first day', () => {
+    expect(monthWindow('2026-09')).toEqual({ from: '2026-09-01', to: '2026-10-01' });
+    expect(monthWindow('2026-12')).toEqual({ from: '2026-12-01', to: '2027-01-01' });
+    expect(monthWindow('nope')).toBeNull();
+  });
+
+  it('tiles: one month s end is the next month s start', () => {
+    const august = monthWindow('2026-08');
+    const september = monthWindow('2026-09');
+    expect(august.to).toBe(september.from);
+  });
+
+  // HAND-BUILT, NEVER `toLocaleDateString` (:8156). A locale-formatted month
+  // renders in whoever is READING, and every other date on this card is the
+  // gym's.
+  it('names the month without asking the reader s locale', () => {
+    expect(monthLabel('2026-09')).toBe('September 2026');
+    expect(monthLabel('2026-01')).toBe('January 2026');
+    expect(monthLabel('nope')).toBe('');
+  });
+});
+
+describe('the grid a month draws', () => {
+  const on = (day, at) => visit({ day, markedAt: at ?? `${day}T06:12:00.000Z` });
+
+  it('marks only the days somebody came, and carries their times', () => {
+    const grid = monthGrid('2026-09', [on('2026-09-02'), on('2026-09-20')], {
+      timezone: 'UTC',
+      clockFormat: '24h',
+    });
+    expect(grid.cells).toHaveLength(30);
+    expect(grid.cells.filter((c) => c.came).map((c) => c.day)).toEqual([2, 20]);
+    expect(grid.cells.find((c) => c.day === 2).times).toEqual(['06:12']);
+    expect(grid.cells.find((c) => c.day === 3).times).toEqual([]);
+  });
+
+  // KD RULING 12 ON THE GRID (:27992 §1): two visits in two sessions on one day
+  // is ONE square with TWO times — the same shape the list had, and the same
+  // shape the owner's screen uses.
+  it('gives a day somebody came twice ONE square with both times', () => {
+    const grid = monthGrid(
+      '2026-09',
+      [on('2026-09-02', '2026-09-02T17:40:00.000Z'), on('2026-09-02', '2026-09-02T06:12:00.000Z')],
+      { timezone: 'UTC', clockFormat: '24h' },
+    );
+    expect(grid.cells.filter((c) => c.came)).toHaveLength(1);
+    expect(grid.cells.find((c) => c.day === 2).times).toEqual(['17:40', '06:12']);
+  });
+
+  // A VISIT FROM ANOTHER MONTH IS NOT DRAWN, and it is asserted because the
+  // panel merges this session's taps into whatever month is on screen: a tap
+  // made TODAY must not appear on a March somebody has stepped back to.
+  it('ignores a visit that belongs to a different month', () => {
+    const grid = monthGrid('2026-03', [on('2026-09-02')], { timezone: 'UTC', clockFormat: '24h' });
+    expect(grid.cells.some((c) => c.came)).toBe(false);
+  });
+
+  // THE WEEK STARTS ON MONDAY, matching the opening-hours list two lines above
+  // it on the same card. 1 September 2026 is a Tuesday, so one blank leads it.
+  it('offsets the first day to its own weekday, Monday first', () => {
+    expect(monthGrid('2026-09', [], {}).leading).toBe(1);
+    // 1 February 2027 is a Monday — no blanks at all, the boundary an
+    // off-by-one lands on.
+    expect(monthGrid('2027-02', [], {}).leading).toBe(0);
+  });
+
+  // FEBRUARY IS THE MONTH A HAND-ROLLED LENGTH GETS WRONG, and 2100 is the
+  // century rule that a `% 4` alone gets wrong on top of it.
+  it('counts the days of a month, leap years included', () => {
+    expect(monthGrid('2026-02', [], {}).cells).toHaveLength(28);
+    expect(monthGrid('2028-02', [], {}).cells).toHaveLength(29);
+    expect(monthGrid('2000-02', [], {}).cells).toHaveLength(29);
+    expect(monthGrid('2100-02', [], {}).cells).toHaveLength(28);
+    expect(monthGrid('2026-01', [], {}).cells).toHaveLength(31);
+  });
+
+  // **FUTURE IS THE GYM'S FUTURE.** A member reading late in London is looking
+  // at a gym in Assam that is already on the next day; greying by the reader's
+  // clock would dim a day the gym has already had.
+  it('greys the days after the gym s today, and nothing when the day is unknown', () => {
+    const grid = monthGrid('2026-09', [], { today: '2026-09-10' });
+    expect(grid.cells.find((c) => c.day === 9).future).toBe(false);
+    expect(grid.cells.find((c) => c.day === 10).future).toBe(false);
+    expect(grid.cells.find((c) => c.day === 11).future).toBe(true);
+    // Unknown zone greys NOTHING — the admit-on-unknown direction this file
+    // uses everywhere, rather than dimming a whole month.
+    expect(monthGrid('2026-09', [], {}).cells.every((c) => !c.future)).toBe(true);
+  });
+
+  // A DAY IS A FACT OFF THE WIRE; A TIME IS A RENDERING OF IT. An unreadable
+  // zone must not remove the day somebody attended.
+  it('keeps a day whose time cannot be read, with no chip', () => {
+    const grid = monthGrid('2026-09', [on('2026-09-02')], { timezone: 'Mars/Olympus' });
+    const cell = grid.cells.find((c) => c.day === 2);
+    expect(cell.came).toBe(true);
+    expect(cell.times).toEqual([]);
+  });
+
+  it('carries a label for every day, so whatever opens one has a heading', () => {
+    const grid = monthGrid('2026-09', [on('2026-09-02')], { timezone: 'UTC', clockFormat: '24h' });
+    expect(grid.cells.find((c) => c.day === 2).label).toBe('Wed 2 Sep 2026');
+    // Including a day nobody came on, which is what stops the heading being
+    // empty the moment the panel opens a cell built from anything but a visit.
+    expect(grid.cells.find((c) => c.day === 3).label).toBe('Thu 3 Sep 2026');
+  });
+
+  it('draws nothing for a month key it cannot read', () => {
+    expect(monthGrid('nope', [on('2026-09-02')], {})).toBeNull();
+  });
+});
+
+// **A CONDITION CAUSED BY OTHER MONTHS MUST NOT BE PRINTED AS A SENTENCE ABOUT
+// THIS ONE** — the calendar's own recorded defect, twice (:4267 F1, :4355 F4).
+describe('what an empty month says', () => {
+  it('names the month rather than claiming the member has never come', () => {
+    expect(emptyMonthNote('2026-03')).toBe('No visits in March 2026.');
+    expect(emptyMonthNote('2026-03')).not.toMatch(/never|yet/i);
+  });
+
+  it('says "yet" only for the month the gym is actually in', () => {
+    expect(emptyMonthNote('2026-09', { current: true })).toBe('No visits yet this month.');
+  });
+
+  it('still says something for a month key it cannot read', () => {
+    expect(emptyMonthNote('nope')).toBe('No visits to show.');
   });
 });

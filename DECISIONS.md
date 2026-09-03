@@ -32193,3 +32193,201 @@ mass-write detector clean (445 fingerprinted rows unchanged).
 **THE INSTANTS EDIT WAS REVERTED BY REPLACING THE STRING, NOT BY RESTORING THE
 FILE** — §4(b)'s own lesson, applied in the round that followed it; `git status`
 showed only Kd's pre-existing `CLAUDE.md` edit afterwards.
+
+## 2026-09-03 — KD'S CALENDAR REACHES A SCREEN: a month grid with fire on the days attended, and the sweep found that four of my own new tests proved less than they claimed
+
+**Read before drawing a calendar or any month view in this product, before
+deriving "this month" from the reader's clock anywhere, before adding a state to
+`AttendancePanel`, before writing an empty-state sentence for a screen that shows
+ONE PAGE of a longer history, before holding two answers about one gym in the
+same object, and before believing a render test that uses `waitFor` while `Date`
+is faked.**
+
+The web half of Kd's calendar (`:31508`; the server half is `:31921`). *"a user
+might cam 7 days a week that way the records on this section will also become
+very long and overwhelming so need better design ... i think a calander with
+dates when you went to gym is good and a day with attandance will have a fire
+effect"*. **The list is replaced, not removed** — that is his ruling, and the
+information it carried is all still reachable.
+
+**NO SERVER FILE MOVED.** `:31921` shipped the window this consumes; this is
+`apps/web` only — no migration, no `apps/api`, no `packages/shared`.
+
+### 1 · EVERY DATE ON THIS SCREEN IS THE GYM'S, AND THE MONTH IS WHERE THAT NEARLY WENT WRONG
+
+The grid opens on the GYM's current month, taken from the gym's zone off the
+hours read this card already makes. **A month derived from the reader's clock is
+the client half of the defect the server card was arranged to prevent**: a visit
+is filed under the gym's day, so a member in Honolulu looking at an Assam gym
+late on the 30th would be handed a grid for a month the server is not being asked
+about — the window and the squares answering differently about one visit.
+**C191 is that edit**, and it is invisible to anybody who tests in their own gym's
+zone, which is everybody who tests by hand.
+
+**THE ZONE COMES FROM THE HOURS READ RATHER THAN FROM A FIRST HISTORY READ, and
+that is what keeps this at ONE REQUEST PER MONTH.** The obvious alternative —
+read unwindowed to learn the zone, then read the month — costs two requests on
+every mount, on a screen that draws one panel per gym and shares a 600/hour
+bucket with the console's day list. It waits for that read to **RESOLVE, not to
+succeed**: a failed hours read still produces a calendar, because a dropped
+background request must not remove a feature.
+
+**NO `Date` IS BUILT FOR A CELL.** Days, months and windows are all calendar
+STRINGS — `YYYY-MM-DD` is fixed-width and zero-padded, so lexical order is
+calendar order, while `new Date(y, m, d)` is the reader's local midnight, the one
+thing every comment in this file says not to use for a gym's day. Month length is
+a table plus the full leap rule (**C201**: February loses the 29th, and the
+member who came that day has no square to be marked on); the week starts on
+Monday to match the opening-hours list two lines above it (**C202**: one extra
+blank shifts every square by a day, every number still correct and every column
+wrong).
+
+### 2 · THE STATE THIS SCREEN MUST KEEP APART, AND THE THIRD PAIR WAS NEW
+
+`AttendancePanel` already held the read's list and this session's taps apart
+(T3 round 1 C/H-2, because a read in flight cannot know about a tap). This card
+adds two more separations and **the second is a defect this card CREATED**:
+
+**(a) THE ANSWER IS STAMPED WITH THE MONTH IT WAS FETCHED FOR** — `Attendance.jsx`'s
+own instrument (:29250 §6) on the member's side. A synchronous reset at the top
+of the effect is a cascading render AND two sources of truth. **What the stamp
+actually buys is narrower than it looks and the sweep is what said so**: a visit
+from another month can never match a cell, because the grid indexes by full DATE
+— so cross-month bleeding is impossible by construction. The stamp stops a
+CONFIDENT SENTENCE about a month nobody has read yet: without it the completed
+September read leaves `status: 'ready'`, and stepping to August draws an empty
+grid captioned *"No visits in August 2026"* while August is still in the air
+(**C193**).
+
+**(b) THE MARK'S ZONE AND CLOCK NOW LIVE IN THEIR OWN STATE, BECAUSE THIS CARD
+BROKE T3 ROUND 1's L-4 AND ONLY A PROBE CAUGHT IT.** That fix made the mark's
+pair win over the read's as the fresher of two answers about one gym — and it won
+by ORDERING, the read having almost always landed first. **Gating the history
+read on the hours read makes it land AFTER a quick tap**, and its whole object
+replaced `clockFormat`, so a gym on the 12-hour clock had its newest visit
+spelled the old way. **The setter was untouched and still correct; nothing in the
+diff looked wrong.** Holding the pair apart makes the precedence a FACT rather
+than a race (**C196**).
+**STANDING: two answers about one thing, held in one object, are ordered by
+whichever response lands last — which is not a decision anybody made.**
+
+### 3 · AN EMPTY MONTH IS NOT AN EMPTY HISTORY, AND THE OLD SENTENCE COULD NOT COME WITH US
+
+The list said *"You haven't marked yourself in here yet"* and it was TRUE of a
+list holding everything. **Over a month grid the same sentence is false for
+anybody stepping back past the month they joined** — which is the ordinary way
+this screen gets used. :4267's F1 and :4355's F4 are both exactly this: a
+condition caused by OTHER months printed as a sentence about this one, twice on
+the workout calendar.
+
+**AND THE HONEST VERSION CANNOT BE RECOVERED BY ASKING HARDER.** A windowed read
+cannot see other months, so *"you have never come here"* is not a fact this
+screen holds. It is **dropped, not softened** — a sentence a screen cannot
+support is not a sentence it may print. What replaces it names the month and is
+true in both cases (**C194**).
+
+**THE SAME REASONING PUT A LINE BACK THAT THE LIST DELIBERATELY DID NOT HAVE.**
+A failed read used to draw NOTHING here, reasoned as *"a red bar about a
+background read would be noise"*. **A grid has arrows**: drawing nothing takes
+away the only way to step to a month that would have loaded. The heading and the
+arrows stay and one honest line replaces the squares (**C200** — the failure
+drawn as an empty month is :8267/:8343 on the surface that answers *"which days
+did I come"*). **The change is deliberate and is recorded because the old
+behaviour was reasoned, not accidental.**
+
+**AND THE PAGE LIMIT IS SAID RATHER THAN SILENTLY SHORT** (**C199**): past a
+hundred visits in one month the rest do not appear, and a grid that just left
+days blank would be telling somebody they did not come. Reaching it needs more
+than three visits a day every day, which the window makes rare — **and "rare" is
+not a reason to print something false, which is :4355's own correction, in Kd's
+words about a state his test account could not reach.**
+
+### 4 · THE COST KD WAS TOLD ABOUT IS PAID, AND IT IS THE PART A GRID CANNOT DO
+
+*"a square in a grid cannot show that somebody came at 5:01 PM and 3:32 AM, so
+the times move behind a tap on the day — the same place the workout calendar puts
+them"*. A tap opens a sheet shaped like `SessionDetail` — a bottom sheet on a
+phone, where members actually read this (:26586) — headed by the day's own date
+and holding every time (**C197**). **A day whose times cannot be read still opens
+and says so**: the day is a fact off the wire, a time is a rendering of it, and
+dropping the day would lose a visit that really happened.
+**NO FOCUS TRAP, and it is on `OWED.md` as a CLASS rather than invented here.**
+`SessionDetail` has none either, so this adds no new standard, and :23578 records
+that a jsdom test cannot prove keyboard behaviour — a trap written today ships as
+an unobserved guarantee.
+
+### 5 · THE SWEEP FOUND FOUR OF MY OWN TESTS PROVING LESS THAN THEY CLAIMED, AND ONE OF THEM WAS FLAKY
+
+Twelve mutants; **the first run came back 10 RED, 2 ALIVE**, and both survivors
+were defects in MY tests rather than in the code.
+
+**(a) TWO TESTS WERE ASSERTING SOMETHING TRUE FOR A DIFFERENT REASON.** Both the
+stamp test and the opened-day test asserted that a thing from another month was
+not drawn — and the grid's date index already guarantees that, whatever the state
+says. Rewritten to drive what the code under them actually decides (§2a above,
+and the sheet REOPENING on the way back rather than merely closing on the way
+out).
+
+**(b) A GUARANTEE HELD BY A PAIR CANNOT BE MUTATED, which is :28221 §3(d)'s
+question asked again.** The day was cleared in BOTH arrow handlers, so deleting
+it from either left the other covering the round trip and the mutant survived
+honestly. **The answer was not a cleverer mutant but one function**: `stepMonth`
+now owns it, the code is shorter, and the guarantee has an observer (**C198**).
+
+**(c) A FIXTURE THAT DID NOT BEHAVE, AND IT COST MORE TIME THAN THE FEATURE.**
+`mockImplementationOnce` chained after `mockResolvedValueOnce` left the FIRST
+read never resolving at all — measured, two renders and no third. Rebuilt from
+the two mock shapes this file already drives successfully.
+**STANDING: when a new test fails and the code looks right, suspect the FIXTURE
+before the component — and prove it with a probe rather than by reading.**
+
+**(d) AND THE ONE WORTH THE MOST: A TEST THAT PASSED TWO TIMES IN THREE.** Run
+five times in isolation, the in-flight case failed once. `Date` is faked
+suite-wide, testing-library then takes its fake-timer path, and its yielding to
+the microtask queue races a promise resolving off a click. **A test that is right
+two times in three is a liar the third time, which is worse than one that
+fails** — it would have landed in CI as somebody else's flake. `act` replaces
+`waitFor` there and flushes once, deterministically; five for five afterwards.
+**STANDING: `waitFor` under faked `Date` is a race, not a wait. Where a promise
+resolves off an interaction, `act` is the instrument.**
+
+### 6 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **NO SMOKE HAS RUN.** This card changes what a member sees, so it needs one —
+  `RUNBOOK/smoke-my-gyms-calendar.md` is written and unrun, and the `OWED.md`
+  line does not tick until it and T3 have (:15927 — a PROVE is not evidence the
+  app runs).
+- **The greying of future days is pinned in the pure layer only.** `monthGrid`'s
+  `future` flag has tests; nothing asserts the panel passes the gym's today into
+  it, and :28976's lesson is that a sweep aimed at pure functions misses what a
+  screen does. It is cosmetic-but-true, so it is stated rather than fixed here.
+- **The month arrows against the shared rate limit are untested.** Fifty years of
+  stepping in an hour is a benchmark, not a test.
+- **T3 is UNRUN.**
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :2912, :4267, :4355, :4622, :26586, :28822, :28976, :29117,
+:29250 §6, :31295, :31508, :31921 · `HANDOFF.md`'s top block · `CLAUDE.md`
+Part 0.5 and Part I §2.5 · `OWED.md`'s calendar line · the current
+`AttendancePanel.jsx`, `attendanceView.js`, `WorkoutCalendar.jsx` and
+`myGyms.render.test.jsx` in full.
+
+**PROVE, on the final bytes:** `web` **1734/1734 across 58 files** ·
+`attendanceView` **59/59** (+21) · `myGyms.render` **44/44** (+11) · the render
+file run THREE times with no flake after the `act` fix, and the one repaired case
+five times alone · `vite build` green in 35.14s · `eslint --max-warnings=0` exit 0
+on the four touched files · `check-harnesses` 25 scripts parse.
+
+**SWEEP, a stated SUBSET of 219 — twelve mutants: 12 RED · 0 ALIVE · 0 never
+ran**, controls GREEN and tallied first, restore sha256 byte-exact after every
+mutant. **The first run was 10 RED / 2 ALIVE and the second 11/1**; the figures
+above are the third, after the tests and `stepMonth` were fixed.
+
+**A CONTROL FILTER NAMED A TEST IN THE WRONG SUITE and the control step caught
+it** (:5199's class): C194 pointed at a render title while its target is the pure
+file. **Three of my `expect` filters were also wrong on the first run** — written
+from memory of the test names rather than copied — and every one aborted before a
+byte was mutated.

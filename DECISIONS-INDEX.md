@@ -4799,6 +4799,43 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   replacing the STRING, not the FILE** — §4(b)’s lesson applied in the very next
   round. **No smoke — no screen reads it yet.**
 
+- **:32197** — 2026-09-03 — **KD'S CALENDAR REACHES A SCREEN: a month grid with
+  fire on the days attended, and the sweep found four of my own new tests proving
+  less than they claimed.** The web half of `:31508`, consuming `:31921`'s window;
+  **no server file moved, and the `OWED.md` line does NOT tick — no smoke, T3
+  UNRUN.** **Read before drawing a calendar or any month view in this product,
+  before deriving "this month" from the reader's clock anywhere, before adding a
+  state to `AttendancePanel`, before writing an empty-state sentence for a screen
+  that shows ONE PAGE of a longer history, before holding two answers about one
+  gym in the same object, and before believing a render test that uses `waitFor`
+  while `Date` is faked.**
+  **THE MONTH IS THE GYM'S**, taken from the hours read the card already makes —
+  which is what keeps it at ONE request per month, where learning the zone from a
+  first unwindowed read would cost two on every mount. **No `Date` is built for a
+  cell**: days and months are calendar STRINGS, because `new Date(y,m,d)` is the
+  reader's midnight. **THE LIST'S EMPTY SENTENCE COULD NOT COME WITH US** — *"you
+  haven't marked yourself in here yet"* is false for anybody stepping back past
+  the month they joined (:4267 F1, :4355 F4 twice over), and a windowed read
+  cannot recover the honest version, so it is DROPPED rather than softened.
+  **A failed read now says so where the list drew nothing** — a grid has arrows,
+  and drawing nothing removes the only way to reach a month that would have
+  loaded; deliberate, and recorded because the old silence was reasoned.
+  **THE DEFECT THIS CARD CREATED AND A PROBE CAUGHT: gating the history read on
+  the hours read makes it land AFTER a quick tap**, so its whole object replaced
+  `clockFormat` and undid T3 round 1's L-4 — the setter was untouched and correct.
+  **Two answers about one thing held in one object are ordered by whichever
+  response lands last, which is not a decision anybody made.**
+  **THE SWEEP IS THE PART TO READ:** first run **10 RED / 2 ALIVE**, both
+  survivors defects in the TESTS — two asserted something true for a different
+  reason (the date index, not the stamp), and one guarantee was held by a PAIR of
+  handlers so neither deletion was observable (:28221 §3(d)); the answer was one
+  `stepMonth`, not a cleverer mutant. **A fixture that did not behave**
+  (`mockImplementationOnce` chained after `mockResolvedValueOnce` left the first
+  read never resolving — measured) **and a test that passed two times in three**:
+  `waitFor` under faked `Date` races a promise resolving off a click, so `act` is
+  the instrument there. `web` 1734/1734 · `vite build` green · SWEEP a stated
+  subset of 219: **12 RED, 0 ALIVE** (C191–C202).
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

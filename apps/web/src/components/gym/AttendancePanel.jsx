@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Flame, Loader2, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { attendanceShutReason, markedSentence, mergeVisits, visitDays, withVisit } from './attendanceView';
+import { gymToday } from '../../pages/console/hoursView';
+import {
+  attendanceShutReason,
+  emptyMonthNote,
+  markedSentence,
+  mergeVisits,
+  monthGrid,
+  monthKeyOfDay,
+  monthWindow,
+  shiftMonthKey,
+  withVisit,
+} from './attendanceView';
 
 // "I'M HERE" — Kd's ruling of 2026-08-31 (:26469), and the member's own list of
 // the days they came (:27900, his answer at the card's gate).
@@ -63,34 +74,99 @@ import { attendanceShutReason, markedSentence, mergeVisits, visitDays, withVisit
 // it the button is decided once, at paint, and a member sitting on this screen
 // at 06:59 is still refused at 07:05 — blocked from something they are entitled
 // to do, which is :5807's second clause and Critical/High. It issues no fetch,
-// touches no bucket, and is cleared on unmount. **The two reads are unchanged
-// and still happen exactly once each.**
+// touches no bucket, and is cleared on unmount.
+//
+// ~~**The two reads are unchanged and still happen exactly once each.**~~
+// **STRUCK 2026-09-03 BY THE CALENDAR (Kd, `:31508`): the history read now
+// happens ONCE PER MONTH VIEWED.** The list it replaced grew without bound,
+// which is the problem he named; a month grid is a fixed height however often
+// somebody comes. **The cost is one request per arrow press and it is bounded by
+// the person pressing** — nothing polls, nothing re-reads on focus, and stepping
+// is an action rather than something the screen does on its own. Against the
+// shared 600/hour bucket (`orgs_attendance_read`, split with the console's day
+// list) a member would have to step through fifty years of months in an hour to
+// reach it.
 
-/** One chip per visit. Times are the GYM's, on the GYM's clock — see
- *  `attendanceView.js` for why the zone is never the reader's. */
-function DayRow({ row }) {
+/** THE TIMES OF ONE DAY, OPENED BY TAPPING IT — Kd was told this cost before he
+ *  chose the calendar (`OWED.md`): *"a square in a grid cannot show that
+ *  somebody came at 5:01 PM and 3:32 AM, so the times move behind a tap on the
+ *  day — the same place the workout calendar puts them"*.
+ *
+ *  **IT IS A SHEET AND NOT AN INLINE ROW because that is what he was told**, and
+ *  `WorkoutCalendar`'s `SessionDetail` is the shape named: `items-end` on a
+ *  phone, so it arrives as a bottom sheet where members actually read this
+ *  (:26586), and centred from `sm` up. Tapping the backdrop or the X closes it.
+ *
+ *  **NO FOCUS TRAP, STATED RATHER THAN OMITTED.** `SessionDetail` has none
+ *  either, so this adds no new standard; :23578 records that a jsdom test cannot
+ *  prove keyboard behaviour anyway, so building one here would ship an
+ *  unobserved guarantee. It has an `OWED.md` line for the app's modals as a
+ *  class rather than a fix invented on this card. */
+function DaySheet({ row, onClose }) {
+  if (row === null) return null;
   return (
-    <li className="flex items-baseline gap-2 flex-wrap">
-      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        {row.label}
-      </span>
-      {row.times.map((time, i) => (
-        // KEYED BY THE TIME AND ITS POSITION. Two visits cannot share a minute
-        // in one session (the UNIQUE sees to that), but two different sessions
-        // in one day CAN both start at a minute that formats the same on a
-        // 12-hour clock, and a duplicate sibling key silently drops a fiber
-        // (:20867, the guard in `test-setup.js`).
-        <span
-          key={`${row.day}-${i}-${time}`}
-          className="text-2xs px-1.5 py-0.5 rounded-md"
-          style={{ background: 'rgba(255,138,31,0.12)', color: '#FFB347' }}
-        >
-          {time}
-        </span>
-      ))}
-    </li>
+    <div
+      role="presentation"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
+    >
+      <div
+        role="presentation"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-xs rounded-3xl overflow-hidden p-5"
+        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
+              You were here
+            </p>
+            <h3 className="text-base font-bold text-white">{row.label}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.04)' }}
+          >
+            <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+
+        {row.times.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {row.times.map((time, i) => (
+              // KEYED BY THE TIME AND ITS POSITION. Two visits cannot share a
+              // minute in one session (the UNIQUE sees to that), but two
+              // different sessions in one day CAN both start at a minute that
+              // formats the same on a 12-hour clock, and a duplicate sibling key
+              // silently drops a fiber (:20867, the guard in `test-setup.js`).
+              <span
+                key={`${row.date}-${i}-${time}`}
+                className="text-xs px-2 py-1 rounded-md"
+                style={{ background: 'rgba(255,138,31,0.12)', color: '#FFB347' }}
+              >
+                {time}
+              </span>
+            ))}
+          </div>
+        ) : (
+          // THE DAY IS A FACT OFF THE WIRE; A TIME IS A RENDERING OF IT. A zone
+          // `Intl` cannot resolve gives no chips, and saying "you came, at no
+          // time" is better than either inventing a time in the reader's own
+          // zone (trap #8) or dropping a day the member really attended.
+          <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            You came this day. The times couldn&apos;t be read.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
+
+const WEEK_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function AttendancePanel({ gym }) {
   const gymId = gym?.id ?? null;
@@ -106,17 +182,53 @@ export default function AttendancePanel({ gym }) {
   // so not even the "most recent visits" line appeared. A tap tells you what it
   // recorded; it does not tell you what else is in your history, and a screen
   // that answers the second question from the first is guessing.
+  // THE ANSWER IS STAMPED WITH THE MONTH IT WAS FETCHED FOR — `Attendance.jsx`'s
+  // own instrument (:29250 §6), on this side of the product.
+  //
+  // **A synchronous reset at the top of the effect is what this replaces**: it
+  // is a cascading render (`react-hooks/set-state-in-effect`) and, worse, two
+  // sources of truth — the held visits belong to the OLD month for as long as
+  // the new read is in flight, and only the setter's timing keeps them off
+  // screen. Stamping makes staleness a property of the DATA, so a read that
+  // lands late cannot be drawn under the wrong month's heading whatever the
+  // ordering.
   const [history, setHistory] = useState({
     status: 'loading',
+    forMonth: null,
     visits: [],
     timezone: null,
     clockFormat: '24h',
     more: false,
   });
+  // WHICH MONTH THE MEMBER HAS STEPPED TO, or null meaning "wherever the gym is
+  // now". **DERIVED AT RENDER RATHER THAN SET IN AN EFFECT** — the month is a
+  // function of the gym's zone and this member's presses, and computing it in an
+  // effect was both a cascading render and a second place for it to live.
+  const [monthStep, setMonthStep] = useState(null);
+  // THE DAY WHOSE TIMES ARE OPEN, or null. Holds the DATE and not the row, so a
+  // month re-read cannot leave a stale row on screen — the row is looked up out
+  // of the current grid at render.
+  const [openDay, setOpenDay] = useState(null);
   // THE TAPS THIS SESSION CONFIRMED, HELD APART FROM THE READ'S LIST (C/H-2).
   // See `mergeVisits` — a read already in flight when somebody taps cannot know
   // about the tap, and holding both in one place let it erase them.
   const [marked, setMarked] = useState([]);
+  // THE ZONE AND CLOCK THE MARK CAME BACK WITH, HELD APART FROM THE READ'S FOR
+  // THE SAME REASON THE VISITS ARE (C/H-2), and this is the second time that
+  // lesson has had to be applied on this panel.
+  //
+  // **T3 round 1's L-4 made the MARK's pair win because it is the FRESHER of two
+  // answers about one gym. It won by ORDERING — the read had almost always
+  // landed first — and the calendar broke that**: the history read now waits for
+  // the hours read to name a month, so it lands AFTER a quick tap and its whole
+  // object replaced `clockFormat`, spelling the new chip on the gym's OLD clock.
+  // Found by a probe, not by a test, and not by reading (the setter was
+  // untouched and still correct).
+  //
+  // Holding it separately makes the precedence a FACT rather than a race: the
+  // tap's pair wins whenever there is one, whatever order the two responses
+  // arrive in.
+  const [markedClock, setMarkedClock] = useState(null);
   // WHEN THE GYM IS OPEN — the SAME reader `GymHoursNote` uses two lines above
   // this button, which is what stops the button and the times it is judged
   // against ever disagreeing (`gymHoursSchema`'s own header: *"one reader for
@@ -135,6 +247,12 @@ export default function AttendancePanel({ gym }) {
   // for `GymHoursNote`'s reason: this card is ADDITIVE, and the button still
   // works because the server is the enforcement.
   const [hours, setHours] = useState(null);
+  // WHETHER THE HOURS READ HAS FINISHED, WHICHEVER WAY IT WENT — and it exists
+  // because `hours === null` cannot tell "not back yet" from "it failed". The
+  // BUTTON does not care (both admit), but the CALENDAR does: it anchors its
+  // first month on the gym's zone, which arrives with this read, and without
+  // this flag a failed read would leave the grid waiting for ever.
+  const [hoursDone, setHoursDone] = useState(false);
   // THE CLOCK, AND IT MAKES NO REQUEST — see the header. Held in state because
   // nothing else on this screen re-renders between the read landing and the
   // gym's opening minute, so without it the gate is frozen at paint.
@@ -157,27 +275,82 @@ export default function AttendancePanel({ gym }) {
       .then((res) => {
         if (cancelled) return;
         setHours(res.data?.hours ?? null);
+        setHoursDone(true);
       })
       .catch(() => {
         // Deliberately silent, and the gate admits on the null this leaves
         // behind: a member must never be refused their own gym's door because a
         // background read dropped (:24141 §3a).
+        //
+        // **THE FLAG IS STILL SET, and that is the point of having one.** The
+        // calendar below waits for this read to RESOLVE before it names a month;
+        // leaving the flag false on a failure would hang the grid on a request
+        // that is never coming back, which is the loading-spinner-for-ever shape
+        // :4267's F4 records.
+        if (!cancelled) setHoursDone(true);
       });
     return () => {
       cancelled = true;
     };
   }, [gymId]);
 
+  // THE MONTH THE GYM IS IN, and the month on screen — both DERIVED, neither
+  // stored.
+  //
+  // **THE ZONE COMES FROM THE HOURS READ THIS CARD ALREADY MAKES, which is what
+  // keeps the history read at ONE REQUEST PER MONTH.** The obvious alternative —
+  // a first unwindowed history read to learn the zone, then a windowed one —
+  // costs two requests on every mount, on a screen that draws one panel per gym
+  // and shares a 600/hour bucket with the console.
+  //
+  // **IT WAITS FOR THE READ TO RESOLVE, NOT TO SUCCEED** (`hoursDone`): a failed
+  // hours read must still produce a calendar, or a dropped background request
+  // would remove a feature.
+  //
+  // **A ZONE WE CANNOT READ FALLS BACK TO THE READER'S, DELIBERATELY, AND IT IS
+  // THE ONLY DATE ON THIS CARD THAT DOES.** `gymToday` already has that fallback
+  // and `attendanceShutReason` refuses to use it — correctly, because that
+  // decides whether a control is DEAD. This decides which month a grid OPENS on,
+  // and the reader can step. Drawing no calendar at all because a zone failed to
+  // resolve would remove the feature over a label being a day out.
+  //
+  // **RECOMPUTED OFF `tick`**, so a member sitting on this screen past the gym's
+  // midnight is not left a month behind with the forward arrow dead.
+  const gymZone =
+    typeof hours?.timezone === 'string' && hours.timezone !== '' ? hours.timezone : null;
+  const currentMonth = hoursDone
+    ? monthKeyOfDay(gymZone === null ? gymToday(undefined, tick) : gymToday(gymZone, tick))
+    : null;
+  const month = monthStep ?? currentMonth;
+
+  // THE HISTORY READ — ONE REQUEST PER MONTH VIEWED, and `month` is the only
+  // dependency that moves after mount.
+  //
+  // **A TAP, A TICK OR AN OPENED DAY ISSUES NOTHING**, which is the shared
+  // 600/hour bucket (`orgs_attendance_read`) the console's own day list also
+  // draws from. Stepping months is the one thing that re-reads, and it is an
+  // action a person takes rather than something the screen does on its own.
+  //
+  // **IT WAITS FOR `month`, WHICH MEANS IT WAITS FOR THE GYM'S ZONE.** A window
+  // built from the browser's clock would ask for the wrong month for any member
+  // not in their gym's zone — the window and the grid disagreeing about one
+  // visit, which is the defect the server half was arranged to prevent
+  // (DECISIONS `:31921` §1), arriving on the client instead.
   useEffect(() => {
-    if (gymId === null) return undefined;
+    if (gymId === null || month === null) return undefined;
+    const window = monthWindow(month);
+    if (window === null) return undefined;
     let cancelled = false;
     void orgService
-      .getAttendanceHistory(gymId)
+      .getAttendanceHistory(gymId, window)
       .then((res) => {
         if (cancelled) return;
         const answer = res.data?.attendance;
         setHistory({
           status: 'ready',
+          // STAMPED WITH THE MONTH ASKED FOR, never with whatever `month` is by
+          // the time this lands.
+          forMonth: month,
           visits: answer?.visits ?? [],
           timezone: answer?.timezone ?? null,
           clockFormat: answer?.clockFormat ?? '24h',
@@ -186,16 +359,17 @@ export default function AttendancePanel({ gym }) {
       })
       .catch(() => {
         if (cancelled) return;
-        // The list is not drawn at all on a failure — no empty state, no error
+        // The grid is not drawn at all on a failure — no empty month, no error
         // strip. The BUTTON is the point of this panel and it still works; a
         // red bar about a background read would be noise on the screen somebody
-        // opened to say they had arrived.
-        setHistory((held) => ({ ...held, status: 'failed' }));
+        // opened to say they had arrived. Stamped like the success, so a failure
+        // on one month cannot mark another month failed.
+        setHistory((held) => ({ ...held, status: 'failed', forMonth: month }));
       });
     return () => {
       cancelled = true;
     };
-  }, [gymId]);
+  }, [gymId, month]);
 
   const markPresent = async () => {
     if (gymId === null) return;
@@ -214,11 +388,14 @@ export default function AttendancePanel({ gym }) {
       // now — so a gym that changed its clock between the read and the tap
       // draws the new chip the way the gym reads it today, not the way it did
       // when the page loaded.
-      setHistory((held) => ({
-        ...held,
-        timezone: answer?.timezone ?? held.timezone,
-        clockFormat: answer?.clockFormat ?? held.clockFormat,
-      }));
+      //
+      // **INTO ITS OWN STATE, NEVER INTO `history`.** Merging it there made the
+      // precedence depend on which response landed last, and the calendar's
+      // month gate is what made the read land second — see `markedClock`.
+      setMarkedClock({
+        timezone: answer?.timezone ?? null,
+        clockFormat: answer?.clockFormat ?? null,
+      });
     } catch (err) {
       setMark({
         busy: false,
@@ -232,10 +409,55 @@ export default function AttendancePanel({ gym }) {
     }
   };
 
-  const days = visitDays(mergeVisits(history.visits, marked), {
-    timezone: history.timezone,
-    clockFormat: history.clockFormat,
-  });
+  // AN ANSWER TO A DIFFERENT MONTH IS NOT AN ANSWER (:29250 §6). Until the read
+  // for the month on screen lands, this grid is loading — it never draws
+  // September's days under October's heading, whatever order the responses
+  // arrive in.
+  const fresh = history.forMonth === month && month !== null;
+  const gridStatus = fresh ? history.status : 'loading';
+
+  // THE GRID. `mergeVisits` is unchanged and still holds the read's list and
+  // this session's taps apart (T3 round 1 C/H-2) — what the month adds is that a
+  // tap made TODAY simply does not match any cell of a month somebody has
+  // stepped back to. That falls out of indexing by date rather than needing a
+  // filter, and it is asserted rather than assumed.
+  //
+  // **THE VISITS ARE THE STAMPED ONES ONLY.** Drawing `history.visits` while the
+  // stamp disagrees is the exact defect the stamp exists to prevent.
+  // THE FRESHER PAIR WINS, DECIDED HERE RATHER THAN BY WHICH RESPONSE LANDED
+  // LAST (T3 round 1 L-4, re-fixed — see `markedClock`).
+  const shownZone = markedClock?.timezone ?? history.timezone;
+  const shownClock = markedClock?.clockFormat ?? history.clockFormat;
+  const grid =
+    month === null
+      ? null
+      : monthGrid(month, fresh ? mergeVisits(history.visits, marked) : marked, {
+          timezone: shownZone,
+          clockFormat: shownClock,
+          // The GYM's today, so a day is greyed as future by the gym's calendar
+          // and not the reader's. Null when we have no zone — nothing is greyed,
+          // which is the admit-on-unknown direction this file uses everywhere.
+          today: gymZone === null ? null : gymToday(gymZone, tick),
+        });
+  const openRow = grid?.cells.find((c) => c.date === openDay && c.came) ?? null;
+
+  /** MOVE A MONTH, AND CLOSE WHATEVER DAY WAS OPEN.
+   *
+   *  **ONE FUNCTION RATHER THAN THE SAME TWO LINES IN BOTH ARROWS, AND THE
+   *  MUTATION SWEEP IS WHY.** With the clear written into each handler, deleting
+   *  it from ONE of them changed nothing observable: the sheet is looked up out
+   *  of the CURRENT grid, so stepping away closes it either way, and the OTHER
+   *  handler cleared it on the way back. The mutant survived both single
+   *  deletions — :28221 §3(d)'s question, and the answer here was that the
+   *  guarantee was held by the PAIR, so no honest fixture could attack it.
+   *
+   *  **WHAT IT PROTECTS IS THE ROUND TRIP.** Without the clear, a member who
+   *  opens the 2nd, steps to August and steps back finds the sheet OPEN again —
+   *  a panel appearing over the screen that nobody tapped. */
+  const stepMonth = (delta) => {
+    setOpenDay(null);
+    setMonthStep(shiftMonthKey(month, delta));
+  };
   // KD'S RULING OF 2026-09-03 REACHING THE SCREEN. Null means press away — and
   // it is null for every state we cannot decide, because the server is the
   // enforcement and refusing on a guess is the worse mistake (:24141 §3a).
@@ -311,37 +533,145 @@ export default function AttendancePanel({ gym }) {
         </p>
       ) : null}
 
-      {/* THE DAYS THEY CAME. Drawn only when the read actually answered — a
-          failed read draws nothing at all rather than "no visits yet", which
-          would be this app telling somebody their own history is empty because
-          a request dropped. */}
-      {history.status === 'ready' ? (
+      {/* THE DAYS THEY CAME — Kd's calendar (`:31508`). The heading stays and
+          the grid replaces the list under it, because the list grew without
+          bound and a month is a fixed height however often somebody comes.
+          The month arrows are drawn as soon as there is a month, INCLUDING
+          while a read is in flight: hiding them during loading would make a
+          second press impossible until the first landed, which on a slow
+          connection reads as a broken control. */}
+      {grid !== null ? (
         <div className="mt-3">
-          <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Days you came
-          </p>
-          {days.length === 0 ? (
-            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              You haven&apos;t marked yourself in here yet.
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Days you came
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => { stepMonth(-1); }}
+                aria-label="Previous month"
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: 'rgba(255,255,255,0.04)' }}
+              >
+                <ChevronLeft className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.65)' }} />
+              </button>
+              <span
+                className="text-xs font-semibold text-center"
+                style={{ color: 'rgba(255,255,255,0.75)', minWidth: '7.5rem' }}
+              >
+                {grid.label}
+              </span>
+              {/* THE FUTURE IS NOT OFFERED. Bounded by the GYM's month, so a
+                  member reading late at night in another country is not stopped
+                  a month early — or let a month past. */}
+              <button
+                type="button"
+                onClick={() => { stepMonth(1); }}
+                disabled={currentMonth !== null && month >= currentMonth}
+                aria-label="Next month"
+                className="w-7 h-7 rounded-lg flex items-center justify-center disabled:opacity-30"
+                style={{ background: 'rgba(255,255,255,0.04)' }}
+              >
+                <ChevronRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.65)' }} />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mt-2">
+            {WEEK_HEADS.map((d) => (
+              <div
+                key={d}
+                className="text-center text-2xs font-semibold uppercase tracking-wider"
+                style={{ color: 'rgba(255,255,255,0.30)' }}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* THREE STATES, NEVER TWO — "we could not ask" and "nobody came" look
+              identical in the data and must never look identical on screen
+              (:8267/:8343). A failed read draws no grid at all rather than a
+              month of empty squares, which would be this app telling somebody
+              they did not come on days nobody looked at. */}
+          {gridStatus === 'failed' ? (
+            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Couldn&apos;t load the days you came.
             </p>
           ) : (
-            <ul className="mt-1.5 flex flex-col gap-1">
-              {days.map((row) => (
-                <DayRow key={row.day} row={row} />
-              ))}
-            </ul>
+            <>
+              <div className="grid grid-cols-7 gap-1 mt-1" aria-busy={gridStatus === 'loading'}
+                   style={{ opacity: gridStatus === 'loading' ? 0.4 : 1 }}>
+                {Array.from({ length: grid.leading }, (_, i) => (
+                  <div key={`lead-${String(i)}`} />
+                ))}
+                {grid.cells.map((cell) => (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    onClick={() => {
+                      if (cell.came) setOpenDay(cell.date);
+                    }}
+                    disabled={!cell.came || gridStatus === 'loading'}
+                    // THE DAY NUMBER IS ALWAYS READABLE AND THE FIRE SITS BESIDE
+                    // IT. Kd asked for "a day with attandance will have a fire
+                    // effect"; a fire drawn OVER the number would take the date
+                    // away to show that the date mattered.
+                    aria-label={
+                      cell.came ? `${String(cell.day)} — you came` : String(cell.day)
+                    }
+                    className="aspect-square rounded-lg flex flex-col items-center justify-center relative"
+                    style={{
+                      background: cell.came ? 'rgba(255,138,31,0.15)' : 'transparent',
+                      border: cell.came
+                        ? '1px solid rgba(255,138,31,0.30)'
+                        : '1px solid transparent',
+                      cursor: cell.came ? 'pointer' : 'default',
+                      opacity: cell.future ? 0.3 : 1,
+                    }}
+                  >
+                    <span
+                      className="text-2xs font-bold tabular-nums leading-none"
+                      style={{ color: cell.came ? '#FF8A1F' : 'rgba(255,255,255,0.55)' }}
+                    >
+                      {cell.day}
+                    </span>
+                    {cell.came ? (
+                      <Flame
+                        className="w-2.5 h-2.5 mt-0.5"
+                        style={{ color: '#FF8A1F' }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+
+              {gridStatus === 'ready' && grid.cells.every((c) => !c.came) ? (
+                <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {emptyMonthNote(month, { current: month === currentMonth })}
+                </p>
+              ) : null}
+
+              {/* SAID RATHER THAN SILENTLY SHORT. The server pages this read and
+                  this screen takes the first page, so a month holding more
+                  visits than one page says so — a grid that simply left days
+                  blank would be telling somebody they did not come. Reaching it
+                  needs more than a hundred visits in ONE month, which the window
+                  makes rare rather than impossible, and "rare" is not a reason to
+                  print something false (:4355's own correction). */}
+              {gridStatus === 'ready' && history.more ? (
+                <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  This month has more visits than this view can show, so some days may be missing.
+                </p>
+              ) : null}
+            </>
           )}
-          {/* SAID RATHER THAN SILENTLY TRUNCATED. The server pages this list and
-              this screen reads the first page only, so a member with a long
-              history is told that what they are looking at is the recent part —
-              a list that simply stopped would read as "this is all of it". */}
-          {history.more ? (
-            <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              Showing your most recent visits.
-            </p>
-          ) : null}
         </div>
       ) : null}
+
+      <DaySheet row={openRow} onClose={() => setOpenDay(null)} />
     </div>
   );
 }

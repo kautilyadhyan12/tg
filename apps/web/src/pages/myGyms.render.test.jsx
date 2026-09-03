@@ -76,7 +76,35 @@ const marked = (over = {}) => ({
   },
 });
 
+// THE CALENDAR OPENS ON THE GYM'S CURRENT MONTH, SO EVERY FIXTURE DAY BELOW IS
+// A CLAIM ABOUT WHAT MONTH IT IS. Left on the wall clock these tests would pass
+// in September 2026 and fail in October — :25567's *"asserting a dated string in
+// any web test"*, arriving through the fixture rather than the assertion.
+//
+// **ONLY `Date` IS FAKED**, for the reason the opening-hours block below already
+// records: `setTimeout` stays real so `waitFor` behaves, and `setInterval` stays
+// real so the panel's tick fires only in the one test that asks it to. That
+// block re-installs with the same list and sets its own moment, which is a
+// no-op re-install rather than a conflict.
+const NOW = new Date('2026-09-02T12:00:00.000Z');
+
+/** THE GRID CELL FOR A DAY SOMEBODY CAME ON — the fire, addressed by what it
+ *  tells a screen reader rather than by an icon nobody can query. A day with no
+ *  visit renders a button too (disabled, no fire), so the name is what tells
+ *  them apart and `queryByRole` returning null IS the assertion that the day is
+ *  not marked. */
+const cameOn = (dayOfMonth) =>
+  screen.queryByRole('button', { name: `${String(dayOfMonth)} — you came` });
+
+/** Open a day's times. Kd was told the times move behind a tap when he chose the
+ *  calendar, so every time assertion in this file goes through here. */
+const openDay = (dayOfMonth) => {
+  fireEvent.click(cameOn(dayOfMonth));
+};
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
+  vi.setSystemTime(NOW);
   resetConsoleOrgs();
   api.getMine.mockReset().mockResolvedValue({ data: { orgs: [GYM], formerOrgs: [] } });
   // The hours note draws nothing for a gym that has not answered, which keeps
@@ -89,6 +117,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetConsoleOrgs();
+  vi.useRealTimers();
 });
 
 const drawSidebar = () =>
@@ -222,6 +251,11 @@ describe('the screen', () => {
     drawScreen();
     await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
     expect(screen.queryByRole('button', { name: /i'm here/i })).toBeNull();
+    // THE HISTORY STAYS — the day is still marked and its times still open.
+    // Those visits really happened, and hiding them because the gym stopped
+    // taking new ones would remove a thing Kd ruled in.
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
     expect(screen.getByText('06:12')).toBeTruthy();
   });
 
@@ -263,10 +297,16 @@ describe('saying you are here', () => {
   // what the server told it rather than asking again.
   it('adds the new day without re-reading the history', async () => {
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/haven't marked yourself in here yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/no visits yet this month/i)).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText('Wed 2 Sep 2026')).toBeTruthy());
+    // THE DAY LIGHTS UP, and its times are behind the tap Kd was told about.
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
     expect(screen.getByText('06:12')).toBeTruthy();
+    // **AND THE MONTH WAS READ EXACTLY ONCE.** This counted a re-read after a
+    // mark before the calendar; it now also pins that neither the tap, the
+    // opened day, nor the panel's own half-minute tick asks again — the shared
+    // 600/hour bucket, with the console's day list on the other side of it.
     expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1);
   });
 
@@ -277,10 +317,15 @@ describe('saying you are here', () => {
     drawScreen();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText('06:12')).toBeTruthy());
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
     api.markAttendance.mockResolvedValue(marked({ alreadyMarked: true }));
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(screen.getByText(/already marked in/i)).toBeTruthy());
+    // ONE DAY, ONE TIME. A second chip would be a count the database disagrees
+    // with — and the grid has one more way to get this wrong than the list did,
+    // so the CELL is asserted to be single as well as the chip inside it.
+    expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
+    openDay(2);
     expect(screen.getAllByText('06:12')).toHaveLength(1);
   });
 
@@ -295,20 +340,36 @@ describe('saying you are here', () => {
       ]),
     );
     drawScreen();
-    await waitFor(() => expect(screen.getByText('17:40')).toBeTruthy());
+    // ONE SQUARE, not two — the grid's version of ruling 12's "one row".
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
+    // AND BOTH TIMES BEHIND IT. This is the assertion that says a square is not
+    // a loss of information: the day carries everything the row carried.
+    openDay(2);
+    expect(screen.getByText('17:40')).toBeTruthy();
     expect(screen.getByText('06:12')).toBeTruthy();
-    expect(screen.getAllByText('Wed 2 Sep 2026')).toHaveLength(1);
   });
 
   // A FAILED HISTORY READ DRAWS NOTHING — never "you haven't been here yet",
   // which is this app telling somebody their own past is empty because a
   // request dropped.
-  it('says nothing about the history when the read failed', async () => {
+  // **THE FAILED READ SAYS SO NOW, WHERE IT USED TO SAY NOTHING, AND THE CHANGE
+  // IS DELIBERATE.** The list drew nothing at all on a failure, reasoned as "a
+  // red bar about a background read would be noise". A GRID has arrows: drawing
+  // nothing would take away the only way to step to a month that would have
+  // loaded, so the heading and the arrows stay and one honest line replaces the
+  // squares. What has not changed is the thing :8267/:8343 are about — a failure
+  // is never drawn as an empty month.
+  it('says the month could not be read, and never draws it as an empty month', async () => {
     api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
     drawScreen();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    expect(screen.queryByText(/haven't marked yourself in here yet/i)).toBeNull();
-    expect(screen.queryByText('Days you came')).toBeNull();
+    await waitFor(() => expect(screen.getByText(/couldn't load the days you came/i)).toBeTruthy());
+    expect(screen.queryByText(/no visits/i)).toBeNull();
+    expect(cameOn(2)).toBeNull();
+    // NO SQUARES AT ALL — a month of blank cells on a read nobody completed
+    // would be this app telling somebody they did not come on days it never
+    // looked at.
+    expect(screen.queryByRole('button', { name: '2' })).toBeNull();
   });
 
   // ── T3 ROUND 1 REGRESSIONS ────────────────────────────────────────────────
@@ -328,9 +389,10 @@ describe('saying you are here', () => {
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     // The tap is confirmed — that part is true and stays on screen …
     await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
-    // … and the list it says nothing about is not drawn at all.
-    expect(screen.queryByText('Days you came')).toBeNull();
-    expect(screen.queryByText('Wed 2 Sep 2026')).toBeNull();
+    // … and the month it says nothing about is still not drawn. The tap knows
+    // one day; the grid would be a claim about thirty.
+    expect(screen.getByText(/couldn't load the days you came/i)).toBeTruthy();
+    expect(cameOn(2)).toBeNull();
   });
 
   // C/H-2. The mount read landed AFTER the mark and replaced the list
@@ -351,9 +413,10 @@ describe('saying you are here', () => {
     // The read — which left before the tap and therefore knows nothing of it —
     // now comes back empty.
     answerTheRead();
-    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
     expect(screen.getByText('06:12')).toBeTruthy();
-    expect(screen.queryByText(/haven't marked yourself in here yet/i)).toBeNull();
+    expect(screen.queryByText(/no visits/i)).toBeNull();
   });
 
   it('draws the visit once when the read comes back already carrying it', async () => {
@@ -368,7 +431,9 @@ describe('saying you are here', () => {
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
     answerTheRead();
-    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
+    openDay(2);
     expect(screen.getAllByText('06:12')).toHaveLength(1);
   });
 
@@ -398,7 +463,9 @@ describe('saying you are here', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
 
-    await waitFor(() => expect(screen.getByText('6:12 AM')).toBeTruthy());
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
+    expect(screen.getByText('6:12 AM')).toBeTruthy();
     // The stale pair winning would spell the same minute the other way.
     expect(screen.queryByText('06:12')).toBeNull();
   });
@@ -430,7 +497,7 @@ describe('saying you are here', () => {
     drawScreen();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText('06:12')).toBeTruthy());
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
 
     // Their list becomes a gym they have never marked in at, without the screen
     // ever leaving the list arm.
@@ -440,7 +507,10 @@ describe('saying you are here', () => {
 
     await waitFor(() => expect(screen.getByText('Bar Bell Club')).toBeTruthy());
     expect(screen.queryByText('Iron House')).toBeNull();
-    expect(screen.queryByText('06:12')).toBeNull();
+    // THE FIRE DOES NOT FOLLOW THEM. The grid is one more piece of state the key
+    // has to throw away, and it is drawn from `marked` as well as from the read
+    // — so a panel reused across gyms would show gym A's day on gym B's month.
+    expect(cameOn(2)).toBeNull();
   });
 });
 
@@ -632,6 +702,285 @@ describe('what the button is for', () => {
     await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
     expect(screen.queryByText('Attendance')).toBeNull();
     expect(screen.queryByText(/marks your attendance at the gym/i)).toBeNull();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
     expect(screen.getByText('06:12')).toBeTruthy();
+  });
+});
+
+// ── KD'S CALENDAR AT THE SCREEN (`:31508`) ──────────────────────────────────
+// *"i think a calander with dates when you went to gym is good and a day with
+// attandance will have a fire effect"*. The list this replaces grew without
+// bound; a month is a fixed height however often somebody comes.
+//
+// **EVERY MONTH HERE IS THE GYM'S MONTH.** The gym below is in `Asia/Kolkata`
+// and the suite's pinned clock is 2026-09-02T12:00Z, so its today is the 2nd of
+// September and the grid opens there.
+describe('the calendar', () => {
+  const hoursIn = (timezone) => ({
+    data: { hours: { mode: 'open_24h', timezone, clockFormat: '24h', week: [], closures: [] } },
+  });
+
+  const windowOf = (call) => call[1];
+
+  it('opens on the gym s current month and asks the server for exactly it', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    // HALF-OPEN, so August's `to` is September's `from` and a visit belongs to
+    // exactly one month (DECISIONS `:31921`).
+    expect(windowOf(api.getAttendanceHistory.mock.calls[0])).toEqual({
+      from: '2026-09-01',
+      to: '2026-10-01',
+    });
+  });
+
+  // **THE MONTH IS THE GYM'S, NOT THE READER'S, AND THIS IS THE CASE THAT TELLS
+  // THEM APART.** The pinned instant is 2026-09-30T20:00Z. In `Asia/Kolkata`
+  // (+05:30) that is already 01:30 on 1 OCTOBER, while the browser — pinned to
+  // `Asia/Kolkata` in `vitest.config.js` — and UTC disagree. A gym in Honolulu
+  // (-10:00) is still on 30 September. Two gyms, one instant, two months, and a
+  // grid built from the browser's clock would open on the wrong one for the
+  // second: the window and the grid answering differently about one visit,
+  // which is the defect the server half was arranged to prevent.
+  it('opens on the GYM s month even when the reader s calendar says another', async () => {
+    vi.setSystemTime(new Date('2026-09-30T20:00:00.000Z'));
+    api.getHours.mockResolvedValue(hoursIn('Pacific/Honolulu'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    expect(windowOf(api.getAttendanceHistory.mock.calls[0])).toEqual({
+      from: '2026-09-01',
+      to: '2026-10-01',
+    });
+    // And the same instant at a gym the other side of UTC is a month ahead.
+    cleanup();
+    api.getAttendanceHistory.mockClear();
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('October 2026')).toBeTruthy());
+    expect(windowOf(api.getAttendanceHistory.mock.calls[0])).toEqual({
+      from: '2026-10-01',
+      to: '2026-11-01',
+    });
+  });
+
+  it('draws the fire on the days somebody came and on no others', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(
+      history([visit({ day: '2026-09-02' }), visit({ day: '2026-09-20' })]),
+    );
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(cameOn(20)).toBeTruthy();
+    expect(cameOn(3)).toBeNull();
+    // A day nobody came on is still a square — it is just not one you can open.
+    expect(screen.getByRole('button', { name: '3' }).disabled).toBe(true);
+  });
+
+  // STEPPING IS THE ONE THING THAT RE-READS, and it asks for the month it moved
+  // to. A step that re-asked for the same window would draw the wrong month
+  // silently.
+  it('steps back a month and asks for that month', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
+    expect(windowOf(api.getAttendanceHistory.mock.calls[1])).toEqual({
+      from: '2026-08-01',
+      to: '2026-09-01',
+    });
+    // AND FORWARD AGAIN, so the arrows are not tested in one direction only —
+    // :7104's PG1, on a control instead of a guard.
+    fireEvent.click(screen.getByRole('button', { name: /next month/i }));
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+  });
+
+  it('will not step past the month the gym is in', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /next month/i }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /next month/i }).disabled).toBe(false);
+  });
+
+  // **A TAP MADE TODAY MUST NOT LAND ON A MONTH SOMEBODY STEPPED BACK TO.** The
+  // panel merges this session's taps into whatever month is on screen, so this
+  // is the assertion that the merge is bounded by the grid's own dates rather
+  // than by a filter somebody remembered to write.
+  it('does not draw today s tap on a month it did not happen in', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
+    // The 2nd of AUGUST is not the day they marked.
+    expect(cameOn(2)).toBeNull();
+    // …and stepping back finds it again, so this cannot be passing because the
+    // tap was simply lost.
+    fireEvent.click(screen.getByRole('button', { name: /next month/i }));
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    expect(cameOn(2)).toBeTruthy();
+  });
+
+  // **AN ANSWER TO A DIFFERENT MONTH IS NOT AN ANSWER** (:29250 §6), AND THE
+  // SWEEP CORRECTED WHAT THIS TEST FIRST CLAIMED.
+  //
+  // Its first version stepped to a month whose read was slow and asserted that
+  // the other month's visits were not drawn — and the stamp mutant SURVIVED it,
+  // because that is not what the stamp buys. The grid indexes by full DATE, so a
+  // visit from another month can never match a cell whatever the state says;
+  // cross-month bleeding is impossible by construction, in both directions.
+  //
+  // **WHAT THE STAMP ACTUALLY PREVENTS IS A CONFIDENT SENTENCE ABOUT A MONTH
+  // NOBODY HAS READ YET.** Without it, the completed September read leaves
+  // `status: 'ready'`, so stepping to August draws an empty grid captioned "No
+  // visits in August 2026" while August's request is still in the air — the
+  // :8267/:8343 class, told about a month rather than about a list. That is the
+  // assertion, and it is the one the mutant dies on.
+  it('never calls a month empty while its read is still in flight', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+
+    // AUGUST IS HELD OPEN, and the mock is swapped only once September has
+    // landed. **A chained `mockImplementationOnce` was tried first and the
+    // September read never resolved at all** — no third render, measured — so
+    // the fixture is built from the two mock shapes this file already drives
+    // successfully: a plain `mockResolvedValue`, then a `mockReturnValue`
+    // holding one promise open. A fixture that does not behave is not a smaller
+    // problem than a defect; it is a test that proves nothing.
+    let answerAugust = () => {};
+    api.getAttendanceHistory.mockReturnValue(
+      new Promise((resolve) => {
+        answerAugust = () => resolve(history([visit({ day: '2026-08-11' })]));
+      }),
+    );
+
+    // **`act` RATHER THAN `waitFor`, AND IT IS NOT A STYLE CHOICE — MEASURED.**
+    // With `waitFor` this case failed once in three identical runs: `Date` is
+    // faked suite-wide, testing-library then takes its fake-timer path, and its
+    // yielding to the microtask queue races a promise that resolves off a click.
+    // A test that is right two times in three is a liar the third time, which is
+    // worse than one that fails. `act` flushes the render and the microtasks
+    // once, deterministically, and asserts on what is then on screen.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    });
+    expect(screen.getByText('August 2026')).toBeTruthy();
+
+    // AUGUST IS UNREAD, SO NOTHING IS SAID ABOUT IT. September's answer is still
+    // the newest one held, and it is not an answer to this question.
+    expect(screen.queryByText(/no visits/i)).toBeNull();
+    // Nor is September's day drawn — true by the date index rather than by the
+    // stamp, and asserted so a later change to either cannot lose it.
+    expect(cameOn(2)).toBeNull();
+
+    await act(async () => {
+      answerAugust();
+    });
+    expect(cameOn(11)).toBeTruthy();
+  });
+
+  // :4267's F1 AND :4355's F4, WHICH THIS CARD COULD REPEAT EXACTLY: a
+  // condition caused by OTHER months printed as a sentence about this one. The
+  // list said "you haven't marked yourself in here yet" and was right; over a
+  // month grid that sentence is false for anybody stepping back past the month
+  // they joined.
+  it('says an empty month is empty, never that the member has never come', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory
+      .mockResolvedValueOnce(history([visit({ day: '2026-09-02' })]))
+      .mockResolvedValue(history([]));
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    await waitFor(() => expect(screen.getByText('No visits in August 2026.')).toBeTruthy());
+    expect(screen.queryByText(/haven't marked yourself in here yet/i)).toBeNull();
+    expect(screen.queryByText(/never/i)).toBeNull();
+  });
+
+  // SAID RATHER THAN SILENTLY SHORT. A month holding more visits than one page
+  // must say so — a grid that just left days blank would be telling somebody
+  // they did not come.
+  it('says so when a month holds more visits than it can show', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(
+      history([visit({ day: '2026-09-02' })], { nextCursor: 'more|00000000-0000-4000-8000-000000000000' }),
+    );
+    drawScreen();
+    await waitFor(() => expect(screen.getByText(/more visits than this view can show/i)).toBeTruthy());
+    // And it is not said when the month came back whole, or every member would
+    // be told their history is incomplete.
+    cleanup();
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(screen.queryByText(/more visits than this view can show/i)).toBeNull();
+  });
+
+  // KD WAS TOLD THIS COST BEFORE HE CHOSE THE CALENDAR: a square cannot show
+  // that somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap.
+  // If they cannot be reached, the card lost information the list had.
+  it('opens a day to its times, headed by the day s own date', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(
+      history([
+        visit({ day: '2026-09-02', markedAt: '2026-09-02T17:40:00.000Z' }),
+        visit({ day: '2026-09-02', markedAt: '2026-09-02T06:12:00.000Z' }),
+      ]),
+    );
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(screen.queryByText('06:12')).toBeNull();
+    openDay(2);
+    expect(screen.getByText('Wed 2 Sep 2026')).toBeTruthy();
+    expect(screen.getByText('17:40')).toBeTruthy();
+    expect(screen.getByText('06:12')).toBeTruthy();
+    // AND IT CLOSES. A sheet that cannot be dismissed is what :31295 was.
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByText('17:40')).toBeNull();
+  });
+
+  // STEPPING MONTHS MUST NOT LEAVE A DAY OPEN — AND THE SWEEP FOUND THAT THE
+  // OBVIOUS ASSERTION PROVES NOTHING.
+  //
+  // The first version stepped away and checked the sheet had gone. It goes
+  // either way: `openRow` is looked up out of the CURRENT grid, so a date from
+  // another month matches no cell and the sheet closes itself. The clearing
+  // mutant survived, which is :28221 §3(d)'s question — is the expression
+  // load-bearing at all?
+  //
+  // **IT IS, AND ONLY COMING BACK SHOWS IT.** Step away and step back and the
+  // held date matches again, so the sheet REOPENS on a month change nobody
+  // asked to open anything on — a panel appearing over the screen by itself.
+  // That is the case this drives.
+  it('does not re-open a day by itself when the member steps back to its month', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory
+      .mockResolvedValueOnce(history([visit({ day: '2026-09-02' })]))
+      .mockResolvedValueOnce(history([]))
+      .mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    openDay(2);
+    expect(screen.getByText(/you were here/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
+    expect(screen.queryByText(/you were here/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /next month/i }));
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    // NOBODY TAPPED ANYTHING. A sheet here is the screen deciding to open
+    // something on its own.
+    expect(screen.queryByText(/you were here/i)).toBeNull();
   });
 });
