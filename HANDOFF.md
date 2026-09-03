@@ -1,6 +1,42 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD FOUND TWO THINGS AT HIS BROWSER AND STOPPED THE SESSION. NOTHING WAS
+      BUILT FOR THEM — both are on `OWED.md` and this is the handoff.
+      **START HERE. Do not start by rewriting the smoke sheet.**
+
+  1. 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS.** His
+     words: *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i
+     am here button was still there which i told you to disable if it does not
+     incline with the gym time"*. **KD'S RULING IS HALF BUILT: the SERVER
+     refuses** (:30867, O241/O242 RED) **and the SCREEN was never touched**, so a
+     member presses a live-looking button and gets a 409. He said *"should not
+     be able to press"*; being refused after pressing is not that.
+     **Before building:** check whether `/v1/orgs/mine` already carries the
+     gym's hours and today's closure, or whether the member's card needs a read
+     it does not have. The refusal SENTENCE already exists on the server
+     (`gymClosedMessage`) — do not write a second spelling of it.
+  2. ❓ **"it is showing wednesaday but it is thrusday" — MEASURED, AND IT MAY
+     NOT BE A BUG.** The `owner` gym's timezone is **`America/Mendoza`**: it was
+     **21:11 Wednesday there** while his clock read 05:28 Thursday. The screen
+     is showing the GYM's day, which every ruling on this product requires
+     (trap #8, :26469 §5). **Two separate questions: (a) is that gym's timezone
+     simply wrong for a test gym he made — ask him; (b) even when right, the
+     screen never says whose clock it is on, which is a real copy gap either
+     way.** **DO NOT "fix" it by switching to the reader's zone.**
+
+STATE: everything else is committed and green. `web` 1671/1671, `api` 767/767
+       local, three root guards green, SWEEP C155-C179 22 RED and O241-O243
+       3 RED. Servers were left running and will die with the laptop.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS SIX COMMITS STALE** and its step 8 now asks him to
+       mark attendance at a gym that will refuse him. **Rewrite it AFTER item 1
+       above, not before — item 1 changes what the sheet has to say.**
+       **T3 round 1 on the whole overview-numbers packet is still UNRUN.**
+```
+
+```
 TASK: THE DROPDOWN COULD NOT BE CLOSED. DECISIONS :31295 (addendum 2 to
       :31098). Web-only: no `apps/api`, no `packages/shared`, no migration.
 

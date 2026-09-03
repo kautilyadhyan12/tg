@@ -34,6 +34,35 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
+- [ ] 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS — KD'S
+      RULING IS ONLY HALF BUILT.** Found by him at his own browser 2026-09-03:
+      *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am
+      here button was still there which i told you to disable if it does not
+      incline with the gym time"*. **The SERVER refuses correctly** (`:30867`,
+      mutants O241/O242) — **the SCREEN was never touched**, so a member taps a
+      live-looking button and is answered with a 409. His words were *"should
+      not be able to press i am here"*, and being refused after pressing is not
+      that. **What it needs:** the member's gym card must know the gym's hours
+      and today's closure, disable the button when it is shut, and say when the
+      gym opens — the same sentence the server already produces. Check whether
+      `/v1/orgs/mine` carries enough to decide it without a second read.
+      **🔴 because a user-facing control lies about what it will do.**
+
+- [ ] ❓ **A MEMBER SEES THEIR GYM'S DAY, NOT THEIR OWN, AND KD READ IT AS A
+      BUG.** Same session: *"is the timimng wrong it is showing wednesaday but
+      it is thrusday"*. **MEASURED, and it is not obviously a defect:** the
+      `owner` gym's `timezone` is **`America/Mendoza`**, where it was
+      **21:11 on Wednesday** while his own clock read 05:28 Thursday
+      (`now()` UTC 2026-09-03 00:11). So the screen is showing the GYM's day,
+      which is what every ruling on this product requires (trap #8, :26469 §5).
+      **TWO THINGS TO SETTLE AND THEY ARE DIFFERENT:** (a) is that gym's
+      timezone simply WRONG — did he pick Mendoza by accident on a test gym, in
+      which case there is no bug at all; and (b) even when it is right, a member
+      reading "Wednesday" on a Thursday has no way to know why — **the screen
+      never says whose clock it is on.** (b) is a real copy gap whatever the
+      answer to (a). **Do not "fix" this by switching to the reader's zone** —
+      that is the trap this product has kept out of every attendance surface.
+
 - [ ] 🟡 **THE ATTENDANCE SCREEN'S PEOPLE LIST GROWS WITHOUT BOUND, and Kd asked
       the question that found it** (2026-09-03, DECISIONS `:31098` §3):
       *"Who came today shows two as of now what if there are 2000 3000 the whole
