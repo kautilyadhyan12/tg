@@ -2112,11 +2112,19 @@ function toWeekSchedule(sessions: readonly repo.GymSessionRow[]): GymHours["week
 /** ONE PLACE TURNS A ROW INTO THE ANSWER, and it is what makes the `unset`
  *  guarantee checkable rather than a comment.
  *
- *  **`week` IS EMPTY UNLESS THE MODE IS `scheduled`.** A gym on `open_24h` has
- *  no rows anyway (the writer deletes them), and `unset` has none by
+ *  **`week` IS EMPTY UNLESS THE MODE IS `scheduled`.** ~~A gym on `open_24h` has
+ *  no rows anyway (the writer deletes them)~~ — **STRUCK 2026-09-03: Kd reversed
+ *  that, and the rows now survive on purpose** (`:31508`), which makes the rest
+ *  of this paragraph MORE load-bearing rather than less. `unset` has none by
  *  construction — but a reader that trusted the rows alone would be one stray
- *  row away from telling members a 24-hour gym closes at six. The mode decides,
- *  every time, which is :26736's rule made mechanical. */
+ *  row away from telling members a 24-hour gym closes at six, and stray rows are
+ *  no longer hypothetical. The mode decides, every time, which is :26736's rule
+ *  made mechanical.
+ *
+ *  T3 round 1's L-1: this block survived the commit that reversed it, stacked
+ *  above the newer one where only the second binds. Struck in place on
+ *  :20587's rule rather than deleted, because the sentence is the reason the
+ *  guarantee exists. */
 /** THE TWO WEEKS ANSWER TWO DIFFERENT QUESTIONS, and this function is the only
  *  place either is built.
  *

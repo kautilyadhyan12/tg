@@ -109,6 +109,48 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       read. `ConsoleSection`'s `defaultOpen` is the console's answer to the same
       problem (:31295) and is the pattern to follow, not `forceOpen`.
 
+- [ ] ⚪ **A MEMBER WITH `/my-gyms` OPEN DOES NOT SEE THEIR GYM CHANGE ITS
+      HOURS UNTIL THEY REFRESH** (2026-09-03, T3 round 1 on `:31352`). The hours
+      are read once per mount; the 30-second tick moves the CLOCK, not the data.
+      **So if an owner cancels today's closure or extends the hours while a
+      member is looking at the screen, that member stays greyed out** — refusing
+      somebody the server would admit, which is the direction :24141 §3a exists
+      to prevent. **NOT graded Critical/High and the reasoning is on record:** it
+      needs a concurrent owner edit, it clears on any reload, and the panel's own
+      rate-limit constraint forbids polling (both attendance reads share one
+      600/hour bucket, :28649). **The review's sharp point, kept because it is
+      the argument for fixing this properly:** `:31352` graded the identical user
+      outcome — 06:59 still refused at 07:05 — Critical/High when the cause was
+      the clock, and the cause being staleness does not change what the member
+      meets. The honest fix is the shared per-gym reader on the line below, which
+      can re-read on the tick without a second request.
+
+- [ ] ⚪ **EDITING DAYS, SWITCHING TO 24 HOURS AND SAVING DISCARDS THE EDIT**
+      (2026-09-03, T3 round 1 on `:31508` — "noted, not graded"). `hoursRequest`
+      sends `{ mode: 'open_24h' }` alone, and the server now KEEPS the rows it
+      used to delete, so the week that comes back on switching to "Set opening
+      times" is the one from before the edit. **NOT a regression — before
+      `:31508` they got nothing back at all, so this is newly confusing rather
+      than newly lossy** — and it needs a mode switch made mid-edit to reach,
+      the day editor being hidden in 24-hour mode. **What it needs:** either the
+      form warns that unsaved day edits will not be kept, or `hoursRequest`
+      carries the draft week with an `open_24h` save. **The second is the better
+      shape and is NOT free**: the request union deliberately refuses
+      `open_24h` carrying a week (`setGymHoursRequestSchema`, and a test pins
+      it), so it is a contract change and belongs to its own card.
+
+- [ ] ⚪ **`apps/api/test/orgs.hours.test.ts` HAND-WRITES ITS OWN `interface
+      Hours`, AND IT WENT STALE THE DAY IT MATTERED** (2026-09-03, T3 round 1's
+      L-6 — **and the deferral is mine: it was written into a code comment with
+      no line here, in the session that cited the deferral rule twice**).
+      `savedWeek` had to be hand-added to that interface or `tsc` failed, while
+      **every new assertion passed at runtime** — the suite was green against a
+      type that did not know the field. R2.5 says infer types from schemas and
+      never hand-write a duplicate interface; it is written about `src`, and a
+      test file is where it quietly stops being followed. **What it needs:**
+      replace it with `GymHours` from `@app/shared`. Not done in its own round
+      because it touches every assertion in the file (R1.1).
+
 - [ ] ⚪ **`/my-gyms` ASKS EACH GYM FOR ITS OPENING HOURS TWICE** (2026-09-03,
       DECISIONS `:31352` §5). `GymHoursNote` reads `GET /hours` to print the
       times and `AttendancePanel` reads it again to decide whether the button
@@ -121,6 +163,13 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       alternatives rejected in the moment, so nobody re-derives them:** a cache
       that outlives a component, and a second optional shape for a note THREE
       screens already draw — the second can break a screen Kd has smoked.
+      **T3 round 1 found the user-visible cost of the duplication, which the
+      original line only implied:** the two reads can fail INDEPENDENTLY, so a
+      member whose hours-note read drops while the button's succeeds reads *"Your
+      gym isn't open right now"* **with no opening times anywhere on the card** —
+      and those times are the whole reason that sentence is allowed to name none
+      (`:31352` §3). Low by :5807 (the sentence stays TRUE), and the second
+      reason this card is worth doing.
 
 - [ ] ⚪ ~~❓ **A MEMBER SEES THEIR GYM'S DAY, NOT THEIR OWN, AND KD READ IT AS A
       BUG.**~~ **NOT A DEFECT — KD CLOSED IT HIMSELF THE SAME EVENING:

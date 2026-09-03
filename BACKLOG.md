@@ -3509,3 +3509,61 @@ its name and comments and observed neither.
       Corrected in place rather than deleted, because it is the evidence Kd was
       shown. :7298's class — a sentence that outlives the condition that raised
       it.
+
+## 2026-09-03 — T3 round 1 on the "I'm here" gate (`a1c5005`) and the kept timetable (`dba7cbe`) — ZERO Critical/High, six Low, all fixed this commit
+
+Round record at `DECISIONS.md:31633`'s successor; the review's verdict was that
+the packet SHIPS on :5348 rule 1, subject to a SMOKE that is a gate rather than
+a finding. **None of the six bought another round; all six are fixed here.**
+
+- [x] **L-1 · a struck invariant left standing in a docblock nobody deleted** —
+      `apps/api/src/modules/orgs/service.ts`. `dba7cbe` added a second JSDoc
+      block above `toGymHours` and left the first one asserting *"A gym on
+      `open_24h` has no rows anyway (the writer deletes them)"* — the exact
+      sentence that commit reversed. Two blocks stacked, only the second binding.
+      **Struck in place (:20587) rather than deleted, and the rest of the
+      paragraph is now MORE load-bearing**: it warns against a reader that trusts
+      rows over the mode, and stray rows stopped being hypothetical the moment
+      they were kept on purpose. :7298's class — a sentence outliving the
+      condition that raised it — caught by the review, in the file whose twin
+      sentence WAS struck correctly.
+- [x] **L-2 · the audit log described a deletion that no longer happens** —
+      `apps/api/src/modules/orgs/repo.ts`. `sessions: "0"` for an `open_24h`
+      save was TRUE while the writer emptied the table and became false with
+      `dba7cbe`: the record now says the week was emptied for a save that
+      emptied nothing. **`null` instead** — the field does not apply to a save
+      that declares a flag. Low because no user sees it and nothing reads the
+      column; worth fixing because :5807's shape in the one place whose whole
+      job is to say what happened is still a false sentence.
+- [x] **L-3 · a test that passed for the wrong reason, and the review MEASURED
+      it** — `apps/web/src/pages/myGyms.render.test.jsx`. *"stays pressable when
+      the gym has never set hours"* used a bare `{ mode: 'unset' }` fixture with
+      no timezone, so the admit came from the ZONE guard rather than from the
+      unset-first branch the case is named for; deleting that branch left the
+      file 33/33 green. **The fixture now carries a zone**, and the fix was
+      proven by re-running the review's own mutation by hand: RED, restore
+      sha256 byte-exact. **A fixture missing a field tests the guard that
+      catches the missing field.**
+- [x] **L-4 · the branch ORDER was called load-bearing and held by nothing** —
+      `apps/web/src/components/gym/attendanceView.js`. The docblock says the
+      zone check is what keeps `gymToday`'s browser-zone fallback out of reach;
+      the review moved the closure check above it and every suite stayed green.
+      **New pure case plus mutant `C189`**: an unreadable zone AND a closure
+      dated the day the BROWSER thinks it is — correct order admits, wrong order
+      refuses somebody over a date their gym never named. The reader's date is
+      computed in the test with the same formatter the fallback uses, so it
+      asserts the gate does not use it rather than assuming which day that is.
+- [x] **L-5 · "nothing member-facing may draw `savedWeek`" was prose in three
+      files and enforced in none** — `apps/web/src/components/gym/GymHoursNote.jsx`.
+      A 24-hour gym's kept timetable travels on its own members' response.
+      **New render case plus mutant `C190`**, and it is a BEHAVIOUR test rather
+      than a grep on purpose: a grep is satisfied by spelling the identifier
+      differently, and :12731's lesson is that a source regex proves nothing
+      about what a screen draws. Carries a positive control first, so the seven
+      absences cannot pass on a component that rendered nothing (:21751).
+- [x] **L-6 · a deferral written into a comment instead of `OWED.md`, and it is
+      mine** — `apps/api/test/orgs.hours.test.ts`. The comment added with
+      `savedWeek` says converting the hand-written `interface Hours` to the
+      shared type *"belongs to its own change"* — a deferral, in prose, with no
+      line anywhere. **The deferral rule is absolute and I broke it in the same
+      session I cited it twice.** Now `OWED.md`, this commit.

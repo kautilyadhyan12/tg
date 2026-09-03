@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,570 lines, MEASURED 2026-09-03 and not estimated**
-(1,111 + 1,385 + 74). **THE NINETEENTH MEASUREMENT IS A SMOKE RECORD: +4, all of
+**ALWAYS-READ TOTAL: 2,574 lines, MEASURED 2026-09-03 and not estimated**
+(1,115 + 1,385 + 74). **THE TWENTIETH MEASUREMENT IS A T3 ROUND PLUS SIX FIXES:
++4, all of them trigger phrases, §1 and §2 unmoved** — the round record went to
+§1B, where :24813 sends it. **Four measurements in one day now — a card, a
+ruling, a smoke and a review — reading +5, +45, +4, +4**, and the shape is the
+whole argument for the split: only the RULING is read every session.
+**THE NINETEENTH MEASUREMENT IS A SMOKE RECORD: +4, all of
 them trigger phrases, §1 and §2 unmoved** — it went to §1B, where :24813 sends
 every card record. **The eighteenth is immediately below and cost 45**, and the
 pair inside one afternoon is the cleanest demonstration the split has produced:
@@ -4663,7 +4668,41 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   and **C185**; it does not have a browser. **:23535 is why it is written down**
   — there a chat read *"all passed"* as covering three unrun steps and ticked two
   🔴 lines on them. **NOTHING TICKS, and not only for that reason: T3 round 1 is
-  UNRUN on both cards.**
+  UNRUN on both cards.** — **RUN the same day at `:31710`, ZERO Critical/High.**
+- **:31710** — 2026-09-03 — **T3 ROUND 1 ON BOTH OF TODAY'S CARDS: ZERO
+  Critical/High, THE PACKET SHIPS** — six Low, all fixed that commit and logged
+  in `BACKLOG.md`, none buying another round (:5348 rule 1); escape hatch NOT
+  armed (`:29740` found zero before it). **Read before calling a docblock's
+  "load-bearing" claim tested, before writing "nothing member-facing may draw X"
+  anywhere, before trusting a render fixture that omits a field the code guards
+  on, and before leaving a struck invariant standing above the code that
+  reversed it.**
+  **L-4 — the branch ORDER its own docblock calls load-bearing was held by
+  NOTHING**: the reviewer moved the closure check above the zone guard and every
+  suite stayed green. The case that separates the two orders is an unreadable
+  zone plus a closure dated the day the READER thinks it is, **with that date
+  computed by the same formatter the fallback uses** (**C189**). **L-5 —
+  *"nothing member-facing may draw `savedWeek`"* was prose in three files and
+  enforced in none**, on the commit that made stray rows deliberate; fixed with a
+  BEHAVIOUR test rather than a grep (:12731) and a positive control first
+  (:21751) (**C190**). **L-3 — a test of mine passed for the wrong reason and the
+  review MEASURED it**: a fixture with no timezone admitted at the ZONE guard,
+  not at the unset branch it was named for; **a fixture that omits a field the
+  code guards on tests the guard, not the rule.** **L-1/L-2 — two sentences that
+  outlived what made them true**: a struck invariant left standing above the code
+  that reversed it (its twin WAS struck correctly in the same commit — the tell),
+  and an audit row logging `sessions: "0"` for a save that no longer empties
+  anything. **L-6 IS MINE: a deferral written into a code comment with no
+  `OWED.md` line, in the session that cited that rule twice.**
+  **It also verified what would have hurt, recorded because silence is not
+  evidence:** the five branches match `readAttendanceContext` both ways,
+  `getUTCDay()` 0→7 agrees with `EXTRACT(ISODOW)`, today's closure is always in
+  the payload, tenancy/authz untouched, the moved DELETE still parameterised.
+  Three deferrals surfaced, each with an `OWED.md` line — **a member with the
+  screen open not seeing an hours change until reload**, **editing days then
+  saving 24 hours discarding the edit**, and **the two `/hours` reads failing
+  independently**. `api` 768/768 LOCAL · `web` 1704/1704 · SWEEPS O244–O247
+  (4 RED) and **C180–C190 (11 RED)**. **The closed-day smoke is still owed.**
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

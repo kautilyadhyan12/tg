@@ -31706,3 +31706,149 @@ source** (`"exports": "./src/index.ts"`, no build step), which is why the new
 contract reached his browser without a build.
 
 **Both cards' T3 round 1 is owed and the prompt has been handed over.**
+
+## 2026-09-03 — T3 ROUND 1 ON BOTH OF TODAY'S CARDS: ZERO Critical/High, THE PACKET SHIPS — and the two findings worth keeping are a guarantee its own docblock called load-bearing and a promise written in three files and enforced in none
+
+**Read before calling a docblock's "load-bearing" claim tested, before writing
+"nothing member-facing may draw X" anywhere, before trusting a render fixture
+that omits a field the code guards on, and before leaving a struck invariant
+standing above the code that reversed it.**
+
+Fresh-chat review of `a1c5005` (the "I'm here" gate) and `dba7cbe` (the kept
+timetable). **ZERO Critical/High, six Low, all six fixed this commit and logged
+in `BACKLOG.md`; none bought another round** (:5348 rule 1). Three deferrals it
+surfaced take `OWED.md` lines. **The escape hatch is NOT armed** — the previous
+round in this subsystem (`:29740`, attendance owner's half round 2) found zero
+Critical/High, so :5348's two-consecutive trigger does not fire.
+
+**IT VERIFIED THE THINGS THAT WOULD HAVE HURT, and that is worth recording
+because silence is not evidence:** the client gate's five branches match
+`readAttendanceContext` one for one in both directions; `isoWeekdayOfDay`'s
+`getUTCDay()` 0→7 map agrees with Postgres `EXTRACT(ISODOW)`; today's closure is
+always in the payload, so branch 2 cannot silently miss; the zone guard does
+close trap #8; tenancy and authz are untouched by either commit; and the moved
+`DELETE` stays parameterised and gym-scoped.
+
+### 1 · L-4 — A DOCBLOCK CALLED THE ORDER LOAD-BEARING AND NOTHING WATCHED IT
+
+`attendanceShutReason`'s header says the zone check is what keeps `gymToday`'s
+browser-zone fallback out of reach. **The review moved the closure check above
+that guard and every suite stayed green.** The ordering was right; nothing held
+it. :5348 rule 5's definition of a guarantee one edit from silence.
+
+**THE CASE THAT CAN TELL THE TWO ORDERS APART is the part to keep:** an
+unreadable zone AND a closure dated the day the READER thinks it is. Correct
+order → the zone guard returns first, the member may press, the server decides.
+Wrong order → the fallback matches that closure and refuses somebody over a date
+their gym never named. **The reader's date is computed in the test with the same
+formatter the fallback uses**, so it asserts the gate does not use it rather than
+assuming what day the machine running it is on. **C189.**
+
+**A CLAIM IN A DOCBLOCK IS STILL A CLAIM (V1), AND THIS ONE WAS TRUE** — which is
+why nobody looked. :19960's shape: the code was right, the evidence was missing,
+and only an outside reader tried the edit.
+
+### 2 · L-5 — "NOTHING MEMBER-FACING MAY DRAW `savedWeek`" WAS PROSE IN THREE FILES
+
+Written in `packages/shared`, in the service and in `hoursView.js`; enforced
+nowhere. **`savedWeek` carries a 24-hour gym's kept timetable and travels on its
+own members' response** — rows that used to be deleted and now survive on
+purpose, so "one stray row" stopped being hypothetical on the same commit that
+wrote the promise.
+
+**IT IS A BEHAVIOUR TEST AND NOT A GREP, and the reason generalises:** a grep for
+the identifier is satisfied by spelling it differently, and :12731 already ruled
+that a source regex proves nothing about what a screen draws. The case asks the
+only question that matters — with a kept week in hand, does the member's card put
+a weekday on screen — and **the positive control comes FIRST**, so seven
+absences cannot pass on a component that rendered nothing (:21751). **C190.**
+
+### 3 · L-3 — THE REVIEW MEASURED A TEST OF MINE PASSING FOR THE WRONG REASON
+
+*"stays pressable when the gym has never set hours"* used `{ mode: 'unset' }`
+with **no timezone**, so the admit came from the ZONE guard rather than from the
+unset-first branch the case is named for. Deleting that branch left the file
+33/33 green. **The fixture now carries a zone, and the fix was proven by running
+the review's own mutation by hand — RED, restore sha256 byte-exact** rather than
+argued.
+
+**STANDING: a fixture that omits a field the code guards on tests the guard, not
+the rule.** The pure suite covered the invariant throughout, so this was a weak
+instrument and never an uncovered rule — which is exactly the distinction :5348
+rule 4 asks for.
+
+### 4 · L-1 AND L-2 — TWO SENTENCES THAT OUTLIVED WHAT MADE THEM TRUE
+
+**L-1:** `dba7cbe` added a docblock above `toGymHours` and left the previous one
+asserting *"A gym on `open_24h` has no rows anyway (the writer deletes them)"* —
+the very thing it reversed, stacked above the new block where only the second
+binds. **Struck in place (:20587), and the rest of that paragraph is now MORE
+load-bearing**, since it warns against a reader trusting rows over the mode.
+**The twin sentence in `repo.ts` WAS struck correctly in the same commit**, which
+is the tell: a chat that strikes one copy has proved it knows the sentence is
+false everywhere (:20587's own lesson, recurring).
+
+**L-2:** the audit row logged `sessions: "0"` for an `open_24h` save. **True
+while the writer emptied the table; false the moment the rows survived** — the
+log describing a deletion that did not happen, in the one place whose whole job
+is to say what happened. Now `null`, which is what "the field does not apply to
+this save" means.
+
+### 5 · L-6 IS MINE AND IS THE ONE TO BE UNCOMFORTABLE ABOUT
+
+The comment added with `savedWeek` says converting the test file's hand-written
+`interface Hours` to the shared type *"belongs to its own change"*. **That is a
+deferral, written into prose, with no line anywhere — in the session that cited
+the deferral rule twice and wrote the `:31508` entry about a defect surviving
+because its only test praised it.** `OWED.md` line, this commit.
+
+### 6 · THE THREE DEFERRALS IT SURFACED, EACH WITH A LINE
+
+**(a) A member with `/my-gyms` open does not see their gym change its hours until
+they refresh** — the hours are read once per mount and the tick moves the CLOCK,
+not the data. Not Critical/High: it needs a concurrent owner edit and clears on
+reload, and the panel's own rate-limit constraint forbids polling. **The review's
+sharp point is on the line:** `:31352` graded the identical user outcome
+Critical/High when the cause was the clock, and the cause being staleness does
+not change what the member meets.
+**(b) Editing days, switching to 24 hours and saving discards the edit** —
+`hoursRequest` sends the mode alone and the server keeps the OLD rows. **Not a
+regression** (before `:31508` they got nothing back at all) and it needs a mode
+switch made mid-edit. The better fix is a contract change: the request union
+deliberately refuses `open_24h` carrying a week, and a test pins that.
+**(c) The two `/hours` reads can fail INDEPENDENTLY** — a member whose hours-note
+read drops while the button's succeeds meets *"Your gym isn't open right now"*
+with no opening times anywhere, and those times are the whole reason that
+sentence may name none. Folded onto the existing duplicate-read line as its
+second reason.
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `api` **768/768 across 50 files, exit 0**,
+LOCAL · `web` **1704/1704 across 58 files, exit 0** (+2) · `tsc --noEmit` exit 0
+on `api` · `eslint --max-warnings=0` exit 0 on two api and four web files ·
+`vite build` exit 0.
+
+**SWEEPS, both stated SUBSETS.** API `MUTATE_ONLY=O244…O247` re-run after the
+audit-meta change — **4 RED, 0 ALIVE**, local database. Web **`C180…C190` — 11
+of 207, 11 RED, 0 ALIVE**, which re-runs every mutant this session added rather
+than only the two new ones. Every control GREEN and tallying; restores
+sha256-verified.
+
+**RULE 3, MEASURED BY THE REVIEWER RATHER THAN READ:** `dba7cbe`'s fix reverted
+by hand took the hours suite to 2 RED (the renamed test and the round-trip
+test); `a1c5005`'s three anchors held. **RULE 4:** the two green liars it found
+are §§1 and 3 above, both fixed.
+
+**WHAT STILL DOES NOT TICK: the closed-day refusal has passed no browser smoke**
+(`:31633`), and `dba7cbe`'s own step 6 has not been re-run either. The review
+named that as a Done-gate item rather than a finding, which is the correct
+reading. **Three of Kd's four remain unbuilt.**
+
+**Files:** `apps/api/src/modules/orgs/{repo.ts,service.ts}` ·
+`apps/web/src/components/gym/{attendanceView.test.js,gymHours.render.test.jsx}` ·
+`apps/web/src/pages/myGyms.render.test.jsx` ·
+`apps/web/tools/mutate-console.mjs` · `BACKLOG.md`, `OWED.md`, records.
+**No `src` change in `apps/web`, no `packages/shared` change, no migration** —
+the two code fixes are both in `apps/api` and everything else is a test or a
+record.

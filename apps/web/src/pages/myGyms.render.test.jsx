@@ -541,8 +541,16 @@ describe('the button outside opening hours', () => {
 
   // EVERY UNKNOWN ADMITS (:24141 §3a). Three ways the screen can fail to know,
   // and none of them may take a member's door away — the server decides.
+  // **THE FIXTURE CARRIES A ZONE, AND T3 ROUND 1's L-3 IS WHY.** Written as a
+  // bare `{ mode: 'unset' }` this case passed for the wrong reason: with no
+  // timezone the gate admits at the ZONE guard, so deleting the unset branch
+  // altogether left it green — measured, and the pure suite was the only thing
+  // that went red. A fixture missing a field tests the guard that catches the
+  // missing field, not the rule the test is named for.
   it('stays pressable when the gym has never set hours', async () => {
-    api.getHours.mockResolvedValue({ data: { hours: { mode: 'unset' } } });
+    api.getHours.mockResolvedValue({
+      data: { hours: { mode: 'unset', timezone: 'UTC', clockFormat: '24h', week: [], closures: [] } },
+    });
     drawScreen();
     await waitFor(() => expect(button()).toBeTruthy());
     expect(button()?.disabled).toBe(false);

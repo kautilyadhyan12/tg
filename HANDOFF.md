@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 1 ON BOTH OF TODAY'S CARDS — ZERO Critical/High, THE PACKET
+      SHIPS. DECISIONS `:31710`. Six Low, ALL FIXED in that commit and logged in
+      `BACKLOG.md`; none bought another round (:5348 rule 1). Escape hatch NOT
+      armed (`:29740` found zero before it).
+      **START HERE: the ONLY thing left on these two cards is ONE browser step —
+      the closed-day refusal (`:31633` §2). Then both `OWED.md` lines tick.**
+
+  1. **L-4, AND IT IS THE ONE TO CARRY: a docblock called the branch ORDER
+     load-bearing and NOTHING watched it.** The reviewer moved the closure check
+     above the zone guard and every suite stayed green. **A claim in a docblock
+     is still a claim (V1), and this one was TRUE — which is why nobody looked**
+     (:19960's shape). **C189** now holds it: an unreadable zone plus a closure
+     dated the day the READER thinks it is, that date computed with the same
+     formatter the fallback uses.
+  2. **L-5: *"nothing member-facing may draw `savedWeek`"* was prose in three
+     files and enforced in none** — written on the very commit that made stray
+     rows deliberate. Fixed with a BEHAVIOUR test, not a grep (:12731), positive
+     control FIRST (:21751). **C190.**
+  3. **L-3: a test of MINE passed for the wrong reason and the review measured
+     it.** A fixture with no timezone admitted at the ZONE guard, not at the
+     unset branch it was named for. **STANDING: a fixture that omits a field the
+     code guards on tests the guard, not the rule.** Proven fixed by running the
+     reviewer's own mutation by hand — RED, restore sha256 byte-exact.
+  4. **L-1/L-2: two sentences that outlived what made them true** — a struck
+     invariant left standing above the code that reversed it (**its twin WAS
+     struck correctly in the same commit, which is the tell**), and an audit row
+     logging `sessions: "0"` for a save that no longer empties anything.
+  5. **L-6 IS MINE AND IS THE UNCOMFORTABLE ONE: a deferral written into a code
+     comment with no `OWED.md` line — in the session that cited that rule
+     twice.** Now on the list.
+  6. **THREE DEFERRALS IT SURFACED, each with a line:** a member with the screen
+     open does not see an hours change until reload · editing days then saving
+     24 hours discards the edit · the two `/hours` reads can fail independently,
+     leaving the refusal with no opening times beside it.
+
+PROVE: `api` **768/768 / 50 files** LOCAL · `web` **1704/1704 / 58 files** ·
+       `tsc` exit 0 on api · eslint clean on six files · `vite build` exit 0 ·
+       three root guards green. **SWEEPS: `O244…O247` 4 RED (local db) and
+       `C180…C190` — 11 RED, every mutant this session added, re-run.**
+
+FILES: `apps/api/src/modules/orgs/{repo.ts,service.ts}` — the only `src` changes,
+       both server · `apps/web/src/components/gym/{attendanceView.test.js,
+       gymHours.render.test.jsx}` · `apps/web/src/pages/myGyms.render.test.jsx` ·
+       `apps/web/tools/mutate-console.mjs` · `BACKLOG.md`, `OWED.md`, records.
+       No `apps/web/src` source change, no `packages/shared` change, no migration.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **ONE BROWSER STEP owed on these two cards, then both lines tick.**
+       **THE THREE KD APPROVED AND NOBODY HAS BUILT, all on `OWED.md`:** the
+       calendar for "Days you came" — **which needs a date window on the
+       member's attendance history first** — the fire on days attended, and
+       folding the member card's Mon–Sun list (**tap, never hover**: :26586).
+       **THE SMOKE SHEET IS TEN COMMITS STALE.**
+```
+
+```
 TASK: BOTH OF TODAY'S CARDS PASS AT KD'S BROWSER. DECISIONS `:31633`.
       **NINE STEPS RAN, ONE DID NOT, AND NOTHING TICKS.**
       **START HERE: T3 round 1 is UNRUN on `:31352` AND `:31508`** — the prompt

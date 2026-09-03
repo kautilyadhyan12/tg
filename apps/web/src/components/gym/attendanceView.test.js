@@ -400,6 +400,35 @@ describe('whether the button may be pressed', () => {
     ).toBe(GYM_SHUT_NOW_MESSAGE);
   });
 
+  // ── T3 ROUND 1, L-4: THE BRANCH ORDER HAD NO OBSERVER ────────────────────
+  // `attendanceShutReason`'s docblock calls the zone check "load-bearing" and
+  // says it is what keeps `gymToday`'s browser-zone fallback out of reach. The
+  // review MOVED the closure check above that guard and every suite stayed
+  // green — the ordering was correct and nothing was holding it, which is
+  // :5348 rule 5's definition of a guarantee one edit away from silence.
+  //
+  // **THE CASE IS THE ONE THAT CAN TELL THE TWO ORDERS APART:** an unreadable
+  // zone AND a closure dated the day the BROWSER thinks it is. Correct order →
+  // the zone guard returns first and the member may press, because the server
+  // decides. Wrong order → `gymToday` falls back to the reader's own zone,
+  // matches that closure, and refuses somebody over a date their gym never
+  // named. **The browser's date is computed here with the same formatter the
+  // fallback uses**, so the test asserts the gate does NOT use it rather than
+  // assuming which day that is on the machine running it.
+  it('never lets an unreadable zone fall back to the reader s own date', () => {
+    const at = new Date('2026-09-03T05:28:00.000Z');
+    const readersToday = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(at);
+    const hours = scheduled({
+      timezone: 'Mars/Olympus',
+      closures: [{ day: readersToday, note: null }],
+    });
+    expect(attendanceShutReason(hours, at)).toBeNull();
+  });
+
   // NEITHER SENTENCE SPELLS A TIME. The server's does, because a 409 arrives
   // with no context around it; this screen draws `GymHoursNote` two lines above
   // the button, on the gym's own clock, and a second spelling of one minute is

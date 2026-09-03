@@ -2584,6 +2584,24 @@ const MUTANTS = [
     from: "  const source = saved.length > 0 ? saved : (Array.isArray(hours?.week) ? hours.week : []);",
     to: "  const source = saved;",
   },
+  {
+    id: 'C189',
+    target: 'memberattendanceview',
+    suite: MEMBER_ATTENDANCE_VIEW_SUITE,
+    why: "THE ZONE GUARD GOES AND THE CLOSURE CHECK BELOW IT FALLS BACK TO THE READER'S OWN DATE - T3 round 1's L-4, which found this ordering correct and held by nothing. gymToday answers in the BROWSER's zone for a zone it cannot read, which is right for a min hint on a date box and is trap #8 on a control that BLOCKS somebody, so a member on a phone in another zone is refused over a date their gym never named. The docblock calls the order load-bearing and now something watches it",
+    expect: "never lets an unreadable zone fall back",
+    from: "  if (minute === null) return null;",
+    to: "  if (false) return null;",
+  },
+  {
+    id: 'C190',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "A 24-HOUR GYM'S KEPT TIMETABLE IS DRAWN TO ITS MEMBERS - T3 round 1's L-5. savedWeek carries rows that used to be deleted and since :31508 survive on purpose, and it travels on the member's own response; nothing member-facing may draw it, which was written in three files and enforced in none. Reading it here puts a Monday-to-Sunday list under Open 24 hours, which is a timetable nobody is being offered",
+    expect: "never reaches a member",
+    from: "        {hours.mode === 'scheduled' ? (",
+    to: "        {hours.mode === 'scheduled' || hours.savedWeek?.length ? (",
+  },
 ];
 
 const abort = (msg) => {

@@ -55,6 +55,45 @@ afterEach(() => {
   cleanup();
 });
 
+// ── T3 ROUND 1, L-5: "NOTHING MEMBER-FACING MAY DRAW `savedWeek`" ─────────
+// That promise was written in three files and enforced in none. `savedWeek`
+// carries a 24-hour gym's kept timetable — rows that used to be deleted and
+// since `:31508` survive on purpose — and it reaches every member of that gym
+// on the same response object. **The stray row is no longer hypothetical**,
+// which is exactly what makes an unenforced promise worth a test.
+//
+// **IT IS A BEHAVIOUR TEST AND NOT A GREP, deliberately.** A grep for the
+// identifier is satisfied by spelling it differently, and :12731's lesson is
+// that a source-regex test proves nothing about what a screen draws. This asks
+// the only question that matters: with a kept week in hand, does the member's
+// card put a weekday on screen?
+describe('the timetable a 24-hour gym keeps', () => {
+  it('never reaches a member, even though it travels on their own response', async () => {
+    orgService.getHours.mockResolvedValue(
+      hours({
+        mode: 'open_24h',
+        week: [],
+        savedWeek: [
+          { weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] },
+          { weekday: 4, sessions: [{ opensMinute: 460, closesMinute: 580 }] },
+        ],
+      }),
+    );
+    render(<GymHoursNote gymId={GYM} />);
+
+    // The positive control FIRST, so the absences below cannot pass on a
+    // component that rendered nothing at all (:21751 — a ✅ of "nothing
+    // appears" is satisfied by a blank screen).
+    expect(await screen.findByText('Open 24 hours')).toBeTruthy();
+
+    for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+      expect(screen.queryByText(day)).toBeNull();
+    }
+    // And no time from it, spelled either way the gym's clock could spell one.
+    expect(screen.queryByText(/06:00|6:00 AM|07:40|7:40 AM/)).toBeNull();
+  });
+});
+
 describe('a gym that has not answered', () => {
   it('draws NOTHING — not "Closed", not an empty list, not a heading', async () => {
     orgService.getHours.mockResolvedValue(hours({ mode: 'unset' }));

@@ -3591,10 +3591,19 @@ export async function setGymHours(
       // The COUNT, not the timetable. A reader weeks later wants "who changed
       // the hours and when"; a whole week of ranges in a meta column is the
       // whole-row snapshot :19366's `changed` list exists to avoid.
+      //
+      // **NULL AND NOT `"0"` FOR AN `open_24h` SAVE — T3 round 1's L-2.**
+      // `"0"` was true while the writer deleted the rows: it said "the week was
+      // emptied", and it was. Since `:31508` the rows SURVIVE, so a `"0"` here
+      // is the audit log describing a deletion that did not happen — a false
+      // sentence in the one place whose whole job is to say what happened
+      // (:5807's shape, in a record rather than on a screen). **`null` says the
+      // field does not apply to this save**, which is what "the gym declared a
+      // flag" actually means; the count belongs to a `scheduled` save alone.
       meta: {
         before: before.mode,
         after: input.mode,
-        sessions: String(input.mode === "scheduled" ? input.sessions.length : 0),
+        sessions: input.mode === "scheduled" ? String(input.sessions.length) : null,
       },
     });
 
