@@ -32494,3 +32494,88 @@ controls GREEN and tallied first, restore sha256 byte-exact after every mutant.
 working rather than a regression** — every one of them asserts on a month that is
 now behind a click. The helper is `openCalendar()`, and it waits for the fold to
 exist rather than for anything inside it.
+
+### 8 · ADDENDUM 2, same session — THE SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, AND THE ONE STEP HE ACTUALLY RAN PROVED THE STEP ITSELF WAS UNRUNNABLE
+
+**Read before writing a smoke step that turns the api off, before writing any
+smoke step a member could not perform with the app's own controls, before
+treating a failed `/v1/auth/me` as a signed-out user, and before writing "the
+smoke passed" anywhere.**
+
+Handed the remaining ten steps he answered *"the smoke passed"*. Told that one of
+them provably had not run, he ran it, reported what he saw, and then — offered a
+DevTools repair — said *"lets just say pass not undersatning what you saying"*.
+
+### 1 · WHAT IS RECORDED, AND IT IS :27415's SHAPE EXACTLY
+
+**The gate is open. The claim is attributed.** The sheet reads **3 OBSERVED · 9
+DECLARED · 1 STRUCK**, with his sentences quoted beside them. **He is the
+operator and the gate is his to open**; what a chat may not do is write *"the
+smoke ran and passed"*, because that is a false statement about an event and
+:23535 is this repo's recorded instance of writing one. Attributing it is how
+both things stay true at once.
+
+**THE `OWED.md` LINE STILL DOES NOT TICK — T3 is unrun, and that is now the only
+gate left on it.**
+
+### 2 · THE STEP HE RAN IS THE FINDING, AND HE WAS RIGHT
+
+*"well when api was off i reloaded and was directed to login page did not show
+the word"*.
+
+**Step 12 asked for the api to be stopped so the calendar's failed state could be
+seen. It cannot be**: `AuthContext.jsx:98` catches ANY failure from `getMe()` and
+runs `setUser(null)`, so `ProtectedRoute.jsx:44` redirects — **My Gyms never
+draws, and the calendar is never reached.** Verified in the code after he
+reported it, rather than reasoned about.
+
+**A SMOKE STEP THAT CANNOT REACH THE STATE IT NAMES IS WORSE THAN NO STEP: it
+invites a ✅ for something nobody saw**, which is :23535's whole shape. Struck,
+with the reasoning on the sheet rather than deleted.
+
+**THE STATE ITSELF IS REAL AND IS HELD** — **C200** turns the failed month into
+an empty one and goes RED, and a render case drives it. **Striking a step says
+nothing about the behaviour it aimed at**, and the sheet says so where somebody
+might infer otherwise.
+
+### 3 · THE DEFECT UNDER IT IS PRE-EXISTING, APP-WIDE, AND NOW HAS A LINE
+
+**A 401 and a dropped connection are the same event to that `catch`.** One means
+*"you are not signed in"*, the other means *"we could not ask"*, and the app
+draws the first for both — :8267/:8343's class on the app's front door. A member
+on a train through a tunnel is bounced to a login screen with a cookie that is
+probably still valid.
+
+**NOT FIXED ON THE CARD THAT FOUND IT (R1.1):** every protected screen is
+downstream of that one `catch`, and what a member should be shown instead is its
+own decision. 🟡 `OWED.md` line — no data is lost, which is why it is not 🔴.
+
+### 4 · THE LESSON IS ABOUT WRITING SHEETS, AND IT COST HIS PATIENCE TO LEARN
+
+The repair offered was **Chrome DevTools request-blocking** — right-click the
+request, Block request URL, reload. His answer: *"not undersatning what you
+saying"*.
+
+**THAT IS A FAIR ANSWER AND THE FAULT IS THE STEP'S.** Part 0.5 governs what a
+chat writes for him, and a smoke sheet is exactly that: something he must be able
+to ACT on. **STANDING: a smoke step must be reachable with the controls the APP
+gives him. If a state needs a developer tool to reach, it is not a smoke step —
+say so in the sheet and let a test hold it.**
+
+**THE SHEET ALSO NOW NAMES THE ONE ROW WHERE A DECLARATION LEAVES A REAL GAP:**
+the phone width (step 13) has no test behind it either, because jsdom has no
+layout — and being wrong about size is precisely what he caught twice on this
+card (`:32395`). Everything else declared is held by a mutant: C195, C197, C194.
+
+### Round log
+
+**No code, no test, no `src` file — records only.**
+`RUNBOOK/smoke-my-gyms-calendar.md` (status block, nine declarations, step 12
+struck with its reasoning, two new caveats) · `OWED.md` (the calendar line's
+smoke gate, plus a new 🟡 line for the login redirect) · `DECISIONS.md` ·
+`DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+**The api was genuinely stopped and restarted for step 12** — pid 24268
+terminated, port 3000 refusing, then pid 6088 answering `{"status":"ok"}`. So the
+one thing this session can say it OBSERVED about that step is that the server was
+really down when he looked.

@@ -4874,6 +4874,40 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   **24 existing tests needed the calendar opened first, which is the fold working
   rather than a regression.**
 
+- **:32498** — 2026-09-03 — **ADDENDUM 2 to `:32197` — THE SMOKE GATE IS
+  DISCHARGED ON KD'S DECLARATION, AND THE ONE STEP HE ACTUALLY RAN PROVED THE
+  STEP ITSELF WAS UNRUNNABLE.** **Read before writing a smoke step that turns the
+  api off, before writing any smoke step a member could not perform with the
+  app's own controls, before treating a failed `/v1/auth/me` as a signed-out
+  user, and before writing "the smoke passed" anywhere.**
+  **:27415's SHAPE EXACTLY: the gate is open, the claim is attributed.** The
+  sheet reads **3 OBSERVED · 9 DECLARED · 1 STRUCK** with his sentences quoted —
+  *"the smoke passed"*, then *"lets just say pass not undersatning what you
+  saying"*. He is the operator and the gate is his; what a chat may not write is
+  *"the smoke ran and passed"*, which is :23535. **The `OWED.md` line still does
+  not tick — T3 is the only gate left on it.**
+  **THE STEP HE RAN IS THE FINDING AND HE WAS RIGHT:** *"when api was off i
+  reloaded and was directed to login page did not show the word"*. Step 12 asked
+  for the api to be stopped so the calendar's failed state could be seen, and it
+  cannot be — `AuthContext.jsx:98` catches ANY `getMe()` failure and
+  `ProtectedRoute.jsx:44` redirects, so My Gyms never draws. **A smoke step that
+  cannot reach the state it names invites a ✅ for something nobody saw.** Struck
+  with its reasoning; the state itself is held by **C200** and a render case, and
+  the sheet says so.
+  **THE DEFECT UNDER IT IS PRE-EXISTING AND APP-WIDE, now a 🟡 line:** a 401 and
+  a dropped connection are the same event to that `catch` — one means *"you are
+  not signed in"*, the other *"we could not ask"* — so a member in a tunnel is
+  bounced to login with a cookie that is probably still valid. :8267/:8343's class
+  on the app's front door; not fixed on the card that found it (R1.1).
+  **AND THE LESSON ABOUT WRITING SHEETS, which cost his patience:** the repair
+  offered was DevTools request-blocking and his answer was *"not undersatning what
+  you saying"* — a fair answer, and the step's fault. **STANDING: a smoke step
+  must be reachable with the controls the APP gives him; if a state needs a
+  developer tool, it is not a smoke step.** The sheet also names the one row where
+  a declaration leaves a real gap — **the phone width has no test behind it
+  either**, jsdom having no layout, which is what he caught by eye twice
+  (`:32395`). Records only: no code, no test, no `src` file.
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CALENDAR'S SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, and the one
+      step he actually ran proved that step was unrunnable. DECISIONS `:32498`,
+      addendum 2 to `:32197`. **Records only — no code, no test, no `src` file.**
+      **START HERE: T3 IS THE ONLY GATE LEFT ON THE `OWED.md` CALENDAR LINE.**
+      The review prompt covers the whole packet — `:31921` (server), `:32197`
+      (screen) and `:32395` (Kd's reshape).
+
+  1. **THE GATE IS OPEN AND THE CLAIM IS ATTRIBUTED — :27415's shape.** The
+     sheet reads **3 OBSERVED · 9 DECLARED · 1 STRUCK**, his sentences quoted.
+     He is the operator and the gate is his; **what a chat may not write is
+     "the smoke ran and passed"**, which is :23535, this repo's recorded
+     instance of writing one.
+  2. **THE STEP HE RAN IS THE FINDING AND HE WAS RIGHT.** *"when api was off i
+     reloaded and was directed to login page did not show the word"*. Step 12
+     asked for the api to be stopped so the calendar's failed state could be
+     seen — **it cannot be**: `AuthContext.jsx:98` catches ANY `getMe()` failure
+     and `ProtectedRoute.jsx:44` redirects, so My Gyms never draws. Verified in
+     the code after he reported it. **A smoke step that cannot reach the state
+     it names invites a ✅ for something nobody saw.**
+  3. **STRIKING THE STEP SAYS NOTHING ABOUT THE BEHAVIOUR** — C200 turns the
+     failed month into an empty one and goes RED, and a render case drives it.
+     The sheet says so where somebody might infer otherwise.
+  4. **THE DEFECT UNDER IT IS PRE-EXISTING, APP-WIDE, AND NOW HAS A 🟡 LINE:** a
+     401 and a dropped connection are the same event to that one `catch`, so a
+     member in a tunnel is bounced to login with a cookie probably still valid.
+     :8267/:8343's class on the app's front door. Not fixed here (R1.1) — every
+     protected screen is downstream of it.
+  5. **AND THE LESSON THAT COST HIS PATIENCE: a smoke step must be reachable
+     with the controls the APP gives him.** The repair offered was DevTools
+     request-blocking; his answer was *"not undersatning what you saying"*, which
+     is fair and is the step's fault (Part 0.5). **If a state needs a developer
+     tool, it is not a smoke step — say so and let a test hold it.**
+
+PROVE: no code in this commit. The three ROOT guards pass — harnesses 25, index
+       **287 pointers**, triggers up to date (962 from 252 of 390 rulings).
+       **The api really was stopped and restarted** — pid 24268 terminated, port
+       3000 refusing, then pid 6088 answering `{"status":"ok"}` — so the one
+       thing this session OBSERVED about step 12 is that the server was genuinely
+       down when he looked.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE ONE ROW WHERE A DECLARATION LEAVES A REAL GAP: the phone width.**
+       jsdom has no layout, so step 13 has no test behind it either — and being
+       wrong about SIZE is exactly what he caught by eye twice on this card
+       (`:32395`). Everything else declared is held by a mutant (C195, C197,
+       C194).
+       **A HABIT WORTH COPYING, after getting it wrong THREE times today**
+       (:31951→:31921, :32341→:32395, :32517→:32498): **append the DECISIONS
+       entry FIRST, `grep -n` its heading, and only then write the pointer into
+       `OWED.md`/the sheet.** `check-decisions-index` walks the INDEX and does
+       not walk those files, so nothing else catches it.
+       **NEXT: (a)** T3 round 1 on the calendar packet. **(b)** the last of the
+       three things he approved on 2026-09-03 — folding the member card's Mon–Sun
+       hours list, **tap not hover** (:26586), `defaultOpen` not `forceOpen`
+       (:31295). **That fold now has a worked precedent on this very card.**
+```
+
+```
 TASK: KD SENT THE CALENDAR BACK AT HIS OWN BROWSER AND IT WAS RESHAPED — it
       folds away, it is compact, and the fire carries the date. DECISIONS
       `:32395`, an addendum to `:32197`.

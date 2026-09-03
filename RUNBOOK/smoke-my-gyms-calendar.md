@@ -2,8 +2,8 @@
 
 **Card:** DECISIONS `:32197` (web) on top of `:31921` (server), as corrected at
 Kd's browser the same day (`:32395`).
-**Status: 3 of 13 RUN.** The `OWED.md` calendar line does not tick until the rest
-pass and T3 has run.
+**Status: 3 OBSERVED · 9 DECLARED · 1 STRUCK.** The `OWED.md` calendar line does
+not tick until **T3** has run, which is now the only gate left on it.
 
 **⚠️ THIS SHEET DESCRIBES THE CALENDAR AS IT IS AFTER KD'S CORRECTION — folded
 away behind a calendar icon, opened by a click.** Its first version described a
@@ -38,25 +38,58 @@ step is recorded as untestable, never as a pass.
 
 **Steps 1–3 were RUN AND PASSED at Kd's own browser on 2026-09-03** — his words,
 *"excellent everything good"*, after he had rejected the first shape on the same
-screen. **They are ticked below and 4 and 6–13 are NOT**: one look at a folded calendar
-and a flame is not a run of this sheet (:27810, :31633 — an operator's approval
-covers what was on screen when it was given).
+screen.
+
+**THE REST ARE PASSED ON HIS DECLARATION, NOT ON A WATCHED RUN** (:27415's
+precedent, and its exact wording). Handed the remaining steps he said *"the smoke
+passed"*, and after step 12 was shown to be unrunnable, *"lets just say pass not
+undersatning what you saying"*. **The gate is his to open and it is open. What is
+NOT claimed is that these steps were observed** — writing *"the smoke ran and
+passed"* would be a false statement about an event, which is :23535, this repo's
+recorded instance of exactly that.
+
+**STEP 12 IS STRUCK RATHER THAN PASSED, AND KD'S OWN OBSERVATION IS WHY** — see
+the note under the table. It is the one step here that was actually attempted.
 
 | # | Do this | ✅ Expect | Ran |
 |---|---|---|---|
 | 1 | Open **My Gyms**. | Under the gym's opening times there is a **single row**: an orange **calendar icon**, the words **Days you came**, and a **⌄** on the right. **No month grid is on screen** — it is folded away. | ✅ 2026-09-03 |
 | 2 | Click that row. | A **compact** month opens — a small block of squares, not a full-width sheet. Above it, the month name and year with **‹** and **›** arrows. | ✅ 2026-09-03 |
 | 3 | Look at a day you came. | It is a **bright orange flame filling the square**, with **the date inside it in white**, readable without leaning in. Days you did not come are a plain grey number. Days later this month are dimmed. | ✅ 2026-09-03 |
-| 4 | Click the **Days you came** row again. | The month **folds away** and the row is back on its own. | |
-| 5 | Look at the month name. | It is **the month your gym is in right now**. | |
-| 6 | Press **I'm here** (if your gym is open), with the calendar open. | The confirmation sentence appears as before, **and today's square turns into a flame straight away** — no reload. | |
-| 7 | Click the flame for a day you came. | A panel opens over the screen headed with **that day's date**, listing **the time or times you arrived**. Click outside it, or the ✕, and it closes. | |
-| 8 | Press the **left arrow** once. | The heading moves to the **previous month** and the grid redraws for it. If you came that month, those days carry flames. | |
-| 9 | Press the **right arrow** to come back. | You are back on the current month, and **no day panel opens by itself**. | |
-| 10 | On the current month, look at the **right arrow**. | It is **greyed out** — there is no next month to look at. | |
-| 11 | If you have a month with no visits, step to it. | It says **"No visits in <that month>."** — it does **not** say you have never marked in at this gym. | |
-| 12 | Stop the API server, reload My Gyms, and open the calendar. | You see the month name and arrows plus **"Couldn't load the days you came."** — **not** an empty grid, and **not** a claim that you have no visits. Start the API again and reload: the grid comes back. | |
-| 13 | Open the same screen on a **phone** (or a narrow window). | The calendar row is easy to hit, the opened month fits without sideways scrolling, the flames are big enough to tap, and the day panel arrives **from the bottom**. | |
+| 4 | Click the **Days you came** row again. | The month **folds away** and the row is back on its own. | 📣 declared |
+| 5 | Look at the month name. | It is **the month your gym is in right now**. | 📣 declared |
+| 6 | Press **I'm here** (if your gym is open), with the calendar open. | The confirmation sentence appears as before, **and today's square turns into a flame straight away** — no reload. | 📣 declared |
+| 7 | Click the flame for a day you came. | A panel opens over the screen headed with **that day's date**, listing **the time or times you arrived**. Click outside it, or the ✕, and it closes. | 📣 declared |
+| 8 | Press the **left arrow** once. | The heading moves to the **previous month** and the grid redraws for it. If you came that month, those days carry flames. | 📣 declared |
+| 9 | Press the **right arrow** to come back. | You are back on the current month, and **no day panel opens by itself**. | 📣 declared |
+| 10 | On the current month, look at the **right arrow**. | It is **greyed out** — there is no next month to look at. | 📣 declared |
+| 11 | If you have a month with no visits, step to it. | It says **"No visits in <that month>."** — it does **not** say you have never marked in at this gym. | 📣 declared |
+| ~~12~~ | ~~Stop the API server, reload My Gyms, and open the calendar.~~ | **STRUCK — this step cannot reach the state it names. See below.** | ❌ struck |
+| 13 | Open the same screen on a **phone** (or a narrow window). | The calendar row is easy to hit, the opened month fits without sideways scrolling, the flames are big enough to tap, and the day panel arrives **from the bottom**. | 📣 declared |
+
+---
+
+## STEP 12 IS STRUCK, AND KD'S OBSERVATION IS THE FINDING
+
+**He ran it and was sent to the LOGIN PAGE.** *"well when api was off i reloaded
+and was directed to login page did not show the word"*.
+
+**He is right and the step was wrong.** With the api down, `AuthContext`'s
+`getMe()` fails, `setUser(null)` runs and `ProtectedRoute` redirects — so My Gyms
+never draws and the calendar's failed state is unreachable by that route. **A
+smoke step that cannot reach the state it claims to check is worse than no step:
+it invites a ✅ for something nobody saw**, which is :23535's whole shape.
+
+**THE STATE IS REAL AND IS HELD ELSEWHERE.** It needs the ATTENDANCE read alone
+to fail while auth still works — mutant **C200** turns the failed month into an
+empty one and goes RED, and a render case drives it. Nothing about this striking
+says the behaviour is unbuilt or unwatched.
+
+**THE REUSABLE LESSON, and it cost Kd's patience to learn: a smoke step must be
+reachable with the controls the APP gives him.** The repair offered was DevTools
+request-blocking, and his answer was *"not undersatning what you saying"* — fair,
+and the fault is the step's. **If a state needs a developer tool to reach, it is
+not a smoke step; say so in the sheet and let a test hold it.**
 
 ---
 
@@ -66,10 +99,16 @@ covers what was on screen when it was given).
   whose month it is, and reading it in your own gym's zone cannot tell a correct
   implementation from one using your phone's clock. That case is held by a test
   (`C191`) and by nothing you can see here.
-- **THE THREE STEPS THAT HAVE RUN COVER HOW IT LOOKS, AND NOTHING ELSE.** Kd's
+- **ONLY THREE STEPS WERE OBSERVED, AND THEY COVER HOW IT LOOKS.** Kd's
   *"excellent everything good"* was given to a folded row, an opened month and a
-  flame with a date in it. It says nothing about stepping months, opening a day,
-  an empty month's wording, or a failed read — steps 4 and 6–13, all unrun.
+  flame with a date in it. **Steps 4–11 and 13 are 📣 DECLARED**: the gate is open
+  on his authority (:27415) and nobody watched them. Stepping months, opening a
+  day, the empty-month wording and the phone width are therefore **unobserved**,
+  and each is held by a test and a mutant instead — C195, C197, C194, and nothing
+  for the phone width.
+- **NOTHING HERE HOLDS THE PHONE WIDTH.** jsdom has no layout, so step 13 has no
+  test behind it either. It is the one row where a declaration leaves a real gap,
+  and it is the shape Kd found by eye twice on this card (:32395).
 - **A month with more than a hundred visits.** The "some days may be missing"
   line needs more than three visits a day for a whole month; no account is near
   it, and that is a fact about this sheet rather than about users (:4355).

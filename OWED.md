@@ -128,11 +128,15 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       **fills the square with the date inside it in white** — his three words.
       Steps 1–3 of `RUNBOOK/smoke-my-gyms-calendar.md` are ticked with *"excellent
       everything good"* beside them.
-      **THE LINE STILL DOES NOT TICK: steps 4 and 6–13 are UNRUN and T3 is
-      UNRUN.** His approval covers how it LOOKS and says nothing about stepping
-      months, opening a day, an empty month or a failed read (:27810, :31633 —
-      an approval covers what was on screen when it was given), and this repo
-      does not tick a user-facing line on a green suite (:15927).
+      **THE SMOKE GATE IS DISCHARGED ON HIS DECLARATION** (`:32498`, on
+      :27415's precedent): *"the smoke passed"* and *"lets just say pass"*.
+      **3 steps OBSERVED, 9 DECLARED, 1 STRUCK** — and the struck one is his own
+      finding, that stopping the api sends you to the login page before any
+      screen draws (its own line below).
+      **THE LINE STILL DOES NOT TICK: T3 IS UNRUN**, and that is now the only
+      gate left on it. **What is NOT claimed is that the declared steps were
+      watched** — nine of them were not, and the phone width in particular has
+      no test behind it either, jsdom having no layout.
       **Cost stated to Kd before he chose:** a square in a grid cannot show that
       somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
       the day — the same place the workout calendar puts them.
@@ -9422,3 +9426,29 @@ file and is stated so nobody reads these as lower priority than they are.
       :23578 records that a jsdom test cannot prove keyboard behaviour, so a trap
       written today ships as an unobserved guarantee — the thing this repo keeps
       finding. Whoever takes it decides how it is watched FIRST.
+
+- [ ] 🟡 **A DROPPED REQUEST LOGS A MEMBER OUT RATHER THAN TELLING THEM TO TRY
+      AGAIN** (2026-09-03, found by Kd at his own browser during the calendar
+      smoke — DECISIONS `:32498`). **Read before writing any smoke step that
+      turns the api off, and before treating a failed `/v1/auth/me` as a signed-
+      out user.** His words: *"well when api was off i reloaded and was directed
+      to login page did not show the word"*.
+      **THE MECHANISM, verified in the code rather than inferred:**
+      `AuthContext.jsx:98` catches ANY failure from `getMe()` and runs
+      `adoptSession(null); setUser(null)`, so `ProtectedRoute.jsx:44` redirects
+      to `/login`. **A 401 and a dropped connection are the same event to that
+      `catch`** — one means "you are not signed in", the other means "we could
+      not ask" — and the app draws the first for both. That is :8267/:8343's
+      class (a failure drawn as a state) on the app's front door.
+      **WHAT IT COSTS A REAL PERSON:** a member on a train through a tunnel is
+      bounced to a login screen rather than shown a retry, and their cookie is
+      very likely still valid. **No data is lost and nothing is deleted** —
+      which is why this is 🟡 rather than 🔴.
+      **PRE-EXISTING AND APP-WIDE, not the calendar's** (`git log -S` would date
+      it to the Card 1 auth repoint). **Not fixed on the card that found it
+      (R1.1)** — every protected screen in the app is downstream of that `catch`,
+      and it needs its own decision about what a member is shown instead.
+      **AND IT MAKES ONE SMOKE STEP UNRUNNABLE, which is how it was found:**
+      `smoke-my-gyms-calendar.md` step 12 asked for the api to be stopped so the
+      calendar's failed state could be seen, and the login redirect happens
+      first. That step is STRUCK with the reasoning on the sheet.
