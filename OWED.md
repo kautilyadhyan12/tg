@@ -108,15 +108,20 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       shipped (month arrows, a day that opens, and it already imports `Flame`).
       🔥 already means a STREAK in this product (:27900), so the symbol reads
       correctly rather than being invented.
-      **IT CANNOT BE BUILT ON TODAY'S SERVER AND THAT IS THIS LINE'S FINDING:**
-      `attendanceHistoryQuerySchema` takes `userId` and `cursor` and **nothing
-      else** (`apps/api/src/modules/orgs/schemas.ts`), so no screen can ask for
-      "September" — only for "the most recent visits", paged backwards. **A
-      date window comes first**, and `/v1/workouts` already has exactly one
-      (`from`/`to`, :4434) to copy rather than invent. **Cost stated to Kd
-      before he chose:** a square in a grid cannot show that somebody came at
-      5:01 PM *and* 3:32 AM, so the times move behind a tap on the day — the
-      same place the workout calendar puts them.
+      ~~**IT CANNOT BE BUILT ON TODAY'S SERVER AND THAT IS THIS LINE'S
+      FINDING:** `attendanceHistoryQuerySchema` takes `userId` and `cursor` and
+      **nothing else** (`apps/api/src/modules/orgs/schemas.ts`), so no screen can
+      ask for "September" — only for "the most recent visits", paged
+      backwards.~~ **THE SERVER HALF SHIPPED 2026-09-03 (DECISIONS `:31951`) AND
+      THIS BLOCKER IS SPENT.** `?from=`/`?to=` are live on
+      `GET /v1/orgs/:gymId/attendance/history`, half-open so months tile, in GYM
+      DAYS rather than :4434's instants — the reasoning is on the schema and a
+      chat that "corrects" it to instants re-introduces the defect it thinks it
+      is fixing. **What remains on this line is the SCREEN**: the month grid, the
+      arrows, and 🔥 on the days attended. No web file has moved.
+      **Cost stated to Kd before he chose:** a square in a grid cannot show that
+      somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
+      the day — the same place the workout calendar puts them.
 
 - [ ] ⚪ **THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE, AND KD ASKED
       FOR IT TO FOLD** (2026-09-03, DECISIONS `:31508`): *"should have a drop
@@ -9364,3 +9369,25 @@ file and is stated so nobody reads these as lower priority than they are.
       scope was "log the minor finding"** and widening an approved plan mid-round
       is the drift R1.1/S4 exist to stop — he was told in the round summary and
       can overrule.
+
+- [ ] ⚪ **THE MUTATION HARNESS BLAMES THE FILTER WHEN THE DATABASE IS THE
+      PROBLEM — found 2026-09-03 by walking into it (DECISIONS `:31951` §4).**
+      **Read before re-anchoring an `expect` filter that a control step calls
+      dead, and before trusting any `mutate-*.mjs` abort message's stated CAUSE.**
+      A control run whose suite cannot CONNECT tallies zero tests, and
+      `mutate-orgs.mjs` reports that as *"no test tally. That filter matches no
+      test, so its mutants would prove nothing"* — naming a healthy filter as the
+      fault. **The guard itself is sound and nothing ran** (:5199's class, doing
+      its job); what is wrong is only the diagnosis, and the cost is a chat
+      re-aiming a filter that was never broken. Hit here with a mistyped
+      `DATABASE_URL`: the message survived a genuine credentials failure
+      unchanged.
+      **THE FIX IS TO TELL TWO THINGS APART: a suite that FAILED and a filter
+      that MATCHED NOTHING.** Vitest reports them differently — a failed suite
+      prints `Test Files 1 failed` with zero tests run, a dead filter prints
+      `N skipped` and no failure — so the abort can name the real cause instead
+      of guessing the likelier one.
+      **NOT FIXED IN THE CARD THAT FOUND IT (R1.1):** that card's approved scope
+      was the attendance date window, and it already touches this file to add a
+      target and eight mutants. Widening an approved plan mid-card is the drift
+      R1.1/S4 exist to stop — Kd was told and can overrule.

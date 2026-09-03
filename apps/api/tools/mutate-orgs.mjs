@@ -56,6 +56,14 @@ const TARGETS = {
   // picker, so it lives in @app/shared and is mutated there. The api suite
   // imports the workspace source directly, so no build step sits in between.
   shared: { file: resolve(ROOT, 'packages/shared/src/orgs.ts') },
+  // THE ROUTE-LEVEL PARSERS, and they were unreachable from this harness until
+  // the attendance date window needed them. A guarantee that lives in a
+  // `.refine()` — "an inverted window is a 400, never an empty page" — has no
+  // other home: the service sees only values the schema already blessed, so a
+  // mutant aimed at the service cannot reach the check at all. :28452 §1 is the
+  // standing reason this file matters as much as the two above it — a whole
+  // parameter parsed, validated and thrown away, with tsc unable to see it.
+  schemas: { file: resolve(ROOT, 'apps/api/src/modules/orgs/schemas.ts') },
   // The DPDP Day-0 flow closes a leaving member's gym rows, and since the
   // waiting-room card it cancels their pending applications in the same
   // transaction. It lives in the USERS repo — R7.1 forbids the deletion
@@ -2689,8 +2697,20 @@ const MUTANTS = [
     // them could see. The observer is a member of TWO — an ordinary user of this
     // product, not an edge case.
     expect: 'does not include their visits to another',
-    from: "    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL",
-    to: "    WHERE user_id = ${input.userId}\n      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL",
+    // RE-ANCHORED 2026-09-03 BY THE DATE-WINDOW CARD, AND THE PRE-CHECK CAUGHT
+    // IT BEFORE A BYTE WAS WRITTEN (:28221 §4, the guard working a fourth
+    // time). The old anchor spanned the tenancy line and the CURSOR line, and
+    // the window's two predicates landed between them — so it matched nothing
+    // and would have reported a missing test rather than a live guarantee.
+    //
+    // IT NOW ANCHORS UPWARD, on `FROM gym_attendance` instead of downward on
+    // the cursor, which is deliberate rather than the nearest repair: the lines
+    // BELOW this WHERE are where predicates get added (a window today, a status
+    // filter or a method filter tomorrow), while the line above it is the table
+    // being read and moves only if the query is rewritten entirely. Re-aiming at
+    // whichever line happens to come next is what :15770 warns about.
+    from: "    FROM gym_attendance\n    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n",
+    to: "    FROM gym_attendance\n    WHERE user_id = ${input.userId}\n",
   },
   {
     id: 'O210',
@@ -2956,6 +2976,86 @@ const MUTANTS = [
     expect: "the MODE decides what the week contains",
     from: '    week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],',
     to: "    week: toWeekSchedule(row.sessions),",
+  },
+
+  // ---------------------------------------------------------------------
+  // THE ATTENDANCE DATE WINDOW (Kd's calendar, 2026-09-03). A month grid asks
+  // for a MONTH, and until this card the route took only a cursor — so every
+  // row below guards a boundary a calendar is drawn on. They sit in rule 4a's
+  // "numbers a user sees" column: a wrong window paints a visit onto a square
+  // of a month it did not happen in, which reads as the app inventing visits.
+  // ---------------------------------------------------------------------
+  {
+    id: 'O248',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE WINDOW LOSES ITS LOWER BOUND, so a request for September also answers with August. The screen would draw last month's visits onto this month's squares, and because the count still looks plausible nobody checks it - this is the direction that adds days somebody never came",
+    expect: "a month window answers that month and neither of its neighbours",
+    from: '      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)',
+    to: '      AND (${null}::date IS NULL OR day >= ${input.from ?? null}::date)',
+  },
+  {
+    id: 'O249',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE WINDOW LOSES ITS UPPER BOUND, the same defect from the other end: a request for September carries October with it, and everything a screen asks for reaches today. The pair is mutated separately because one bound working is not two bounds working, and a fixture with a visit on only one side would let this pass",
+    expect: "a month window answers that month and neither of its neighbours",
+    from: '      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
+    to: '      AND (${null}::date IS NULL OR day < ${input.to ?? null}::date)',
+  },
+  {
+    id: 'O250',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE UPPER BOUND TURNS INCLUSIVE, which is the single edit that breaks TILING while looking tidier. September would then hold 1 October, and a caller stepping month by month either counts that visit twice or - if it compensates by starting the next window a day later - loses it entirely. Half-open is what makes a visit belong to exactly one month",
+    expect: "adjacent months tile",
+    from: '      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
+    to: '      AND (${input.to ?? null}::date IS NULL OR day <= ${input.to ?? null}::date)',
+  },
+  {
+    id: 'O251',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE LOWER BOUND TURNS EXCLUSIVE - the OVER-firing direction, and the one a bound's tests usually miss (:7104 PG1). A filter that only ever excludes too much is satisfied by a door that is simply shut, so this drops the FIRST of the month from every request: somebody who came on 1 September is told they did not. It is also the edit a later chat makes reaching for symmetry with the upper bound",
+    expect: "a month window answers that month and neither of its neighbours",
+    from: '      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)',
+    to: '      AND (${input.from ?? null}::date IS NULL OR day > ${input.from ?? null}::date)',
+  },
+  {
+    id: 'O252',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE WINDOW IS APPLIED ON PAGE ONE AND FORGOTTEN ON PAGE TWO - the web calendar's own M33 (:4622) one layer down. Page one looks perfect, so every ordinary fixture passes; press Show more and a neighbouring month's visits arrive. This is the reason the paging test's out-of-window rows are OLDER than everything else, because that is the only arrangement in which the leak can surface",
+    expect: "the window still holds on the SECOND page",
+    from: '      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)\n      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
+    to: '      AND (${input.cursor !== undefined} OR ${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)\n      AND (${input.cursor !== undefined} OR ${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
+  },
+  {
+    id: 'O253',
+    target: 'schemas',
+    suite: ATTENDANCE_SUITE,
+    why: "AN INVERTED WINDOW STOPS BEING A 400 AND BECOMES AN EMPTY PAGE. On this route that is worse than a plain bug: zero visits is what a member with no history sees, so a caller sending its bounds the wrong way round tells somebody they have never been to their gym. :4434 ruled the 400 for exactly this confusion, and the calendar card exists because that confusion reached a user once already",
+    expect: "an inverted window is a 400",
+    from: '  .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, {',
+    to: '  .refine((q) => q.from === undefined || q.to === undefined || true, {',
+  },
+  {
+    id: 'O254',
+    target: 'service',
+    suite: ATTENDANCE_SUITE,
+    why: "THE LOWER BOUND STOPS BEING CALENDAR-CHECKED, so 2026-02-31 - which matches YYYY-MM-DD and is not a day - reaches Postgres, the ::date cast is refused and the caller gets a 500 with a Sentry event instead of the 400 they can act on. The module states this rule for `day` and for closureParamsSchema; :26947 §5 is that a rule a file states in one place is not a rule the file keeps",
+    expect: "a shape-valid non-date is a 400 on either bound alone",
+    from: '    from: query.from === undefined ? undefined : requireCalendarDate(query.from),',
+    to: '    from: query.from,',
+  },
+  {
+    id: 'O255',
+    target: 'service',
+    suite: ATTENDANCE_SUITE,
+    why: "THE UPPER BOUND STOPS BEING CALENDAR-CHECKED. Mutated apart from O254 because the two are separate call sites and a guard covering one of two readers is not a guard (:28452 §1) - and because the ordering refine only runs when BOTH bounds are present, so a one-bound request travels a path no two-bound test covers (:4483 F3)",
+    expect: "a shape-valid non-date is a 400 on either bound alone",
+    from: '    to: query.to === undefined ? undefined : requireCalendarDate(query.to),',
+    to: '    to: query.to,',
   },
 ];
 

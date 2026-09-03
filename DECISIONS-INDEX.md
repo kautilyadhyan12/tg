@@ -4734,6 +4734,41 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   the defect no test can see, found by somebody looking. **The `:31508` timetable
   card was never an `OWED.md` line** and closes with its records instead.
 
+- **:31921** — 2026-09-03 — **THE MEMBER'S ATTENDANCE HISTORY LEARNS A DATE
+  WINDOW: a screen can finally ask for SEPTEMBER, and the unit is the GYM'S DAY
+  rather than :4434's instant.** The server half of Kd's calendar (`:31508`);
+  **no web file moved and the `OWED.md` line does not tick — the month grid with
+  the fire is the next card.** **Read before adding a date filter to any
+  attendance route, before "correcting" `attendanceHistoryQuerySchema`'s window
+  to instants for consistency with `/v1/workouts`, before adding any predicate to
+  a query a CURSOR pages, before comparing two date strings with `<` anywhere in
+  this repo, and before restoring a mutated file with `git checkout --`.**
+  **THE SHAPE IS :4434's AND THE UNIT DELIBERATELY IS NOT**: a workout carries
+  only `started_at` and :4622 groups it by the VIEWER's local day, while an
+  attendance carries `day` — the gym's own date, frozen at write time — which is
+  the column `visitDays` already draws a square from. Instants would make the
+  WINDOW and the GRID two different quantities, and would be a THIRD notion of a
+  day beside :26684's and :27900 §3's. Cost stated to Kd before he approved: a
+  member abroad sees a late visit on the GYM's date, which is already how their
+  streak counts. **Half-open so months TILE** — O250 (`<` to `<=`) is the tidy
+  edit that breaks it, and both bounds are mutated in BOTH directions (:7104 PG1)
+  because a bound tested only for firing is a door that is simply shut.
+  **The predicate sits beside the CURSOR comparison**, because :4622's own M33 is
+  a window applied to page one and forgotten on page two; the fixture's
+  out-of-window rows are OLDER so the leak can surface at all, with `marked_at`
+  set FROM the day (a defaulted `now()` collapses the ordering to a random uuid).
+  **NEW HARNESS TARGET `schemas.ts`** — a `.refine()` guarantee has no other home.
+  **TWO INSTRUMENT FINDINGS: (a)** `mutate-orgs.mjs` reports a suite that cannot
+  CONNECT as *"that filter matches no test"*, blaming a healthy filter — own
+  `OWED.md` line, unfixed (R1.1); **(b)** `git checkout --` on a hand-mutated file
+  discarded the CARD's own edits with the mutant, :25567's recorded trigger walked
+  into hours after reading it — **a hand-run mutant is reverted by replacing the
+  STRING, never by restoring the FILE**, and the first sweep is withdrawn because
+  the re-applied bytes differ. `api` 236/236 across four suites LOCAL · `shared`
+  52/52 · tsc PROVEN REAL by a planted error · SWEEP a stated subset of 245:
+  **9 RED, 0 ALIVE** (O248–O255 new, O209 re-anchored upward onto
+  `FROM gym_attendance`). **No smoke — no screen reads it yet; T3 UNRUN.**
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

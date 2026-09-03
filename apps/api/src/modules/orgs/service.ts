@@ -2531,7 +2531,13 @@ export async function getOrgAttendanceDay(
  *
  *  **THE SELF CASE IS CHECKED FIRST AND SEPARATELY**, so a member who is not
  *  staff never reaches the privilege check and never sees a 403 about their own
- *  attendance. */
+ *  attendance.
+ *
+ *  **`from`/`to` NARROW THE ANSWER AND CANNOT WIDEN IT.** They are gym days, not
+ *  instants, and the fork above runs before them — a window is a filter over the
+ *  rows this caller was already entitled to for this subject, never a way to
+ *  reach a row they were not. `attendanceHistoryQuerySchema` carries the whole
+ *  reasoning, including why the unit is not `/v1/workouts`'. */
 export async function getOrgAttendanceHistory(
   deps: OrgsDeps,
   userId: string,
@@ -2556,6 +2562,15 @@ export async function getOrgAttendanceHistory(
   const row = await repo.getGymAttendanceHistory(deps.sql, {
     gymId,
     userId: subjectId,
+    // THE CALENDAR CHECK IS HERE AND THE SHAPE CHECK IS IN THE SCHEMA, which is
+    // the split `getOrgAttendanceDay` above already makes for `day`: the pattern
+    // admits `2026-02-31`, which is not a date, and Postgres refusing the
+    // `::date` cast would be a 500 the caller cannot act on. Each bound is
+    // checked ALONE because the schema's ordering refine only runs when BOTH are
+    // present (:4483's F3 — a one-bound request reaching the database layer and
+    // 500ing there while the two-bound request was politely refused).
+    from: query.from === undefined ? undefined : requireCalendarDate(query.from),
+    to: query.to === undefined ? undefined : requireCalendarDate(query.to),
     cursor: requireAttendanceCursor(query.cursor),
   });
   if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");

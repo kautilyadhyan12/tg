@@ -220,13 +220,75 @@ export type AttendanceDayQuery = z.infer<typeof attendanceDayQuerySchema>;
 /** ONE PERSON'S ATTENDANCE. **`userId` absent means the CALLER'S OWN**, which is
  *  what makes this one route serve both a member reading themselves and staff
  *  reading somebody else — the service authorises the two differently and
- *  nothing else about them differs (:28055). */
+ *  nothing else about them differs (:28055).
+ *
+ *  **`from`/`to` ARE A HALF-OPEN WINDOW OF GYM DAYS, and the UNIT is the one
+ *  decision on this schema.** Without them a screen can only ask for "the most
+ *  recent visits" and page backwards, which is the walk :4434 removed from
+ *  `/v1/workouts` after it drew EMPTY MONTHS for anyone whose history was deeper
+ *  than the cap. Kd's calendar (2026-09-03) has to ask for a month.
+ *
+ *  **THE SHAPE IS :4434's, THE UNIT DELIBERATELY IS NOT, and a chat that
+ *  "corrects" this to instants re-introduces the defect it thinks it is
+ *  fixing.** `/v1/workouts` filters on an INSTANT because a workout carries only
+ *  `started_at` and the calendar groups it by the VIEWER's local day. An
+ *  attendance carries `day` — the GYM's own calendar date, stamped at write time
+ *  in the gym's zone — and that column is what a screen draws a square for
+ *  (`attendanceView.js`'s `visitDays` groups on `visit.day`). Filtering by
+ *  instants would make the WINDOW and the GRID two different quantities: a late
+ *  visit could be returned by a September request and drawn on the August grid,
+ *  the app disagreeing with itself about one visit. :26684 already fixed the
+ *  member-facing dates as the gym's own (trap #8), and :27900 §3 takes the
+ *  stored gym-day AS IS for streaks because `users.timezone` is captured nowhere
+ *  (:618) — so instants here would be a THIRD notion of a day.
+ *
+ *  **HALF-OPEN so months TILE**: `from` inclusive, `to` exclusive, so September
+ *  is `2026-09-01`→`2026-10-01` and August's `to` is September's `from`. A
+ *  visit at either edge belongs to exactly one month, which a closed window
+ *  cannot promise — and a caller asking for an inclusive last day would have to
+ *  do calendar arithmetic to find it, which is its own bug class.
+ *
+ *  **SHAPE HERE, CALENDAR IN THE SERVICE**, exactly as `attendanceDayQuerySchema`
+ *  above records: `2026-02-31` matches this pattern and is not a day, and
+ *  Postgres refusing the `::date` cast is a 500 nobody can act on. The service
+ *  runs both bounds through `requireCalendarDate`, which also holds the year-zero
+ *  hole (:26947 Low-1).
+ *
+ *  **THE WINDOW ONLY NARROWS.** There is no plan history-gate on gym attendance
+ *  — `/v1/workouts` clamps to one because Part 4 §0.2 gives it a floor, and this
+ *  route has never had one. Inventing a limit here would be R0.2, so these
+ *  parameters cannot reach a single row the route did not already serve this
+ *  subject; the authorisation fork in the service is untouched. */
 export const attendanceHistoryQuerySchema = z
   .object({
     userId: z.string().uuid().optional(),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     cursor: z.string().min(1).max(200).optional(),
   })
-  .strict();
+  .strict()
+  // AN INVERTED WINDOW IS A 400, NOT AN EMPTY PAGE — :4434's ruling, and the
+  // reason is this route's own screen: zero visits reads as "you have never
+  // been to your gym", which is the confusion the calendar exists to remove.
+  // Equal bounds are refused too: a half-open window that starts where it ends
+  // holds nothing, so it can only be a caller bug.
+  //
+  // **COMPARED AS STRINGS ON PURPOSE, AND :4434 REACHED THE OPPOSITE ANSWER FOR
+  // A REASON THAT DOES NOT APPLY HERE.** There the values are instants carrying
+  // an offset, so `…T00:00:00+05:30` sorts AFTER `…T00:00:00Z` lexically while
+  // being five and a half hours earlier — string order is not time order, and
+  // that card compares parsed instants. A `YYYY-MM-DD` is fixed-width and
+  // zero-padded, so its lexical order IS its calendar order, for every value
+  // the pattern above admits. **If this field ever gains an offset or a time,
+  // this comparison becomes wrong and must move to parsed values.**
+  //
+  // NOT A SAFETY NET FOR A SINGLE BAD BOUND, which is :4483's F3: this only
+  // runs when BOTH are present, so a one-bound request never reaches it. Each
+  // bound is made real on its own by `requireCalendarDate` in the service.
+  .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, {
+    message: "`to` must be later than `from`",
+    path: ["to"],
+  });
 export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema>;
 
 /** Both path parameters of the confirm/reject routes. The application id is a

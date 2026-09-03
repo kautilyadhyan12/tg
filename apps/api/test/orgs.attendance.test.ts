@@ -94,6 +94,13 @@ interface Visit {
   session: { opensMinute: number; closesMinute: number } | null;
 }
 
+interface AttendanceHistory {
+  timezone: string;
+  clockFormat: "12h" | "24h";
+  visits: Visit[];
+  nextCursor: string | null;
+}
+
 interface AttendanceDay {
   day: string;
   timezone: string;
@@ -253,6 +260,22 @@ d("gym attendance (real Postgres)", () => {
     expect(res.statusCode).toBe(200);
     return (JSON.parse(res.body) as { attendance: AttendanceDay }).attendance;
   };
+
+  const readHistory = async (
+    gymId: string,
+    cookies: Record<string, string>,
+    query = "",
+  ): Promise<AttendanceHistory> => {
+    const res = await get(`/v1/orgs/${gymId}/attendance/history${query}`, cookies);
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { attendance: AttendanceHistory }).attendance;
+  };
+
+  /** The days a history read came back with, newest first — which is the order
+   *  the route promises, so asserting the ARRAY rather than a set is deliberate:
+   *  a window that returned the right rows in the wrong order would still be a
+   *  calendar drawn out of sequence. */
+  const daysOf = (page: { visits: Visit[] }) => page.visits.map((v) => v.day);
 
   /** THE GYM'S OWN TODAY, ASKED OF THE DATABASE AND NEVER COMPUTED HERE.
    *
@@ -1454,6 +1477,315 @@ d("gym attendance (real Postgres)", () => {
       // AND THE ORDINARY CALL IS UNTOUCHED — a POST with no keys is the normal
       // case and must stay a 200.
       expect((await mark(org.org.id, member.cookies)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // -------------------------------------------------------------------------
+  // THE DATE WINDOW (Kd's calendar, 2026-09-03) — `?from=`/`?to=` on the
+  // history read, so a screen can ask for a MONTH instead of paging backwards
+  // from today. The walk this replaces is what drew EMPTY MONTHS on the workout
+  // calendar for anyone whose history was deeper than the cap (:4434).
+  // -------------------------------------------------------------------------
+
+  /** ONE VISIT ON A NAMED GYM DAY, with `marked_at` set FROM that day instead of
+   *  defaulting to `now()`.
+   *
+   *  **THE DEFAULT WOULD QUIETLY DESTROY THE ORDER THESE TESTS REST ON.** Every
+   *  row a fixture writes in one run takes the same `now()`, so `ORDER BY
+   *  marked_at DESC, id DESC` falls through to a random uuid and "the older rows
+   *  come last" stops being true — which is exactly the property the paging test
+   *  needs in order to SEE a filter that was dropped after page one. Noon UTC is
+   *  17:30 in `Asia/Kolkata`, so `day` and `marked_at` agree the way a real gym
+   *  writes them rather than being two unrelated fixtures.
+   *
+   *  `hours_unset` because these gyms never set hours, which is what a real mark
+   *  would store — and `slot_key` must equal it or
+   *  `gym_attendance_slot_key_agrees_check` raises 23514 (:28221 §2). */
+  const visitOn = (gymId: string, userId: string, day: string) => sql`
+    INSERT INTO gym_attendance
+      (gym_id, user_id, marked_by_user_id, day, marked_at, method, hours_status, slot_key)
+    VALUES (${gymId}, ${userId}, ${userId}, ${day}::date,
+            ${`${day}T12:00:00Z`}::timestamptz, 'manual', 'hours_unset', 'hours_unset')`;
+
+  /** THE WHOLE POINT OF THE CARD, AND THE TILING IS THE HALF THAT IS EASY TO GET
+   *  WRONG.
+   *
+   *  A calendar asks for one month at a time, so the months must PARTITION the
+   *  history: every visit in exactly one of them, none in two and none in
+   *  neither. A CLOSED window cannot promise that — `to` inclusive counts the
+   *  first of the month twice if the next request starts there, and skips it if
+   *  the next request starts a day later. **So the four fixture days sit on the
+   *  two boundaries that can go wrong** (the last day of a month and the first of
+   *  the next), and the three windows are asserted to reconstruct the unwindowed
+   *  read exactly.
+   *
+   *  **EACH BOUND ALSO WORKS ALONE**, which is not decoration: "everything since
+   *  I joined" sends only `from`, and a schema that required them in pairs would
+   *  refuse it. :4483's F3 is the reason this is asserted rather than assumed —
+   *  the ordering refine only fires when BOTH are present, so a one-bound request
+   *  travels a path no two-bound test covers. */
+  it(
+    "a month window answers that month and neither of its neighbours, and adjacent months tile",
+    async () => {
+      const owner = await makeUser("win-owner");
+      const member = await makeUser("win-member");
+      const org = await makeOrg(owner.cookies, "Window Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // THE TWO BOUNDARIES THAT CAN GO WRONG, twice over: the last day of a
+      // month and the first day of the next.
+      for (const day of ["2026-08-31", "2026-09-01", "2026-09-30", "2026-10-01"]) {
+        await visitOn(org.org.id, member.userId, day);
+      }
+
+      const all = await readHistory(org.org.id, member.cookies);
+      expect(daysOf(all)).toEqual(["2026-10-01", "2026-09-30", "2026-09-01", "2026-08-31"]);
+
+      // SEPTEMBER — half-open, so it holds the 1st and the 30th and neither
+      // neighbour. A `to` read as INCLUSIVE puts 2026-10-01 in here too.
+      const september = await readHistory(
+        org.org.id,
+        member.cookies,
+        "?from=2026-09-01&to=2026-10-01",
+      );
+      expect(daysOf(september)).toEqual(["2026-09-30", "2026-09-01"]);
+
+      const august = await readHistory(
+        org.org.id,
+        member.cookies,
+        "?from=2026-08-01&to=2026-09-01",
+      );
+      expect(daysOf(august)).toEqual(["2026-08-31"]);
+
+      const october = await readHistory(
+        org.org.id,
+        member.cookies,
+        "?from=2026-10-01&to=2026-11-01",
+      );
+      expect(daysOf(october)).toEqual(["2026-10-01"]);
+
+      // THE TILING ITSELF, asserted rather than inferred from the three lines
+      // above: August's `to` IS September's `from` and September's `to` IS
+      // October's `from`, so stepping month by month reconstructs the whole
+      // history with nothing counted twice and nothing lost between two
+      // requests. Sorted because the union of three descending pages is not
+      // itself descending.
+      const tiled = [...daysOf(august), ...daysOf(september), ...daysOf(october)].sort();
+      expect(tiled).toEqual([...daysOf(all)].sort());
+      expect(new Set(tiled).size).toBe(tiled.length);
+
+      // EACH BOUND ALONE. `from` is "everything since"; `to` is "everything
+      // before". Neither reaches the ordering refine, which only runs on a pair.
+      const since = await readHistory(org.org.id, member.cookies, "?from=2026-09-01");
+      expect(daysOf(since)).toEqual(["2026-10-01", "2026-09-30", "2026-09-01"]);
+
+      const before = await readHistory(org.org.id, member.cookies, "?to=2026-09-01");
+      expect(daysOf(before)).toEqual(["2026-08-31"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE WINDOW MUST NOT LOOSEN THE TENANCY CLAUSE IT SITS BESIDE.
+   *
+   *  A date predicate is added to the same `WHERE` that carries `gym_id` and
+   *  `user_id`, and the edit that replaces a clause instead of extending it is
+   *  ordinary rather than exotic. **The observer has to be a member of TWO gyms
+   *  who came to both in the SAME month** — with one membership there is nothing
+   *  to leak, which is the gap O209 sat in for a whole card (:28221 §3b), and
+   *  with visits in different months a broken window looks correct. */
+  it(
+    "a windowed read is still scoped to ONE gym, for a member of two",
+    async () => {
+      const ownerA = await makeUser("win2-a-owner");
+      const ownerB = await makeUser("win2-b-owner");
+      const both = await makeUser("win2-both");
+      const orgA = await makeOrg(ownerA.cookies, "Window A Gym");
+      const orgB = await makeOrg(ownerB.cookies, "Window B Gym");
+      await joinAsMember(both.cookies, orgA, ownerA.cookies);
+      await joinAsMember(both.cookies, orgB, ownerB.cookies);
+
+      // THE SAME MONTH AT BOTH GYMS, and deliberately not the same DAY: two
+      // rows on one day would also be told apart by the UNIQUE, so distinct
+      // days keep the fixture about the window rather than about the constraint.
+      await visitOn(orgA.org.id, both.userId, "2026-09-10");
+      await visitOn(orgB.org.id, both.userId, "2026-09-11");
+
+      const september = "?from=2026-09-01&to=2026-10-01";
+      expect(daysOf(await readHistory(orgA.org.id, both.cookies, september))).toEqual([
+        "2026-09-10",
+      ]);
+      // AND THE OTHER GYM ANSWERS ITS OWN, so this cannot pass because one of
+      // the two reads is broken in a compensating direction.
+      expect(daysOf(await readHistory(orgB.org.id, both.cookies, september))).toEqual([
+        "2026-09-11",
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE FILTER HAS TO BE ON EVERY PAGE, AND THE SECOND PAGE IS WHERE IT GETS
+   *  LOST.
+   *
+   *  This is the web calendar's own M33 one layer down (:4622): a window applied
+   *  to the first read and forgotten on the next serves a neighbouring month's
+   *  visits the moment somebody presses for more — and a screen would draw them
+   *  onto squares of a month they did not happen in, which to a user is the app
+   *  inventing visits.
+   *
+   *  **THE FIXTURE IS BUILT SO THE MISSING FILTER IS VISIBLE**: the
+   *  out-of-window rows are OLDER than every in-window row, so they sort last
+   *  and can only surface on page two. Page one is full at
+   *  `ATTENDANCE_PAGE_LIMIT`, so the second page holds exactly one row when the
+   *  window holds and six when it does not. */
+  it(
+    "the window still holds on the SECOND page",
+    async () => {
+      const owner = await makeUser("winpg-owner");
+      const member = await makeUser("winpg-member");
+      const org = await makeOrg(owner.cookies, "Window Paging Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      /** 101 CONSECUTIVE DAYS INSIDE THE WINDOW plus five OLDER days outside it,
+       *  written in two statements because 106 round trips is a minute of test
+       *  time for nothing.
+       *
+       *  **`AT TIME ZONE 'UTC'` IS EXPLICIT AND :26220 §3 IS WHY.** A naive
+       *  timestamp cast to `timestamptz` is resolved in the session's `TimeZone`
+       *  GUC, which nothing in this repo sets — so the same fixture would carry
+       *  different instants on a differently-configured database, and only the
+       *  ORDER matters here. */
+      const fill = (fromDay: string, toDay: string) => sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, marked_at, method, hours_status, slot_key)
+        SELECT ${org.org.id}, ${member.userId}, ${member.userId}, d::date,
+               ((d::date)::timestamp + interval '12 hours') AT TIME ZONE 'UTC',
+               'manual', 'hours_unset', 'hours_unset'
+        FROM generate_series(${fromDay}::date, ${toDay}::date, interval '1 day') AS d`;
+
+      // 2026-01-01 … 2026-04-11 is 101 days: one more than a full page.
+      await fill("2026-01-01", "2026-04-11");
+      // FIVE OLDER DAYS OUTSIDE IT — the rows a dropped filter would hand back.
+      await fill("2025-12-27", "2025-12-31");
+
+      const window = "from=2026-01-01&to=2026-05-01";
+      const page1 = await readHistory(org.org.id, member.cookies, `?${window}`);
+      expect(page1.visits).toHaveLength(100);
+      expect(page1.visits[0]?.day).toBe("2026-04-11");
+      expect(page1.visits[99]?.day).toBe("2026-01-02");
+      expect(page1.nextCursor).not.toBeNull();
+
+      const page2 = await readHistory(
+        org.org.id,
+        member.cookies,
+        `?${window}&cursor=${encodeURIComponent(page1.nextCursor ?? "")}`,
+      );
+      // ONE ROW, NOT SIX. Without the window on this read the five December days
+      // follow it, because they are older than everything on page one.
+      expect(daysOf(page2)).toEqual(["2026-01-01"]);
+      expect(page2.nextCursor).toBeNull();
+
+      // THE POSITIVE CONTROL: those December rows DO exist and ARE reachable, so
+      // the assertion above cannot be passing because the fixture never wrote
+      // them. Same cursor, no window — the five come back.
+      const unwindowed = await readHistory(
+        org.org.id,
+        member.cookies,
+        `?cursor=${encodeURIComponent(page1.nextCursor ?? "")}`,
+      );
+      expect(daysOf(unwindowed)).toEqual([
+        "2026-01-01",
+        "2025-12-31",
+        "2025-12-30",
+        "2025-12-29",
+        "2025-12-28",
+        "2025-12-27",
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** AN INVERTED WINDOW IS A 400, NEVER AN EMPTY PAGE — :4434's ruling, and on
+   *  this route the reason is sharper than it was there. Zero visits on a
+   *  member's own gym card reads as *"you have never been to your gym"*, which
+   *  is the confusion the calendar exists to remove; answering a caller bug with
+   *  that sentence would ship the defect through the fix.
+   *
+   *  **EQUAL BOUNDS ARE REFUSED TOO**, and that follows from half-openness
+   *  rather than being an extra rule: a window that starts where it ends holds
+   *  nothing, so it can only ever be a mistake.
+   *
+   *  `validation_error` and not `invalid_date` is asserted deliberately — it
+   *  names WHICH layer refused. The ordering is the schema's; the calendar check
+   *  below it is the service's. */
+  it(
+    "an inverted window is a 400, and so is one that starts where it ends",
+    async () => {
+      const owner = await makeUser("wininv-owner");
+      const member = await makeUser("wininv-member");
+      const org = await makeOrg(owner.cookies, "Inverted Window Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await visitOn(org.org.id, member.userId, "2026-09-15");
+
+      for (const query of [
+        "?from=2026-10-01&to=2026-09-01",
+        "?from=2026-09-01&to=2026-09-01",
+      ]) {
+        const res = await get(`/v1/orgs/${org.org.id}/attendance/history${query}`, member.cookies);
+        expect(res.statusCode).toBe(400);
+        expect((JSON.parse(res.body) as { error: string }).error).toBe("validation_error");
+      }
+
+      // THE CONTROL, so this cannot pass on a route that refuses everything: the
+      // same gym, the same member, the bounds the right way round.
+      expect(
+        daysOf(await readHistory(org.org.id, member.cookies, "?from=2026-09-01&to=2026-10-01")),
+      ).toEqual(["2026-09-15"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A SHAPE THAT IS NOT A DATE IS A 400 ON EITHER BOUND ALONE, NEVER A 500.
+   *
+   *  `2026-02-31` matches `YYYY-MM-DD` and is not a day; Postgres refuses the
+   *  `::date` cast and the caller gets a 500 they can do nothing about. The
+   *  module already carries this rule for `day` and for `closureParamsSchema`,
+   *  and :26947 §5's lesson is that **a rule a file states in one place is not a
+   *  rule the file keeps** — so it is asserted here rather than assumed from
+   *  there.
+   *
+   *  **EACH BOUND IS SENT ALONE, WHICH IS :4483's F3 EXACTLY.** With both bounds
+   *  present the ordering refine can refuse the request for an unrelated reason
+   *  and the hole looks covered from every angle a test happened to be written
+   *  from. `0000-01-01` is the year-zero hole (:26947 Low-1) — it matches the
+   *  pattern AND round-trips through `Date`, and Postgres still refuses it. */
+  it(
+    "a shape-valid non-date is a 400 on either bound alone, never a 500",
+    async () => {
+      const owner = await makeUser("windt-owner");
+      const member = await makeUser("windt-member");
+      const org = await makeOrg(owner.cookies, "Window Date Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      for (const query of [
+        "?from=2026-02-31",
+        "?to=2026-02-31",
+        "?from=0000-01-01",
+        "?to=0000-01-01",
+      ]) {
+        const res = await get(`/v1/orgs/${org.org.id}/attendance/history${query}`, member.cookies);
+        expect(res.statusCode).toBe(400);
+        expect((JSON.parse(res.body) as { error: string }).error).toBe("invalid_date");
+      }
+
+      // AND A MALFORMED SHAPE IS STILL THE SCHEMA'S 400, not the service's — the
+      // two refusals are different layers and stay told apart.
+      const malformed = await get(
+        `/v1/orgs/${org.org.id}/attendance/history?from=last-tuesday`,
+        member.cookies,
+      );
+      expect(malformed.statusCode).toBe(400);
+      expect((JSON.parse(malformed.body) as { error: string }).error).toBe("validation_error");
     },
     TEST_TIMEOUT_MS,
   );

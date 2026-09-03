@@ -31917,3 +31917,196 @@ the Neon dev branch (`America/Mendoza`, `12h`), api restarted on the committed
 bytes before the step ran — **pid 7420, started after `00c2699`** — web on
 `:5173` throughout. `@app/shared` is consumed from source, so no build step sat
 between the commit and his browser.
+
+## 2026-09-03 — THE MEMBER'S ATTENDANCE HISTORY LEARNS A DATE WINDOW: a screen can finally ask for SEPTEMBER, and the unit is the GYM'S DAY rather than :4434's instant
+
+**Read before adding a date filter to any attendance route, before "correcting"
+`attendanceHistoryQuerySchema`'s window to instants for consistency with
+`/v1/workouts`, before adding any predicate to a query a CURSOR pages, before
+comparing two date strings with `<` anywhere in this repo, and before restoring
+a mutated file with `git checkout --`.**
+
+The server half of Kd's calendar (approved 2026-09-03, `:31508`; `OWED.md`'s
+*"days you came"* line). **Nothing on a screen has moved and no web file was
+touched** — the month grid with the fire on the days attended is the next card,
+and this is the blocker that line named: `attendanceHistoryQuerySchema` took
+`userId` and `cursor` and nothing else, so no screen could ask for a month, only
+for "the most recent visits" paged backwards. That walk is what drew EMPTY MONTHS
+on the workout calendar for anyone whose history outran the cap (:4434).
+
+`?from=`/`?to=` on `GET /v1/orgs/:gymId/attendance/history`, half-open, both
+optional.
+
+### 1 · THE SHAPE IS :4434's AND THE UNIT DELIBERATELY IS NOT — this is the one decision on the card
+
+The card said to copy the window `/v1/workouts` already has. **The shape was
+copied; the unit was not, and a chat that "fixes" this for consistency
+re-introduces the defect it thinks it is removing.**
+
+`/v1/workouts` filters on an **instant** because a workout carries only
+`started_at`, and :4622 has the calendar group it by the **viewer's** local day —
+so that card was careful to move no timezone decision to the server. An
+attendance is not that shape: it carries `day`, the **gym's** own calendar date,
+stamped at write time in the gym's zone, and `attendanceView.js`'s `visitDays`
+already groups on exactly that column. **Filtering by instants would make the
+WINDOW and the GRID two different quantities** — a late visit returned by a
+September request and drawn on the August square, one visit, two answers, the app
+disagreeing with itself.
+
+**IT ALSO AVOIDS INVENTING A THIRD NOTION OF A DAY.** :26684 fixed member-facing
+dates as the gym's own (trap #8) and :27900 §3 takes the stored gym-day **as is**
+for streaks, because `users.timezone` is captured nowhere (:618, still owed). Two
+notions exist; a viewer-local window would have been the third.
+
+**THE COST IS REAL AND WAS STATED TO KD BEFORE HE APPROVED:** a member in a
+different country from their gym sees a late visit on the GYM's date. That is
+already how their streak is counted, so this keeps one answer rather than adding
+a second.
+
+### 2 · HALF-OPEN IS WHAT MAKES MONTHS TILE, AND THE INCLUSIVE EDIT IS THE ONE THAT LOOKS TIDIER
+
+`from` inclusive, `to` exclusive: September is `2026-09-01` to `2026-10-01`, and
+August's `to` **is** September's `from`. A closed window cannot promise that — a
+caller stepping month by month either counts the 1st twice or, compensating by
+starting a day later, loses it — and an inclusive `to` would also make every
+caller do calendar arithmetic to find "the last day of the month", which is its
+own bug class.
+
+**O250 IS THAT EXACT EDIT** and it is the mutant to keep: `day <` becomes
+`day <=`, which reads as a tidy-up and puts 1 October inside September. Hand-run,
+its failure names the defect rather than a neighbour — *expected [ '2026-10-01',
+'2026-09-30', ...(1) ] to deeply equal [ '2026-09-30', '2026-09-01' ]* (:28452's
+M2 discipline: a mutant red for the wrong reason is not an observer).
+
+**BOTH BOUNDS ARE MUTATED IN BOTH DIRECTIONS**, because a bound tested only for
+firing is satisfied by a door that is simply shut (:7104 PG1): O248/O249 delete
+the lower/upper bound (too many days), O250/O251 make them inclusive/exclusive
+(too few). **O251 is the symmetry edit a later chat reaches for** — making `from`
+exclusive to match `to` — and it tells somebody who came on 1 September that they
+did not.
+
+### 3 · A PREDICATE ADDED TO A CURSOR-PAGED QUERY HAS A SECOND PAGE, AND THAT IS WHERE IT GETS LOST
+
+The window sits beside the cursor comparison rather than being applied to the
+first read. **The failure it prevents is the web calendar's own M33 (:4622) one
+layer down**: page one looks perfect, so every ordinary fixture passes, and the
+neighbouring month arrives the moment somebody presses for more — visits painted
+onto squares of a month they did not happen in, which to a user is the app
+inventing sessions.
+
+**THE FIXTURE IS BUILT SO THE LEAK CAN SURFACE AT ALL, AND THAT IS THE
+TRANSFERABLE PART.** The out-of-window rows are **older** than every in-window
+row, so they sort last and can only appear on page two; page one is full at
+`ATTENDANCE_PAGE_LIMIT`, so page two holds exactly one row when the window holds
+and six when it does not. **A fixture whose extra rows sort first proves
+nothing.** It carries its own positive control — the same cursor with no window
+returns all six — so the assertion cannot be passing because the fixture never
+wrote them.
+
+**`marked_at` IS SET FROM THE DAY RATHER THAN DEFAULTED**, and the default would
+have destroyed the property silently: every row a fixture writes in one run takes
+the same `now()`, so `ORDER BY marked_at DESC, id DESC` falls through to a random
+uuid and "the older rows come last" stops being true.
+
+### 4 · TWO INSTRUMENT FINDINGS, AND THE SECOND ONE COST ME MY OWN WORK
+
+**(a) THE HARNESS BLAMES THE FILTER WHEN THE DATABASE IS THE PROBLEM.** A control
+run whose suite cannot CONNECT tallies zero tests, and `mutate-orgs.mjs` reports
+*"no test tally. That filter matches no test"* — naming a healthy filter as the
+fault. Hit with a mistyped `DATABASE_URL` (the credentials are `aihg:aihg`, and
+:30867's `127.0.0.1` rule still applies). **The guard is sound and nothing ran;
+only the diagnosis is wrong**, and the cost is a chat re-aiming a filter that was
+never broken. Own `OWED.md` line, not fixed here (R1.1).
+
+**(b) `git checkout --` RESTORED THE MUTANT AND MY CARD WITH IT.** I hand-applied
+O250 to read its failure message, then reverted the file with
+`git checkout -- apps/api/src/modules/orgs/repo.ts` — which does not undo a
+mutant, it discards **every uncommitted change in that file**, and this card's
+window predicates and docblock were among them. Caught immediately because the
+verifying grep for the `to` predicate returned **0** rather than 1.
+**:25567 already carries this trigger** (*"restoring a file with `git checkout --`
+and calling the restore byte-exact"*) and I walked into it hours after reading it.
+**STANDING, and it is narrower than "don't use git checkout": a hand-run mutant on
+a file the CARD has also edited must be reverted by replacing the mutant STRING,
+never by restoring the FILE — the harness does exactly this, and is why it
+verifies sha256 rather than trusting git.** The re-applied bytes differ from what
+the first sweep ran against (a docblock gained an O252 reference), **so that sweep
+is withdrawn and the figures below are a re-run on the final bytes** — a sweep on
+bytes you then rewrite is a sweep of something else.
+
+### 5 · CHOICES MADE RATHER THAN ASKED (R0.2 does not cover routine shape)
+
+**No history gate.** `/v1/workouts` clamps its window to the plan's floor
+(Part 4 §0.2); gym attendance has never had one, so these parameters cannot reach
+a row the route did not already serve this subject. **Inventing a limit here would
+be R0.2** — how far back a member may look is Kd's, and nothing asks it today.
+**No migration:** `gym_attendance_gym_user_day_slot_uq` leads on
+`(gym_id, user_id, day)`, which is this predicate's columns.
+**The calendar check is in the SERVICE and the shape check in the SCHEMA**, the
+split `attendanceDayQuerySchema` already makes for `day`: `2026-02-31` matches
+the pattern and is not a day, and Postgres refusing the cast is a 500 nobody can
+act on. **Each bound is checked ALONE** because the ordering refine only runs when
+both are present — :4483's F3, where a one-bound request reached the database
+layer and 500'd there while the two-bound request was politely refused.
+**The ordering refine compares STRINGS, and :4434 reached the opposite answer for
+a reason that does not apply here**: its values carry offsets, so a `+05:30`
+instant sorts after a `Z` one lexically while being earlier. A zero-padded
+`YYYY-MM-DD` has lexical order identical to calendar order. **Written into the
+code as a condition: if that field ever gains a time or an offset, the comparison
+must move to parsed values.**
+
+### 6 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **No smoke, and none was offered.** No screen reads these parameters yet — the
+  web half is the next card — so there is nothing to click (:26012's shape, not
+  an invented step).
+- **The window composed with the RATE LIMIT is untested.** A calendar stepping
+  months spends the shared 600/hour read bucket (:28649 §6), and the interval that
+  would break it gets decided by the screen that polls, not here.
+- **T3 is UNRUN.** The `OWED.md` line does not tick: its remaining half is the
+  screen.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :4434, :4483, :4556, :4622, :26220 §§1–3, :28221 with addendum
+:28395, :28452, :28649 in full · `HANDOFF.md`'s top block · `CLAUDE.md` Part 0.5
+and Part I §2.5 · `OWED.md`'s calendar line.
+
+**PROVE, all LOCAL (`127.0.0.1:5433`, per :13659) and all on the FINAL bytes:**
+`orgs.attendance` **34/34** (+5) · `orgs.attendance` + `orgs.routes` +
+`orgs.hours` + `db.migration` in one invocation **236/236** · `@app/shared`
+**52/52** · `tsc --noEmit` exit 0 on `api` and on `@app/shared`, **and PROVEN
+REAL by planting a type error** (a number where the bound goes, `TS2322`,
+restored, exit 0 again) · `eslint --max-warnings=0` exit 0 on
+`apps/api/{src,test,tools}` · `check-harnesses` **25 scripts parse**.
+
+**`packages/shared` WAS NOT TOUCHED, so :28395's web run does not apply** — the
+whole change is `apps/api`, and the web's `getAttendanceHistory` already forwards
+a `params` object, so the new parameters are additive and break no caller
+(grep-verified: `apps/web` sends none today).
+
+**SWEEP, a stated SUBSET of 245 — nine mutants: 9 RED · 0 ALIVE · 0 never ran**,
+controls GREEN and tallied first, restore verified byte-exact after every mutant,
+mass-write detector clean (442 fingerprinted rows unchanged). Eight are new
+(**O248–O255**); **O209 is a re-anchor** and its control passing is what proves
+the re-aim landed.
+
+**THE PRE-CHECK ABORTED BEFORE A BYTE WAS WRITTEN, for the fifth card running**
+(:28221 §4): O209's anchor spanned the tenancy line and the CURSOR line, and this
+card's two predicates landed between them, so it matched nothing. **Re-anchored
+UPWARD onto `FROM gym_attendance` rather than downward onto whichever line now
+comes next** — the lines BELOW that `WHERE` are where predicates get added (a
+window today, a method filter tomorrow) while the line above is the table being
+read. Re-aiming at the nearest survivor is what :15770 warns about.
+
+**A NEW HARNESS TARGET: `schemas.ts`.** The inverted-window guarantee lives in a
+`.refine()` and has no other home — the service only ever sees values the schema
+already blessed, so no mutant aimed at the service can reach it. :28452 §1 is the
+standing reason that file matters as much as the repo and the service.
+
+**MY OWN `expect` FILTERS WERE WRONG AND THE CONTROL STEP CAUGHT ALL THREE**
+(:5199's class): I wrote *"a month answers that month and neither neighbour"*
+against a test titled *"a month window answers that month and neither of its
+neighbours"*. Nothing ran on a filter that matched nothing.

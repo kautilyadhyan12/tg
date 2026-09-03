@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE ATTENDANCE HISTORY LEARNS A DATE WINDOW — the server half of Kd's
+      calendar. DECISIONS `:31921`. `?from=`/`?to=` on
+      `GET /v1/orgs/:gymId/attendance/history`, half-open, both optional.
+      **NO SCREEN MOVED AND THE `OWED.md` LINE DOES NOT TICK** — its remaining
+      half is the month grid with the fire, which is the next card. **T3 IS
+      UNRUN and the prompt was handed to Kd with the card.**
+      **START HERE: T3 round 1 on this diff, then the calendar's WEB half.**
+
+  1. **THE ONE DECISION, AND IT IS THE THING A LATER CHAT WILL TRY TO "FIX":**
+     the window is in GYM DAYS, not `/v1/workouts`' instants. A workout carries
+     only `started_at` and :4622 groups it by the VIEWER's day; an attendance
+     carries `day`, the gym's own date frozen at write time, and that is the
+     column `visitDays` already draws a square from. **Instants would make the
+     window and the grid two different quantities** — a late visit returned by a
+     September request and drawn on the August square — and would be a THIRD
+     notion of a day beside :26684's and :27900 §3's. Cost stated to Kd before
+     he approved: a member abroad sees a late visit on the GYM's date.
+  2. **THE MUTANT TO KEEP IS O250** (`day <` → `day <=`): the tidy-looking edit
+     that breaks TILING by putting 1 October inside September. Both bounds are
+     mutated in BOTH directions (O248–O251) because a bound tested only for
+     firing is a door that is simply shut (:7104 PG1). **O252 is :4622's own M33
+     one layer down** — a window applied to page one and forgotten on page two.
+  3. **THE INSTRUMENT FINDING THAT COST ME MY OWN WORK, and it is on `OWED.md`
+     as a trigger:** `git checkout --` on a hand-mutated file discards the
+     CARD's edits along with the mutant. :25567 already carries that trigger and
+     I walked into it hours after reading it. **A hand-run mutant is reverted by
+     replacing the STRING, never by restoring the FILE.** The first sweep is
+     WITHDRAWN — the re-applied bytes differ — and the quoted figures are a
+     re-run on the final bytes.
+  4. **A SECOND INSTRUMENT LINE IS NOW OWED:** `mutate-orgs.mjs` reports a suite
+     that cannot CONNECT as *"that filter matches no test"*, blaming a healthy
+     filter. Sound guard, wrong diagnosis. Unfixed here (R1.1).
+  5. **NEW HARNESS TARGET `schemas.ts`** — a `.refine()` guarantee (the inverted
+     window's 400) has no other home, because the service only ever sees values
+     the schema already blessed.
+
+PROVE: all LOCAL (`127.0.0.1:5433`, creds `aihg:aihg`), all on the FINAL bytes.
+       `orgs.attendance` 34/34 (+5) · that suite + `orgs.routes` + `orgs.hours` +
+       `db.migration` in one invocation 236/236 · `@app/shared` 52/52 · tsc exit
+       0 on api and shared, PROVEN REAL by a planted type error · eslint
+       `--max-warnings=0` exit 0 on `apps/api/{src,test,tools}` · the three ROOT
+       guards pass (harnesses 25, index 283 pointers, triggers up to date).
+       **SWEEP a stated SUBSET of 245: 9 mutants, 9 RED, 0 ALIVE, 0 never ran**,
+       controls GREEN and tallied first, restores sha256 byte-exact.
+       `turbo run lint` is RED and PRE-EXISTING — a corepack pnpm version check
+       in `@app/config`/`@app/engine`, neither touched (:22497 recorded it).
+       **`packages/shared` was NOT touched, so :28395's web run does not apply.**
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NO SMOKE, and none was offered**: nothing reads these parameters yet, so
+       there is nothing to click (:26012's shape rather than an invented step).
+       **NEXT, in order: (a)** T3 round 1 on this diff. **(b)** the calendar's WEB
+       half — `components/progress/WorkoutCalendar.jsx` is the shape to follow and
+       already imports `Flame`; 🔥 already means a STREAK in this product
+       (:27900), so the symbol is not being invented. **(c)** folding the member
+       card's Mon–Sun list — **tap, never hover** (:26586), `ConsoleSection`'s
+       `defaultOpen` is the pattern and NOT `forceOpen` (:31295).
+       **THE SMOKE SHEET IS STILL STALE** — twelve commits now.
+```
+
+```
 TASK: THE CLOSED-DAY STEP RAN AND THE 🔴 "I'm here" LINE TICKS. DECISIONS
       `:31856`. **BOTH OF TODAY'S CARDS ARE CLOSED — PROVE, Kd's browser, and
       T3 round 1 with zero Critical/High.** Nothing is outstanding on them.

@@ -4342,12 +4342,40 @@ export interface GymAttendanceHistoryRow {
  *
  *  Newest first: "have I been this week" is the question and its answer is at
  *  the top. The cursor compares the PAIR `(marked_at, id)` because two visits
- *  can share a millisecond, and a cursor on one column silently drops rows. */
+ *  can share a millisecond, and a cursor on one column silently drops rows.
+ *
+ *  **THE WINDOW FILTERS `day` WHILE THE CURSOR ORDERS `marked_at`, AND THE TWO
+ *  BEING DIFFERENT COLUMNS IS DELIBERATE.** `day` is the gym's own calendar date,
+ *  frozen at write time in the gym's zone, and it is the quantity a calendar
+ *  square is — so it is what a month request must mean (the reasoning is on
+ *  `attendanceHistoryQuerySchema`). `marked_at` is the instant, which is what
+ *  gives a total order to page on. They agree for every row a gym writes under
+ *  one timezone and are NOT re-derived from each other: a gym that later changes
+ *  its zone leaves old rows filed under the day they were stamped with (:27900
+ *  §3's "as is"), and re-bucketing them here would move visits between months
+ *  under somebody's feet.
+ *
+ *  **THE FILTER IS APPLIED ON EVERY PAGE, which is the half a cursor makes easy
+ *  to lose.** Both predicates sit beside the cursor comparison rather than being
+ *  applied to the first read only — the web calendar's own M33 (:4622) is that
+ *  mutant one layer up, and here it would serve a neighbouring month's visits
+ *  the moment somebody pressed for more (**O252**).
+ *
+ *  **NO MIGRATION: `gym_attendance_gym_user_day_slot_uq` leads on
+ *  `(gym_id, user_id, day)`** (`0019_gym_attendance.sql:176`, read this
+ *  session), which is exactly this predicate's columns. That is a statement
+ *  about the index's shape and not a claim about a plan nobody has run. */
 export async function getGymAttendanceHistory(
   sql: SqlOrTx,
   input: {
     gymId: string;
     userId: string;
+    /** GYM DAYS, `YYYY-MM-DD`, half-open: `from` inclusive, `to` exclusive, so
+     *  adjacent months tile. Both already calendar-checked by the service —
+     *  reaching Postgres with a shape-valid non-date is a 500, which is the
+     *  whole reason that check exists. */
+    from?: string | undefined;
+    to?: string | undefined;
     cursor?: { markedAt: Date; id: string } | undefined;
     limit?: number | undefined;
   },
@@ -4373,6 +4401,8 @@ export async function getGymAttendanceHistory(
            session_opens_minute, session_closes_minute
     FROM gym_attendance
     WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)
+      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)
       AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
            OR (marked_at, id) < (${input.cursor?.markedAt ?? null}::timestamptz,
                                  ${input.cursor?.id ?? null}::uuid))
