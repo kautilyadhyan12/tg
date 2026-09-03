@@ -66,6 +66,41 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       a second, and wrong, spelling of one minute.
       **🔴 because a user-facing control lies about what it will do.**
 
+- [ ] 🟡 **THE MEMBER'S "DAYS YOU CAME" LIST GROWS WITHOUT BOUND, AND KD RULED A
+      CALENDAR WITH FIRE ON THE DAYS ATTENDED** (2026-09-03, DECISIONS
+      `:31508`). His words at his own browser: *"a user might cam 7 days a week
+      that way the records on this section will also become very long and
+      overwhelming so need better design ... i think a calander with dates when
+      you went to gym is good and a day with attandance will have a fire effect"*
+      — and *"do all four"* on a plan that recommended it. **A month grid is a
+      fixed height however often somebody comes, which is the actual problem**,
+      and `components/progress/WorkoutCalendar.jsx` is the same shape already
+      shipped (month arrows, a day that opens, and it already imports `Flame`).
+      🔥 already means a STREAK in this product (:27900), so the symbol reads
+      correctly rather than being invented.
+      **IT CANNOT BE BUILT ON TODAY'S SERVER AND THAT IS THIS LINE'S FINDING:**
+      `attendanceHistoryQuerySchema` takes `userId` and `cursor` and **nothing
+      else** (`apps/api/src/modules/orgs/schemas.ts`), so no screen can ask for
+      "September" — only for "the most recent visits", paged backwards. **A
+      date window comes first**, and `/v1/workouts` already has exactly one
+      (`from`/`to`, :4434) to copy rather than invent. **Cost stated to Kd
+      before he chose:** a square in a grid cannot show that somebody came at
+      5:01 PM *and* 3:32 AM, so the times move behind a tap on the day — the
+      same place the workout calendar puts them.
+
+- [ ] ⚪ **THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE, AND KD ASKED
+      FOR IT TO FOLD** (2026-09-03, DECISIONS `:31508`): *"should have a drop
+      down type of effect whenver click or hover in them"*, part of *"do all
+      four"*. Today `GymHoursNote` prints today's line PLUS a Mon–Sun list on
+      every card, on the dashboard and on `My Gyms` — his screenshot is seven
+      rows tall before the attendance section starts. **What it needs:** the
+      headline (`Today: 7:40 AM – 9:40 AM`) stays and the week folds behind it.
+      **ON TAP, NOT ON HOVER, and the reason is a ruling rather than taste:**
+      hover does not exist on a phone, and :26586 is Kd's own *"members are not
+      going to use the web"* — the phone is where this screen actually gets
+      read. `ConsoleSection`'s `defaultOpen` is the console's answer to the same
+      problem (:31295) and is the pattern to follow, not `forceOpen`.
+
 - [ ] ⚪ **`/my-gyms` ASKS EACH GYM FOR ITS OPENING HOURS TWICE** (2026-09-03,
       DECISIONS `:31352` §5). `GymHoursNote` reads `GET /hours` to print the
       times and `AttendancePanel` reads it again to decide whether the button

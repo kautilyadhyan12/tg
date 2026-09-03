@@ -1696,7 +1696,16 @@ export type GymClosure = z.infer<typeof gymClosureSchema>;
  *  `week` is empty unless `mode` is `scheduled`, and `closures` lists only
  *  today-forward dates in the gym's own zone: a closure that has passed is a
  *  fact about history and no screen asks for it. `timezone` travels with them
- *  because every one of these values is meaningless without it. */
+ *  because every one of these values is meaningless without it.
+ *
+ *  **`week` AND `savedWeek` ANSWER TWO DIFFERENT QUESTIONS AND MUST NOT BE
+ *  MERGED.** `week` is *what this gym is telling people* — emptied by the MODE,
+ *  which is the invariant `orgs.hours.test.ts`'s "the MODE decides what the week
+ *  contains" exists to protect: a reader that trusted the rows instead of the
+ *  mode would draw a 24-hour gym a Monday-to-Sunday timetable nobody is being
+ *  offered. `savedWeek` is *what the owner would come back to* — the rows as
+ *  they stand, whatever the mode — and it exists for exactly one caller, the
+ *  console's own form. **Nothing member-facing may draw it.** */
 export const gymHoursSchema = z
   .object({
     mode: gymHoursModeSchema,
@@ -1710,6 +1719,24 @@ export const gymHoursSchema = z
      *  window where the web is newer than the api. */
     clockFormat: gymClockFormatSchema.default('24h'),
     week: gymWeekScheduleSchema,
+    /** THE TIMETABLE THAT IS STILL ON FILE, whatever the mode says — the
+     *  console form's source, and nothing else's.
+     *
+     *  **Kd's ruling of 2026-09-03, made at his own browser after this app
+     *  destroyed his week.** He chose "Open 24 hours", saved, and all seven days
+     *  were gone: the writer deleted them on purpose so a stale set could not
+     *  disagree with the flag. His answer was to keep them — *"do all four"* on
+     *  a plan whose first line was *"don't delete it at all"* — so the two
+     *  answers now coexist and are told apart by NAME rather than by one of them
+     *  being destroyed.
+     *
+     *  **`.default([])` IS LOAD-BEARING, NOT CEREMONIAL** (:12660, and :31222 is
+     *  the day this repo paid for forgetting it): `orgsApi.js` treats a contract
+     *  mismatch as a HARD failure, so a required field would blank the whole
+     *  opening-hours section during any window where the web is newer than the
+     *  api. The form falls back to `week` when this arrives empty, which is
+     *  exactly what an older api sends. */
+    savedWeek: gymWeekScheduleSchema.default([]),
     /** BOUNDED — T3 round 1's Low-5. This array is on a MEMBER-facing response
      *  and nothing capped it: a gym's own owner could close every date to
      *  `9999-12-31` and grow every one of its members' payloads without limit.

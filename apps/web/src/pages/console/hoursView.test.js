@@ -104,6 +104,57 @@ describe('the draft', () => {
     expect(hoursDraft({ mode: 'something-new' }).mode).toBe('unset');
   });
 
+  // ── KD'S RULING OF 2026-09-03: THE TIMETABLE SURVIVES "OPEN 24 HOURS" ─────
+  // He chose it, saved, and lost all seven days — *"no my timetable was not
+  // restored"*. The rows now survive on the server and reach the form as
+  // `savedWeek`; `week` stays what the gym TELLS people and is emptied by the
+  // mode, so a form reading `week` would still show him an empty screen.
+  it('fills the form from the KEPT week when the gym is on 24 hours', () => {
+    const draft = hoursDraft({
+      mode: 'open_24h',
+      timezone: 'UTC',
+      // What a member is told: nothing about a weekly pattern.
+      week: [],
+      // What the owner comes back to.
+      savedWeek: [{ weekday: 4, sessions: [{ opensMinute: 460, closesMinute: 580 }] }],
+      closures: [],
+    });
+    expect(draft.mode).toBe('open_24h');
+    const thursday = draft.days.find((d) => d.weekday === 4);
+    expect(thursday?.sessions.map((s) => ({ opens: s.opens, closes: s.closes }))).toEqual([
+      { opens: '07:40', closes: '09:40' },
+    ]);
+  });
+
+  // AN API OLDER THAN THIS BUNDLE SENDS NO `savedWeek` AT ALL, and the shared
+  // contract defaults it to `[]` (:12660, :31222). Falling back to `week` is
+  // what keeps a scheduled gym's form filled in during that window rather than
+  // blanking it — the defect this whole card is about, arriving from the other
+  // direction.
+  it('falls back to the told week when the server sent no kept one', () => {
+    const draft = hoursDraft({
+      mode: 'scheduled',
+      timezone: 'UTC',
+      week: [{ weekday: 2, sessions: [{ opensMinute: 360, closesMinute: 420 }] }],
+      closures: [],
+    });
+    expect(draft.days.find((d) => d.weekday === 2)?.sessions).toHaveLength(1);
+  });
+
+  // AND `unset` STILL INVENTS NOTHING (:26736). A gym that never answered has
+  // no rows, so both weeks are empty and the form is a blank one waiting — not
+  // a claim that the gym is shut.
+  it('invents no week for a gym that has never answered, kept or told', () => {
+    const draft = hoursDraft({
+      mode: 'unset',
+      timezone: 'UTC',
+      week: [],
+      savedWeek: [],
+      closures: [],
+    });
+    expect(draft.days.every((d) => d.sessions.length === 0)).toBe(true);
+  });
+
   it('gives every row its own identity, which is what stops one row wearing another\'s state', () => {
     // T3 round 1's Critical/High at its source. The form's time boxes hold their
     // own half-finished state, and React only rebuilds them when the row's

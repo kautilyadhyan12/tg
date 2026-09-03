@@ -31504,3 +31504,128 @@ line stays open with what is left written onto it.
 · `apps/web/src/components/gym/attendanceView.test.js` ·
 `apps/web/src/pages/myGyms.render.test.jsx` · `apps/web/tools/mutate-console.mjs`
 · records. **No `apps/api`, no `packages/shared`, no migration.**
+
+## 2026-09-03 — KD RULES THAT "OPEN 24 HOURS" MUST STOP DESTROYING A GYM'S TIMETABLE, after a smoke step I wrote destroyed his — and the fix is to NAME the two answers rather than delete one
+
+**Read before writing anything that DELETES rows a person typed, before adding a
+field to `gymHoursSchema`, before reading `hours.week` anywhere, before
+"simplifying" `toGymHours`, and before trusting a green suite about a type a
+test file hand-wrote for itself.**
+
+Kd ran step 6 of a smoke sheet I wrote for the "I'm here" card. It asked him to
+switch his gym to "Open 24 hours" and back. **His whole week was gone** — *"i
+click in the 24 hour again in When is your gym open? but nothing happened so i
+clicked in set openning times and no my timetable was not restored"*. Measured
+immediately: `hours_mode = open_24h`, `gym_hours` **0 rows**. Not hidden —
+deleted, by the writer, on purpose.
+
+**HE RULED THE REMEDY AND HE RULED IT KNOWING THE TRADE**, on a plan whose first
+line was *"don't delete it at all — keep the week quietly so switching back
+restores it"*: *"restore and do all four"*.
+
+### 1 · THE OLD REASONING WAS NOT WRONG, AND THAT IS WHY IT IS KEPT
+
+`setGymHours`' own docblock said it plainly: *"the mode and the rows would be two
+answers to one question, and the stale set is the one nobody looked at."*
+**That hazard is real and this card does not deny it.** What changed is the
+remedy: the two answers are now told apart by NAME instead of one of them being
+destroyed.
+
+- **`week` — what this gym is TELLING people.** Still emptied by the MODE, in
+  `toGymHours`, exactly as before. A member of a 24-hour gym reads "Open 24
+  hours" and nothing else, and `GymHoursNote` is unchanged.
+- **`savedWeek` — what the OWNER would come back to.** The rows as they stand,
+  in every mode, with exactly one caller: the console's own form.
+
+**THE INVARIANT `orgs.hours.test.ts` ALREADY PROTECTED IS UNTOUCHED AND NOW HAS A
+MUTANT.** *"The MODE decides what the week contains, even with rows left
+behind"* was written against a reader that trusts rows over the mode — and with
+rows now surviving on purpose, that reader is likelier, not less. **O247 is the
+simplification a later chat will reach for** (`week: toWeekSchedule(sessions)`)
+and it hands a 24-hour gym a Monday-to-Sunday timetable nobody is being offered.
+
+### 2 · THE DELETE MOVED, IT DID NOT GO
+
+`DELETE FROM gym_hours` now runs only inside the `scheduled` arm, where it is the
+replace half of replace-then-insert and must not move. **Both directions are
+mutated, because a guard with one test is a door that is simply shut** (:7104's
+PG1): **O244** puts the unconditional delete back — Kd's defect, exactly — and
+**O245** removes the delete altogether, so a second save MERGES into the first
+and a gym that moves its Monday from 6am to 7am advertises both. The overlap rule
+cannot save it, because overlap is validated against the REQUEST and not against
+the table.
+
+### 3 · THE TEST THAT ASSERTED THE DEFECT IS THE ONE THAT NOW HOLDS THE FIX
+
+*"switching to `open_24h` empties the week AND deletes the rows behind it"*
+asserted `n === 0`. **The behaviour Kd lost his week to had a test whose name
+praised it**, which is why nothing ever flagged it. It is now *"…and KEEPS the
+rows behind it"* — :30867's shape, one card earlier, where the two tests
+asserting the old attendance rule became the regression tests for the new one.
+
+**BOTH HALVES ARE ASSERTED SEPARATELY BECAUSE THEY FAIL SEPARATELY**, and this is
+the part worth carrying: the row count alone passes on a response that never
+hands the rows to the form — the owner still meets an empty week after a reload,
+which is the same defect from the other side (**O246**). A new end-to-end case
+walks the round trip Kd actually performed, through the door rather than through
+SQL: scheduled → 24 hours → scheduled, nothing retyped.
+
+### 4 · THE FALLBACK IS FOR AN OLDER API, AND IT IS THIS CARD'S DEFECT REVERSED
+
+`savedWeek` is `.default([])` in the shared contract (:12660, and :31222 is the
+day this repo paid for forgetting it). **An older api sends exactly that**, so a
+form reading `savedWeek` alone would show every `scheduled` gym seven empty days
+during a web-newer-than-api window — the wipe, re-created in the fix for the
+wipe. `hoursDraft` falls back to `week`, **C188** is the mutant, and the two
+fields hold the same rows for a `scheduled` gym so the choice can only matter in
+the state it exists for.
+
+### 5 · THE SUITE WAS GREEN AGAINST A TYPE THAT DID NOT KNOW THE FIELD
+
+`orgs.hours.test.ts` hand-writes its own `interface Hours`. Every new assertion
+PASSED at runtime while `tsc` said `Property 'savedWeek' does not exist`.
+**R2.5 — *"infer types from schemas, never hand-write a duplicate interface"* —
+is written about `src`, and a test file is where it silently stops being
+followed.** The field is added rather than the interface converted, because
+converting it touches every assertion in the file (R1.1); the reason is now a
+comment on the line. **Standing: a green run says nothing about a type the test
+file invented for itself.**
+
+### 6 · HIS DATA WAS PUT BACK BEFORE ANY OF THIS WAS BUILT
+
+The `owner` gym's eight sessions were re-written through `repo.setGymHours` — the
+real transaction, the real `lockOrgRow`, the real audit row — from values with
+sources rather than guesses: seven read out of `gym_hours` by this session BEFORE
+the wipe, and the Thursday 14:00–15:00 read off **Kd's own screenshot**, which he
+had taken after adding it. The one-off script was deleted the moment it ran and
+is in no commit. **The screenshot was evidence, and it is the only reason that
+eighth session exists.**
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `api` **768/768 across 50 files, exit 0**,
+LOCAL (`127.0.0.1:5433`, :13659) — a clean full run, no flake this time · `web`
+**1702/1702 across 58 files, exit 0** · `@app/shared` **52/52** · `tsc --noEmit`
+exit 0 on `api` and on `shared` — **and it EARNED its place here, §5** ·
+`eslint --max-warnings=0` exit 0 on three api, one shared and four web files ·
+`vite build` exit 0 · three root guards green.
+
+**SWEEPS, both stated SUBSETS.** API `MUTATE_ONLY=O244…O247` — **4 of 237, 4 RED,
+0 ALIVE**, against the LOCAL database, mass-write detector clean over 433
+fingerprinted rows. Web `MUTATE_ONLY=C187,C188` — **2 of 205, 2 RED, 0 ALIVE**.
+Every control GREEN and tallying; restores sha256-verified. **Database mutants
+ran because this card changes SERVER behaviour** (:5857 rule 4a).
+
+**WHAT DOES NOT TICK: smoke step 6 has not been re-run**, and T3 is UNRUN on this
+and on the button card before it. **Three of Kd's four are not built** — the
+calendar for "Days you came", the fire on days attended, and folding the member
+card's Mon–Sun list — each with its own `OWED.md` line, and the calendar's line
+carries the finding that it CANNOT be built on today's server: the member's
+attendance history takes only a cursor, so no screen can ask for "September".
+
+**Files:** `packages/shared/src/orgs.ts` ·
+`apps/api/src/modules/orgs/{repo.ts,service.ts}` ·
+`apps/api/test/orgs.hours.test.ts` · `apps/api/tools/mutate-orgs.mjs` ·
+`apps/web/src/pages/console/{hoursView.js,hoursView.test.js}` ·
+`apps/web/src/components/console/openingHours.render.test.jsx` ·
+`apps/web/tools/mutate-console.mjs` · records. **No migration.**

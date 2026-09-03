@@ -131,6 +131,57 @@ describe('the three modes are three different screens', () => {
     expect(screen.queryByText('Monday')).toBeNull();
   });
 
+  // ── KD'S RULING OF 2026-09-03, AT THE SCREEN WHERE HE LOST HIS WEEK ───────
+  // He chose "Open 24 hours", saved, came back, pressed "Set opening times" —
+  // and every day was empty. *"no my timetable was not restored"*.
+  //
+  // **THIS IS THE LAYER THAT MATTERS AND `hoursView.test.js` IS NOT IT**
+  // (:31222 — a test can be in the wrong layer, not merely weak). The pure
+  // helper takes a hand-built object; only here does the panel READ the server's
+  // answer, build its draft from it, and mount the day rows an owner clicks.
+  // The fixture is deliberately the shape the server now sends for a 24-hour
+  // gym: an empty `week`, because that is what the gym TELLS people, and a full
+  // `savedWeek`, because that is what the owner comes back to.
+  it('gives a 24-hour gym its timetable back the moment the owner switches modes', async () => {
+    orgService.getHours.mockResolvedValue(
+      answer({
+        mode: 'open_24h',
+        week: [],
+        savedWeek: [{ weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] }],
+      }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+
+    expect(await screen.findByText('Your gym is open 24 hours.')).toBeTruthy();
+    await openSection();
+    // Nothing of the week is on screen while the gym is on 24 hours — the mode
+    // still decides what is DRAWN, which is the half that must not change.
+    expect(screen.queryByText('Wednesday')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Set opening times'));
+
+    // And there it is, without a save, a reload, or a minute retyped.
+    openDay('Wednesday');
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('6');
+    expect(screen.getByLabelText('Wednesday session 1 opens minute').value).toBe('0');
+  });
+
+  // AN API OLDER THAN THIS BUNDLE SENDS NO `savedWeek`, and the contract
+  // defaults it to `[]`. A scheduled gym's form must still fill in from `week`
+  // during that window — blanking it would be this card's own defect arriving
+  // from the other direction.
+  it('still fills the form from the told week when the server sent no kept one', async () => {
+    orgService.getHours.mockResolvedValue(
+      answer({ week: [{ weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] }] }),
+    );
+    render(<OpeningHoursPanel org={ORG} privileges={OWNER} />);
+
+    await screen.findByText(/opening times are set for 1 day a week/i);
+    await openSection();
+    openDay('Wednesday');
+    expect(screen.getByLabelText('Wednesday session 1 opens hour').value).toBe('6');
+  });
+
   it('draws the week for a scheduled gym, and Closed is TRUE for its empty days', async () => {
     orgService.getHours.mockResolvedValue(
       answer({ week: [{ weekday: 3, sessions: [{ opensMinute: 360, closesMinute: 420 }] }] }),

@@ -2117,12 +2117,28 @@ function toWeekSchedule(sessions: readonly repo.GymSessionRow[]): GymHours["week
  *  construction — but a reader that trusted the rows alone would be one stray
  *  row away from telling members a 24-hour gym closes at six. The mode decides,
  *  every time, which is :26736's rule made mechanical. */
+/** THE TWO WEEKS ANSWER TWO DIFFERENT QUESTIONS, and this function is the only
+ *  place either is built.
+ *
+ *  **`week` — WHAT THIS GYM IS TELLING PEOPLE. The MODE decides it, never the
+ *  rows**, and that is the invariant `orgs.hours.test.ts`'s *"the MODE decides
+ *  what the week contains"* was written to protect: a reader trusting the rows
+ *  would draw a 24-hour gym a Monday-to-Sunday timetable nobody is being
+ *  offered, and an `unset` gym a week it has never claimed (:26736).
+ *
+ *  **`savedWeek` — WHAT THE OWNER WOULD COME BACK TO.** The rows as they stand,
+ *  whatever the mode. It exists because Kd ruled on 2026-09-03 that switching to
+ *  24 hours must stop destroying a gym's timetable, and it has exactly ONE
+ *  caller: the console's own form. **Nothing member-facing may draw it** —
+ *  `GymHoursNote` branches on the mode and reads `week`, which is why keeping
+ *  the rows changes nothing a member sees. */
 function toGymHours(row: repo.GymHoursRow): GymHours {
   return {
     mode: row.mode,
     timezone: row.timezone,
     clockFormat: row.clockFormat,
     week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],
+    savedWeek: toWeekSchedule(row.sessions),
     closures: row.closures.map((c) => ({ day: c.day, note: c.note })),
   };
 }

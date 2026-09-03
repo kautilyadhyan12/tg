@@ -14,8 +14,14 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,521 lines, MEASURED 2026-09-03 and not estimated**
-(1,102 + 1,345 + 74). **THE SEVENTEENTH MEASUREMENT IS THE SIXTEENTH'S RESULT A
+**ALWAYS-READ TOTAL: 2,566 lines, MEASURED 2026-09-03 and not estimated**
+(1,107 + 1,385 + 74). **THE EIGHTEENTH MEASUREMENT IS A KD RULING, AND IT COSTS
+WHAT A RULING COSTS: +45, of which 40 are §1 and 5 are trigger phrases.**
+Compare the +5 immediately below it, a whole card whose record went to §1B. **The
+two together, taken the same afternoon on the same subsystem, are the split
+working in both directions** — a card is a pointer, a ruling is read — and 40
+lines is the going rate a ruling has cost all week (45, 39, 34, 40 on 2026-09-01).
+**THE SEVENTEENTH MEASUREMENT IS THE SIXTEENTH'S RESULT A
 THIRD TIME — a whole card (a client-side gate, seven mutants, twenty-six tests)
 cost FIVE lines here, all of them trigger phrases, and §1 and §2 did not move at
 all**; its record is a CARD record and went to §1B, where :24813 sends it. Three
@@ -1493,6 +1499,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   ANYWHERE (:26469 §1.3 forbids showing that to a gym), and a per-day DISTINCT
   count cannot be summed across days. `CARD-gym-overview-numbers.md` is WRITTEN
   AND UNAPPROVED; **the gate is not passed** (:26777).
+- **:31508** — 2026-09-03 — **KD RULES THAT "OPEN 24 HOURS" MUST STOP DESTROYING
+  A GYM'S TIMETABLE**, after a smoke step this session wrote destroyed his.
+  **Read before writing anything that DELETES rows a person typed, before adding
+  a field to `gymHoursSchema`, before reading `hours.week` anywhere, before
+  "simplifying" `toGymHours`, and before trusting a green suite about a type a
+  test file hand-wrote for itself.**
+  He switched his gym to "Open 24 hours", came back, and all seven days were
+  gone — *"no my timetable was not restored"*; measured on the spot as
+  `hours_mode = open_24h` with **0 rows** in `gym_hours`. **THE OLD REASONING IS
+  KEPT BECAUSE IT WAS NOT WRONG** — the writer's own docblock said *"the mode and
+  the rows would be two answers to one question"* — **what changed is the
+  remedy: the two answers are told apart by NAME instead of one being
+  destroyed.** `week` is what the gym is TELLING people and is still emptied by
+  the MODE; **`savedWeek` is what the OWNER comes back to**, in every mode, with
+  exactly one caller — the console's form. **Nothing member-facing may draw it**,
+  and `GymHoursNote` is unchanged.
+  **THE INVARIANT THIS COULD HAVE BROKEN IS THE ONE IT STRENGTHENS:** *"the MODE
+  decides what the week contains"* now matters MORE, because stray rows are
+  deliberate — **O247 is the simplification a later chat reaches for** and it
+  hands a 24-hour gym a timetable nobody is offered. The `DELETE` moved into the
+  `scheduled` arm rather than going: **O244** restores Kd's defect, **O245**
+  removes the delete entirely so a second save MERGES (:7104's PG1 — a guard
+  with one test is a door that is simply shut).
+  **THE TEST THAT ASSERTED THE DEFECT NOW HOLDS THE FIX** — its name praised the
+  deletion, which is why nothing flagged it (:30867's shape, one card earlier) —
+  and **both halves are asserted separately because they fail separately**: a row
+  count alone passes on a response that never hands the rows to the form
+  (**O246**). **`savedWeek` is `.default([])` and the form falls back to `week`**,
+  because an older api sends exactly that and a form reading only `savedWeek`
+  would blank every scheduled gym — this card's own defect re-created inside its
+  fix (**C188**, :12660/:31222).
+  **AND THE SUITE WAS GREEN AGAINST A TYPE THAT DID NOT KNOW THE FIELD:**
+  `orgs.hours.test.ts` hand-writes `interface Hours`, every new assertion passed
+  at runtime, and only `tsc` objected. **R2.5 is written about `src`, and a test
+  file is where it silently stops being followed.**
+  `api` 768/768 LOCAL · `web` 1702/1702 · `shared` 52/52 · SWEEPS O244–O247
+  (4 RED) and C187/C188 (2 RED). **Smoke step 6 not re-run; T3 UNRUN. Three of
+  Kd's four remain unbuilt**, each with an `OWED.md` line — and the calendar's
+  carries the finding that it cannot be built on today's server, the member's
+  attendance history taking a cursor and no date window.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

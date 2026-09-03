@@ -2921,6 +2921,42 @@ const MUTANTS = [
     from: "      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,",
     to: "      SELECT p.user_id, u.display_name, u.display_name AS email, p.first_marked_at,",
   },
+  {
+    id: 'O244',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "THE DEFECT KD FOUND AT HIS OWN BROWSER, PUT BACK. Switching to Open 24 hours deletes every session row, so a gym that comes back to Set opening times finds an empty week and must retype it - no my timetable was not restored. It is data loss with no warning and no undo, and the reason it survived so long is that the only test on it ASSERTED the deletion. The delete belongs to a scheduled save alone, where it is the replace half of replace-then-insert",
+    expect: "KEEPS the rows behind it",
+    from: '    if (input.mode === "scheduled") {\n      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;\n    }',
+    to: '    await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;',
+  },
+  {
+    id: 'O245',
+    target: 'repo',
+    suite: HOURS_SUITE,
+    why: "THE REPLACE STOPS REPLACING, WHICH IS THE OPPOSITE DIRECTION AND THE ONE A LOCK'S TESTS USUALLY MISS (:7104 PG1). If the delete never runs at all, a second scheduled save MERGES into the first instead of replacing it - so a gym that moves its Monday from 6am to 7am ends up advertising both, and the overlap rule cannot save it because overlap is validated against the request rather than the table",
+    expect: "a second PUT replaces the week",
+    from: '    if (input.mode === "scheduled") {\n      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;\n    }',
+    to: '    if (false) {\n      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;\n    }',
+  },
+  {
+    id: 'O246',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "THE KEPT TIMETABLE NEVER REACHES THE OWNER'S FORM. The rows survive on the server and the response empties them anyway, so the console still shows an empty week after a reload and Kd still retypes his hours - the defect from the other side, and the reason the row count alone is not the guarantee. savedWeek answers what the owner comes back to and the MODE must never decide it",
+    expect: "KEEPS the rows behind it",
+    from: "    savedWeek: toWeekSchedule(row.sessions),",
+    to: "    savedWeek: row.mode === \"scheduled\" ? toWeekSchedule(row.sessions) : [],",
+  },
+  {
+    id: 'O247',
+    target: 'service',
+    suite: HOURS_SUITE,
+    why: "THE TWO WEEKS COLLAPSE INTO ONE, which is what a later simplification will try. week is what the gym TELLS people and is emptied by the MODE; letting the rows decide it hands a 24-hour gym a Monday-to-Sunday timetable nobody is being offered, and an unset gym a week it has never claimed (:26736). That invariant predates this card and the mode-decides test exists to protect it",
+    expect: "the MODE decides what the week contains",
+    from: '    week: row.mode === "scheduled" ? toWeekSchedule(row.sessions) : [],',
+    to: "    week: toWeekSchedule(row.sessions),",
+  },
 ];
 
 

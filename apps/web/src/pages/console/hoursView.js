@@ -225,11 +225,30 @@ export function mintSessionId() {
  *  **The mode is carried verbatim, `unset` included.** Nothing here invents a
  *  week for a gym that has not answered (:26736) — `unset` produces seven empty
  *  rows, which is a form waiting to be filled in, not a claim that the gym is
- *  shut. */
+ *  shut.
+ *
+ *  **IT READS `savedWeek`, AND THIS IS THE ONLY CALLER THAT MAY.** Kd chose
+ *  "Open 24 hours", saved, and lost all seven days — *"no my timetable was not
+ *  restored"*. The rows now survive that switch, and `savedWeek` is how they
+ *  reach the form: `week` is what the gym is TELLING people and is emptied by
+ *  the mode, so a form reading it would still show a 24-hour gym an empty week
+ *  and the owner would still have to retype everything. **The form is not
+ *  telling anybody anything — it is editing the rows** (`GymHoursNote` is the
+ *  member-facing reader and stays on `week`).
+ *
+ *  **THE FALLBACK IS FOR AN API OLDER THAN THIS BUNDLE, not a preference.**
+ *  `savedWeek` defaults to `[]` in the shared contract (:12660, :31222), which
+ *  is exactly what an older server sends — so falling back to `week` keeps a
+ *  `scheduled` gym's form filled in during that window instead of blanking it,
+ *  and a 24-hour gym on such a server behaves as it did before, which is the
+ *  honest degradation. When both are present they hold the same rows for a
+ *  `scheduled` gym, so the choice can only matter in the state it exists for. */
 export function hoursDraft(hours) {
   const mode = hours?.mode === 'open_24h' || hours?.mode === 'scheduled' ? hours.mode : 'unset';
+  const saved = Array.isArray(hours?.savedWeek) ? hours.savedWeek : [];
+  const source = saved.length > 0 ? saved : (Array.isArray(hours?.week) ? hours.week : []);
   const byWeekday = new Map();
-  for (const day of Array.isArray(hours?.week) ? hours.week : []) {
+  for (const day of source) {
     if (!Number.isInteger(day?.weekday)) continue;
     byWeekday.set(
       day.weekday,

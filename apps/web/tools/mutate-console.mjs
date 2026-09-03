@@ -2566,6 +2566,24 @@ const MUTANTS = [
     from: "  const minute = visitMinutes(at.toISOString(), hours?.timezone);",
     to: "  const minute = at.getHours() * 60 + at.getMinutes();",
   },
+  {
+    id: 'C187',
+    target: 'hoursview',
+    suite: HOURS_PANEL_SUITE,
+    why: "THE OWNER'S FORM GOES BACK TO READING WHAT MEMBERS ARE TOLD, so a 24-hour gym opens Set opening times onto an empty week and every day has to be retyped - Kd at his own browser, no my timetable was not restored. week is emptied by the MODE on purpose; the form is not telling anybody anything, it is EDITING the rows, and savedWeek is the only field that carries them in every mode",
+    expect: "gives a 24-hour gym its timetable back",
+    from: "  const source = saved.length > 0 ? saved : (Array.isArray(hours?.week) ? hours.week : []);",
+    to: "  const source = Array.isArray(hours?.week) ? hours.week : [];",
+  },
+  {
+    id: 'C188',
+    target: 'hoursview',
+    suite: HOURS_PANEL_SUITE,
+    why: "THE FALLBACK GOES AND AN API OLDER THAN THE BUNDLE BLANKS EVERY FORM. savedWeek defaults to an empty array in the shared contract, which is exactly what an older server sends, so a scheduled gym's owner opens the section during that window and finds the timetable they are still publishing shown as seven empty days - this card's own defect arriving from the other direction, and :12660's rule about a field a newer web asks for",
+    expect: "still fills the form from the told week",
+    from: "  const source = saved.length > 0 ? saved : (Array.isArray(hours?.week) ? hours.week : []);",
+    to: "  const source = saved;",
+  },
 ];
 
 const abort = (msg) => {

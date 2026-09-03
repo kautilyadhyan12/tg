@@ -3517,10 +3517,22 @@ export type SetGymHoursOutcome = { kind: "set"; hours: GymHoursRow } | { kind: "
  *  owners saving different timetables from interleaving into a third that is
  *  neither.
  *
- *  **`open_24h` DELETES THE ROWS TOO.** A gym that switches to 24 hours and back
- *  must not find last month's sessions waiting: the mode and the rows would be
- *  two answers to one question, and the stale set is the one nobody looked at.
- *  Kd's flag is the whole answer in that mode (:26624 §4.5).
+ *  **~~`open_24h` DELETES THE ROWS TOO.~~ KD REVERSED THIS AT HIS OWN BROWSER ON
+ *  2026-09-03, AFTER IT DESTROYED HIS WEEK.** He chose "Open 24 hours", saved,
+ *  and all seven days were gone — *"no my timetable was not restored"* — with
+ *  nothing on screen warning him first. **A control that silently destroys what
+ *  somebody typed is the worst thing this card found, and the old reasoning is
+ *  kept because it was not wrong**: the mode and the rows ARE two answers to one
+ *  question, and a stale set nobody looked at is a real hazard. What changed is
+ *  the remedy. **The two answers are now told apart by NAME — `week` is what the
+ *  gym is TELLING people and is still emptied by the mode; `savedWeek` is what
+ *  the owner would come back to** — so the hazard is closed by making the
+ *  distinction explicit rather than by deleting one of them. Kd's flag is still
+ *  the whole answer in that mode (:26624 §4.5); these rows say nothing to
+ *  anybody until the gym goes back to `scheduled`.
+ *
+ *  **THE DELETE NOW HAPPENS ONLY ON A `scheduled` SAVE**, where it is the
+ *  replace half of replace-then-insert and must not move.
  *
  *  `unset` cannot arrive — the request union does not admit it, because a gym
  *  that has answered cannot un-answer — so this never writes it. */
@@ -3542,7 +3554,14 @@ export async function setGymHours(
     const before = await getGymHours(tx, input.gymId);
     if (before === null) return { kind: "not_found" };
 
-    await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;
+    // THE WHOLE `if` IS THE FIX, AND THE DELETE INSIDE IT IS UNCHANGED.
+    // A `scheduled` save still replaces the week outright — that is what makes
+    // it a REPLACE and is what the overlap rule is validated against. An
+    // `open_24h` save now touches nothing, so the rows survive to be handed back
+    // as `savedWeek` when the owner switches the mode again.
+    if (input.mode === "scheduled") {
+      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;
+    }
     if (input.mode === "scheduled" && input.sessions.length > 0) {
       // One multi-row INSERT rather than a loop: this is one statement's worth
       // of work, and a loop inside a transaction is N round trips buying no

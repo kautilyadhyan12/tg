@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "OPEN 24 HOURS" STOPS DESTROYING A GYM'S TIMETABLE. DECISIONS `:31508`,
+      a KD RULING made after a smoke step I wrote destroyed HIS.
+      **KD APPROVED FOUR THINGS AND ONE IS BUILT. THE OTHER THREE HAVE `OWED.md`
+      LINES AND ARE THE NEXT WORK — read them before proposing anything else.**
+
+  1. **HE LOST HIS WEEK RUNNING MY OWN SMOKE STEP.** Switch to 24 hours, come
+     back, every day empty — measured on the spot: `hours_mode = open_24h`,
+     `gym_hours` **0 rows**. Deleted by the writer, on purpose, silently.
+  2. **THE OLD REASONING IS KEPT BECAUSE IT WAS NOT WRONG** — *"the mode and the
+     rows would be two answers to one question"*. **The two answers are now told
+     apart by NAME: `week` is what the gym TELLS people (still emptied by the
+     MODE); `savedWeek` is what the OWNER comes back to, one caller, the console
+     form. NOTHING MEMBER-FACING MAY DRAW `savedWeek`.**
+  3. **THE INVARIANT THIS COULD HAVE BROKEN IS THE ONE IT STRENGTHENS.** *"The
+     MODE decides what the week contains"* matters MORE now that stray rows are
+     deliberate — **O247** is the simplification a later chat reaches for.
+     The DELETE moved into the `scheduled` arm; **O244** puts Kd's defect back
+     and **O245** removes the delete entirely so a save MERGES (:7104 PG1).
+  4. **THE TEST THAT ASSERTED THE DEFECT NOW HOLDS THE FIX** — its NAME praised
+     the deletion, which is why nothing ever flagged it. Both halves asserted
+     apart, because a row count alone passes on a response that never reaches
+     the form (**O246**).
+  5. **`savedWeek` IS `.default([])` AND THE FORM FALLS BACK TO `week`** — an
+     older api sends exactly that, and reading only `savedWeek` would blank
+     every scheduled gym: this card's defect re-created inside its own fix
+     (**C188**, :12660/:31222).
+  6. **THE SUITE WAS GREEN AGAINST A TYPE THAT DID NOT KNOW THE FIELD.**
+     `orgs.hours.test.ts` hand-writes `interface Hours`; only `tsc` objected.
+     **R2.5 is written about `src`, and a test file is where it quietly stops
+     being followed.**
+  7. **HIS DATA WAS PUT BACK FIRST**, through `repo.setGymHours` — eight
+     sessions, seven read out of the table before the wipe and the eighth off
+     his own screenshot. One-off script, deleted, in no commit.
+
+PROVE: `api` **768/768 / 50 files, exit 0** LOCAL (a clean full run) · `web`
+       **1702/1702 / 58 files** · `@app/shared` **52/52** · `tsc` exit 0 on api
+       and shared · eslint clean on eight files · `vite build` exit 0 · three
+       root guards green. **SWEEPS: `O244…O247` 4 RED (local db, mass-write
+       detector clean) and `C187,C188` 2 RED.**
+
+FILES: `packages/shared/src/orgs.ts` ·
+       `apps/api/src/modules/orgs/{repo.ts,service.ts}` ·
+       `apps/api/test/orgs.hours.test.ts` · `apps/api/tools/mutate-orgs.mjs` ·
+       `apps/web/src/pages/console/{hoursView.js,hoursView.test.js}` ·
+       `apps/web/src/components/console/openingHours.render.test.jsx` ·
+       `apps/web/tools/mutate-console.mjs` · records. No migration.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **SMOKE STEP 6 HAS NOT BEEN RE-RUN** and steps 1–5 passed on the card
+       before this one. **T3 IS UNRUN on BOTH cards** (this and `:31352`).
+       **THE THREE KD APPROVED AND NOBODY HAS BUILT, all on `OWED.md`:** the
+       calendar for "Days you came" — **which needs a date window on the
+       member's attendance history first, since it takes only a cursor** — the
+       fire on days attended, which ships with it, and folding the member card's
+       Mon–Sun list (**tap, never hover**: :26586, members are on phones).
+       **THE SMOKE SHEET IS EIGHT COMMITS STALE.**
+```
+
+```
 TASK: THE "I'm here" BUTTON NOW REFUSES WHEN THE GYM IS SHUT, AND SAYS WHAT IT
       IS FOR. DECISIONS `:31352`. Web-only: no `apps/api`, no
       `packages/shared`, no migration. **THE CODE IS DONE. TWO GATES ARE NOT:

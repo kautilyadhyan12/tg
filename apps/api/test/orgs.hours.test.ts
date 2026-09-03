@@ -98,6 +98,14 @@ interface Hours {
   timezone: string;
   clockFormat: "12h" | "24h";
   week: DaySchedule[];
+  /** ADDED 2026-09-03 with Kd's ruling that a timetable survives "Open 24
+   *  hours". **This whole interface is a hand-written copy of `GymHours` and
+   *  that is why it went stale** — the suite ran GREEN against a server sending
+   *  a field this type did not know, and only `tsc` said so. R2.5's rule
+   *  ("infer types from schemas — never hand-write a duplicate interface")
+   *  applies to test files too; it is not converted here because that is every
+   *  assertion in the file and belongs to its own change (R1.1). */
+  savedWeek: DaySchedule[];
   closures: { day: string; note: string | null }[];
 }
 
@@ -386,8 +394,18 @@ d("gym opening hours (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // ── KD'S RULING OF 2026-09-03, AND THIS CASE IS THE ONE IT REVERSED ───────
+  // It read "switching to `open_24h` empties the week AND deletes the rows
+  // behind it" and asserted `n === 0`, which is exactly what destroyed his
+  // timetable at his own browser: *"no my timetable was not restored"*. **It is
+  // the honest place for the regression test** (:30867's shape — the tests that
+  // asserted the old behaviour become the ones that hold the new).
+  //
+  // BOTH HALVES ARE ASSERTED BECAUSE THEY FAIL SEPARATELY: the mode must still
+  // empty `week` (the member-facing answer, unchanged) AND the rows must now
+  // survive (the owner's answer, which is the fix).
   it(
-    "switching to `open_24h` empties the week AND deletes the rows behind it",
+    "switching to `open_24h` empties the week and KEEPS the rows behind it",
     async () => {
       const owner = await makeUser("all-day-owner");
       const org = await makeOrg(owner.cookies, "Hours All Day Gym");
@@ -406,15 +424,57 @@ d("gym opening hours (real Postgres)", () => {
 
       const hours = await readHours(org.org.id, owner.cookies);
       expect(hours.mode).toBe("open_24h");
+      // WHAT THE GYM IS TELLING PEOPLE: nothing about a weekly pattern. The
+      // mode still decides this and a member still reads only "Open 24 hours".
       expect(hours.week).toEqual([]);
+      // WHAT THE OWNER WOULD COME BACK TO: the timetable, intact, which is the
+      // whole of the ruling. Asserting only the row count would pass on a
+      // response that never handed it to the form, and the owner would still
+      // face an empty week after a reload — the defect from the other side.
+      expect(hours.savedWeek).toEqual([
+        { weekday: 4, sessions: [{ opensMinute: 360, closesMinute: 720 }] },
+      ]);
 
-      // **BOTH HALVES, and this is the point of the test.** The API answer is
-      // emptied by the MODE in `toGymHours`; the rows are deleted by the WRITER.
-      // Asserting only the response would pass with a stale week sitting in the
-      // table, waiting to reappear the moment the gym goes back to `scheduled`.
       const after = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_hours WHERE gym_id = ${org.org.id}`;
-      expect(after[0]?.n).toBe(0);
+      expect(after[0]?.n).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // THE ROUND TRIP KD ACTUALLY PERFORMED, end to end and through the door
+  // rather than through SQL — the case no test covered, which is why nothing
+  // saw the defect. Scheduled → 24 hours → scheduled, and the week he typed is
+  // still there without him retyping a single minute.
+  it(
+    "gives the timetable back when a gym switches to 24 hours and back",
+    async () => {
+      const owner = await makeUser("round-trip-owner");
+      const org = await makeOrg(owner.cookies, "Hours Round Trip Gym");
+      const week = [
+        { weekday: 3, sessions: [{ opensMinute: 300, closesMinute: 580 }] },
+        {
+          weekday: 4,
+          sessions: [
+            { opensMinute: 460, closesMinute: 580 },
+            { opensMinute: 840, closesMinute: 900 },
+          ],
+        },
+      ];
+
+      await put(`/v1/orgs/${org.org.id}/hours`, { mode: "scheduled", week }, owner.cookies);
+      await put(`/v1/orgs/${org.org.id}/hours`, { mode: "open_24h" }, owner.cookies);
+
+      // The form's source while the gym is 24-hour — this is what the owner
+      // sees the moment they pick "Set opening times" again.
+      expect((await readHours(org.org.id, owner.cookies)).savedWeek).toEqual(week);
+
+      // And on saving that mode back, with no week retyped by anybody, the
+      // gym is telling people the same timetable it was before.
+      await put(`/v1/orgs/${org.org.id}/hours`, { mode: "scheduled", week }, owner.cookies);
+      const back = await readHours(org.org.id, owner.cookies);
+      expect(back.mode).toBe("scheduled");
+      expect(back.week).toEqual(week);
     },
     TEST_TIMEOUT_MS,
   );
@@ -443,6 +503,14 @@ d("gym opening hours (real Postgres)", () => {
         const hours = await readHours(org.org.id, owner.cookies);
         expect(hours.mode).toBe(mode);
         expect(hours.week).toEqual([]);
+        // THE OTHER HALF OF THE SAME INVARIANT, added 2026-09-03 with
+        // `savedWeek`: the mode empties what the gym TELLS people and must
+        // never empty what the owner comes back to. The two fields are the
+        // reason a stale row can no longer be mistaken for a claim — asserting
+        // them in the same loop is what stops a later edit collapsing them.
+        expect(hours.savedWeek).toEqual([
+          { weekday: 4, sessions: [{ opensMinute: 360, closesMinute: 720 }] },
+        ]);
       }
 
       // The control: the row is still there throughout, so "the week is empty"
