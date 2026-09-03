@@ -4252,7 +4252,7 @@ export async function getGymAttendanceDay(
               OR (min(a.marked_at), a.user_id)
                  > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
       ORDER BY first_marked_at, a.user_id
-      LIMIT ${limit}
+      LIMIT ${limit + 1}
     )
     SELECT v.user_id, v.display_name, v.email, v.first_marked_at, v.day, v.marked_at,
            v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
@@ -4282,7 +4282,13 @@ export async function getGymAttendanceDay(
     ORDER BY v.first_marked_at, v.user_id, v.marked_at`;
 
   const grouped: GymAttendancePersonRow[] = [];
-  let last: { userId: string; markedAt: Date } | null = null;
+  /** EACH GROUPED PERSON'S CURSOR KEY, index-aligned with `grouped`.
+   *
+   *  It is kept beside the rows rather than read back off them because
+   *  `GymAttendancePersonRow` carries RENDERED visits — a time somebody reads —
+   *  while the cursor needs the raw `first_marked_at` the inner select ordered
+   *  by. Deriving one from the other would be re-parsing our own output. */
+  const keys: { userId: string; markedAt: Date }[] = [];
   for (const r of people) {
     const tail = grouped[grouped.length - 1];
     if (tail !== undefined && tail.userId === r.user_id) {
@@ -4294,9 +4300,15 @@ export async function getGymAttendanceDay(
         email: r.email,
         visits: [toAttendanceVisitRow(r)],
       });
+      keys.push({ userId: r.user_id, markedAt: r.first_marked_at });
     }
-    last = { userId: r.user_id, markedAt: r.first_marked_at };
   }
+
+  // THE PAGE IS WHAT IS SERVED; THE PERSON PAST IT ONLY EVER ANSWERS "IS THERE
+  // MORE". The cursor is the LAST PERSON OF THE PAGE, never the extra one, or
+  // page two would begin after somebody nobody has seen.
+  const page = grouped.slice(0, limit);
+  const lastKey = keys[page.length - 1];
 
   return {
     day: gym.day,
@@ -4313,13 +4325,22 @@ export async function getGymAttendanceDay(
       visits: Number(r.visits),
       people: Number(r.people),
     })),
-    people: grouped,
-    // A FULL PAGE MEANS THERE MAY BE MORE; a short one is the end. Derived from
-    // the number of PEOPLE, which is what the LIMIT bounded — deriving it from
-    // the row count would page on visits and skip whoever came twice.
+    people: page,
+    // A FULL PAGE MEANS THERE IS ANOTHER ONE, because one more person than the
+    // page holds was asked for. Derived from the number of PEOPLE, which is
+    // what the LIMIT bounded — deriving it from the row count would page on
+    // visits and skip whoever came twice.
+    //
+    // **`> limit` AND NOT `=== limit`, AND THE OWNER'S SCREEN IS WHY.** A day
+    // with exactly `ATTENDANCE_PAGE_LIMIT` people drew a *Show more people*
+    // button that added nobody, and — worse — made every failed name search say
+    // *"in the people loaded so far — load the rest to search them too"* when
+    // the rest were already loaded, sending an owner hunting for a member who
+    // never came (:5807: on screen AND wrong). `searchCoversEverybody` reads
+    // this field and nothing else, so this is where that sentence is decided.
     nextCursor:
-      grouped.length === limit && last !== null
-        ? encodeAttendanceCursor(last.markedAt, last.userId)
+      grouped.length > limit && lastKey !== undefined
+        ? encodeAttendanceCursor(lastKey.markedAt, lastKey.userId)
         : null,
   };
 }
@@ -4407,15 +4428,24 @@ export async function getGymAttendanceHistory(
            OR (marked_at, id) < (${input.cursor?.markedAt ?? null}::timestamptz,
                                  ${input.cursor?.id ?? null}::uuid))
     ORDER BY marked_at DESC, id DESC
-    LIMIT ${limit}`;
+    LIMIT ${limit + 1}`;
 
-  const lastRow = rows[rows.length - 1];
+  const page = rows.slice(0, limit);
+  const lastRow = page[page.length - 1];
   return {
     timezone: gym.timezone,
     clockFormat: gymClockFormatSchema.parse(gym.clock_format),
-    visits: rows.map(toAttendanceVisitRow),
+    visits: page.map(toAttendanceVisitRow),
+    // ONE MORE IS FETCHED THAN IS SERVED, AND THAT EXTRA ROW IS THE WHOLE
+    // ANSWER. `rows.length === limit` cannot tell a full page with nothing
+    // behind it from a full page with more, so a member whose month held
+    // EXACTLY `ATTENDANCE_PAGE_LIMIT` visits was handed a cursor to nowhere —
+    // and the calendar turns that cursor into "some days may be missing" over
+    // a grid on which every day is drawn (:5807: on screen AND wrong).
+    // Asking for `limit + 1` makes a full page mean there really is another,
+    // which is the idiom this file already uses for applicants and members.
     nextCursor:
-      rows.length === limit && lastRow !== undefined
+      rows.length > limit && lastRow !== undefined
         ? encodeAttendanceCursor(lastRow.marked_at, lastRow.id)
         : null,
   };

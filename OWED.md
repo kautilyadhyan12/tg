@@ -133,13 +133,42 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       **3 steps OBSERVED, 9 DECLARED, 1 STRUCK** — and the struck one is his own
       finding, that stopping the api sends you to the login page before any
       screen draws (its own line below).
-      **THE LINE STILL DOES NOT TICK: T3 IS UNRUN**, and that is now the only
-      gate left on it. **What is NOT claimed is that the declared steps were
+      ~~**THE LINE STILL DOES NOT TICK: T3 IS UNRUN**, and that is now the only
+      gate left on it.~~ **T3 ROUND 2 RAN 2026-09-04 (DECISIONS `:32583`) AND
+      FOUND TWO Critical/High, SO THE LINE STILL DOES NOT TICK** — both fixed in
+      that commit, and **round 3 is diff-only** (:5348 rule 2), which is now the
+      only gate left. **What is NOT claimed is that the declared steps were
       watched** — nine of them were not, and the phone width in particular has
       no test behind it either, jsdom having no layout.
+      **WHAT ROUND 2 FOUND, because it is what round 3 must confirm is gone:**
+      both readers of `gym_attendance` decided *"there is another page"* from a
+      page being FULL, so a month holding exactly one page told the member *"some
+      days may be missing"* over a grid where every day was drawn — and the same
+      shortcut on the OWNER's day list drew a *Show more people* button that
+      added nobody and told a name search to *"load the rest"* when the rest were
+      already loaded. **The second one the review had CLEARED as harmless**, and
+      it is the easier of the two to reach: a hundred people through the door is
+      an ordinary Monday. Also closed: `:32197` §6's own stated gap (nothing
+      asserted the panel greys future days by the GYM's clock) and **the fire
+      itself had no test — two were named after it and both passed with it
+      deleted.**
       **Cost stated to Kd before he chose:** a square in a grid cannot show that
       somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
       the day — the same place the workout calendar puts them.
+
+- [ ] ⚪ **A BARE `--` SILENTLY DEFEATS FILE SCOPING ON
+      `pnpm --filter api test:local`** (2026-09-04, DECISIONS `:32583`'s round
+      log). Passing a test file behind `--` sends the `--` through as an argument
+      and the filter is ignored — **the whole 776-test suite ran when two tests
+      were wanted**, about four and a half minutes instead of fifteen seconds.
+      Without the `--` the scoping works, so this is a footgun rather than a
+      breakage. **Why it matters beyond the wait:** a chat that does not notice
+      believes it scoped a run, which is the family :26220 names (*"believing a
+      `-t` filtered run about a test you have just written"*), and a sweep is
+      exactly a scoped run repeated once per mutant. **The fix is in
+      `apps/api/scripts/test-local.mjs`**: either drop a leading `--` from the
+      forwarded arguments or refuse it by name. Not fixed on the card that found
+      it (R1.1) — it is nowhere near the calendar packet's diff.
 
 - [ ] ⚪ **THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE, AND KD ASKED
       FOR IT TO FOLD** (2026-09-03, DECISIONS `:31508`): *"should have a drop

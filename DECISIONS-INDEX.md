@@ -4908,6 +4908,51 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   either**, jsdom having no layout, which is what he caught by eye twice
   (`:32395`). Records only: no code, no test, no `src` file.
 
+- **:32583** — 2026-09-04 — **THE CALENDAR PACKET, T3 ROUND 2: TWO
+  Critical/High, THE PACKET DOES NOT SHIP — and the second one was on a screen
+  the review had CLEARED.** Covers `:31921` + `:32197` + `:32395`; round 1 was
+  `:32114`, on the server half alone, and found zero — **so the escape hatch did
+  NOT fire.** **Read before deriving "there is another page" from a full one
+  anywhere in this repo, before trusting a review's verdict that a finding is
+  confined to one screen, before writing a test whose name contains the word for
+  something it never queries, and before correcting a document a code fix is
+  about to make true.**
+  **BOTH READERS OF `gym_attendance` DECIDED `nextCursor` ON `rows.length ===
+  limit`**, which cannot tell *"full, and there is more"* from *"full, and that
+  was everything"* — so a page that exactly filled itself handed out a cursor to
+  nowhere, and **both consumers turn that cursor into a sentence.** C/H-1: the
+  member's calendar printed *"some days may be missing"* over a grid on which
+  every day was drawn. **C/H-2: the review graded the console reader *"benign …
+  its consumer makes no claim"* and its consumer makes TWO** — a *Show more
+  people* button that added nobody, and a name search answering *"in the people
+  loaded so far — load the rest to search them too"* with the rest already on
+  screen. **The finding graded lower was the one more likely to fire**: a hundred
+  people through the door is an ordinary Monday; a hundred visits in a month is
+  one member training four times a day. **STANDING: a review's map of where a
+  false sentence lives is a hypothesis about CONSUMERS and is checked by opening
+  them** (:24559/:29740's shape, with the verdict inverted — a defect the review
+  found and then argued away).
+  **THE REVIEW'S SUGGESTED FIX WOULD HAVE MADE THREE DOCUMENTS WRONG:** it asked
+  for the panel comment, `:32197` §3 and the smoke sheet to be corrected from
+  *"more than a hundred"* to *"at a hundred"* — and all three become true the
+  moment the code does. **Decide which side is wrong BEFORE editing the
+  document.**
+  **RULE 4 FOUND KD'S FIRE HAD NO OBSERVER AT ALL, and two tests were NAMED after
+  it** — `cameOn` addresses a cell by the aria-label the BUTTON sets and the date
+  by its class, so deleting the flame left both GREEN (proven by deleting it).
+  The icon is `aria-hidden`, correctly, **so the accessible query that makes every
+  other assertion on that screen sound is the one that cannot see it.** **The one
+  thing Kd sent this card back over was held up by his single look at it and
+  nothing else.** `C208` is the guard.
+  **AND `:32197` §6's OWN STATED GAP WAS STILL OPEN** — nothing asserted the panel
+  passes the GYM's today into `monthGrid`, and one gym in one zone cannot show it;
+  the test uses **two gyms straddling the clock** (UTC+14 and UTC-10), because a
+  panel on the reader's clock hands both the same answer (`C207`).
+  Fixes: `LIMIT` one more than the page on both readers, two regression tests each
+  asserting BOTH directions, mutants **O257–O260** and **C207/C208**. api
+  **239/239**, web **1741/1741**, sweeps 13 RED + 19 RED, 0 ALIVE.
+  **Round 3 is diff-only (:5348 rule 2).**
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

@@ -1,6 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CALENDAR PACKET, T3 ROUND 2 — TWO Critical/High, both FIXED, and the
+      second was on a screen the review had CLEARED. DECISIONS `:32583`.
+      **START HERE: the packet does NOT ship on this round (:5348 rule 1). ROUND
+      3 IS DIFF-ONLY (rule 2) and is the only gate left on the `OWED.md`
+      calendar line.** Round 1 was `:32114` (server half, zero C/H), so the
+      escape hatch did NOT fire.
+
+  1. **BOTH READERS OF `gym_attendance` READ A FULL PAGE AS PROOF OF ANOTHER
+     ONE.** `rows.length === limit` cannot tell "full, and there is more" from
+     "full, and that was everything". **C/H-1:** a month holding exactly 100
+     visits told the member *"some days may be missing"* over a grid where every
+     day was drawn. **C/H-2:** the same shortcut on the OWNER's day list drew a
+     *Show more people* button that added nobody and made a name search say
+     *"load the rest to search them too"* with the rest already on screen.
+     Fixed by fetching one row more than the page — the idiom `listOrgApplications`
+     and the members roster in that same file already used.
+  2. **THE REVIEW HAD CLEARED C/H-2** — *"benign there only because its consumer
+     makes no claim"*. Its consumer makes two, and it is the EASIER of the pair
+     to reach: a hundred people through the door is an ordinary Monday at a
+     300-member gym. **A review's map of where a false sentence lives is a
+     hypothesis about CONSUMERS; open them** (:24559/:29740, verdict inverted).
+  3. **THE REVIEW'S SUGGESTED FIX WOULD HAVE MADE THREE DOCUMENTS WRONG.** It
+     asked for *"more than a hundred"* to be corrected to *"at a hundred"* in
+     the panel comment, `:32197` §3 and the smoke sheet. **All three become TRUE
+     the moment the code does.** Decide which side is wrong before editing.
+  4. **RULE 4: KD'S FIRE HAD NO OBSERVER AND TWO TESTS WERE NAMED AFTER IT.**
+     Deleting the flame left both GREEN, proven by deleting it — `cameOn` queries
+     the aria-label the BUTTON sets and the date by its class, and the icon is
+     `aria-hidden`, so the accessible query that makes every other assertion on
+     that screen sound is the one that cannot see it. **C208.**
+  5. **`:32197` §6's OWN STATED GAP WAS STILL OPEN** — nothing asserted the panel
+     greys future days by the GYM's clock. **One gym cannot test it** (TZ is
+     pinned to Asia/Kolkata); the test straddles the clock with UTC+14 and
+     UTC-10, because the broken version hands both the same answer. **C207.**
+
+PROVE: `orgs.attendance` + `orgs.routes` + `orgs.hours` + `db.migration` in ONE
+       invocation **239/239** (+2), all LOCAL · `web` **1741/1741 across 58
+       files** (+1) · `tsc` exit 0 · `eslint --max-warnings=0` exit 0 on
+       `apps/api/{src,test,tools}` and the three web files · three ROOT guards
+       pass (harnesses 25, index **288 pointers**, triggers up to date — 966
+       from 253 of 391 rulings).
+       **SWEEPS: O248–O260 13 RED / 0 ALIVE; C190–C208 19 RED / 0 ALIVE**,
+       controls GREEN and tallied first, restores sha256 byte-exact, *"gyms +
+       subscriptions verified — no unattributed changes"*.
+       **RULE 3 PROVEN BY REVERTING EACH FIX, not by reading it** — both new
+       tests RED naming the defect, the flame assertions RED on a deleted flame,
+       the greying assertion RED on the reader's zone AND the only test that
+       moved. Every revert replaced the STRING (`:31921` §4b); `git diff`
+       afterwards showed only intended edits.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       deliberately not committed here.
+       **NO SMOKE FOR THESE FIXES AND NONE OFFERED**: both defects need a hundred
+       rows to reach, which no gym in Kd's browser has — `:32498`'s own finding,
+       four days old, is that a step which cannot reach its state invites a ✅ for
+       something nobody saw.
+       **NEXT: (a)** T3 round 3, DIFF-ONLY, covering the two cursor fixes and the
+       four tests/mutants they carry — nothing else. **(b)** the last of the three
+       things Kd approved on 2026-09-03: folding the member card's Mon–Sun hours
+       list, **tap not hover** (:26586), `defaultOpen` not `forceOpen` (:31295).
+       **NEW `OWED.md` LINE:** a bare `--` silently defeats file scoping on
+       `pnpm --filter api test:local` — it ran all 776 tests when two were wanted.
+```
+
+```
 TASK: THE CALENDAR'S SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, and the one
       step he actually ran proved that step was unrunnable. DECISIONS `:32498`,
       addendum 2 to `:32197`. **Records only — no code, no test, no `src` file.**

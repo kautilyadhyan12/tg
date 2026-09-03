@@ -1769,6 +1769,126 @@ d("gym attendance (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  /** A FULL PAGE WITH NOTHING BEHIND IT IS THE END, AND THE OLD TEST FOR THIS
+   *  COULD NOT SEE THE DIFFERENCE.
+   *
+   *  The paging test above writes 101 days precisely so a second page EXISTS, so
+   *  it is satisfied by any rule that hands out a cursor on a full page —
+   *  including `rows.length === limit`, which cannot tell "full, and there is
+   *  more" from "full, and that was everything". **Exactly
+   *  `ATTENDANCE_PAGE_LIMIT` visits is the one input where the two rules
+   *  disagree**, and it is the input nobody writes a fixture for.
+   *
+   *  **WHAT THE MEMBER SAW: a calendar captioned *"This month has more visits
+   *  than this view can show, so some days may be missing"* over a grid on which
+   *  every single day was drawn** — the app calling its own complete answer
+   *  incomplete (:5807). It needs 100 visits in one month, which the 24-sessions
+   *  cap makes reachable at 3–4 a day; *rare* is not a reason to print something
+   *  false, which is :4355's own correction.
+   *
+   *  The control matters as much as the assertion: 100 in the window must still
+   *  RETURN 100. A fix that made the cursor honest by serving 99 would pass a
+   *  bare `nextCursor === null`. */
+  it(
+    "a month holding exactly one page of visits says there is no second page",
+    async () => {
+      const owner = await makeUser("winexact-owner");
+      const member = await makeUser("winexact-member");
+      const org = await makeOrg(owner.cookies, "Exact Page Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // 2026-01-01 … 2026-04-10 is 100 days: a page with nothing behind it.
+      // `AT TIME ZONE 'UTC'` for the reason the paging fixture states — only the
+      // ORDER matters and a naive cast would resolve in the session's GUC.
+      await sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, marked_at, method, hours_status, slot_key)
+        SELECT ${org.org.id}, ${member.userId}, ${member.userId}, d::date,
+               ((d::date)::timestamp + interval '12 hours') AT TIME ZONE 'UTC',
+               'manual', 'hours_unset', 'hours_unset'
+        FROM generate_series('2026-01-01'::date, '2026-04-10'::date, interval '1 day') AS d`;
+
+      const page = await readHistory(org.org.id, member.cookies, "?from=2026-01-01&to=2026-05-01");
+      expect(page.visits).toHaveLength(100);
+      expect(page.nextCursor).toBeNull();
+
+      // AND THE OTHER DIRECTION, so this cannot pass on a route that never
+      // pages: one more visit in the same window and the cursor comes back.
+      await visitOn(org.org.id, member.userId, "2026-04-11");
+      const full = await readHistory(org.org.id, member.cookies, "?from=2026-01-01&to=2026-05-01");
+      expect(full.visits).toHaveLength(100);
+      expect(full.nextCursor).not.toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** THE SAME DEFECT ON THE OWNER'S SCREEN, WHERE IT IS EASIER TO REACH AND
+   *  WORSE WHEN IT LANDS.
+   *
+   *  A day with exactly `ATTENDANCE_PAGE_LIMIT` people — an ordinary Monday at a
+   *  300-member gym — handed the console a cursor to nowhere. That drew a *Show
+   *  more people* button which added nobody, and made `searchCoversEverybody`
+   *  answer NO, so a name that had not come back *"Nobody by that name in the
+   *  people loaded so far — load the rest to search them too"* while the rest
+   *  were already on screen: an owner sent hunting for a member who never came
+   *  (:5807).
+   *
+   *  **THE USERS ARE WRITTEN DIRECTLY AND THE EMAIL PATTERN IS LOAD-BEARING.**
+   *  A hundred `register` + `login` round trips is a minute of test time for a
+   *  property this test does not depend on — and `orgatt-t-…@example.com` is
+   *  what this suite's own `cleanup` deletes by, so a bulk insert under any other
+   *  pattern would leave a hundred rows behind for every later run.
+   *
+   *  Membership is deliberately not created: the day read joins `gym_attendance`
+   *  to `users` and asks nothing of `gym_members`, so adding rows this query
+   *  never touches would make the fixture describe a query that does not exist. */
+  it(
+    "a day holding exactly one page of people says there is no second page",
+    async () => {
+      const owner = await makeUser("dayexact-owner");
+      const org = await makeOrg(owner.cookies, "Exact Day Gym");
+      const day = await gymToday(org.org.id);
+
+      /** **THE ARRIVAL MINUTE IS DERIVED FROM `n` AND THAT IS NOT DECORATION.**
+       *  The page orders by `(min(marked_at), user_id)`, so people sharing one
+       *  instant fall through to a random uuid and "the 101st sorts last" stops
+       *  being true — :31921 §3's own lesson, which is why that fixture sets
+       *  `marked_at` rather than defaulting it. Ordering by `n` keeps the extra
+       *  person at the END across both calls, so the page of 100 is the same
+       *  hundred before and after. */
+      const fillPeople = async (from: number, to: number) => {
+        await sql`
+          INSERT INTO users (email, display_name)
+          SELECT 'orgatt-t-dayexact-' || n || '@example.com', 'Att Day ' || n
+          FROM generate_series(${from}::int, ${to}::int) AS n`;
+        await sql`
+          INSERT INTO gym_attendance
+            (gym_id, user_id, marked_by_user_id, day, marked_at, method, hours_status, slot_key)
+          SELECT ${org.org.id}, u.id, u.id, ${day}::date,
+                 (${day}::timestamp + interval '6 hours' + n * interval '1 minute')
+                   AT TIME ZONE 'UTC',
+                 'manual', 'hours_unset', 'hours_unset'
+          FROM generate_series(${from}::int, ${to}::int) AS n
+          JOIN users u ON u.email = 'orgatt-t-dayexact-' || n || '@example.com'`;
+      };
+
+      await fillPeople(1, 100);
+      const page = await readDay(org.org.id, owner.cookies);
+      expect(page.people).toHaveLength(100);
+      expect(page.totals.people).toBe(100);
+      expect(page.nextCursor).toBeNull();
+
+      // ONE MORE PERSON AND THE BUTTON IS HONEST AGAIN — the direction a fix
+      // that simply never paged would fail.
+      await fillPeople(101, 101);
+      const full = await readDay(org.org.id, owner.cookies);
+      expect(full.people).toHaveLength(100);
+      expect(full.totals.people).toBe(101);
+      expect(full.nextCursor).not.toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   /** AN INVERTED WINDOW IS A 400, NEVER AN EMPTY PAGE — :4434's ruling, and on
    *  this route the reason is sharper than it was there. Zero visits on a
    *  member's own gym card reads as *"you have never been to your gym"*, which

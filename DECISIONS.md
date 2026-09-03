@@ -32579,3 +32579,202 @@ smoke gate, plus a new 🟡 line for the login redirect) · `DECISIONS.md` ·
 terminated, port 3000 refusing, then pid 6088 answering `{"status":"ok"}`. So the
 one thing this session can say it OBSERVED about that step is that the server was
 really down when he looked.
+
+## 2026-09-04 — THE CALENDAR PACKET, T3 ROUND 2: TWO Critical/High, THE PACKET DOES NOT SHIP — and the second one was on a screen the review had CLEARED
+
+**Read before deriving "there is another page" from a full one anywhere in this
+repo, before trusting a review's verdict that a finding is confined to one
+screen, before writing a test whose name contains the word for something it
+never queries, and before correcting a document a code fix is about to make
+true.**
+
+Round 2 on the calendar packet (`:31921` server · `:32197` screen · `:32395`
+Kd's reshape), run in a fresh chat and handed back here. Round 1 was `:32114`,
+on the server half alone, and found zero. **This round found ONE Critical/High;
+reproducing it found a SECOND, of the same class, on the owner's console.
+The packet does NOT ship (:5348 rule 1) and round 3 is diff-only (rule 2).**
+**The escape hatch did NOT fire** — round 1 found zero Critical/High, so there
+are not two consecutive rounds carrying them, and this is a patch rather than
+Kd's redesign trigger.
+
+### 1 · A FULL PAGE IS NOT EVIDENCE OF ANOTHER ONE, AND BOTH READERS OF `gym_attendance` BELIEVED IT WAS
+
+`rows.length === limit` cannot tell *"full, and there is more"* from *"full, and
+that was everything"*. Both attendance readers decided `nextCursor` that way, so
+**a page that exactly filled itself handed out a cursor to nowhere** — and both
+consumers turn that cursor into a sentence.
+
+**C/H-1, THE MEMBER'S CALENDAR.** At exactly `ATTENDANCE_PAGE_LIMIT` visits in
+one month the grid printed *"This month has more visits than this view can show,
+so some days may be missing."* **Every day was drawn.** The app told somebody
+their own history was incomplete when it was complete — :5807's test exactly, on
+screen AND wrong. Reachable at 3–4 visits a day every day (the 24-sessions cap
+puts the ceiling at 720 a month), which is rare — **and :4355's correction, which
+this very panel's comment already quotes, is that rare is not a reason to print
+something false.**
+
+**C/H-2, THE OWNER'S ATTENDANCE SCREEN, AND THE REVIEW HAD CLEARED IT.** The
+review named `getGymAttendanceDay` as carrying the identical shortcut and graded
+it *"benign there only because its consumer makes no claim"*. **Its consumer
+makes two.** At exactly a hundred people on one day the console drew a *Show more
+people* button that added nobody, and `searchCoversEverybody` answered NO — so a
+name that had not come back **"Nobody by that name in the people loaded so far —
+load the rest to search them too"** while the rest were already on screen. An
+owner sent hunting for a member who never came, by a sentence whose own comment
+(`Attendance.jsx:698-702`) explains that the OTHER branch would be *"the same lie
+as counting a page and calling it the day"*.
+
+**AND IT IS THE EASIER OF THE TWO TO REACH.** A hundred people through the door
+is an ordinary Monday at a 300-member gym; a hundred visits in a month is one
+member training four times a day. **The finding graded lower was the one more
+likely to fire.**
+
+**STANDING: a review's map of where a false sentence lives is a hypothesis about
+CONSUMERS, and it is checked by opening them.** :24559 and :29740 both record a
+map taken as complete; this is the same shape with the verdict inverted — not a
+sentence found in fewer places than the review said, but a defect the review
+found and then argued away. **The instrument that caught it was reading
+`searchCoversEverybody`'s one call site**, which took a minute.
+
+### 2 · THE FIX IS THE IDIOM THIS FILE ALREADY USED TWICE, AND ASKING FOR IT MAKES THE DOCUMENTS TRUE
+
+`LIMIT` one more than the page, serve the first `limit`, and page when the extra
+row came back — which is what `listOrgApplications` and the members roster in the
+same file have always done. **Two readers were the exception rather than the
+rule, and neither comment said why**, which is how the shortcut survived review
+twice.
+
+**THE REVIEW'S SUGGESTED FIX WOULD HAVE MADE THREE DOCUMENTS WRONG.** It noted
+that the panel's comment, `:32197` §3 and the smoke sheet all say the note fires
+past *"more than a hundred"* visits while the code fired AT a hundred, and asked
+for the three to be corrected. **They are correct as written the moment the code
+is** — with the extra row fetched the sentence appears at 101 and up, which is
+what all three already say. Correcting them would have pinned the defect's
+arithmetic into the record. **STANDING: when a document and the code disagree,
+decide which one is wrong BEFORE editing the document** (:20587's shape, one step
+earlier).
+
+**BOTH DIRECTIONS ARE MUTATED, because a cursor has two failure modes** (:7104's
+PG1). **O257/O258** restore `=== limit` on each reader — the shipped defect;
+**O259/O260** drop the extra row so neither ever pages again, which loses a
+member's later visits in silence. A test asserting only that a full page has no
+cursor passes O259 perfectly, so both regression tests assert the OTHER direction
+in the same case.
+
+### 3 · THE RULE-4 FINDING IS THE ONE TO KEEP: KD'S FIRE HAD NO OBSERVER, AND TWO TESTS WERE NAMED AFTER IT
+
+`myGyms.render.test.jsx` carried *"draws the fire on the days somebody came and
+on no others"* and *"keeps the day number readable inside the fire"*. **Deleting
+the flame left both GREEN** — verified by deleting it, not reasoned about.
+
+**THE CAUSE IS A HELPER THAT WAS RIGHT ABOUT EVERYTHING EXCEPT ITS OWN NAME.**
+`cameOn` addresses a cell by the `aria-label` the BUTTON sets, and the date by
+its class — and its docblock says so proudly: *"the fire, addressed by what it
+tells a screen reader rather than by an icon nobody can query"*. The icon is
+`aria-hidden`, correctly, **so the accessible query that makes every other
+assertion on this screen sound is precisely the one that cannot see the flame.**
+
+**WHAT THAT LEFT: the one thing Kd sent this card back over (`:32395`) was held
+up by his single look at it and by nothing else.** Round 1 of this packet
+predates the flame entirely. `C206` covers the NUMBER inside the flame and reads
+as covering the flame; nothing covered the flame. **`C208` is the guard** and it
+is RED.
+
+**STANDING: a test whose NAME contains a noun it never queries is the liar rule 4
+is looking for, and the name is the cheapest place to spot one.** Both tests now
+assert the icon, with a day nobody came on as the control that keeps it
+non-vacuous.
+
+### 4 · `:32197` §6's OWN STATED GAP WAS STILL OPEN, WHICH IS WHAT A STATED GAP IS FOR
+
+That entry wrote: *"the greying of future days is pinned in the pure layer only.
+`monthGrid`'s `future` flag has tests; nothing asserts the panel passes the gym's
+today into it."* **Still true, and swapping the gym's zone for the reader's in
+that one argument left the entire suite green.** `C191` covers the MONTH coming
+from the gym's zone and stops there — the panel computes TWO dates from that zone
+and only one had an observer.
+
+**ONE GYM CANNOT TEST IT AND THAT IS THE TRANSFERABLE PART.** The suite pins
+`TZ=Asia/Kolkata`, so any single gym's answer is consistent with both
+implementations for most of the day. The test uses **two gyms straddling the
+clock** — `Pacific/Kiritimati` at UTC+14 is already on the 3rd, `Pacific/Honolulu`
+at UTC-10 is still on the 2nd — and **a panel reading the reader's clock hands
+both the same answer**, so it fails whichever way round it is wrong. (**C207**.)
+
+### 5 · WHAT WAS CHECKED AND FOUND SOUND, so round 3 does not re-derive it
+
+The authorisation fork is untouched and still completes before the date arguments
+are evaluated · the window predicates are still conjunctive filters over rows the
+fork entitled, and fetching one extra row cannot widen them · tenancy still leads
+both `WHERE`s · no `sql.raw`, no `any`, no non-null assertion in the diff · no new
+dependency · the day read's `totals` are still counted over the whole day in SQL
+and are unmoved by the paging change (asserted: 100 people served, `totals.people`
+101) · `packages/shared` was not touched, so `:28395`'s web-run rule does not
+apply · the two Low the review raised beyond these are in `BACKLOG.md`.
+
+### 6 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **No smoke was run for these fixes and none is offered.** Both defects need a
+  hundred rows to reach, which no member or gym in Kd's browser has — a smoke
+  step that cannot reach the state it names is `:32498`'s own finding, four days
+  old. The tests hold them.
+- **The phone width still has nothing behind it** (`:32498` §4) — unchanged by
+  this round.
+- **The month arrows against the shared 600/hour bucket are still untested**
+  (`:32197` §6) — unchanged by this round.
+- **The `/v1/auth/me` login redirect is untouched** (`:32498` §3, its own 🟡
+  `OWED.md` line): out of this packet's diff under R1.1, verified still present
+  rather than taken from the review.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :31921 with §7, :32197, :32395, :32498 in full · `HANDOFF.md`'s
+top block · `CLAUDE.md` Part 0.5 and Part I §2.5 · `OWED.md`'s calendar line ·
+`repo.ts`'s four list readers, `AttendancePanel.jsx`, `Attendance.jsx`,
+`attendanceView.js` and both test files.
+
+**EVERY FINDING WAS REPRODUCED AGAINST THE CODE BEFORE IT WAS ACTED ON** (V4,
+:23928, :24559) — the review is another chat's report and hearsay until run. That
+is what turned its cleared console note into C/H-2.
+
+**PROVE, all LOCAL (`127.0.0.1:5433`, per :13659) and on the FINAL bytes:**
+`orgs.attendance` + `orgs.routes` + `orgs.hours` + `db.migration` in one
+invocation **239/239** (+2) · `web` **1741/1741 across 58 files** (+1) ·
+`myGyms.render` 51/51 · `tsc --noEmit` exit 0 on `api` ·
+`eslint --max-warnings=0` exit 0 on `apps/api/{src,test,tools}` and on the three
+touched web files · the three ROOT guards pass (harnesses **25 scripts**, index
+**287 pointers**, triggers up to date).
+
+**RULE 3, BOTH FIXES, PROVEN BY REVERTING THE FIX AND NOT BY READING IT:** with
+the comparison put back, *"a month holding exactly one page of visits…"* and *"a
+day holding exactly one page of people…"* both failed, each naming the defect —
+*expected '2026-01-01T12:00:00.000Z|30b7affc…' to be null*. The flame assertions
+failed on a deleted flame; the greying assertion failed on the reader's zone with
+*expected '0.3' to be '1'*, and **it was the only test in the suite that moved.**
+
+**SWEEPS: api O248–O260 — 13 mutants, 13 RED, 0 ALIVE, 0 never ran**, controls
+GREEN and tallied first, restore sha256 byte-exact after every mutant, 451 rows
+fingerprinted and *"gyms + subscriptions verified — no unattributed changes"*.
+**web C190–C208 — 19 mutants, 19 RED, 0 ALIVE, 0 never ran**, the seventeen from
+`:32197`/`:32395` re-run to prove the cursor and comment changes broke none.
+
+**EVERY REVERT WAS DONE BY REPLACING THE STRING, NEVER `git checkout --`**
+(`:31921` §4b) — `git diff` on `AttendancePanel.jsx` afterwards showed only the
+two intended edits and no probe residue.
+
+**THE DAY-LIST FIXTURE WRITES ITS HUNDRED USERS DIRECTLY AND THE EMAIL PATTERN
+IS LOAD-BEARING:** a hundred `register`+`login` round trips is a minute of test
+time for a property the test does not depend on, and `orgatt-t-…@example.com` is
+what this suite's own `cleanup` deletes by. Verified after the sweep: **0 rows
+left behind.** Its arrival minutes derive from the series index for `:31921` §3's
+reason — rows sharing one instant fall through to a random uuid and "the extra
+person sorts last" stops being true.
+
+**AN INSTRUMENT NOTE, cheap and recurring:** passing a file to
+`pnpm --filter api test:local` behind a bare `--` sends the `--` through as an
+argument and the filter is ignored — the whole 776-test suite ran. Without it the
+scoping works. Not fixed here (R1.1); :26220's *"believing a `-t` filtered run
+about a test you have just written"* is the standing caution and the control step
+is what catches it.

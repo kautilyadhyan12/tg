@@ -421,11 +421,14 @@ export default function AttendancePanel({ gym }) {
     // server nothing at all — and `/my-gyms` draws one of these per gym, so on a
     // member of three that is three requests saved on every page load.
     if (gymId === null || month === null || !everOpened) return undefined;
-    const window = monthWindow(month);
-    if (window === null) return undefined;
+    // NOT `window` — that shadows the browser global for the rest of this
+    // effect, so a later line reaching for `window.…` would silently get a
+    // `{from, to}` instead of failing.
+    const range = monthWindow(month);
+    if (range === null) return undefined;
     let cancelled = false;
     void orgService
-      .getAttendanceHistory(gymId, window)
+      .getAttendanceHistory(gymId, range)
       .then((res) => {
         if (cancelled) return;
         const answer = res.data?.attendance;
@@ -739,10 +742,17 @@ export default function AttendancePanel({ gym }) {
                       if (cell.came) setOpenDay(cell.date);
                     }}
                     disabled={!cell.came || gridStatus === 'loading'}
-                    // THE DAY NUMBER IS ALWAYS READABLE AND THE FIRE SITS BESIDE
-                    // IT. Kd asked for "a day with attandance will have a fire
-                    // effect"; a fire drawn OVER the number would take the date
-                    // away to show that the date mattered.
+                    // THE LABEL IS HOW A MARKED DAY IS ADDRESSED — by anybody
+                    // not looking at pixels, and by every test in this file.
+                    // The flame is `aria-hidden`, so this sentence is the ONLY
+                    // thing that says the day was marked.
+                    //
+                    // It used to say the fire sat BESIDE the number and that a
+                    // fire drawn over it "would take the date away". Kd reversed
+                    // that at his own browser on 2026-09-03 (:32395 §3) — the
+                    // flame FILLS the square now and the date sits INSIDE it in
+                    // white — and the comment outlived the design it described,
+                    // which is :31295's defect in prose rather than in a prop.
                     aria-label={
                       cell.came ? `${String(cell.day)} — you came` : String(cell.day)
                     }

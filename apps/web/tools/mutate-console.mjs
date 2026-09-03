@@ -2751,6 +2751,24 @@ const MUTANTS = [
     from: '        <span\n          className="font-black tabular-nums leading-none text-white"\n          style={{ fontSize: \x270.6rem\x27 }}\n        >\n          {day}\n        </span>',
     to: '        <span className="sr-only">{day}</span>',
   },
+  {
+    id: 'C207',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE FUTURE DAYS ARE GREYED BY THE READER'S CLOCK INSTEAD OF THE GYM'S - the client half of the defect the server card was arranged to prevent, on the OTHER date this panel computes. C191 covers the MONTH and stops here; :32197 §6 stated this gap in as many words ('pinned in the pure layer only') and T3 round 2 found it still open, so this edit left the whole suite green. A member in Honolulu looking at an Assam gym sees today greyed out as if it had not happened",
+    expect: 'greys the day ahead by the GYM s clock',
+    from: '          today: gymZone === null ? null : gymToday(gymZone, tick),',
+    to: '          today: gymZone === null ? null : gymToday(undefined, tick),',
+  },
+  {
+    id: 'C208',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE FIRE ITSELF IS DELETED - Kd's one instruction for this screen, and until T3 round 2 NOTHING in this repo could see it go. Two tests are NAMED after it and both queried around it: `cameOn` addresses a cell by the aria-label the BUTTON sets, and the date by its class, so the flame could vanish and the suite stayed green (proven by deleting it). The icon is aria-hidden, which is correct and is exactly why no accessible query could reach it. C206 covers the NUMBER inside the flame; nothing covered the flame",
+    expect: 'draws the fire on the days somebody came',
+    from: '      <Flame\n        className="w-full h-full"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />',
+    to: '      {null}',
+  },
 ];
 
 const abort = (msg) => {

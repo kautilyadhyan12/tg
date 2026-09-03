@@ -3066,6 +3066,42 @@ const MUTANTS = [
     from: '      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)\n      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
     to: '      AND (${input.from ?? null}::timestamptz IS NULL OR marked_at >= ${input.from ?? null}::timestamptz)\n      AND (${input.to ?? null}::timestamptz IS NULL OR marked_at < ${input.to ?? null}::timestamptz)',
   },
+  {
+    id: 'O257',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "A FULL PAGE IS READ AS PROOF THERE IS ANOTHER ONE - the shipped defect, found by T3 round 2. `rows.length === limit` cannot tell a full page with more behind it from a full page that was everything, so a month holding EXACTLY ATTENDANCE_PAGE_LIMIT visits handed out a cursor to nowhere and the calendar captioned it 'This month has more visits than this view can show, so some days may be missing' over a grid on which every day was drawn (:5807 - on screen AND wrong). The paging test above cannot see this: it writes 101 days precisely so a second page EXISTS, so it passes under both rules. Exactly one page is the single input where they disagree",
+    expect: "exactly one page of visits",
+    from: '      rows.length > limit && lastRow !== undefined',
+    to: '      rows.length === limit && lastRow !== undefined',
+  },
+  {
+    id: 'O258',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE SAME DEFECT ON THE OWNER'S DAY LIST, where it is EASIER to reach - a hundred people through the door is an ordinary Monday at a 300-member gym, against 3-4 visits a day every day for the member's month. It drew a 'Show more people' button that added nobody, and made searchCoversEverybody answer NO, so a name that had not come back 'in the people loaded so far - load the rest to search them too' while the rest were already on screen: an owner sent hunting for a member who never came. Fix the class, not the case - both readers of gym_attendance had the identical shortcut",
+    expect: "exactly one page of people",
+    from: '      grouped.length > limit && lastKey !== undefined',
+    to: '      grouped.length === limit && lastKey !== undefined',
+  },
+  {
+    id: 'O259',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE EXTRA ROW STOPS BEING FETCHED, which is the OTHER half of O257's fix and fails in the opposite direction. With LIMIT limit the comparison can never be true, so the history NEVER pages: a member with two hundred visits in a month is served a hundred and told that was all of them - days missing from a calendar with no sentence saying so, which is the silence the panel's note exists to break. A test asserting only that a full page has no cursor passes here perfectly (:7104 PG1, on a bound instead of a guard)",
+    expect: "exactly one page of visits",
+    from: '    ORDER BY marked_at DESC, id DESC\n    LIMIT ${limit + 1}',
+    to: '    ORDER BY marked_at DESC, id DESC\n    LIMIT ${limit}',
+  },
+  {
+    id: 'O260',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "O259's edit on the owner's day list: the inner select stops asking for the person past the page, so nextCursor can never fire and a gym of four hundred shows a hundred with no Show more at all. Mutated apart from O259 because they are two queries and a guard covering one of two readers is not a guard (:28452 §1)",
+    expect: "exactly one page of people",
+    from: '      ORDER BY first_marked_at, a.user_id\n      LIMIT ${limit + 1}',
+    to: '      ORDER BY first_marked_at, a.user_id\n      LIMIT ${limit}',
+  },
 ];
 
 

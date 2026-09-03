@@ -3602,3 +3602,55 @@ buying another round.
       index guard could not catch it — **it only checks pointers in the index,
       and `OWED.md` is not walked.** V2's own failure mode: I greped the number
       correctly and then transcribed it wrongly.
+
+## 2026-09-04 — the calendar packet, T3 round 2 (DECISIONS `:32583`)
+
+TWO Critical/High this round, so the packet does NOT ship and they appear in
+neither file — they are fixed and hold the packet (:5348). What is logged here is
+everything else the round produced. **All fixed in the same commit; no Low bought
+a round.**
+
+- [x] **L-1 · A COMMENT DESCRIBED THE DESIGN KD REPLACED** —
+      `apps/web/src/components/gym/AttendancePanel.jsx`. It read *"THE DAY NUMBER
+      IS ALWAYS READABLE AND THE FIRE SITS BESIDE IT … a fire drawn OVER the
+      number would take the date away"*. Kd reversed exactly that at his own
+      browser on 2026-09-03 (`:32395` §3): the flame FILLS the square and the
+      date sits INSIDE it in white. **The comment survived the commit that
+      reversed it** — :31295's defect in prose rather than in a prop, and
+      :19960's shape. Rewritten to say what the label is FOR (the flame is
+      `aria-hidden`, so the label is the only thing that says a day was marked)
+      with the reversal recorded in place rather than deleted (:20587).
+- [x] **L-2 · `window` SHADOWED THE BROWSER GLOBAL** — same file, inside the
+      history effect: `const window = monthWindow(month)`. Harmless today and a
+      trap tomorrow — a later line reaching for `window.…` in that effect gets a
+      `{from, to}` object and fails silently rather than loudly. Renamed to
+      `range`, with the reason written beside it so it is not renamed back.
+- [x] **L-3 · THE PANEL'S USE OF THE GYM'S CLOCK FOR GREYING HAD NO OBSERVER** —
+      `:32197` §6 stated this gap in its own words (*"pinned in the pure layer
+      only"*) and it was still open. Swapping the gym's zone for the reader's in
+      that one argument left the whole suite green. **One gym cannot test it**:
+      the suite pins `TZ=Asia/Kolkata`, so a single gym's answer is consistent
+      with both implementations for most of the day. Fixed with **two gyms
+      straddling the clock** — `Pacific/Kiritimati` (UTC+14, already on the 3rd)
+      and `Pacific/Honolulu` (UTC-10, still on the 2nd) — because a panel reading
+      the reader's clock hands both the same answer. Mutant **C207**.
+- [x] **RULE 4 · KD'S FIRE HAD NO OBSERVER AND TWO TESTS WERE NAMED AFTER IT** —
+      *"draws the fire on the days somebody came and on no others"* and *"keeps
+      the day number readable inside the fire"* both stayed GREEN with the flame
+      deleted, proven by deleting it. `cameOn` addresses a cell by the
+      `aria-label` the BUTTON sets and the date by its class; the icon is
+      `aria-hidden`, correctly, **so the accessible query that makes every other
+      assertion on this screen sound is the one that cannot see the flame.**
+      Graded Low because nothing on screen is false today — **and it is the most
+      important finding of the round**, since the one thing Kd sent this card
+      back over was held up by his single look at it and nothing else. Both tests
+      now assert the icon, with a day nobody came on as the non-vacuous control;
+      mutant **C208**.
+- [ ] **INSTRUMENT, NOT FIXED (R1.1) — a bare `--` silently defeats file scoping
+      on `pnpm --filter api test:local`.** Passing the file behind `--` sends the
+      `--` through as an argument and the filter is ignored: the whole 776-test
+      suite ran when two tests were wanted (~4½ minutes). Without it, scoping
+      works. Noted rather than fixed because it is nowhere near this packet's
+      diff; :26220's *"believing a `-t` filtered run about a test you have just
+      written"* is the standing caution and the harness's control step is what
+      catches the consequence.

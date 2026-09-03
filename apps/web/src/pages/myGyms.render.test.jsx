@@ -96,6 +96,18 @@ const NOW = new Date('2026-09-02T12:00:00.000Z');
 const cameOn = (dayOfMonth) =>
   screen.queryByRole('button', { name: `${String(dayOfMonth)} — you came` });
 
+/** THE FLAME ITSELF, AND IT NEEDED ITS OWN QUERY.
+ *
+ *  `cameOn` addresses a cell by its LABEL and the number is queried by its
+ *  class, so the two tests named after the fire both passed with the `<Flame>`
+ *  deleted — proven by deleting it. The icon is `aria-hidden`, which is correct
+ *  and is exactly why nothing could see it: the one thing Kd sent this card back
+ *  over was held up by his single look at it (:32395) and by nothing else.
+ *
+ *  It is not vacuous — a day nobody came on renders a button with no icon at
+ *  all, which is the control every assertion below carries. */
+const fireIn = (cell) => cell?.querySelector('svg') ?? null;
+
 /** Open a day's times. Kd was told the times move behind a tap when he chose the
  *  calendar, so every time assertion in this file goes through here. */
 const openDay = (dayOfMonth) => {
@@ -792,6 +804,42 @@ describe('the calendar', () => {
     });
   });
 
+  /** THE GREYING FOLLOWS THE GYM'S CLOCK TOO, AND ONE GYM CANNOT PROVE IT.
+   *
+   *  `monthGrid`'s `future` flag has its own tests in the pure file, and nothing
+   *  asserted that the PANEL hands it the gym's today rather than the reader's:
+   *  swapping `gymToday(gymZone, tick)` for `gymToday(undefined, tick)` left the
+   *  whole suite green. **That is :32197 §6's own stated gap** — "the greying of
+   *  future days is pinned in the pure layer only" — and :28976's lesson that a
+   *  sweep aimed at pure functions misses what a screen does.
+   *
+   *  **TWO GYMS, BECAUSE ONE ANSWER IS NOT A COMPARISON.** The clock is
+   *  2026-09-02T12:00Z and `TZ` is pinned to `Asia/Kolkata`, so the READER is on
+   *  the 2nd. At UTC+14 the gym is already on the 3rd, so that square is TODAY;
+   *  at UTC-10 it is still the 2nd, so the 3rd is future and dimmed. **A panel
+   *  reading the reader's clock hands both gyms the same answer**, so it fails
+   *  the first of these whichever way round it is wrong — which one gym, in one
+   *  zone, could never show. (C207.) */
+  it('greys the day ahead by the GYM s clock and not the reader s', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Pacific/Kiritimati'));
+    api.getAttendanceHistory.mockResolvedValue(history([]));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    // UTC+14: the gym is ON the 3rd, so the 3rd is today and is not dimmed.
+    expect(screen.getByRole('button', { name: '3' }).style.opacity).toBe('1');
+
+    cleanup();
+    api.getAttendanceHistory.mockClear();
+    api.getHours.mockResolvedValue(hoursIn('Pacific/Honolulu'));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+    // UTC-10, same instant: the gym is still on the 2nd, so the 3rd has not
+    // happened there yet.
+    expect(screen.getByRole('button', { name: '3' }).style.opacity).toBe('0.3');
+  });
+
   it('draws the fire on the days somebody came and on no others', async () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     api.getAttendanceHistory.mockResolvedValue(
@@ -803,7 +851,14 @@ describe('the calendar', () => {
     expect(cameOn(20)).toBeTruthy();
     expect(cameOn(3)).toBeNull();
     // A day nobody came on is still a square — it is just not one you can open.
-    expect(screen.getByRole('button', { name: '3' }).disabled).toBe(true);
+    const blank = screen.getByRole('button', { name: '3' });
+    expect(blank.disabled).toBe(true);
+    // AND THE FIRE IS ACTUALLY DRAWN. Without these three lines this test
+    // passes with the flame deleted, because the label it queries by is set by
+    // the CELL and not by the icon.
+    expect(fireIn(cameOn(2))).not.toBeNull();
+    expect(fireIn(cameOn(20))).not.toBeNull();
+    expect(fireIn(blank)).toBeNull();
   });
 
   // STEPPING IS THE ONE THING THAT RE-READS, and it asks for the month it moved
@@ -1121,5 +1176,10 @@ describe('the calendar folds away', () => {
     const inside = cameOn(2).querySelector('.text-white');
     expect(inside).not.toBeNull();
     expect(inside.textContent).toBe('2');
+    // AND IT IS INSIDE A FLAME. "Readable inside the fire" is two claims and
+    // this test could only see one of them: with the icon deleted the white
+    // number is still there, still white, still says 2 — and the day has no
+    // fire on it at all.
+    expect(fireIn(cameOn(2))).not.toBeNull();
   });
 });
