@@ -19,9 +19,19 @@
 // that has never said when it is open (`hours_unset`) is told nothing about
 // opening hours at all — it is NOT "outside hours", and folding the two
 // together is the false sentence that ruling exists to prevent. Nothing here
-// scolds: :26624 §4.4 records a visit outside hours rather than refusing it, so
-// the copy states what happened and never suggests the member did wrong.
-import { clockLabel, closureDateLabel } from '../../pages/console/hoursView';
+// scolds: the copy states what happened and never suggests the member did
+// wrong.
+//
+// ~~:26624 §4.4 records a visit outside hours rather than refusing it~~ —
+// **STRUCK 2026-09-03: Kd REVERSED that call at `:30867`** (*"if a gym has set
+// certain times not 24 hour then if a memeber comes outside of time should not
+// be able to press i am here"*), and this file is where the screen obeys it.
+// The sentence is left struck rather than deleted because `markedSentence`'s
+// `outside_hours` and `closed_day` arms below still read as though a new visit
+// could land in either: they cannot any more — the server refuses first — and
+// they survive for the visits recorded BEFORE the rule, and for gyms the rule
+// does not reach.
+import { clockLabel, closureDateLabel, gymToday, isoWeekdayOfDay } from '../../pages/console/hoursView';
 
 /** Minutes since midnight ON THE GYM'S WALL, or null when the instant or the
  *  zone cannot be read.
@@ -106,6 +116,88 @@ export function markedSentence(visit, { alreadyMarked = false, clockFormat = '24
   // first because nobody has answered (:26736), the second because a client
   // must never invent a meaning for a state it cannot read.
   return `${opener}.`;
+}
+
+/** WHAT THE BUTTON SAYS WHEN IT IS DEAD, and both are the SERVER'S sentence or
+ *  its cadence — `READ_ONLY_NOTE`'s precedent (:24141 §3c), where the screen's
+ *  copy is verbatim the server's own so the two cannot drift apart.
+ *
+ *  **NEITHER OF THEM SPELLS A TIME, and that is deliberate rather than terse.**
+ *  `gymClosedMessage`'s third branch names today's windows — *"Your gym is open
+ *  06:00–07:00 today"* — because a 409 arrives with no context around it. This
+ *  screen has context: `GymHoursNote` draws today's opening times on the same
+ *  card, ON THE GYM'S OWN CLOCK, two lines above this button. Rebuilding that
+ *  sentence here would be a SECOND spelling of one minute — the defect
+ *  `clockLabel`'s own header names — and it would be the WRONG one, because the
+ *  server always writes 24-hour while the member's card writes whichever clock
+ *  the gym chose. */
+export const GYM_CLOSED_TODAY_MESSAGE = "Your gym is closed today, so attendance isn't open.";
+export const GYM_SHUT_NOW_MESSAGE = "Your gym isn't open right now, so attendance isn't open.";
+
+/** WHY "I'm here" CANNOT BE PRESSED — or null, meaning press away.
+ *
+ *  Kd's ruling of 2026-09-03 (`:30867`): *"if a gym has set certain times not 24
+ *  hour then if a memeber comes outside of time should not be able to press i am
+ *  here"*. **The SERVER is the enforcement (R3.3) and already refuses**; this
+ *  exists so a member is told BEFORE they press rather than by a 409 afterwards
+ *  — `hoursView.js`'s own rule for the owner's form, on the member's side.
+ *  **Where the two could disagree, this file is the one that is wrong.**
+ *
+ *  **THE ORDER OF THE BRANCHES IS THE RULING AND IS COPIED FROM
+ *  `readAttendanceContext` IN `apps/api/src/modules/orgs/repo.ts`**, whose own
+ *  header says the same thing about itself. Any edit that reorders them makes
+ *  this screen disagree with the door it is describing:
+ *
+ *  1. **UNSET FIRST, before the closure and before everything.** A gym that has
+ *     never said when it opens has said nothing to enforce (:26736), and
+ *     `GymHoursNote` draws it NOTHING — so refusing here would leave a member
+ *     with a dead button beside a card that claims no opening times exist.
+ *  2. **The closure next: a dated closure WINS over the weekly pattern**
+ *     (:26684 §3), including over `open_24h`, which is a pattern like any other.
+ *  3. `open_24h` — nothing to be outside of.
+ *  4. A session containing this minute — **`opens <= m < closes`, HALF-OPEN**,
+ *     because sessions may TOUCH (10:00–12:00 beside 12:00–14:00 is a legal
+ *     timetable) and an inclusive upper bound would put 12:00 inside two of
+ *     them.
+ *  5. Otherwise the gym is shut.
+ *
+ *  **EVERY UNKNOWN ADMITS, AND THAT DIRECTION IS THE WHOLE SAFETY ARGUMENT.**
+ *  Hours not read yet, a read that failed, a mode this bundle does not know, a
+ *  zone `Intl` cannot resolve, a clock that is not a clock — all return null and
+ *  the member may press, because the server decides. **Greying on an unknown
+ *  refuses somebody something the server would have allowed, and they cannot
+ *  find out which** — :24141 §3(a)'s rule, and the failure C107/C108 exist for.
+ *
+ *  **THE ZONE IS CHECKED BEFORE THE DATE IS ASKED FOR, and the order is
+ *  load-bearing**: `gymToday` falls back to the BROWSER's zone for a zone it
+ *  cannot read, which is correct for a `min` hint on a date box and would be
+ *  trap #8 for a control that blocks somebody. `visitMinutes` returns null for
+ *  exactly that case, so passing its check is what makes the `gymToday` below it
+ *  safe. */
+export function attendanceShutReason(hours, now = new Date()) {
+  const mode = hours?.mode;
+  if (mode !== 'open_24h' && mode !== 'scheduled') return null;
+
+  const at = now instanceof Date && !Number.isNaN(now.getTime()) ? now : null;
+  if (at === null) return null;
+  const minute = visitMinutes(at.toISOString(), hours?.timezone);
+  if (minute === null) return null;
+
+  const today = gymToday(hours.timezone, at);
+  if ((hours.closures ?? []).some((c) => c?.day === today)) return GYM_CLOSED_TODAY_MESSAGE;
+  if (mode === 'open_24h') return null;
+
+  const weekday = isoWeekdayOfDay(today);
+  if (weekday === null) return null;
+  const sessions = (hours.week ?? []).find((d) => d?.weekday === weekday)?.sessions ?? [];
+  const inSession = sessions.some(
+    (s) =>
+      Number.isInteger(s?.opensMinute) &&
+      Number.isInteger(s?.closesMinute) &&
+      s.opensMinute <= minute &&
+      minute < s.closesMinute,
+  );
+  return inSession ? null : GYM_SHUT_NOW_MESSAGE;
 }
 
 /** THE VISIT THE SERVER JUST CONFIRMED, PUT INTO THE LIST ALREADY ON SCREEN.

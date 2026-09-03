@@ -31348,3 +31348,159 @@ in when you find it.** Arriving-open is free; closing is the guarantee.
 0 on five web files · `vite build` exit 0 · three root guards green. **SWEEP a
 stated SUBSET: `MUTATE_ONLY=C155…C179` — 22 mutants, 22 RED, 0 ALIVE.** No
 `apps/api` and no `packages/shared` change.
+
+## 2026-09-03 — THE "I'm here" BUTTON STOPS BEING PRESSABLE WHEN THE GYM IS SHUT, and it says what it is for — the half of Kd's ruling that never reached a screen
+
+**Read before disabling or greying any control in the MEMBER app, before adding
+a second reader of `GET /v1/orgs/:gymId/hours`, before deciding whether a
+refusal's copy should name a time, before re-installing Vitest fake timers
+inside a test that already has them, and before writing a client-side mirror of
+a server rule.**
+
+Kd found it at his own browser and it is the whole card: *"i set owner gym times
+to 7 am to 8 am but now it is 5:28 but the i am here button was still there
+which i told you to disable if it does not incline with the gym time"*. **His
+ruling at `:30867` was half built** — the SERVER has refused since that commit
+(O241/O242) and the SCREEN was never touched — so a member pressed a live-looking
+control and was answered with a 409. **Being refused AFTER pressing is not
+*"should not be able to press i am here"*.**
+
+**HE ADDED ONE THING IN THE SAME MESSAGE THAT APPROVED THE CARD, and it is a
+ruling however small:** *"there should be some indication that i am here means
+attandance in gym so that user understands"*. `I'm here` is his own wording and
+does not change; nothing on the card said what pressing it DID.
+
+### 1 · THE GATE IS A MIRROR, AND THE THING IT MIRRORS IS NAMED
+
+`attendanceShutReason` copies the five branches of `readAttendanceContext` in
+`apps/api/src/modules/orgs/repo.ts` **in the server's order, because the order IS
+the ruling**: `unset` first, then the dated closure, then `open_24h`, then a
+session containing this minute (`opens <= m < closes`, half-open), then shut.
+This is `hoursView.js`'s own arrangement one screen over — *"EVERY RULE HERE IS
+THE SERVER'S. The server is the enforcement (R3.3); these exist so an owner is
+told BEFORE they press Save"* — applied to a member instead of an owner.
+**Where the two could disagree, the client is the one that is wrong**, and it is
+written at the top of the function.
+
+**EVERY UNKNOWN ADMITS, AND THAT DIRECTION IS THE WHOLE SAFETY ARGUMENT.** Hours
+not read yet, a read that failed, a mode this bundle does not know, a zone `Intl`
+cannot resolve — all return null and the member may press. :24141 §3(a) is the
+rule and C107/C108 are its cost: **greying on an unknown refuses somebody
+something the server would have allowed, and they cannot find out which.**
+**C183 is the mutant that holds it**, and it is the same over-firing `O242`
+already holds on the server.
+
+**THE ZONE IS CHECKED BEFORE THE DATE IS ASKED FOR, and the order is
+load-bearing** — `gymToday` FALLS BACK to the browser's zone for a zone it cannot
+read, which is correct for a `min` hint on a date box and is trap #8 on a control
+that BLOCKS somebody. `visitMinutes` returns null for exactly that case, so
+passing its check is what makes the `gymToday` under it safe. **C186 runs the
+browser's clock instead and dies on a two-gym fixture** — one instant, London and
+Assam, which is the case a single-zone fixture cannot see (:26812 §2a's shape).
+
+### 2 · GREYED, NOT ABSENT — AND :24141 RULES BOTH HALVES OF THIS PANEL
+
+The panel already hides the button when the gym has switched manual attendance
+off, and its comment cites :24141 for doing so. **That entry actually says
+GREYED, NEVER HIDDEN, and the two are not in conflict — it rules on WHICH state
+gets which:** a power somebody NEVER has draws nothing, because nothing false is
+being said; **a TEMPORARY fact about the GYM is greyed with a true sentence,
+because a control that vanished would leave them guessing whether they had lost
+something.** The switch is the first kind and is untouched. Being shut at 05:28
+is the second: it clears at opening time, on its own.
+
+**THE SENTENCE IS NOT OPTIONAL EITHER.** :29500's C/H-1 was the sixth panel in
+this app to grey a control and the first to say why nowhere — Critical/High, not
+cosmetic. **C181 and its own named test hold it, deliberately apart from the
+disable half**, because those two fail independently and a single case asserting
+both passes while half of it is broken.
+
+### 3 · THE REFUSAL NAMES NO TIME, AND THAT IS A DECISION RATHER THAN BREVITY
+
+`gymClosedMessage`'s third branch spells today's windows — *"Your gym is open
+06:00–07:00 today"* — **because a 409 arrives with no context around it.** This
+screen has context: `GymHoursNote` draws today's opening times on the same card,
+two lines above the button, **on the gym's own clock**. Rebuilding that sentence
+here would be a SECOND spelling of one minute — the defect `clockLabel`'s header
+names — **and it would be the WRONG one, because the server always writes
+24-hour while the member's card writes whichever clock the gym chose.**
+
+So the screen's two sentences name the STATE and the card names the TIMES.
+`GYM_CLOSED_TODAY_MESSAGE` is verbatim the server's own, `READ_ONLY_NOTE`'s
+precedent (:24141 §3c) — *"so the screen and the 409 cannot drift apart"*.
+**The thing that makes this safe is asserted rather than assumed:** a render
+case reads `Today: 07:00 – 08:00` off the card beside the dead button, so if the
+hours note ever stops being there the refusal becomes a bare no at a locked door,
+which is what `:30867` §1 refused to ship. A second case asserts neither sentence
+contains a digit, so a reworded one that smuggles the times back in fails here
+rather than in a browser.
+
+### 4 · THE CLOCK, AND WHY A TIMER WAS THE HONEST ANSWER
+
+Without one the gate is decided ONCE, at paint: nothing else re-renders this
+panel between the hours read landing and the gym's opening minute, so **a member
+who opens the screen at 06:59 is still refused at 07:05** — blocked from
+something they are entitled to do, which is :5807's second clause and
+Critical/High. A 30-second `setInterval` re-reads the browser's clock and
+**issues no request**.
+
+**IT MADE A COMMENT IN THIS FILE FALSE AND THE COMMENT WAS CORRECTED IN THE SAME
+EDIT** (:31295's lesson, one commit later): the header said *"NOTHING HERE POLLS,
+RE-READS ON FOCUS, OR RUNS ON A TIMER"* and gave the shared 600/hour attendance
+bucket as the reason. **The constraint is about REQUESTS; the timer makes none.**
+The clause is struck in place rather than deleted, because the distinction it was
+hiding is the useful part. Both reads still happen exactly once each.
+
+### 5 · A SECOND READ ON ONE CARD, STATED RATHER THAN HIDDEN
+
+`GymHoursNote` and `AttendancePanel` now each call `GET /hours`, so `/my-gyms`
+asks each gym for its hours twice. **The alternatives are both bigger than this
+card**: a cache that outlives a component, or a second optional shape for a note
+THREE screens draw — and the second can break a screen Kd has already smoked.
+**It takes an `OWED.md` line instead, which is exactly what :28822 §3 did with
+the identical duplicate it created on this same screen.** The route carries no
+dedicated rate limit and does not touch the attendance bucket (`routes.ts`,
+checked).
+
+### 6 · THE INSTRUMENT FINDING, MEASURED IN ISOLATION RATHER THAN REASONED ABOUT
+
+**Calling `vi.useFakeTimers()` while fake timers are ALREADY installed silently
+keeps the FIRST `toFake` list and drops the new one.** The ticker test asked for
+`setInterval` inside a describe whose `beforeEach` had already faked `Date`
+alone; `setInterval` stayed real, the tick never fired, and **the test failed
+with the button dead while the code was right** — the most expensive shape of
+red, because it invites a "fix" to working code. Probed both ways in a throwaway
+file: **re-install fired 0, release-then-install fired 2.** `vi.useRealTimers()`
+first, and the reason is written beside it.
+
+Its sibling: **one mechanism moves time.** The first draft paired
+`setSystemTime` with `advanceTimersByTime` — the former moves `Date` and leaves
+every scheduled callback where it was, so the clock said 07:00 and the panel
+never heard.
+
+### Round log
+
+**PROVE, all on the shipping bytes.** `web` **1697/1697 across 58 files, exit
+0** (1671/58 before; +26). `eslint --max-warnings=0` exit 0 on four web files
+plus the harness · `vite build` exit 0 · three root guards green with real exit
+codes.
+
+**SWEEP a stated SUBSET, `MUTATE_ONLY=C180…C186` — 7 of 203 mutants, 7 RED, 0
+ALIVE, 0 never ran**, every control GREEN and tallying, restores sha256-verified
+after each. **No database mutant: this card changes no server behaviour**
+(:5857 rule 4a). Two new targets, because a mutant is a claim about ONE call site
+(:15770) — the view file decides whether the gym is open, the panel decides
+whether that answer reaches the button. **`memberattendanceview` is named for a
+reason: two files in this repo are called `attendanceView.js`.**
+
+**Deliberately NOT mutated (:5857 rule 4a): the two sentences and the label.**
+They are wording, they are covered by named render cases, and a copy mutant
+would spend the audit on the row the rule excludes.
+
+**NOTHING TICKS. No browser smoke has run and T3 is UNRUN**, so `OWED.md`'s 🔴
+line stays open with what is left written onto it.
+
+**Files:** `apps/web/src/components/gym/{attendanceView.js,AttendancePanel.jsx}`
+· `apps/web/src/components/gym/attendanceView.test.js` ·
+`apps/web/src/pages/myGyms.render.test.jsx` · `apps/web/tools/mutate-console.mjs`
+· records. **No `apps/api`, no `packages/shared`, no migration.**

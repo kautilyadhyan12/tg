@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE "I'm here" BUTTON NOW REFUSES WHEN THE GYM IS SHUT, AND SAYS WHAT IT
+      IS FOR. DECISIONS `:31352`. Web-only: no `apps/api`, no
+      `packages/shared`, no migration. **THE CODE IS DONE. TWO GATES ARE NOT:
+      Kd's browser smoke, then T3 round 1 — in that order.**
+
+  1. **THE HALF OF `:30867` THAT NEVER REACHED A SCREEN.** The server has
+     refused since that commit; the button had not been touched, so a member
+     pressed a live control and got a 409. **`attendanceShutReason` copies
+     `readAttendanceContext`'s five branches IN THE SERVER'S ORDER**, because
+     the order is the ruling — `unset` first, the dated closure next, then
+     `open_24h`, then a half-open session window.
+  2. **EVERY UNKNOWN ADMITS** (:24141 §3a — greying on an unknown refuses
+     somebody something the server would have allowed). Hours unread, read
+     failed, unknown mode, unreadable zone → the button WORKS. **C183.**
+     And the zone is checked before the date is asked for: `gymToday` falls
+     back to the BROWSER's zone, which is trap #8 on a control that blocks
+     somebody (**C186**, one instant × two gyms).
+  3. **GREYED WITH A SENTENCE, NOT ABSENT — :24141 rules BOTH halves of this
+     panel** and the existing comment cited it for the other one. A power
+     nobody ever has draws nothing; a TEMPORARY fact about the gym is greyed
+     and explained. A greyed control with nothing beside it is :29500's C/H-1
+     (**C181**, its own named case apart from the disable half).
+  4. **THE REFUSAL NAMES NO TIME AND THAT IS DELIBERATE.** `GymHoursNote`
+     draws today's hours two lines above, on the GYM's clock; the server's
+     sentence is 24-hour because a 409 has no context. A render case reads
+     `Today: 07:00 – 08:00` beside the dead button so that stays true.
+  5. **A 30-SECOND TIMER, AND IT MAKES NO REQUEST** — without it 06:59 stays
+     refused at 07:05 (:5807's second clause). The file's own "runs on a timer"
+     comment was struck in the same edit (:31295's lesson).
+  6. **KD ADDED THE "what is this button" LINE WHEN HE APPROVED IT** — *"there
+     should be some indication that i am here means attandance in gym"*.
+     `I'm here` is his wording and is untouched.
+  7. **INSTRUMENT: `vi.useFakeTimers()` called while fake timers are ALREADY
+     installed keeps the FIRST `toFake` list and drops the new one** — probed
+     0 vs 2 in isolation. A test went red while the code was right.
+
+PROVE: `web` **1697/1697 / 58 files, exit 0** (+26) · eslint clean on four web
+       files + the harness · `vite build` exit 0 · three root guards green.
+       **SWEEP `MUTATE_ONLY=C180…C186` — 7 RED, 0 ALIVE**, controls GREEN.
+       No database mutant — this card changes no server behaviour (:5857 4a).
+
+FILES: `apps/web/src/components/gym/{attendanceView.js,AttendancePanel.jsx,
+       attendanceView.test.js}` · `apps/web/src/pages/myGyms.render.test.jsx` ·
+       `apps/web/tools/mutate-console.mjs` · records.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **THE SMOKE SHEET IS SEVEN COMMITS STALE.** Its step 8 still asks him to
+       mark attendance at a gym that will now refuse him — and after this card
+       the button is GREYED there, not merely refused, so the sheet's expected
+       result is wrong in a new way. **Rewrite it before asking him to run it.**
+       **ONE SMALL THING IS KD'S TO RULE and this card makes it more live:** the
+       screen never says WHOSE clock it is on, and "isn't open right now" is the
+       gym's now, not the reader's (`OWED.md`, the ⚪ line under the 🔴).
+       **T3 round 1 on the overview-numbers packet is still UNRUN**, and so is
+       T3 round 1 on this one.
+```
+
+```
 TASK: KD FOUND TWO THINGS AT HIS BROWSER AND STOPPED THE SESSION. NOTHING WAS
       BUILT FOR EITHER — both are on `OWED.md` and this is the handoff. **ONE of
       them turned out to be his own test data and he closed it himself.**

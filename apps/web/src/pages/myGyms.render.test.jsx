@@ -12,7 +12,7 @@
 // the rule — the sidebar and the screen read the same kept answer here, exactly
 // as they do in the browser.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const api = {
@@ -441,5 +441,189 @@ describe('saying you are here', () => {
     await waitFor(() => expect(screen.getByText('Bar Bell Club')).toBeTruthy());
     expect(screen.queryByText('Iron House')).toBeNull();
     expect(screen.queryByText('06:12')).toBeNull();
+  });
+});
+
+// ── KD'S RULING OF 2026-09-03 (`:30867`) AT THE SCREEN ──────────────────────
+// *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am here
+// button was still there which i told you to disable if it does not incline
+// with the gym time"* — and *"should not be able to press i am here"*, which is
+// why every assertion below is about the button's DISABLED state and not about
+// what a tap answers. The server has refused since `:30867`; being refused
+// AFTER pressing is not what he asked for.
+//
+// **ONLY `Date` IS FAKED.** `setTimeout` stays real so `waitFor` behaves
+// normally, and `setInterval` stays real so the panel's clock simply never
+// fires except in the one case that asks it to. A test that let the gate read
+// the wall clock would pass at 07:30 and fail at 05:28 — :27094 §2's defect.
+describe('the button outside opening hours', () => {
+  // 05:28 on Thursday in London, which is Kd's own moment. The gym below opens
+  // at 07:00, so this instant is the one he was looking at.
+  const KDS_MOMENT = new Date('2026-09-03T05:28:00.000Z');
+  const THURSDAY = 4;
+
+  const hoursOf = (over = {}) => ({
+    data: {
+      hours: {
+        mode: 'scheduled',
+        timezone: 'UTC',
+        clockFormat: '24h',
+        week: [{ weekday: THURSDAY, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
+        closures: [],
+        ...over,
+      },
+    },
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
+    vi.setSystemTime(KDS_MOMENT);
+    api.getHours.mockResolvedValue(hoursOf());
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const button = () => screen.queryByRole('button', { name: /i'm here/i });
+
+  it('cannot be pressed before the gym opens', async () => {
+    drawScreen();
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+  });
+
+  // ITS OWN CASE, AND SEPARATE FROM THE ONE ABOVE ON PURPOSE. :29500's C/H-1
+  // was a control that greyed correctly and said nothing beside it — the sixth
+  // panel in this app to disable something and the first to leave a person with
+  // no explanation. The disable half and the sentence half fail independently,
+  // so they are asserted independently rather than folded into one case that
+  // passes while half of it is broken.
+  it('says why the button is dead', async () => {
+    drawScreen();
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+    expect(screen.getByText(/isn't open right now/i)).toBeTruthy();
+  });
+
+  // THE STATE IT IS *NOT* IN WHEN YOU FIND IT (:31295). Same fixture, same
+  // gym, one hour later: a gate that simply killed the button would satisfy
+  // every assertion above and fail here.
+  it('can be pressed while the gym is open', async () => {
+    vi.setSystemTime(new Date('2026-09-03T07:30:00.000Z'));
+    drawScreen();
+    await waitFor(() => expect(button()).toBeTruthy());
+    expect(button()?.disabled).toBe(false);
+    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
+    fireEvent.click(button());
+    await waitFor(() => expect(api.markAttendance).toHaveBeenCalledWith('g1'));
+  });
+
+  it('cannot be pressed on a day the gym said it is closed', async () => {
+    api.getHours.mockResolvedValue(hoursOf({ closures: [{ day: '2026-09-03', note: 'Holi' }] }));
+    vi.setSystemTime(new Date('2026-09-03T07:30:00.000Z'));
+    drawScreen();
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+    // The closure wins over a session that is running (:26684 §3), and the
+    // sentence says which of the two shut the day.
+    expect(screen.getByText(/closed today, so attendance isn't open/i)).toBeTruthy();
+    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
+  });
+
+  // **THIS IS WHAT LETS THE REFUSAL SAY NO TIME.** The server's 409 spells
+  // today's windows because it arrives with no context; here the opening times
+  // are already on the card, on the gym's own clock, ABOVE the dead button. If
+  // that ever stops being true the sentence becomes a bare no at a locked door,
+  // which is the thing `:30867` §1 refused to ship — so it is asserted rather
+  // than assumed.
+  it('tells the member when the gym IS open, beside the button it just killed', async () => {
+    drawScreen();
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+    expect(screen.getByText('Today: 07:00 – 08:00')).toBeTruthy();
+  });
+
+  // EVERY UNKNOWN ADMITS (:24141 §3a). Three ways the screen can fail to know,
+  // and none of them may take a member's door away — the server decides.
+  it('stays pressable when the gym has never set hours', async () => {
+    api.getHours.mockResolvedValue({ data: { hours: { mode: 'unset' } } });
+    drawScreen();
+    await waitFor(() => expect(button()).toBeTruthy());
+    expect(button()?.disabled).toBe(false);
+  });
+
+  it('stays pressable for a gym that is open 24 hours', async () => {
+    api.getHours.mockResolvedValue({
+      data: { hours: { mode: 'open_24h', timezone: 'UTC', clockFormat: '24h', week: [], closures: [] } },
+    });
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('Open 24 hours')).toBeTruthy());
+    expect(button()?.disabled).toBe(false);
+  });
+
+  it('stays pressable when the opening times could not be read', async () => {
+    api.getHours.mockRejectedValue(new Error('offline'));
+    drawScreen();
+    await waitFor(() => expect(button()).toBeTruthy());
+    expect(button()?.disabled).toBe(false);
+    // And nothing is invented about a gym we could not ask about.
+    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
+  });
+
+  // THE CLOCK, AND WHY IT EXISTS. Without it the gate is decided once at paint,
+  // so a member who opens this screen at 06:59 is still refused at 07:05 —
+  // blocked from something they are entitled to do, which is :5807's second
+  // clause. `setInterval` is faked ONLY here.
+  it('comes back to life at opening time without a reload', async () => {
+    // **`useRealTimers()` FIRST, AND IT IS NOT TIDINESS — MEASURED.** Calling
+    // `useFakeTimers` while fake timers are ALREADY installed silently keeps
+    // the first `toFake` list and drops the new one: `setInterval` stayed real,
+    // the panel's tick never fired, and the test failed with the button dead
+    // while the code was right. Probed both ways in isolation — re-install
+    // fired 0, release-then-install fired 2 — rather than reasoned about.
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-09-03T06:59:40.000Z'));
+    drawScreen();
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+
+    // ONE MECHANISM MOVES TIME, and the first draft of this test used two.
+    // `advanceTimersByTime` carries the faked `Date` forward AND fires what is
+    // due; a `setSystemTime` beside it moves `Date` while leaving every
+    // scheduled callback where it was, so the clock said 07:00 and the panel
+    // never heard about it — the test failed with the button still dead and
+    // the CODE was right. Twenty past seven, one tick fired, nothing else
+    // touched.
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(button()?.disabled).toBe(false);
+    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
+  });
+});
+
+// KD ASKED FOR THIS IN THE SAME MESSAGE THAT APPROVED THE CARD: *"there should
+// be some indication that i am here means attandance in gym so that user
+// understands"*. "I'm here" is his own wording and is untouched; what was
+// missing is anything on the card SAYING what pressing it does.
+describe('what the button is for', () => {
+  it('says that pressing it marks attendance at the gym', async () => {
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
+    expect(screen.getByText('Attendance')).toBeTruthy();
+    expect(screen.getByText(/marks your attendance at the gym/i)).toBeTruthy();
+  });
+
+  // IT DESCRIBES THE CONTROL, SO IT GOES WHERE THE CONTROL GOES. A gym with
+  // the switch off draws no button (ruling 4), and an explanation of a button
+  // that is not there is the same class of false sentence as :30867 §2.4 — the
+  // line promising nobody is turned away, left standing after they were. The
+  // history below is untouched, because those visits happened.
+  it('says nothing about a button the gym has switched off', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...GYM, manualAttendanceEnabled: false }], formerOrgs: [] },
+    });
+    api.getAttendanceHistory.mockResolvedValue(history([visit()]));
+    drawScreen();
+    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
+    expect(screen.queryByText('Attendance')).toBeNull();
+    expect(screen.queryByText(/marks your attendance at the gym/i)).toBeNull();
+    expect(screen.getByText('06:12')).toBeTruthy();
   });
 });

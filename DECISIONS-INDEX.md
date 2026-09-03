@@ -14,8 +14,22 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,329 lines, MEASURED 2026-09-02 and not estimated**
-(1,063 + 1,208 + 58). **THE SIXTEENTH MEASUREMENT IS THE FIFTEENTH'S RESULT
+**ALWAYS-READ TOTAL: 2,521 lines, MEASURED 2026-09-03 and not estimated**
+(1,102 + 1,345 + 74). **THE SEVENTEENTH MEASUREMENT IS THE SIXTEENTH'S RESULT A
+THIRD TIME — a whole card (a client-side gate, seven mutants, twenty-six tests)
+cost FIVE lines here, all of them trigger phrases, and §1 and §2 did not move at
+all**; its record is a CARD record and went to §1B, where :24813 sends it. Three
+consecutive cards at +5/+6 is the split holding at a steady rate, which is what
+the thirteenth measurement asked for.
+**AND IT CAUGHT THE HEADER LYING ABOUT ITSELF AGAIN — the second time in two
+days, which makes the drift the finding rather than the delta.** The three
+figures above read **1,063 · 1,208 · 58** while the bytes at `HEAD`, before this
+card changed anything, were **1,097 · 1,345 · 74** — 187 lines of drift, and §1
+had grown 137 lines with nobody re-running the command in the paragraph below.
+**The +5 above is computed from `git show HEAD:` and `wc -l`, never from the
+previous figures in this header**, which is the only way a number here can be
+trusted and is the lesson :22497 already paid for once.
+**THE SIXTEENTH MEASUREMENT IS THE FIFTEENTH'S RESULT
 REPEATED ON A REVIEW ROUND: a T3 round plus ten fixes cost SIX lines here, all
 of them trigger phrases, and §1 and §2 did not move at all** — the record went
 to §1B, where :24813 sends every card record. **Two consecutive cards at +6 is
@@ -4539,6 +4553,45 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   join door and email is not on it; open question at §2, not a deferral.
   `web` 1689/1689; SWEEP C155–C176, **22 RED — two survived the first pass, one a
   weak test of mine and one a mutant aimed at DECORATION, neither allow-listed.**
+- **:31352** — 2026-09-03 — **THE "I'm here" BUTTON STOPS BEING PRESSABLE WHEN
+  THE GYM IS SHUT, and it says what it is for — the half of `:30867` that never
+  reached a screen.** **Read before disabling or greying any control in the
+  MEMBER app, before adding a second reader of `GET /v1/orgs/:gymId/hours`,
+  before deciding whether a refusal's copy should name a time, before
+  re-installing Vitest fake timers inside a test that already has them, and
+  before writing a client-side mirror of a server rule.**
+  Kd at his own browser: *"i set owner gym times to 7 am to 8 am but now it is
+  5:28 but the i am here button was still there"* — the server had refused since
+  `:30867` and the screen was never touched, so being refused AFTER pressing
+  stood in for *"should not be able to press"*. **`attendanceShutReason` copies
+  `readAttendanceContext`'s five branches IN THE SERVER'S ORDER, because the
+  order is the ruling** (`unset` first, then the dated closure, then `open_24h`,
+  then a half-open session window). **EVERY UNKNOWN ADMITS** — :24141 §3(a),
+  since greying on an unknown refuses somebody something the server would have
+  allowed (**C183**) — and **the zone is checked before the date is asked for**,
+  because `gymToday` falls back to the BROWSER's zone and that is trap #8 on a
+  control that blocks somebody (**C186**, a two-gym one-instant fixture).
+  **GREYED WITH A SENTENCE, NOT ABSENT: :24141 rules both halves of this panel**
+  — a power nobody ever has draws nothing, a TEMPORARY fact about the gym is
+  greyed and explained, and :29500's C/H-1 is a greyed control that says nothing
+  (**C181**, its own named case apart from the disable half).
+  **THE REFUSAL NAMES NO TIME ON PURPOSE**: the server's spells today's windows
+  because a 409 has no context, this screen draws `GymHoursNote` two lines above
+  the button on the gym's own clock, and rebuilding it would be a second — and
+  24-hour — spelling of one minute. Asserted, not assumed: a case reads
+  `Today: 07:00 – 08:00` beside the dead button, another that neither sentence
+  holds a digit. **A 30-SECOND TIMER MAKES THE GATE HONEST IN BOTH DIRECTIONS**
+  (06:59 refused is still refused at 07:05 without one — :5807's second clause)
+  **and it makes no request; the file's "runs on a timer" comment was struck in
+  the same edit** (:31295). **Kd added the label and the line under it in the
+  message that approved the card** — *"there should be some indication that i am
+  here means attandance in gym so that user understands"*; `I'm here` is his own
+  wording and is untouched. **Second `/hours` read on the card, stated with an
+  `OWED.md` line** on :28822 §3's precedent. **INSTRUMENT, measured in isolation:
+  `vi.useFakeTimers()` called while fake timers are already installed keeps the
+  FIRST `toFake` list and silently drops the new one** — probed 0 vs 2 — so a
+  test failed red while the code was right.
+  `web` 1697/1697; SWEEP C180–C186, **7 RED, 0 ALIVE**. **No smoke; T3 UNRUN.**
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

@@ -35,18 +35,49 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
 - [ ] 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS — KD'S
-      RULING IS ONLY HALF BUILT.** Found by him at his own browser 2026-09-03:
+      RULING IS ONLY HALF BUILT.** ~~**BUILT 2026-09-03** (DECISIONS `:31352`)~~
+      — **THE CODE IS BUILT AND THE LINE DOES NOT TICK: no browser smoke has
+      run and T3 is UNRUN.** The button is now greyed with a true sentence
+      whenever the gym is shut, it comes back to life at opening time without a
+      reload, and every state the screen cannot decide leaves it PRESSABLE so
+      the server keeps the last word (:24141 §3a). `web` 1697/1697; mutants
+      C180–C186, 7 RED. **What is left is the two gates, in this order: Kd runs
+      the click-through, then a fresh chat runs T3 round 1.**
+      Found by him at his own browser 2026-09-03:
       *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am
       here button was still there which i told you to disable if it does not
       incline with the gym time"*. **The SERVER refuses correctly** (`:30867`,
       mutants O241/O242) — **the SCREEN was never touched**, so a member taps a
       live-looking button and is answered with a 409. His words were *"should
       not be able to press i am here"*, and being refused after pressing is not
-      that. **What it needs:** the member's gym card must know the gym's hours
-      and today's closure, disable the button when it is shut, and say when the
-      gym opens — the same sentence the server already produces. Check whether
-      `/v1/orgs/mine` carries enough to decide it without a second read.
+      that.
+      ~~Check whether `/v1/orgs/mine` carries enough to decide it without a
+      second read.~~ **ANSWERED: IT DOES NOT** — that response carries
+      `manualAttendanceEnabled` and nothing about hours, deliberately
+      (`orgsApi.js`: a week of sessions plus a closure list per gym belongs to
+      the screen that asks for them). The card reads `GET /hours`, which
+      `gymHoursSchema`'s own header calls *"one reader for the console and for
+      the member's gym card"*.
+      ~~and say when the gym opens — the same sentence the server already
+      produces~~ — **DELIBERATELY NOT DONE, and `:31352` §3 is the reasoning**:
+      the server's sentence spells today's windows in 24-hour because a 409
+      arrives with no context, while `GymHoursNote` already draws those times
+      two lines above the button ON THE GYM'S OWN CLOCK. Repeating them would be
+      a second, and wrong, spelling of one minute.
       **🔴 because a user-facing control lies about what it will do.**
+
+- [ ] ⚪ **`/my-gyms` ASKS EACH GYM FOR ITS OPENING HOURS TWICE** (2026-09-03,
+      DECISIONS `:31352` §5). `GymHoursNote` reads `GET /hours` to print the
+      times and `AttendancePanel` reads it again to decide whether the button
+      may be pressed, so one card makes two identical requests. **Harmless
+      today** — the route carries no dedicated rate limit and does not touch the
+      attendance reads' shared 600/hour bucket — and it is on the same screen
+      where :28822 §3 recorded the identical duplicate for `/v1/orgs/mine`, so
+      the fix is one card for both: a small per-gym reader the member app shares,
+      the way `consoleOrgs.js` is shared for the gym list. **The two
+      alternatives rejected in the moment, so nobody re-derives them:** a cache
+      that outlives a component, and a second optional shape for a note THREE
+      screens already draw — the second can break a screen Kd has smoked.
 
 - [ ] ⚪ ~~❓ **A MEMBER SEES THEIR GYM'S DAY, NOT THEIR OWN, AND KD READ IT AS A
       BUG.**~~ **NOT A DEFECT — KD CLOSED IT HIMSELF THE SAME EVENING:

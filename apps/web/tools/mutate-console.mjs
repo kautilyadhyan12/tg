@@ -83,6 +83,13 @@ const HOURS_NOTE_SUITE = 'src/components/gym/gymHours.render.test.jsx';
  *  already had one, not a screen of their own. */
 const OVERVIEW_VIEW_SUITE = 'src/pages/console/overviewView.test.js';
 const ATTENDANCE_VIEW_SUITE = 'src/pages/console/attendanceView.test.js';
+/** THE MEMBER'S SIDE OF ATTENDANCE, added 2026-09-03 with Kd's ruling that the
+ *  door refuses outside opening hours (`:30867`). **Two files share the name
+ *  `attendanceView.js` in this repo** — the console's is above, the member's is
+ *  this one — so both the suite and the target below carry `MEMBER_`/`member`
+ *  rather than being told apart by a directory nobody reads in a mutant row. */
+const MEMBER_ATTENDANCE_VIEW_SUITE = 'src/components/gym/attendanceView.test.js';
+const MY_GYMS_SUITE = 'src/pages/myGyms.render.test.jsx';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -142,6 +149,13 @@ const TARGETS = {
   // reaches a screen at all.
   overviewview: { file: resolve(ROOT, 'apps/web/src/pages/console/overviewView.js') },
   overviewnumbers: { file: resolve(ROOT, 'apps/web/src/components/console/OverviewNumbers.jsx') },
+  // THE DOOR SHUTS OUTSIDE OPENING HOURS (Kd :30867), added 2026-09-03. TWO
+  // targets for one guarantee, because a mutant is a claim about ONE call site
+  // (:15770): the view file decides WHETHER the gym is open right now, and the
+  // panel decides whether that answer reaches the button at all — round 1 of
+  // My Gyms (:28976) is the recorded cost of mutating only the first kind.
+  memberattendanceview: { file: resolve(ROOT, 'apps/web/src/components/gym/attendanceView.js') },
+  attendancepanel: { file: resolve(ROOT, 'apps/web/src/components/gym/AttendancePanel.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -2488,6 +2502,69 @@ const MUTANTS = [
     expect: "lets an owner fold the names away",
     from: "  const [open, setOpen] = useState(defaultOpen);",
     to: "  const [open, setOpen] = useState(false);",
+  },
+  {
+    id: 'C180',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE DEFECT KD FOUND AT HIS BROWSER, PUT BACK EXACTLY AS IT WAS. He set his gym to 7-8am, looked at 5:28, and the button was still live: i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am here button was still there. The gate is computed and then thrown away, so the member presses a live-looking control and is answered with a 409 - being refused AFTER pressing is not should not be able to press i am here",
+    expect: "cannot be pressed before the gym opens",
+    from: "            disabled={mark.busy || shutReason !== null}",
+    to: "            disabled={mark.busy}",
+  },
+  {
+    id: 'C181',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE BUTTON GOES DEAD WITH NOTHING BESIDE IT - :29500's C/H-1, which was the sixth panel in this app to grey a control and the first to say why nowhere. The sentence is drawn in the state where there is nothing to say and withheld in the state that needs it, so a member meets a dead control under a card that claims the gym is open",
+    expect: "says why the button is dead",
+    from: "          {shutReason !== null ? (",
+    to: "          {shutReason === null ? (",
+  },
+  {
+    id: 'C182',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE CLOCK STOPS, SO THE GATE IS DECIDED ONCE AT PAINT AND NEVER AGAIN. A member who opens this screen at 06:59 is still refused at 07:05 - blocked from something they are entitled to do, which is :5807's second clause and Critical/High. The interval is the only thing that re-renders this panel between the read landing and the gym's opening minute, and it issues no request",
+    expect: "comes back to life at opening time",
+    from: "    }, 30_000);",
+    to: "    }, 86_400_000);",
+  },
+  {
+    id: 'C183',
+    target: 'memberattendanceview',
+    suite: MEMBER_ATTENDANCE_VIEW_SUITE,
+    why: "A GYM THAT HAS NEVER SAID WHEN IT OPENS IS REFUSED. :26736 rules that no answer is not closed, and GymHoursNote draws such a gym NOTHING - so this hands the member a dead button beside a card claiming no opening times exist. It is the same over-firing O242 holds on the server, and it also refuses every gym whose hours could not be read at all, which is :24141 3a exactly: greying on an unknown refuses somebody something the server would have allowed",
+    expect: "admits a gym that has never said when it opens",
+    from: "  if (mode !== 'open_24h' && mode !== 'scheduled') return null;",
+    to: "  if (mode !== 'open_24h' && mode !== 'scheduled') return GYM_SHUT_NOW_MESSAGE;",
+  },
+  {
+    id: 'C184',
+    target: 'memberattendanceview',
+    suite: MEMBER_ATTENDANCE_VIEW_SUITE,
+    why: "THE WINDOW BECOMES INCLUSIVE AT BOTH ENDS, so the closing minute is inside the session. The server compares opens <= m < closes and sessions may TOUCH - 10:00-12:00 beside 12:00-14:00 is a legal timetable - so an inclusive upper bound puts one minute inside two sessions and the screen admits somebody the door will turn away at exactly closing time",
+    expect: "shuts ON the closing minute",
+    from: "      minute < s.closesMinute,",
+    to: "      minute <= s.closesMinute,",
+  },
+  {
+    id: 'C185',
+    target: 'memberattendanceview',
+    suite: MEMBER_ATTENDANCE_VIEW_SUITE,
+    why: "A DATED CLOSURE STOPS WINNING OVER THE WEEKLY PATTERN. :26684 3 rules that closed today beats the timetable, so a gym shut for Holi with an ordinary Thursday session admits its members and the button disagrees with the card above it, which says Closed today - Holi. The comparison is against a field no closure carries, so it silently never matches",
+    expect: "says CLOSED TODAY over a session that is running",
+    from: "  if ((hours.closures ?? []).some((c) => c?.day === today)) return GYM_CLOSED_TODAY_MESSAGE;",
+    to: "  if ((hours.closures ?? []).some((c) => c?.day === null)) return GYM_CLOSED_TODAY_MESSAGE;",
+  },
+  {
+    id: 'C186',
+    target: 'memberattendanceview',
+    suite: MEMBER_ATTENDANCE_VIEW_SUITE,
+    why: "THE GYM'S MINUTE BECOMES THE READER'S - trap #8 on the one control that BLOCKS somebody. gymToday falls back to the browser's zone for a zone it cannot read, which is right for a min hint on a date box and wrong here, so a member on a phone set to another zone is refused their own gym's open door. Checking the minute first is what makes the date below it safe",
+    expect: "judges the minute on the GYM zone",
+    from: "  const minute = visitMinutes(at.toISOString(), hours?.timezone);",
+    to: "  const minute = at.getHours() * 60 + at.getMinutes();",
   },
 ];
 

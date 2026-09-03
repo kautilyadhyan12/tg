@@ -4,6 +4,9 @@
 // check first are named where they are asserted.
 import { describe, expect, it } from 'vitest';
 import {
+  GYM_CLOSED_TODAY_MESSAGE,
+  GYM_SHUT_NOW_MESSAGE,
+  attendanceShutReason,
   markedSentence,
   mergeVisits,
   sessionWindowLabel,
@@ -223,5 +226,188 @@ describe('merging the read s list with the taps this session', () => {
 
   it('answers the taps when the read gave nothing', () => {
     expect(mergeVisits(null, [tapped])).toEqual([tapped]);
+  });
+});
+
+// KD'S RULING OF 2026-09-03 (`:30867`), IN THE PURE LAYER — *"if a gym has set
+// certain times not 24 hour then if a memeber comes outside of time should not
+// be able to press i am here"*.
+//
+// THE CLOCK IS PASSED IN, WHICH IS THE WHOLE REASON THESE LIVE HERE. A test
+// that let the gate read the wall clock would assert something different at
+// 05:28 than at 07:30 and would be measuring the runner rather than the code —
+// :27094 §2's defect, in the very file it was found in.
+//
+// THE ORDER OF THE BRANCHES IS THE RULING, so the cases below are written to
+// pull them APART rather than to agree with each other: a closure over a live
+// session, a closure over `open_24h`, and a closure over a gym that has said
+// nothing all check that exactly one branch answered.
+describe('whether the button may be pressed', () => {
+  const THURSDAY_0528_UTC = new Date('2026-09-03T05:28:00.000Z');
+  const scheduled = (over = {}) => ({
+    mode: 'scheduled',
+    timezone: 'UTC',
+    clockFormat: '24h',
+    week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
+    closures: [],
+    ...over,
+  });
+
+  // KD'S OWN CASE, THE ONE HE FOUND AT HIS BROWSER: hours 07:00–08:00, and it
+  // is 05:28. This is the assertion the whole card exists for.
+  it('refuses before the gym opens', () => {
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC)).toBe(GYM_SHUT_NOW_MESSAGE);
+  });
+
+  // THE STATE IT IS *NOT* IN WHEN YOU FIND IT (:31295's standing rule). A gate
+  // that simply refuses everybody satisfies every assertion that it fires —
+  // :7104's PG1, and the direction a lock's tests usually miss.
+  it('admits while the session is running', () => {
+    expect(attendanceShutReason(scheduled(), new Date('2026-09-03T07:30:00.000Z'))).toBeNull();
+  });
+
+  // HALF-OPEN, `opens <= m < closes`, copied from the server's own comparison.
+  // Sessions may TOUCH, so an inclusive upper bound would put one minute inside
+  // two sessions — two answers for one visit's `slot_key`.
+  it('opens ON the opening minute and shuts ON the closing minute', () => {
+    expect(attendanceShutReason(scheduled(), new Date('2026-09-03T07:00:00.000Z'))).toBeNull();
+    expect(attendanceShutReason(scheduled(), new Date('2026-09-03T07:59:00.000Z'))).toBeNull();
+    expect(attendanceShutReason(scheduled(), new Date('2026-09-03T08:00:00.000Z'))).toBe(
+      GYM_SHUT_NOW_MESSAGE,
+    );
+  });
+
+  it('admits at the seam between two touching sessions', () => {
+    const hours = scheduled({
+      week: [
+        {
+          weekday: 4,
+          sessions: [
+            { opensMinute: 600, closesMinute: 720 },
+            { opensMinute: 720, closesMinute: 840 },
+          ],
+        },
+      ],
+    });
+    expect(attendanceShutReason(hours, new Date('2026-09-03T12:00:00.000Z'))).toBeNull();
+  });
+
+  it('refuses on a weekday the gym listed no sessions for', () => {
+    // The session sits on the Thursday; this instant is the Friday.
+    expect(attendanceShutReason(scheduled(), new Date('2026-09-04T07:30:00.000Z'))).toBe(
+      GYM_SHUT_NOW_MESSAGE,
+    );
+  });
+
+  // BRANCH 2 — a dated closure WINS over the weekly pattern (:26684 §3), and
+  // the session under it is live, so only the ORDER can produce this answer.
+  it('says CLOSED TODAY over a session that is running', () => {
+    const hours = scheduled({ closures: [{ day: '2026-09-03', note: 'Holi' }] });
+    expect(attendanceShutReason(hours, new Date('2026-09-03T07:30:00.000Z'))).toBe(
+      GYM_CLOSED_TODAY_MESSAGE,
+    );
+  });
+
+  it('says CLOSED TODAY over a gym that is open 24 hours', () => {
+    const hours = {
+      mode: 'open_24h',
+      timezone: 'UTC',
+      clockFormat: '24h',
+      week: [],
+      closures: [{ day: '2026-09-03', note: null }],
+    };
+    expect(attendanceShutReason(hours, THURSDAY_0528_UTC)).toBe(GYM_CLOSED_TODAY_MESSAGE);
+  });
+
+  it('ignores a closure on some other date', () => {
+    const hours = scheduled({ closures: [{ day: '2026-09-04', note: null }] });
+    expect(attendanceShutReason(hours, new Date('2026-09-03T07:30:00.000Z'))).toBeNull();
+  });
+
+  it('admits a gym that is open 24 hours', () => {
+    const hours = { mode: 'open_24h', timezone: 'UTC', clockFormat: '24h', week: [], closures: [] };
+    expect(attendanceShutReason(hours, THURSDAY_0528_UTC)).toBeNull();
+  });
+
+  // BRANCH 1 — UNSET FIRST, BEFORE THE CLOSURE. A gym that has never said when
+  // it opens has said nothing to enforce (:26736), and `GymHoursNote` draws it
+  // NOTHING — so a refusal here would be a dead button beside a card claiming
+  // no opening times exist. The closure in the second case is what makes the
+  // ORDER the only thing that can produce a null.
+  it('admits a gym that has never said when it opens, closure or not', () => {
+    const unset = (closures) => ({ mode: 'unset', timezone: 'UTC', week: [], closures });
+    expect(attendanceShutReason(unset([]), THURSDAY_0528_UTC)).toBeNull();
+    expect(attendanceShutReason(unset([{ day: '2026-09-03', note: null }]), THURSDAY_0528_UTC)).toBeNull();
+  });
+
+  // TRAP #8, AND IT IS THE CASE A SINGLE-ZONE FIXTURE CANNOT SEE. One instant,
+  // two gyms: 05:28 in London is 10:58 in Assam, so a 10:00–11:00 session is
+  // still to come in one and running in the other.
+  it('judges the minute on the GYM zone, not the reader s', () => {
+    const week = [{ weekday: 4, sessions: [{ opensMinute: 600, closesMinute: 660 }] }];
+    expect(attendanceShutReason(scheduled({ week }), THURSDAY_0528_UTC)).toBe(GYM_SHUT_NOW_MESSAGE);
+    expect(
+      attendanceShutReason(scheduled({ week, timezone: 'Asia/Kolkata' }), THURSDAY_0528_UTC),
+    ).toBeNull();
+  });
+
+  // THE SAME TRAP ON THE **DAY**, which is the half a minutes-only fixture
+  // misses: this instant is still Thursday in London and is already Friday in
+  // Assam, so the two gyms read DIFFERENT rows of the week.
+  it('reads the gym s own weekday, not the reader s', () => {
+    const week = [
+      { weekday: 4, sessions: [{ opensMinute: 0, closesMinute: 1440 }] },
+      { weekday: 5, sessions: [] },
+    ];
+    const at = new Date('2026-09-03T20:00:00.000Z');
+    expect(attendanceShutReason(scheduled({ week }), at)).toBeNull();
+    expect(attendanceShutReason(scheduled({ week, timezone: 'Asia/Kolkata' }), at)).toBe(
+      GYM_SHUT_NOW_MESSAGE,
+    );
+  });
+
+  // EVERY UNKNOWN ADMITS, and this is the safety argument rather than a list of
+  // edge cases: greying on an unknown refuses somebody something the server
+  // would have allowed, and they cannot find out which (:24141 §3a).
+  it('admits on everything it cannot decide', () => {
+    // Not read yet, or the read failed.
+    expect(attendanceShutReason(null, THURSDAY_0528_UTC)).toBeNull();
+    expect(attendanceShutReason(undefined, THURSDAY_0528_UTC)).toBeNull();
+    // A mode a NEWER server knows and this bundle does not.
+    expect(attendanceShutReason(scheduled({ mode: 'by_appointment' }), THURSDAY_0528_UTC)).toBeNull();
+    // A zone `Intl` cannot resolve — the case `gymToday` alone would answer in
+    // the BROWSER's zone, which is why the minute is checked before the date.
+    expect(attendanceShutReason(scheduled({ timezone: 'Mars/Olympus' }), THURSDAY_0528_UTC)).toBeNull();
+    expect(attendanceShutReason(scheduled({ timezone: '' }), THURSDAY_0528_UTC)).toBeNull();
+    // A clock that is not a clock.
+    expect(attendanceShutReason(scheduled(), new Date('nonsense'))).toBeNull();
+    expect(attendanceShutReason(scheduled(), null)).toBeNull();
+  });
+
+  // A HALF-WRITTEN SESSION IS NOT A SESSION, and it refuses rather than
+  // admitting: this is the one unknown that does NOT open the door, because the
+  // gym HAS answered and a row we cannot read is not a window we can stand in.
+  // The server would refuse it too — it never stored one.
+  it('refuses on a session whose window cannot be read', () => {
+    expect(attendanceShutReason(scheduled({ week: undefined }), THURSDAY_0528_UTC)).toBe(
+      GYM_SHUT_NOW_MESSAGE,
+    );
+    expect(
+      attendanceShutReason(
+        scheduled({ week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: null }] }] }),
+        new Date('2026-09-03T07:30:00.000Z'),
+      ),
+    ).toBe(GYM_SHUT_NOW_MESSAGE);
+  });
+
+  // NEITHER SENTENCE SPELLS A TIME. The server's does, because a 409 arrives
+  // with no context around it; this screen draws `GymHoursNote` two lines above
+  // the button, on the gym's own clock, and a second spelling of one minute is
+  // the defect `clockLabel`'s header names. A reworded sentence that smuggles
+  // the times back in fails here rather than being noticed in a browser.
+  it('never names a time in either refusal', () => {
+    for (const sentence of [GYM_CLOSED_TODAY_MESSAGE, GYM_SHUT_NOW_MESSAGE]) {
+      expect(sentence).not.toMatch(/\d/);
+    }
   });
 });
