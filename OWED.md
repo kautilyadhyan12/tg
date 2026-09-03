@@ -112,7 +112,7 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       FINDING:** `attendanceHistoryQuerySchema` takes `userId` and `cursor` and
       **nothing else** (`apps/api/src/modules/orgs/schemas.ts`), so no screen can
       ask for "September" — only for "the most recent visits", paged
-      backwards.~~ **THE SERVER HALF SHIPPED 2026-09-03 (DECISIONS `:31951`) AND
+      backwards.~~ **THE SERVER HALF SHIPPED 2026-09-03 (DECISIONS `:31921`) AND
       THIS BLOCKER IS SPENT.** `?from=`/`?to=` are live on
       `GET /v1/orgs/:gymId/attendance/history`, half-open so months tile, in GYM
       DAYS rather than :4434's instants — the reasoning is on the schema and a
@@ -9371,7 +9371,7 @@ file and is stated so nobody reads these as lower priority than they are.
       can overrule.
 
 - [ ] ⚪ **THE MUTATION HARNESS BLAMES THE FILTER WHEN THE DATABASE IS THE
-      PROBLEM — found 2026-09-03 by walking into it (DECISIONS `:31951` §4).**
+      PROBLEM — found 2026-09-03 by walking into it (DECISIONS `:31921` §4).**
       **Read before re-anchoring an `expect` filter that a control step calls
       dead, and before trusting any `mutate-*.mjs` abort message's stated CAUSE.**
       A control run whose suite cannot CONNECT tallies zero tests, and

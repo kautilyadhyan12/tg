@@ -32110,3 +32110,86 @@ standing reason that file matters as much as the repo and the service.
 (:5199's class): I wrote *"a month answers that month and neither neighbour"*
 against a test titled *"a month window answers that month and neither of its
 neighbours"*. Nothing ran on a filter that matched nothing.
+
+### 7 · ADDENDUM — T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS, and the one finding worth keeping is that THIS CARD'S OWN DECISION HAD NO OBSERVER
+
+**Read before trusting a fixture that makes one property observable to leave a
+neighbouring property observable, before writing a `Read before …` phrase and
+treating the warning as the guard, and before citing a `DECISIONS.md` line number
+in `OWED.md`.**
+
+Round 1 on `:31921`, run in a fresh chat. **Zero Critical/High, so the packet
+SHIPS (:5348 rule 1); TWO Low, BOTH FIXED in this round** (:5307 — everything
+found is fixed whatever its severity) **and neither bought another round.** The
+escape hatch did not fire — the previous packet's round 1 (`00c2699`) also found
+zero. Both findings were reproduced against the code before being acted on
+(:23928, :24559, V4): the review is another chat's report and hearsay until run.
+
+**L-1 IS THE FINDING, AND IT IS THE ONE A CARD IS LEAST LIKELY TO CATCH ABOUT
+ITSELF.** §1 above argues at length that the window filters `day` and not
+`marked_at`; the schema carries the argument, and this entry's own `Read before …`
+sentence warns the next chat against "correcting" it. **The reviewer made exactly
+that correction and all 34 tests stayed green.** Reproduced here before anything
+was written: 34/34 under the instants version.
+
+**THE CAUSE IS A GOOD FIXTURE, WHICH IS WHY NOBODY WOULD LOOK.** Every fixture
+writes `marked_at` at noon UTC on the row's own day — deliberately, because §3
+needed a deterministic order and a defaulted `now()` collapses it to a random
+uuid. **That same choice makes `day` and any instant-derived date agree in every
+row the suite creates, so the two implementations are indistinguishable to all of
+it.** The fixture that made the PAGING property observable is the fixture that
+erased the UNIT property. **STANDING: a fixture is built for one guarantee and
+can silently be the reason a neighbouring guarantee has none — when a card's
+central decision is a CHOICE BETWEEN TWO COLUMNS, the fixture must contain a row
+where those columns DISAGREE, or nothing is testing the choice.**
+
+**AND THE SECOND HALF IS SHARPER: A TRIGGER PHRASE IS NOT A GUARD.** :22497's own
+warning is that a trigger list narrows a search and can never clear one; this is
+the same limit one step further in — **a `Read before …` sentence tells a future
+chat the trap exists and stops nothing.** The sentence was written, correctly,
+about this exact edit, and the edit still passed every test. The phrase finds the
+reader; only a mutant refuses the change.
+
+Fixed with a row where the two columns disagree, and it is an ordinary row rather
+than a contrivance: **01:30 on 1 October at an `Asia/Kolkata` gym is
+`day = 2026-10-01` while the instant is still `2026-09-30T20:00:00Z`.** The test
+asserts BOTH directions — September excludes it, October keeps it — because the
+edit moves the visit both ways and a one-sided assertion survives half of it (a
+`from`-only correction drops it from October without adding it to September).
+**`O256` is the permanent guard** (:5348 rule 5, the class rather than the case),
+and it is RED.
+
+**L-2 IS MINE AND IS V2's OWN FAILURE MODE:** `OWED.md` cited this ruling as
+`:31951` in two places; the `##` heading is `:31921` and `:31951` is mid-paragraph
+inside §1. **I greped the number correctly and then transcribed it wrongly** —
+`DECISIONS-INDEX.md` and `DECISIONS-TRIGGERS.md` both had it right, which is what
+makes the slip invisible: `check-decisions-index` walks the INDEX's pointers and
+**does not walk `OWED.md`**, so no guard in this repo could have caught it. Both
+corrected; verified by reading both target lines rather than by trusting the
+report.
+
+**WHAT THE ROUND CHECKED AND FOUND SOUND, so the next one does not re-derive it:**
+the authorisation fork completes and is awaited before the date arguments are
+evaluated, so an unauthorised caller gets 404/403 and never a 400 that discloses
+anything · the predicates are conjunctive filters over rows the fork already
+entitled, so the window cannot widen · tenancy is untouched and still first in the
+`WHERE` · `O209`'s upward re-anchor was independently re-run RED · the docblock's
+index citation (`0019_gym_attendance.sql:176`) is exact · no `sql.raw`, no `any`,
+no non-null assertion in the diff · the paging fixture genuinely can observe a
+dropped filter, and `O252` proves it.
+
+### Round log
+
+**PROVE on the FINAL bytes, all LOCAL (`127.0.0.1:5433`):** `orgs.attendance`
+**35/35** (+1) · that suite with `orgs.routes` + `orgs.hours` + `db.migration` in
+one invocation **237/237** · `@app/shared` **52/52** · `tsc --noEmit` exit 0 on
+`api` · `eslint --max-warnings=0` exit 0 on `apps/api/{src,test,tools}` ·
+`check-harnesses` 25 scripts parse.
+
+**SWEEP, a stated SUBSET of 246 — ten mutants: 10 RED · 0 ALIVE · 0 never ran**,
+controls GREEN and tallied first, restore sha256 byte-exact after every mutant,
+mass-write detector clean (445 fingerprinted rows unchanged).
+
+**THE INSTANTS EDIT WAS REVERTED BY REPLACING THE STRING, NOT BY RESTORING THE
+FILE** — §4(b)'s own lesson, applied in the round that followed it; `git status`
+showed only Kd's pre-existing `CLAUDE.md` edit afterwards.

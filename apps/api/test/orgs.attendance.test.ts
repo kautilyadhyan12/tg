@@ -1586,6 +1586,70 @@ d("gym attendance (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  /** THE CARD'S ONE DECISION, AND UNTIL T3 ROUND 1 IT WAS HELD BY PROSE ALONE.
+   *
+   *  The window filters `day` — the GYM's calendar date, frozen at write time —
+   *  and NOT `marked_at`, the instant. The whole argument is on
+   *  `attendanceHistoryQuerySchema`, `DECISIONS-TRIGGERS.md` carries a phrase
+   *  warning against "correcting" it to instants for consistency with
+   *  `/v1/workouts`, and **the reviewer made exactly that edit and all 34 tests
+   *  stayed green.**
+   *
+   *  **WHY EVERY OTHER FIXTURE IS BLIND TO IT, and it is the reusable part:**
+   *  they all write `marked_at` at noon UTC on the row's own day, so `day` and
+   *  any instant-derived date agree in every row the suite creates. **The
+   *  fixture that makes the paging property observable is the same fixture that
+   *  erases this one** — a fixture can be well built for one guarantee and be
+   *  the reason a neighbouring guarantee has no observer at all.
+   *
+   *  **SO THE ROW HAS TO BE ONE WHERE THE TWO DISAGREE, and it is an ordinary
+   *  row rather than a contrived one**: a member tapping in at 01:30 on 1
+   *  October at a gym in `Asia/Kolkata` is stamped `day = 2026-10-01` while the
+   *  instant is still `2026-09-30T20:00:00Z`. Filing by the instant puts that
+   *  visit in SEPTEMBER — a square in the wrong month, which is the defect §1
+   *  of the entry describes and could not previously prove.
+   *
+   *  **BOTH DIRECTIONS ARE ASSERTED because the mutant moves it BOTH ways**: it
+   *  is added to September AND removed from October, and a test checking only
+   *  one of those would still pass under half of the edit. */
+  it(
+    "a visit whose GYM day and UTC date differ is filed by the gym's day",
+    async () => {
+      const owner = await makeUser("winunit-owner");
+      const member = await makeUser("winunit-member");
+      // `Asia/Kolkata` is UTC+5:30, so any gym-local instant before 05:30 falls
+      // on the PREVIOUS UTC date — which is the disagreement this test needs.
+      const org = await makeOrg(owner.cookies, "Window Unit Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      // 01:30 ON 1 OCTOBER, GYM TIME. `day` is what the mark route would stamp
+      // for that instant, so this is a row the product really produces.
+      await sql`
+        INSERT INTO gym_attendance
+          (gym_id, user_id, marked_by_user_id, day, marked_at, method, hours_status, slot_key)
+        VALUES (${org.org.id}, ${member.userId}, ${member.userId}, '2026-10-01'::date,
+                '2026-09-30T20:00:00Z'::timestamptz, 'manual', 'hours_unset', 'hours_unset')`;
+
+      // A CONTROL ROW WHOSE TWO DATES AGREE, so neither assertion below can pass
+      // by the window being broken in some wholesale way.
+      await visitOn(org.org.id, member.userId, "2026-09-15");
+
+      // SEPTEMBER HOLDS ONLY THE SEPTEMBER VISIT. Filed by `marked_at`, the
+      // 1 October visit lands here too — the wrong square.
+      expect(
+        daysOf(await readHistory(org.org.id, member.cookies, "?from=2026-09-01&to=2026-10-01")),
+      ).toEqual(["2026-09-15"]);
+
+      // AND OCTOBER STILL HAS IT. This is the half that a `from`-only correction
+      // breaks: by the instant, the visit is before October begins and vanishes
+      // from both months.
+      expect(
+        daysOf(await readHistory(org.org.id, member.cookies, "?from=2026-10-01&to=2026-11-01")),
+      ).toEqual(["2026-10-01"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   /** THE WINDOW MUST NOT LOOSEN THE TENANCY CLAUSE IT SITS BESIDE.
    *
    *  A date predicate is added to the same `WHERE` that carries `gym_id` and

@@ -4769,6 +4769,36 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   **9 RED, 0 ALIVE** (O248–O255 new, O209 re-anchored upward onto
   `FROM gym_attendance`). **No smoke — no screen reads it yet; T3 UNRUN.**
 
+- **:32114** — 2026-09-03 — **THE DATE WINDOW, T3 ROUND 1: ZERO Critical/High,
+  THE PACKET SHIPS — and the one finding is that THE CARD’S OWN DECISION HAD NO
+  OBSERVER.** Addendum inside `:31921`. **Read before trusting a fixture that
+  makes one property observable to leave a neighbouring property observable,
+  before writing a `Read before …` phrase and treating the warning as the guard,
+  and before citing a `DECISIONS.md` line number in `OWED.md`.**
+  Two Low, **BOTH FIXED in the round** (:5307), neither buying another; escape
+  hatch not fired (`00c2699` round 1 also found zero). **L-1: the reviewer made
+  the exact edit this entry’s own trigger phrase warns against — filing the
+  window by `marked_at` instead of `day` — and ALL 34 TESTS STAYED GREEN**
+  (reproduced before acting, V4). **The cause is a GOOD fixture:** every row
+  writes `marked_at` at noon UTC on its own day — needed for §3’s deterministic
+  paging order — so the two columns agree everywhere and the two implementations
+  are indistinguishable. **STANDING: when a card’s decision is a CHOICE BETWEEN
+  TWO COLUMNS, the fixture must hold a row where those columns DISAGREE.** And
+  the sharper half: **a trigger phrase is not a guard** — :22497’s limit one step
+  in; the sentence finds the reader, only a mutant refuses the change. Fixed with
+  an ordinary row (01:30 on 1 Oct in `Asia/Kolkata` is `day` 2026-10-01 at
+  instant `2026-09-30T20:00:00Z`), asserted in BOTH directions because a
+  `from`-only correction drops it from October without adding it to September;
+  **O256** is the permanent guard. **L-2 is mine and is V2’s own failure mode:**
+  `OWED.md` cited the ruling as `:31951` twice — mid-paragraph — against the
+  `:31921` heading, and `check-decisions-index` **does not walk `OWED.md`**, so no
+  guard here could catch it. Checked sound: the authorisation fork completes
+  before the date arguments evaluate; the predicates cannot widen; O209’s upward
+  re-anchor independently RED. `api` 237/237 LOCAL · `shared` 52/52 · SWEEP a
+  stated subset of 246: **10 RED, 0 ALIVE**. **The instants edit was reverted by
+  replacing the STRING, not the FILE** — §4(b)’s lesson applied in the very next
+  round. **No smoke — no screen reads it yet.**
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

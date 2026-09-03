@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE DATE WINDOW, T3 ROUND 1 — ZERO Critical/High, THE PACKET SHIPS.
+      DECISIONS `:32114` (addendum inside `:31921`). Two Low, BOTH FIXED in the
+      round and logged in `BACKLOG.md`; neither bought another round (:5348
+      rule 1). Escape hatch NOT fired — `00c2699`'s round 1 also found zero.
+      **START HERE: the server half is DONE and reviewed. The next work is the
+      CALENDAR'S WEB HALF — the month grid with the fire — which is what the
+      `OWED.md` line's remaining half is.**
+
+  1. **L-1 IS THE ONE TO CARRY, AND IT IS THE CARD'S OWN DECISION LEFT
+     UNGUARDED.** This entry argues at length that the window filters `day` and
+     not `marked_at`, and its own `Read before …` phrase warns the next chat
+     against "correcting" it. **The reviewer made exactly that edit and all 34
+     tests stayed green.**
+  2. **THE CAUSE IS A GOOD FIXTURE, WHICH IS WHY NOBODY WOULD LOOK.** Every row
+     writes `marked_at` at noon UTC on its own day — needed for the paging
+     test's deterministic order — so `day` and any instant-derived date agree
+     everywhere and the two implementations are indistinguishable to the whole
+     suite. **STANDING: when a decision is a CHOICE BETWEEN TWO COLUMNS, the
+     fixture must hold a row where those columns DISAGREE.**
+  3. **AND THE SHARPER HALF: A TRIGGER PHRASE IS NOT A GUARD** — :22497's limit
+     one step further in. The sentence finds the reader; only a mutant refuses
+     the change. Fixed with an ordinary row (01:30 on 1 Oct in `Asia/Kolkata` is
+     `day` 2026-10-01 at instant `2026-09-30T20:00:00Z`), asserted in BOTH
+     directions because a `from`-only correction drops it from October without
+     adding it to September. **O256** is the permanent guard.
+  4. **L-2 IS MINE AND NO GUARD HERE COULD CATCH IT:** `OWED.md` cited the
+     ruling as `:31951` twice against the `:31921` heading, and
+     `check-decisions-index` walks the INDEX's pointers and **not `OWED.md`**.
+  5. **THE INSTANTS EDIT WAS REVERTED BY REPLACING THE STRING, NOT THE FILE** —
+     §4(b)'s own lesson applied in the very next round.
+
+PROVE: on the FINAL bytes, all LOCAL (`127.0.0.1:5433`, creds `aihg:aihg`).
+       `orgs.attendance` 35/35 (+1) · that suite with `orgs.routes` +
+       `orgs.hours` + `db.migration` in one invocation 237/237 · `@app/shared`
+       52/52 · tsc exit 0 on api · eslint `--max-warnings=0` exit 0 on
+       `apps/api/{src,test,tools}` · the three ROOT guards pass (harnesses 25,
+       index 284 pointers, triggers up to date).
+       **SWEEP a stated SUBSET of 246: 10 mutants, 10 RED, 0 ALIVE, 0 never
+       ran**, controls GREEN and tallied first, restores sha256 byte-exact,
+       mass-write detector clean (445 rows).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NO SMOKE on any of it, and none was offered**: nothing reads these
+       parameters yet, so there is nothing to click (:26012's shape).
+       **NEXT, in order: (a)** the calendar's WEB half —
+       `components/progress/WorkoutCalendar.jsx` is the shape to follow and
+       already imports `Flame`; 🔥 already means a STREAK (:27900), so the symbol
+       is not invented. The server now answers a month, so nothing blocks it.
+       **(b)** folding the member card's Mon–Sun list — **tap, never hover**
+       (:26586), `ConsoleSection`'s `defaultOpen` and NOT `forceOpen` (:31295).
+       **THE SMOKE SHEET IS STILL STALE** — thirteen commits now.
+```
+
+```
 TASK: THE ATTENDANCE HISTORY LEARNS A DATE WINDOW — the server half of Kd's
       calendar. DECISIONS `:31921`. `?from=`/`?to=` on
       `GET /v1/orgs/:gymId/attendance/history`, half-open, both optional.

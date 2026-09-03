@@ -3057,6 +3057,15 @@ const MUTANTS = [
     from: '    to: query.to === undefined ? undefined : requireCalendarDate(query.to),',
     to: '    to: query.to,',
   },
+  {
+    id: 'O256',
+    target: 'repo',
+    suite: ATTENDANCE_SUITE,
+    why: "THE WINDOW IS FILED BY THE INSTANT INSTEAD OF THE GYM'S DAY - the card's ONE decision, undone by the exact edit DECISIONS-TRIGGERS.md warns against, and it is what a later chat does reaching for consistency with /v1/workouts. A member tapping in at 01:30 on 1 October in Asia/Kolkata is stamped day = 2026-10-01 while the instant is still 2026-09-30T20:00:00Z, so filing by marked_at draws that visit on a SEPTEMBER square - the window and the grid answering differently about one visit. ADDED BY T3 ROUND 1, which made this edit and watched all 34 tests stay green: every other fixture writes marked_at at noon UTC on its own day, so the two dates agree in every row the suite creates",
+    expect: "a visit whose GYM day and UTC date differ is filed by the gym's day",
+    from: '      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)\n      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)',
+    to: '      AND (${input.from ?? null}::timestamptz IS NULL OR marked_at >= ${input.from ?? null}::timestamptz)\n      AND (${input.to ?? null}::timestamptz IS NULL OR marked_at < ${input.to ?? null}::timestamptz)',
+  },
 ];
 
 

@@ -3567,3 +3567,38 @@ a finding. **None of the six bought another round; all six are fixed here.**
       shared type *"belongs to its own change"* — a deferral, in prose, with no
       line anywhere. **The deferral rule is absolute and I broke it in the same
       session I cited it twice.** Now `OWED.md`, this commit.
+
+## 2026-09-03 — the attendance date window, T3 round 1 (DECISIONS `:31921`)
+
+Zero Critical/High, so the packet SHIPS (:5348 rule 1). Two Low, **both fixed in
+this round** (:5307 — everything found is fixed whatever its severity), neither
+buying another round.
+
+- [x] **L-1 · THE CARD'S ONE DECISION WAS HELD BY PROSE ALONE, and it is the
+      highest-value finding on the card** — `apps/api/src/modules/orgs/repo.ts`.
+      The window filters `day` (the gym's own date) and not `marked_at` (the
+      instant); the schema argues it at length and `DECISIONS-TRIGGERS.md` carries
+      a phrase warning against "correcting" it for consistency with
+      `/v1/workouts`. **The reviewer made exactly that edit and all 34 tests
+      stayed green** — reproduced here before acting on it (V4), 34/34 under the
+      instants version.
+      **WHY EVERY FIXTURE WAS BLIND: they all write `marked_at` at noon UTC on
+      the row's own day**, so `day` and any instant-derived date agree in every
+      row the suite creates. **The fixture that makes the PAGING property
+      observable is the same fixture that erases the UNIT property** — a fixture
+      can be well built for one guarantee and be the reason a neighbouring one
+      has no observer at all.
+      **Fixed with a row where the two disagree**, and it is an ordinary row:
+      01:30 on 1 October at an `Asia/Kolkata` gym is `day = 2026-10-01` while the
+      instant is still `2026-09-30T20:00:00Z`. New test asserts BOTH directions
+      (September excludes it, October keeps it) because the mutant moves it both
+      ways and a one-sided assertion survives half the edit. **Mutant `O256`**
+      is the permanent guard (:5348 rule 5 — the class, not the case).
+- [x] **L-2 · a DECISIONS pointer wrong in two places, and it is mine** —
+      `OWED.md:115` and `OWED.md:9374` cited the ruling as `:31951`, which is
+      mid-paragraph inside §1; the `##` heading is at **`:31921`**. Verified by
+      reading both lines rather than by trusting the report.
+      `DECISIONS-INDEX.md` and `DECISIONS-TRIGGERS.md` had it right, so the
+      index guard could not catch it — **it only checks pointers in the index,
+      and `OWED.md` is not walked.** V2's own failure mode: I greped the number
+      correctly and then transcribed it wrongly.
