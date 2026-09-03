@@ -1,6 +1,49 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: BOTH OF TODAY'S CARDS PASS AT KD'S BROWSER. DECISIONS `:31633`.
+      **NINE STEPS RAN, ONE DID NOT, AND NOTHING TICKS.**
+      **START HERE: T3 round 1 is UNRUN on `:31352` AND `:31508`** — the prompt
+      is in the previous session's last message and covers both commits.
+
+  1. **`:31352` steps 1–5 PASS.** The button faded at **Thursday 05:17
+     Mendoza** against a 07:40 opening — Kd's own complaint reproduced and
+     REFUSED — with the opening times beside it and his *"Pressing this marks
+     your attendance at the gym."* line above it. His screenshot also shows a
+     SECOND gym card whose button is LIVE because that gym set no hours: **the
+     admits-on-unknown arm, observed without anybody asking for it.**
+  2. **`:31508` 6a–6d PASS.** Week restored · 24 hours draws no week · **"Set
+     opening times" hands the whole timetable back, nothing retyped** · the
+     faded button returns.
+  3. **THE CLOSED-DAY REFUSAL HAS NEVER BEEN ON A SCREEN, and this is the one
+     thing to carry.** The only step covering it was the ORIGINAL step 6, which
+     Kd never reached — it opened by asking him to leave 24-hour mode, which is
+     where he lost his timetable and stopped — and the replacement 6a–6d contain
+     no closure at all. It has a render case and **C185**; it has no browser.
+     **:23535 is the precedent: an operator's "all passed" covers what they
+     DID.** One step, one minute, still owed.
+  4. **NOTHING TICKS, AND NOT ONLY FOR THAT REASON** — T3 would hold both lines
+     open regardless.
+
+PROVE: no code in this commit; records only. **The pass rests on:** the `owner`
+       gym on the Neon dev branch (`America/Mendoza`, `12h`), its week as
+       restored at `:31508` §6; api pid 23112 started 14:48:19 against sources
+       last written 14:36:36, so the running bytes were this commit's (`tsx` has
+       no watch); web restarted after it. **`@app/shared` is consumed from
+       SOURCE** (`"exports": "./src/index.ts"`), which is why the new contract
+       reached his browser with no build step.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **T3 ROUND 1 ON BOTH CARDS, and the closure step.**
+       **THE THREE KD APPROVED AND NOBODY HAS BUILT, all on `OWED.md`:** the
+       calendar for "Days you came" — **which needs a date window on the
+       member's attendance history first** — the fire on days attended, and
+       folding the member card's Mon–Sun list (**tap, never hover**: :26586).
+       **THE SMOKE SHEET IS NINE COMMITS STALE** and neither of today's two
+       sheets was ever written into it — both were handed over in chat.
+```
+
+```
 TASK: "OPEN 24 HOURS" STOPS DESTROYING A GYM'S TIMETABLE. DECISIONS `:31508`,
       a KD RULING made after a smoke step I wrote destroyed HIS.
       **KD APPROVED FOUR THINGS AND ONE IS BUILT. THE OTHER THREE HAVE `OWED.md`

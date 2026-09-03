@@ -31629,3 +31629,80 @@ attendance history takes only a cursor, so no screen can ask for "September".
 `apps/web/src/pages/console/{hoursView.js,hoursView.test.js}` ·
 `apps/web/src/components/console/openingHours.render.test.jsx` ·
 `apps/web/tools/mutate-console.mjs` · records. **No migration.**
+
+## 2026-09-03 — BOTH OF TODAY'S CARDS PASS AT KD'S BROWSER, AND THE ONE STEP NOBODY RAN IS NAMED RATHER THAN ROLLED INTO THE "all passed"
+
+**Read before writing "the smoke passed" for either card, before ticking
+`OWED.md`'s "I'm here" line, before citing the closed-day refusal as verified,
+and before reading an operator's "all passed" as covering a step that was
+abandoned mid-way.**
+
+Kd ran both sheets at his own browser on 2026-09-03 and reported **"smoke till 5
+passed"** and then **"all passed"**. **Nine steps ran. One did not, and it is the
+one this entry exists to name.**
+
+### 1 · WHAT ACTUALLY RAN, STEP BY STEP
+
+**`:31352`, the "I'm here" button — steps 1–5 PASSED**, on the servers this
+session started against the Neon dev branch:
+
+1. `My Gyms` draws the `owner` gym card.
+2. **Attendance** and *"Pressing this marks your attendance at the gym."* — Kd's
+   own addition, on screen (his screenshot is the evidence, and it also shows a
+   SECOND gym card whose button is live because that gym has no hours set — the
+   admits-on-unknown arm, unasked for and observed).
+3. The button **faded and unclickable**, with *"Your gym isn't open right now, so
+   attendance isn't open."* — his gym was at **Thursday 05:17 Mendoza** against
+   a 07:40 opening, which is his original complaint reproduced and refused.
+4. *"Today: 7:40 AM – 9:40 AM"* on the same card: the member is told when to come
+   back, which is what lets the refusal name no time (`:31352` §3).
+5. 24-hour → the button **bright and pressable**, and the tap recorded.
+
+**`:31508`, the timetable — 6a–6d PASSED** on the restarted servers: the restored
+week is there · 24 hours draws no week · **"Set opening times" hands the whole
+timetable back, nothing retyped** · and the faded button returns.
+
+### 2 · THE STEP THAT NEVER RAN, AND WHY IT IS WRITTEN DOWN INSTEAD OF ASSUMED
+
+**The CLOSED-DAY refusal has never been on a screen.** The original step 6 was
+the only one covering it — add a closure for today, expect *"Your gym is closed
+today, so attendance isn't open."* — and **Kd never reached it**: the step began
+by asking him to switch off 24 hours, which is where he lost his timetable and
+stopped. The replacement 6a–6d are about the timetable and **contain no closure
+at all**.
+
+**So one of the two refusal sentences is unobserved, and it is the one whose
+branch ORDER matters most** — a dated closure wins over a running session
+(:26684 §3), and that ordering is the thing a browser would catch if the client
+and the server disagreed about which day it is at the gym. It has a render case
+and a mutant (**C185**); it does not have a browser.
+
+**:23535 IS WHY THIS PARAGRAPH EXISTS.** That day a chat read Kd's *"all
+passed"* as covering three steps he had never run, ticked two 🔴 lines on them,
+and he had to quote the steps back — *"these are not tested"*. **The tell then was
+that a step needed the CHAT to act; the tell here is that a step was ABANDONED
+mid-way and its replacement had a different subject.** Both are the same rule: an
+operator's summary covers what they did, and knowing what that was is the chat's
+job, not theirs.
+
+### 3 · NOTHING TICKS, AND THE REASON IS NOT ONLY THE MISSING STEP
+
+`OWED.md`'s 🔴 line names two gates — the click-through and then T3 round 1 —
+and **T3 is UNRUN on both cards**. So the line would stay open on this commit
+even if every step had run. The missing closure step is recorded on it in its own
+words rather than folded into "the smoke passed".
+
+### Round log
+
+**No code changed in this commit.** Records only: this entry, its index line, the
+`OWED.md` line's evidence, and the handoff.
+
+**What the pass rests on, named so it cannot be over-quoted later:** the `owner`
+gym on the Neon dev branch, timezone `America/Mendoza`, `clock_format` `12h`,
+its week as restored at `:31508` §6; api pid 23112 started 14:48:19 against
+sources last written 14:36:36 (so the running bytes are this commit's, `tsx`
+having no watch); web restarted after it. **`@app/shared` is consumed from
+source** (`"exports": "./src/index.ts"`, no build step), which is why the new
+contract reached his browser without a build.
+
+**Both cards' T3 round 1 is owed and the prompt has been handed over.**

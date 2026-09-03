@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,566 lines, MEASURED 2026-09-03 and not estimated**
-(1,107 + 1,385 + 74). **THE EIGHTEENTH MEASUREMENT IS A KD RULING, AND IT COSTS
+**ALWAYS-READ TOTAL: 2,570 lines, MEASURED 2026-09-03 and not estimated**
+(1,111 + 1,385 + 74). **THE NINETEENTH MEASUREMENT IS A SMOKE RECORD: +4, all of
+them trigger phrases, §1 and §2 unmoved** — it went to §1B, where :24813 sends
+every card record. **The eighteenth is immediately below and cost 45**, and the
+pair inside one afternoon is the cleanest demonstration the split has produced:
+same subsystem, same day, a ruling read and a record pointed at.
+**THE EIGHTEENTH MEASUREMENT IS A KD RULING, AND IT COSTS
 WHAT A RULING COSTS: +45, of which 40 are §1 and 5 are trigger phrases.**
 Compare the +5 immediately below it, a whole card whose record went to §1B. **The
 two together, taken the same afternoon on the same subsystem, are the split
@@ -4638,6 +4643,27 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   FIRST `toFake` list and silently drops the new one** — probed 0 vs 2 — so a
   test failed red while the code was right.
   `web` 1697/1697; SWEEP C180–C186, **7 RED, 0 ALIVE**. **No smoke; T3 UNRUN.**
+  **SMOKED 2026-09-03 — steps 1–5 PASS at Kd's browser (`:31633`), and the
+  CLOSED-DAY refusal is the one step nobody ran.**
+- **:31633** — 2026-09-03 — **BOTH OF TODAY'S CARDS PASS AT KD'S BROWSER, AND
+  THE ONE STEP NOBODY RAN IS NAMED rather than rolled into the "all passed".**
+  **Read before writing "the smoke passed" for either card, before ticking
+  `OWED.md`'s "I'm here" line, before citing the closed-day refusal as verified,
+  and before reading an operator's "all passed" as covering a step that was
+  abandoned mid-way.** Nine steps ran: `:31352` steps 1–5 (the button faded at
+  **Thursday 05:17 Mendoza** against a 07:40 opening — his own complaint
+  reproduced and refused — plus his *"Pressing this marks your attendance"* line,
+  and a second gym card whose button is LIVE because that gym set no hours, which
+  is the admits-on-unknown arm observed unasked) and `:31508` 6a–6d (the
+  timetable survives the 24-hour round trip, nothing retyped).
+  **THE CLOSED-DAY REFUSAL HAS NEVER BEEN ON A SCREEN.** The only step covering
+  it was the original step 6, and Kd never reached it — that step opened by
+  asking him to leave 24-hour mode, which is where he lost his timetable and
+  stopped; the replacement 6a–6d contain no closure at all. It has a render case
+  and **C185**; it does not have a browser. **:23535 is why it is written down**
+  — there a chat read *"all passed"* as covering three unrun steps and ticked two
+  🔴 lines on them. **NOTHING TICKS, and not only for that reason: T3 round 1 is
+  UNRUN on both cards.**
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

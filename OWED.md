@@ -41,8 +41,16 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       whenever the gym is shut, it comes back to life at opening time without a
       reload, and every state the screen cannot decide leaves it PRESSABLE so
       the server keeps the last word (:24141 §3a). `web` 1697/1697; mutants
-      C180–C186, 7 RED. **What is left is the two gates, in this order: Kd runs
-      the click-through, then a fresh chat runs T3 round 1.**
+      C180–C186, 7 RED.
+      **SMOKED 2026-09-03 AND IT DOES NOT TICK — steps 1–5 PASS at Kd's browser
+      (`:31633`): the button faded at Thursday 05:17 Mendoza against a 07:40
+      opening, which is his own complaint reproduced and refused, with the
+      opening times beside it and his "Pressing this marks your attendance"
+      line. **THE CLOSED-DAY REFUSAL WAS NEVER SEEN** — the only step covering it
+      was abandoned mid-way when he lost his timetable, and its replacement had a
+      different subject (`:23535`'s rule: an operator's "all passed" covers what
+      they did). **What is left: that one closure step, then a fresh chat runs
+      T3 round 1** — and T3 alone would hold this line open anyway.
       Found by him at his own browser 2026-09-03:
       *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am
       here button was still there which i told you to disable if it does not
