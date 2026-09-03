@@ -2,8 +2,10 @@
 
 ```
 TASK: KD FOUND TWO THINGS AT HIS BROWSER AND STOPPED THE SESSION. NOTHING WAS
-      BUILT FOR THEM — both are on `OWED.md` and this is the handoff.
+      BUILT FOR EITHER — both are on `OWED.md` and this is the handoff. **ONE of
+      them turned out to be his own test data and he closed it himself.**
       **START HERE. Do not start by rewriting the smoke sheet.**
+      **ITEM 2 IS ALREADY CLOSED BY KD — ITEM 1 IS THE ONLY THING TO BUILD.**
 
   1. 🔴 **THE "I'M HERE" BUTTON IS STILL SHOWN OUTSIDE OPENING HOURS.** His
      words: *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i
@@ -16,15 +18,19 @@ TASK: KD FOUND TWO THINGS AT HIS BROWSER AND STOPPED THE SESSION. NOTHING WAS
      gym's hours and today's closure, or whether the member's card needs a read
      it does not have. The refusal SENTENCE already exists on the server
      (`gymClosedMessage`) — do not write a second spelling of it.
-  2. ❓ **"it is showing wednesaday but it is thrusday" — MEASURED, AND IT MAY
-     NOT BE A BUG.** The `owner` gym's timezone is **`America/Mendoza`**: it was
-     **21:11 Wednesday there** while his clock read 05:28 Thursday. The screen
-     is showing the GYM's day, which every ruling on this product requires
-     (trap #8, :26469 §5). **Two separate questions: (a) is that gym's timezone
-     simply wrong for a test gym he made — ask him; (b) even when right, the
-     screen never says whose clock it is on, which is a real copy gap either
-     way.** **DO NOT "fix" it by switching to the reader's zone.**
-
+  2. ⚪ **"it is showing wednesaday but it is thrusday" — NOT A DEFECT, AND KD
+     CLOSED IT HIMSELF THE SAME EVENING: *"i agree my fault"*.** He had set that
+     test gym to Argentina. The `owner` gym's timezone is **`America/Mendoza`**,
+     where it was **21:11 Wednesday** while his clock read 05:28 Thursday. **No
+     code was wrong and none was changed.** The measurement is kept because it
+     is the PROOF the gym-day rule works (trap #8, :26469 §5), not a bug report.
+     **Do NOT re-open this with him and do NOT "fix" it by switching to the
+     reader's zone.**
+     **ONE SMALL THING SURVIVES AND IS HIS TO RULE, not a card:** even when the
+     zone is right, the screen never says WHOSE CLOCK it is on. About one
+     sentence of copy — the console's own attendance screen already says *"Times
+     are your gym's own"* — and it belongs beside the next member-facing
+     attendance change rather than on its own.
 STATE: everything else is committed and green. `web` 1671/1671, `api` 767/767
        local, three root guards green, SWEEP C155-C179 22 RED and O241-O243
        3 RED. Servers were left running and will die with the laptop.
