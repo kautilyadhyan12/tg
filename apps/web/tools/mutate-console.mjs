@@ -2714,6 +2714,43 @@ const MUTANTS = [
     from: '  const leading = leadingWeekday === null ? 0 : leadingWeekday - 1;',
     to: '  const leading = leadingWeekday === null ? 0 : leadingWeekday;',
   },
+  // ── KD'S THREE CORRECTIONS AT HIS OWN BROWSER (2026-09-03) ──────────────
+  {
+    id: 'C203',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE CALENDAR IS OPEN BY DEFAULT AGAIN - the shape Kd looked at and rejected in as many words: a full month under a two-line gym card fills the page, and /my-gyms draws one per gym so a member of three gets three of them. It also costs a request per gym on every page load against a 600/hour bucket shared with the console, for a thing most visits never look at",
+    expect: 'arrives CLOSED, with no month on screen',
+    from: '  const [calendarOpen, setCalendarOpen] = useState(false);',
+    to: '  const [calendarOpen, setCalendarOpen] = useState(true);',
+  },
+  {
+    id: 'C204',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE FOLD OPENS AND WILL NOT CLOSE, which is :31295 exactly - a control Kd found dead at his browser because one operator overrode the tap, with both its comments claiming it worked. A two-state control is asserted on the state it is NOT in when you find it, and that entry is the reason this row exists rather than a test that merely watches it open",
+    expect: 'opens on a tap and closes again on the next one',
+    from: '              setCalendarOpen((open) => !open);',
+    to: '              setCalendarOpen(true);',
+  },
+  {
+    id: 'C205',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE MONTH IS READ WHETHER OR NOT ANYBODY OPENED THE CALENDAR, so folding it away saves the page nothing: every gym card still spends a request on a month most members never look at. The fold would be decoration over the same cost, which is half of what Kd was objecting to",
+    expect: 'asks the server for nothing until it is opened',
+    from: '    if (gymId === null || month === null || !everOpened) return undefined;',
+    to: '    if (gymId === null || month === null) return undefined;',
+  },
+  {
+    id: 'C206',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE DATE COMES OUT OF THE FIRE AND THE SQUARE IS A PICTURE. Kd asked for the date IN THE MIDDLE OF THE SYMBOL in white; a flame with no number in it is a day nobody can name, and anybody not looking at pixels loses the date entirely. The number is rendered text rather than drawn for exactly that reason",
+    expect: 'keeps the day number readable inside the fire',
+    from: '        <span\n          className="font-black tabular-nums leading-none text-white"\n          style={{ fontSize: \x270.6rem\x27 }}\n        >\n          {day}\n        </span>',
+    to: '        <span className="sr-only">{day}</span>',
+  },
 ];
 
 const abort = (msg) => {

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Flame, Loader2, X } from 'lucide-react';
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Loader2,
+  X,
+} from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { gymToday } from '../../pages/console/hoursView';
 import {
@@ -168,6 +177,59 @@ function DaySheet({ row, onClose }) {
 
 const WEEK_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+/** HOW WIDE THE MONTH IS ALLOWED TO BE — Kd, at his own browser: *"it looks
+ *  disgusting covering alsmot the whole page ... the calender need to be compact
+ *  small"*.
+ *
+ *  **THE CELLS WERE `aspect-square` IN A FULL-WIDTH CARD, WHICH IS WHY IT ATE
+ *  THE PAGE.** On his screen that card is ~950px, so each square came out over a
+ *  hundred pixels tall and six rows filled everything below the button. Capping
+ *  the GRID rather than the cell keeps the squares square and makes the month
+ *  ~36px a day — a block you take in at a glance instead of scrolling past. The
+ *  weekday heads take the same cap or the columns stop lining up. */
+const CALENDAR_MAX_WIDTH = '17rem';
+
+/** ONE DAY SOMEBODY CAME — Kd's fire, and all three of his corrections are here.
+ *
+ *  *"the burn sysmbol so small have to use a maginfying glass"* · *"the burn
+ *  symbol should be bright with color"* · *"in the middle of the symbol should
+ *  be the date with white color"*.
+ *
+ *  **IT WAS A 10px HAIRLINE OUTLINE UNDER THE NUMBER.** Now the flame FILLS the
+ *  square and is filled with the colour rather than stroked in it, and the date
+ *  sits inside it in white — one mark instead of two competing ones.
+ *
+ *  **THE NUMBER IS NUDGED DOWN, and that is the flame's shape rather than a
+ *  fudge**: a flame's mass is in its lower bulge, so the optical centre is below
+ *  the geometric one and a number centred by the box reads as floating in the
+ *  tip. **`aria-hidden` on the icon and the number in real text** — the date has
+ *  to survive for anybody not looking at pixels, which is the thing a picture of
+ *  a number would lose. */
+function CameDay({ day }) {
+  return (
+    <span className="relative block w-full h-full">
+      <Flame
+        className="w-full h-full"
+        style={{ color: '#FF8A1F' }}
+        fill="#FF8A1F"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <span
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ paddingTop: '0.3em' }}
+      >
+        <span
+          className="font-black tabular-nums leading-none text-white"
+          style={{ fontSize: '0.6rem' }}
+        >
+          {day}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 export default function AttendancePanel({ gym }) {
   const gymId = gym?.id ?? null;
   const [mark, setMark] = useState({ busy: false, done: null, error: null });
@@ -205,6 +267,23 @@ export default function AttendancePanel({ gym }) {
   // function of the gym's zone and this member's presses, and computing it in an
   // effect was both a cascading render and a second place for it to live.
   const [monthStep, setMonthStep] = useState(null);
+  // **THE CALENDAR IS FOLDED AWAY UNTIL SOMEBODY ASKS FOR IT — Kd, at his own
+  // browser, 2026-09-03:** *"the calender need to be compact small and only
+  // appear when click may be have a calendar symbol big that the user can see
+  // properly"*. A full month opened by default filled the whole page under a
+  // two-line gym card, which is the shape he was shown and rejected.
+  //
+  // **CLOSED IS THE STARTING STATE AND IT MUST BE ABLE TO GO BACK THERE**
+  // (:31295 — a dropdown that arrived open and could not be closed, because one
+  // `||` overrode the tap). Nothing forces this open; it is `useState` and the
+  // header row is its only writer.
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  // **AND WHETHER IT HAS EVER BEEN OPENED, WHICH IS A DIFFERENT QUESTION.** The
+  // read is gated on THIS rather than on `calendarOpen`, so folding the calendar
+  // away and opening it again does not spend another request on a month already
+  // in hand — the shared 600/hour bucket, again. Two states because they mean
+  // two things; collapsing them into one re-reads on every open.
+  const [everOpened, setEverOpened] = useState(false);
   // THE DAY WHOSE TIMES ARE OPEN, or null. Holds the DATE and not the row, so a
   // month re-read cannot leave a stale row on screen — the row is looked up out
   // of the current grid at render.
@@ -337,7 +416,11 @@ export default function AttendancePanel({ gym }) {
   // visit, which is the defect the server half was arranged to prevent
   // (DECISIONS `:31921` §1), arriving on the client instead.
   useEffect(() => {
-    if (gymId === null || month === null) return undefined;
+    // **NOTHING IS ASKED FOR UNTIL THE CALENDAR HAS BEEN OPENED.** It is folded
+    // away by default (Kd, 2026-09-03), so a member who never opens it costs the
+    // server nothing at all — and `/my-gyms` draws one of these per gym, so on a
+    // member of three that is three requests saved on every page load.
+    if (gymId === null || month === null || !everOpened) return undefined;
     const window = monthWindow(month);
     if (window === null) return undefined;
     let cancelled = false;
@@ -369,7 +452,7 @@ export default function AttendancePanel({ gym }) {
     return () => {
       cancelled = true;
     };
-  }, [gymId, month]);
+  }, [gymId, month, everOpened]);
 
   const markPresent = async () => {
     if (gymId === null) return;
@@ -542,9 +625,54 @@ export default function AttendancePanel({ gym }) {
           connection reads as a broken control. */}
       {grid !== null ? (
         <div className="mt-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          {/* THE FOLD — Kd, 2026-09-03: *"only appear when click may be have a
+              calendar symbol big that the user can see properly"*. The whole row
+              is the control rather than a small chevron beside a heading,
+              because on a phone a 44px row is a target and a 14px chevron is
+              not (:26586 — members are on phones).
+
+              **IT SAYS WHICH WAY IT WILL GO.** `aria-expanded` is the state and
+              the chevron follows it, so a screen reader and an eye get the same
+              answer — and :31295's defect was a control whose comment said it
+              could close while one `||` stopped it, so the closing direction is
+              driven by a test rather than described here. */}
+          <button
+            type="button"
+            onClick={() => {
+              setCalendarOpen((open) => !open);
+              setEverOpened(true);
+            }}
+            aria-expanded={calendarOpen}
+            className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 -mx-2"
+            style={{ background: calendarOpen ? 'rgba(255,255,255,0.03)' : 'transparent' }}
+          >
+            <span
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(255,138,31,0.15)' }}
+            >
+              <CalendarDays className="w-5 h-5" style={{ color: '#FF8A1F' }} aria-hidden="true" />
+            </span>
+            <span
+              className="text-xs uppercase tracking-wider flex-1 text-left"
+              style={{ color: 'rgba(255,255,255,0.55)' }}
+            >
               Days you came
+            </span>
+            <ChevronDown
+              className="w-4 h-4 flex-shrink-0"
+              style={{
+                color: 'rgba(255,255,255,0.45)',
+                transform: calendarOpen ? 'rotate(180deg)' : 'none',
+              }}
+              aria-hidden="true"
+            />
+          </button>
+
+          {calendarOpen ? (
+            <>
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              {grid.label}
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -556,12 +684,6 @@ export default function AttendancePanel({ gym }) {
               >
                 <ChevronLeft className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.65)' }} />
               </button>
-              <span
-                className="text-xs font-semibold text-center"
-                style={{ color: 'rgba(255,255,255,0.75)', minWidth: '7.5rem' }}
-              >
-                {grid.label}
-              </span>
               {/* THE FUTURE IS NOT OFFERED. Bounded by the GYM's month, so a
                   member reading late at night in another country is not stopped
                   a month early — or let a month past. */}
@@ -578,7 +700,7 @@ export default function AttendancePanel({ gym }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 mt-2">
+          <div className="grid grid-cols-7 gap-0.5 mt-2" style={{ maxWidth: CALENDAR_MAX_WIDTH }}>
             {WEEK_HEADS.map((d) => (
               <div
                 key={d}
@@ -601,8 +723,11 @@ export default function AttendancePanel({ gym }) {
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-7 gap-1 mt-1" aria-busy={gridStatus === 'loading'}
-                   style={{ opacity: gridStatus === 'loading' ? 0.4 : 1 }}>
+              <div
+                className="grid grid-cols-7 gap-0.5 mt-1"
+                aria-busy={gridStatus === 'loading'}
+                style={{ maxWidth: CALENDAR_MAX_WIDTH, opacity: gridStatus === 'loading' ? 0.4 : 1 }}
+              >
                 {Array.from({ length: grid.leading }, (_, i) => (
                   <div key={`lead-${String(i)}`} />
                 ))}
@@ -621,29 +746,27 @@ export default function AttendancePanel({ gym }) {
                     aria-label={
                       cell.came ? `${String(cell.day)} — you came` : String(cell.day)
                     }
-                    className="aspect-square rounded-lg flex flex-col items-center justify-center relative"
+                    className="aspect-square rounded-lg flex items-center justify-center p-px"
                     style={{
-                      background: cell.came ? 'rgba(255,138,31,0.15)' : 'transparent',
-                      border: cell.came
-                        ? '1px solid rgba(255,138,31,0.30)'
-                        : '1px solid transparent',
                       cursor: cell.came ? 'pointer' : 'default',
                       opacity: cell.future ? 0.3 : 1,
                     }}
                   >
-                    <span
-                      className="text-2xs font-bold tabular-nums leading-none"
-                      style={{ color: cell.came ? '#FF8A1F' : 'rgba(255,255,255,0.55)' }}
-                    >
-                      {cell.day}
-                    </span>
+                    {/* THE FIRE CARRIES THE DATE (Kd, 2026-09-03), so a day that
+                        was two marks — a small number with a smaller flame under
+                        it — is now one. A day nobody came on keeps a plain
+                        number and no tinted box: the box was competing with the
+                        flame for the same job. */}
                     {cell.came ? (
-                      <Flame
-                        className="w-2.5 h-2.5 mt-0.5"
-                        style={{ color: '#FF8A1F' }}
-                        aria-hidden="true"
-                      />
-                    ) : null}
+                      <CameDay day={cell.day} />
+                    ) : (
+                      <span
+                        className="font-medium tabular-nums leading-none"
+                        style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.45)' }}
+                      >
+                        {cell.day}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -668,6 +791,8 @@ export default function AttendancePanel({ gym }) {
               ) : null}
             </>
           )}
+            </>
+          ) : null}
         </div>
       ) : null}
 

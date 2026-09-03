@@ -122,9 +122,17 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       **THE SCREEN IS BUILT TOO, 2026-09-03 (DECISIONS `:32197`)** — the month
       grid with 🔥 on every day attended, arrows that step months, and the times
       behind a tap on the day, which is the cost stated below and accepted.
-      **THE LINE STILL DOES NOT TICK: no browser smoke has run and T3 is
-      UNRUN**, and this repo does not tick a user-facing line on a green suite
-      (:15927 — a card's PROVE is not evidence the app RUNS).
+      **KD LOOKED AT IT THE SAME DAY AND SENT IT BACK** (`:32395`): the month
+      filled the page and the flame was a 10px hairline. It now **folds away
+      behind a calendar icon**, is capped compact when opened, and the fire
+      **fills the square with the date inside it in white** — his three words.
+      Steps 1–3 of `RUNBOOK/smoke-my-gyms-calendar.md` are ticked with *"excellent
+      everything good"* beside them.
+      **THE LINE STILL DOES NOT TICK: steps 4 and 6–13 are UNRUN and T3 is
+      UNRUN.** His approval covers how it LOOKS and says nothing about stepping
+      months, opening a day, an empty month or a failed read (:27810, :31633 —
+      an approval covers what was on screen when it was given), and this repo
+      does not tick a user-facing line on a green suite (:15927).
       **Cost stated to Kd before he chose:** a square in a grid cannot show that
       somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
       the day — the same place the workout calendar puts them.

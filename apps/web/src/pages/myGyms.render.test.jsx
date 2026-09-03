@@ -102,6 +102,20 @@ const openDay = (dayOfMonth) => {
   fireEvent.click(cameOn(dayOfMonth));
 };
 
+/** UNFOLD THE CALENDAR — it arrives CLOSED (Kd, 2026-09-03, at his own browser:
+ *  *"the calender need to be compact small and only appear when click"*), so
+ *  every assertion about a month in this file goes through here first.
+ *
+ *  **AND NOTHING IS READ UNTIL THIS RUNS**, which is why the request-count
+ *  assertions below sit after it rather than after `drawScreen`. */
+const openCalendar = async () => {
+  const fold = () => screen.getByRole('button', { name: /days you came/i });
+  // It appears once the gym's zone has arrived and a month can be named, so the
+  // wait is for the fold itself rather than for anything inside it.
+  await waitFor(() => expect(fold()).toBeTruthy());
+  fireEvent.click(fold());
+};
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
   vi.setSystemTime(NOW);
@@ -249,6 +263,7 @@ describe('the screen', () => {
     });
     api.getAttendanceHistory.mockResolvedValue(history([visit()]));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
     expect(screen.queryByRole('button', { name: /i'm here/i })).toBeNull();
     // THE HISTORY STAYS — the day is still marked and its times still open.
@@ -297,6 +312,7 @@ describe('saying you are here', () => {
   // what the server told it rather than asking again.
   it('adds the new day without re-reading the history', async () => {
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText(/no visits yet this month/i)).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     // THE DAY LIGHTS UP, and its times are behind the tap Kd was told about.
@@ -315,6 +331,7 @@ describe('saying you are here', () => {
   // chip for it, which would be a count the database disagrees with.
   it('draws ONE time when the same session is tapped twice', async () => {
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
@@ -340,6 +357,7 @@ describe('saying you are here', () => {
       ]),
     );
     drawScreen();
+    await openCalendar();
     // ONE SQUARE, not two — the grid's version of ruling 12's "one row".
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
@@ -363,6 +381,7 @@ describe('saying you are here', () => {
   it('says the month could not be read, and never draws it as an empty month', async () => {
     api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText(/couldn't load the days you came/i)).toBeTruthy());
     expect(screen.queryByText(/no visits/i)).toBeNull();
     expect(cameOn(2)).toBeNull();
@@ -385,6 +404,7 @@ describe('saying you are here', () => {
   it('never draws the history off a read that failed, even after a tap', async () => {
     api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     // The tap is confirmed — that part is true and stays on screen …
@@ -407,6 +427,7 @@ describe('saying you are here', () => {
       }),
     );
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
@@ -427,6 +448,7 @@ describe('saying you are here', () => {
       }),
     );
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
@@ -460,6 +482,7 @@ describe('saying you are here', () => {
     api.getAttendanceHistory.mockResolvedValue(history([], { clockFormat: '24h' }));
     api.markAttendance.mockResolvedValue(marked({ clockFormat: '12h' }));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
 
@@ -495,6 +518,7 @@ describe('saying you are here', () => {
   // later edit could create. That is the finding: unreachable now, one edit away.
   it('never carries a visit across to a different gym', async () => {
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
@@ -699,6 +723,7 @@ describe('what the button is for', () => {
     });
     api.getAttendanceHistory.mockResolvedValue(history([visit()]));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
     expect(screen.queryByText('Attendance')).toBeNull();
     expect(screen.queryByText(/marks your attendance at the gym/i)).toBeNull();
@@ -726,6 +751,7 @@ describe('the calendar', () => {
   it('opens on the gym s current month and asks the server for exactly it', async () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
     // HALF-OPEN, so August's `to` is September's `from` and a visit belongs to
     // exactly one month (DECISIONS `:31921`).
@@ -747,6 +773,7 @@ describe('the calendar', () => {
     vi.setSystemTime(new Date('2026-09-30T20:00:00.000Z'));
     api.getHours.mockResolvedValue(hoursIn('Pacific/Honolulu'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
     expect(windowOf(api.getAttendanceHistory.mock.calls[0])).toEqual({
       from: '2026-09-01',
@@ -757,6 +784,7 @@ describe('the calendar', () => {
     api.getAttendanceHistory.mockClear();
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('October 2026')).toBeTruthy());
     expect(windowOf(api.getAttendanceHistory.mock.calls[0])).toEqual({
       from: '2026-10-01',
@@ -770,6 +798,7 @@ describe('the calendar', () => {
       history([visit({ day: '2026-09-02' }), visit({ day: '2026-09-20' })]),
     );
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     expect(cameOn(20)).toBeTruthy();
     expect(cameOn(3)).toBeNull();
@@ -783,6 +812,7 @@ describe('the calendar', () => {
   it('steps back a month and asks for that month', async () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
     await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
@@ -799,6 +829,7 @@ describe('the calendar', () => {
   it('will not step past the month the gym is in', async () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
     expect(screen.getByRole('button', { name: /next month/i }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
@@ -813,6 +844,7 @@ describe('the calendar', () => {
   it('does not draw today s tap on a month it did not happen in', async () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
@@ -848,6 +880,7 @@ describe('the calendar', () => {
     api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
 
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
 
     // AUGUST IS HELD OPEN, and the mock is swapped only once September has
@@ -900,6 +933,7 @@ describe('the calendar', () => {
       .mockResolvedValueOnce(history([visit({ day: '2026-09-02' })]))
       .mockResolvedValue(history([]));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
     await waitFor(() => expect(screen.getByText('No visits in August 2026.')).toBeTruthy());
@@ -916,12 +950,14 @@ describe('the calendar', () => {
       history([visit({ day: '2026-09-02' })], { nextCursor: 'more|00000000-0000-4000-8000-000000000000' }),
     );
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(screen.getByText(/more visits than this view can show/i)).toBeTruthy());
     // And it is not said when the month came back whole, or every member would
     // be told their history is incomplete.
     cleanup();
     api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     expect(screen.queryByText(/more visits than this view can show/i)).toBeNull();
   });
@@ -938,6 +974,7 @@ describe('the calendar', () => {
       ]),
     );
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     expect(screen.queryByText('06:12')).toBeNull();
     openDay(2);
@@ -969,6 +1006,7 @@ describe('the calendar', () => {
       .mockResolvedValueOnce(history([]))
       .mockResolvedValue(history([visit({ day: '2026-09-02' })]));
     drawScreen();
+    await openCalendar();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
     openDay(2);
     expect(screen.getByText(/you were here/i)).toBeTruthy();
@@ -982,5 +1020,106 @@ describe('the calendar', () => {
     // NOBODY TAPPED ANYTHING. A sheet here is the screen deciding to open
     // something on its own.
     expect(screen.queryByText(/you were here/i)).toBeNull();
+  });
+});
+
+// ── KD AT HIS BROWSER, 2026-09-03 ───────────────────────────────────────────
+// *"it looks disgusting covering alsmot the whole page and the burn sysmbol so
+// small have to use a maginfying glass, men the calender need to be compact
+// small and only appear when click may be have a calendar symbol big that the
+// user can see properly and the burn symbol should be bright with color and in
+// the middle of the symbol should be the date with white color"*.
+describe('the calendar folds away', () => {
+  const hoursIn = (timezone) => ({
+    data: { hours: { mode: 'open_24h', timezone, clockFormat: '24h', week: [], closures: [] } },
+  });
+
+  it('arrives CLOSED, with no month on screen', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    // The fold itself is there…
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /days you came/i })).toBeTruthy(),
+    );
+    // …and nothing of the month is.
+    expect(screen.queryByText('September 2026')).toBeNull();
+    expect(cameOn(2)).toBeNull();
+    expect(screen.queryByRole('button', { name: /previous month/i })).toBeNull();
+  });
+
+  // **AND IT MUST GO BACK, WHICH IS THE HALF :31295 SHIPPED BROKEN** — a
+  // dropdown that arrived open and could not be closed, because one `||`
+  // overrode the tap and both its comments said otherwise. **The assertion is
+  // the state it is NOT in when you find it**, which is that entry's standing
+  // rule for a two-state control.
+  it('opens on a tap and closes again on the next one', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /days you came/i }));
+    expect(screen.queryByText('September 2026')).toBeNull();
+    expect(cameOn(2)).toBeNull();
+  });
+
+  it('says which way it will go, for somebody not looking at the chevron', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    const fold = () => screen.getByRole('button', { name: /days you came/i });
+    await waitFor(() => expect(fold()).toBeTruthy());
+    expect(fold().getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(fold());
+    expect(fold().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  // **NOTHING IS ASKED FOR UNTIL IT IS OPENED**, and `/my-gyms` draws one of
+  // these per gym — so on a member of three this is three requests saved on
+  // every page load, against a 600/hour bucket shared with the console.
+  it('asks the server for nothing until it is opened', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    drawScreen();
+    // Non-vacuity: the screen really did finish drawing before this is checked.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy(),
+    );
+    expect(api.getAttendanceHistory).not.toHaveBeenCalled();
+
+    await openCalendar();
+    await waitFor(() => expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1));
+  });
+
+  // FOLDING AND UNFOLDING IS NOT A REASON TO ASK AGAIN — the month is already
+  // in hand, and re-reading on every open would spend the bucket on nothing.
+  it('does not re-read a month it already has when closed and opened again', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /days you came/i }));
+    fireEvent.click(screen.getByRole('button', { name: /days you came/i }));
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1);
+  });
+
+  // **THE DATE LIVES INSIDE THE FIRE AND IS STILL TEXT** (Kd: *"in the middle
+  // of the symbol should be the date with white color"*). A flame that swallowed
+  // the number would take the date away from anybody not looking at pixels,
+  // which is why the number is rendered rather than drawn.
+  it('keeps the day number readable inside the fire', async () => {
+    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ day: '2026-09-02' })]));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    // The number is inside the cell, as text, and white — his three words.
+    const inside = cameOn(2).querySelector('.text-white');
+    expect(inside).not.toBeNull();
+    expect(inside.textContent).toBe('2');
   });
 });

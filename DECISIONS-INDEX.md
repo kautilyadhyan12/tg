@@ -4836,6 +4836,44 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   the instrument there. `web` 1734/1734 · `vite build` green · SWEEP a stated
   subset of 219: **12 RED, 0 ALIVE** (C191–C202).
 
+- **:32395** — 2026-09-03 — **ADDENDUM to `:32197` — KD LOOKED AT THE CALENDAR
+  AND REJECTED ITS SHAPE: it folds away, it is compact, and the fire carries the
+  date.** **Read before sizing any grid of cells in this app, before drawing an
+  icon that carries meaning at under 16px, before putting anything on a member's
+  gym card that is open by default, and before quoting an operator's *"everything
+  good"* as a smoke pass.** His words on the shipped bytes: *"it looks disgusting
+  covering alsmot the whole page and the burn sysmbol so small have to use a
+  maginfying glass ... compact small and only appear when click ... the burn
+  symbol should be bright with color and in the middle of the symbol should be the
+  date with white color"*.
+  **1,734 TESTS WERE GREEN ON THAT SHAPE, and jsdom is why: it has no LAYOUT**, so
+  a grid that eats the page and one that fits in a corner are the same DOM —
+  fourth defect on this card's surfaces found by his eye rather than a test
+  (:30624, :31008, :31098). **A test can say a thing is on screen; only a person
+  can say it is the right SIZE.**
+  **THE CAUSE WAS ARITHMETIC:** `aspect-square` cells in a ~950px card are >100px
+  each, so six rows filled the page. The fix caps the **GRID** (17rem), not the
+  cell, so squares stay square at ~36px a day.
+  **THE FOLD BUYS A REQUEST PER GYM AS WELL AS THE SPACE (C205)** — `/my-gyms`
+  draws one panel per gym, so a member of three spent three reads on every page
+  load against a 600/hour bucket shared with the console, for a month most visits
+  never open. `calendarOpen` and `everOpened` are two states because they answer
+  two questions; folding and re-opening must not re-read. **The CLOSING direction
+  has its own test and mutant (C204) because :31295 is a control Kd found dead
+  whose two comments both claimed it worked.**
+  **THE DATE IS REAL TEXT INSIDE THE FLAME (C206 makes it screen-reader-only,
+  which is the defect), and it is nudged down because a flame's optical centre is
+  below its geometric one.** A day nobody came on lost its tinted box: two markers
+  for one fact was what made both unreadable.
+  **HIS "EVERYTHING GOOD" IS STEPS 1–3 OF THE SHEET AND NOTHING ELSE** — stepping
+  months, opening a day, the empty-month wording, the failed read and the phone
+  width are unrun. **The sheet itself was rewritten here because it described the
+  calendar as it WAS**, which is `25554f3`'s defect three commits later.
+  `web` 1740/1740 (+6) · `vite build` green · **SWEEP 16 mutants, 16 RED, 0
+  ALIVE** (C191–C206, the twelve re-run to prove the reshape broke none).
+  **24 existing tests needed the calendar opened first, which is the fold working
+  rather than a regression.**
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

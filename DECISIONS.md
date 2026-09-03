@@ -32391,3 +32391,106 @@ it** (:5199's class): C194 pointed at a render title while its target is the pur
 file. **Three of my `expect` filters were also wrong on the first run** — written
 from memory of the test names rather than copied — and every one aborted before a
 byte was mutated.
+
+### 7 · ADDENDUM, same session — KD LOOKED AT THE CALENDAR AND REJECTED ITS SHAPE: IT FOLDS AWAY, IT IS COMPACT, AND THE FIRE CARRIES THE DATE
+
+**Read before sizing any grid of cells in this app, before drawing an icon that
+carries meaning at under 16px, before putting anything on a member's gym card
+that is open by default, and before quoting an operator's *"everything good"* as
+a smoke pass.**
+
+His words, at his own browser, on the shipped bytes: *"men look at the calender
+in gympic folder it looks disgusting covering alsmot the whole page and the burn
+sysmbol so small have to use a maginfying glass, men the calender need to be
+compact small and only appear when click may be have a calendar symbol big that
+the user can see properly and the burn symbol should be bright with color and in
+the middle of the symbol should be the date with white color"*.
+
+**HE WAS RIGHT ON EVERY ONE, AND THE SCREENSHOT IS THE EVIDENCE THE SUITE COULD
+NOT BE.** 1,734 tests were green on that shape. **jsdom has no layout** — no
+element has a width, so a grid that eats the page and a grid that fits in a
+corner are the same DOM — which is why this is the fourth time a defect on this
+card's surfaces reached him rather than a test (:30624, :31008, :31098's slab).
+**A test can say a thing is ON SCREEN. Only a person can say it is the right
+SIZE.**
+
+### 1 · WHY IT ATE THE PAGE, AND IT IS ARITHMETIC RATHER THAN TASTE
+
+The cells were `aspect-square` in a full-width card. On his screen that card is
+~950px, so each square came out **over 100px tall** and six rows filled
+everything below the button — the whole month between his gym's opening hours and
+the bottom of the page.
+
+**The fix caps the GRID, not the cell** (`CALENDAR_MAX_WIDTH`, 17rem): the
+squares stay square and the month becomes ~36px a day, a block taken in at a
+glance. **The weekday heads take the same cap or the columns stop lining up** —
+two grids, one width, and nothing else in this file needed to change.
+
+### 2 · IT IS FOLDED AWAY, AND THAT BUYS A REQUEST PER GYM AS WELL AS THE SPACE
+
+*"only appear when click may be have a calendar symbol big that the user can see
+properly"*. A big calendar icon, the heading, and a chevron — **the whole row is
+the control** rather than a small chevron beside a label, because on a phone a
+44px row is a target and a 14px chevron is not (:26586 — members are on phones).
+
+**AND NOTHING IS ASKED FOR UNTIL IT IS OPENED** (**C205**). `/my-gyms` draws one
+of these per gym, so a member of three gyms was spending three requests on every
+page load, against a bucket of 600/hour shared with the console's own screen —
+for a month most visits never look at. **`calendarOpen` and `everOpened` are two
+states because they are two questions**: folding away and opening again must not
+re-read a month already in hand.
+
+**THE CLOSING DIRECTION HAS ITS OWN TEST AND ITS OWN MUTANT, and :31295 is why.**
+That entry is a dropdown Kd found dead at his browser — it arrived open and the
+tap could not close it, because one `||` overrode the state, **and both of its
+comments claimed it worked**. So `calendarOpen` is plain `useState`, the header
+row is its only writer, and **C204** pins the second tap rather than the first.
+
+### 3 · THE FIRE CARRIES THE DATE, WHICH REPLACED TWO MARKS WITH ONE
+
+*"the burn symbol should be bright with color and in the middle of the symbol
+should be the date with white color"*. It was a **10px stroked outline under a
+tiny number** — two small things competing for one job, which is what made both
+unreadable. Now the flame **fills the square**, is `fill`ed rather than stroked,
+and the date sits inside it in white.
+
+**THE NUMBER IS REAL TEXT AND IS NUDGED DOWN.** Text, because a date drawn as
+part of a picture is a date anybody not looking at pixels loses (**C206** turns
+it into a screen-reader-only label, which is exactly that defect). Nudged,
+because a flame's mass is in its lower bulge — **its optical centre is below its
+geometric one**, and a number centred by the box floats in the tip.
+
+**A day nobody came on lost its tinted box too.** The box existed to say "this
+day is marked" and the flame now says it far better; two markers for one fact is
+what §3 above is about.
+
+### 4 · WHAT HIS "EVERYTHING GOOD" DOES AND DOES NOT COVER
+
+**It covers HOW IT LOOKS: the folded row, the compact month, the flame with the
+date in it.** Those are steps 1–3 of `RUNBOOK/smoke-my-gyms-calendar.md` and they
+are ticked with his words beside them.
+
+**IT IS NOT A SMOKE PASS AND THE SHEET SAYS SO.** Stepping months, opening a
+day, the empty-month wording, the failed read and the phone width are steps 4 and
+6–13, all unrun. **An operator's approval covers what was ON SCREEN when it was
+given** (:27810, :31633), and reading one look as a run of a sheet is the failure
+those two entries record.
+
+**THE SHEET ITSELF WAS REWRITTEN IN THIS COMMIT, because it described the
+calendar as it WAS** — open by default, a tinted square with a small flame. That
+is the defect `25554f3` was committed to fix, three commits before this one.
+
+### Round log
+
+**PROVE, on the final bytes:** `web` **1740/1740 across 58 files** (+6) ·
+`myGyms.render` **50/50** (+6) · `vite build` green in 34.54s ·
+`eslint --max-warnings=0` exit 0 on the three touched files.
+
+**SWEEP — the four new rows RED, and the twelve from `:32197` re-run to prove the
+reshape broke none of them: 16 mutants · 16 RED · 0 ALIVE · 0 never ran**,
+controls GREEN and tallied first, restore sha256 byte-exact after every mutant.
+
+**24 EXISTING TESTS NEEDED THE CALENDAR OPENED FIRST, and that is the fold
+working rather than a regression** — every one of them asserts on a month that is
+now behind a click. The helper is `openCalendar()`, and it waits for the fold to
+exist rather than for anything inside it.

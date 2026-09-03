@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD SENT THE CALENDAR BACK AT HIS OWN BROWSER AND IT WAS RESHAPED — it
+      folds away, it is compact, and the fire carries the date. DECISIONS
+      `:32395`, an addendum to `:32197`.
+      **START HERE: steps 1–3 of `RUNBOOK/smoke-my-gyms-calendar.md` are TICKED
+      with his own words. Steps 4 and 6–13 are UNRUN, and T3 is UNRUN. The
+      `OWED.md` calendar line does NOT tick.**
+
+  1. **1,734 TESTS WERE GREEN ON A SHAPE HE CALLED DISGUSTING, AND jsdom IS
+     WHY: IT HAS NO LAYOUT.** A grid that eats the page and one that fits in a
+     corner are the same DOM. **A test can say a thing is on screen; only a
+     person can say it is the right SIZE** — fourth defect on this card's
+     surfaces found by his eye rather than by a suite (:30624, :31008, :31098).
+  2. **THE CAUSE WAS ARITHMETIC, NOT TASTE:** `aspect-square` cells in a ~950px
+     card are over 100px each, so six rows filled everything under the button.
+     **The fix caps the GRID (17rem), never the cell** — squares stay square and
+     the month is ~36px a day. The weekday heads take the same cap or the
+     columns stop lining up.
+  3. **THE FOLD BUYS A REQUEST PER GYM AS WELL AS THE SPACE (C205).**
+     `/my-gyms` draws one panel per gym, so a member of three spent three reads
+     on every page load against a 600/hour bucket shared with the console — for
+     a month most visits never open. **`calendarOpen` and `everOpened` are two
+     states on purpose**: folding away and opening again must not re-read.
+     **The CLOSING direction has its own test and mutant (C204), because :31295
+     is a control he found dead whose two comments both said it worked.**
+  4. **THE DATE IS REAL TEXT INSIDE THE FLAME** — C206 turns it into a
+     screen-reader-only label, which is the defect: a date drawn as part of a
+     picture is a date anybody not looking at pixels loses. It is nudged down
+     because a flame's optical centre sits below its geometric one.
+  5. **HIS "EXCELLENT EVERYTHING GOOD" COVERS HOW IT LOOKS AND NOTHING ELSE.**
+     Stepping months, opening a day, the empty-month wording and the failed read
+     are all unrun (:27810, :31633 — an approval covers what was ON SCREEN when
+     it was given). **The sheet was rewritten in the same commit because it
+     described the calendar as it WAS**, which is `25554f3`'s defect three
+     commits later.
+
+PROVE: `web` **1740/1740 across 58 files** (+6) · `myGyms.render` 50/50 (+6) ·
+       `vite build` green in 34.54s · `eslint --max-warnings=0` exit 0 on the
+       three touched files · the three ROOT guards pass (harnesses 25, index 286
+       pointers, triggers up to date).
+       **SWEEP: 16 mutants, 16 RED, 0 ALIVE, 0 never ran** — the four new rows
+       plus `:32197`'s twelve re-run, to prove the reshape broke none of them.
+       Controls GREEN and tallied first; restores sha256 byte-exact.
+       **24 existing tests needed `openCalendar()` inserted, and that is the fold
+       working rather than a regression** — every one asserts on a month that is
+       now behind a click.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NEXT, in order: (a)** the rest of the smoke sheet at his browser — ten
+       steps, and the two that need a visit in a PREVIOUS month (8 and 11) may
+       have to be skipped and RECORDED as skipped rather than faked. **(b)** T3
+       round 1 on the whole calendar packet (`:32197` + `:32395`). **(c)** the
+       last of the three things he approved on 2026-09-03: folding the member
+       card's Mon–Sun hours list — **tap, never hover** (:26586),
+       `ConsoleSection`'s `defaultOpen` and NOT `forceOpen` (:31295). **That
+       fold now has a worked precedent on this very card.**
+       **STILL UNOBSERVED, stated:** the greying of future days is pinned in the
+       pure layer only, and the month arrows against the shared rate limit are a
+       benchmark rather than a test.
+```
+
+```
 TASK: KD'S CALENDAR REACHES A SCREEN — the month grid with fire on the days
       attended. DECISIONS `:32197`, the web half of `:31508` consuming
       `:31921`'s window. **NO SERVER FILE MOVED.**
