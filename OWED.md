@@ -8483,6 +8483,51 @@ file and is stated so nobody reads these as lower priority than they are.
       questionnaire's exit have no mutation cover. **D15 was hand-run 2026-09-02
       and was RED on both cases**, so the crossing half is spot-verified, not
       covered. **STANDING: a harness is only as live as its last run.**
+- [ ] 🟡 **`apps/web/tools/mutate-person-gate.mjs` IS UNRUNNABLE AND HAS BEEN
+      SINCE 2026-08-14 — 213 COMMITS, THE LONGEST OF THESE YET.** Found
+      2026-09-04 by T3 round 1 on `:32929`/`:33091` (Low-4) and re-measured
+      independently before it was written down. **`PG16` and `PG17` both anchor
+      on `if (enabled && !wasEnabled) controllerRef.current.resetScene();`, and
+      `resetScene` does not appear in `apps/web/src/hooks/usePoseDetection.js`
+      at all any more** — `8c2d204` (*"The pause stops being billed as squatting"*)
+      took it out. The harness ABORTS on a drifted anchor, exactly as designed
+      (:13336), **so all 23 of its mutants have been unrunnable that whole time,
+      not merely those two.** What they guard is the person check's ruled cut-off
+      and the sentence it puts on screen (:7037, :6959, :7104) — a Kd-ruled
+      number and a `:5807` Critical/High class.
+      **What is owed is the re-aim, BY MEANING and not by pattern** (:28221),
+      then a measured run of the whole table. **Re-anchoring alone proves
+      nothing** (:4718 F2): a mutant re-aimed until it goes red is a mutant
+      fitted to the tests. `:33091` §6 re-anchored `P4` in-card only because the
+      abort BLOCKED that card's own proof; nothing here blocks anything, so
+      under R1.1 this is its own card and not a drive-by.
+      **NOT DOUBLE-COUNTED: the five NOT-APPLIED rows in
+      `apps/web/tools/mutate-write-path.mjs`** (M5 · M21 · M28 · M40 · M43) **are
+      already carried by the 2026-08-16 line above** and were re-confirmed dead
+      by the same measurement; that harness reports NOT APPLIED and exits 1
+      rather than aborting, so its other 59 mutants do still run. **D13
+      (`mutate-login-door.mjs`) is the line immediately above.** Measured the
+      same day across all nine web harnesses, CRLF-normalised on both sides:
+      **console 231 · dashboard-stats 17 · join-door 36 · badge-cue 8 ·
+      pose-assets 27 · pose-tuning 13 — every anchor live, zero ambiguous.**
+      **THE CLASS IS NOW FOUR DEEP AND EACH ONE WAS FOUND BY ACCIDENT** — D13
+      (five days dead, `:28822`), `P4` (nineteen days, `:33091` §6), the
+      write-path five (reformatted arrow functions, 2026-08-16), and these two
+      (twenty-one days). **`tools/check-harnesses.mjs` parses every harness and
+      says in its own docblock that it "cannot tell a stale anchor from a live
+      one — the harness's own whole-table pre-check does that".** That mitigation
+      is *"somebody runs the harness"*, and nobody did for 213 commits.
+      **RECOMMENDED, and it is `:5348` rule 5's class fix rather than a fifth
+      careful case fix: give every harness a `--check` flag that runs its
+      existing whole-table pre-check and exits, then have the ROOT `lint` guard
+      call it.** Deliberately NOT a central anchor parser reading the tables from
+      outside: the nine harnesses use five different table shapes, three are
+      shell scripts with no JS table at all, and a checker that silently resolves
+      a target wrong reports CLEAN — which is the failure mode `:22640` recorded
+      when a generator's own input list turned out to be incomplete. Reusing each
+      harness's own resolution logic is the only version that cannot lie.
+      **Put to Kd 2026-09-04 with that recommendation; he approved building it as
+      its own card rather than inside the fix round.**
 - [ ] ⚪ **THE MEMBER APP NOW ASKS `/v1/orgs/mine` TWICE ON THE DASHBOARD.**
       Raised 2026-09-02 (`DECISIONS.md:28822` §3). The sidebar reads the kept
       answer in `consoleOrgs.js` (so the `My Gyms` item is decided once per

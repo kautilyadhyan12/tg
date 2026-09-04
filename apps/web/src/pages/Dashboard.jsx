@@ -428,7 +428,13 @@ export default function Dashboard() {
           transition={{ duration: 0.5 }}
           className="flex items-start justify-between"
         >
-          <div>
+          {/* `min-w-0` IS WHAT MAKES THE `truncate` BELOW BITE. A flex child
+              defaults to `min-width: auto`, so it refuses to shrink under its
+              content and an over-long gym name pushes the Start Workout button
+              rather than being cut — `truncate` alone is inert here. It is the
+              pairing `GymMembershipCard` and `MyGyms` both already use for the
+              same string. */}
+          <div className="min-w-0">
             <p className="text-sm font-medium mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
               {greeting}
             </p>
@@ -450,9 +456,17 @@ export default function Dashboard() {
                 **IT COSTS NO REQUEST.** `useMyGyms` reads the kept answer the
                 member `Sidebar` already fetches on every screen (:28822), so
                 this is a second CONSUMER of one response and not a second reader
-                of `/v1/orgs/mine`. */}
+                of `/v1/orgs/mine`.
+
+                **IT TRUNCATES, because a gym names itself** and
+                `createOrgRequestSchema` allows 120 characters
+                (`packages/shared/src/orgs.ts:204`). The membership row this line
+                replaced carried `truncate`; this one shipped without it (T3
+                round 1 on `:32929`/`:33091`, Low-3). It needs BOTH halves — the
+                `min-w-0` above and the class here — and jsdom has no layout, so
+                nothing in the suite can see either. */}
             {welcomeGym !== null ? (
-              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              <p className="text-sm mt-1 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 Welcome to {welcomeGym.name}
               </p>
             ) : null}

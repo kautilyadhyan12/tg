@@ -15,7 +15,7 @@ running locally, an account that is a **member** of a gym, and that gym's
 opening times already set for several weekdays (any account that passed
 `smoke-opening-hours.md` steps 1–13 has this).
 
-**Status: UNRUN AS A SHEET, and only step 4's *presence* has been looked at.**
+**Status: UNRUN AS A SHEET, and only the fold's *presence* has been looked at.**
 Kd declared the dashboard-greeting sheet passed on 2026-09-04, and its step 4
 names the **This week** fold as being on the `My Gyms` card — so the fold has
 been SEEN. **Nobody has tapped it shut.** That is step 3 below, it is the whole
@@ -23,14 +23,25 @@ point of `:31295` (a dropdown he found dead at his own browser because it opened
 and would not close), and it is held today by mutant `C212` and by the
 `gymHours.render.test.jsx` case that asserts the SECOND tap.
 
+**EVERY STEP MOVED TO `My Gyms` ON 2026-09-04, AND THE SHEET COULD NOT HAVE BEEN
+RUN AS WRITTEN.** Steps 1–3 used to say *"the main dashboard, at the card that
+says **You're a member of …**"*. Hours after this sheet was written Kd ruled that
+card off the dashboard — *"the dashboard should not even show you are a memebr of
+xyz"* (`:33091`) — and the opening times ride on that row, so **the screen those
+steps named stopped existing.** Found by T3 round 1 on `:32929`/`:33091`; the
+sheet was wrong and the code was what he ruled (`:32583` §2). The old step 4
+(*"now do steps 1–3 again on `My Gyms`"*) is folded in, and what it uniquely
+tested — that the week and the **Days you came** calendar do not move each other
+— is step 4 in its own right.
+
 ---
 
 | # | Do this | ✅ Expect |
 |---|---------|-----------|
-| 1 | Sign in as the **member** and look at the main dashboard, at the card that says **"You're a member of …"**. | Under the gym's name: **one line starting "Today:"**, and under that a row reading **"This week"** with a small arrow at its right. **There is NO Monday-to-Sunday list.** If you can see seven weekdays without tapping anything, that is the failure this card was built to fix — stop and say so. |
+| 1 | Sign in as the **member**, click **My Gyms** in the left menu, and look at your gym's card. | Under the gym's name: **one line starting "Today:"**, and under that a row reading **"This week"** with a small arrow at its right. **There is NO Monday-to-Sunday list.** If you can see seven weekdays without tapping anything, that is the failure this card was built to fix — stop and say so. |
 | 2 | **Tap the "This week" row.** | The seven weekdays appear underneath it, each with its times or the word **Closed**, and the arrow turns over. |
 | 3 | **Tap the "This week" row again.** | The seven weekdays **disappear**. The **"Today:" line is still there** — that line must never go away, in either state. (This is the step that matters most: a drop-down that opens and then refuses to close is a real thing that shipped on this app once.) |
-| 4 | Go to **My gyms** in the left menu and do steps 1–3 again on the card there. | Exactly the same, and the **Days you came** calendar below it is unaffected — opening the week must not open or close the calendar, and the other way round. |
+| 4 | Tap **"This week"** open once more. Now open the **"Days you came"** calendar below it, and close it again. | The two are **independent**. Opening or closing the calendar leaves the week exactly as you left it, and opening or closing the week leaves the calendar exactly as you left it. Neither may move the other. |
 | 5 | Make the browser window **narrow** (drag its edge in until it looks like a phone), or open the app on your phone. Tap the **"This week"** row. | It is **easy to hit** — the whole row responds, not just the little arrow — and the week opens under it without the card going crooked. |
 
 ---
@@ -47,7 +58,13 @@ and would not close), and it is held today by mutant `C212` and by the
   looked at.
 - **A dated closure.** The interaction between a closure and the folded week is
   `smoke-opening-hours.md` steps 22 and 22b, which were rewritten for the fold
-  in the same commit as this sheet and have **not** been re-run since.
+  in the same commit as this sheet, re-pointed at `My Gyms` on 2026-09-04 with
+  these steps, and have **not** been re-run since either edit.
+- **The dashboard.** There is nothing to fold there any more — the whole
+  membership card came off that screen on 2026-09-04 (`:33091`), and what
+  replaced it is one line in the greeting with no opening times in it at all.
+  That the times are ABSENT from the dashboard is
+  `smoke-dashboard-gym-greeting.md` step 1, not a step here.
 - **How it behaves for somebody who is only WAITING to join a gym.** They are
   not a member yet, so the hours are not drawn for them at all — a deliberate
   choice recorded on `GymMembershipCard`, and not something this sheet touches.

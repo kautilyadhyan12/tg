@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,163 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,168 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,15 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,622 lines, MEASURED 2026-09-04 and not estimated**
-(1,163 + 1,385 + 74). **THE TWENTY-FIFTH MEASUREMENT IS A SMOKE DECLARATION AND
+**ALWAYS-READ TOTAL: 2,627 lines, MEASURED 2026-09-04 and not estimated**
+(1,168 + 1,385 + 74). **THE TWENTY-SIXTH MEASUREMENT IS A T3 ROUND THAT DOES NOT
+SHIP ITS PACKET — one Critical/High, four Low, all fixed — AND IT COST FIVE
+LINES, all of them trigger phrases, §1 AND §2 UNMOVED**: its record is a ROUND
+record and went to §1B, where :24813 sends it. **The fourth measurement of one
+afternoon, at +5, +6, +3 and +5**, which is the split holding at a steady rate on
+a day that produced two cards, a smoke declaration and a review round. Taken with
+this header's own prescribed command against the bytes being committed, never by
+adding a delta to the figures above. **THE TWENTY-FIFTH MEASUREMENT IS A SMOKE DECLARATION AND
 ITS THREE TRIGGER PHRASES, §1 AND §2 UNMOVED** — the third measurement of one
 afternoon, at +5, +6 and +3. **THE TWENTY-FOURTH MEASUREMENT IS A SECOND WHOLE CARD ON
 THE SAME AFTERNOON — Kd rejected the screen the twenty-third had just improved —
@@ -5128,6 +5135,38 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   subject; `smoke-gym-hours-fold.md` stays UNRUN and `C212` holds the closing.
   **A control seen is not a control working.** Records only; T3 is now the only
   gate left, and it covers BOTH of today's cards.
+
+- **:33334** — 2026-09-04 — **T3 ROUND 1 ON BOTH OF TODAY'S CARDS (`:32929` the
+  fold, `:33091` the greeting): ONE Critical/High, THE PACKET DOES NOT SHIP.**
+  **Read before removing a surface a smoke sheet names, before re-pointing any
+  smoke step at a different screen, before writing a second absence assertion
+  into a suite that already has one, before adding a `truncate` to a flex child,
+  and before adding an `OWED.md` line for a dead mutation anchor without first
+  grepping `OWED.md` for it.** **C/H-1: `showMemberships={false}` took the
+  membership card off the dashboard and the opening times ride on that row, so
+  FOUR sheets sent the tester to a screen the app no longer draws** —
+  `smoke-gym-hours-fold.md` 1–3 (the live UNRUN gate), `smoke-opening-hours.md`
+  22/22b/23, and `smoke-join-door.md` 12, **which is recorded PASSED, so a false
+  ✅ sat inside cited evidence.** **:32498 and :33265 §1 a third time, in the most
+  literal shape: a step naming the APP's unreachable state, then the ACCOUNT's,
+  now the SCREEN's** — and `:32583` §2 was applied correctly by `e807340` and not
+  an hour later by `0fcfcba`. **STANDING: a commit that REMOVES a surface greps
+  `RUNBOOK/` for the words on it before it lands.** All re-pointed at `My Gyms`,
+  after CHECKING the calendar really folds and the nav item really says
+  `My Gyms` — a re-point onto a control that does not fold would have been the
+  same defect inside its own correction. **Four Low, all fixed: a FIFTH liar of
+  the shape `:32929` §3 said it had found all four of** (`C214` failed 2 of 14
+  before the added assertion, 3 of 14 after) · a comment struck in place
+  (`:20587`) · **the greeting's missing `truncate`, where the review's fix was
+  HALF of it** — a flex child needs `min-w-0` or `truncate` is inert (`:25567`) ·
+  and **a dead-anchor line where the review's map would have cost Kd a DUPLICATE
+  deferral**: five of its seven were already on `OWED.md` from 2026-08-16.
+  Re-measured independently, EOL-normalised: `mutate-person-gate.mjs` PG16/PG17
+  dead **213 commits**, and it ABORTS, so all 23 mutants unrunnable for
+  twenty-one days — the only untracked one. **The dead-anchor class is now FOUR
+  deep and Kd ruled its guard a card of its own**, shaped as a `--check` flag on
+  each harness rather than a central parser (`:22640`). `web` 1752/1752.
+  **NEXT: T3 round 2, diff-only.**
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.

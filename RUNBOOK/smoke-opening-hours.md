@@ -14,13 +14,25 @@ opens. If step 1 shows the word "Closed" anywhere, stop and say so.
 **Time:** about 20 minutes (27 steps). **You need:** the API and the web app running
 locally, and **two email addresses** (the second never receives mail).
 
-**STEPS 22 AND 22b WERE EDITED 2026-09-04 AND THE PASS THEY CARRY IS OLDER THAN
-THE EDIT.** Kd asked for the member card's Mon–Sun list to fold away behind a tap
-(`OWED.md`'s ⚪ line off `:31508`), so both steps used to describe a week that was
-simply on screen. **The screen changed and this sheet was stale, not wrong** —
-the code is what he ruled, and correcting the steps in the same commit is what
-stops a later run reporting a failure that is not one. **Neither step has been
-re-run against the fold**; the fold's own sheet is `smoke-gym-hours-fold.md`.
+**STEPS 22, 22b AND 23 WERE EDITED 2026-09-04 AND THE PASS THEY CARRY IS OLDER
+THAN THE EDIT.** Two changes landed that day, in that order.
+
+**(1) THE WEEK FOLDED.** Kd asked for the member card's Mon–Sun list to fold away
+behind a tap (`OWED.md`'s ⚪ line off `:31508`), so 22 and 22b used to describe a
+week that was simply on screen.
+
+**(2) THE CARD LEFT THE DASHBOARD ALTOGETHER.** Hours later he ruled the
+membership card off that screen — *"the dashboard should not even show you are a
+memebr of xyz"* (`:33091`) — and the opening times ride on the membership row, so
+**there is no longer any gym card on the dashboard to look at.** Steps 22 and 23
+still sent the tester there, which made them unrunnable rather than merely stale;
+found by T3 round 1 on `:32929`/`:33091`. **They now say `My Gyms`, which is where
+that card lives** (Settings → Gym draws it too).
+
+**The screen changed twice and this sheet was stale, not wrong** — the code is
+what he ruled, and correcting the steps is what stops a later run reporting a
+failure that is not one. **None of the three has been re-run since either edit**;
+the fold's own sheet is `smoke-gym-hours-fold.md`.
 
 **Status: 26 steps PASSED ON KD'S DECLARATION, 2026-09-01, NOT ON A WATCHED RUN
 — and STEP 22b PASSED ON AN ACTUAL RUN the same day, watched by Kd at the
@@ -116,9 +128,9 @@ start to finish.
 | 19 | Now pick a date **in the past** (say last week), leave the reason empty, and press **Mark closed**. | **A sentence appears: "That date has already passed at your gym, so it's saved but not shown below."** The list does **not** grow. **This is correct, not a failure** — the save worked, and the list only shows dates still to come. Say if you see an error message instead. |
 | 20 | Press **Undo** beside the Staff-training date, then **Mark closed** on **today's date**, reason **Holi**. | The first disappears; today appears in the list. |
 | 21 | In a **different browser** (or a private window), sign up as **account B** and type the join code from step 1. Back as **A**, go to **Members** and confirm B. | B is a member of the gym. |
-| 22 | As **account B**, look at the main dashboard, at the card that says **"You're a member of ..."**. Then **tap the row that reads "This week"**. | Before the tap: **"Closed today — Holi"** and a **"This week"** row, and **no list of weekdays**. After it: the seven weekdays appear. **Every time is on the 12-hour clock the OWNER picked at step 3** — one gym, one clock. |
+| 22 | As **account B**, click **My Gyms** in the left menu and look at the gym's card. Then **tap the row that reads "This week"**. | Before the tap: **"Closed today — Holi"** and a **"This week"** row, and **no list of weekdays**. After it: the seven weekdays appear. **Every time is on the 12-hour clock the OWNER picked at step 3** — one gym, one clock. |
 | 22b | **WITH "This week" STILL OPEN, FIND TODAY'S OWN ROW** in the list — it is the row printed in a brighter white than the others. | **It reads "Closed today"** — those two words, not a bare "Closed" (T3 round 2's L-5: this list is the WEEKLY pattern, so a bare "Closed" on that row reads as *closed every Wednesday*, which is a different thing from being shut for one date). Today's normal opening hours must appear **nowhere on this card** — not in the headline, not in that row. **If today's row shows times, that is a FAIL and the step to report**: the top of the card would be saying the gym is shut while the row your eye goes to says it is open. (This step exists because the card did exactly that until 2026-09-01, and the test guarding it was only ever looking at the headline.) |
-| 23 | As **account A**, go back to **Settings → When we're open** and press **Undo** beside today's closure. Then, as **B**, press **F5** on the dashboard. | B's card no longer says "Closed today". It now shows today's normal line from the week. |
+| 23 | As **account A**, go back to **Settings → When we're open** and press **Undo** beside today's closure. Then, as **B**, press **F5** on **My Gyms**. | B's card no longer says "Closed today". It now shows today's normal line from the week. |
 
 ---
 

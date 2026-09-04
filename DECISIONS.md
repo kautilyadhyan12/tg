@@ -33330,3 +33330,157 @@ smoke gate discharged, the two uncovered things named) · `DECISIONS.md` ·
 
 **T3 IS NOW THE ONLY GATE LEFT ON THE 🟡 LINE**, and it covers BOTH of today's
 cards — `:32929`'s fold and `:33091`'s greeting sit on one screen.
+
+## 2026-09-04 — T3 ROUND 1 ON BOTH OF TODAY'S CARDS: ONE Critical/High, THE PACKET DOES NOT SHIP, and the finding is that a ruling made four sheets unrunnable an hour after one of them was written
+
+**Read before removing a surface a smoke sheet names, before re-pointing any
+smoke step at a different screen, before writing a second absence assertion into
+a suite that already has one, before adding a `truncate` to a flex child, and
+before adding an `OWED.md` line for a dead mutation anchor without first grepping
+`OWED.md` for it.**
+
+Review of `e807340` (`:32929`, the week folds) and `0fcfcba` (`:33091`, the gym
+becomes a greeting), read together as one screen. **ONE Critical/High ⇒ the
+packet does NOT ship this round** (`:5348` rule 1). Escape hatch NOT armed: round
+1 has no preceding round. Every finding is fixed here, Low included (`:5307`).
+
+**NO SERVER FILE MOVED.** No `apps/api`, no `packages/shared`, no migration.
+
+### 1 · C/H-1 — FOUR SHEETS SENT THE TESTER TO A CARD KD HAD JUST REMOVED
+
+`0fcfcba` passed `showMemberships={false}` to the dashboard's `GymMembershipCard`,
+and **the opening times ride on the membership row** (`GymMembershipCard.jsx:203`,
+inside the `member` row that the filter drops). So the dashboard draws no gym card
+and no hours at all. Four sheets still said *"look at the main dashboard, at the
+card that says **You're a member of …**"*:
+
+- `smoke-gym-hours-fold.md` steps 1–3 — **the live, UNRUN gate on the ⚪ line**,
+  and step 3 is the one `:33265` §3 says nobody has performed. Steps 2 and 3
+  chain off step 1, so the whole sheet bar its last step was unrunnable.
+- `smoke-opening-hours.md` 22, 22b, 23 — 22b chains off 22.
+- `smoke-join-door.md` step 12 — **recorded PASSED, so a false ✅ was sitting
+  inside cited evidence.**
+
+**IT IS THE SAME FINDING THIS SESSION HAD ALREADY WRITTEN DOWN TWICE, ARRIVING A
+THIRD TIME AND IN ITS MOST LITERAL FORM.** `:32498`: a step naming a state the
+APP cannot reach. `:33265` §1: a step naming a state the ACCOUNT cannot be in.
+Here: a step naming a **screen the app no longer draws**. And `:32583` §2's
+discipline — decide which side is wrong before editing the document — was applied
+correctly by `e807340` to steps 22/22b in the packet's own first commit, and not
+applied an hour later when `0fcfcba` deleted the surface those steps point at.
+
+**STANDING, and it is the cheap half of a habit this repo already has: a commit
+that REMOVES a surface greps `RUNBOOK/` for the words on it before it lands.**
+The greeting sheet written in that same commit says the box is gone; the four
+sheets that send somebody to look at it were never opened.
+
+Fixed by re-pointing at `My Gyms`, which is where that card lives (Settings → Gym
+draws it too). The fold sheet's old step 4 (*"now do steps 1–3 again on My Gyms"*)
+is folded in, and **what it uniquely tested survives as its own step** — that the
+week and the `Days you came` calendar do not move each other. Each sheet says the
+steps moved, and that neither the fold nor the re-point has been run.
+
+**CHECKED BEFORE WRITING, because this fix could have re-committed the defect it
+was fixing:** `AttendancePanel`'s calendar really is a two-state control
+(`calendarOpen`, plain `useState`, `aria-expanded`) and the nav item really is
+labelled `My Gyms` (`sidebarNav.js:32`). A re-point onto a control that does not
+fold would have been `:32498` a fourth time, inside its own correction.
+
+### 2 · THE FOUR LOW, ALL FIXED — AND ONE OF THEM CORRECTS THE REVIEW
+
+**Low-1 — a fifth case of the shape `:32929` §3 generalises about.** That entry
+says four existing cases became liars when the week folded and that all four were
+found. There is a fifth: `gymHours.render.test.jsx`'s *"says 'Open 24 hours' and
+lists no week"*, whose only evidence was `queryByText('Mon') === null` — satisfied
+by a shut fold exactly as `C190`'s was. **The fold is drawn on the MODE and not on
+the week's length** (`GymHoursNote.jsx:146`), so under `C214` a 24-hour gym is
+handed a control over nothing and this case stayed GREEN. Low, because the
+guarantee is not unguarded — the `savedWeek` case and `C214`'s own case both catch
+it. **MEASURED BOTH WAYS: `C214` applied by hand failed 2 of 14 before the added
+assertion and 3 of 14 after**, the new red being this case.
+
+**Low-2 — a comment made false by the same ruling.** `MyGyms.jsx` said
+*"the same reader the member's dashboard card and the owner's Settings panel use"*
+in a file `0fcfcba` never opened. Struck in place (`:20587`), not rewritten:
+`:31295`'s lesson is that a comment about behaviour is a claim (V1).
+
+**Low-3 — the greeting lost the `truncate` the row it replaced had, and the
+review's suggested fix was half of it.** `Welcome to {name}` shipped on
+`className="text-sm mt-1"`; `GymMembershipCard.jsx:192` carries `truncate`, and a
+gym names itself up to 120 characters (`orgs.ts:204`). **`truncate` alone would
+have been inert here**: the containing `<div>` is a flex child, so it defaults to
+`min-width:auto` and refuses to shrink under its content — the name would push the
+Start Workout button instead of being cut. Both halves added, which is the pairing
+`GymMembershipCard` and `MyGyms` already use. `:25567`'s rule — a review's
+suggested fix is not the whole of its finding — and jsdom has no layout, so
+**nothing in the suite can see either half** and this is held by a browser.
+
+**Low-4 — and the review's map was wrong in the direction that would have cost
+Kd work.** It reported seven dead anchors across two harnesses as needing an
+`OWED.md` line. **Five of them already have one**: `mutate-write-path.mjs`'s M5 ·
+M21 · M28 · M40 · M43 have been carried since 2026-08-16 on the 🟡 line that
+records that same sweep finding them NOT APPLIED. Adding a second line would have
+been a duplicate deferral in the file whose whole purpose is answering *"what is
+still to do?"* once. **Re-measured independently before anything was written**,
+across all nine web harnesses with line endings normalised on both sides (a naive
+count reports 13 false deads, because several sources check out as CRLF while
+anchors are authored with `\n`): `mutate-person-gate.mjs` **PG16 · PG17** dead
+since `8c2d204`, **213 commits**, and that harness ABORTS, so **all 23 of its
+mutants have been unrunnable for twenty-one days**; `mutate-login-door.mjs` D13
+dead (known, `:28822`, has its line); console 231 · dashboard-stats 17 · join-door
+36 · badge-cue 8 · pose-assets 27 · pose-tuning 13 all live. **Only person-gate is
+untracked**, and that is the line added.
+
+### 3 · THE CLASS IS FOUR DEEP AND KD RULED THE GUARD IS ITS OWN CARD
+
+D13 (five days), `P4` (nineteen days, `:33091` §6), the write-path five, and now
+PG16/PG17 (twenty-one days) — **four dead-anchor findings, every one found by
+accident.** `check-harnesses.mjs` says in its own docblock that it *"cannot tell a
+stale anchor from a live one — the harness's own whole-table pre-check does that"*,
+and that mitigation is *"somebody runs the harness"*.
+
+The review recommended extending that guard to count anchor hits. **A better shape
+was recommended to Kd instead and he took it: give every harness a `--check` flag
+that runs its OWN existing pre-check and exits, and have the ROOT guard call that.**
+A central parser reading the tables from outside is the wrong instrument — the nine
+harnesses use five different table shapes, three more are shell scripts with no JS
+table at all, and **a checker that silently resolves a target wrong reports CLEAN**,
+which is `:22640`'s recorded failure (a generator whose own input list was
+incomplete). This session's own scratchpad audit needed three attempts to read
+those tables correctly, which is the evidence for that call rather than a feeling.
+**Kd ruled it a card of its own rather than part of a fix round** (`:5348` rule 6);
+it is on the new `OWED.md` line with the recommendation named.
+
+### Round log
+
+**FINDINGS APPROVED BEFORE ANY CODE CHANGED** (`:5348`, *"no code changes without
+listed findings and Kd's approval"*) — five put to him in plain words, plus the
+one decision that was genuinely his; he answered *"go"*.
+
+**Rule 3 (a regression test with every Critical/High fix): N/A by subject.**
+C/H-1's defect is in four smoke sheets, and no test in this repo can assert that a
+document names a screen the app draws. Stated rather than papered over with a
+source grep, which is the instrument `:33091` §4 had just found going quiet.
+**Rule 4: one liar found (Low-1), fixed, and the fix measured red.**
+
+**PROVE, on the final bytes:** `web` **1752/1752 across 58 files** · scoped
+`gymHours.render` + `myGyms.render` + `xpDisplay.render` **139/139** ·
+`eslint --max-warnings=0` exit 0 on four files · two ROOT guards pass (harnesses
+**25 scripts**, index **291 pointers resolve, 290 on a heading**).
+No `apps/api`, `packages/shared` or migration file is touched, so no api figure is
+quoted (`:28395`).
+
+**THE C214 RUN LEFT A LESSON ABOUT THE RESTORE AND IT IS `:25567`'S, EXACTLY.**
+`git checkout --` restored `GymHoursNote.jsx` to CRLF where the working tree had
+held LF, so the sha did NOT match the pre-mutation file and the mismatch was
+reported rather than waved through. The true bytes were put back and verified
+(`sha256sum -c`, OK); `git diff` confirms no content change either way. **A
+`git checkout --` restore is a restore of CONTENT, never of BYTES — keep a copy if
+the sha is going to be quoted.**
+
+**`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (`:24559`, Kd's), and
+`GymHoursNote.jsx` shows in `git status` for the line-ending reason above while
+`git diff` reports nothing — it is deliberately NOT staged.
+
+**NEXT: T3 ROUND 2, DIFF-ONLY** (`:5348` rule 2) — the fixes and the surfaces they
+touch, nothing else. The 🟡 line ticks on zero Critical/High.

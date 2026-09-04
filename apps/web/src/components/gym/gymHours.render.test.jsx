@@ -158,6 +158,15 @@ describe('a gym that has answered', () => {
     expect(await screen.findByText('Open 24 hours')).toBeTruthy();
     // Seven identical rows for a gym that never shuts is noise, not information.
     expect(screen.queryByText('Mon')).toBeNull();
+    // AND THE CONTROL ITSELF, for the same reason the `savedWeek` case above
+    // needs it: once the week folds, `queryByText('Mon') === null` is satisfied
+    // by a SHUT fold just as well as by a component that drew no week at all,
+    // so on its own this case goes quiet under `C214` instead of red. The fold
+    // is drawn on the MODE and not on the week's length, so a 24-hour gym under
+    // that mutant is handed a control over nothing — which is what this asserts
+    // never happens. (T3 round 1 on `:32929`/`:33091`, Low-1: the fifth case of
+    // the shape that entry's §3 generalises about, and the one it missed.)
+    expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
   });
 
   it("shows TODAY from the GYM's zone — proven on a PAIR, because one gym cannot prove it", async () => {

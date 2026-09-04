@@ -120,10 +120,14 @@ export default function MyGyms() {
                 <p className="text-sm font-semibold truncate" style={{ color: '#fff' }}>
                   {gym.name}
                 </p>
-                {/* The same reader the member's dashboard card and the owner's
-                    Settings panel use, so no two screens can disagree about
-                    when a gym is open. It draws nothing until the gym has
-                    answered — "nobody has set hours" is not "closed" (:26736). */}
+                {/* The same reader ~~the member's dashboard card and~~ the
+                    owner's Settings panel uses, so no two screens can disagree
+                    about when a gym is open. **STRUCK 2026-09-04:** `:33091`
+                    took the membership row off the dashboard and the hours ride
+                    on that row, so this screen and Settings → Gym are the only
+                    two places they are drawn now. It draws nothing until the gym
+                    has answered — "nobody has set hours" is not "closed"
+                    (:26736). */}
                 <GymHoursNote gymId={gym.id} />
                 <AttendancePanel gym={gym} />
               </div>

@@ -1,6 +1,54 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 1 ON BOTH OF TODAY'S CARDS — ONE Critical/High, THE PACKET DOES
+      NOT SHIP, ALL FIVE FINDINGS FIXED. DECISIONS `:33334`.
+      **START HERE: the next gate is T3 ROUND 2, DIFF-ONLY** (`:5348` rule 2) —
+      the fixes and the surfaces they touch, never a fresh full pass. The 🟡
+      `OWED.md` line covering `:32929` and `:33091` ticks on zero Critical/High.
+      Web only: no `apps/api`, no `packages/shared`, no migration.
+
+  1. **C/H-1 — FOUR SHEETS NAMED A SCREEN THE APP NO LONGER DRAWS.** `:33091`'s
+     `showMemberships={false}` took the membership card off the dashboard and
+     the opening times ride on that row, so `smoke-gym-hours-fold.md` 1–3 (the
+     live UNRUN gate), `smoke-opening-hours.md` 22/22b/23 and
+     `smoke-join-door.md` 12 were unrunnable — and 12 is recorded PASSED, so a
+     false ✅ sat inside cited evidence. **:32498 / :33265 §1 a THIRD time.** All
+     re-pointed at `My Gyms`, after checking the calendar really folds and the
+     nav item really says `My Gyms` (a re-point onto a control that does not
+     fold would be the same defect inside its own correction).
+  2. **STANDING, and it is cheap: a commit that REMOVES a surface greps
+     `RUNBOOK/` for the words on it before it lands.**
+  3. **THE REVIEW WAS WRONG ONCE, IN THE DIRECTION THAT COSTS KD WORK.** Its
+     Low-4 asked for an `OWED.md` line covering seven dead anchors; **five were
+     already on one from 2026-08-16**. Only `mutate-person-gate.mjs` (PG16/PG17,
+     dead 213 commits, harness ABORTS ⇒ all 23 mutants unrunnable) is untracked
+     and got the line. **Re-measure a review's map before acting on it.**
+  4. **THE DEAD-ANCHOR CLASS IS FOUR DEEP AND ITS GUARD IS ITS OWN CARD** — Kd
+     ruled it out of this fix round. Shape recommended and recorded: a `--check`
+     flag on each harness running its OWN pre-check, never a central parser
+     (`:22640`).
+
+PROVE: `web` **1752/1752 across 58 files** · scoped `gymHours.render` +
+       `myGyms.render` + `xpDisplay.render` **139/139** · `eslint
+       --max-warnings=0` exit 0 on four files · three ROOT guards pass
+       (harnesses **25 scripts**, index **292 pointers resolve, 291 on a
+       heading**, triggers **989 from 258 of 396**). `C214` applied BY HAND to
+       measure Low-1's fix: **2 of 14 red before, 3 of 14 after**; restore
+       verified `sha256sum -c` OK. No api figure quoted (`:28395`).
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       `GymHoursNote.jsx` shows in `git status` because `git checkout --`
+       returned it as CRLF and the true bytes are LF; `git diff` reports no
+       content change and it is deliberately NOT staged (`:25567`).
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+       **NEITHER SHEET HAS BEEN RUN IN ITS RE-POINTED FORM** — the fold has been
+       SEEN and never operated (`:33265` §3), and `smoke-join-door.md` step 12's
+       new ✅ is unrun.
+```
+
+```
 TASK: THE SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, AND THE SHEET ASKED HIM
       TO CONFIRM ONE THING WAS BOTH PRESENT AND ABSENT. DECISIONS `:33265`.
       **START HERE: T3 IS NOW THE ONLY GATE LEFT on the 🟡 `OWED.md` line, and it

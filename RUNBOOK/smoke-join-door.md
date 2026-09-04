@@ -158,7 +158,19 @@ list below within a second** — without you reloading anything.
 ### 12 — the member is told they are in
 In the MEMBER window, reload the **Dashboard**.
 
-✅ **Expect:** **"You're a member of {your gym}"**. The waiting card is gone.
+✅ **Expect:** the waiting card is **gone**, and the greeting at the top now reads
+**"Welcome to {your gym}"** underneath your name.
+
+> **THIS STEP'S ✅ WAS REWRITTEN 2026-09-04 AND ITS PASS IS OLDER THAN THE EDIT.**
+> It used to expect a bordered box saying *"You're a member of {your gym}"*. Kd
+> ruled that box off the dashboard the same day — *"the dashboard should not even
+> show you are a memebr of xyz"* (`:33091`) — so the old ✅ describes a screen the
+> app no longer draws. The box itself is not gone from the product: it is on
+> **My Gyms** and on **Settings → Gym**, whole, with the opening times.
+> **The welcome line names a gym only when you belong to exactly ONE**, which a
+> fresh account running this sheet does; on an account in two gyms it is absent
+> by design and this step's ✅ is then just "the waiting card is gone".
+> **Not re-run in this form.**
 
 ---
 
