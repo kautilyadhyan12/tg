@@ -20,3 +20,23 @@
 6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:41
 6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:42
 6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:45
+
+# T3 round 1 on the cheer packet (2026-09-04, DECISIONS :34443): CI's
+# full-history gitleaks job went RED on THREE prose sentences in the RECORD —
+# no code, no config, no secret. The flagged "secret" is a FUNCTION NAME:
+# `kcalPointForSetsV2` / `kcalPointForSetsV3`, both exported from
+# `apps/api/src/modules/workouts/calories.ts` (verified by grep the day this was
+# pinned, alongside their call sites in `workouts/service.ts`).
+#
+# WHY THE RULE FIRES, because it will happen again: `generic-api-key` is a
+# KEYWORD-plus-ENTROPY rule, and every one of these lines reads
+# "API half: `kcalPointForSetsV…`". The word API sits next to a long camelCase
+# token, which is the exact shape of `api_key = <secret>`. **Any sentence in
+# this repo's prose that puts "API" beside a backticked identifier can do this.**
+#
+# NOT A REAL-SECRET FINGERPRINT (R3.6, and this file's own header rule): these
+# name a pure arithmetic function that takes sets and a body weight and returns
+# a calorie figure. Nothing here authenticates anything.
+a3138614a8b05beb36f6d9b1cfcadad8bbdd16b1:OWED.md:generic-api-key:6758
+9b54454aa4a1dde0f81419d6a7f6e3393ac09665:HANDOFF.md:generic-api-key:25
+84ff14d7dbb13644539d8d639575deda17959085:HANDOFF.md:generic-api-key:23
