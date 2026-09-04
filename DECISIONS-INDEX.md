@@ -5200,6 +5200,35 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   `tools/check-smoke-folds.mjs` on the ROOT lint** — measured at 2 of the 4
   broken ✅ and saying so in its own header. `web` 1752/1752; guard proven RED on
   the pre-fix bytes. **NEXT: T3 round 3, diff-only.**
+- **:33648** — 2026-09-04 — **T3 ROUND 3 (diff-only): TWO Critical/High, KD
+  RULED PATCH, and round 2's own fix carried a fresh instance of the class it
+  was closing.** **Read before writing a ✅ that names what is INSIDE a fold you
+  just told the tester to open, before trusting `tools/check-smoke-folds.mjs` to
+  mean a sheet is runnable, before folding a surface any smoke sheet already
+  describes, and before answering Kd's "is a wrong sentence really Critical?"
+  from memory instead of from `:5348` rule 1.** **C/H-1: round 2 rewrote
+  `smoke-attendance.md` step 10 to promise a time beside today's date in the
+  month grid — the grid draws a FLAME with the date inside it and NO time
+  (`CameDay`); the times are in `DaySheet`, one further tap in, and `DaySheet`
+  is `fixed inset-0 z-50` so it covers the "I'm here" button step 11 presses.**
+  **C/H-2: `smoke-my-gyms-calendar.md` step 4 folds the month away and step 5
+  asks for the month name inside it**, every later step inheriting the shut
+  fold. **The hatch armed** (`smoke-attendance.md` twice running, `:13336` FILE
+  granularity) **and Kd ruled PATCH — plus "keep the documentation as it is".**
+  **He also asked whether a wrong SENTENCE is really Critical: it is not under
+  `:5348` rule 1 / `:5807` 1a, `:22029` is the precedent for the same over-tag,
+  the reclassification was offered and he did not take it, so THE GATE IS
+  UNCHANGED.** Low-2: the guard tested its operator verb against the WHOLE step,
+  so one tap satisfied both folds on a card that draws two — now windowed at
+  `NEAR = 80`, **measured off all 16 real (control, step) pairs** (widest genuine
+  distance 69; 25 rejected because it flags three CORRECT steps), and tightening
+  it immediately caught a third sheet at ~110. Low-1: a stale step reference the
+  same commit fixed one file over. **THE GUARD IS 0 OF 2 ON THIS ROUND'S
+  FINDINGS, verified by running it on the pre-fix bytes (exit 0)** — it proves a
+  step OPENS a fold, never that the ✅ under it is TRUE, and a per-step grep
+  cannot see cross-step fold state. Both limits are in its header and in
+  `OWED.md`; **neither is fixed.** No app source touched. **NEXT: T3 round 4,
+  diff-only.**
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.

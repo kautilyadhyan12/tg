@@ -35,7 +35,7 @@ everything** — which is the whole of what he objected to.
 the account running it invites a tick for something nobody saw.** Step 3 is
 struck below rather than deleted, because the wrong step is the lesson.
 
-**THE FOLD WAS SEEN BUT NOT OPERATED.** Step 4 names the *This week* fold as
+**THE FOLD WAS SEEN BUT NOT OPERATED.** Step 3 names the *This week* fold as
 PRESENT; nothing in this sheet asked him to tap it shut, which is
 `smoke-gym-hours-fold.md` step 3 and the guarantee `:31295` exists over. That
 sheet is still UNRUN and its own status block says so.

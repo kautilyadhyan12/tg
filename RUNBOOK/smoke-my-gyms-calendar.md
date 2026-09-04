@@ -11,6 +11,13 @@ month grid that was open by default, which he looked at and rejected
 (*"disgusting covering alsmot the whole page"*). A sheet that describes a screen
 as it WAS is the defect commit `25554f3` exists to fix.
 
+**CORRECTED 2026-09-04 — STEP 5 ASKED FOR SOMETHING STEP 4 HAD JUST HIDDEN.**
+Step 4 folds the month away; step 5 then said *"Look at the month name"*, which
+is drawn only while the fold is open, and nothing between them re-opened it.
+Every step from 5 down inherited the shut fold. Step 5 now re-opens it. **The
+📣 declarations below were given against the old wording**, so they stand as
+declarations and are not upgraded by this correction.
+
 **Why this exists even though 1,734 tests are green:** those run in jsdom through
 `fastify.inject` and a mocked network. Card 4's dead-method bug sat behind 250
 green tests because a browser was never opened. **What is being checked here is a
@@ -57,7 +64,7 @@ the note under the table. It is the one step here that was actually attempted.
 | 2 | Click that row. | A **compact** month opens — a small block of squares, not a full-width sheet. Above it, the month name and year with **‹** and **›** arrows. | ✅ 2026-09-03 |
 | 3 | Look at a day you came. | It is a **bright orange flame filling the square**, with **the date inside it in white**, readable without leaning in. Days you did not come are a plain grey number. Days later this month are dimmed. | ✅ 2026-09-03 |
 | 4 | Click the **Days you came** row again. | The month **folds away** and the row is back on its own. | 📣 declared |
-| 5 | Look at the month name. | It is **the month your gym is in right now**. | 📣 declared |
+| 5 | **Tap the Days you came row open again** — step 4 folded it shut — then look at the month name. | It is **the month your gym is in right now**. | 📣 declared |
 | 6 | Press **I'm here** (if your gym is open), with the calendar open. | The confirmation sentence appears as before, **and today's square turns into a flame straight away** — no reload. | 📣 declared |
 | 7 | Click the flame for a day you came. | A panel opens over the screen headed with **that day's date**, listing **the time or times you arrived**. Click outside it, or the ✕, and it closes. | 📣 declared |
 | 8 | Press the **left arrow** once. | The heading moves to the **previous month** and the grid redraws for it. If you came that month, those days carry flames. | 📣 declared |

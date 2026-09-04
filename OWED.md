@@ -259,7 +259,24 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       own fold and the `Days you came` calendar** — all corrected, none re-run.
       A permanent guard now holds the class on the root lint
       (`tools/check-smoke-folds.mjs`), and it is measured at 2 of those 4, which
-      its own header states. **NEXT: T3 round 3, diff-only.**
+      its own header states.
+      **ROUND 3 (2026-09-04) FOUND TWO MORE Critical/High AND KD RULED PATCH,
+      NOT REDESIGN**, the escape hatch having armed on `smoke-attendance.md`
+      twice running (`:5348`; the hatch ARMS, Kd rules — `:14493`). Both were
+      sheets again, neither in the app: round 2's own correction to step 10
+      promised *"today's date carries a time beside it"* when the month grid
+      draws a flame and a date and no time at all, and
+      `smoke-my-gyms-calendar.md` step 5 asked for the month name that step 4
+      had just folded away. Both fixed, plus two Low; all four sheets remain
+      **UNRUN**.
+      **THE GUARD'S REACH IS NOW MEASURED AT 0 OF 2 ON ROUND 3'S FINDINGS** —
+      run against those sheets' pre-fix bytes it exits 0. It proves a step opens
+      a fold; it cannot prove the ✅ underneath is true (C/H-1), and a per-step
+      grep cannot see a step relying on a fold an EARLIER step shut (C/H-2).
+      **Both limits are written into the file's own header rather than left to
+      be rediscovered, and NEITHER IS FIXED** — closing them needs an instrument
+      that reads a ✅ against the component, which is not this patch.
+      **NEXT: T3 round 4, diff-only.**
 
 - [ ] 🟡 **`RUNBOOK/smoke-overview-numbers.md` IS STALE AND IS MARKED SO AT THE
       TOP** (2026-09-03). Two of its ✅ name things Kd removed the same day it

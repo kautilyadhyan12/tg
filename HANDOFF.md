@@ -1,6 +1,66 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 3 (DIFF-ONLY) — TWO Critical/High, THE PACKET DOES NOT SHIP, ALL
+      FOUR FINDINGS FIXED, AND KD RULED **PATCH** ON AN ARMED ESCAPE HATCH.
+      DECISIONS `:33648`.
+      **START HERE: the next gate is T3 ROUND 4, DIFF-ONLY** (`:5348` rule 2).
+      The 🟡 `OWED.md` line still does not tick — three rounds, three with a
+      Critical/High. **NO app source touched**: `git diff --name-only apps
+      packages` is empty. Four `RUNBOOK/*.md`, one `tools/*.mjs`, records.
+
+  1. **THE HATCH ARMED AND KD RULED PATCH — plus "keep the documentation as it
+     is".** `smoke-attendance.md` carried the Critical in rounds 2 AND 3;
+     `:13336` judges at FILE granularity. The distinction he was given
+     (`:14493`): **round 2's fix to step 10 replaced one false sentence with
+     another**, which is not the convergence shape that earned PATCH before.
+  2. **KD ASKED WHETHER A WRONG SENTENCE IS REALLY CRITICAL. IT IS NOT** —
+     `:5348` rule 1 puts wording in Low, `:5807` 1a keeps cosmetic-but-TRUE
+     there, and `:22029` is the precedent for this exact over-tag. **All three
+     rounds' Criticals were sheet prose, none in the app.** The
+     reclassification was OFFERED and he did not take it, so **the gate is
+     UNCHANGED** — but read this before tagging the next sheet finding C/H.
+  3. **C/H-1 — the month grid has NO times.** Round 2 promised *"today's date
+     carries a time beside it"*. `CameDay` draws a flame with the date inside
+     it; times live in `DaySheet`, one further tap in — **and `DaySheet` is
+     `fixed inset-0 z-50`, so it covers the "I'm here" button step 11 presses.**
+     Steps 10/11/12 rewritten to click the flame and close the panel.
+  4. **C/H-2 — `smoke-my-gyms-calendar.md` step 4 folds the month away, step 5
+     reads the month name out of it**, and every later step inherited the shut
+     fold. Step 5 now re-opens it; the 📣 declarations are NOT upgraded.
+  5. **THE GUARD IS 0 OF 2 ON THIS ROUND, MEASURED — it exits 0 on both sheets'
+     pre-fix bytes.** It proves a step OPENS a fold; it has never proved the ✅
+     under it is TRUE (C/H-1), and a per-step grep cannot see cross-step fold
+     state (C/H-2). **Both limits are in its header and `OWED.md`; NEITHER IS
+     FIXED** — closing them needs an instrument that reads a ✅ against the
+     component, which PATCH does not authorise.
+  6. **Low-2 — `OPERATED` was tested against the WHOLE step**, so one tap
+     satisfied both folds on a card that draws two. Windowed at `NEAR = 80`,
+     **measured off all 16 real (control, step) pairs** (widest genuine 69; 25
+     rejected — it flags three CORRECT steps). Tightening it immediately caught
+     a third sheet at ~110, fixed by rewording rather than a new exception.
+
+PROVE: four ROOT guards green — harnesses **26 scripts (23 .mjs + 3 .sh)**,
+       index **294 pointers resolve, 293 on a heading, 1308 headings**,
+       triggers **997 from 260 of 398 rulings** (rebuilt; the staleness check
+       fired first and was obeyed), smoke-folds **OK, 1 documented exception**.
+       `node --check` parses the guard. **Rule 3 on Low-2 proven by running the
+       PRE-FIX guard on the PRE-FIX sheet: exit 0 "OK", vs exit 1 on the fixed
+       guard.** Restores by byte copy from a scratchpad snapshot — never
+       `git checkout --` (`:25567`). No sweep, no test run: `:5857` 4a and no
+       app file moved.
+
+OPEN:  **Rule 3 does NOT hold for either Critical** — no instrument in this repo
+       can express them; their evidence is the component, cited by line.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       `GymHoursNote.jsx` shows in `git status` for the CRLF reason and is
+       deliberately NOT staged (`:25567`); `git diff` reports no content change.
+       **NONE OF THE FOUR SHEETS HAS BEEN RUN IN ITS CORRECTED FORM.**
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: T3 ROUND 2 (DIFF-ONLY) — ONE Critical/High, THE PACKET DOES NOT SHIP, ALL
       FIVE FINDINGS FIXED, AND THE REVIEW WAS WRONG IN BOTH DIRECTIONS ON ONE
       FINDING. DECISIONS `:33499`.

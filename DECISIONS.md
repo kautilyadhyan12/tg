@@ -33644,3 +33644,140 @@ change is a CSS class jsdom cannot observe.
 round with zero Critical/High; this round has one. **Neither the fold sheet nor
 the attendance sheet has been run in its corrected form**, and `smoke-attendance.md`
 now says so in its own header. **NEXT: T3 round 3, diff-only** (`:5348` rule 2).
+
+## 2026-09-04 — T3 ROUND 3 (diff-only): TWO Critical/High, KD RULED **PATCH**, and the round-2 fix that was supposed to end the class carried a fresh instance of it
+
+**Read before writing a ✅ that names what is INSIDE a fold you just told the
+tester to open, before trusting `tools/check-smoke-folds.mjs` to mean a sheet is
+runnable, before folding a surface any smoke sheet already describes, and before
+answering Kd's "is a wrong sentence really Critical?" from memory instead of from
+`:5348` rule 1.**
+
+Reviews `1945bf9`. **TWO Critical/High, both in smoke sheets, neither in the
+app** — the third round running where every Critical was prose. Fixed here with
+both Low. No `apps/api`, no `packages/shared`, no `apps/web` source, no
+migration.
+
+### 1 · THE ESCAPE HATCH ARMED AND KD RULED PATCH — the record is the DISTINCTION, not the count
+
+Round 2's Critical was in `smoke-attendance.md`; round 3's C/H-1 is in
+`smoke-attendance.md`. `:13336` judges at FILE granularity, so `:5348`'s trigger
+fired. Put to Kd with the distinction `:14493` says decides it — **round 2 found
+four false ✅ and fixed three; round 3 found that the FIX to step 10 replaced one
+false sentence with another, so this is not the convergence shape that earned
+PATCH at `:14493`, `:6277`, `:9509`** — and he ruled **patch, and keep the
+documentation as it is**.
+
+**HE ALSO ASKED THE QUESTION THE ROUNDS SHOULD HAVE ASKED THEMSELVES:** *"is
+there not a rule that sentence correction is not critical"*. **There is, and he
+is reading it correctly** — `:5348` rule 1 puts *"spelling, comments, naming,
+style"* in Low, and `:5807` 1a keeps *"cosmetic-but-TRUE"* findings there, its
+two worked examples both being APP SCREENS printing a false number. **Three
+rounds of "the packet does not ship" were bought by sheet prose.** `:22029` is
+the recorded precedent for the same over-tag — *"it should not have been tagged
+C/H and the hatch should not have fired on it"*. **The reclassification was
+OFFERED to him and he did not take it**; he asked for the problems fixed
+instead, so **the severity gate is UNCHANGED and this paragraph is a pointer for
+whoever next tags a sheet, not a ruling.**
+
+### 2 · C/H-1 — THE FIX FOR "THE FOLD HID IT" PROMISED SOMETHING THAT IS NOT IN THERE AT ALL
+
+Round 2 rewrote `smoke-attendance.md` step 10 to *"The month opens and today's
+date carries a time beside it, on the 12-hour clock."* **The month grid has no
+times.** A day someone attended draws `CameDay` — a filled flame with the date
+inside it in white (`AttendancePanel.jsx:208-231`, and `:32395` is Kd putting the
+date INSIDE the flame). Times exist only in `DaySheet` (`:147-172`), reached by
+clicking the flame (`:742`). Steps 11 and 12 carried the same promise.
+
+**AND THE SHEET COULD NOT HAVE BEEN RUN EVEN ONCE THE TIMES WERE FOUND:**
+`DaySheet` is `fixed inset-0 z-50` (`:119`), so it covers the **I'm here** button
+that step 11 tells the tester to press. Fixed: step 10 says the square carries no
+time and sends them one tap deeper, then says to close the panel and why; 11 and
+12 re-open it. Verified `withVisit` dedupes on `day`+`markedAt`
+(`attendanceView.js:218-223`), so step 11's *"still only ONE time"* is true of
+the second press.
+
+**THE SHAPE, because it is the whole lesson of the round:** round 2 diagnosed the
+class correctly (*a ✅ naming content behind an unopened fold*) and then wrote its
+correction from a memory of the screen rather than from the component. **A fix
+for "this sentence was not checked against the code" that is itself not checked
+against the code is the defect surviving its own remedy.**
+
+### 3 · C/H-2 — `smoke-my-gyms-calendar.md` STEP 4 SHUTS THE FOLD THAT STEP 5 READS FROM
+
+Step 4's ✅ is *"The month folds away"*; step 5 is *"Look at the month name"*,
+which renders only under `calendarOpen` (`AttendancePanel.jsx:723`). Nothing
+between them re-opens it, and **every step from 5 down inherited the shut fold.**
+Step 5 now re-opens it. The nine 📣 declarations were given against the old
+wording and are NOT upgraded by the correction — the sheet says so.
+
+### 4 · THE GUARD IS GREEN ON BOTH OF THESE, MEASURED RATHER THAN ASSUMED — 0 of 2
+
+`tools/check-smoke-folds.mjs` was built by round 2 for exactly this class and
+**exits 0 against the pre-fix bytes of both sheets.** Two different blind spots,
+now written into its own header:
+
+- **C/H-1 is a false ✅ inside a CORRECTLY operated fold.** The check proves a
+  step opens the fold; it has never proved the sentence under it is true.
+- **C/H-2 is cross-step state.** Step 5 names no fold, so no per-step grep
+  reaches it.
+
+**Neither is fixed and neither is pretended to be** — closing them needs an
+instrument that reads a ✅ against the component it describes, which Kd's PATCH
+ruling does not authorise. `OWED.md` carries both, with the 0-of-2 figure beside
+round 2's 2-of-4.
+
+### 5 · Low-2 — `OPERATED` WAS TESTED AGAINST THE WHOLE STEP, SO ONE TAP SATISFIED TWO FOLDS
+
+The guard matched its operator verb anywhere in the step rather than near the
+fold it was judging, and **the member's gym card draws both folds on one screen**,
+so that is the shape of every step on that card, not a contrived one. The verb
+now has to sit within `NEAR` of an occurrence of THAT fold's own control.
+
+**`NEAR = 80` IS MEASURED, NOT PICKED.** All 16 (control, step) pairs in
+`RUNBOOK/` were scored for distance to their nearest operator verb: 2 · 2 · 3 · 4
+· 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 · 49 · 60 · 69. The widest GENUINE one is
+69, so 80 clears every true phrasing. **25 was considered and rejected on that
+same data** — it flags three CORRECT steps (one asserting both rows are merely
+present, one operating the calendar with the deliberately-excluded verbs
+"open"/"close", one asserting legitimate absence), and a guard that cries wolf on
+correct steps is this file's own header warning in reverse.
+
+**TIGHTENING IT IMMEDIATELY FOUND A THIRD SHEET**, which is the argument for the
+change: `smoke-gym-hours-fold.md` step 1 sat at ~110 and passed the old check by
+borrowing a verb from elsewhere in the sentence. **Fixed by rewording the sheet
+rather than by adding an `ABSENT_BY_DESIGN` entry** — an exception permanently
+widens the guard, and the step reads better as *"There is NO Monday-to-Sunday
+list until you tap that This week row."*
+
+### 6 · Low-1 — the stale cross-reference the same commit fixed one file over
+
+`smoke-dashboard-gym-greeting.md:38` said *"Step 4 names the This week fold"*; it
+is row 3 (row 4 is Settings → Gym). `1945bf9` fixed this exact defect in
+`smoke-gym-hours-fold.md` and left it standing in the sheet it was citing.
+
+### Round log
+
+**PROVE.** All four ROOT guards green — `check-harnesses` 26 scripts (23 .mjs + 3
+.sh) · `check-decisions-index` 293 pointers, 1300 headings ·
+`check-decisions-triggers` up to date, 993 triggers from 259 of 397 rulings ·
+`check-smoke-folds` OK. `node --check tools/check-smoke-folds.mjs` parses.
+
+**RULE 3 — the Low-2 fix is proven RED without it**, not asserted: the pre-fix
+guard (`git show HEAD:tools/check-smoke-folds.mjs`) run against the pre-fix sheet
+exits **0, "OK"**; the fixed guard against the same bytes exits **1**, flagging
+`smoke-gym-hours-fold.md::step 1`. Pre-fix bytes written with `git show HEAD:`
+and restored by byte copy from a scratchpad snapshot — **never `git checkout --`**
+(`:25567`'s CRLF hazard).
+
+**RULE 3 does NOT hold for C/H-1 or C/H-2, and that is stated rather than
+implied.** No instrument in this repo can express either; §4 is the measurement.
+Their evidence is the component read this session, cited by line above.
+
+**No mutation sweep, no test run.** `:5857` rule 4a — database mutants are for
+cards that change SERVER behaviour. **`git diff --name-only apps packages` is
+empty**: this round changed four `RUNBOOK/*.md`, one `tools/*.mjs` and `OWED.md`.
+
+**NOTHING TICKS.** The 🟡 `OWED.md` line needs a round with zero Critical/High;
+this one has two. **None of the four sheets has been run in its corrected form.**
+**NEXT: T3 round 4, diff-only** (`:5348` rule 2).

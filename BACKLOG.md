@@ -3745,3 +3745,49 @@ this file for that round and finds nothing.**
       vocabulary the previous step installed**, so it stays Low under `:5807`
       ("on screen AND wrong" is the test). Now names the headline and says the
       reload re-folds the week.
+
+## 2026-09-04 — the fold/greeting packet, T3 round 3, DIFF-ONLY (DECISIONS `:33648`)
+
+Reviews `1945bf9`. **TWO Critical/High ⇒ the packet does NOT ship** (`:5348`
+rule 1); they are in `DECISIONS.md`, not here. **TWO Low, both fixed in this
+round.** Kd ruled **PATCH** on the armed escape hatch and *"keep the
+documentation as it is"*.
+
+**AND THE SEVERITY QUESTION HE ASKED BELONGS AT THE TOP OF THIS FILE'S OWN
+SUBJECT:** *"is there not a rule that sentence correction is not critical"*.
+**There is** — this file's header says a Low finding is *"spelling, comments,
+naming, style"*, and `:5807` 1a keeps cosmetic-but-TRUE findings Low. **All
+three rounds on this packet put their Critical on sheet prose**, and `:22029`
+records the same over-tag being made and regretted. **He was offered the
+reclassification and did not take it, so the gate is UNCHANGED** — but a chat
+about to tag the next sheet finding Critical should read `:33648` §1 first.
+
+- [x] **L-1 · A STALE STEP REFERENCE, IN THE SHEET THE SAME COMMIT WAS CITING** —
+      `smoke-dashboard-gym-greeting.md:38` said *"Step 4 names the This week
+      fold as PRESENT"*. It is row **3**; row 4 is Settings → Gym. `1945bf9`
+      fixed this exact defect in `smoke-gym-hours-fold.md` (step 4 → step 3) and
+      left the identical one standing in the sheet that fix pointed at. **The
+      shape is `:20587`'s at sentence scale, for the second round running**:
+      correcting one copy of a claim and not its sibling.
+- [x] **L-2 · THE FOLD GUARD TESTED ITS OPERATOR VERB AGAINST THE WHOLE STEP** —
+      `tools/check-smoke-folds.mjs` matched `OPERATED` anywhere in the step
+      rather than near the fold it was judging, so **a step that tapped ONE fold
+      satisfied the check for a SECOND it only mentioned in passing.** The
+      member's gym card draws both folds on one screen, so that is the shape of
+      every step on that card, not a contrived one. The verb must now sit within
+      `NEAR` of an occurrence of THAT fold's own control.
+      **`NEAR = 80` IS MEASURED, NOT PICKED**: all 16 real (control, step) pairs
+      in `RUNBOOK/` scored for distance to their nearest operator verb — 2 · 2 ·
+      3 · 4 · 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 · 49 · 60 · 69 — widest
+      genuine 69. **25 was considered and rejected on that data**: it flags three
+      CORRECT steps (one asserting both rows merely present, one operating the
+      calendar with the deliberately-excluded verbs "open"/"close", one asserting
+      legitimate absence), and a guard that cries wolf on correct steps is this
+      file's own hazard in reverse.
+      **Tightening it immediately caught a third sheet** — `smoke-gym-hours-
+      fold.md` step 1 sat at ~110 and had been passing by borrowing a verb from
+      elsewhere in the sentence. **Fixed by rewording the sheet, NOT by adding an
+      `ABSENT_BY_DESIGN` entry**: an exception permanently widens the guard, and
+      *"There is NO Monday-to-Sunday list until you tap that This week row"*
+      reads better than what it replaced. Proven RED without the fix — the
+      pre-fix guard on the pre-fix sheet exits 0, the fixed guard exits 1.

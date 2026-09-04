@@ -38,7 +38,7 @@ tested — that the week and the **Days you came** calendar do not move each oth
 
 | # | Do this | ✅ Expect |
 |---|---------|-----------|
-| 1 | Sign in as the **member**, click **My Gyms** in the left menu, and look at your gym's card. | Under the gym's name: **one line starting "Today:"**, and under that a row reading **"This week"** with a small arrow at its right. **There is NO Monday-to-Sunday list.** If you can see seven weekdays without tapping anything, that is the failure this card was built to fix — stop and say so. |
+| 1 | Sign in as the **member**, click **My Gyms** in the left menu, and look at your gym's card. | Under the gym's name: **one line starting "Today:"**, and under that a row reading **"This week"** with a small arrow at its right. **There is NO Monday-to-Sunday list until you tap that "This week" row.** If you can see seven weekdays before tapping it, that is the failure this card was built to fix — stop and say so. |
 | 2 | **Tap the "This week" row.** | The seven weekdays appear underneath it, each with its times or the word **Closed**, and the arrow turns over. |
 | 3 | **Tap the "This week" row again.** | The seven weekdays **disappear**. The **"Today:" line is still there** — that line must never go away, in either state. (This is the step that matters most: a drop-down that opens and then refuses to close is a real thing that shipped on this app once.) |
 | 4 | Tap **"This week"** open once more. Now open the **"Days you came"** calendar below it, and close it again. | The two are **independent**. Opening or closing the calendar leaves the week exactly as you left it, and opening or closing the week leaves the calendar exactly as you left it. Neither may move the other. |

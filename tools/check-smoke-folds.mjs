@@ -38,17 +38,31 @@
  * closing note): a clean run means "no sheet declared the problem in the
  * vocabulary below", never "no sheet has it".**
  *
- * **AND ITS REACH WAS MEASURED, NOT ASSUMED: it caught 2 of the 4 broken ✅ it
- * was written for.** Run against the pre-fix bytes it flagged
- * `smoke-attendance.md` steps 6 and 10 — the two that NAME a fold — and was
- * blind to steps 11 and 12, which said *"still only ONE time on that day"* and
- * *"the day and its time are still there"* without naming anything. **Step 11
- * was only consequentially wrong** (fixing 10 makes it reachable) **but step 12
- * was independently wrong: a reload folds the calendar shut again, so it needed
- * its own re-open and this check cannot express that.** A step that depends on a
- * fold left open by an EARLIER step is outside what a per-step grep can see.
+ * **AND ITS REACH WAS MEASURED, NOT ASSUMED — TWICE, AND THE SECOND
+ * MEASUREMENT IS THE HONEST ONE.**
+ *
+ * Against the four broken ✅ it was written for (T3 round 2) it caught **2 of
+ * 4**: `smoke-attendance.md` steps 6 and 10, the two that NAME a fold. It was
+ * blind to steps 11 and 12, which described the content without naming
+ * anything.
+ *
+ * **Against T3 round 3's two Critical/High it caught 0 of 2, verified by
+ * running this file against those sheets' pre-fix bytes: `EXIT=0`, "OK".**
+ * That is the number to quote, and each miss names a different blind spot:
+ *
+ *   - **C/H-1 (`smoke-attendance.md` step 10) — a false ✅ INSIDE a correctly
+ *     operated fold.** The step said to tap `Days you came` and then promised
+ *     *"today's date carries a time beside it"*. The month grid draws a flame
+ *     and a date and NO time (`AttendancePanel.jsx` `CameDay`); the times live
+ *     in `DaySheet`, one further tap in. **This check proves a step opens the
+ *     fold. It has never proved the ✅ under it is true, and cannot.**
+ *   - **C/H-2 (`smoke-my-gyms-calendar.md` step 5) — cross-step state.** Step 4
+ *     folds the month away, step 5 asked for the month name, which lives inside
+ *     it. Step 5 names no fold, so no per-step grep can reach it.
+ *
  * The honest reading of a green run is therefore "no step introduces a fold
- * without naming it", not "every step is runnable".
+ * without naming it", not "every step is runnable" — and emphatically not
+ * "every ✅ is true".
  *
  * Run from the ROOT `lint` script, before turbo, for `check-harnesses.mjs`'s
  * reason (T3 round 5, Low-6): a guard a warm cache can skip is not a guard.
@@ -84,6 +98,46 @@ const FOLDS = [
  *  both appear all over these sheets. */
 const OPERATED =
   /\btap(?:s|ped|ping)?\b|\bclick(?:s|ed|ing)?\b|\bfold(?:s|ed|ing)?\b|\bcollapsed?\b|\bstill open\b|\bopens\b/i;
+
+/** How far from a control's own name an operator verb may sit and still be read
+ *  as operating THAT control.
+ *
+ *  **80 IS MEASURED OFF THE REAL SHEETS, NOT PICKED.** Every (control, step)
+ *  pair in `RUNBOOK/` was scored for the distance to its nearest operator verb:
+ *  16 pairs, and they run 2 · 2 · 3 · 4 · 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 ·
+ *  49 · 60 · 69. **The widest genuine one is 69** (`smoke-my-gyms-calendar.md`
+ *  step 1, *"…the words Days you came… No month grid is on screen — it is
+ *  folded away"*), so 80 clears every true phrasing with margin. The
+ *  pre-fix violation this tightening caught sat at ~110.
+ *
+ *  **A TIGHTER WINDOW WAS CONSIDERED AND REJECTED ON THAT DATA.** 25 would flag
+ *  three steps that are CORRECT — one asserting both rows are merely present,
+ *  one operating the calendar with "open"/"close" (deliberately excluded verbs,
+ *  see `OPERATED`), one asserting legitimate absence. A guard that cries wolf on
+ *  correct steps is the failure this file's header warns about, in reverse. */
+const NEAR = 80;
+
+/** **T3 ROUND 3, Low-2 — `OPERATED` USED TO BE TESTED AGAINST THE WHOLE STEP.**
+ *  A step that tapped ONE fold therefore satisfied this check for a SECOND fold
+ *  it only mentioned in passing, because the verb belonging to the first was
+ *  somewhere in the same string. The member's gym card draws both folds on one
+ *  screen, so that is not a contrived shape — it is the shape every step on
+ *  that card has.
+ *
+ *  The verb now has to sit within `NEAR` characters of an occurrence of THIS
+ *  fold's own control. A step that describes a fold's CONTENT without ever
+ *  naming its control has nothing to anchor to and is a violation, which is the
+ *  stricter and correct reading: a tester cannot operate a control the step
+ *  never mentions. */
+function operates(text, control) {
+  const flags = control.flags.includes("g") ? control.flags : `${control.flags}g`;
+  for (const hit of text.matchAll(new RegExp(control.source, flags))) {
+    const from = Math.max(0, hit.index - NEAR);
+    const to = Math.min(text.length, hit.index + hit[0].length + NEAR);
+    if (OPERATED.test(text.slice(from, to))) return true;
+  }
+  return false;
+}
 
 /** Steps that legitimately mention a fold's vocabulary while asserting the
  *  surface is ABSENT — where there is no control to name because the app draws
@@ -144,7 +198,7 @@ for (const file of readdirSync(RUNBOOK).filter((f) => f.endsWith(".md")).sort())
   for (const step of steps(text)) {
     for (const fold of FOLDS) {
       if (!fold.content.test(step.text) && !fold.control.test(step.text)) continue;
-      if (OPERATED.test(step.text)) continue;
+      if (operates(step.text, fold.control)) continue;
       const key = `${file}::${step.id}`;
       if (key in ABSENT_BY_DESIGN) {
         allowed.add(key);
