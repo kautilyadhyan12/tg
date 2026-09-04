@@ -22,17 +22,24 @@ card and write all tests passed"*, given after being handed
 operator and the gate is his** (`:27415`, `:32498`, `:33265`). **He was NOT shown
 this sheet's five steps in that session**, which is recorded so nobody reads the
 discharge as coverage.
-**WHAT IS THEREFORE STILL HELD BY TESTS AND NOT BY A BROWSER: step 3, the
-CLOSING tap.** That is the whole subject of `:31295` — a dropdown that arrived
-open, could not be closed, and whose two comments both said it worked — and its
-only observers are mutant `C212` and the `gymHours.render.test.jsx` case
-asserting the second tap. **A control seen is not a control working**
-(`:33265` §3), and nobody has yet tapped this one shut.
+~~**WHAT IS THEREFORE STILL HELD BY TESTS AND NOT BY A BROWSER: step 3, the
+CLOSING tap.**~~ **— CORRECTED THE SAME DAY BY KD: HE HAS TAPPED IT SHUT.**
+Told that the closing tap had no human eyes on it, he answered *"these were
+tested and passed"* (2026-09-04, DECISIONS `:34147`). **So step 3 is passed on
+his declaration like the rest of this sheet**, and the sentence above was wrong
+about what he had done, not about what the record held.
+Step 3 is the whole subject of `:31295` — a dropdown that arrived open, could
+not be closed, and whose two comments both said it worked — and its other
+observers are mutant `C212` and the `gymHours.render.test.jsx` case asserting the
+second tap.
 
 ~~**UNRUN AS A SHEET, and only the fold's *presence* has been looked at.**~~
 Kd declared the dashboard-greeting sheet passed on 2026-09-04, and its step 3
 names the **This week** fold as being on the `My Gyms` card — so the fold has
-been SEEN. **Nobody has tapped it shut.** That is step 3 below, it is the whole
+been SEEN. ~~**Nobody has tapped it shut.**~~ **— NO LONGER TRUE: he says he
+has** (`:34147`), and this sentence is struck rather than deleted because it was
+true for a day and its replacement is a declaration, not an observation anybody
+watched. Tapping it shut is step 3 below, it is the whole
 point of `:31295` (a dropdown he found dead at his own browser because it opened
 and would not close), and it is held today by mutant `C212` and by the
 `gymHours.render.test.jsx` case that asserts the SECOND tap.

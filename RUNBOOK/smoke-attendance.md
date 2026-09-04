@@ -251,7 +251,11 @@ section and the odd-arrival line were removed, the button learned to refuse, the
 email arrived beside the name, the initials went, **and steps 6, 10, 11 and 12
 were REWRITTEN on 2026-09-04** because the week and the calendar both fold now.
 **So the steps most likely to be wrong are the four nobody has ever run**, and
-the ⏳ waits in 10 and 12 were added the same day and have never been followed.
+the ⏳ waits in 10 and 12 were added the same day.
+~~and have never been followed.~~ **— CORRECTED THE SAME DAY: KD HAS SEEN THE
+LOADING WINDOW.** Told the two waits had no human eyes on them, he answered
+*"these were tested and passed"* (DECISIONS `:34147`), so they are passed on his
+declaration like the rest of this sheet.
 
 ~~**NOT YET RUN.**~~ This sheet was rewritten 2026-09-03 against the screens as
 they stand after `a1c5005`, `dba7cbe`, `00c2699` and the rulings at

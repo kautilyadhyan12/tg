@@ -21,13 +21,21 @@ TASK: THE FOLD/GREETING PACKET IS CLOSED. Kd DISCHARGED THE SMOKE GATE BY
      `smoke-my-gyms-calendar.md` · `smoke-opening-hours.md` 22/22b/23 ·
      `smoke-join-door.md` step 12. The 🟡 line's tick is a DECLARATION, and its
      own text says so in the same sentence.
-  3. **THREE THINGS NOBODY HAS EVER SEEN RENDER, held by tests alone** (`:34048`
-     §2): **the week fold's CLOSING tap** — `:31295`'s whole subject, a dropdown
-     that arrived open, could not be closed, and whose two comments both claimed
-     it worked; observers `C212` + one render case · **the `Welcome to <gym>`
-     line** — absent on Kd's own two-gym account, so he CANNOT discharge it by
-     looking; observers `P6` + one render case · **the ⏳ loading waits and the
-     corrected calendar step 5**, both written 2026-09-04 and never followed.
+  3. ~~**THREE THINGS NOBODY HAS EVER SEEN RENDER**~~ **— KD ANSWERED THE LIST
+     THE SAME DAY: *"these were tested and passed"* (`:34147`), and TWO ARE
+     ACCEPTED** — the week fold's CLOSING tap (`:31295`'s whole subject) and the
+     two ⏳ loading waits, both now recorded as passed on his declaration.
+     **THE THIRD IS STILL OPEN AND IT IS ARITHMETIC, NOT A DISAGREEMENT:**
+     `Welcome to <gym>` renders only for an account in exactly ONE gym
+     (`Dashboard.jsx:294`, read that session) and **`owner@example.com` has TWO
+     live memberships** — measured against the Neon branch his browser reads
+     (`gym_members` has **no `status` column**; liveness is `removed_at IS NULL`).
+     **So it cannot have been seen on that account.** One question is with him:
+     a different, one-gym account? Until then it is held by `P6` + one render
+     case, as `:33265` §2 left it. **STANDING: when the operator says "that was
+     tested", check the thing is REACHABLE on the account he uses before
+     recording it — a declaration discharges a gate, it cannot make a
+     conditional branch render.**
   4. **"100 TIMES" MEASURED RATHER THAN DISPUTED** (`:34048` §3): parts A/B DID
      pass 8/8 on 2026-09-02 and C/D the same day — **on `8eacc54`'s bytes**.
      Since then the button learned to REFUSE, the email arrived beside the name,

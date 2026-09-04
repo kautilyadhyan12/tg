@@ -193,8 +193,18 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       and this is the fourth time). **WHAT IS NOT CLAIMED: that any step was
       observed** — he was handed `smoke-attendance.md`'s 24 steps in full and
       shown none of the other four sheets. Named on each sheet's own status
-      block, and the three things nobody has ever seen render are listed at
-      `:34048` §2 rather than left to be assumed away.
+      block, and ~~the three things nobody has ever seen render are listed at
+      `:34048` §2~~ **— KD ANSWERED THAT LIST THE SAME DAY: *"these were tested
+      and passed"* (`:34147`). TWO of the three are accepted and recorded as his
+      declaration** (the week fold's CLOSING tap, and the two ⏳ loading waits).
+      **THE THIRD IS ARITHMETIC AND IS STILL OPEN: `Welcome to <gym>` renders
+      only for an account in exactly ONE gym** (`Dashboard.jsx:294`, read this
+      session) **and `owner@example.com` has TWO live memberships** — measured
+      against the Neon branch his browser reads, `Smoke Test Gym` and `owner`,
+      both `removed_at IS NULL`. **So it cannot have been seen on that account.**
+      One question is with him: whether he tested it on a different, one-gym
+      account. Until he answers, the line stays held by mutant `P6` and one
+      render case, exactly as `:33265` §2 left it.
       (2026-09-04, DECISIONS
       `:32929` and `:33091`). Kd took the *"You're a member of xyz"* card off the
       dashboard at his own browser — *"its really looking bad in the dashboard

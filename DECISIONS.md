@@ -34143,3 +34143,83 @@ phrases.
 
 **`git diff --name-only apps packages` is empty.** No sweep and no test run
 (`:5857` rule 4a — no server file moved, and no source file of any kind).
+
+### 5 · ADDENDUM, same session — KD SAYS ALL THREE UNSEEN THINGS WERE TESTED, AND TWO OF THEM ARE HIS TO SAY. THE THIRD CANNOT HAVE HAPPENED ON HIS ACCOUNT, MEASURED
+
+**Read before recording that anybody has seen the `Welcome to <gym>` line, and
+before treating an operator's "that was tested" as settling a question the
+DATABASE can answer in ten seconds.**
+
+Handed §2's list of three things nobody had seen render, he answered ***"these
+were tested and passed"***.
+
+**TWO ARE ACCEPTED WITHOUT ARGUMENT AND ARE NOW RECORDED AS PASSED ON HIS
+DECLARATION** — the week fold's CLOSING tap (`smoke-gym-hours-fold.md` step 3)
+and the two ⏳ loading waits (`smoke-attendance.md` steps 10 and 12, and the
+calendar sheet's Setup note). **He is the operator, both are things he plainly
+could have done at his own browser, and §2 was a statement about the RECORD's
+coverage rather than about his memory.** The sheets now say so.
+
+### THE THIRD IS DIFFERENT, AND IT IS NOT A DISAGREEMENT — IT IS ARITHMETIC
+
+**`Welcome to <gym>` renders only for an account in exactly ONE gym**, and it was
+measured today rather than recalled from `:33265`:
+
+- `Dashboard.jsx:294` — `const welcomeGym = memberGyms.length === 1 ? memberGyms[0] : null`,
+  read this session, and `:482` draws the line only when it is non-null.
+- Queried against the **Neon branch his browser reads**: `owner@example.com` has
+  **TWO live `gym_members` rows** — `Smoke Test Gym` and `owner`, both
+  `removed_at IS NULL`, both gyms `active`.
+
+**So on that account the line is correctly ABSENT and cannot have been observed
+there.** `:33265` §2 recorded this on 2026-09-04 and recorded that he was told
+it; this is the same fact re-measured rather than re-cited (V4).
+
+**THE QUESTION PUT TO HIM, AND IT IS THE ONLY ONE OPEN:** did he test it on a
+DIFFERENT account — a one-gym account, where it does render? **If yes it is
+passed on his declaration like the other two and this addendum's finding
+evaporates.** If he meant the card as a whole, the line stays held by mutant
+`P6` and one render case, exactly as `:33265` left it.
+
+**WHY IT WAS MEASURED INSTEAD OF ASKED FIRST:** the query is two joins and the
+answer is not a matter of opinion. **Asking Kd to confirm something the database
+already answers is the cost `:19256` names** — work manufactured for him out of a
+chat's own uncertainty. The one thing the database CANNOT answer is which account
+he sat at, and that is precisely what was asked.
+
+**STANDING, and it is the useful half of this addendum: when an operator says
+"that was tested", check whether the thing he names is REACHABLE on the account
+he uses before recording it.** A declaration discharges a gate; it cannot make a
+conditional branch render. `:27415`'s attribution rule and this are the same
+principle applied at two different scales — **the gate is his, the arithmetic is
+not anybody's.**
+
+### Round log (addendum)
+
+**No code, no test, no `src` file.** `RUNBOOK/smoke-gym-hours-fold.md` ·
+`RUNBOOK/smoke-attendance.md` · `RUNBOOK/smoke-my-gyms-calendar.md` ·
+`OWED.md` · `DECISIONS.md` · `DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` ·
+`HANDOFF.md`.
+
+**MEASUREMENT COMMANDS, so the next chat re-runs rather than re-reads:** the
+membership count came from `postgres` against `apps/api/.env`'s `DATABASE_URL`
+(the Neon branch, deliberately — `:13659`: the LOCAL database is for suites, the
+Neon one is what his browser reads), joining `gym_members` to `gyms` on
+`user_id`. **`gym_members` has no `status` column** — liveness is
+`removed_at IS NULL`; a first attempt assumed otherwise and was corrected by the
+error rather than by guessing.
+
+**PROVE, taken last on the committed bytes:** all four ROOT guards green —
+`check-harnesses` **26 scripts parse (23 .mjs + 3 .sh)** · `check-decisions-index`
+**296 pointers resolve (295 on a heading, 1 deliberate mid-entry), 1326
+headings** · `check-decisions-triggers` **up to date — 1008 triggers from 264 of
+402 rulings, 138 declaring none** (rebuilt) · `check-smoke-folds` **OK, 1
+documented exception**. Header re-measured with its own command: always-read
+**2,646 = 1,187 + 1,385 + 74**, **§1 and §2 unmoved**.
+**`git diff --name-only apps packages` is empty.**
+
+**AND ONE CONTRADICTION THIS ADDENDUM HAD TO CLEAR UP AFTER ITSELF:**
+`smoke-gym-hours-fold.md` carried *"Nobody has tapped it shut"* in a second
+paragraph below the one being corrected, so the sheet would have asserted both
+that he had and that he had not. Struck in place rather than deleted (`:20587`,
+`:7298` — a sentence that outlives the condition that raised it).

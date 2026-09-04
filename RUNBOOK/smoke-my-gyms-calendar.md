@@ -58,6 +58,9 @@ second wait; only a fresh page load does. Added by T3 round 4 (2026-09-04) after
 the same window was found un-flagged in `smoke-attendance.md` steps 10 and 12 —
 **it applies to every step below, which is why it is here and not in one of
 them**, and no step's wording or ✅ was touched to add it.
+**KD HAS SINCE SEEN THIS WINDOW:** told the two loading waits had no human eyes
+on them, he answered *"these were tested and passed"* (2026-09-04, DECISIONS
+`:34147`), so it is passed on his declaration like the rest of this sheet.
 
 ---
 
