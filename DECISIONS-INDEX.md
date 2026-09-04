@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,187 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,188 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,10 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,646 lines, MEASURED 2026-09-04 and not estimated**
-(1,187 + 1,385 + 74). **THE THIRTIETH MEASUREMENT IS AN ADDENDUM THAT COST TWO
+**ALWAYS-READ TOTAL: 2,647 lines, MEASURED 2026-09-04 and not estimated**
+(1,188 + 1,385 + 74). **THE THIRTY-FIRST IS KD DELETING A PARAGRAPH ABOUT HOW A
+CHAT PHRASED ITSELF TO HIM: +1 always-read line for the trigger that stops it
+recurring, ~14 lines of prose gone from three files.** **THE THIRTIETH MEASUREMENT IS AN ADDENDUM THAT COST TWO
 LINES AND SAVED A FALSE ONE** — Kd answered the discharge's own "nobody has seen
 this" list, two of three were accepted on his word and the third was checked
 against the DATABASE instead, which is `:34147`. **§1 AND §2 UNMOVED.** Its index
@@ -5337,8 +5339,10 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   phone.
   **ADDENDUM `:34147`, same session — KD SAYS ALL THREE WERE TESTED; TWO ARE HIS
   TO SAY AND THE THIRD IS ARITHMETIC.** **Read before recording that anybody has
-  seen the `Welcome to <gym>` line, and before treating an operator's "that was
-  tested" as settling a question the DATABASE can answer in ten seconds.**
+  seen the `Welcome to <gym>` line, before treating an operator's "that was
+  tested" as settling a question the DATABASE can answer in ten seconds, and
+  before writing down how a chat phrased a question to Kd — he ruled that out of
+  the record on 2026-09-04.**
   *"these were tested and passed"*. **ACCEPTED WITHOUT ARGUMENT: the week fold's
   CLOSING tap and the two ⏳ loading waits** — things he plainly could have done
   at his own browser, and §2 was a statement about the RECORD's coverage, not
@@ -5354,10 +5358,9 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   unreachable on the account running it. **STANDING: when an operator says "that
   was tested", check the thing is REACHABLE on the account he uses before
   recording it — a declaration discharges a gate, it cannot make a conditional
-  branch render.** **AND ON HOW TO ASK: he had already answered once, so the
-  follow-up read as a second demand for the same answer. The check was right and
-  the FRAME was wrong — lead with what is being recorded, put the one-account
-  question last as a detail (K7).** Instrument note: `gym_members` has **no `status` column**; liveness
+  branch render.** **KD RULED 2026-09-04 that a chat's account of HOW IT PHRASED
+  ITSELF to him does not go in the record — that paragraph is deleted from all
+  three files.** Instrument note: `gym_members` has **no `status` column**; liveness
   is `removed_at IS NULL`, and a first query assumed otherwise and was corrected
   by the error rather than by guessing.
 

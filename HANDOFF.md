@@ -39,10 +39,9 @@ TASK: THE FOLD/GREETING PACKET IS CLOSED. Kd DISCHARGED THE SMOKE GATE BY
      defect — a ✅ unreachable on the account running it. **STANDING: when the
      operator says "that was tested", check the thing is REACHABLE on the account
      he uses before recording it — a declaration discharges a gate, it cannot
-     make a conditional branch render.** **AND ON HOW TO ASK: he had already
-     answered once, so the follow-up read as a second demand. The check was
-     right, the FRAME was wrong — lead with what is being recorded and put the
-     one-account question last as a detail (K7).**
+     make a conditional branch render.** **KD RULED 2026-09-04: a chat's account
+     of HOW IT PHRASED ITSELF to him does not go in the record. Deleted from all
+     three files.**
   4. **"100 TIMES" MEASURED RATHER THAN DISPUTED** (`:34048` §3): parts A/B DID
      pass 8/8 on 2026-09-02 and C/D the same day — **on `8eacc54`'s bytes**.
      Since then the button learned to REFUSE, the email arrived beside the name,

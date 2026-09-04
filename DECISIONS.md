@@ -34146,9 +34146,10 @@ phrases.
 
 ### 5 · ADDENDUM, same session — KD SAYS ALL THREE UNSEEN THINGS WERE TESTED, AND TWO OF THEM ARE HIS TO SAY. THE THIRD CANNOT HAVE HAPPENED ON HIS ACCOUNT, MEASURED
 
-**Read before recording that anybody has seen the `Welcome to <gym>` line, and
-before treating an operator's "that was tested" as settling a question the
-DATABASE can answer in ten seconds.**
+**Read before recording that anybody has seen the `Welcome to <gym>` line, before
+treating an operator's "that was tested" as settling a question the DATABASE can
+answer in ten seconds, and before writing down how a chat phrased a question to
+Kd — he ruled that out of the record on 2026-09-04.**
 
 Handed §2's list of three things nobody had seen render, he answered ***"these
 were tested and passed"***.
@@ -34188,12 +34189,10 @@ question was worth one message:** the line still cannot appear on
 account or it is `:32498`'s defect again** — a ✅ that cannot be reached on the
 account running it. That, and not the pass, is what this addendum is for.
 
-**AND THE TONE IS RECORDED BECAUSE IT IS EVIDENCE ABOUT THE ASKING, NOT ABOUT
-HIM:** he had already said *"these were tested and passed"*, and the follow-up
-read as a second demand for the same answer. **The check was right and the FRAME
-was wrong** — it should have led with what was being recorded and put the
-one-account question last, as a detail, rather than making a yes/no gate out of
-it (K7: the recommendation first, the evidence below).
+**KD RULED, 2026-09-04: a chat's account of HOW IT PHRASED ITSELF to him does not
+go in the record.** Deleted here, in the index line and in `HANDOFF.md`. No
+future chat's work changes because of it, and `:24703` already sends
+*"self-assessment"* out of the read path.
 
 **WHY IT WAS MEASURED INSTEAD OF ASKED FIRST:** the query is two joins and the
 answer is not a matter of opinion. **Asking Kd to confirm something the database
