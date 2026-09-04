@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,154 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,160 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,12 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,613 lines, MEASURED 2026-09-04 and not estimated**
-(1,154 + 1,385 + 74). **THE TWENTY-THIRD MEASUREMENT IS A WHOLE CARD — a control
+**ALWAYS-READ TOTAL: 2,619 lines, MEASURED 2026-09-04 and not estimated**
+(1,160 + 1,385 + 74). **THE TWENTY-FOURTH MEASUREMENT IS A SECOND WHOLE CARD ON
+THE SAME AFTERNOON — Kd rejected the screen the twenty-third had just improved —
+AND IT COST SIX LINES, all of them trigger phrases, §1 and §2 UNMOVED.** Two
+cards in one session at +5 and +6 is the split holding at the rate the thirteenth
+measurement asked for. **THE TWENTY-THIRD MEASUREMENT IS A WHOLE CARD — a control
 Kd asked for, four new tests, four new mutants and two smoke sheets — AND IT COST
 FIVE LINES HERE, all of them trigger phrases, with §1 and §2 UNMOVED**: its record
 is a CARD record and went to §1B, where :24813 sends it. Taken with this header's
@@ -5046,6 +5050,61 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   touched.** `smoke-opening-hours.md` steps 22/22b rewritten for the fold and NOT
   re-run; `RUNBOOK/smoke-gym-hours-fold.md` written and UNRUN; **T3 UNRUN, so the
   ⚪ line does not tick.**
+
+- **:33091** — 2026-09-04 — **KD TAKES THE GYM OFF THE DASHBOARD AND IT COMES
+  BACK AS A GREETING: "Welcome to Iron House" instead of two boxes above the
+  Start Workout button.** Same session as `:32929`, which folded that card's week
+  away — **he objected to the card being on that screen AT ALL, so a smaller
+  version of the wrong thing was still the wrong thing.** His words: *"its really
+  looking bad in the dashboard and completely destroying the user experience it
+  should have been in my gym as gym related things should be there very bad very
+  bad , the dashboard should not even show you are a memebr of xyz it is the part
+  of gym and good afternoon owner welcome to xyz gym can be there"*.
+  **Read before putting anything on the dashboard above the hero, before drawing
+  a gym's name anywhere in the member app, before adding a reader of `useMyGyms`,
+  before filtering `GymMembershipCard`'s rows, and before assuming a source-grep
+  wiring test still means what its name says after a prop is added.**
+  **IT NAMES A GYM ONLY WHEN THERE IS EXACTLY ONE** (`P6` is `=== 1` → `>= 1`):
+  he is in TWO in the screenshot that produced the ruling, so greeting him at the
+  first of a list is the screen inventing an answer — **and a one-gym fixture
+  cannot see that edit.** It costs no request, verified rather than assumed:
+  `ensureConsoleOrgs` returns early while the store is `ready`/`loading`
+  (`consoleOrgs.js:189-193`), so the greeting is a second CONSUMER of the
+  `Sidebar`'s read, not a second reader of `/v1/orgs/mine` (`:28822`).
+  **NOTHING IS DELETED — `showMemberships={false}` removes ONE row kind from ONE
+  screen.** `My Gyms` and Settings → Gym still draw the card whole, and the
+  dashboard KEEPS the three rows a member can see nowhere else: **waiting** (no
+  `My Gyms` item exists for them at all, `:28822`), **removed** (`:12660`, his own
+  ruling that they must be TOLD) and **refused/expired** (`:11385`). Put to him
+  before a line was written; he answered *"go"*. Filtered at RENDER so `rows`
+  stays the whole truth.
+  **THE FINDING IS A WIRING TEST THAT STAYED TRUE AND STOPPED MEANING WHAT IT
+  SAID:** *"the Dashboard still draws the gym card"* passes unchanged, because it
+  does — and on its own it now tells the next chat this screen is unaffected.
+  Renamed, with the assertion its new name claims. **`:32783`'s lesson from the
+  other direction: there a name made three claims and two were watched; here one
+  claim stayed true while the SUBJECT under it moved. When a call site gains a
+  prop that changes what it renders, every test named after that call site is
+  under-specified.**
+  **TWO OF MY OWN NEW CASES FAILED FIRST AND BOTH WERE THE TEST:** a negative
+  `queryByText('Mon')` matched the DASHBOARD'S OWN week strip
+  (`Dashboard.jsx:76`), and a fixture wrote `applicationId` where `gymStatusRows`
+  reads `app.id` — every sentence still rendered and only **Remind them**
+  vanished. **A negative assertion must name something only the surface under
+  test can draw.**
+  **AND THE SWEEP FOUND A MUTANT DEAD FOR 205 COMMITS, NOT THIS CARD'S:** `P4`
+  (a plan-limited total captioned *"all time"*, :598) anchored on a line `8b681ef`
+  changed on 2026-08-16, so `mutate-dashboard-stats.mjs` ABORTED — **nobody had
+  run it in nineteen days**, :28822 one harness over and four times longer.
+  Re-anchored because it BLOCKED this card's own proof; the claim is unchanged and
+  it is RED. **Not claimed: that nothing broke meanwhile — a dead mutant leaves
+  the period unmeasured.**
+  `web` 1752/1752 · SWEEPS join-door **36/36 RED** and dashboard-stats **17/17
+  RED**, both WHOLE TABLES re-run on the final bytes (the join-door one twice: a
+  test file changed under the first).
+  **No api, shared or migration file is touched.** `RUNBOOK/smoke-dashboard-gym-greeting.md`
+  written and UNRUN; **T3 UNRUN on this card and on `:32929`**, both on one 🟡
+  `OWED.md` line.
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.

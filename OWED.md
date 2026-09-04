@@ -183,6 +183,33 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       forwarded arguments or refuse it by name. Not fixed on the card that found
       it (R1.1) — it is nowhere near the calendar packet's diff.
 
+- [ ] 🟡 **THE DASHBOARD'S GYM GREETING AND THE HOURS FOLD ARE BUILT AND
+      NEITHER HAS BEEN SEEN IN A BROWSER OR REVIEWED** (2026-09-04, DECISIONS
+      `:32929` and `:33091`). Kd took the *"You're a member of xyz"* card off the
+      dashboard at his own browser — *"its really looking bad in the dashboard
+      and completely destroying the user experience it should have been in my
+      gym as gym related things should be there very bad very bad"* — and the
+      gym now arrives as **"Welcome to <gym>"** in the greeting, with the whole
+      timetable on `My Gyms`.
+      **THE CODE IS DONE. WHAT IS OWED IS THE TWO GATES:**
+      **`RUNBOOK/smoke-dashboard-gym-greeting.md`** (7 steps) and
+      **`RUNBOOK/smoke-gym-hours-fold.md`** (5 steps) are both WRITTEN AND
+      UNRUN, and **T3 is UNRUN on both cards** — the fold sits underneath the
+      greeting card and a review of one without the other would cover half a
+      screen.
+      **WHY IT IS 🟡 AND NOT ⚪:** this is the FIRST screen of the app, the
+      change is one he asked for after looking at it, and the thing he objected
+      to is a thing no test in this repo can judge — jsdom has no layout, so
+      *"it looks disgusting"* is outside what 1,745 green tests can answer
+      (`:32395`, the fourth time a defect on these surfaces reached him rather
+      than a test).
+      **WHAT IS NOT AT RISK, so a later chat does not re-litigate it:** nothing
+      was deleted. The membership row still draws on `My Gyms` and on Settings →
+      Gym, and the dashboard KEEPS the three rows a member can see nowhere else
+      — waiting (with **Remind them**), removed (`:12660`, his own ruling that
+      a removed member must be told), and refused/expired. Those three were put
+      to him before a line was written and he answered *"go"*.
+
 - [ ] ⚪ **THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE, AND KD ASKED
       FOR IT TO FOLD** (2026-09-03, DECISIONS `:31508`): *"should have a drop
       down type of effect whenver click or hover in them"*, part of *"do all

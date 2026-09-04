@@ -289,8 +289,31 @@ function Row({ row }) {
  *  it read once at mount. So the panel below could answer "You've asked to join
  *  Iron House" while the card an inch above it stayed blank, and only a page
  *  reload reconciled them — two views of one fact, disagreeing on screen. The
- *  dashboard passes nothing and keeps its single read. */
-export default function GymMembershipCard({ refreshToken = 0 }) {
+ *  dashboard passes nothing and keeps its single read.
+ *
+ *  **`showMemberships` — KD TOOK "You're a member of X" OFF THE DASHBOARD,
+ *  2026-09-04**, looking at his own: *"the dashboard should not even show you
+ *  are a memebr of xyz it is the part of gym ... it should have been in my gym
+ *  as gym related things should be there"*. Two full-width boxes stood between
+ *  his name and the Start Workout hero, on the screen somebody opens to train.
+ *
+ *  **NOTHING IS DELETED AND THIS PROP IS WHY.** `My Gyms` draws the membership
+ *  and its opening hours in full, Settings → Gym still draws this card whole,
+ *  and what the dashboard loses is one row KIND. The other three — waiting,
+ *  removed, refused/expired — STAY on the dashboard, and that is deliberate
+ *  rather than an oversight:
+ *
+ *  - a person still WAITING has no `My Gyms` item at all (`:28822` — it appears
+ *    only once a gym approves them), so moving their row there would hide the
+ *    only place they can see their request and press **Remind them**;
+ *  - `:12660` is Kd's own ruling that a REMOVED member must be told, and that
+ *    entry records silence as the other half of the bug it fixed;
+ *  - refused and expired both end in *"ask again — it takes seconds"*, which is
+ *    load-bearing (`:11385`) and pointless on a screen only members reach.
+ *
+ *  They are also rare and transient, where a membership row is permanent — so
+ *  what he was looking at is gone and none of the sentences he ruled in are. */
+export default function GymMembershipCard({ refreshToken = 0, showMemberships = true }) {
   const [rows, setRows] = useState([]);
 
   useEffect(() => {
@@ -316,11 +339,18 @@ export default function GymMembershipCard({ refreshToken = 0 }) {
     };
   }, [refreshToken]);
 
-  if (rows.length === 0) return null;
+  // FILTERED AT RENDER, NOT AT READ, so `rows` stays the whole truth: the same
+  // state feeds a screen that shows memberships and one that does not, and a
+  // later reader cannot be handed a list that quietly lost a kind.
+  const visible = showMemberships ? rows : rows.filter((row) => row.kind !== 'member');
+
+  // Still nothing when there is nothing to say — including a dashboard whose
+  // only gym news is a membership. Silence claims nothing; see the header.
+  if (visible.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-3">
-      {rows.map((row) => (
+      {visible.map((row) => (
         <div
           key={row.orgId}
           className="rounded-2xl p-4"

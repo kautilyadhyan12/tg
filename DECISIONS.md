@@ -33087,3 +33087,177 @@ so no api figure is quoted (`:28395`'s rule satisfied by the web suite above).
 
 **`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's), and
 is deliberately not committed here.
+
+## 2026-09-04 — KD TAKES THE GYM OFF THE DASHBOARD AND IT COMES BACK AS A GREETING: "Welcome to Iron House" instead of two boxes above the Start Workout button
+
+**Read before putting anything on the dashboard above the hero, before drawing a
+gym's name anywhere in the member app, before adding a reader of `useMyGyms`,
+before filtering `GymMembershipCard`'s rows, before assuming a source-grep
+wiring test still means what its name says after a prop is added, and before
+quoting `mutate-dashboard-stats.mjs` as having covered anything between
+2026-08-16 and today.**
+
+His words, at his own browser, on the bytes committed an hour earlier: *"its
+looking disgusting in the dashboard ... its really looking bad in the dashboard
+and completely destroying the user experience it should have been in my gym as
+gym related things should be there very bad very bad , the dashboard should not
+even show you are a memebr of xyz it is the part of gym and good afternoon owner
+welcome to xyz gym can be there"*.
+
+**HE WAS LOOKING AT THE CARD THIS SESSION HAD JUST IMPROVED, AND THE IMPROVEMENT
+WAS NOT THE POINT.** `:32929` folded the seven weekday rows away and made that
+card shorter; his objection is that it is on that screen AT ALL. **A smaller
+version of the wrong thing is still the wrong thing** — and the fold was right
+work, it was simply right for `My Gyms`, where it now does its job alone.
+
+**NO SERVER FILE MOVED.** No `apps/api`, no `packages/shared`, no migration.
+
+### 1 · WHAT THE SCREENSHOT ACTUALLY SHOWED, because it is worse than the ruling makes it sound
+
+Two full-width bordered boxes between his own name and the Start Workout hero —
+*"You're a member of Smoke Test Gym"* and *"You're a member of owner"* — the
+second carrying the opening hours as well. **He is a member of two gyms, so the
+thing he was shown was the defect DOUBLED**, and on a phone it is the whole first
+screen of the app somebody opens to train.
+
+**THE GYM NOW ARRIVES IN THE GREETING, IN THE ORDER HE SAID IT:** *"Good
+afternoon"*, the name, then **"Welcome to Iron House"**. One line where there
+were two boxes.
+
+### 2 · IT NAMES A GYM ONLY WHEN THERE IS EXACTLY ONE, AND THAT IS THE DECISION ON THIS CARD
+
+**`memberGyms.length === 1`.** The obvious implementation — welcome them to the
+first gym in the list — is wrong on the very screenshot that produced the ruling:
+he is in two, and the first is whichever the server happened to order first.
+**A screen that greets somebody at a gym they may not be standing in has invented
+an answer nobody gave it**, and with more than one gym there is no answer to give.
+So the line is ABSENT there, and `My Gyms` is where the list lives.
+
+**`P6` IS THAT EDIT** (`=== 1` → `>= 1`) and **a one-gym fixture cannot see it**,
+which is why the two-gym case exists beside the one-gym case rather than instead
+of it.
+
+**IT COSTS NO REQUEST, VERIFIED RATHER THAN ASSUMED.** `useMyGyms` reads the kept
+answer the member `Sidebar` already fetches on every screen (`:28822`), and
+`ensureConsoleOrgs` returns early while the store is `ready` or `loading`
+(`consoleOrgs.js:189-193`, read this session) — so this is a second CONSUMER of
+one response, not a second reader of `/v1/orgs/mine`.
+
+### 3 · NOTHING IS DELETED, AND THE THREE ROWS THAT STAYED ARE THE REASON THE PROP EXISTS
+
+`showMemberships={false}` removes ONE row kind from ONE screen.
+`My Gyms` draws the membership and its hours in full; Settings → Gym still draws
+this card whole. **What stays on the dashboard is the news a member can get
+NOWHERE ELSE, and each has its own ruling behind it:**
+
+- **WAITING**, with **Remind them** — somebody still waiting has no `My Gyms`
+  item at all (`:28822`: it appears only once a gym approves them), so moving
+  that row would hide the only place they can see their own request.
+- **REMOVED** — `:12660` is Kd's own ruling that a removed member must be TOLD,
+  and that entry records SILENCE as the other half of the bug it fixed.
+- **REFUSED / EXPIRED** — both end in *"ask again — it takes seconds"*, which
+  `:11385` made load-bearing.
+
+**These were put to Kd before a line was written and he answered *"go"*.** The
+alternative — moving all four kinds — was not taken quietly.
+
+**THE FILTER IS AT RENDER, NOT AT READ**, so `rows` stays the whole truth and a
+later reader of that state cannot be handed a list that quietly lost a kind.
+
+### 4 · THE FINDING: A SOURCE-GREP WIRING TEST STAYED TRUE AND STOPPED MEANING WHAT IT SAID
+
+`joinGym.render.test.jsx` carries *"the Dashboard still draws the gym card"* — a
+regex over `Dashboard.jsx`'s text, one of the source guards this repo keeps as a
+cheap early catch. **It passes unchanged after this card**, because the dashboard
+does still draw the card. **And on its own it now tells the next chat that this
+screen is unaffected, which is false.**
+
+Renamed to *"…and asks it to LEAVE OUT memberships"*, with the assertion its new
+name claims. **This is `:32783`'s lesson arriving from the other direction:**
+there a test's name made three claims and only two were watched; here the name
+made one claim that stayed true while the SUBJECT underneath it moved.
+**STANDING: when a call site gains a prop that changes what it renders, every
+test whose name describes that call site is now under-specified — the name is
+the instrument, whichever direction the drift came from.**
+
+### 5 · TWO OF MY OWN NEW CASES FAILED FIRST, AND BOTH WERE THE TEST RATHER THAN THE CODE
+
+**(a) A NEGATIVE ASSERTION MATCHED A DIFFERENT PART OF THE PAGE.**
+`queryByText('Mon')` — meant to prove no weekday from the gym's timetable reaches
+the dashboard — matched the **dashboard's own week-activity strip**, which draws
+weekday initials for a completely unrelated feature. It failed while the code was
+right. **A negative assertion has to name something only the surface under test
+can draw**: it is now the fixture's own `7:40 AM`, which exists nowhere else on
+that page.
+
+**(b) A FIXTURE USED THE WRONG FIELD NAME AND WITHDREW A BUTTON.**
+`applicationId: 'a1'` instead of `id: 'a1'` — `gymStatusRows` reads `app.id`, so
+the row got a null id, **every sentence still rendered**, and only **Remind them**
+was missing. The case that caught it is the one asserting the button, which is
+why it asserts the button and not only the words.
+
+### 6 · THE SWEEP FOUND A MUTANT THAT HAD BEEN DEAD FOR 205 COMMITS, AND IT IS NOT THIS CARD'S
+
+`mutate-dashboard-stats.mjs` **ABORTED** on `P4` before writing a byte: *"its
+anchor matched nothing"*. **`P4` guards a real sentence on the dashboard** — that
+a plan-limited workout total is not captioned *"all time"* (`:598`).
+
+**MEASURED, NOT ESTIMATED:** its anchor was `… sub={windowLabel}`, and `8b681ef`
+(2026-08-16) made that caption conditional
+(`sub={totals.totalWorkouts === null ? undefined : windowLabel}`). `git log -S`
+puts **205 commits** between that day and this one. **My own diff never touched
+the line** — checked with `git diff` before anything was concluded.
+
+**THE INSTRUMENT BEHAVED CORRECTLY AND THAT IS THE POINT: an abort is loud and
+cannot be sat on**, so the finding is not *"the guard failed"* but **"nobody has
+run this harness in nineteen days"**. A no-op mutation would have reported ALIVE,
+which reads as *"this guarantee has no test"* and sends the next chat hunting a
+hole that was never there. **This is `:28822`'s finding one harness over and four
+times longer** (`mutate-login-door.mjs`, unrunnable for five days).
+
+**RE-ANCHORED RATHER THAN REPORTED AND STEPPED AROUND, and the reason is R1.1's
+own limit:** the abort BLOCKED this card's proof — `P6` and `P7` are in the same
+table and could not run at all. Unblocking an instrument you need is not a
+drive-by fix. **The claim is unchanged**; only the text it hangs on moved, and it
+is RED on the re-run.
+
+**WHAT IS NOT CLAIMED: that nothing broke in those nineteen days.** `P4` is RED
+now, so the guarantee holds TODAY. Whether it held throughout is a question this
+run cannot answer, and the honest reading of a dead mutant is that the period is
+simply unmeasured.
+
+### 7 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **NO SMOKE HAS RUN ON THIS.** It is a change to the first screen of the app and
+  needs one — `RUNBOOK/smoke-dashboard-gym-greeting.md` is written and UNRUN.
+- **THE LOOK IS SMOKE-ONLY.** jsdom has no layout, so nothing in the suite says
+  the dashboard got shorter — and "it looks disgusting" is precisely the judgement
+  no test in this repo can make (`:32395`, four times on these surfaces).
+- **THE GREETING'S CASING AND PLACEMENT ARE UNASSERTED BEYOND THE STRING.** The
+  test reads `Welcome to Iron House`; that it sits under the name rather than
+  above it is a thing only the browser shows.
+- **T3 IS UNRUN**, on this card and on `:32929`, which it sits on top of.
+
+### Round log
+
+**PROVE, on the final bytes:** `web` **1752/1752 across 58 files** (+7) ·
+`xpDisplay.render` **74/74** (+5) · `joinGym.render` **43/43** (+2) ·
+`eslint --max-warnings=0` exit 0 on the six touched files · `vite build` green
+in 32.96s · two ROOT guards pass (harnesses **25 scripts**, index **290 pointers
+resolve, 289 on a heading**).
+
+**SWEEPS, BOTH WHOLE TABLES AND BOTH RE-RUN ON THE FINAL BYTES:** join-door
+**36 mutants · 36 RED · 0 ALIVE · 0 never ran**; dashboard-stats **17 runs over 17
+distinct mutations · 17 RED · 0 ALIVE · 0 never ran**. Controls GREEN and tallied
+first in both, restore sha256 byte-exact after every mutant.
+**THE JOIN-DOOR SWEEP WAS RUN TWICE AND ONLY THE SECOND IS QUOTED:** I edited
+`joinGym.render.test.jsx` while the first was in flight (§4's rename), and a
+suite that changes under a sweep makes every verdict after it a claim about bytes
+that no longer exist. No filter matched the renamed test, so the first run's
+verdicts were sound in substance — the re-run is what makes them sound on the
+record.
+
+**No `apps/api`, `packages/shared` or migration file is touched by this commit**,
+so no api figure is quoted (`:28395`).
+
+**`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's).

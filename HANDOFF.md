@@ -1,6 +1,80 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD TAKES THE GYM OFF THE DASHBOARD AND IT COMES BACK AS A GREETING.
+      DECISIONS `:33091`. **START HERE: this is the SECOND card of the same
+      session and it overrules the shape of the first.** `:32929` folded the
+      member card's week away; Kd then objected to that card being on the
+      dashboard AT ALL — *"very bad very bad , the dashboard should not even
+      show you are a memebr of xyz"* — so **a smaller version of the wrong
+      thing was still the wrong thing.** The fold was right work and now does
+      its job on `My Gyms` alone. Web only: no `apps/api`, no
+      `packages/shared`, no migration. **Neither card is smoked or T3'd; ONE 🟡
+      `OWED.md` line covers both.**
+
+  1. **THE GYM IS A GREETING NOW** — *"Welcome to Iron House"* under the name,
+     and `showMemberships={false}` drops ONE row kind from ONE screen.
+     **NOTHING IS DELETED:** `My Gyms` and Settings → Gym draw the card whole,
+     and the dashboard KEEPS waiting (with **Remind them**), removed (`:12660`)
+     and refused/expired (`:11385`) — the three a member can see nowhere else,
+     since somebody waiting has no `My Gyms` item at all (`:28822`). Put to Kd
+     before a byte was written; he answered *"go"*.
+  2. **IT NAMES A GYM ONLY WHEN THERE IS EXACTLY ONE** (`P6`). He is in TWO in
+     the screenshot that produced the ruling, so greeting him at the first of a
+     list is the screen inventing an answer — **and a one-gym fixture cannot see
+     that edit.** No extra request: `ensureConsoleOrgs` returns early while the
+     store is `ready`/`loading` (`consoleOrgs.js:189-193`, verified not assumed).
+  3. **A WIRING TEST STAYED TRUE AND STOPPED MEANING WHAT IT SAID.** *"The
+     Dashboard still draws the gym card"* passes unchanged — it does — and alone
+     it now says this screen is unaffected. Renamed, with the assertion the new
+     name claims. **`:32783` from the other direction: there a name made three
+     claims and two were watched; here one claim stayed true while the SUBJECT
+     under it moved.**
+  4. **A MUTANT HAD BEEN DEAD FOR 205 COMMITS AND IT IS NOT THIS CARD'S.**
+     `mutate-dashboard-stats.mjs` ABORTED on `P4` (a plan-limited total captioned
+     *"all time"*, `:598`): `8b681ef` made that caption conditional on
+     **2026-08-16**, so **nobody had run this harness in nineteen days** —
+     `:28822` one harness over and four times longer. Re-anchored because it
+     BLOCKED `P6`/`P7` in the same table; claim unchanged, RED on the re-run.
+     **NOT claimed: that nothing broke meanwhile.**
+  5. **TWO OF MY OWN NEW CASES FAILED FIRST AND BOTH WERE THE TEST** — a
+     negative `queryByText('Mon')` matched the DASHBOARD'S OWN week strip
+     (`Dashboard.jsx:76`), and a fixture wrote `applicationId` where
+     `gymStatusRows` reads `app.id`, so every sentence rendered and only
+     **Remind them** vanished. **A negative assertion must name something only
+     the surface under test can draw.**
+
+PROVE: `web` **1752/1752 across 58 files** (+7) · `xpDisplay.render` **74/74**
+       (+5) · `joinGym.render` **43/43** (+2) · `eslint --max-warnings=0` exit 0
+       on the six touched files · `vite build` green in 32.96s · three ROOT
+       guards pass (harnesses **25 scripts**, index **291 pointers resolve, 290
+       on a heading**, triggers rebuilt and `--check` clean at **981 from 256 of
+       394 rulings**).
+       **SWEEPS, BOTH WHOLE TABLES, BOTH RE-RUN ON THE FINAL BYTES:** join-door
+       **36/36 RED**, dashboard-stats **17/17 RED**, 0 ALIVE and 0 never ran in
+       both, controls GREEN and tallied first, restore sha256 byte-exact.
+       **THE JOIN-DOOR SWEEP RAN TWICE AND ONLY THE SECOND IS QUOTED** — I edited
+       `joinGym.render.test.jsx` while the first was in flight, and a suite that
+       changes under a sweep makes every later verdict a claim about bytes that
+       no longer exist. No filter matched the renamed test, so the first run was
+       sound in substance; the re-run is what makes it sound on the record.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       deliberately not committed here.
+       **THE LOOK IS SMOKE-ONLY AND THAT IS THE WHOLE RISK ON BOTH CARDS.** jsdom
+       has no layout, so nothing in 1,752 green tests says the dashboard got
+       shorter — and *"it looks disgusting"* is exactly the judgement no test
+       here can make (`:32395`, now the fifth time a defect on these surfaces
+       reached him rather than a test).
+       **NEXT:** `RUNBOOK/smoke-dashboard-gym-greeting.md` (7 steps) and
+       `RUNBOOK/smoke-gym-hours-fold.md` (5 steps) at Kd's browser, then T3
+       round 1 in a FRESH chat covering BOTH commits — the fold sits underneath
+       the greeting and reviewing one without the other covers half a screen.
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: THE MEMBER'S WEEK FOLDS AWAY BEHIND A TAP — the last of Kd's *"restore and
       do all four"* (`:31508`). DECISIONS `:32929`. **START HERE: the code is
       built and the ⚪ `OWED.md` line does NOT tick — no smoke has run and T3 is

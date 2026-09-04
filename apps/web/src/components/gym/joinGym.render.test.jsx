@@ -431,10 +431,17 @@ describe('the join door is reachable at all', () => {
     expect(src).toMatch(/useSearchParams\s*\(/);
   });
 
-  it('the Dashboard still draws the gym card', () => {
+  it('the Dashboard still draws the gym card, and asks it to LEAVE OUT memberships', () => {
     const src = codeAt('../../pages/Dashboard.jsx');
     expect(src).toMatch(/<GymMembershipCard\b/);
     expect(src).toMatch(/import\s+GymMembershipCard\s+from/);
+    // ADDED 2026-09-04 WITH KD'S RULING, and the test's NAME was renamed with
+    // it: "still draws the gym card" stayed true when he took the membership
+    // row off this screen, so on its own it would have told the next chat the
+    // dashboard is unchanged. Rule 4's cheapest instrument is the name (:32783).
+    // The behaviour is pinned by `xpDisplay.render.test.jsx` and mutant `P7`;
+    // this line is the cheap early catch at the spelling level.
+    expect(src).toMatch(/<GymMembershipCard\s+showMemberships=\{false\}/);
   });
 
   it('Settings has a Gym tab carrying BOTH the card and the code box', () => {
@@ -737,6 +744,66 @@ describe('the gym card on the dashboard', () => {
 // are :5807's class — on screen and wrong. "One tap at the front desk"
 // describes a tap :23711's gate refuses with a 409, and the countdown counts
 // toward a deadline the sweep no longer acts on now that the request is held.
+// ── `showMemberships` — KD TOOK "You're a member of X" OFF THE DASHBOARD ────
+// 2026-09-04, at his own browser: *"the dashboard should not even show you are
+// a memebr of xyz it is the part of gym"*. The prop is the whole of that
+// change, and it is asserted as a PAIR: one fixture, two props, two answers.
+// Either half alone would pass with the prop ignored in one direction.
+describe('the gym card on a screen that does not show memberships', () => {
+  const memberOnly = () => {
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
+    orgService.getMine.mockReturnValue(
+      ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }),
+    );
+  };
+
+  it('drops the membership row on the dashboard and KEEPS it everywhere else', async () => {
+    memberOnly();
+    const dashboard = draw(<GymMembershipCard showMemberships={false} />);
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
+    expect(screen.queryByText(/you're a member of iron house/i)).toBeNull();
+    // AND IT DRAWS NOTHING AT ALL rather than an empty box. A membership was
+    // this person's only gym news, so the card has nothing left to say — and a
+    // bordered box with a heading and no content is what he was objecting to.
+    expect(dashboard.container.textContent).toBe('');
+    dashboard.unmount();
+
+    // THE OTHER HALF, same fixture: Settings → Gym still draws it whole, which
+    // is what makes this a MOVE rather than a deletion.
+    draw(<GymMembershipCard />);
+    expect(await screen.findByText(/you're a member of iron house/i)).toBeTruthy();
+  });
+
+  it('still draws the three rows a member can see NOWHERE else', async () => {
+    // Waiting, removed and refused all stay on the dashboard, deliberately:
+    // somebody waiting has no `My Gyms` item at all (:28822), :12660 is Kd's
+    // ruling that a removed member must be TOLD, and a refusal ends in "ask
+    // again — it takes seconds" (:11385). A prop that filtered the wrong kind
+    // — or filtered everything — passes the case above and fails this one.
+    orgService.getMyApplications.mockReturnValue(
+      ok({
+        applications: [
+          { ...APPLICATION, org: ORG },
+          { ...APPLICATION, id: 'app-2', status: 'rejected', org: { ...ORG, id: 'g2', name: 'Steel Gym' } },
+        ],
+      }),
+    );
+    orgService.getMine.mockReturnValue(
+      ok({
+        orgs: [],
+        formerOrgs: [{ ...ORG, id: 'g3', name: 'Old Gym', removedAt: '2026-08-20T04:41:16.656Z' }],
+      }),
+    );
+
+    draw(<GymMembershipCard showMemberships={false} />);
+
+    expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /remind them/i })).toBeTruthy();
+    expect(screen.getByText(/steel gym didn't confirm your request/i)).toBeTruthy();
+    expect(screen.getByText(/you're no longer a member of old gym/i)).toBeTruthy();
+  });
+});
+
 describe('the gym card when the gym cannot take members', () => {
   const HELD = { ...APPLICATION, orgCanConfirm: false, org: ORG };
 

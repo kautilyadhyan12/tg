@@ -458,6 +458,29 @@ const MUTANTS = [
     from: "            {held ? (\n              <p className=\"text-sm mt-2\" style={{ color: 'rgba(255,255,255,0.55)' }}>",
     to: "            {false ? (\n              <p className=\"text-sm mt-2\" style={{ color: 'rgba(255,255,255,0.55)' }}>",
   },
+  // ── `showMemberships` — KD TOOK THE MEMBERSHIP ROW OFF THE DASHBOARD ──────
+  // 2026-09-04. Two rows for one line, because a filter has two ways to be
+  // wrong and they fail different cases: it can do NOTHING, and it can take the
+  // wrong thing. `P7` in `mutate-dashboard-stats.mjs` covers the third way —
+  // the page not asking for it at all (:15770).
+  {
+    id: 'J35',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: "THE FILTER IS INERT AND THE DASHBOARD DRAWS MEMBERSHIPS AGAIN - the shape Kd rejected, restored while the prop is still passed, still documented and still read. Nothing in the component's own name would look wrong; the card simply ignores what its caller asked for",
+    expect: 'drops the membership row on the dashboard and KEEPS it everywhere else',
+    from: "  const visible = showMemberships ? rows : rows.filter((row) => row.kind !== 'member');",
+    to: '  const visible = rows;',
+  },
+  {
+    id: 'J36',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: "THE FILTER KEEPS THE WRONG KIND: the dashboard drops WAITING, REMOVED and REFUSED and keeps only the membership - the exact inversion of the ruling. Somebody waiting has no My Gyms item at all (:28822), :12660 is Kd's own ruling that a removed member must be TOLD, and both would vanish from the one screen they can be seen on while the case above stays green",
+    expect: 'still draws the three rows a member can see NOWHERE else',
+    from: "  const visible = showMemberships ? rows : rows.filter((row) => row.kind !== 'member');",
+    to: "  const visible = showMemberships ? rows : rows.filter((row) => row.kind === 'member');",
+  },
 ];
 
 const abort = (msg) => {

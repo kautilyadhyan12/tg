@@ -19,6 +19,7 @@ import { totalsWindowLabel } from './progressClamp';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
 import GymMembershipCard from '../components/gym/GymMembershipCard';
+import { useMyGyms } from '../hooks/useMyGyms';
 import { motion } from 'framer-motion';
 import {
   Flame, Dumbbell, Clock, TrendingUp,
@@ -286,6 +287,12 @@ export default function Dashboard() {
   const quote    = getQuote();
   const greeting = getGreeting();
 
+  // ONE GYM, ONE WELCOME — see the header line below. `gyms` is `[]` while the
+  // store is loading or has failed, so the line is simply absent rather than
+  // half-written, and nothing here can draw a gym this person is not in.
+  const { gyms: memberGyms } = useMyGyms();
+  const welcomeGym = memberGyms.length === 1 ? memberGyms[0] : null;
+
   // THREE READS NOW, NOT ONE — and each carries its own settled flag.
   //
   // The old backend answered all of this in a single envelope, so one `loading`
@@ -428,6 +435,27 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold tracking-tighter" style={{ color: 'rgba(255,255,255,0.95)' }}>
               {user?.displayName?.split(' ')[0] || 'Athlete'}
             </h1>
+            {/* THE GYM ARRIVES AS A GREETING RATHER THAN AS A CARD — Kd, at his
+                own browser, 2026-09-04: *"the dashboard should not even show you
+                are a memebr of xyz it is the part of gym and good afternoon
+                owner welcome to xyz gym can be there"*. One line, in the order
+                he said it: the greeting, the name, then the gym.
+
+                **IT NAMES A GYM ONLY WHEN THERE IS EXACTLY ONE.** He is a member
+                of two in the screenshot that produced this ruling, and picking
+                one of them to welcome him to would be the screen inventing an
+                answer nobody gave it. Two or more, and this line is absent —
+                `My Gyms` is where the list lives.
+
+                **IT COSTS NO REQUEST.** `useMyGyms` reads the kept answer the
+                member `Sidebar` already fetches on every screen (:28822), so
+                this is a second CONSUMER of one response and not a second reader
+                of `/v1/orgs/mine`. */}
+            {welcomeGym !== null ? (
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                Welcome to {welcomeGym.name}
+              </p>
+            ) : null}
             {totals.currentStreak !== null && totals.currentStreak > 0 && (
               <div className="flex items-center gap-1.5 mt-2">
                 <Flame className="w-4 h-4" style={{ color: '#FF8A1F' }} />
@@ -457,8 +485,15 @@ export default function Dashboard() {
             below it works exactly as it did.
             Renders NOTHING when there is nothing to say, including when its
             reads fail: silence states nothing, while an error strip here would
-            be noise on the screen a person opens to start training. */}
-        <GymMembershipCard />
+            be noise on the screen a person opens to start training.
+
+            **`showMemberships={false}` — KD TOOK "You're a member of X" OFF THIS
+            SCREEN, 2026-09-04**, and the gym now arrives in the greeting above
+            instead. What stays here is the news a member cannot get anywhere
+            else: a request still waiting (with **Remind them**), a membership
+            that ENDED, and a request refused or expired. The component's own
+            docblock carries the ruling and the three citations. */}
+        <GymMembershipCard showMemberships={false} />
 
         {/* ── Hero banner ───────────────────────────────────────────────────── */}
         <motion.div

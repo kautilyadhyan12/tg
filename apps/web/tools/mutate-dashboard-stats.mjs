@@ -157,8 +157,18 @@ const MUTANTS = [
     target: 'page',
     why: 'the window label is hard-coded back to "all time", so a 90-day total claims to be a lifetime one',
     expect: 'a plan-limited total is NOT captioned "all time"',
-    from: 'label="Total Workouts" value={orUnknown(totals.totalWorkouts)} sub={windowLabel}',
-    to: 'label="Total Workouts" value={orUnknown(totals.totalWorkouts)} sub="all time"',
+    // RE-ANCHORED 2026-09-04, AND THE DRIFT IS THE FINDING RATHER THAN THE FIX.
+    // The old anchor was `… sub={windowLabel}`; `8b681ef` (2026-08-16) made the
+    // caption conditional, so this row has matched NOTHING for **205 commits**
+    // — measured with `git log -S`, not estimated. The pre-check aborted rather
+    // than lying, exactly as designed, which means nobody has run this harness
+    // in nineteen days: an abort is loud and cannot be sat on.
+    // **:28822's finding, one harness over and four times longer** (there,
+    // `mutate-login-door.mjs` had been unrunnable for five days). The claim is
+    // unchanged — hard-code the window caption back to "all time" — and only
+    // the text it hangs on moved.
+    from: 'sub={totals.totalWorkouts === null ? undefined : windowLabel}',
+    to: 'sub={totals.totalWorkouts === null ? undefined : "all time"}',
   },
   {
     id: 'P5',
@@ -177,6 +187,29 @@ const MUTANTS = [
     expect: 'the caption counts the SAME days the dots light',
     from: '<WeekStrip activity={week?.byDate ?? null} state={weekState}',
     to: '<WeekStrip activity={weekRaw ?? null} state={weekState}',
+  },
+  // ── THE GYM IS A GREETING, NOT A CARD (Kd, 2026-09-04) ───────────────────
+  //
+  // Two rows for one change, on the two things it decides: WHEN a gym is named,
+  // and WHETHER the membership card still draws memberships here. The second is
+  // a claim about a CALL SITE and cannot be made in the component (:15770) —
+  // `J35` next door mutates the filter itself, and the component can be right
+  // while this page never asks for it.
+  {
+    id: 'P6',
+    target: 'page',
+    why: "THE DASHBOARD WELCOMES SOMEBODY TO ONE OF THEIR GYMS AT RANDOM. Kd is a member of two in the screenshot that produced this ruling, so the FIRST of a list becomes a fact the screen invents - it greets him at a gym he may not be standing in, and the other one is not mentioned at all. A one-gym fixture cannot see this edit, which is why the pair case exists",
+    expect: 'names NO gym when there are two',
+    from: '  const welcomeGym = memberGyms.length === 1 ? memberGyms[0] : null;',
+    to: '  const welcomeGym = memberGyms.length >= 1 ? memberGyms[0] : null;',
+  },
+  {
+    id: 'P7',
+    target: 'page',
+    why: "THE MEMBERSHIP CARD COMES BACK TO THE DASHBOARD - the exact shape Kd looked at and rejected in as many words, two full-width boxes between his own name and the Start Workout button, on the screen a person opens to train. The prop is the whole of the change and deleting it here restores the defect with the component still perfectly correct",
+    expect: 'welcomes a member to their gym BY NAME',
+    from: '        <GymMembershipCard showMemberships={false} />',
+    to: '        <GymMembershipCard />',
   },
 ];
 

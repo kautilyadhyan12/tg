@@ -80,6 +80,24 @@ vi.mock('../api/recommendationApi', () => ({
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { displayName: 'Kd Test' } }),
 }));
+// THE GYM READS THIS SCREEN MAKES, MOCKED 2026-09-04 WITH THE WELCOME LINE.
+// Before this they were UNMOCKED: every case in this file let `GymMembershipCard`
+// reach for a real axios call that fails in jsdom, which is silent only because
+// that card is deliberately quiet about a failed read. The welcome line needs a
+// gym list somebody can control, so the reads become fixtures — and the forty
+// cases below stop depending on a request that was never going to arrive.
+// `getHours` is here because it is the noisy one: an unstubbed member of this
+// object is `undefined`, the effect throws, every assertion still passes, and
+// only the runner's exit code says anything happened.
+const orgApi = {
+  getMine: vi.fn(),
+  getMyApplications: vi.fn(),
+  getHours: vi.fn(),
+};
+vi.mock('../api/orgsApi', () => ({
+  orgService: orgApi,
+  errorText: (_err, fallback) => fallback,
+}));
 vi.mock('../context/TransitionContext', () => ({
   useTransition: () => ({ triggerTransition: (fn) => fn() }),
 }));
@@ -97,6 +115,8 @@ const { recommendationService } = await import('../api/recommendationApi');
 // response to "the summary did not arrive" is to say so, and today it says
 // nothing at all. So this one assertion needs the mock's call log.
 const toast = (await import('react-hot-toast')).default;
+
+const { resetConsoleOrgs } = await import('./console/consoleOrgs');
 
 const Dashboard         = (await import('./Dashboard')).default;
 const Achievements      = (await import('./Achievements')).default;
@@ -217,9 +237,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   recommendationService.getRecommendations.mockImplementation(DEAD);
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  // NO GYM BY DEFAULT, and the store is emptied between cases — it keeps ONE
+  // answer per user, so a list left behind by the previous test would decide
+  // the next one's greeting.
+  resetConsoleOrgs();
+  orgApi.getMine.mockResolvedValue({ data: { orgs: [], formerOrgs: [] } });
+  orgApi.getMyApplications.mockResolvedValue({ data: { applications: [] } });
+  orgApi.getHours.mockResolvedValue({ data: { hours: { mode: 'unset' } } });
 });
 afterEach(() => {
   cleanup();
+  resetConsoleOrgs();
   vi.restoreAllMocks();
 });
 
@@ -276,6 +304,143 @@ describe('Sidebar — where the original bug lived — round 8 F1', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// THE GYM IS A GREETING, NOT A CARD — Kd, at his own browser, 2026-09-04:
+// *"its really looking bad in the dashboard and completely destroying the user
+// experience it should have been in my gym as gym related things should be
+// there ... the dashboard should not even show you are a memebr of xyz it is
+// the part of gym and good afternoon owner welcome to xyz gym can be there"*.
+//
+// **THE NEGATIVE HALF IS THE RULING AND THE POSITIVE HALF IS THE CONTROL.** A
+// screen that simply failed to draw anything would satisfy every "is not on
+// screen" assertion here, which is :21751's rule, so each case names something
+// that IS there.
+const MEMBER_GYM = (over = {}) => ({
+  id: 'g1',
+  name: 'Iron House',
+  slug: 'iron-house',
+  isMember: true,
+  staffRole: null,
+  manualAttendanceEnabled: true,
+  ...over,
+});
+
+describe('Dashboard — the gym arrives as a greeting rather than as a card', () => {
+  beforeEach(() => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    dashboardDead();
+  });
+
+  it('welcomes a member to their gym BY NAME, and never says "you are a member of"', async () => {
+    orgApi.getMine.mockResolvedValue({ data: { orgs: [MEMBER_GYM()], formerOrgs: [] } });
+
+    renderPage(<Dashboard />);
+
+    expect(await screen.findByText('Welcome to Iron House')).toBeTruthy();
+    // The row Kd took off this screen. It is still drawn on `My Gyms` and on
+    // Settings → Gym, and `joinGym.render.test.jsx` is where that is pinned.
+    expect(screen.queryByText(/you're a member of/i)).toBeNull();
+  });
+
+  it('says NOTHING about opening hours here, which is what made the card two boxes tall', async () => {
+    orgApi.getMine.mockResolvedValue({ data: { orgs: [MEMBER_GYM()], formerOrgs: [] } });
+    orgApi.getHours.mockResolvedValue({
+      data: {
+        hours: {
+          mode: 'scheduled',
+          timezone: 'Asia/Kolkata',
+          clockFormat: '12h',
+          week: [{ weekday: 1, sessions: [{ opensMinute: 460, closesMinute: 580 }] }],
+          closures: [],
+        },
+      },
+    });
+
+    renderPage(<Dashboard />);
+
+    await screen.findByText('Welcome to Iron House');
+    // Not the headline, not the fold, and none of the gym's times. The whole
+    // timetable lives on `My Gyms` now.
+    //
+    // **THE TIMES ARE THE ASSERTION AND A WEEKDAY IS NOT**, which this case
+    // learned the hard way: `queryByText('Mon')` matched the DASHBOARD'S OWN
+    // week-activity strip, so it failed while the code was right. A negative
+    // assertion has to name something only the surface under test can draw —
+    // `7:40 AM` comes from this fixture's `opensMinute` and from nowhere else
+    // on the page.
+    expect(screen.queryByText(/^Today: /)).toBeNull();
+    expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
+    expect(screen.queryByText(/7:40 AM/)).toBeNull();
+  });
+
+  it('names NO gym when there are two, rather than picking one', async () => {
+    // The screenshot that produced this ruling had him in two gyms. Welcoming
+    // him to one of them would be the screen answering a question nobody asked
+    // it — and the failure is invisible with a one-gym fixture, which is why
+    // this case exists beside the one above.
+    orgApi.getMine.mockResolvedValue({
+      data: {
+        orgs: [MEMBER_GYM(), MEMBER_GYM({ id: 'g2', name: 'Smoke Test Gym', slug: 'smoke' })],
+        formerOrgs: [],
+      },
+    });
+
+    renderPage(<Dashboard />);
+
+    // The positive control: the page is really up and really knows both gyms.
+    await waitFor(() => expect(orgApi.getMine).toHaveBeenCalled());
+    expect(await screen.findByText('Kd')).toBeTruthy();
+    expect(screen.queryByText(/^Welcome to /)).toBeNull();
+    expect(screen.queryByText(/Iron House|Smoke Test Gym/)).toBeNull();
+  });
+
+  it('still tells a WAITING person where their request stands, with the button', async () => {
+    // The row that must NOT have gone with the membership: somebody waiting has
+    // no `My Gyms` item at all (:28822 — it appears once a gym approves them),
+    // so this dashboard is where their request lives.
+    orgApi.getMyApplications.mockResolvedValue({
+      data: {
+        applications: [
+          {
+            // `id`, NOT `applicationId` — `gymStatusRows` reads `app.id` and
+            // hands the row a null id otherwise, which withdraws the button
+            // while every sentence still renders. The first draft of this case
+            // used the wrong name and failed on the button alone.
+            id: 'a1',
+            status: 'pending',
+            expiresAt: '2026-12-01T00:00:00.000Z',
+            nudgedAt: null,
+            orgCanConfirm: true,
+            org: { id: 'g9', name: 'Iron House', slug: 'iron-house' },
+          },
+        ],
+      },
+    });
+
+    renderPage(<Dashboard />);
+
+    expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /remind them/i })).toBeTruthy();
+  });
+
+  it('still tells a REMOVED member they were removed (Kd 2026-08-20)', async () => {
+    // :12660 is his own ruling, and that entry records SILENCE as the other
+    // half of the bug it fixed. A removed person is not in `My Gyms` either.
+    orgApi.getMine.mockResolvedValue({
+      data: {
+        orgs: [],
+        formerOrgs: [{ ...MEMBER_GYM({ isMember: false }), removedAt: '2026-08-20T04:41:16.656Z' }],
+      },
+    });
+
+    renderPage(<Dashboard />);
+
+    expect(await screen.findByText(/you're no longer a member of iron house/i)).toBeTruthy();
+  });
+});
+
 describe('Dashboard — a real level never sits beside fabricated figures', () => {
   it('every stats read DEAD, XP ready: shows the true level and dashes for the rest', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
