@@ -32745,7 +32745,8 @@ invocation **239/239** (+2) · `web` **1741/1741 across 58 files** (+1) ·
 `myGyms.render` 51/51 · `tsc --noEmit` exit 0 on `api` ·
 `eslint --max-warnings=0` exit 0 on `apps/api/{src,test,tools}` and on the three
 touched web files · the three ROOT guards pass (harnesses **25 scripts**, index
-**287 pointers**, triggers up to date).
+**288 pointers resolve, 287 of them on a heading and 1 deliberately mid-entry**,
+triggers up to date).
 
 **RULE 3, BOTH FIXES, PROVEN BY REVERTING THE FIX AND NOT BY READING IT:** with
 the comparison put back, *"a month holding exactly one page of visits…"* and *"a
@@ -32778,3 +32779,149 @@ argument and the filter is ignored — the whole 776-test suite ran. Without it 
 scoping works. Not fixed here (R1.1); :26220's *"believing a `-t` filtered run
 about a test you have just written"* is the standing caution and the control step
 is what catches it.
+
+## 2026-09-04 — THE CALENDAR PACKET, T3 ROUND 3 (diff-only): ZERO Critical/High, THE PACKET SHIPS AND THE CALENDAR LINE TICKS — and round 2's own rule-4 fix had left the same defect one noun further along
+
+**Read before treating a rule-4 fix as finished because the noun the review
+named now has an observer, before writing an assertion whose subject is what
+CONTAINS something, before quoting one half of a guard's compound output into a
+record, and before adding a line to `DECISIONS-INDEX.md` without re-measuring
+that file's own header.**
+
+Round 3 on the calendar packet, diff-only over `7831015` (:5348 rule 2), run in a
+fresh chat and handed back here. **ZERO Critical/High, so the packet SHIPS
+(rule 1) and `OWED.md`'s *"days you came"* calendar line TICKS.** Three Low, all
+fixed in this commit and logged in `BACKLOG.md`; none bought another round. Kd
+approved the list before a byte was written (*"fix"*). **The escape hatch did NOT
+fire** — round 2 carried two Critical/High and round 3 carries none, so there are
+not two consecutive rounds and this is not the redesign trigger.
+
+**Every finding was reproduced against the code before it was acted on** (V4,
+:23928, :24559) — the review is another chat's report and hearsay until run.
+
+### 1 · THE RULE-4 DEFECT SURVIVED ITS OWN FIX, ONE NOUN FURTHER ALONG
+
+The test is called *"keeps the day number readable inside the fire"*, and that
+name makes THREE claims: a NUMBER, a FIRE, and the number being INSIDE it. Round
+2 (:32583 §3) found the second unobserved — the flame could be deleted and the
+test stayed green — and shipped `C208` for it. **It did not ask what else its own
+name claimed.**
+
+Reproduced here rather than reasoned about: deleting
+`className="absolute inset-0 flex items-center justify-center"` from
+`AttendancePanel.jsx`'s `CameDay` left **all 51 tests passing**. What that class
+does is the whole of the positioning — the number's wrapper is stretched across
+the cell over an icon filling the same square — so without it the number leaves
+the middle of the flame and drops below it. **That is the
+small-number-with-a-smaller-flame-under-it shape Kd sent this card back over**
+(:32395), reachable with every assertion in the suite still green.
+
+**STANDING: rule 4's cheapest instrument is the test's NAME, and the way to use
+it is to COUNT THE NOUNS. A fix that gives an observer to the one noun a review
+named leaves the rest of the sentence exactly as it was** — and it leaves it
+worse, because the next reviewer reads a name that now looks earned.
+
+### 2 · THE NEW ASSERTION HAS TWO HALVES AND ONE MUTANT ONLY FAILS ONE OF THEM
+
+The fix asks the cell for the element carrying the positioning and asserts the
+number is inside it — `querySelector('.absolute.inset-0')`, then `not.toBeNull()`
+and `contains(inside)`. It is queried BY THE POSITIONING and not through
+`inside.parentElement`, so wrapping the number in one more span cannot quietly
+satisfy it.
+
+**`C209` deletes the class and is RED — but it can only ever fail the FIRST
+assertion**, and :23578's standing rule is that *"an assertion that a fixture is
+'still inside' a container it was already inside is not an assertion"*. Under
+`C209` alone the second assertion was exactly that.
+
+**`C210` is the other direction and it is a real defect, not an instrument
+check:** the cell-filling position moves ONTO the `<Flame>` and the number is
+left in normal flow. Something still carries `absolute inset-0`, so
+`not.toBeNull()` passes; `querySelector` returns the icon, which does not contain
+the number, so the `contains` assertion fails. **Verified by hand under the
+mutation rather than read off the harness's RED** (:27468):
+`expected false to be true` at `myGyms.render.test.jsx:1198`, which is the
+`contains` line and not the existence line above it. On screen the number falls
+out of the fire exactly as in `C209`.
+
+**This goes beyond the review's suggested fix, which asked only for the mutant
+that REMOVES the overlay — and that alone would have shipped a half-vacuous
+assertion inside the fix for a rule-4 finding** (:25567: a review's suggested fix
+is not the whole of its finding; :7104's PG1: a guard with one test is a door
+that is simply shut).
+
+### 3 · TWO RECORDS OF ONE GUARD RUN QUOTED DIFFERENT HALVES OF ONE LINE
+
+`check-decisions-index` prints a compound figure —
+`288 pointers resolve (287 on a heading, 1 deliberate mid-entry)`. Round 2's
+`HANDOFF.md` block took **288**; its `DECISIONS.md` round log took **287**.
+**Neither is false, and that is what makes it worth recording**: a chat grepping
+either gets a different answer to *"how many pointers"*, and the disagreement
+reads as one of them being wrong. Both now quote the whole clause (:20587 —
+correct a figure in ALL of its copies, applied here to a figure that was never
+incorrect, only halved).
+
+**STANDING: when a guard prints a compound figure, a record quotes the WHOLE
+clause. Half of a true line is how two correct records come to contradict each
+other.**
+
+### 4 · `DECISIONS-INDEX.md`'s HEADER WAS LYING ABOUT ITS OWN SIZE, FOR THE THIRD RECORDED TIME
+
+That header states the always-read cost and carries its own instruction —
+*"Re-measure whenever you add a line here"* — with the command to do it. Measured
+on the bytes committed here rather than by adding a delta (:24813): the three
+figures read **1,063 · 1,208 · 58** and the file's own paragraph said **1,118**
+for the first. **Mostly pre-existing drift rather than this commit's doing** — at
+`7831015^` the trigger file was already 1,141 lines and §1/§2 were already at
+their current sizes — **which is the shape :22497 and :24813 both paid for,
+arriving a third time.** Corrected using the command the header itself names.
+
+### 5 · WHAT THIS ROUND CHECKED AND FOUND SOUND, so a later chat does not re-derive it
+
+The round-2 cursor fix holds in both readers: the served page is still exactly
+`limit` (`grouped.slice(0, limit)`, `rows.slice(0, limit)`), the day list's cursor
+is still the last person OF THE PAGE and not the extra row, and both response
+schemas are `.max(ATTENDANCE_PAGE_LIMIT)` so a 101st row would 500 rather than
+render · `limit` is not attacker-reachable (neither query schema accepts it, both
+`.strict()`) · tenancy leads both `WHERE`s and neither was widened · the day-list
+fixture's hundred users are deleted by this suite's own `cleanup`
+(`orgatt-t-…@example.com`) and collide with no other suite · no `sql.raw`, no
+`any`, no non-null assertion, no new dependency.
+
+**THE TICK RESTS ON TESTS, NOT ON A BROWSER, and that is stated rather than
+implied:** :32583 §6 declares no smoke for these fixes and gives the reason —
+both round-2 defects need a hundred rows to reach, which no account in Kd's
+browser has, and a step that cannot reach the state it names is :32498's own
+finding. The three Low fixed here change nothing a browser could show.
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :32583, :23578, :20587, :24703 with its :24813 addendum, :15770,
+:14174, :10726, :32114, :5200, :8707 and :27659 · `HANDOFF.md`'s top block ·
+`CLAUDE.md` Part 0.5, Part I §2.5 and Part II · `OWED.md`'s calendar line.
+
+**THIS SESSION RECOVERED THE PREVIOUS ONE FROM DISK.** VS Code closed mid-fix.
+The code half of Low-1 was already in the working tree, unrun and uncommitted,
+and the fix round's finding list and Kd's approval of it were read back out of
+the previous session's transcript rather than re-derived or put to him again.
+
+**PROVE, on the FINAL bytes:** `myGyms.render` **51/51** · the three ROOT guards
+pass — `check-decisions-index` **288 pointers resolve (287 on a heading, 1
+deliberate mid-entry), 1259 headings**, `check-harnesses` **25 scripts parse**,
+triggers rebuilt and `--check` clean. **No `apps/api` file, no
+`packages/shared` file and no migration is touched by this commit**, so
+:28395's rule is satisfied by the web suite above and no api figure is quoted.
+
+**SWEEP: a stated SUBSET of 227 — `C209` and `C210`, 2 RED · 0 ALIVE · 0 never
+ran**, control GREEN and tallied first, restore sha256 byte-exact after every
+mutant. **`C210`'s direction was ALSO verified by hand**, because a RED says only
+that something failed (:27468).
+
+**THE HAND PROBE WAS REVERTED BY REPLACING THE STRING, NEVER `git checkout --`**
+(:31921 §4b) — `git diff` on `AttendancePanel.jsx` afterwards was empty and the
+working tree carried no residue.
+
+**`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's), and
+is deliberately not committed here.

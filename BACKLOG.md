@@ -3654,3 +3654,41 @@ a round.**
       diff; :26220's *"believing a `-t` filtered run about a test you have just
       written"* is the standing caution and the harness's control step is what
       catches the consequence.
+
+## 2026-09-04 — the calendar packet, T3 round 3, DIFF-ONLY (DECISIONS `:32783`)
+
+ZERO Critical/High, so **the packet SHIPS and the `OWED.md` calendar line TICKS**
+(:5348 rule 1). Three Low, **all fixed in the same commit**; none bought a round.
+Kd approved the list before a byte was written (*"fix"*).
+
+- [x] **L-1 · A TEST NAME MADE THREE CLAIMS AND ONLY TWO HAD AN OBSERVER** —
+      `apps/web/src/pages/myGyms.render.test.jsx`, *"keeps the day number
+      readable inside the fire"*. Round 2 fixed the FIRE half of exactly this
+      finding (`C208`) and did not ask what else its own name claimed. **Proven
+      by deleting `className="absolute inset-0 flex items-center justify-center"`
+      from `AttendancePanel.jsx`'s `CameDay`: all 51 tests passed** — while on
+      screen the number leaves the middle of the flame and drops below it, the
+      small-number-with-a-smaller-flame shape Kd sent the card back over
+      (`:32395`). The test now asks the cell for the element carrying the
+      positioning and asserts the number is inside it, queried by the positioning
+      rather than through `parentElement` so one more wrapper span cannot quietly
+      satisfy it. **Two mutants, because the assertion has two halves**:
+      **`C209`** deletes the class (fails the existence half) and **`C210`** moves
+      the cell-filling position onto the `<Flame>`, leaving the number in normal
+      flow (fails the `contains` half — :23578's rule, and verified by hand under
+      the mutation, not read off the harness's RED). Both RED.
+- [x] **L-2 · TWO RECORDS OF ONE GUARD RUN QUOTED DIFFERENT HALVES OF ITS
+      OUTPUT** — `HANDOFF.md`'s round-2 block said the index guard reported
+      **288 pointers**, `DECISIONS.md`'s round-2 log said **287**. The guard
+      prints both in one clause: `288 pointers resolve (287 on a heading, 1
+      deliberate mid-entry)`. **Neither record is false**, which is the point —
+      a chat grepping either gets a different answer and the pair reads as a
+      contradiction. Both now quote the whole clause (:20587, applied to a figure
+      that was never incorrect, only halved).
+- [x] **L-3 · `DECISIONS-INDEX.md`'s HEADER WAS WRONG ABOUT ITS OWN SIZE** — the
+      three always-read figures read 1,063 · 1,208 · 58 (and 1,118 in the file's
+      own MEASURED paragraph) against the real 1,145 · 1,385 · 74 at
+      `7831015`. **Mostly pre-existing drift, not this commit's doing**, and the
+      third recorded instance of the header a header's own rule tells every chat
+      to re-measure (:22497, :24813). Re-measured on the bytes being committed,
+      with the command the header itself names, rather than by adding a delta.

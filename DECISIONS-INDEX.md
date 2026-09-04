@@ -4,18 +4,30 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,063 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,149 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,208 lines** (~680 at the split; 797 on
+2. **§1 below — STANDING RULES. 1,385 lines** (~680 at the split; 797 on
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
-3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
+3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,577 lines, MEASURED 2026-09-03 and not estimated**
-(1,118 + 1,385 + 74). **THE TWENTY-FIRST MEASUREMENT CLOSES A CARD — a smoke
+**ALWAYS-READ TOTAL: 2,608 lines, MEASURED 2026-09-04 and not estimated**
+(1,149 + 1,385 + 74). **THE TWENTY-SECOND MEASUREMENT IS A T3 ROUND THAT SHIPS A
+PACKET AND TICKS A 🔴 LINE: +4, all of them trigger phrases, §1 and §2 UNMOVED**
+— the round record went to §1B, where :24813 sends it.
+**AND IT WAS TAKEN BECAUSE THE ROUND FOUND THIS HEADER LYING ABOUT ITSELF AGAIN
+— the THIRD recorded time, which makes the drift the standing finding rather
+than any one delta.** The three figures above read **1,063 · 1,208 · 58** (and
+the paragraph below said **1,118** for the first) against a real **1,145 · 1,385
+· 74** at `7831015`, so **§1 had been under-reported by 177 lines with nobody
+re-running the command two paragraphs down.** Mostly pre-existing: this commit's
+own contribution is the +4. **Computed from `wc -l` and the `grep` below on the
+bytes being committed, never by adding a delta to the previous figures** — the
+only way a number here can be trusted, and the lesson :22497 already paid for
+once. **THE TWENTY-FIRST MEASUREMENT CLOSES A CARD — a smoke
 step, a 🔴 tick and its evidence: +3, all trigger phrases, §1 and §2 unmoved.**
 **FIVE MEASUREMENTS IN ONE DAY, and the day is the clearest evidence the split
 works that anybody has taken: +5 (a card), +45 (a KD RULING), +4 (a smoke), +4
@@ -4951,7 +4963,45 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   Fixes: `LIMIT` one more than the page on both readers, two regression tests each
   asserting BOTH directions, mutants **O257–O260** and **C207/C208**. api
   **239/239**, web **1741/1741**, sweeps 13 RED + 19 RED, 0 ALIVE.
-  **Round 3 is diff-only (:5348 rule 2).**
+  ~~**Round 3 is diff-only (:5348 rule 2).**~~ **ROUND 3 RAN 2026-09-04
+  (`:32783`) WITH ZERO Critical/High: the packet SHIPS and the `OWED.md`
+  calendar line TICKS.** Its rule-4 finding is this entry's own fix one noun
+  further along — see below.
+
+- **:32783** — 2026-09-04 — **THE CALENDAR PACKET, T3 ROUND 3 (diff-only): ZERO
+  Critical/High, THE PACKET SHIPS AND THE CALENDAR LINE TICKS — and round 2's own
+  rule-4 fix had left the same defect one noun further along.** Diff-only over
+  `7831015` (:5348 rule 2). Three Low, all fixed in the same commit, logged in
+  `BACKLOG.md`, none buying another round; Kd approved the list first (*"fix"*).
+  **Escape hatch did NOT fire** — round 2 carried two Critical/High, round 3
+  carries none. **Read before treating a rule-4 fix as finished because the noun
+  the review named now has an observer, before writing an assertion whose subject
+  is what CONTAINS something, before quoting one half of a guard's compound
+  output into a record, and before adding a line to `DECISIONS-INDEX.md` without
+  re-measuring that file's own header.**
+  **THE TEST NAME MADE THREE CLAIMS AND ROUND 2 GAVE AN OBSERVER TO ONE OF THEM**
+  — *"keeps the day number readable inside the fire"* is a NUMBER, a FIRE, and
+  the number being INSIDE it; `C208` covered the fire and nothing covered the
+  third. Proven by deleting the one positioning class from `CameDay`: **all 51
+  tests passed** while the number leaves the middle of the flame and drops below
+  it, which is the shape Kd sent the card back over (`:32395`). **STANDING: rule
+  4's cheapest instrument is the test's NAME — count the nouns in it.**
+  **THE FIX'S OWN NEW ASSERTION HAS TWO HALVES AND `C209` CAN ONLY FAIL ONE**, so
+  the `contains` half was :23578's *"still inside is not an assertion"* until
+  **`C210`** moved the cell-filling position onto the `<Flame>` — a real defect,
+  not an instrument check — and it was verified BY HAND under the mutation
+  (`expected false to be true` at the `contains` line, not the existence line),
+  because a RED says only that something failed (:27468). Beyond the review's
+  suggested fix, deliberately (:25567).
+  **TWO RECORDS OF ONE GUARD RUN QUOTED DIFFERENT HALVES OF ONE COMPOUND LINE**
+  (288 pointers resolve / 287 on a heading) — neither false, and a chat grepping
+  either gets a different answer. Both now quote the whole clause (:20587).
+  **AND THIS INDEX'S HEADER WAS WRONG ABOUT ITS OWN SIZE FOR THE THIRD RECORDED
+  TIME**, mostly pre-existing drift; re-measured with the command the header
+  itself names (:24813, :22497).
+  Web `myGyms.render` 51/51 · three ROOT guards pass · SWEEP a stated SUBSET of
+  227: `C209`/`C210`, 2 RED, 0 ALIVE. **No api, shared or migration file is
+  touched.** No smoke, on `:32583` §6's stated reason.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

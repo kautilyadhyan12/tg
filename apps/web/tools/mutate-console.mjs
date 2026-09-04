@@ -2769,6 +2769,24 @@ const MUTANTS = [
     from: '      <Flame\n        className="w-full h-full"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />',
     to: '      {null}',
   },
+  {
+    id: 'C209',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE NUMBER COMES OUT FROM INSIDE THE FLAME AND FALLS UNDERNEATH IT - Kd's instruction was the date IN THE MIDDLE of the symbol, and this one class is the whole of what puts it there. Round 2 gave this test the flame it was named after and stopped one claim short: with the overlay deleted the number is still present, still white, still says 2, and there is still a fire, so C206 and C208 both stay GREEN while the square becomes the small-number-with-a-smaller-flame-under-it that this card was sent back over (:32395). Measured before the assertion was written: the whole 51-test suite passed with this line gone",
+    expect: 'keeps the day number readable inside the fire',
+    from: '        className="absolute inset-0 flex items-center justify-center"\n',
+    to: '',
+  },
+  {
+    id: 'C210',
+    target: 'attendancepanel',
+    suite: MY_GYMS_SUITE,
+    why: "THE CELL-FILLING POSITION MOVES ONTO THE FLAME AND THE NUMBER IS LEFT IN NORMAL FLOW - the same defect as C209 approached from the other side, and it is here because the assertion C209 protects has TWO halves and C209 can only fail one of them. `expect(overTheFlame).not.toBeNull()` still passes with this edit, because something on the cell still carries `absolute inset-0`; only `contains(inside)` fails, and :23578's standing rule is that an 'is it still inside' assertion which cannot fail is not an assertion. On screen the number drops out of the middle of the fire exactly as in C209, so this is a real defect and not only an instrument check",
+    expect: 'keeps the day number readable inside the fire',
+    from: '        className="w-full h-full"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />\n      <span\n        className="absolute inset-0 flex items-center justify-center"\n',
+    to: '        className="w-full h-full absolute inset-0"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />\n      <span\n        className="flex items-center justify-center"\n',
+  },
 ];
 
 const abort = (msg) => {

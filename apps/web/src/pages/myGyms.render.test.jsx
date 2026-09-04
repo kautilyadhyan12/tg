@@ -1181,5 +1181,20 @@ describe('the calendar folds away', () => {
     // number is still there, still white, still says 2 — and the day has no
     // fire on it at all.
     expect(fireIn(cameOn(2))).not.toBeNull();
+    // AND IT IS *INSIDE* IT RATHER THAN BESIDE IT, which is the THIRD claim in
+    // this test's own name and was still unobserved after round 2 fixed the
+    // second (T3 round 3). jsdom has no layout, so the only thing this layer
+    // can see is the thing that does the positioning: the number's wrapper is
+    // stretched across the whole cell, over an icon that fills the same square.
+    // **Delete that one class and every assertion above still passes** — the
+    // number is still there, still white, still says 2, and there is still a
+    // flame — while the number drops BELOW the fire, which is the small-number-
+    // with-a-smaller-flame-under-it shape Kd sent this card back over (:32395).
+    // Queried by the positioning rather than through `inside.parentElement` so
+    // that wrapping the number in one more span does not quietly satisfy it.
+    // Mutant C209.
+    const overTheFlame = cameOn(2).querySelector('.absolute.inset-0');
+    expect(overTheFlame).not.toBeNull();
+    expect(overTheFlame.contains(inside)).toBe(true);
   });
 });

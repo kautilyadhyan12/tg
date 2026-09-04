@@ -96,9 +96,11 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       a second, and wrong, spelling of one minute.
       **🔴 because a user-facing control lies about what it will do.**
 
-- [ ] 🟡 **THE MEMBER'S "DAYS YOU CAME" LIST GROWS WITHOUT BOUND, AND KD RULED A
-      CALENDAR WITH FIRE ON THE DAYS ATTENDED** (2026-09-03, DECISIONS
-      `:31508`). His words at his own browser: *"a user might cam 7 days a week
+- [x] 🟡 **THE MEMBER'S "DAYS YOU CAME" LIST GROWS WITHOUT BOUND, AND KD RULED A
+      CALENDAR WITH FIRE ON THE DAYS ATTENDED — DONE 2026-09-04**, on the commit
+      carrying DECISIONS `:32783` (T3 round 3, diff-only, ZERO Critical/High ⇒
+      the packet ships, :5348 rule 1). Raised 2026-09-03, DECISIONS
+      `:31508`. His words at his own browser: *"a user might cam 7 days a week
       that way the records on this section will also become very long and
       overwhelming so need better design ... i think a calander with dates when
       you went to gym is good and a day with attandance will have a fire effect"*
@@ -134,12 +136,17 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       finding, that stopping the api sends you to the login page before any
       screen draws (its own line below).
       ~~**THE LINE STILL DOES NOT TICK: T3 IS UNRUN**, and that is now the only
-      gate left on it.~~ **T3 ROUND 2 RAN 2026-09-04 (DECISIONS `:32583`) AND
+      gate left on it.~~ ~~**T3 ROUND 2 RAN 2026-09-04 (DECISIONS `:32583`) AND
       FOUND TWO Critical/High, SO THE LINE STILL DOES NOT TICK** — both fixed in
       that commit, and **round 3 is diff-only** (:5348 rule 2), which is now the
-      only gate left. **What is NOT claimed is that the declared steps were
-      watched** — nine of them were not, and the phone width in particular has
-      no test behind it either, jsdom having no layout.
+      only gate left.~~ **ROUND 3 RAN 2026-09-04 (DECISIONS `:32783`), DIFF-ONLY,
+      AND FOUND ZERO Critical/High — SO THE LINE TICKS.** Its three Low are fixed
+      in the same commit and logged in `BACKLOG.md`. **What is NOT claimed is
+      that the declared steps were watched** — nine of them were not, and the
+      phone width in particular has no test behind it either, jsdom having no
+      layout. **THE TICK RESTS ON TESTS AND NOT ON A BROWSER for the round-2 and
+      round-3 fixes specifically**, on `:32583` §6's stated reason: both round-2
+      defects need a hundred rows to reach, which no account in Kd's browser has.
       **WHAT ROUND 2 FOUND, because it is what round 3 must confirm is gone:**
       both readers of `gym_attendance` decided *"there is another page"* from a
       page being FULL, so a month holding exactly one page told the member *"some
@@ -152,6 +159,12 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       asserted the panel greys future days by the GYM's clock) and **the fire
       itself had no test — two were named after it and both passed with it
       deleted.**
+      **ROUND 3 CONFIRMED ALL OF THAT GONE** (`:32783` §5) — the served page is
+      still exactly `limit` in both readers, the day list's cursor is still the
+      last person OF THE PAGE, and neither `WHERE` was widened — **and found the
+      fire's own test still one claim short**: it is named *"readable INSIDE the
+      fire"* and nothing observed the "inside". Fixed with two mutants, `C209`
+      and `C210`.
       **Cost stated to Kd before he chose:** a square in a grid cannot show that
       somebody came at 5:01 PM *and* 3:32 AM, so the times move behind a tap on
       the day — the same place the workout calendar puts them.

@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CALENDAR PACKET, T3 ROUND 3 (diff-only) — ZERO Critical/High, THE
+      PACKET SHIPS AND THE 🟡 `OWED.md` CALENDAR LINE TICKS. DECISIONS `:32783`.
+      **START HERE: the calendar card is CLOSED.** Rounds 1/2 were `:32114` and
+      `:32583`; the escape hatch never fired (round 1 zero, round 2 two, round 3
+      zero — never two consecutive). Three Low, all fixed in this commit and
+      logged in `BACKLOG.md`; Kd approved the list first (*"fix"*).
+
+  1. **ROUND 2's OWN RULE-4 FIX LEFT THE SAME DEFECT ONE NOUN FURTHER ALONG.**
+     The test is called *"keeps the day number readable inside the fire"* — a
+     NUMBER, a FIRE, and the number being INSIDE it. Round 2 gave the FIRE an
+     observer (`C208`) and did not ask what else its own name claimed. Deleting
+     the one positioning class from `CameDay` left **all 51 tests passing**
+     while the number drops out of the flame and sits below it — the shape Kd
+     sent this card back over (`:32395`). **STANDING: rule 4's cheapest
+     instrument is the test's NAME — count the nouns in it.**
+  2. **THE FIX'S NEW ASSERTION HAS TWO HALVES AND ONE MUTANT ONLY FAILS ONE.**
+     `C209` (delete the class) cannot fail the `contains` half, which left it as
+     :23578's *"still inside is not an assertion"*. **`C210`** moves the
+     cell-filling position onto the `<Flame>` — a real defect, not an instrument
+     check — and it was verified BY HAND under the mutation (`expected false to
+     be true` at the `contains` line, not the existence line above it), because
+     a RED says only that something failed (:27468). Deliberately beyond the
+     review's suggested fix (:25567).
+  3. **TWO RECORDS OF ONE GUARD RUN QUOTED DIFFERENT HALVES OF ONE LINE** —
+     288 pointers resolve / 287 on a heading. Neither false; a chat grepping
+     either got a different answer. Both now quote the whole clause (:20587).
+  4. **THIS INDEX'S HEADER WAS WRONG ABOUT ITS OWN SIZE, THIRD RECORDED TIME.**
+     1,063 · 1,208 · 58 against a real 1,145 · 1,385 · 74 at `7831015` — §1
+     under-reported by 177 lines. Mostly pre-existing; re-measured on the bytes
+     committed, with the command the header itself names (:24813, :22497).
+
+PROVE: `myGyms.render` **51/51** · three ROOT guards pass (harnesses **25
+       scripts**, index **289 pointers resolve, 288 of them on a heading**,
+       triggers rebuilt and `--check` clean at 970 from 254 of 392 rulings).
+       **SWEEP a stated SUBSET of 227 — `C209` and `C210`, 2 RED / 0 ALIVE / 0
+       never ran**, control GREEN and tallied first, restore sha256 byte-exact.
+       **No `apps/api`, `packages/shared` or migration file is touched by this
+       commit**, so no api figure is quoted (:28395's rule satisfied by the web
+       suite above).
+       **THE HAND PROBE WAS REVERTED BY REPLACING THE STRING** (`:31921` §4b) —
+       `git diff` on `AttendancePanel.jsx` afterwards was empty.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       deliberately not committed here.
+       **THE TICK RESTS ON TESTS, NOT ON A BROWSER**, and `:32583` §6 gives the
+       reason: both round-2 defects need a hundred rows to reach, which no
+       account in Kd's browser has. Nine of the calendar smoke's steps were
+       DECLARED rather than watched (`:32498`), and the phone width still has
+       nothing behind it — jsdom has no layout.
+       **THIS SESSION RECOVERED THE PREVIOUS ONE FROM DISK** after VS Code
+       closed mid-fix: the code half of finding 1 was already in the working
+       tree, unrun and uncommitted, and Kd's approval was read back out of the
+       previous session's transcript rather than put to him a second time.
+       **NEXT:** the last of the three things Kd approved on 2026-09-03 —
+       folding the member card's Mon–Sun hours list, **tap not hover**
+       (:26586), `defaultOpen` not `forceOpen` (:31295). Its `OWED.md` line is
+       the ⚪ *"THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE"* one.
+       Still open and untouched by this card: the ⚪ bare-`--` scoping footgun
+       in `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: THE CALENDAR PACKET, T3 ROUND 2 — TWO Critical/High, both FIXED, and the
       second was on a screen the review had CLEARED. DECISIONS `:32583`.
       **START HERE: the packet does NOT ship on this round (:5348 rule 1). ROUND
@@ -40,8 +102,8 @@ PROVE: `orgs.attendance` + `orgs.routes` + `orgs.hours` + `db.migration` in ONE
        invocation **239/239** (+2), all LOCAL · `web` **1741/1741 across 58
        files** (+1) · `tsc` exit 0 · `eslint --max-warnings=0` exit 0 on
        `apps/api/{src,test,tools}` and the three web files · three ROOT guards
-       pass (harnesses 25, index **288 pointers**, triggers up to date — 966
-       from 253 of 391 rulings).
+       pass (harnesses 25, index **288 pointers resolve, 287 of them on a
+       heading**, triggers up to date — 966 from 253 of 391 rulings).
        **SWEEPS: O248–O260 13 RED / 0 ALIVE; C190–C208 19 RED / 0 ALIVE**,
        controls GREEN and tallied first, restores sha256 byte-exact, *"gyms +
        subscriptions verified — no unattributed changes"*.
