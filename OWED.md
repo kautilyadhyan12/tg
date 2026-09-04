@@ -192,11 +192,25 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       gym now arrives as **"Welcome to <gym>"** in the greeting, with the whole
       timetable on `My Gyms`.
       **THE CODE IS DONE. WHAT IS OWED IS THE TWO GATES:**
-      **`RUNBOOK/smoke-dashboard-gym-greeting.md`** (7 steps) and
+      ~~**`RUNBOOK/smoke-dashboard-gym-greeting.md`** (7 steps) and
       **`RUNBOOK/smoke-gym-hours-fold.md`** (5 steps) are both WRITTEN AND
-      UNRUN, and **T3 is UNRUN on both cards** — the fold sits underneath the
-      greeting card and a review of one without the other would cover half a
-      screen.
+      UNRUN, and~~ **THE GREETING SHEET IS DISCHARGED ON KD'S DECLARATION
+      2026-09-04** (*"all passed"*, then *"all working"*) — :27415's and
+      :32498's precedent, recorded as a DECLARATION and never as a watched run.
+      **T3 is UNRUN on both cards and is now the only gate left** — the fold
+      sits underneath the greeting card and a review of one without the other
+      would cover half a screen.
+      **TWO THINGS THE DECLARATION DOES NOT COVER, named rather than absorbed:**
+      **(a) NOBODY HAS SEEN THE "Welcome to <gym>" LINE.** Kd is a member of TWO
+      gyms, so it is correctly absent for him — and the sheet's own steps 1 and 3
+      asked him to confirm it present AND absent, which is :32498's *"a step
+      whose ✅ cannot be reached invites a tick for something nobody saw"*
+      arriving one card later. Step 3 is STRUCK on the sheet with that reasoning.
+      The line is held by mutant `P6` and by the one-gym render case.
+      **(b) THE FOLD WAS SEEN AND NOT OPERATED.** The greeting sheet names it as
+      present; nothing asked him to tap it SHUT, which is `:31295`'s whole
+      subject. `smoke-gym-hours-fold.md` stays UNRUN and its status block says
+      exactly this; the closing direction is held by `C212`.
       **WHY IT IS 🟡 AND NOT ⚪:** this is the FIRST screen of the app, the
       change is one he asked for after looking at it, and the thing he objected
       to is a thing no test in this repo can judge — jsdom has no layout, so

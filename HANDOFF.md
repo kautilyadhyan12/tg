@@ -1,6 +1,45 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, AND THE SHEET ASKED HIM
+      TO CONFIRM ONE THING WAS BOTH PRESENT AND ABSENT. DECISIONS `:33265`.
+      **START HERE: T3 IS NOW THE ONLY GATE LEFT on the 🟡 `OWED.md` line, and it
+      covers BOTH of today's cards** — `:32929` (the hours fold) and `:33091`
+      (the dashboard greeting) sit on one screen. Records only: no code, no test,
+      no `src` file.
+
+  1. **"all passed", THEN "all working" — ATTRIBUTED, NEVER WRITTEN AS A WATCHED
+     RUN** (:27415, :32498). The gate is his to open; what a chat may not do is
+     write "the smoke ran and passed" about an event it did not see.
+  2. **STEPS 1 AND 3 COULD NOT BOTH PASS.** Kd is a member of TWO gyms
+     (`memberOrgs` counts every `isMember` row whatever its `staffRole`), so the
+     welcome line is CORRECTLY absent for him — while step 1 asked him to confirm
+     it present and step 3 that it was absent. **:32498 one card later in a new
+     shape: there a step named a state the APP could not reach, here one names a
+     state the ACCOUNT cannot be in.** Step 3 struck with its reasoning; the RULE
+     was not softened to make a step pass.
+  3. **NOBODY HAS SEEN THE WELCOME LINE.** It only renders for a one-gym member;
+     `P6` and the one-gym render case are its only observers. The feature he asked
+     for is invisible on his own account and he was told so in plain words — he
+     did not ask for the rule to change.
+  4. **THE FOLD WAS SEEN AND NOT OPERATED.** Nothing asked him to tap it shut,
+     which is :31295's whole subject. `smoke-gym-hours-fold.md` stays UNRUN and
+     `C212` holds the closing direction. **A control seen is not a control
+     working.**
+
+PROVE: three ROOT guards pass (harnesses **25 scripts**, index **291 pointers
+       resolve, 290 on a heading**, triggers rebuilt and `--check` clean at **984
+       from 257 of 395 rulings**). No suite is quoted and none is owed — no
+       `src`, test, api, shared or migration file is touched by this commit.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       **NEXT: T3 round 1 in a FRESH chat over both commits** (`e807340` and
+       `0fcfcba`). The 🟡 line ticks on zero Critical/High.
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: KD TAKES THE GYM OFF THE DASHBOARD AND IT COMES BACK AS A GREETING.
       DECISIONS `:33091`. **START HERE: this is the SECOND card of the same
       session and it overrules the shape of the first.** `:32929` folded the

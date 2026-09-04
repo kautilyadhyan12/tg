@@ -33261,3 +33261,72 @@ record.
 so no api figure is quoted (`:28395`).
 
 **`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's).
+
+### 8 · ADDENDUM, same session — THE SMOKE GATE IS DISCHARGED ON KD'S DECLARATION, AND THE SHEET ASKED HIM TO CONFIRM ONE THING WAS BOTH PRESENT AND ABSENT
+
+**Read before writing a smoke step whose ✅ depends on how many gyms the account
+running it belongs to, before ticking a gate on an operator's "all passed", and
+before quoting `smoke-dashboard-gym-greeting.md` as evidence that anybody has
+seen the welcome line.**
+
+Handed five steps he answered *"all passed"*, and then *"all working"* once the
+contradiction below was put to him. **The gate is open, the claim is attributed,
+and it is `:27415`/`:32498`'s shape exactly** — he is the operator and the gate is
+his to open; what a chat may not do is write *"the smoke ran and passed"* about
+an event it did not watch.
+
+### 1 · STEPS 1 AND 3 COULD NOT BOTH PASS, AND THE ACCOUNT IS WHY
+
+**Kd is a member of TWO gyms** — his own 2026-09-04 screenshots show
+*"You're a member of Smoke Test Gym"* and *"You're a member of owner"*, and
+`memberOrgs` counts every `isMember === true` row whatever its `staffRole`
+(`gymMembershipView.js:137-141`, read before the claim was made). So
+`welcomeGym` is null and the line is CORRECTLY absent for him.
+
+**Step 1 asked him to confirm the line was THERE. Step 3 asked him to confirm it
+was NOT.** One sheet, one account, two opposite ✅. **This is `:32498`'s finding
+one card later and in a new shape**: there a step named a state the app could not
+reach, here a step names a state the ACCOUNT cannot be in — and both invite a
+tick for something nobody saw.
+
+**THE RULE ITSELF IS UNCHANGED AND WAS NOT SOFTENED TO MAKE A STEP PASS.** Two
+gyms still name none, for the reason `§2` gives. Step 3 is struck on the sheet
+with its reasoning, and the sheet now says that the line can only be seen on a
+one-gym account.
+
+### 2 · THE FEATURE HE ASKED FOR IS INVISIBLE ON HIS OWN ACCOUNT, AND THAT WAS PUT TO HIM
+
+*"good afternoon owner welcome to xyz gym can be there"* — and on the account he
+wrote that from, it never appears. **He was told so in plain words rather than
+left to notice**, with the reason (a real member belongs to one gym; two is a
+test-account shape) and the thirty-second way to see it (sign in as the
+single-gym account). He answered *"all working"* and did not ask for the rule to
+change.
+
+**WHAT IS THEREFORE HELD BY TESTS AND NOT BY A BROWSER: the welcome line itself.**
+Mutant **`P6`** and the one-gym case in `xpDisplay.render.test.jsx` are its only
+observers, and no human has seen it render. Said here because a later chat
+reading *"the smoke passed"* would assume otherwise.
+
+### 3 · THE FOLD WAS SEEN AND NOT OPERATED, WHICH IS A DIFFERENT THING
+
+The greeting sheet's step 4 names the **This week** fold as present on `My Gyms`.
+**Nothing asked him to tap it SHUT** — and closing is the entire subject of
+`:31295`, where a dropdown arrived open, could not be closed, and both of its
+comments claimed it worked. `RUNBOOK/smoke-gym-hours-fold.md` stays **UNRUN**,
+its status block now says precisely this, and the closing direction is held by
+**`C212`**.
+
+**A CONTROL SEEN IS NOT A CONTROL WORKING**, and the gap between those two is
+where this repo's most expensive UI defect lived.
+
+### Round log (addendum)
+
+**No code, no test, no `src` file — records only.**
+`RUNBOOK/smoke-dashboard-gym-greeting.md` (status block, step 3 struck with its
+reasoning) · `RUNBOOK/smoke-gym-hours-fold.md` (status block) · `OWED.md` (the
+smoke gate discharged, the two uncovered things named) · `DECISIONS.md` ·
+`DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+**T3 IS NOW THE ONLY GATE LEFT ON THE 🟡 LINE**, and it covers BOTH of today's
+cards — `:32929`'s fold and `:33091`'s greeting sit on one screen.
