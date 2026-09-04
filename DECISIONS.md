@@ -34175,11 +34175,25 @@ measured today rather than recalled from `:33265`:
 there.** `:33265` §2 recorded this on 2026-09-04 and recorded that he was told
 it; this is the same fact re-measured rather than re-cited (V4).
 
-**THE QUESTION PUT TO HIM, AND IT IS THE ONLY ONE OPEN:** did he test it on a
-DIFFERENT account — a one-gym account, where it does render? **If yes it is
-passed on his declaration like the other two and this addendum's finding
-evaporates.** If he meant the card as a whole, the line stays held by mutant
-`P6` and one render case, exactly as `:33265` left it.
+~~**THE QUESTION PUT TO HIM, AND IT IS THE ONLY ONE OPEN:** did he test it on a
+DIFFERENT account — a one-gym account, where it does render?~~ **— ANSWERED THE
+SAME MINUTE: YES.** *"yes bro yes , do you not understand what does YES means"*.
+**So the `Welcome to <gym>` line is PASSED ON HIS DECLARATION like the other
+two, and nothing on this packet is outstanding.**
+
+**THIS SUPERSEDES `:33265` §2's *"no human has seen it render"*** — true when
+written, answered now. **The arithmetic above is UNCHANGED and is why the
+question was worth one message:** the line still cannot appear on
+`owner@example.com`, so **any future step asking for it must name a one-gym
+account or it is `:32498`'s defect again** — a ✅ that cannot be reached on the
+account running it. That, and not the pass, is what this addendum is for.
+
+**AND THE TONE IS RECORDED BECAUSE IT IS EVIDENCE ABOUT THE ASKING, NOT ABOUT
+HIM:** he had already said *"these were tested and passed"*, and the follow-up
+read as a second demand for the same answer. **The check was right and the FRAME
+was wrong** — it should have led with what was being recorded and put the
+one-account question last, as a detail, rather than making a yes/no gate out of
+it (K7: the recommendation first, the evidence below).
 
 **WHY IT WAS MEASURED INSTEAD OF ASKED FIRST:** the query is two joins and the
 answer is not a matter of opinion. **Asking Kd to confirm something the database

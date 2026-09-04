@@ -30,12 +30,19 @@ TASK: THE FOLD/GREETING PACKET IS CLOSED. Kd DISCHARGED THE SMOKE GATE BY
      (`Dashboard.jsx:294`, read that session) and **`owner@example.com` has TWO
      live memberships** — measured against the Neon branch his browser reads
      (`gym_members` has **no `status` column**; liveness is `removed_at IS NULL`).
-     **So it cannot have been seen on that account.** One question is with him:
-     a different, one-gym account? Until then it is held by `P6` + one render
-     case, as `:33265` §2 left it. **STANDING: when the operator says "that was
-     tested", check the thing is REACHABLE on the account he uses before
-     recording it — a declaration discharges a gate, it cannot make a
-     conditional branch render.**
+     **So it cannot have been seen on that account.** ~~One question is with him:
+     a different, one-gym account?~~ **— ANSWERED YES the same minute, so ALL
+     THREE are passed on his declaration and NOTHING on this packet is
+     outstanding.** Supersedes `:33265` §2's *"no human has seen it render"*.
+     **THE ARITHMETIC STILL STANDS AND IS THE REUSABLE PART: any FUTURE step
+     asking for that line must name a ONE-GYM account**, or it is `:32498`'s
+     defect — a ✅ unreachable on the account running it. **STANDING: when the
+     operator says "that was tested", check the thing is REACHABLE on the account
+     he uses before recording it — a declaration discharges a gate, it cannot
+     make a conditional branch render.** **AND ON HOW TO ASK: he had already
+     answered once, so the follow-up read as a second demand. The check was
+     right, the FRAME was wrong — lead with what is being recorded and put the
+     one-account question last as a detail (K7).**
   4. **"100 TIMES" MEASURED RATHER THAN DISPUTED** (`:34048` §3): parts A/B DID
      pass 8/8 on 2026-09-02 and C/D the same day — **on `8eacc54`'s bytes**.
      Since then the button learned to REFUSE, the email arrived beside the name,

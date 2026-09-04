@@ -5345,11 +5345,19 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   about his memory. **NOT POSSIBLE ON HIS ACCOUNT: `Dashboard.jsx:294` draws the
   welcome line only when `memberGyms.length === 1`, and `owner@example.com` has
   TWO live `gym_members` rows** — measured against the Neon branch his browser
-  reads, not re-cited from `:33265` (V4). **One question is with him: a
-  different, one-gym account?** **STANDING: when an operator says "that was
-  tested", check the thing is REACHABLE on the account he uses before recording
-  it — a declaration discharges a gate, it cannot make a conditional branch
-  render.** Instrument note: `gym_members` has **no `status` column**; liveness
+  reads, not re-cited from `:33265` (V4). ~~**One question is with him: a
+  different, one-gym account?**~~ **— ANSWERED YES the same minute** (*"yes bro
+  yes"*), **so all three are passed on his declaration and NOTHING on this packet
+  is outstanding. SUPERSEDES `:33265` §2's *"no human has seen it render"*.**
+  **THE ARITHMETIC IS UNCHANGED AND IS THE REUSABLE PART: any FUTURE step naming
+  that line must name a ONE-GYM account**, or it is `:32498`'s defect — a ✅
+  unreachable on the account running it. **STANDING: when an operator says "that
+  was tested", check the thing is REACHABLE on the account he uses before
+  recording it — a declaration discharges a gate, it cannot make a conditional
+  branch render.** **AND ON HOW TO ASK: he had already answered once, so the
+  follow-up read as a second demand for the same answer. The check was right and
+  the FRAME was wrong — lead with what is being recorded, put the one-account
+  question last as a detail (K7).** Instrument note: `gym_members` has **no `status` column**; liveness
   is `removed_at IS NULL`, and a first query assumed otherwise and was corrected
   by the error rather than by guessing.
 

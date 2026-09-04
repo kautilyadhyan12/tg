@@ -26,9 +26,14 @@ correctly ABSENT for him — while step 1 asked him to confirm it was THERE and
 step 3 asked him to confirm it was NOT. **Both cannot pass, so "all passed"
 could not be literally true and was not recorded as though it were.** Put to him
 in plain words; he answered *"all working"*.
-**What is therefore held by TESTS and not by a browser: the line itself**, which
-only a one-gym member ever sees (mutant `P6`, and the one-gym case in
-`xpDisplay.render.test.jsx`). **What IS declared: the two boxes are gone, the
+~~**What is therefore held by TESTS and not by a browser: the line itself**~~
+**— NO LONGER TRUE: KD CONFIRMED 2026-09-04 THAT HE CHECKED IT ON A DIFFERENT,
+ONE-GYM ACCOUNT** (*"yes bro yes"*, DECISIONS `:34147`), **so the line is PASSED
+ON HIS DECLARATION.** It is still the case that it renders **only for a one-gym
+member** (`Dashboard.jsx:294`), which is why step 1 above cannot pass on his own
+two-gym account — **any future step naming this line must name a one-gym account
+too**, or it is `:32498`'s defect. Also held by mutant `P6` and the one-gym case
+in `xpDisplay.render.test.jsx`. **What IS declared: the two boxes are gone, the
 top of the page is short again, and `My Gyms` and Settings still carry
 everything** — which is the whole of what he objected to.
 **THE LESSON IS `:32498`'s, one card later: a step whose ✅ cannot be reached on

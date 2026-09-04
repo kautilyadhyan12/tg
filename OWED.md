@@ -202,9 +202,13 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       session) **and `owner@example.com` has TWO live memberships** — measured
       against the Neon branch his browser reads, `Smoke Test Gym` and `owner`,
       both `removed_at IS NULL`. **So it cannot have been seen on that account.**
-      One question is with him: whether he tested it on a different, one-gym
-      account. Until he answers, the line stays held by mutant `P6` and one
-      render case, exactly as `:33265` §2 left it.
+      ~~One question is with him: whether he tested it on a different, one-gym
+      account.~~ **— ANSWERED YES the same minute (`:34147`), so ALL THREE are
+      passed on his declaration and NOTHING on this packet is outstanding.**
+      **The arithmetic still stands and is the reusable part: any FUTURE step
+      asking for that line must name a one-gym account**, or it is `:32498`'s
+      defect — a ✅ unreachable on the account running it. Supersedes `:33265`
+      §2's *"no human has seen it render"*.
       (2026-09-04, DECISIONS
       `:32929` and `:33091`). Kd took the *"You're a member of xyz"* card off the
       dashboard at his own browser — *"its really looking bad in the dashboard
