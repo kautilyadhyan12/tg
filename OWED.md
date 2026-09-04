@@ -283,10 +283,23 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       PACKET SHIPS** (`:5348` rule 1) **AND THE T3 HALF OF THIS LINE IS
       SATISFIED.** Four Low, all fixed in that round, none of which bought
       another round. **THE LINE STILL DOES NOT TICK, and the reason is the only
-      one left: NONE OF THE FOUR SHEETS HAS BEEN RUN IN ITS CORRECTED FORM.**
+      one left: NOT ONE CORRECTED SHEET HAS BEEN RUN.**
       Four rounds, three of them with a Critical/High, every one of those in
-      sheet prose and none in the app. **NEXT: Kd at a browser, not another
-      review round.**
+      sheet prose and none in the app.
+      **AND THE COUNT IS SIX, NOT "the four sheets" ROUNDS 3 AND 4 BOTH WROTE**
+      (derived 2026-09-04 with `git diff --name-only 1945bf9~2..HEAD -- RUNBOOK/`,
+      not inherited — DECISIONS `:33799` §7): `smoke-attendance.md` ·
+      `smoke-gym-hours-fold.md` · `smoke-my-gyms-calendar.md` ·
+      `smoke-opening-hours.md` · `smoke-join-door.md` ·
+      `smoke-dashboard-gym-greeting.md`. **"Four" was round 3's LOCAL count of
+      what `e440b25` touched and was carried forward as if it described the
+      packet.** **FIVE NEED A BROWSER:** attendance (24 steps) · the fold sheet
+      (5) · the calendar from its corrected step 5 · **`smoke-opening-hours.md`
+      steps 22/22b/23 and `smoke-join-door.md` step 12, re-pointed in rounds 1–2,
+      both saying UNRUN in their own text and both outside every "four" written
+      since.** **The greeting sheet needs nothing** — round 3 changed a prose
+      cross-reference, not a step, and it is declared passed (`:33265`).
+      **NEXT: Kd at a browser, not another review round.**
 
 - [ ] ⚪ **`tools/check-smoke-folds.mjs` HAS THREE MEASURED LIMITS AND NOTHING
       HOLDS ANY OF THEM** (2026-09-04, T3 round 4 — DECISIONS `:33799`; the first

@@ -4,8 +4,13 @@
 TASK: T3 ROUND 4 (DIFF-ONLY) — ZERO Critical/High, **THE PACKET SHIPS**
       (`:5348` rule 1). FOUR Low, ALL FIXED. DECISIONS `:33799`.
       **START HERE: THERE IS NO ROUND 5. A Low finding buys no round.** The
-      remaining gate on the 🟡 `OWED.md` line is **KD AT A BROWSER** — none of
-      the four sheets has been run in its corrected form.
+      remaining gate on the 🟡 `OWED.md` line is **KD AT A BROWSER** — not one
+      corrected sheet has been run. **THE COUNT IS SIX TOUCHED / FIVE TO RUN, NOT
+      "the four sheets" ROUNDS 3 AND 4 BOTH WROTE** — derived, not inherited; see
+      `:33799` §7, which is V4 broken inside a round about inherited figures.
+      `smoke-opening-hours.md` 22/22b/23 and `smoke-join-door.md` step 12 both
+      say UNRUN in their own text and sat outside every "four". The greeting
+      sheet needs nothing (prose change only, declared passed).
       Escape hatch NOT armed (round 3 had two C/H, this has none). **NO app
       source touched**: `git diff --name-only apps packages` is empty. Two
       `RUNBOOK/*.md`, one `tools/*.mjs`, `OWED.md` + the four record files.
@@ -51,12 +56,14 @@ TASK: T3 ROUND 4 (DIFF-ONLY) — ZERO Critical/High, **THE PACKET SHIPS**
 
 PROVE: four ROOT guards green, taken LAST on the committed bytes — harnesses
        **26 scripts parse (23 .mjs + 3 .sh)**, index **295 pointers resolve
-       (294 on a heading, 1 deliberate mid-entry), 1316 headings**, triggers
-       **up to date — 1002 triggers from 261 of 399 rulings, 138 declaring
+       (294 on a heading, 1 deliberate mid-entry), 1317 headings**, triggers
+       **up to date — 1003 triggers from 262 of 400 rulings, 138 declaring
        none** (rebuilt), smoke-folds **OK, 1 documented exception**. Whole
        compound clauses (`:32783` §3). `node --check tools/check-smoke-folds.mjs`
        parses. `DECISIONS-INDEX.md`'s header re-measured with its own command:
-       always-read **2,640 = 1,181 + 1,385 + 74**, §1 and §2 UNMOVED.
+       always-read **2,641 = 1,182 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **Re-taken after §7 was written — §3's own finding recurring inside its
+       round: "take them LAST" moves every time the entry grows.**
        **§6 of the entry is a defect in MY OWN trigger sentence, found by
        reading the generator's output**: two clauses nested the word "before",
        which the generator splits on, so it harvested `it is true` and `that

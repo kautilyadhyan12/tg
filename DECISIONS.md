@@ -33970,12 +33970,17 @@ was not changed (R1.1); the sentence was.
 **PROVE, TAKEN LAST, ON THE BYTES BEING COMMITTED** — §3's own finding applied to
 this entry. All four ROOT guards green: `check-harnesses` **26 scripts parse (23
 .mjs + 3 .sh)** · `check-decisions-index` **295 pointers resolve (294 on a
-heading, 1 deliberate mid-entry), 1316 headings** · `check-decisions-triggers`
-**up to date — 1002 triggers from 261 of 399 rulings, 138 declaring none**
+heading, 1 deliberate mid-entry), 1317 headings** · `check-decisions-triggers`
+**up to date — 1003 triggers from 262 of 400 rulings, 138 declaring none**
 (rebuilt) · `check-smoke-folds` **OK, 1 documented exception**. Whole compound
 clauses, `:32783` §3. **`DECISIONS-INDEX.md`'s header re-measured with the
-command it names** (`:32783` §4): always-read **2,640 = 1,181 + 1,385 + 74**,
-**§1 and §2 unmoved**, the whole +9 being trigger phrases.
+command it names** (`:32783` §4): always-read **2,641 = 1,182 + 1,385 + 74**,
+**§1 and §2 unmoved**, the whole +10 being trigger phrases.
+
+**AND THESE FIGURES WERE RE-TAKEN ONCE MORE AFTER §7 WAS WRITTEN, WHICH IS §3's
+FINDING ARRIVING A SECOND TIME IN ITS OWN ROUND.** The first set was correct for
+a tree without the addendum in it. **`§3`'s rule is not "take them late", it is
+"take them last" — and "last" moves every time the entry grows.**
 `node --check tools/check-smoke-folds.mjs` parses.
 
 **RULE 3 (a regression test with every Critical/High fix): N/A by subject — there
@@ -33998,7 +34003,44 @@ the four record files.
 
 **THE PACKET SHIPS AND THE 🟡 LINE STILL DOES NOT TICK.** Rule 1 is satisfied —
 zero Critical/High — and that is the T3 half of the line. **The other half is
-untouched: none of the four sheets has been run in its corrected form.** Four
-rounds, three of them with a Critical/High, **every one of those in sheet prose
-and not one in the app.** **NEXT: Kd at a browser. Not another review round** — a
-Low finding buys none (`:5348` rule 1), and this round found nothing else.
+untouched: not one corrected sheet has been run.** Four rounds, three of them
+with a Critical/High, **every one of those in sheet prose and not one in the
+app.** **NEXT: Kd at a browser. Not another review round** — a Low finding buys
+none (`:5348` rule 1), and this round found nothing else.
+
+### 7 · ADDENDUM, same commit — "THE FOUR SHEETS" IS SIX, AND I INHERITED THE FIGURE INSTEAD OF DERIVING IT
+
+**Read before quoting "the four sheets" as this packet's remaining smoke gate.**
+Written while laying out the running order for Kd, which is what forced the
+count to be derived rather than repeated.
+
+`git diff --name-only 1945bf9~2..HEAD -- RUNBOOK/` returns **SIX**:
+`smoke-attendance.md` · `smoke-gym-hours-fold.md` · `smoke-my-gyms-calendar.md` ·
+`smoke-opening-hours.md` · `smoke-join-door.md` · `smoke-dashboard-gym-greeting.md`.
+
+**"The four sheets" was round 3's LOCAL count — the four that `e440b25` touched —
+and rounds 3 and 4 both carried it forward as if it described the PACKET.** It
+does not: rounds 1 and 2 re-pointed `smoke-opening-hours.md` steps 22/22b/23 and
+`smoke-join-door.md` step 12, **both of which say in their own text that they
+have not been re-run in the corrected form**, and neither is inside any "four".
+**A sheet that says UNRUN in its own header and is outside the count in `OWED.md`
+is the exact way a gate gets declared complete early.**
+
+**WHAT THE GATE ACTUALLY IS: five sheets need a browser** — attendance (24
+steps), the fold sheet (5), the calendar (its corrected step 5 onward),
+opening-hours steps 22/22b/23, and join-door step 12. **The greeting sheet needs
+nothing**: round 3's Low-1 changed a prose cross-reference at `:38`, not a step,
+and it is declared passed (`:33265`).
+
+**AND ONE THING IS OBSERVED BUT NOT VERIFIED, so it is not asserted:** `:33334`'s
+own heading and §1 say *"four sheets"* while §1 lists **three** files. That may
+be a fourth this round has not identified or may be round 1's own miscount;
+**establishing which needs the state of `RUNBOOK/` at `e807340` and is round 1's
+record, not this round's** (R1.1). Flagged, not chased, and deliberately not
+corrected on a guess — which is the mistake this addendum exists about.
+
+**V4 IS THE RULE I BROKE:** *"re-derive nothing that exists — read the current
+file or run the command, never infer it from an earlier task's description."*
+The command is one line and I ran it only when Kd asked for something the figure
+had to be true for. **A round whose §2 and §3 are both about inherited figures
+going unchecked propagated one in its own Round log.**

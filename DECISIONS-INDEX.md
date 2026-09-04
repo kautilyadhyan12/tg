@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,181 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,182 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,16 +14,19 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,640 lines, MEASURED 2026-09-04 and not estimated**
-(1,181 + 1,385 + 74). **THE TWENTY-EIGHTH MEASUREMENT IS THE ROUND THAT SHIPPED
-THIS PACKET — zero Critical/High, four Low all fixed — AND IT COST NINE LINES,
+**ALWAYS-READ TOTAL: 2,641 lines, MEASURED 2026-09-04 and not estimated**
+(1,182 + 1,385 + 74). **THE TWENTY-EIGHTH MEASUREMENT IS THE ROUND THAT SHIPPED
+THIS PACKET — zero Critical/High, four Low all fixed — AND IT COST TEN LINES,
 EVERY ONE OF THEM A TRIGGER PHRASE, §1 AND §2 UNMOVED AT 1,385 AND 74**: its
 record is a ROUND record and went to §1B, where `:24813` sends it. **Sixth
-measurement across two afternoons, at +5, +6, +3, +5, +4 and +9** — the largest
+measurement across two afternoons, at +5, +6, +3, +5, +4 and +10** — the largest
 of the six, and the reason is worth naming rather than smoothing over: **that
 entry declares FIVE `Read before …` clauses in the entry AND five in this index
 line, and the generator reads both** (`:22640`), so a deliberately findable
-record costs more here than a terse one. **That is the trade `:24703` ruled and
+record costs more here than a terse one. **The tenth line is its `:34011`
+addendum, which corrects a figure THIS ROUND had itself repeated** — one
+always-read line to stop a smoke gate being declared complete two sheets early,
+which is the trade working rather than drifting. **That is the trade `:24703` ruled and
 not a drift** — the alternative is an entry reachable only by title, which is the
 position 138 rulings are still in.
 **AND THE FIRST DRAFT OF THAT MEASUREMENT WAS +10, WHICH IS THE PART TO KEEP:
@@ -5281,6 +5284,19 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   added, **plus the sibling sheet the review's map stopped short of**, covered in
   its Setup rather than by editing a step whose ✅ is already dated. No app source
   touched. **NEXT: Kd at a browser — a Low finding buys no further round.**
+  **ADDENDUM `:34011`, same commit — "THE FOUR SHEETS" IS SIX.** **Read before
+  quoting "the four sheets" as this packet's remaining smoke gate.** Derived with
+  `git diff --name-only 1945bf9~2..HEAD -- RUNBOOK/` while laying out the running
+  order, which is what forced the count to be computed rather than repeated.
+  **"Four" was round 3's LOCAL count of what `e440b25` touched, carried forward
+  by rounds 3 AND 4 as if it described the packet** — `smoke-opening-hours.md`
+  22/22b/23 and `smoke-join-door.md` step 12 were re-pointed in rounds 1–2, **say
+  UNRUN in their own text, and sat outside every "four" written since.** **FIVE
+  sheets need a browser; the greeting sheet needs nothing** (prose change only,
+  declared passed). **V4 broken inside a round whose §2 and §3 are both about
+  inherited figures going unchecked.** One thing observed and deliberately NOT
+  asserted: `:33334`'s heading says *"four sheets"* while its §1 lists **three**
+  files — round 1's record to settle, not this round's.
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
