@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 2 (DIFF-ONLY) — ONE Critical/High, THE PACKET DOES NOT SHIP, ALL
+      FIVE FINDINGS FIXED, AND THE REVIEW WAS WRONG IN BOTH DIRECTIONS ON ONE
+      FINDING. DECISIONS `:33499`.
+      **START HERE: the next gate is T3 ROUND 3, DIFF-ONLY** (`:5348` rule 2).
+      The 🟡 `OWED.md` line covering `:32929` and `:33091` still does not tick —
+      two rounds, one Critical/High each. Web + records only: no `apps/api`, no
+      `packages/shared`, no migration.
+
+  1. **C/H-1 — A SHEET PROMISED WHAT A FOLD HAD HIDDEN, AND ANOTHER SHEET CALLED
+     THAT PROMISE THE BUG.** `smoke-attendance.md` step 6 asked for "the seven
+     weekdays" on `My Gyms` while `smoke-gym-hours-fold.md` step 1 says seeing
+     them without tapping "is the failure this card was built to fix". **Two live
+     sheets, one screen, opposite ✅.**
+  2. **THE REVIEW FOUND 1 OF 4 AND DECLARED A HATCH THAT IS NOT ARMED.** It
+     missed that `Days you came` is folded too (`calendarOpen` starts false, ONE
+     writer), so steps 10/11/12 were broken the same way — **step 12
+     independently, because a RELOAD re-folds it.** And `:13336` judges the
+     subsystem at FILE granularity, so with round 1's C/H in three OTHER sheets
+     the hatch does not fire; `:14493` says it ARMS and **Kd rules on what the
+     rounds FOUND**. **Second round running that a review handed Kd work that was
+     not real** (round 1's was a duplicate `OWED.md` line). **Re-measure a
+     review's map before acting on it — it under-reports as readily as it
+     over-reports.**
+  3. **NEW PERMANENT GUARD, ROOT LINT: `tools/check-smoke-folds.mjs`** — a
+     RUNBOOK step naming a folded surface must say how to operate it.
+     Shrink-only allow-list, one entry. **Measured at 2 of the 4 broken ✅ and it
+     says so in its own header**: a step relying on a fold an EARLIER step opened
+     is outside what a per-step grep can see.
+  4. **Low-1 CORRECTED A FIGURE IN ALL FOUR OF ITS COPIES** (:20587): the
+     person-gate harness's abort leaves **6** mutants unrun, not 23 — 17 run
+     first, because it has **no whole-table pre-check**. So `:33334` §3's
+     approved `--check` flag must BUILD one there, not expose one.
+
+PROVE: `web` **1752/1752 across 58 files** (unchanged — the `truncate` is
+       invisible to jsdom) · `eslint --max-warnings=0` exit 0 on
+       `Dashboard.jsx` · four ROOT guards green — harnesses **26 scripts parse
+       (23 .mjs + 3 .sh)**, index **293 pointers resolve, 292 on a heading**,
+       triggers **993 from 259 of 397**, smoke-folds **OK, 1 documented
+       exception**. Guard proven RED on the PRE-FIX bytes (steps 6 and 10,
+       exit 1); restore by byte copy, `sha256sum -c` OK — never
+       `git checkout --` (`:25567`). No sweep: `:5857` 4a, no server file moved.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's.
+       `GymHoursNote.jsx` shows in `git status` for the CRLF reason and is
+       deliberately NOT staged (`:25567`); `git diff` reports no content change.
+       **NO SHEET HAS BEEN RUN IN ITS CORRECTED FORM** — the fold sheet is still
+       UNRUN and `smoke-attendance.md` now says so in its own header.
+       **Round 1 logged NONE of its four Low findings in `BACKLOG.md`** (:5348
+       rule 1); they are recorded in this round's block there rather than left
+       for whoever greps and finds nothing.
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: T3 ROUND 1 ON BOTH OF TODAY'S CARDS — ONE Critical/High, THE PACKET DOES
       NOT SHIP, ALL FIVE FINDINGS FIXED. DECISIONS `:33334`.
       **START HERE: the next gate is T3 ROUND 2, DIFF-ONLY** (`:5348` rule 2) —
@@ -22,7 +77,9 @@ TASK: T3 ROUND 1 ON BOTH OF TODAY'S CARDS — ONE Critical/High, THE PACKET DOES
   3. **THE REVIEW WAS WRONG ONCE, IN THE DIRECTION THAT COSTS KD WORK.** Its
      Low-4 asked for an `OWED.md` line covering seven dead anchors; **five were
      already on one from 2026-08-16**. Only `mutate-person-gate.mjs` (PG16/PG17,
-     dead 213 commits, harness ABORTS ⇒ all 23 mutants unrunnable) is untracked
+     dead 213 commits, harness ABORTS ⇒ ~~all 23 mutants unrunnable~~ **SIX —
+     struck by round 2; 17 run before the abort, this harness having no
+     whole-table pre-check**) is untracked
      and got the line. **Re-measure a review's map before acting on it.**
   4. **THE DEAD-ANCHOR CLASS IS FOUR DEEP AND ITS GUARD IS ITS OWN CARD** — Kd
      ruled it out of this fix round. Shape recommended and recorded: a `--check`

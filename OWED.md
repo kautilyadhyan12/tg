@@ -252,6 +252,14 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       `smoke-opening-hours.md`'s steps 22 and 22b were rewritten for the fold in
       the same commit and have **not** been re-run either — their 2026-09-01
       declaration is older than the edit and that sheet now says so.
+      **T3 IS NO LONGER UNRUN AND THE LINE STILL DOES NOT TICK — TWO ROUNDS, EACH
+      WITH ONE Critical/High** (`:33334`, `:33499`), so neither shipped the packet
+      (`:5348` rule 1). **Round 2's finding widens what is owed here: a THIRD
+      sheet, `smoke-attendance.md`, had four ✅ naming content behind this card's
+      own fold and the `Days you came` calendar** — all corrected, none re-run.
+      A permanent guard now holds the class on the root lint
+      (`tools/check-smoke-folds.mjs`), and it is measured at 2 of those 4, which
+      its own header states. **NEXT: T3 round 3, diff-only.**
 
 - [ ] 🟡 **`RUNBOOK/smoke-overview-numbers.md` IS STALE AND IS MARKED SO AT THE
       TOP** (2026-09-03). Two of its ✅ name things Kd removed the same day it
@@ -8491,8 +8499,22 @@ file and is stated so nobody reads these as lower priority than they are.
       `resetScene` does not appear in `apps/web/src/hooks/usePoseDetection.js`
       at all any more** — `8c2d204` (*"The pause stops being billed as squatting"*)
       took it out. The harness ABORTS on a drifted anchor, exactly as designed
-      (:13336), **so all 23 of its mutants have been unrunnable that whole time,
-      not merely those two.** What they guard is the person check's ruled cut-off
+      (:13336), ~~**so all 23 of its mutants have been unrunnable that whole
+      time, not merely those two.**~~ **— CORRECTED 2026-09-04 by T3 round 2,
+      and the correction is what makes this line actionable: it is SIX, not 23.**
+      `PG1`–`PG15b` (**17**) run and report normally; the abort fires at `PG16`
+      and takes `PG16`–`PG21` (**6**) with it. **The reason is a missing
+      instrument, and it is the part to keep: `mutate-person-gate.mjs` has NO
+      whole-table pre-check** — the anchor test lives INSIDE the run loop
+      (`mutate-person-gate.mjs:322-326`), so it cannot know a later anchor is
+      dead until it has already written and restored seventeen mutants.
+      `mutate-console.mjs` pre-checks the whole table BEFORE its run loop, which
+      is why that harness reports every dead anchor at once and this one reports
+      the first. **So the `--check` flag ruled at `:33334` §3 has nothing to call
+      on THIS harness and must build the pre-check here**, rather than exposing
+      one that already exists — a difference between the harnesses that the
+      one-line shape of that ruling does not carry.
+      What they guard is the person check's ruled cut-off
       and the sentence it puts on screen (:7037, :6959, :7104) — a Kd-ruled
       number and a `:5807` Critical/High class.
       **What is owed is the re-aim, BY MEANING and not by pattern** (:28221),

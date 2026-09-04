@@ -433,12 +433,26 @@ export default function Dashboard() {
               content and an over-long gym name pushes the Start Workout button
               rather than being cut — `truncate` alone is inert here. It is the
               pairing `GymMembershipCard` and `MyGyms` both already use for the
-              same string. */}
+              same string.
+
+              **AND IT RELAXES THE FLOOR FOR EVERY CHILD, NOT ONLY THE ONE IT
+              WAS ADDED FOR — T3 round 2 on `:32929`/`:33091`, Low-3.** Before
+              it, `min-width: auto` guaranteed the `h1` below its full width;
+              after it the column may shrink under that word, and a first name
+              is a single unbreakable token at `text-4xl` with the default
+              `overflow: visible`, so it spills out of the card instead of being
+              cut. The precedents this comment cites are only half the pattern:
+              on `MyGyms` the truncating element is the ONLY child that can
+              overflow, so copying the pairing without copying the class moved
+              the problem rather than solving it. **Every child of a `min-w-0`
+              column that can hold a long unbroken string needs the class
+              itself** — hence `truncate` on the `h1` as well as on the gym line.
+              jsdom has no layout, so nothing in the suite can see either. */}
           <div className="min-w-0">
             <p className="text-sm font-medium mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
               {greeting}
             </p>
-            <h1 className="text-4xl font-bold tracking-tighter" style={{ color: 'rgba(255,255,255,0.95)' }}>
+            <h1 className="text-4xl font-bold tracking-tighter truncate" style={{ color: 'rgba(255,255,255,0.95)' }}>
               {user?.displayName?.split(' ')[0] || 'Athlete'}
             </h1>
             {/* THE GYM ARRIVES AS A GREETING RATHER THAN AS A CARD — Kd, at his

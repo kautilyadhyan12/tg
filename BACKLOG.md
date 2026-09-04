@@ -3692,3 +3692,56 @@ Kd approved the list before a byte was written (*"fix"*).
       third recorded instance of the header a header's own rule tells every chat
       to re-measure (:22497, :24813). Re-measured on the bytes being committed,
       with the command the header itself names, rather than by adding a delta.
+
+## 2026-09-04 — the fold/greeting packet, T3 round 2, DIFF-ONLY (DECISIONS `:33499`)
+
+ONE Critical/High, so **the packet does NOT ship and the 🟡 `OWED.md` line does
+not tick** (:5348 rule 1). Four Low, **all fixed in the same commit**; none
+bought a round. Kd approved the list before a byte was written (*"fix"*).
+
+**FIRST, A GAP IN THIS FILE ITSELF: round 1 (`:33334`) fixed four Low findings
+and logged NONE of them here**, which :5348 rule 1 requires so that a Low is
+visibly accounted for without buying a round. They are real and were all fixed in
+`1c9a5ba` — a fifth stale absence assertion in `gymHours.render.test.jsx`, a
+comment struck in place, the greeting's missing `truncate` (whose fix was itself
+half of one, see L-3 below), and the dead-anchor `OWED.md` line (whose figure was
+wrong, see L-1). **Recorded here rather than left to be noticed by whoever greps
+this file for that round and finds nothing.**
+
+- [x] **L-1 · "THE HARNESS ABORTS, SO ALL 23 OF ITS MUTANTS ARE UNRUNNABLE" —
+      IT IS SIX** — round 1 wrote that `mutate-person-gate.mjs`'s abort made all
+      23 mutants unrunnable, in four files at once. `PG1`–`PG15b` (**17**) run
+      and report; the abort fires at `PG16` and takes `PG16`–`PG21` (6) with it.
+      **The cause is the reusable part: this harness has NO whole-table
+      pre-check** — its anchor test is inside the run loop
+      (`mutate-person-gate.mjs:322-326`) where `mutate-console.mjs` checks the
+      whole table first — **so `:33334` §3's approved `--check` flag has nothing
+      to expose here and must BUILD one.** Struck in place in all four copies
+      (:20587): `OWED.md`, `DECISIONS.md`, `DECISIONS-INDEX.md`, `HANDOFF.md`.
+      Everything else on that line re-verified TRUE (`resetScene` 0 hits,
+      `8c2d204..HEAD` = 214 commits, 23 distinct ids).
+- [x] **L-2 · A CROSS-REFERENCE NAMED THE WRONG STEP** —
+      `smoke-gym-hours-fold.md`'s status block said the greeting sheet's *"step
+      4"* names the **This week** fold. It is **step 3**; step 4 is
+      *"Go to Settings → Gym"*. The conclusion (the fold has been SEEN) is
+      unaffected — round 1 edited the first half of that sentence pair and left
+      the surviving pointer stale, which is `:20587`'s shape at sentence scale.
+- [x] **L-3 · `min-w-0` RELAXES THE FLOOR FOR EVERY CHILD, NOT THE ONE IT WAS
+      ADDED FOR** — round 1 added it to the dashboard header column so the gym
+      line's `truncate` would bite, and it also lets the column shrink under the
+      `<h1>` first name: a single unbreakable token at `text-4xl` with default
+      `overflow: visible`, which therefore spills where `min-width: auto` used to
+      guarantee it room. **The cited precedent is half the pattern** — on
+      `MyGyms` and `GymMembershipCard` the truncating element is the ONLY child
+      that can overflow. `truncate` added to the `h1`, and the comment now says
+      why every such child needs it. **jsdom has no layout, so nothing in the
+      suite can see either half**, which the comment states rather than implies.
+- [x] **L-4 · A ✅ POINTED AT THE FOLDED WEEK WHEN IT MEANT THE LINE ABOVE IT** —
+      `smoke-opening-hours.md` step 23, re-pointed by round 1 at `My Gyms`, still
+      read *"It now shows today's normal line from the week."* After the **F5**
+      the week arrives folded, and step 22b has just taught the tester that
+      today's row lives in the weekday list. **Nothing was false** — the headline
+      satisfies it (`GymHoursNote.jsx:116-119`) — **only unreachable in the
+      vocabulary the previous step installed**, so it stays Low under `:5807`
+      ("on screen AND wrong" is the test). Now names the headline and says the
+      reload re-folds the week.

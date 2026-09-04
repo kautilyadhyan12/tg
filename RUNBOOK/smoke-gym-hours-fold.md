@@ -16,7 +16,7 @@ opening times already set for several weekdays (any account that passed
 `smoke-opening-hours.md` steps 1–13 has this).
 
 **Status: UNRUN AS A SHEET, and only the fold's *presence* has been looked at.**
-Kd declared the dashboard-greeting sheet passed on 2026-09-04, and its step 4
+Kd declared the dashboard-greeting sheet passed on 2026-09-04, and its step 3
 names the **This week** fold as being on the `My Gyms` card — so the fold has
 been SEEN. **Nobody has tapped it shut.** That is step 3 below, it is the whole
 point of `:31295` (a dropdown he found dead at his own browser because it opened

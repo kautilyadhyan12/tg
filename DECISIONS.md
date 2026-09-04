@@ -33425,8 +33425,19 @@ still to do?"* once. **Re-measured independently before anything was written**,
 across all nine web harnesses with line endings normalised on both sides (a naive
 count reports 13 false deads, because several sources check out as CRLF while
 anchors are authored with `\n`): `mutate-person-gate.mjs` **PG16 · PG17** dead
-since `8c2d204`, **213 commits**, and that harness ABORTS, so **all 23 of its
-mutants have been unrunnable for twenty-one days**; `mutate-login-door.mjs` D13
+since `8c2d204`, **213 commits**, and that harness ABORTS, so ~~**all 23 of its
+mutants have been unrunnable for twenty-one days**~~ **— STRUCK by T3 round 2 the
+same day (`:20587`): it is SIX, not 23. `PG1`–`PG15b` (17) run and report; the
+abort fires at `PG16` and takes `PG16`–`PG21` with it. The cause is the part that
+matters — this harness has NO whole-table pre-check, its anchor test being inside
+the run loop, so unlike `mutate-console.mjs` it cannot report a dead anchor until
+it has already spent seventeen mutants reaching it. §3's `--check` flag therefore
+has nothing to expose on THIS harness and must BUILD the pre-check.** I wrote
+"the harness ABORTS ⇒ all its mutants are unrunnable" as though abort-on-drift
+implied abort-before-anything, which is true of the harnesses that pre-check and
+false of this one — **a claim about an instrument, made from the class rather
+than from the file, and V1 applies to instruments exactly as it does to the
+app**; `mutate-login-door.mjs` D13
 dead (known, `:28822`, has its line); console 231 · dashboard-stats 17 · join-door
 36 · badge-cue 8 · pose-assets 27 · pose-tuning 13 all live. **Only person-gate is
 untracked**, and that is the line added.
@@ -33484,3 +33495,152 @@ the sha is going to be quoted.**
 
 **NEXT: T3 ROUND 2, DIFF-ONLY** (`:5348` rule 2) — the fixes and the surfaces they
 touch, nothing else. The 🟡 line ticks on zero Critical/High.
+
+## 2026-09-04 — T3 ROUND 2 (diff-only): ONE Critical/High, THE PACKET DOES NOT SHIP, and the review was wrong in BOTH directions on the same finding
+
+**Read before writing a smoke ✅ for anything that folds, before quoting a
+harness's ABORT as meaning none of its mutants ran, before declaring the escape
+hatch fired, and before adding `min-w-0` to a column whose other children can
+hold a long unbroken word.**
+
+Reviews `1c9a5ba` (round 1's five fixes). **ONE Critical/High ⇒ the packet does
+NOT ship this round** (`:5348` rule 1). All five findings fixed here, Low
+included (`:5307`). Web and records only: no `apps/api`, no `packages/shared`, no
+migration.
+
+### 1 · C/H-1 — A SHEET PROMISED WHAT A FOLD HAD HIDDEN, AND ANOTHER SHEET CALLED THAT PROMISE THE BUG
+
+`smoke-attendance.md` sends the tester to `My Gyms` at step 3 and keeps them
+there. Step 6's second ✅ read *"Under it, the seven weekdays with their
+times."* — but `:32929` put the week behind a **This week** tap the day before
+(`GymHoursNote.jsx:57`, `weekOpen` starts `false`; the list renders only under
+it at `:188`). **And `smoke-gym-hours-fold.md` step 1 tells the same tester that
+seeing seven weekdays without tapping *"is the failure this card was built to
+fix — stop and say so."* Two live sheets, one screen, opposite ✅**, so whichever
+was run produced a fault report that was not one. `:33265` §1's defect — a sheet
+asking for two opposite answers — arriving BETWEEN sheets instead of within one.
+
+**THE REVIEW UNDER-REPORTED IT BY THREE AND OVER-REPORTED ITS CONSEQUENCE, and
+both halves are the lesson.** It found step 6. It missed that the **Days you
+came** calendar is folded too (`AttendancePanel.jsx:280`, `calendarOpen` starts
+`false`, and `setCalendarOpen` has exactly ONE writer — the row's own toggle at
+`:645`, the comment beside it saying *"Nothing forces this open"*). So steps 10,
+11 and 12 were broken the same way: **step 10 claimed a date appears under a
+calendar nobody opened, and step 12 is independently wrong even after 10 is
+fixed, because a RELOAD folds it shut again.** Four false ✅ in one sheet, not
+one. **A review's map of where a false sentence lives is a hypothesis**
+(`:29740`, `:24559`), and the sibling fold on the same card was one grep away.
+
+Fixed: step 6 now names the **This week** row and says no weekdays appear until
+it is tapped; steps 10 and 12 tell the tester to open the calendar, step 12
+saying the reload re-folds it. The sheet's header claimed *"Every ✅ below was
+checked against the code as it stands, not remembered"* — **true when written on
+2026-09-03 and false the next day** — so the correction is recorded there rather
+than the claim quietly deleted, and the sheet states it has NOT been re-run.
+
+### 2 · THE ESCAPE HATCH DID NOT FIRE, AND SAYING SO SAVED KD A RULING HE DID NOT OWE
+
+The review opened by declaring the hatch fired and a redesign was Kd's to call.
+**It is not armed.** `:13336`'s precedent judges the subsystem at FILE
+granularity (applied at `:14848`, `:19812`, `:20596`, `:20727`, `:20954`,
+`:22042`), round 1's C/H was in `smoke-gym-hours-fold.md`, `smoke-opening-hours.md`
+and `smoke-join-door.md`, and this one is in `smoke-attendance.md` — **a file no
+round has ever found a Critical in. No file has two rounds running.**
+
+**AND THE DECLARATION ITSELF IS THE THING `:14493` NAMES:** *"before quoting the
+escape hatch as a rule that fires by itself"* — the hatch ARMS mechanically and
+**Kd rules on what the rounds FOUND**. A chat may not perform or announce the
+outcome. `:22029` is the recorded cost of getting the arming wrong in the other
+direction: it fired on a C/H later measured unreachable, and that entry says in
+its own words *"the hatch should not have fired on it."*
+
+**SECOND ROUND RUNNING THAT A REVIEW HANDED KD WORK THAT WAS NOT REAL** — round
+1's Low-4 asked for an `OWED.md` line covering seven dead anchors when five were
+already tracked (`:33334` §2). **Different error, same direction: toward more
+work for him.** `HANDOFF.md`'s *"Re-measure a review's map before acting on it"*
+earned its place twice.
+
+### 3 · Low-1 — "THE HARNESS ABORTS, SO ALL 23 MUTANTS ARE UNRUNNABLE" IS SIX, AND THE CAUSE IS AN ABSENT INSTRUMENT
+
+Round 1 wrote that `mutate-person-gate.mjs`'s abort made **all 23** of its
+mutants unrunnable. **It is 6.** `PG1`–`PG15b` (**17**) run and report; the abort
+fires at `PG16` and takes `PG16`–`PG21` with it. **The reason is the part worth
+keeping: this harness has NO whole-table pre-check** — its anchor test lives
+INSIDE the run loop (`mutate-person-gate.mjs:322-326`), where
+`mutate-console.mjs` checks the whole table before its run loop begins. So it
+cannot know a later anchor is dead until it has already spent seventeen mutants
+reaching it.
+
+**CONSEQUENCE FOR A RULING ALREADY MADE: `:33334` §3's `--check` flag — *"each
+harness runs its OWN pre-check"* — has nothing to expose on this one and must
+BUILD the pre-check here.** A one-line ruling written from the class did not
+carry a difference between the files it governs.
+
+**THE ERROR'S SHAPE: a claim about an INSTRUMENT, reasoned from the class rather
+than read off the file.** "Aborts on a drifted anchor" was taken to mean "aborts
+before anything runs", which is true of the harnesses that pre-check and false of
+this one. **V1 applies to instruments exactly as it does to the app.** Struck in
+place in all four copies (`:20587`): `OWED.md`, `DECISIONS.md`,
+`DECISIONS-INDEX.md`, `HANDOFF.md`. Everything else on that line re-verified and
+TRUE — `resetScene` appears 0 times in `usePoseDetection.js`, `8c2d204..HEAD` is
+214 commits (213 when written), 23 distinct ids.
+
+### 4 · Low-3 — `min-w-0` RELAXES THE FLOOR FOR EVERY CHILD, NOT THE ONE IT WAS ADDED FOR
+
+Round 1 added `min-w-0` to the dashboard header column so the gym line's
+`truncate` would bite. It also lets the column shrink under the `<h1>` first
+name, which is a single unbreakable token at `text-4xl` with the default
+`overflow: visible` — **so it spills out of the card where `min-width: auto`
+used to guarantee it room.** The comment cited `GymMembershipCard` and `MyGyms`
+as the precedent, and **that is half the pattern: on those screens the
+truncating element is the ONLY child that can overflow.** `truncate` added to the
+`h1`; the comment now says why every such child needs it. jsdom has no layout, so
+nothing in the suite can see either half — stated in the comment rather than
+implied by a missing test.
+
+### 5 · THE PERMANENT GUARD (`:5348` rule 5) — `tools/check-smoke-folds.mjs`
+
+**The class is four deep** (`:32498` a state the APP cannot reach · `:33265` §1 a
+state the ACCOUNT cannot be in · `:33334` C/H-1 a screen the app no longer draws
+· this, a surface that now needs a tap) **and had no mechanical check.**
+`:33334`'s standing rule greps `RUNBOOK/` when a commit REMOVES a surface —
+**`:32929` removed nothing, it HID something**, which is why a guard written for
+the last variant missed this one. The new check is aimed at the property: a
+RUNBOOK step naming a folded surface must also say how to operate it, with a
+shrink-only allow-list for steps asserting a surface is legitimately ABSENT
+(one entry: the gym that has never set hours draws no control at all, `:26736`).
+Wired into the ROOT `lint` before turbo — a guard a warm cache can skip is not a
+guard.
+
+**ITS REACH WAS MEASURED, NOT ASSUMED, AND IT IS WRITTEN INTO THE FILE: 2 of the
+4 broken ✅.** It flags the steps that NAME a fold (6 and 10) and is blind to 11
+and 12, which describe the content without naming anything. Step 11 was only
+consequentially wrong; **step 12 was independently wrong and this instrument
+cannot express it** — a step depending on a fold an EARLIER step left open is
+outside what a per-step grep can see. A green run means "no step introduces a
+fold without naming it", never "every step is runnable".
+
+### Round log
+
+**PROVE, all run this session on the shipping bytes:** `web` **1752/1752 across
+58 files** (unchanged from round 1 — the `truncate` is invisible to jsdom, as
+stated) · `eslint --max-warnings=0` exit 0 on `Dashboard.jsx` · four ROOT guards
+green — harnesses **26 scripts parse** (23 `.mjs` + 3 `.sh`; the +1 is the new
+guard, itself parse-checked by that walk), index **292 pointers resolve, 291 on a
+heading**, triggers **up to date, 989 from 258 of 396**, smoke-folds **OK, 1
+documented exception**.
+
+**RULE-3 REGRESSION EVIDENCE.** The guard was run against the PRE-FIX bytes and
+went RED on `smoke-attendance.md` steps 6 and 10 (exit 1), then green on the
+fixed bytes (exit 0). Pre-fix bytes written with `git show HEAD:`, restored by
+byte copy from a scratchpad snapshot and verified `sha256sum -c` OK — **never
+`git checkout --`**, whose CRLF hazard on this machine is recorded at `:25567`.
+
+**No mutation sweep.** `:5857` rule 4a: database mutants run only on cards that
+change SERVER behaviour, and nothing here touches `apps/api`. The one source
+change is a CSS class jsdom cannot observe.
+
+**NOTHING TICKS.** The 🟡 `OWED.md` line covering `:32929` and `:33091` needs a
+round with zero Critical/High; this round has one. **Neither the fold sheet nor
+the attendance sheet has been run in its corrected form**, and `smoke-attendance.md`
+now says so in its own header. **NEXT: T3 round 3, diff-only** (`:5348` rule 2).

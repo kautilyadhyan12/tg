@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,168 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,172 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,17 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,627 lines, MEASURED 2026-09-04 and not estimated**
-(1,168 + 1,385 + 74). **THE TWENTY-SIXTH MEASUREMENT IS A T3 ROUND THAT DOES NOT
+**ALWAYS-READ TOTAL: 2,631 lines, MEASURED 2026-09-04 and not estimated**
+(1,172 + 1,385 + 74). **THE TWENTY-SEVENTH MEASUREMENT IS THE TWENTY-SIXTH'S
+RESULT REPEATED ON THE NEXT ROUND OF THE SAME PACKET — a T3 round that does not
+ship its packet, one Critical/High and four Low all fixed, plus a NEW PERMANENT
+GUARD wired into the root lint — AND IT COST FOUR LINES, all of them trigger
+phrases, §1 AND §2 UNMOVED**: its record is a ROUND record and went to §1B, where
+:24813 sends it. **The fifth measurement across two afternoons, at +5, +6, +3, +5
+and +4** — a rate that has not drifted while the day produced two cards, a smoke
+declaration and two review rounds. Taken with this header's own prescribed
+command against the bytes being committed, never by adding a delta to the figures
+above. **THE TWENTY-SIXTH MEASUREMENT IS A T3 ROUND THAT DOES NOT
 SHIP ITS PACKET — one Critical/High, four Low, all fixed — AND IT COST FIVE
 LINES, all of them trigger phrases, §1 AND §2 UNMOVED**: its record is a ROUND
 record and went to §1B, where :24813 sends it. **The fourth measurement of one
@@ -5162,11 +5171,35 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   and **a dead-anchor line where the review's map would have cost Kd a DUPLICATE
   deferral**: five of its seven were already on `OWED.md` from 2026-08-16.
   Re-measured independently, EOL-normalised: `mutate-person-gate.mjs` PG16/PG17
-  dead **213 commits**, and it ABORTS, so all 23 mutants unrunnable for
-  twenty-one days — the only untracked one. **The dead-anchor class is now FOUR
+  dead **213 commits**, and it ABORTS, so ~~all 23 mutants unrunnable for
+  twenty-one days~~ **SIX, not 23 — struck by round 2 at `:33499`; 17 run before
+  the abort, because this harness has no whole-table pre-check** — the only
+  untracked one. **The dead-anchor class is now FOUR
   deep and Kd ruled its guard a card of its own**, shaped as a `--check` flag on
   each harness rather than a central parser (`:22640`). `web` 1752/1752.
   **NEXT: T3 round 2, diff-only.**
+- **:33499** — 2026-09-04 — **T3 ROUND 2 (diff-only): ONE Critical/High, THE
+  PACKET DOES NOT SHIP, and the review was wrong in BOTH directions on one
+  finding.** **Read before writing a smoke ✅ for anything that folds, before
+  quoting a harness's ABORT as meaning none of its mutants ran, before declaring
+  the escape hatch fired, and before adding `min-w-0` to a column whose other
+  children can hold a long unbroken word.** **C/H-1: `smoke-attendance.md`
+  promised the weekday list and a calendar date that `:32929`'s fold and
+  `AttendancePanel`'s had put behind a tap — while `smoke-gym-hours-fold.md`
+  step 1 called seeing that same list without tapping "the failure this card was
+  built to fix". Two live sheets, one screen, opposite ✅.** **The review found
+  ONE of four broken steps and declared an escape hatch that is NOT armed** —
+  `:13336` judges the subsystem at FILE granularity and round 1's C/H was in
+  three other sheets — **so it under-reported the defect and over-reported its
+  consequence, the second round running that a review has handed Kd work that
+  was not real.** Low-1 struck round 1's *"all 23 mutants unrunnable"* to **SIX**
+  in all four copies (`:20587`): 17 run first, because that harness has **no
+  whole-table pre-check**, which also means `:33334` §3's `--check` flag must
+  BUILD one there rather than expose it. Low-3: `min-w-0` relaxes the floor for
+  EVERY child, so the `h1` needed `truncate` too. **New permanent guard
+  `tools/check-smoke-folds.mjs` on the ROOT lint** — measured at 2 of the 4
+  broken ✅ and saying so in its own header. `web` 1752/1752; guard proven RED on
+  the pre-fix bytes. **NEXT: T3 round 3, diff-only.**
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.

@@ -11,6 +11,17 @@ that day, and the button now REFUSES outside opening hours instead of recording
 a marked visit. **Every ✅ below was checked against the code as it stands, not
 remembered.**
 
+**CORRECTED 2026-09-04, and the sentence above is why it needed correcting.** It
+was true when written and stopped being true the next day: `:32929` folded the
+week away behind a **This week** tap and the **Days you came** calendar was
+already folded, so **four ✅ on this sheet named things no tester could see** —
+step 6's weekday list and steps 10–12's calendar. Found by T3 round 2 on
+`:32929`/`:33091`. **A sheet that states when it was checked is making a claim
+with a date on it, and this is the fourth time in three days that a step has
+named a screen the app had moved** (`:32498`, `:33265` §1, `:33334` C/H-1).
+Steps 10 and 12 now tell you to open the calendar; nothing else about the run
+changed. **This sheet has NOT been re-run in its corrected form.**
+
 ---
 
 ## Before you start
@@ -80,7 +91,9 @@ that gym, and *"nobody has answered"* is not *"we are shut"*.
 **6 · The gym that has set hours.** Find the **owner** card.
 ✅ A line beginning **Today:** followed by that gym's hours for today, on a
 **12-hour clock** — so **7:40 AM – 9:40 AM**, not `07:40`.
-✅ Under it, the seven weekdays with their times.
+✅ Under it, a row reading **This week** with a small arrow — and **no list of
+weekdays until you tap that row.** The week is folded away by design. If seven
+weekdays are already showing without a tap, that is a fault — stop and say so.
 
 ---
 
@@ -109,14 +122,16 @@ open** → **remove today's closure**, then choose **Open 24 hours** and save.
 ✅ **I'm here** is bright again.
 ✅ Press it. A line appears saying you are marked in, and it mentions the gym
 being open 24 hours.
-✅ A date appears under **Days you came** with a time beside it, on the
-**12-hour** clock.
+✅ Now **tap the row that reads "Days you came"** — like the week, it is folded
+away until you do. The month opens and **today's date carries a time beside
+it**, on the **12-hour** clock.
 
-**11 · Press it a second time.**
+**11 · Press it a second time.** Leave the calendar open from the last step.
 ✅ The line changes to say you are **already** marked in.
 ✅ **Still only ONE time** on that day — you came once.
 
-**12 · Reload the page.**
+**12 · Reload the page.** Then **tap "Days you came" open again** — a reload
+folds it back, and that is correct, not a fault.
 ✅ The day and its time are still there. It was really saved.
 
 **13 · Your timetable survived.** Owner door → **link D** → **When we're open**
