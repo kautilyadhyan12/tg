@@ -186,15 +186,31 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 - [ ] ⚪ **THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE, AND KD ASKED
       FOR IT TO FOLD** (2026-09-03, DECISIONS `:31508`): *"should have a drop
       down type of effect whenver click or hover in them"*, part of *"do all
-      four"*. Today `GymHoursNote` prints today's line PLUS a Mon–Sun list on
+      four"*. ~~Today `GymHoursNote` prints today's line PLUS a Mon–Sun list on
       every card, on the dashboard and on `My Gyms` — his screenshot is seven
-      rows tall before the attendance section starts. **What it needs:** the
+      rows tall before the attendance section starts.~~ **What it needs:** the
       headline (`Today: 7:40 AM – 9:40 AM`) stays and the week folds behind it.
       **ON TAP, NOT ON HOVER, and the reason is a ruling rather than taste:**
       hover does not exist on a phone, and :26586 is Kd's own *"members are not
       going to use the web"* — the phone is where this screen actually gets
       read. `ConsoleSection`'s `defaultOpen` is the console's answer to the same
       problem (:31295) and is the pattern to follow, not `forceOpen`.
+      **THE CODE IS BUILT, 2026-09-04 (DECISIONS `:32929`) — AND THE LINE DOES
+      NOT TICK: NO SMOKE HAS RUN AND T3 IS UNRUN.** The week is behind a *This
+      week* row on both screens, the headline is outside it in both states,
+      closing is what the tests assert (`:31295`'s standing rule), and a 24-hour
+      gym is offered no control at all. `web` 1745/1745; mutants **C211–C214**
+      plus the six existing `hoursnote` rows re-run, 10 RED.
+      **WHAT THE CARD FOUND, because it is a hazard for the next fold rather
+      than for this one:** three existing cases proving the dated closure wins
+      *anywhere* on the card, and the `savedWeek` guard whose whole evidence was
+      *"no weekday is on screen"* (`C190`), would all have been satisfied by a
+      shut control. **When a section learns to fold, every absence assertion that
+      could see into it inherits a second way to pass.**
+      **`RUNBOOK/smoke-gym-hours-fold.md` is written and UNRUN** (5 steps), and
+      `smoke-opening-hours.md`'s steps 22 and 22b were rewritten for the fold in
+      the same commit and have **not** been re-run either — their 2026-09-01
+      declaration is older than the edit and that sheet now says so.
 
 - [ ] 🟡 **`RUNBOOK/smoke-overview-numbers.md` IS STALE AND IS MARKED SO AT THE
       TOP** (2026-09-03). Two of its ✅ name things Kd removed the same day it

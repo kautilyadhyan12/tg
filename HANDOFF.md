@@ -1,6 +1,70 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE MEMBER'S WEEK FOLDS AWAY BEHIND A TAP — the last of Kd's *"restore and
+      do all four"* (`:31508`). DECISIONS `:32929`. **START HERE: the code is
+      built and the ⚪ `OWED.md` line does NOT tick — no smoke has run and T3 is
+      UNRUN.** `GymHoursNote` keeps `Today: …` on screen and puts Mon–Sun behind
+      a *This week* row, on the dashboard card and on `/my-gyms`. **TAP, NOT
+      HOVER** (:26586). Web only: no `apps/api`, no `packages/shared`, no
+      migration.
+
+  1. **FOUR EXISTING CASES BECAME LIARS THE MOMENT THE WEEK MOVED BEHIND A TAP,
+     and this is the part that generalises** (:29740, arriving on the member's
+     side). Three cases prove the dated closure wins ANYWHERE on the card with a
+     screen-wide `queryAllByText(…) → 0` — satisfied by a shut fold. The fourth
+     is worth more: the `savedWeek` guard (`C190`) whose entire evidence was
+     *"no weekday is on screen"* would have gone QUIET rather than red, and only
+     asserting that **the control itself is absent** restores it (**C214**).
+     **STANDING: when a section learns to fold, every absence assertion that
+     could see into it inherits a second way to pass. Find them before writing
+     the fold.**
+  2. **AN ANCHOR THAT STILL MATCHES IS NOT AN ANCHOR THAT STILL WORKS.**
+     Re-indenting the list by four spaces moved `C150`'s line; the whole-table
+     pre-check reported ONE HIT and did not abort, because `String.split` is a
+     substring match and an 18-space anchor sits inside a 22-space line. Nothing
+     broke — the replacement lands correctly and it is RED — but the guard for a
+     drifted anchor (:13336, :15770) cannot see a drift whitespace absorbs.
+     **What proves it is the RE-RUN**, which is why all six existing `hoursnote`
+     rows were swept beside the four new ones.
+  3. **ONE NEW CASE HAS NO STANDING MUTANT AND WAS PROBED BY HAND.** *"Keeps
+     today's line on screen in BOTH states"* is the card's central promise and no
+     single-line anchor can falsify it (the headline is a three-armed
+     conditional). Broken by hand — `{closedToday !== null ? (` →
+     `{!weekOpen ? null : closedToday !== null ? (` — and the failure landed on
+     the FIRST assertion, before any click (:27468: a RED says only that
+     something failed). Reverted by replacing the string (:31921 §4b), case green
+     after.
+  4. **`smoke-opening-hours.md` STEPS 22 AND 22b WERE STALE AND ARE REWRITTEN IN
+     THIS COMMIT** — both described a week simply on screen. The code is what Kd
+     ruled and the sheet was wrong (:32583 §2). **Neither has been re-run**, and
+     the sheet's header now says so above its 2026-09-01 declaration.
+
+PROVE: `web` **1745/1745 across 58 files** (+4) · `gymHours.render` **14/14**
+       (+4) · `eslint --max-warnings=0` exit 0 on the three touched files ·
+       `vite build` green in 43.17s · three ROOT guards pass (harnesses **25
+       scripts**, index **290 pointers resolve, 289 on a heading**, triggers
+       rebuilt and `--check` clean at **975 from 255 of 393 rulings**).
+       **SWEEP a stated SUBSET of 231 — ten mutants: 10 RED · 0 ALIVE · 0 never
+       ran**, all ten controls GREEN and tallied first, restore sha256
+       byte-exact after every mutant. **Six are EXISTING rows re-run** (C132,
+       C133, C134, C148, C150, C190) for finding 2.
+       **No api figure is quoted and none is owed** (:28395) — no `apps/api`,
+       `packages/shared` or migration file is touched.
+
+OPEN:  `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (:24559) — Kd's,
+       deliberately not committed here.
+       **THE SIZE IS SMOKE-ONLY AND NOTHING IN 1,745 GREEN TESTS SAYS THE CARD
+       GOT SHORTER** — jsdom has no layout, and `:32395` is the entry where four
+       defects on these exact surfaces reached Kd rather than a test.
+       **NEXT:** `RUNBOOK/smoke-gym-hours-fold.md` (5 steps, written, UNRUN) at
+       Kd's browser, then T3 round 1 in a FRESH chat on this diff. Both gates
+       are on the ⚪ line.
+       Still open and untouched by this card: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`.
+```
+
+```
 TASK: THE CALENDAR PACKET, T3 ROUND 3 (diff-only) — ZERO Critical/High, THE
       PACKET SHIPS AND THE 🟡 `OWED.md` CALENDAR LINE TICKS. DECISIONS `:32783`.
       **START HERE: the calendar card is CLOSED.** Rounds 1/2 were `:32114` and

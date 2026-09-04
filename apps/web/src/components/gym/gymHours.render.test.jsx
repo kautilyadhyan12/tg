@@ -13,7 +13,7 @@
 // gym's zone from one that asks the browser's — the same defect the server half
 // shipped with and only a mutation sweep caught.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -55,6 +55,24 @@ afterEach(() => {
   cleanup();
 });
 
+// ── THE WEEK IS BEHIND A TAP NOW, AND THAT MAKES EVERY ABSENCE ASSERTION IN
+//    THIS FILE SUSPECT UNTIL IT IS OPENED ───────────────────────────────────
+// Kd asked for the Mon–Sun list to fold (2026-09-03, `OWED.md`'s ⚪ line off
+// `:31508`). Closed means UNMOUNTED, so a screen-wide `queryAllByText(...) → 0`
+// — which is how the closure cases below prove the dated closure wins ANYWHERE
+// on the card — is satisfied by the fold simply being shut. **That is :29740's
+// finding on the console's Settings screen arriving here**: a query that reads
+// the whole screen tells you nothing about a section nobody opened.
+//
+// Every case whose subject is inside the week therefore taps this row first.
+// The name is the accessible name of the control a person actually presses, so
+// a fold that stopped rendering fails the query rather than the assertion.
+const openWeek = async () => {
+  const row = await screen.findByRole('button', { name: /this week/i });
+  fireEvent.click(row);
+  return row;
+};
+
 // ── T3 ROUND 1, L-5: "NOTHING MEMBER-FACING MAY DRAW `savedWeek`" ─────────
 // That promise was written in three files and enforced in none. `savedWeek`
 // carries a 24-hour gym's kept timetable — rows that used to be deleted and
@@ -85,6 +103,13 @@ describe('the timetable a 24-hour gym keeps', () => {
     // component that rendered nothing at all (:21751 — a ✅ of "nothing
     // appears" is satisfied by a blank screen).
     expect(await screen.findByText('Open 24 hours')).toBeTruthy();
+
+    // **AND THE SECOND CONTROL, ADDED WITH THE FOLD: there is no row to tap.**
+    // Once the week folds, "no weekday is on screen" stops being evidence that
+    // no weekday is DRAWN — a shut fold satisfies it just as well, which would
+    // have left this whole guarantee (T3 round 1's L-5, mutant C190) passing
+    // over a 24-hour gym's kept timetable sitting one tap away.
+    expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
 
     for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
       expect(screen.queryByText(day)).toBeNull();
@@ -201,6 +226,7 @@ describe('a gym that has answered', () => {
     render(<GymHoursNote gymId={GYM} />);
 
     await screen.findByText('Today: 06:00 – 07:00');
+    await openWeek();
     for (const short of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
       expect(screen.getByText(short)).toBeTruthy();
     }
@@ -240,6 +266,12 @@ describe('a gym that has answered', () => {
     // so the headline reads as `Closed today` and its ` — Holi` span is a
     // separate match. A regex spanning both finds nothing.
     expect(await screen.findByText(/Holi/)).toBeTruthy();
+    // **THE WEEK IS OPENED BEFORE THE ABSENCES ARE READ, AND WITHOUT THIS LINE
+    // THE CASE IS A LIAR AGAIN** — for the second time, in the same test. Its
+    // whole subject is the half of the card the fold now hides, so a shut fold
+    // satisfies every `toHaveLength(0)` below exactly as the headline-only query
+    // it was rewritten from used to (:29740).
+    await openWeek();
     expect(screen.queryAllByText('Today: 06:00 – 07:00')).toHaveLength(0);
     expect(screen.queryAllByText('06:00 – 07:00')).toHaveLength(0);
     // TWO elements read "Closed today" — the headline and today's own row — and
@@ -269,6 +301,7 @@ describe('a gym that has answered', () => {
     render(<GymHoursNote gymId={GYM} />);
 
     await screen.findByText(/Holi/);
+    await openWeek();
     expect(screen.getByText('06:00 – 22:00')).toBeTruthy();
     // Five weekdays shut by the pattern; today shut by the closure and saying
     // which, in the headline and in its own row.
@@ -292,5 +325,105 @@ describe('a gym that has answered', () => {
     // gone, not merely joined by a friendlier one.
     expect(screen.getByText('Closed Sun 20 Sep 2026')).toBeTruthy();
     expect(screen.queryByText(/2026-09-20/)).toBeNull();
+  });
+});
+
+// ── THE WEEK FOLDS (Kd, 2026-09-03, `OWED.md`'s ⚪ line off `:31508`) ────────
+// *"should have a drop down type of effect whenver click or hover in them"* —
+// **ON TAP, NOT ON HOVER**: hover does not exist on a phone, and :26586 is his
+// own *"members are not going to use the web"*, so the phone is the screen this
+// is read on.
+//
+// **THE ASSERTIONS BELOW ARE ABOUT THE CLOSING, NOT THE OPENING, AND :31295 IS
+// WHY.** A case asserting a section ARRIVES in a state passes under that
+// entry's defect perfectly — the dropdown Kd found dead arrived open either
+// way. For a two-state control the assertion is the state it is NOT in when you
+// find it, so the taps below go there and back.
+//
+// No `waitFor` sits on the far side of a click here: the tap changes state and
+// resolves no promise, and `fireEvent` already wraps it in `act`. Where a
+// promise DOES resolve off an interaction under this file's faked `Date`,
+// :32197 §5(d) is the instrument note — `act`, never `waitFor`.
+describe('the rest of the week', () => {
+  // Wednesday is today at this gym (see AT / GYM_TZ above), so the headline
+  // reads its hours and Monday's belong to a row inside the fold. The two are
+  // deliberately DIFFERENT times: one fixture where the headline and the list
+  // print the same string could not tell them apart.
+  const scheduled = () =>
+    hours({
+      week: [
+        { weekday: 1, sessions: [{ opensMinute: 360, closesMinute: 420 }] },
+        { weekday: 3, sessions: [{ opensMinute: 460, closesMinute: 580 }] },
+      ],
+    });
+
+  const SHORTS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  it('arrives FOLDED — seven rows are not what a member is handed', async () => {
+    orgService.getHours.mockResolvedValue(scheduled());
+    render(<GymHoursNote gymId={GYM} />);
+
+    // Today is on screen without touching anything — the closed row still
+    // answers the question the card was opened with (:20338).
+    expect(await screen.findByText('Today: 07:40 – 09:40')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /this week/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+
+    // And the list Kd was looking at is not there: not the day names, not
+    // Monday's times, and not the five shut days' word.
+    for (const short of SHORTS) {
+      expect(screen.queryByText(short)).toBeNull();
+    }
+    expect(screen.queryByText('06:00 – 07:00')).toBeNull();
+    expect(screen.queryAllByText('Closed')).toHaveLength(0);
+  });
+
+  it('opens on a tap and CLOSES again on the next one', async () => {
+    orgService.getHours.mockResolvedValue(scheduled());
+    render(<GymHoursNote gymId={GYM} />);
+
+    const row = await screen.findByRole('button', { name: /this week/i });
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Mon')).toBeTruthy();
+    expect(screen.getByText('06:00 – 07:00')).toBeTruthy();
+
+    // THE SECOND TAP IS THIS CASE'S SUBJECT. Closed means UNMOUNTED here, so
+    // the rows must be GONE rather than merely hidden — a `display:none` body
+    // would leave this assertion passing over content no person can see.
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Mon')).toBeNull();
+    expect(screen.queryByText('06:00 – 07:00')).toBeNull();
+  });
+
+  it("keeps today's line on screen in BOTH states, which is the whole bargain", async () => {
+    // The fold was asked for because the card was seven rows tall; what it may
+    // never do is take away the one line somebody looks at this card FOR. So
+    // the headline is asserted open, closed, and open again — a fold that
+    // swallowed it would still pass every other case in this block.
+    orgService.getHours.mockResolvedValue(scheduled());
+    render(<GymHoursNote gymId={GYM} />);
+
+    const row = await screen.findByRole('button', { name: /this week/i });
+    expect(screen.getByText('Today: 07:40 – 09:40')).toBeTruthy();
+    fireEvent.click(row);
+    expect(screen.getByText('Today: 07:40 – 09:40')).toBeTruthy();
+    fireEvent.click(row);
+    expect(screen.getByText('Today: 07:40 – 09:40')).toBeTruthy();
+  });
+
+  it('is not offered at all by a gym that never closes', async () => {
+    // A fold over nothing is a control that opens onto an empty list, and a
+    // 24-hour gym HAS no week — listing seven identical rows for it was already
+    // refused as noise. This is also the second half of the `savedWeek` guard
+    // at the top of this file (C190): there the gym has kept rows, here it has
+    // none, and both must be unreachable rather than merely unopened.
+    orgService.getHours.mockResolvedValue(hours({ mode: 'open_24h' }));
+    render(<GymHoursNote gymId={GYM} />);
+
+    expect(await screen.findByText('Open 24 hours')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
   });
 });

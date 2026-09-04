@@ -32925,3 +32925,165 @@ working tree carried no residue.
 
 **`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's), and
 is deliberately not committed here.
+
+## 2026-09-04 — THE MEMBER'S WEEK FOLDS AWAY BEHIND A TAP, and the finding is that four existing cases became liars the moment it did
+
+**Read before folding anything else on a member-facing card, before adding a
+control to `GymHoursNote`, before writing an absence assertion anywhere in
+`gymHours.render.test.jsx`, before trusting a mutation anchor that still matches
+after an indentation change, and before writing a test whose guarantee no
+single-line mutant can express.**
+
+The last of the things Kd approved on 2026-09-03 (`:31508`, *"restore and do all
+four"*), carried on `OWED.md`'s ⚪ line in his own words: *"should have a drop
+down type of effect whenver click or hover in them"*. His card was nine lines
+tall — today's hours, then Mon–Sun — on the dashboard and again on `My Gyms`.
+
+**ON TAP AND NOT ON HOVER, and that is a ruling rather than a preference:** hover
+does not exist on a phone, and `:26586` is his own *"members are not going to use
+the web"* — the phone is the screen this gets read on, and a hover-only control
+there is a control that does not exist.
+
+**NO SERVER FILE MOVED.** No `apps/api`, no `packages/shared`, no migration.
+
+### 1 · THE HEADLINE IS THE PART THAT DOES NOT MOVE, AND THAT IS THE WHOLE BARGAIN
+
+`Today: 07:40 – 09:40` stays on screen in both states. **A fold is only an
+improvement while the shut row still answers the question somebody opened the
+card with** — `:20338`'s ruling when the console's own sections learned to fold,
+and the reason its closed headings kept their title, their sentence and their
+count.
+
+The upcoming-closures list stays OUTSIDE the fold too. It is not what he was
+looking at (his screenshot was the seven weekday rows), and a member walking to a
+gym on a holiday should not have to tap to find that out.
+
+**THE FOLD IS NOT DRAWN AT ALL FOR A GYM WITH NO WEEK.** A 24-hour gym has
+nothing to list, so it gets no control onto an empty list, and a gym that has
+never answered still draws nothing whatsoever (`:26736` — no answer is not
+closed). **`C214` is that edit**, and it matters twice: see §3.
+
+### 2 · IT IS PLAIN `useState`, AND EVERY ASSERTION IS ABOUT THE CLOSING
+
+`:31295` is a dropdown Kd found dead at his own browser — `isOpen = open ||
+forceOpen`, so pinning it made the tap flip a flag the `||` overrode, on both
+attendance lists from the moment each shipped, **with both of its comments
+claiming it worked**. So nothing here forces the week open, the header row is the
+state's only writer, and **`C212` pins the SECOND tap** rather than the first: a
+case asserting a section ARRIVES open passes under that defect perfectly.
+
+Closed means UNMOUNTED, not hidden with CSS. `display:none` would have left every
+assertion in this file passing against rows no person can see, which is the class
+`:20338` refused for exactly the same control.
+
+**THE WHOLE ROW IS THE CONTROL** (44px, `aria-expanded`, the chevron following
+it), because on a phone a row is a target and a 14px arrow is not — `:32395` §2's
+call for the calendar one card earlier. It carries no second icon: this block
+already has its `CalendarClock`, and two marks competing for one job is what made
+Kd's fire unreadable (`:32395` §3).
+
+### 3 · THE FINDING: FOUR EXISTING CASES BECAME LIARS THE MOMENT THE WEEK MOVED BEHIND A TAP
+
+This is the part that generalises, and it is `:29740`'s finding on the console's
+Settings screen arriving on the member's side.
+
+**A screen-wide `queryAllByText(…) → 0` proves nothing about a section nobody
+opened.** Three cases in this suite prove the dated closure wins ANYWHERE on the
+card — and that assertion was rewritten into its screen-wide form precisely
+because a headline-only query had let T3 round 1's second Critical/High through
+(`:26947`'s shape). **Folding the week would have handed the same case a second,
+quieter way to be green**: not a query looking at the wrong half, but a query
+looking at a half that is not mounted. Each of them now taps the row first.
+
+**AND THE FOURTH IS THE ONE WORTH THE MOST, because its subject is an ABSENCE by
+design.** The `savedWeek` guard (T3 round 1's L-5, **`C190`**) asserts that a
+24-hour gym's kept timetable — rows that travel on the member's own response and
+since `:31508` survive on purpose — never reaches a member. Its evidence was *"no
+weekday is on screen"*. **Behind a fold that sentence is satisfied by a shut
+control**, so the guarantee would have gone quiet rather than red. What restores
+it is asserting that **the control itself is absent**, and `C214` is what makes
+that assertion fail when it should.
+
+**STANDING: when a section learns to fold, every absence assertion that could see
+into it inherits a second way to pass. Find them before writing the fold, not
+after** — the four here were found by reading the suite for what its queries
+could still reach, and all four are cases somebody else wrote.
+
+### 4 · AN ANCHOR THAT STILL MATCHES IS NOT AN ANCHOR THAT STILL WORKS
+
+Wrapping the list in the fold re-indented it by four spaces, which moved the line
+**`C150`** anchors on. The whole-table pre-check reported **one hit and did not
+abort** — because `String.split` is a substring match, and an 18-space anchor
+sits happily inside a 22-space line. The replacement lands correctly and the
+mutant is still RED (re-run, §6), **so nothing is broken and that is exactly why
+it is written down**: the guard that exists to catch a drifted anchor
+(`:13336`, `:15770`) cannot see a drift that leading whitespace absorbs.
+
+**It was not re-anchored**, because re-anchoring on the new indentation buys
+nothing the RED does not already prove and would be a second edit to a row this
+card has no other business touching (R1.1). **What proves it is the RE-RUN, not
+the pre-check** — all six existing `hoursnote` mutants were swept beside the four
+new ones for that reason.
+
+### 5 · THE CASE NO SINGLE-LINE MUTANT COULD EXPRESS, AND THE PROBE THAT HOLDS IT
+
+*"Keeps today's line on screen in BOTH states"* is this card's central promise and
+**no anchor in this file can falsify it**: the headline is a three-armed
+conditional, and moving it inside the fold is a multi-line edit whose `from`
+would span the whole block.
+
+**So it was broken BY HAND and watched go red** — one line, `{closedToday !==
+null ? (` → `{!weekOpen ? null : closedToday !== null ? (`, which puts all three
+headline arms behind the tap. The failure landed on the FIRST of the three
+assertions (the one taken before any click, `gymHours.render.test.jsx:410`),
+which is the claim, rather than on a later one that would have named a different
+defect (`:27468` — a RED says only that something failed). **Reverted by replacing
+the string back, never `git checkout --`** (`:31921` §4b), and the case re-run
+green afterwards.
+
+**A test with no standing mutant is not automatically an unearned pass — but it
+is only worth what its probe was**, and the probe is recorded here because
+nothing in the harness will re-run it.
+
+### 6 · WHAT HAS NO OBSERVER, STATED RATHER THAN IMPLIED
+
+- **NO SMOKE HAS RUN.** `RUNBOOK/smoke-gym-hours-fold.md` is written and UNRUN,
+  and the ⚪ `OWED.md` line does not tick until it and T3 have.
+- **THE SIZE AND THE TAP TARGET ARE SMOKE-ONLY.** jsdom has no layout, so nothing
+  in 1,745 green tests says the row is 44px or that the card got shorter —
+  `:32395` is the entry where four defects on these exact surfaces reached Kd
+  rather than a test, and the honest reading is that a suite can say a thing is
+  ON SCREEN and never that it is the right SIZE.
+- **`smoke-opening-hours.md` STEPS 22 AND 22b WERE REWRITTEN AND NOT RE-RUN.**
+  Both described a week that was simply on screen; the code is what Kd ruled and
+  the sheet was stale, so both were corrected in this commit (`:32583` §2 — decide
+  which side is wrong before editing). The 2026-09-01 declaration they carry is
+  older than the edit and the sheet now says so.
+- **T3 IS UNRUN.**
+
+### Round log
+
+**Grounding read this session before anything was proposed:**
+`DECISIONS-TRIGGERS.md` in full · `DECISIONS-INDEX.md` §1 and §2 in full ·
+`DECISIONS.md` :20338, :26586, :26684, :26736, :27204, :29740, :31295, :31508,
+:32197, :32395, :32498, :32583, :32783 · `HANDOFF.md`'s top block · `OWED.md`'s
+⚪ *"THE MEMBER'S GYM CARD DRAWS ALL SEVEN WEEKDAYS AT ONCE"* line · `CLAUDE.md`
+Part 0.5 and Part I §2.5 · the current `GymHoursNote.jsx`, `GymMembershipCard.jsx`,
+`MyGyms.jsx`, `ConsoleStates.jsx`, `gymHours.render.test.jsx` and
+`AttendancePanel.jsx`'s fold in full.
+
+**PROVE, on the final bytes:** `web` **1745/1745 across 58 files** (+4) ·
+`gymHours.render` **14/14** (+4) · `eslint --max-warnings=0` exit 0 on the three
+touched files · `vite build` green in 43.17s.
+
+**SWEEP a stated SUBSET of 231 — ten mutants: 10 RED · 0 ALIVE · 0 never ran**,
+all ten controls GREEN and tallied first, restore sha256 byte-exact after every
+mutant. **Six of the ten are EXISTING rows re-run** (`C132`, `C133`, `C134`,
+`C148`, `C150`, `C190`) because this card re-indented the block they live in, and
+`C150` is §4's finding.
+
+**No `apps/api`, `packages/shared` or migration file is touched by this commit**,
+so no api figure is quoted (`:28395`'s rule satisfied by the web suite above).
+
+**`CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT** (:24559, Kd's), and
+is deliberately not committed here.

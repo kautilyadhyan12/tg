@@ -2787,6 +2787,51 @@ const MUTANTS = [
     from: '        className="w-full h-full"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />\n      <span\n        className="absolute inset-0 flex items-center justify-center"\n',
     to: '        className="w-full h-full absolute inset-0"\n        style={{ color: \x27#FF8A1F\x27 }}\n        fill="#FF8A1F"\n        strokeWidth={1.5}\n        aria-hidden="true"\n      />\n      <span\n        className="flex items-center justify-center"\n',
   },
+  // ── THE MEMBER'S WEEK FOLDS (Kd, 2026-09-03, OWED's ⚪ line off :31508) ───
+  //
+  // Four rows for one control, because a fold has four ways to be wrong and
+  // three of them leave a screen that looks finished: it can arrive open (the
+  // shape he objected to), it can refuse to close (:31295, which he found by
+  // clicking), it can open onto nothing, and it can be offered by a gym that
+  // has no week to show. C190 and C150 next door are RE-RUN with these: this
+  // card re-indented the list they anchor in, and a mutant that still matches
+  // is not the same claim as a mutant still proven RED.
+  {
+    id: 'C211',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "THE WEEK ARRIVES OPEN AGAIN - the exact shape Kd looked at and asked to be folded, where his gym card was seven weekday rows tall before the attendance section even started. It is drawn on the dashboard AND on My Gyms, once per gym, so a member of three gyms gets twenty-one rows on one page. The fold is the whole card and this row is the card's own subject",
+    expect: 'arrives FOLDED',
+    from: '  const [weekOpen, setWeekOpen] = useState(false);',
+    to: '  const [weekOpen, setWeekOpen] = useState(true);',
+  },
+  {
+    id: 'C212',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "THE FOLD OPENS AND WILL NOT CLOSE, which is :31295 exactly - a dropdown Kd found dead at his browser because one operator overrode the tap, with both of its comments claiming it worked. A case asserting the section ARRIVES open passes under that defect perfectly, so the standing rule is that a two-state control is asserted on the state it is NOT in when you find it. This row is what makes the second tap load-bearing",
+    expect: 'opens on a tap and CLOSES again on the next one',
+    from: '                setWeekOpen((open) => !open);',
+    to: '                setWeekOpen(true);',
+  },
+  {
+    id: 'C213',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "THE CONTROL OPENS ONTO NOTHING: the row is there, the chevron turns, aria-expanded says open, and the week never appears - so folding the list stops being a fold and becomes a REMOVAL of what Kd ruled members can see (:26684 2, 'yes can see'). It is the worse failure of the two, because a control that visibly responds reads as working",
+    expect: 'lists the whole week',
+    from: '            {weekOpen ? (',
+    to: '            {weekOpen && false ? (',
+  },
+  {
+    id: 'C214',
+    target: 'hoursnote',
+    suite: HOURS_NOTE_SUITE,
+    why: "A 24-HOUR GYM IS OFFERED A FOLD OVER A WEEK IT DOES NOT HAVE, so a member of a gym that never closes taps This week and is handed seven rows reading Closed - the :26736 defect (no answer is not closed) re-entering through a control rather than through the rows. It also matters as the second half of C190: once the week is behind a tap, 'no weekday is on screen' stops being evidence that no weekday is DRAWN, and only the ABSENCE OF THE CONTROL says the kept timetable is unreachable",
+    expect: 'is not offered at all by a gym that never closes',
+    from: "        {hours.mode === 'scheduled' ? (",
+    to: "        {hours.mode !== 'unset' ? (",
+  },
 ];
 
 const abort = (msg) => {

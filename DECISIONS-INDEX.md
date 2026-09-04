@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,149 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,154 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,608 lines, MEASURED 2026-09-04 and not estimated**
-(1,149 + 1,385 + 74). **THE TWENTY-SECOND MEASUREMENT IS A T3 ROUND THAT SHIPS A
+**ALWAYS-READ TOTAL: 2,613 lines, MEASURED 2026-09-04 and not estimated**
+(1,154 + 1,385 + 74). **THE TWENTY-THIRD MEASUREMENT IS A WHOLE CARD — a control
+Kd asked for, four new tests, four new mutants and two smoke sheets — AND IT COST
+FIVE LINES HERE, all of them trigger phrases, with §1 and §2 UNMOVED**: its record
+is a CARD record and went to §1B, where :24813 sends it. Taken with this header's
+own prescribed command against the bytes being committed, never by adding a delta
+to the figures above. **THE TWENTY-SECOND MEASUREMENT IS A T3 ROUND THAT SHIPS A
 PACKET AND TICKS A 🔴 LINE: +4, all of them trigger phrases, §1 and §2 UNMOVED**
 — the round record went to §1B, where :24813 sends it.
 **AND IT WAS TAKEN BECAUSE THE ROUND FOUND THIS HEADER LYING ABOUT ITSELF AGAIN
@@ -5002,6 +5007,46 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   Web `myGyms.render` 51/51 · three ROOT guards pass · SWEEP a stated SUBSET of
   227: `C209`/`C210`, 2 RED, 0 ALIVE. **No api, shared or migration file is
   touched.** No smoke, on `:32583` §6's stated reason.
+- **:32929** — 2026-09-04 — **THE MEMBER'S WEEK FOLDS AWAY BEHIND A TAP, and the
+  finding is that four existing cases became liars the moment it did.** The last
+  of Kd's *"restore and do all four"* (`:31508`); `OWED.md`'s ⚪ line, his words:
+  *"should have a drop down type of effect whenver click or hover in them"*.
+  **ON TAP, NOT ON HOVER** — hover does not exist on a phone and `:26586` is his
+  own *"members are not going to use the web"*. **Read before folding anything
+  else on a member-facing card, before adding a control to `GymHoursNote`, before
+  writing an absence assertion anywhere in `gymHours.render.test.jsx`, before
+  trusting a mutation anchor that still matches after an indentation change, and
+  before writing a test whose guarantee no single-line mutant can express.**
+  `Today: 07:40 – 09:40` stays on screen in both states (`:20338` — a fold is only
+  an improvement while the shut row still answers the question the card was opened
+  with), the upcoming closures stay outside it, and a 24-hour gym is offered no
+  control at all. Plain `useState`, closed means UNMOUNTED, and **`C212` pins the
+  SECOND tap** because a case asserting a section ARRIVES open passes under
+  `:31295`'s defect perfectly.
+  **THE FINDING GENERALISES AND IS `:29740` ARRIVING ON THE MEMBER'S SIDE: when a
+  section learns to fold, every absence assertion that could see into it inherits
+  a second way to pass.** Three closure cases proving the dated closure wins
+  ANYWHERE on the card would have been satisfied by a shut control, and the fourth
+  is worth more — the `savedWeek` guard (`C190`) whose whole evidence was *"no
+  weekday is on screen"* would have gone QUIET rather than red, restored only by
+  asserting **the control itself is absent** (`C214`). Find them before writing
+  the fold, not after.
+  **AN ANCHOR THAT STILL MATCHES IS NOT AN ANCHOR THAT STILL WORKS:** re-indenting
+  the list by four spaces moved `C150`'s line and the whole-table pre-check
+  reported one hit and did not abort, because `String.split` is a substring match
+  and an 18-space anchor sits inside a 22-space line. Nothing broke; the guard that
+  exists to catch a drifted anchor (`:13336`, `:15770`) cannot see a drift that
+  leading whitespace absorbs, and what proves it is the RE-RUN.
+  **The one case no single-line mutant can express** (the headline staying put in
+  both states) **was broken BY HAND and watched go red**, reverted by replacing the
+  string (`:31921` §4b) — a test with no standing mutant is only worth what its
+  probe was.
+  Web 1745/1745 (+4) · SWEEP a stated SUBSET of 231: ten mutants, 10 RED, 0 ALIVE,
+  **six of them existing rows re-run**. **No api, shared or migration file is
+  touched.** `smoke-opening-hours.md` steps 22/22b rewritten for the fold and NOT
+  re-run; `RUNBOOK/smoke-gym-hours-fold.md` written and UNRUN; **T3 UNRUN, so the
+  ⚪ line does not tick.**
+
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

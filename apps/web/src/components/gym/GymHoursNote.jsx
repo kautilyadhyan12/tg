@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, ChevronDown } from 'lucide-react';
 import { orgService } from '../../api/orgsApi';
 import {
   WEEKDAYS,
@@ -31,9 +31,30 @@ import {
 // EVERY DATE HERE IS THE GYM'S, NEVER THE PHONE'S (trap #8). A member in Assam
 // looking at a gym in Texas must be told the gym's today, and `gymToday` is the
 // only thing that decides which weekday this is.
+//
+// **AND THE WEEK IS FOLDED AWAY — Kd, at his own browser, 2026-09-03:** *"should
+// have a drop down type of effect whenver click or hover in them"*, on a
+// screenshot where this card was seven rows tall before the attendance section
+// even started. **ON TAP AND NOT ON HOVER, and that is a ruling rather than a
+// taste**: hover does not exist on a phone and :26586 is his own *"members are
+// not going to use the web"*, so the phone is where this actually gets read.
+// `Today: 7:40 AM – 9:40 AM` stays on screen in both states — the closed row
+// still answers the question somebody opened the card with (:20338).
 
 export default function GymHoursNote({ gymId }) {
   const [hours, setHours] = useState(null);
+  // **PLAIN `useState`, SEEDED CLOSED, AND THE HEADER ROW IS ITS ONLY WRITER.**
+  // :31295 is a dropdown Kd found dead at his browser — `isOpen = open ||
+  // forceOpen`, so pinning it made the tap flip a flag the `||` overrode, and
+  // both of its comments claimed it worked. Nothing here forces this open and
+  // nothing needs to: `forceOpen` is the anti-silence rule (a section holding an
+  // error somebody must see), and the one thing a member must see — today — is
+  // the headline above the fold, which never moves.
+  //
+  // The closing direction is driven by a TEST rather than described here, for
+  // the same reason (:31295 §3: for a two-state control, the assertion is the
+  // state it is NOT in when you find it).
+  const [weekOpen, setWeekOpen] = useState(false);
 
   useEffect(() => {
     if (gymId === undefined || gymId === null) return undefined;
@@ -123,30 +144,74 @@ export default function GymHoursNote({ gymId }) {
             matched on the gym's own date), which is what :13432's rule requires
             of any sentence containing "today". */}
         {hours.mode === 'scheduled' ? (
-          <ul className="mt-1 flex flex-col gap-0.5">
-            {WEEKDAYS.map((weekday) => (
-              <li
-                key={weekday.iso}
-                className="text-xs flex gap-2"
-                style={{
-                  color:
-                    weekday.iso === todayIso
-                      ? 'rgba(255,255,255,0.75)'
-                      : 'rgba(255,255,255,0.45)',
-                }}
+          <>
+            {/* THE WHOLE ROW IS THE CONTROL, not a small chevron beside a label:
+                on a phone a 44px row is a target and a 14px arrow is not
+                (:26586, and :32395 §2 is where the same call was made for the
+                calendar one card ago). It carries no second icon — this block
+                already has its `CalendarClock`, and two marks competing for one
+                job is what made Kd's fire unreadable (:32395 §3).
+
+                IT SAYS WHICH WAY IT WILL GO. `aria-expanded` is the state and
+                the chevron follows it, so a screen reader and an eye get the
+                same answer.
+
+                CLOSED MEANS UNMOUNTED, NOT HIDDEN WITH CSS. A `display:none`
+                body would leave every assertion in this file's suite passing
+                against rows no person can see — the class :20338 refused when
+                the console's own sections learned to fold. */}
+            <button
+              type="button"
+              onClick={() => {
+                setWeekOpen((open) => !open);
+              }}
+              aria-expanded={weekOpen}
+              className="mt-1 w-full flex items-center gap-2 text-left"
+              style={{ minHeight: '44px' }}
+            >
+              <span
+                className="text-xs uppercase tracking-wider"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
               >
-                <span className="w-8 flex-shrink-0">{weekday.short}</span>
-                <span>
-                  {weekday.iso === todayIso && closedToday !== null
-                    ? 'Closed today'
-                    : dayLine(
-                        hours.week?.find((d) => d.weekday === weekday.iso)?.sessions,
-                        clockFormat,
-                      )}
-                </span>
-              </li>
-            ))}
-          </ul>
+                This week
+              </span>
+              <ChevronDown
+                className="w-3.5 h-3.5 flex-shrink-0"
+                style={{
+                  color: 'rgba(255,255,255,0.45)',
+                  transform: weekOpen ? 'rotate(180deg)' : 'none',
+                }}
+                aria-hidden="true"
+              />
+            </button>
+
+            {weekOpen ? (
+              <ul className="flex flex-col gap-0.5">
+                {WEEKDAYS.map((weekday) => (
+                  <li
+                    key={weekday.iso}
+                    className="text-xs flex gap-2"
+                    style={{
+                      color:
+                        weekday.iso === todayIso
+                          ? 'rgba(255,255,255,0.75)'
+                          : 'rgba(255,255,255,0.45)',
+                    }}
+                  >
+                    <span className="w-8 flex-shrink-0">{weekday.short}</span>
+                    <span>
+                      {weekday.iso === todayIso && closedToday !== null
+                        ? 'Closed today'
+                        : dayLine(
+                            hours.week?.find((d) => d.weekday === weekday.iso)?.sessions,
+                            clockFormat,
+                          )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
 
         {/* UPCOMING CLOSURES, so a member sees the holiday before they walk to
