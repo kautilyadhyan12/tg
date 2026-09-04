@@ -33738,10 +33738,16 @@ now has to sit within `NEAR` of an occurrence of THAT fold's own control.
 `RUNBOOK/` were scored for distance to their nearest operator verb: 2 · 2 · 3 · 4
 · 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 · 49 · 60 · 69. The widest GENUINE one is
 69, so 80 clears every true phrasing. **25 was considered and rejected on that
-same data** — it flags three CORRECT steps (one asserting both rows are merely
-present, one operating the calendar with the deliberately-excluded verbs
-"open"/"close", one asserting legitimate absence), and a guard that cries wolf on
-correct steps is this file's own header warning in reverse.
+same data** — it flags ~~three~~ **FOUR** CORRECT steps (one asserting both rows
+are merely present, one operating the calendar with the deliberately-excluded
+verbs "open"/"close", one asserting legitimate absence, **and
+`smoke-attendance.md::step 6`, which this sentence missed**), and a guard that
+cries wolf on correct steps is this file's own header warning in reverse.
+**CORRECTED BY T3 ROUND 4 (`:33799`), which re-ran the guard at 25 rather than
+re-reading the sentence: the four are greeting step 3 (37), hours-fold step 4
+(49), attendance step 6 (60) and calendar step 1 (69) — and the distance list
+printed one line above already contained four values over 25, so the prose
+contradicted its own data.**
 
 **TIGHTENING IT IMMEDIATELY FOUND A THIRD SHEET**, which is the argument for the
 change: `smoke-gym-hours-fold.md` step 1 sat at ~110 and passed the old check by
@@ -33759,9 +33765,17 @@ is row 3 (row 4 is Settings → Gym). `1945bf9` fixed this exact defect in
 ### Round log
 
 **PROVE.** All four ROOT guards green — `check-harnesses` 26 scripts (23 .mjs + 3
-.sh) · `check-decisions-index` 293 pointers, 1300 headings ·
-`check-decisions-triggers` up to date, 993 triggers from 259 of 397 rulings ·
+.sh) · `check-decisions-index` ~~293 pointers, 1300 headings~~ **294 pointers
+resolve (293 on a heading, 1 deliberate mid-entry), 1308 headings** ·
+`check-decisions-triggers` up to date, ~~993 triggers from 259 of 397 rulings~~
+**997 triggers from 260 of 398 rulings, 138 declaring none** ·
 `check-smoke-folds` OK. `node --check tools/check-smoke-folds.mjs` parses.
+**CORRECTED BY T3 ROUND 4 (`:33799`): both figures were taken BEFORE this entry
+and its own index line were added, and were never re-taken on the bytes actually
+committed** — the commit message and `HANDOFF.md` carry the true ones, so the
+record disagreed with itself in the same commit. `:20587` at one level up, and
+the halved index clause is `:32783` §3's *"a record quotes the WHOLE clause"*
+recurring in the round that cited it.
 
 **RULE 3 — the Low-2 fix is proven RED without it**, not asserted: the pre-fix
 guard (`git show HEAD:tools/check-smoke-folds.mjs`) run against the pre-fix sheet
@@ -33781,3 +33795,210 @@ empty**: this round changed four `RUNBOOK/*.md`, one `tools/*.mjs` and `OWED.md`
 **NOTHING TICKS.** The 🟡 `OWED.md` line needs a round with zero Critical/High;
 this one has two. **None of the four sheets has been run in its corrected form.**
 **NEXT: T3 round 4, diff-only** (`:5348` rule 2).
+
+## 2026-09-04 — T3 ROUND 4 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the round's own subject is that round 3's tightening of the guard is held by nothing, which its record then mis-stated twice
+
+**Read before quoting a guard's own tightening as protected, before writing a
+smoke ✅ for a surface the screen must FETCH first, before taking a review's
+count of a figure's COPIES as complete, before recording a round's PROVE figures
+against a tree that does not yet contain the round, and before writing a trigger
+sentence whose clauses nest the word this generator splits on.**
+
+Reviews `e440b25` (`:33648`, round 3's four fixes), diff-only (`:5348` rule 2),
+run in a fresh chat and handed back here. **ZERO Critical/High, so the packet
+SHIPS** (rule 1). **FOUR Low, all fixed in this commit** (`:5307` — everything
+found is fixed whatever its severity), logged in `BACKLOG.md`, none of which
+bought another round. Kd approved the list in plain words before a byte moved
+(*"go"*). **Escape hatch NOT armed:** round 3 carried two Critical/High and this
+round carries none, so there are not two consecutive rounds and this is not the
+redesign trigger. No `apps/api`, no `packages/shared`, no `apps/web` source, no
+migration.
+
+**Every finding was reproduced against the code before it was acted on** (V4,
+`:23928`, `:24559`) — the review is another chat's report and hearsay until run.
+**One of its maps was incomplete and that is recorded below**, for the third time
+in this repo.
+
+### 1 · Low-1 — ROUND 3 TIGHTENED THE GUARD AND NOTHING IN THE REPO OBSERVES THE TIGHTENING
+
+Round 3 windowed `OPERATED` to within `NEAR = 80` of the fold's own control,
+because a step that tapped ONE fold had been satisfying the check for a SECOND.
+**Measured here rather than argued: setting `NEAR = 100000` restores exactly the
+pre-round-3 "verb anywhere in the step" behaviour and `check-smoke-folds.mjs`
+still exits 0 on every shipping sheet.** So the ROOT `lint` stays green over the
+defect the window was added to close, and the value could be reverted by anybody
+without a single red.
+
+**IT IS NOT VACUOUS, AND THE DISTINCTION IS THE HALF WORTH KEEPING.** Stubbing
+`operates()` to `return true` **does** go red — `ABSENT_BY_DESIGN` is
+shrink-only, so `smoke-attendance.md::step 4` stops violating and the run fails
+on the stale exception (`0 step(s), 1 stale exception(s)`, exit 1). **Total
+disablement is caught. The window's VALUE is held by nothing.**
+
+Round 3's own rule-3 proof was real and is not withdrawn — but it needed the
+PRE-FIX sheet bytes to produce a red, and once those sheets were corrected the
+evidence went with them. **A regression test that only exists while the defect
+does is not a guard.** `:18830`'s class exactly: a guard in `tools/*.mjs` whose
+only protection is a comment. **Out of scope to close** — there is no test
+harness over `tools/*.mjs` — so it takes an `OWED.md` line, and the header
+paragraph it now carries is precisely what `:32114` says a warning can never be.
+
+**WHERE THE LINE WENT, AND IT IS A CORRECTION TO HOW ROUNDS 2 AND 3 FILED THESE.**
+The review said *"beside the two limits already there"*. Those two sit inside the
+🟡 sheet line's prose — **so all three would disappear from `OWED.md` the day
+that line ticks**, which is the file's own stated failure mode. The three limits
+now have their own ⚪ line and the 🟡 line points at it.
+
+### 2 · Low-2 — "IT FLAGS THREE CORRECT STEPS" IS FOUR, AND THE DATA ONE LINE ABOVE ALREADY SAID SO
+
+Round 3 rejected `NEAR = 25` on the ground that it flags three correct steps.
+**Re-run at 25: four violations.** greeting step 3 (37) · hours-fold step 4 (49)
+· **`smoke-attendance.md::step 6` (60)** · calendar step 1 (69). The three named
+descriptions are all real and all present; the fourth was never named.
+
+**THE SENTENCE CONTRADICTED ITS OWN EVIDENCE.** The distance list printed one
+paragraph above it — `2 · 2 · 3 · 4 · 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 · 49 ·
+60 · 69`, reproduced here value-for-value — contains **four** values over 25.
+**No new measurement was needed to find this, only reading the number under the
+claim.**
+
+**AND THE FOURTH IS THE DAMNING ONE, WHICH STRENGTHENS THE CONCLUSION RATHER THAN
+WEAKENING IT.** The other three are edge shapes — a bare presence assertion, the
+deliberately-excluded "open"/"close" verbs, a legitimate absence. Step 6 is none
+of those: *"a row reading **This week** … and no list of weekdays until you tap
+that row"* **is the canonical honest step this guard exists to PASS.** It names
+the control and says to tap it, and 25 rejects it for nothing but sentence
+length.
+
+**THE REVIEW'S MAP OF THE COPIES WAS INCOMPLETE — IT SAID FOUR, THERE ARE FIVE.**
+It missed `HANDOFF.md:40`. Re-grepped before editing:
+`tools/check-smoke-folds.mjs` · `DECISIONS.md` · `DECISIONS-INDEX.md` ·
+`BACKLOG.md` · `HANDOFF.md`, all five corrected in this commit, struck in place
+(`:20587`). **This is `:23928` Low-1 and `:24559` Low-1 arriving a third time: a
+correction's MAP is a claim exactly like its figure, and in all three cases the
+reviewer had counted neither.**
+
+### 3 · Low-3 — THE ROUND LOG'S PROVE FIGURES WERE TAKEN BEFORE THE ROUND EXISTED
+
+`:33648`'s Round log recorded `293 pointers, 1300 headings` and `993 triggers
+from 259 of 397 rulings`. **Run on the shipping bytes: `294 pointers resolve (293
+on a heading, 1 deliberate mid-entry), 1308 headings` and `997 triggers from 260
+of 398 rulings, 138 declaring none`.** The figures were taken before that round's
+own entry, index line and rebuilt trigger file were added, and never re-taken —
+**so the commit message and `HANDOFF.md` carry the true numbers while
+`DECISIONS.md` carries the pre-commit ones, and the record disagreed with itself
+inside one commit.**
+
+**The index half is `:32783` §3 recurring in the round that cited it:** that guard
+prints a compound clause, `293` is the "on a heading" half of `294`, and a chat
+grepping either gets a different answer to *"how many pointers"*. **Both
+corrected to the WHOLE clause.**
+
+**THE GENERAL SHAPE, and it is what this round's own Round log below is written
+against: a PROVE figure taken before the entry that reports it is a measurement
+of a tree that was never committed.** Take them last, on the bytes going in.
+
+### 4 · Low-4 — THE MONTH IS FETCHED, AND TWO ✅ DESCRIBED IT BEFORE THE FETCH LANDS
+
+Tapping **Days you came** flips `everOpened`, which is what gates the history read
+(`AttendancePanel.jsx:423,458`). Until that read returns, `gridStatus` is
+`'loading'` (`:502-503`) — the grid draws at `opacity: 0.4` and **every day button
+carries `disabled`** (`:731-732`, `:744`).
+
+- **Step 10** tells the tester to tap the row and then *"Click today's flame"*.
+  The flame is drawn, because this session's own press populated `marked` — **but
+  the button it sits on is disabled for the length of the request.** A click does
+  nothing.
+- **Step 12 is worse and is independent of step 10:** after a reload `marked` is
+  `useState([])` again and `fresh` is false, so the grid is built from `marked`
+  alone (`:520`) — **today is a plain grey number, not a flame, until the read
+  lands.**
+
+**Both sentences become true on their own within one request, which is why this is
+Low and not `:5807` 1a: nothing on screen is FALSE, it is EARLY.** What was
+missing is any cue to wait, and the cost of that omission is the one this class
+keeps paying — `:24559`'s *"each would have made Kd stop, disbelieve a working
+screen, and report a failure that was the sheet's"*. Both steps now carry a ⏳
+line saying to wait for the month to brighten, and step 12's says why the flame is
+briefly absent.
+
+**THE SIBLING SHEET HAS THE SAME WINDOW AND THE REVIEW'S MAP STOPPED AT ONE FILE**
+(`:24559`; `:33499` §1, where the sibling fold was one grep away).
+`smoke-my-gyms-calendar.md` draws the same fold and its steps 3 and 7 look at and
+click flames. **It is covered by a note in that sheet's Setup rather than by
+editing a step**, because steps 1–3 are recorded ✅ RUN AND PASSED at Kd's browser
+on 2026-09-03 and **editing a step's wording would silently re-date its
+evidence**. The note says the wait applies to every step below.
+
+**RE-OPENING A FOLD COSTS NO SECOND WAIT** — `everOpened` stays true and the read
+is not re-issued — **so only a fresh page load is exposed**, which is why steps 10
+and 12 needed the cue and step 11 did not.
+
+### 5 · WHAT THIS ROUND RAN AND WHAT IT DID NOT RE-DERIVE, so the next chat knows which is which
+
+**Run here:** the guard at 25, at 80 and at 100000 · the `operates()` stub · the
+16 distances, reproduced value-for-value off the shipping `RUNBOOK/` · all four
+ROOT guards · the five copies of the figure, by grep ·
+`everOpened`/`marked`/`calendarOpen` as plain `useState` with the history read
+gated on `everOpened`.
+
+**Reported by the review and NOT re-derived here:** that `CameDay` draws a flame
+with the date inside it and no time, that `DaySheet` is `fixed inset-0 z-50`, that
+`withVisit`/`mergeVisits` dedupe, and that `calendarOpen` has one writer. **Those
+are round 3's measurements** (`:33648` §2), unchanged by this diff, and this entry
+does not restate them as its own.
+
+### 6 · AND THIS ENTRY'S OWN `Read before …` SENTENCE PUT TWO JUNK PHRASES INTO AN ALWAYS-READ FILE
+
+Found the way `:22497` says these are found — **by checking the generator's
+OUTPUT against the source, not by reading the generator.** The first draft of the
+sentence above contained two clauses with an inner *"before"*
+(*"…has to FETCH **before it is true**"*, *"…PROVE figures **before that round's
+own entry exists**"*). **`build-decisions-triggers.mjs` splits on the bare word**,
+so it harvested two fragments — `- it is true → :33799` and
+`- that round's own entry exists → :33799` — **each of which is a line every chat
+reads every session and which can never match anything anybody is about to do.**
+
+Rewritten without nested occurrences: **6 harvested phrases became 4 real ones**,
+and the always-read delta fell from +10 to +8. **STANDING: a `Read before …`
+clause that contains the word again does not produce a longer trigger — it
+produces a truncated one plus a nonsense one.** The generator is not at fault and
+was not changed (R1.1); the sentence was.
+
+### Round log
+
+**PROVE, TAKEN LAST, ON THE BYTES BEING COMMITTED** — §3's own finding applied to
+this entry. All four ROOT guards green: `check-harnesses` **26 scripts parse (23
+.mjs + 3 .sh)** · `check-decisions-index` **295 pointers resolve (294 on a
+heading, 1 deliberate mid-entry), 1316 headings** · `check-decisions-triggers`
+**up to date — 1002 triggers from 261 of 399 rulings, 138 declaring none**
+(rebuilt) · `check-smoke-folds` **OK, 1 documented exception**. Whole compound
+clauses, `:32783` §3. **`DECISIONS-INDEX.md`'s header re-measured with the
+command it names** (`:32783` §4): always-read **2,640 = 1,181 + 1,385 + 74**,
+**§1 and §2 unmoved**, the whole +9 being trigger phrases.
+`node --check tools/check-smoke-folds.mjs` parses.
+
+**RULE 3 (a regression test with every Critical/High fix): N/A by subject — there
+were no Critical/High.** For the Low, stated rather than implied: **Low-1 IS the
+finding that no instrument holds the value**, and this round does not pretend to
+have given it one; Low-2 and Low-3 are figures in prose, which nothing in this
+repo can assert; **Low-4's evidence is `AttendancePanel.jsx`, read this session
+and cited by line above** — jsdom has no layout and no wall-clock gap between a
+tap and a resolved promise, so no test in the suite can see a loading window a
+human sees.
+
+**RULE 4 — one liar found, and it is Low-1**, which is this round's own subject:
+the guard's `NEAR` window stays green when reverted. **Listed rather than fixed**
+(`:5348` rule 4's own instruction), with its `OWED.md` line.
+
+**No mutation sweep, no test run.** `:5857` rule 4a — database mutants are for
+cards that change SERVER behaviour. **`git diff --name-only apps packages` is
+empty**: this round changed two `RUNBOOK/*.md`, one `tools/*.mjs`, `OWED.md` and
+the four record files.
+
+**THE PACKET SHIPS AND THE 🟡 LINE STILL DOES NOT TICK.** Rule 1 is satisfied —
+zero Critical/High — and that is the T3 half of the line. **The other half is
+untouched: none of the four sheets has been run in its corrected form.** Four
+rounds, three of them with a Critical/High, **every one of those in sheet prose
+and not one in the app.** **NEXT: Kd at a browser. Not another review round** — a
+Low finding buys none (`:5348` rule 1), and this round found nothing else.

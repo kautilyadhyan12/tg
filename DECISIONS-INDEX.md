@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,172 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,181 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,27 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,631 lines, MEASURED 2026-09-04 and not estimated**
-(1,172 + 1,385 + 74). **THE TWENTY-SEVENTH MEASUREMENT IS THE TWENTY-SIXTH'S
+**ALWAYS-READ TOTAL: 2,640 lines, MEASURED 2026-09-04 and not estimated**
+(1,181 + 1,385 + 74). **THE TWENTY-EIGHTH MEASUREMENT IS THE ROUND THAT SHIPPED
+THIS PACKET — zero Critical/High, four Low all fixed — AND IT COST NINE LINES,
+EVERY ONE OF THEM A TRIGGER PHRASE, §1 AND §2 UNMOVED AT 1,385 AND 74**: its
+record is a ROUND record and went to §1B, where `:24813` sends it. **Sixth
+measurement across two afternoons, at +5, +6, +3, +5, +4 and +9** — the largest
+of the six, and the reason is worth naming rather than smoothing over: **that
+entry declares FIVE `Read before …` clauses in the entry AND five in this index
+line, and the generator reads both** (`:22640`), so a deliberately findable
+record costs more here than a terse one. **That is the trade `:24703` ruled and
+not a drift** — the alternative is an entry reachable only by title, which is the
+position 138 rulings are still in.
+**AND THE FIRST DRAFT OF THAT MEASUREMENT WAS +10, WHICH IS THE PART TO KEEP:
+two of its clauses nested the word *"before"*, the generator splits on it, and it
+harvested two NONSENSE fragments into this always-read pile** — `it is true` and
+`that round's own entry exists`. **A junk trigger costs exactly what a real one
+costs and can never match anything**, so it is pure loss, and nothing in the
+build would have objected. Caught by reading the generator's OUTPUT
+(`:22497`'s own method), fixed in the sentence and not in the tool. Detail at
+`:33799` §6. Taken with this header's own prescribed command against the bytes
+being committed, never by adding a delta to the figures above. **THE TWENTY-SEVENTH MEASUREMENT IS THE TWENTY-SIXTH'S
 RESULT REPEATED ON THE NEXT ROUND OF THE SAME PACKET — a T3 round that does not
 ship its packet, one Critical/High and four Low all fixed, plus a NEW PERMANENT
 GUARD wired into the root lint — AND IT COST FOUR LINES, all of them trigger
@@ -5221,7 +5240,8 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   UNCHANGED.** Low-2: the guard tested its operator verb against the WHOLE step,
   so one tap satisfied both folds on a card that draws two — now windowed at
   `NEAR = 80`, **measured off all 16 real (control, step) pairs** (widest genuine
-  distance 69; 25 rejected because it flags three CORRECT steps), and tightening
+  distance 69; 25 rejected because it flags ~~three~~ **FOUR** CORRECT steps —
+  **corrected by T3 round 4, `:33799`**), and tightening
   it immediately caught a third sheet at ~110. Low-1: a stale step reference the
   same commit fixed one file over. **THE GUARD IS 0 OF 2 ON THIS ROUND'S
   FINDINGS, verified by running it on the pre-fix bytes (exit 0)** — it proves a
@@ -5229,6 +5249,38 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   cannot see cross-step fold state. Both limits are in its header and in
   `OWED.md`; **neither is fixed.** No app source touched. **NEXT: T3 round 4,
   diff-only.**
+- **:33799** — 2026-09-04 — **T3 ROUND 4 (diff-only): ZERO Critical/High, THE
+  PACKET SHIPS — and the round's subject is that round 3's own tightening of the
+  fold guard is held by nothing, which its record then mis-stated twice.**
+  **Read before quoting a guard's own tightening as protected, before writing a
+  smoke ✅ for a surface the screen must FETCH first, before taking a review's
+  count of a figure's COPIES as complete, before recording a round's PROVE
+  figures against a tree that does not yet contain the round, and before writing
+  a trigger sentence whose clauses nest the word this generator splits on.**
+  Four Low, all fixed;
+  escape hatch NOT armed (round 3 had two Critical/High, this has none).
+  **Low-1: `NEAR = 100000` restores the pre-round-3 "verb anywhere in the step"
+  behaviour and the guard still exits 0 on every shipping sheet** — so the ROOT
+  lint stays green over the defect the window closed. **NOT vacuous: stubbing
+  `operates()` to `true` DOES go red**, because `ABSENT_BY_DESIGN` is shrink-only
+  — total disablement is caught, the window's VALUE is held by nothing
+  (`:18830`'s class). Own ⚪ `OWED.md` line, carrying all THREE of the guard's
+  limits, **moved out of the 🟡 line's prose because they would vanish the day it
+  ticks.** **Low-2: "25 flags three CORRECT steps" is FOUR** — the distance list
+  printed one paragraph above it already held four values over 25, so the prose
+  contradicted its own data, **and the fourth (`smoke-attendance.md::step 6`, 60)
+  is the canonical HONEST step the guard exists to PASS.** Corrected in **FIVE**
+  copies; **the review's map said four and missed `HANDOFF.md`** — `:23928`/
+  `:24559` a third time. **Low-3: round 3's PROVE figures were taken before its
+  own entry existed** and never re-taken, so `DECISIONS.md` disagreed with the
+  commit message and `HANDOFF.md`; the index half is `:32783` §3's halved
+  compound clause recurring in the round that cited it. **Low-4: two ✅ describe
+  the month before its read lands** — `gridStatus === 'loading'` disables every
+  day button, and after a reload today is a plain grey number until the fetch
+  returns; Low because the sentences are EARLY, not FALSE (`:5807` 1a). ⏳ cues
+  added, **plus the sibling sheet the review's map stopped short of**, covered in
+  its Setup rather than by editing a step whose ✅ is already dated. No app source
+  touched. **NEXT: Kd at a browser — a Low finding buys no further round.**
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.

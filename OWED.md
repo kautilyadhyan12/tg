@@ -276,7 +276,46 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       **Both limits are written into the file's own header rather than left to
       be rediscovered, and NEITHER IS FIXED** — closing them needs an instrument
       that reads a ✅ against the component, which is not this patch.
-      **NEXT: T3 round 4, diff-only.**
+      **A THIRD LIMIT WAS FOUND BY ROUND 4 AND HAS ITS OWN LINE DIRECTLY BELOW,
+      deliberately NOT recorded in here** — all three would vanish from this file
+      the day this line ticks, which is how the two above are currently held.
+      **ROUND 4 (2026-09-04, DECISIONS `:33799`) FOUND ZERO Critical/High, SO THE
+      PACKET SHIPS** (`:5348` rule 1) **AND THE T3 HALF OF THIS LINE IS
+      SATISFIED.** Four Low, all fixed in that round, none of which bought
+      another round. **THE LINE STILL DOES NOT TICK, and the reason is the only
+      one left: NONE OF THE FOUR SHEETS HAS BEEN RUN IN ITS CORRECTED FORM.**
+      Four rounds, three of them with a Critical/High, every one of those in
+      sheet prose and none in the app. **NEXT: Kd at a browser, not another
+      review round.**
+
+- [ ] ⚪ **`tools/check-smoke-folds.mjs` HAS THREE MEASURED LIMITS AND NOTHING
+      HOLDS ANY OF THEM** (2026-09-04, T3 round 4 — DECISIONS `:33799`; the first
+      two were found by round 3, `:33648` §4, and are moved here rather than left
+      inside the line above, which will tick).
+      **(1) NEW, AND IT IS THE GUARD'S OWN TIGHTENING GOING UNOBSERVED.** Round 3
+      windowed `OPERATED` to within `NEAR = 80` of the fold's own control.
+      **Measured: setting `NEAR = 100000` restores exactly the pre-round-3 "verb
+      anywhere in the step" behaviour and the guard still exits 0 on every
+      shipping sheet**, so the ROOT `lint` stays green over the defect that
+      window was added to close. **It is NOT vacuous, and the distinction is the
+      part to keep: stubbing `operates()` to return `true` DOES go red**, because
+      `ABSENT_BY_DESIGN` is shrink-only and `smoke-attendance.md::step 4` stops
+      violating. **Total disablement is caught; the window's VALUE is held by
+      nothing.** `:18830`'s class exactly — a guard in `tools/*.mjs` whose only
+      protection is a comment — and the comment is now in the file's header,
+      which is what `:32114` says a warning can never be.
+      **(2) and (3), unchanged from `:33648` §4 and still unfixed:** a false ✅
+      INSIDE a correctly-operated fold (the guard proves a step opens the fold,
+      never that the sentence under it is true), and cross-step fold state (a
+      per-step grep cannot see a step relying on a fold an EARLIER step shut).
+      **Measured 0 of 2 on round 3's own two Critical/High**, by running the
+      guard against those sheets' pre-fix bytes: exit 0.
+      **What closes (1):** a fixture for this file — there is no test harness
+      covering `tools/*.mjs` today, which is why round 3 could not close it under
+      a PATCH ruling and round 4 did not either. **What closes (2) and (3):** an
+      instrument that reads a ✅ against the component it describes. **Neither is
+      started, and the honest reading of a green run stays "no step introduces a
+      fold without naming it", never "every ✅ is true".**
 
 - [ ] 🟡 **`RUNBOOK/smoke-overview-numbers.md` IS STALE AND IS MARKED SO AT THE
       TOP** (2026-09-03). Two of its ✅ name things Kd removed the same day it

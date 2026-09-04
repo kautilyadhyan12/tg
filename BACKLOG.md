@@ -3779,11 +3779,13 @@ about to tag the next sheet finding Critical should read `:33648` §1 first.
       **`NEAR = 80` IS MEASURED, NOT PICKED**: all 16 real (control, step) pairs
       in `RUNBOOK/` scored for distance to their nearest operator verb — 2 · 2 ·
       3 · 4 · 5 · 6 · 6 · 7 · 7 · 8 · 18 · 21 · 37 · 49 · 60 · 69 — widest
-      genuine 69. **25 was considered and rejected on that data**: it flags three
-      CORRECT steps (one asserting both rows merely present, one operating the
-      calendar with the deliberately-excluded verbs "open"/"close", one asserting
-      legitimate absence), and a guard that cries wolf on correct steps is this
-      file's own hazard in reverse.
+      genuine 69. **25 was considered and rejected on that data**: it flags
+      ~~three~~ **FOUR** CORRECT steps (one asserting both rows merely present,
+      one operating the calendar with the deliberately-excluded verbs
+      "open"/"close", one asserting legitimate absence, **and
+      `smoke-attendance.md::step 6`, missed when this was written** —
+      **corrected by round 4, DECISIONS `:33799`**), and a guard that cries wolf
+      on correct steps is this file's own hazard in reverse.
       **Tightening it immediately caught a third sheet** — `smoke-gym-hours-
       fold.md` step 1 sat at ~110 and had been passing by borrowing a verb from
       elsewhere in the sentence. **Fixed by rewording the sheet, NOT by adding an
@@ -3791,3 +3793,84 @@ about to tag the next sheet finding Critical should read `:33648` §1 first.
       *"There is NO Monday-to-Sunday list until you tap that This week row"*
       reads better than what it replaced. Proven RED without the fix — the
       pre-fix guard on the pre-fix sheet exits 0, the fixed guard exits 1.
+
+## 2026-09-04 — the fold/greeting packet, T3 round 4, DIFF-ONLY (DECISIONS `:33799`)
+
+Reviews `e440b25`. **ZERO Critical/High ⇒ THE PACKET SHIPS** (`:5348` rule 1).
+**FOUR Low, all fixed in this round**; none bought another round, and there is no
+round 5. Kd approved the list before a byte moved (*"go"*). **Escape hatch NOT
+armed** — round 3 carried two Critical/High and this one carries none.
+
+**EVERY FINDING WAS REPRODUCED BEFORE IT WAS ACTED ON, and doing so corrected the
+review twice**: its copy-count for L-2 was four and is five, and its map for L-4
+stopped at one sheet when the sibling draws the same fold. `:23928`/`:24559` —
+a correction's MAP is a claim exactly like its figure.
+
+- [x] **L-1 · THE FOLD GUARD'S OWN TIGHTENING IS OBSERVED BY NOTHING** —
+      round 3 windowed `OPERATED` to within `NEAR = 80` of the fold's control.
+      **Measured: `NEAR = 100000` restores the pre-round-3 "verb anywhere in the
+      step" behaviour and `tools/check-smoke-folds.mjs` still exits 0 on every
+      shipping sheet**, so the ROOT `lint` stays green over the defect the window
+      was added to close. **NOT vacuous, and the distinction is the part to keep:
+      stubbing `operates()` to `return true` DOES go red** — `ABSENT_BY_DESIGN`
+      is shrink-only, so `smoke-attendance.md::step 4` stops violating and the
+      run fails on the stale exception. **Total disablement is caught; the
+      window's VALUE is held by nothing.** Round 3's rule-3 proof was real but
+      needed the PRE-FIX sheet bytes, and those are gone — **a regression test
+      that exists only while the defect does is not a guard.** `:18830`'s class.
+      **NOT FIXED IN THIS ROUND — it has become a DEFERRAL and therefore an
+      `OWED.md` line, not a BACKLOG entry**, per this file's own header: closing
+      it needs a fixture for `tools/*.mjs`, which no harness in this repo covers.
+      The ⚪ line carries all THREE of the guard's limits, **moved out of the 🟡
+      sheet line's prose because all three would vanish the day that line ticks.**
+
+- [x] **L-2 · "25 FLAGS THREE CORRECT STEPS" IS FOUR, AND THE DATA ONE LINE ABOVE
+      ALREADY SAID SO** — re-run at 25: **four** violations, not three. greeting
+      step 3 (37) · hours-fold step 4 (49) · **`smoke-attendance.md::step 6`
+      (60)** · calendar step 1 (69). The three named descriptions are all real;
+      the fourth was never named. **The distance list printed one paragraph above
+      the claim — `… 18 · 21 · 37 · 49 · 60 · 69` — contains four values over 25,
+      so the prose contradicted its own evidence and no new measurement was
+      needed to see it.** **The fourth strengthens the conclusion rather than
+      weakening it:** the other three are edge shapes, while step 6 —
+      *"a row reading **This week** … and no list of weekdays until you tap that
+      row"* — **is the canonical honest step the guard exists to PASS**, rejected
+      by 25 for nothing but sentence length.
+      **CORRECTED IN FIVE COPIES, AND THE REVIEW SAID FOUR**: it missed
+      `HANDOFF.md:40`. Re-grepped first, then struck in place (`:20587`) in
+      `tools/check-smoke-folds.mjs`, `DECISIONS.md`, `DECISIONS-INDEX.md`,
+      `BACKLOG.md` and `HANDOFF.md`.
+
+- [x] **L-3 · A ROUND'S PROVE FIGURES TAKEN BEFORE THE ROUND EXISTED** —
+      `:33648`'s Round log recorded `293 pointers, 1300 headings` and `993
+      triggers from 259 of 397 rulings`. On the shipping bytes: **`294 pointers
+      resolve (293 on a heading, 1 deliberate mid-entry), 1308 headings`** and
+      **`997 triggers from 260 of 398 rulings, 138 declaring none`**. Taken
+      before that round's own entry, index line and rebuilt trigger file were
+      added, and never re-taken — **so the commit message and `HANDOFF.md` carry
+      the true numbers while `DECISIONS.md` carries the pre-commit ones, and the
+      record disagreed with itself inside one commit.** The index half is
+      `:32783` §3 recurring in the round that cited it: `293` is the "on a
+      heading" half of a compound clause, so a chat grepping either half gets a
+      different answer. **Both corrected to the WHOLE clause.**
+
+- [x] **L-4 · TWO ✅ DESCRIBED THE MONTH BEFORE ITS READ HAD LANDED** — tapping
+      **Days you came** flips `everOpened`, which gates the history read; until
+      it returns `gridStatus` is `'loading'`, the grid draws at `opacity: 0.4`
+      and **every day button carries `disabled`**. So `smoke-attendance.md` step
+      10's *"Click today's flame"* clicks a disabled button, and **step 12 is
+      worse and independent** — after a reload `marked` is empty again, so today
+      is a plain grey number rather than a flame until the fetch lands.
+      **Stays Low under `:5807` 1a because nothing on screen is FALSE, it is
+      EARLY** — both become true within one request. What was missing is a cue to
+      wait, whose cost is `:24559`'s *"each would have made Kd stop, disbelieve a
+      working screen, and report a failure that was the sheet's"*. Both steps now
+      carry a ⏳ line.
+      **THE REVIEW'S MAP STOPPED AT ONE SHEET.** `smoke-my-gyms-calendar.md`
+      draws the same fold and its steps 3 and 7 look at and click flames; it is
+      covered by a note in that sheet's **Setup**, **not by editing a step**,
+      because steps 1–3 are recorded ✅ RUN AND PASSED at Kd's browser and
+      **editing a step's wording would silently re-date its evidence.**
+      Re-opening a fold costs no second wait (`everOpened` stays true), so only a
+      fresh page load is exposed — which is why steps 10 and 12 needed the cue
+      and step 11 did not.

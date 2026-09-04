@@ -39,6 +39,16 @@ current month, so **steps 8 and 11 need at least one visit in a PREVIOUS month**
 If you have none, say so and skip them rather than inventing rows — an untestable
 step is recorded as untestable, never as a pass.
 
+**⏳ THE FIRST TIME YOU OPEN THE MONTH ON ANY PAGE LOAD, IT ARRIVES DIMMED AND
+UNCLICKABLE FOR A MOMENT** while the app fetches your days — and until that
+lands there are **no flames on it at all**. Wait for it to brighten before
+judging any step, and before clicking a day. **That is loading, not a missing
+visit and not a dead control.** Folding it shut and opening it again costs no
+second wait; only a fresh page load does. Added by T3 round 4 (2026-09-04) after
+the same window was found un-flagged in `smoke-attendance.md` steps 10 and 12 —
+**it applies to every step below, which is why it is here and not in one of
+them**, and no step's wording or ✅ was touched to add it.
+
 ---
 
 ## Steps

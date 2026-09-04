@@ -1,6 +1,84 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 4 (DIFF-ONLY) — ZERO Critical/High, **THE PACKET SHIPS**
+      (`:5348` rule 1). FOUR Low, ALL FIXED. DECISIONS `:33799`.
+      **START HERE: THERE IS NO ROUND 5. A Low finding buys no round.** The
+      remaining gate on the 🟡 `OWED.md` line is **KD AT A BROWSER** — none of
+      the four sheets has been run in its corrected form.
+      Escape hatch NOT armed (round 3 had two C/H, this has none). **NO app
+      source touched**: `git diff --name-only apps packages` is empty. Two
+      `RUNBOOK/*.md`, one `tools/*.mjs`, `OWED.md` + the four record files.
+
+  1. **EVERY FINDING WAS REPRODUCED BEFORE IT WAS ACTED ON, AND THAT CORRECTED
+     THE REVIEW TWICE** (`:23928`, `:24559`): its copy-count for Low-2 was four
+     and is **five** (it missed `HANDOFF.md`), and its map for Low-4 stopped at
+     one sheet when the sibling draws the same fold. **A correction's MAP is a
+     claim exactly like its figure — third recorded instance.**
+  2. **Low-1 IS THE ROUND'S SUBJECT: ROUND 3'S TIGHTENING IS HELD BY NOTHING.**
+     `NEAR = 100000` restores the pre-round-3 "verb anywhere in the step"
+     behaviour and `check-smoke-folds.mjs` **still exits 0 on every shipping
+     sheet** — the ROOT lint stays green over the defect the window closed.
+     **NOT vacuous: stubbing `operates()` to `true` DOES go red**, because
+     `ABSENT_BY_DESIGN` is shrink-only. **Total disablement is caught; the
+     window's VALUE is not.** `:18830`'s class. NOT fixed — no harness covers
+     `tools/*.mjs` — so it is a DEFERRAL with an ⚪ `OWED.md` line.
+  3. **THAT LINE CARRIES ALL THREE OF THE GUARD'S LIMITS AND IS DELIBERATELY
+     NOT INSIDE THE 🟡 LINE.** The two from `:33648` §4 sat in the 🟡 line's
+     prose, so **all three would have vanished the day it ticks** — the failure
+     `OWED.md`'s own header exists to stop.
+  4. **Low-2 — "25 flags three CORRECT steps" is FOUR**, and the distance list
+     printed one paragraph above the claim already held four values over 25
+     (37 · 49 · 60 · 69), so **the prose contradicted its own data.** The
+     unnamed fourth, `smoke-attendance.md::step 6`, is **the canonical HONEST
+     step the guard exists to PASS** — rejected by 25 for sentence length alone.
+     Struck in place in all FIVE copies (`:20587`).
+  5. **Low-3 — round 3's PROVE figures were taken before its own entry existed**
+     and never re-taken, so `DECISIONS.md` disagreed with the commit message and
+     this file inside one commit. The index half is `:32783` §3's halved
+     compound clause, recurring in the round that cited it. **Both corrected to
+     the WHOLE clause. This round's own figures were taken LAST, on the bytes
+     committed.**
+  6. **Low-4 — two ✅ described the month before its read landed.** `everOpened`
+     gates the history read; until it returns `gridStatus` is `'loading'`, the
+     grid is `opacity: 0.4` and **every day button is `disabled`**. Step 12 is
+     independently worse: after a reload `marked` is empty, so today is a plain
+     grey number until the fetch lands. **Low, not `:5807` 1a — the sentences
+     are EARLY, not FALSE.** ⏳ cues added to steps 10 and 12, and the sibling
+     sheet covered in its **Setup** rather than by editing a step whose ✅ is
+     already dated at Kd's browser. **Re-opening a fold costs no second wait**,
+     so only a fresh page load is exposed.
+
+PROVE: four ROOT guards green, taken LAST on the committed bytes — harnesses
+       **26 scripts parse (23 .mjs + 3 .sh)**, index **295 pointers resolve
+       (294 on a heading, 1 deliberate mid-entry), 1316 headings**, triggers
+       **up to date — 1002 triggers from 261 of 399 rulings, 138 declaring
+       none** (rebuilt), smoke-folds **OK, 1 documented exception**. Whole
+       compound clauses (`:32783` §3). `node --check tools/check-smoke-folds.mjs`
+       parses. `DECISIONS-INDEX.md`'s header re-measured with its own command:
+       always-read **2,640 = 1,181 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **§6 of the entry is a defect in MY OWN trigger sentence, found by
+       reading the generator's output**: two clauses nested the word "before",
+       which the generator splits on, so it harvested `it is true` and `that
+       round's own entry exists` into the always-read pile. Rewritten; the tool
+       was NOT changed (R1.1). Guard re-run at 25 / 80 / 100000 and with `operates()` stubbed;
+       the 16 distances reproduced value-for-value off the shipping `RUNBOOK/`.
+       **Rule 3 N/A — no Critical/High. Rule 4: one liar, and it is Low-1**,
+       listed not fixed, with its `OWED.md` line. No sweep, no test run
+       (`:5857` 4a — no server file moved).
+
+OPEN:  **THE 🟡 LINE DOES NOT TICK. Four sheets are UNRUN in their corrected
+       form and that is now the ONLY thing left on it.** Four rounds, three with
+       a Critical/High, **every one of those in sheet prose and not one in the
+       app.**
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) —
+       Kd's. `GymHoursNote.jsx` shows in `git status` for the CRLF reason and is
+       deliberately NOT staged (`:25567`); `git diff` reports no content change.
+       Still open and untouched: the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`, and `:33334` §3's `--check` flag card.
+```
+
+```
 TASK: T3 ROUND 3 (DIFF-ONLY) — TWO Critical/High, THE PACKET DOES NOT SHIP, ALL
       FOUR FINDINGS FIXED, AND KD RULED **PATCH** ON AN ARMED ESCAPE HATCH.
       DECISIONS `:33648`.
@@ -37,7 +115,8 @@ TASK: T3 ROUND 3 (DIFF-ONLY) — TWO Critical/High, THE PACKET DOES NOT SHIP, AL
   6. **Low-2 — `OPERATED` was tested against the WHOLE step**, so one tap
      satisfied both folds on a card that draws two. Windowed at `NEAR = 80`,
      **measured off all 16 real (control, step) pairs** (widest genuine 69; 25
-     rejected — it flags three CORRECT steps). Tightening it immediately caught
+     rejected — it flags ~~three~~ **FOUR** CORRECT steps, **corrected by round
+     4, `:33799`**). Tightening it immediately caught
      a third sheet at ~110, fixed by rewording rather than a new exception.
 
 PROVE: four ROOT guards green — harnesses **26 scripts (23 .mjs + 3 .sh)**,

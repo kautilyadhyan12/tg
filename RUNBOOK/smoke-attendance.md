@@ -126,6 +126,10 @@ being open 24 hours.
 away until you do. The month opens and **today is a bright orange flame with the
 date inside it in white**. **There is no time written on the square** — the
 times sit one tap deeper, which is the next line.
+⏳ **Wait for the month to brighten before you click anything in it.** The first
+time you open it, it arrives dimmed while the app fetches your days, and **every
+square is unclickable until that finishes**. It takes a moment. Clicking during
+it does nothing, and that is loading, not a fault.
 ✅ **Click today's flame.** A panel opens over the screen, headed with today's
 date, listing **one arrival time** on the **12-hour** clock.
 ✅ **Close that panel** — the **✕** at its corner, or click the dark area outside
@@ -139,8 +143,12 @@ once. Close the panel again.
 
 **12 · Reload the page.** Then **tap "Days you came" open again** — a reload
 folds it back, and that is correct, not a fault.
-✅ Today is still a flame. **Click it:** the same single time is still there. It
-was really saved.
+⏳ **Wait for the month to brighten again**, and this time it matters more than
+in step 10: a reload wipes what the app was holding in memory, so **until the
+fetch lands there is no flame on today at all** — just a plain grey number. That
+is the month still loading, not a lost visit.
+✅ Once it has brightened: today is still a flame. **Click it:** the same single
+time is still there. It was really saved.
 
 **13 · Your timetable survived.** Owner door → **link D** → **When we're open**
 → choose **Set opening times**.

@@ -38,6 +38,19 @@
  * closing note): a clean run means "no sheet declared the problem in the
  * vocabulary below", never "no sheet has it".**
  *
+ * **AND NOTHING IN THIS REPO OBSERVES `NEAR`'s VALUE — T3 round 4, measured.**
+ * Setting `NEAR = 100000` restores exactly the pre-round-3 "verb anywhere in the
+ * step" behaviour and this guard still exits 0 on every shipping sheet, so the
+ * root `lint` stays green over the defect the window was added to close. **The
+ * distinction is worth keeping, because it is not vacuous: stubbing `operates()`
+ * to return `true` DOES go red** — `ABSENT_BY_DESIGN`'s shrink-only check
+ * catches total disablement, because `smoke-attendance.md::step 4` stops
+ * violating and the run fails on the stale exception. **It is the window's VALUE
+ * alone that nothing holds.** `:18830`'s class — a guard in `tools/*.mjs` whose
+ * only protection is a comment — and this paragraph IS that comment. Own
+ * `OWED.md` line; closing it needs a fixture for this file, which no test
+ * harness in the repo currently covers.
+ *
  * **AND ITS REACH WAS MEASURED, NOT ASSUMED — TWICE, AND THE SECOND
  * MEASUREMENT IS THE HONEST ONE.**
  *
@@ -111,10 +124,23 @@ const OPERATED =
  *  pre-fix violation this tightening caught sat at ~110.
  *
  *  **A TIGHTER WINDOW WAS CONSIDERED AND REJECTED ON THAT DATA.** 25 would flag
- *  three steps that are CORRECT — one asserting both rows are merely present,
- *  one operating the calendar with "open"/"close" (deliberately excluded verbs,
- *  see `OPERATED`), one asserting legitimate absence. A guard that cries wolf on
- *  correct steps is the failure this file's header warns about, in reverse. */
+ *  ~~three steps~~ **FOUR steps** that are CORRECT — one asserting both rows are
+ *  merely present (`smoke-dashboard-gym-greeting.md::step 3`, 37), one operating
+ *  the calendar with "open"/"close" (deliberately excluded verbs, see
+ *  `OPERATED` — `smoke-gym-hours-fold.md::step 4`, 49), one asserting legitimate
+ *  absence (`smoke-my-gyms-calendar.md::step 1`, 69), **and the one this
+ *  sentence missed: `smoke-attendance.md::step 6`, at 60.** A guard that cries
+ *  wolf on correct steps is the failure this file's header warns about, in
+ *  reverse.
+ *
+ *  **THE FOURTH IS THE DAMNING ONE AND IT WAS SITTING IN THE LIST ABOVE.** The
+ *  distances printed two paragraphs up already contain FOUR values over 25 — 37,
+ *  49, 60, 69 — so the prose contradicted its own data. And step 6 is not an
+ *  edge case: *"a row reading **This week** … and no list of weekdays until you
+ *  tap that row"* is the canonical HONEST step this guard exists to PASS — it
+ *  names the control and says to tap it, and 25 rejects it purely for being a
+ *  long sentence. **Corrected T3 round 4, 2026-09-04, by re-running the guard at
+ *  25 rather than by re-reading the sentence.** */
 const NEAR = 80;
 
 /** **T3 ROUND 3, Low-2 — `OPERATED` USED TO BE TESTED AGAINST THE WHOLE STEP.**
