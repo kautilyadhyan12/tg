@@ -170,7 +170,15 @@ In the MEMBER window, reload the **Dashboard**.
 > **The welcome line names a gym only when you belong to exactly ONE**, which a
 > fresh account running this sheet does; on an account in two gyms it is absent
 > by design and this step's ✅ is then just "the waiting card is gone".
-> **Not re-run in this form.**
+> ~~**Not re-run in this form.**~~ **DISCHARGED 2026-09-04 ON KD'S DECLARATION,
+> still not re-run in this form:** *"these tests have been perfomred 100 times
+> till now lets just fucking wrap this card and write all tests passed"*, given
+> after being handed `smoke-attendance.md` in full and asking for the card
+> wrapped. **He was NOT shown this step in that session** (`:27415`'s shape).
+> **This step was also outside every "four sheets" count written since round 3**
+> (`:34011`). **And the welcome line remains unseen by anybody**: Kd is in two
+> gyms, so it is correctly absent on his account, and its only observers are
+> mutant `P6` and one render case (`:33265` §2).
 
 ---
 

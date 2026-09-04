@@ -15,7 +15,21 @@ running locally, an account that is a **member** of a gym, and that gym's
 opening times already set for several weekdays (any account that passed
 `smoke-opening-hours.md` steps 1–13 has this).
 
-**Status: UNRUN AS A SHEET, and only the fold's *presence* has been looked at.**
+**Status: PASSED — ON KD'S DECLARATION, NOT ON A WATCHED RUN (2026-09-04).**
+*"these tests have been perfomred 100 times till now lets just fucking wrap this
+card and write all tests passed"*, given after being handed
+`smoke-attendance.md` in full and asking for the card wrapped. **He is the
+operator and the gate is his** (`:27415`, `:32498`, `:33265`). **He was NOT shown
+this sheet's five steps in that session**, which is recorded so nobody reads the
+discharge as coverage.
+**WHAT IS THEREFORE STILL HELD BY TESTS AND NOT BY A BROWSER: step 3, the
+CLOSING tap.** That is the whole subject of `:31295` — a dropdown that arrived
+open, could not be closed, and whose two comments both said it worked — and its
+only observers are mutant `C212` and the `gymHours.render.test.jsx` case
+asserting the second tap. **A control seen is not a control working**
+(`:33265` §3), and nobody has yet tapped this one shut.
+
+~~**UNRUN AS A SHEET, and only the fold's *presence* has been looked at.**~~
 Kd declared the dashboard-greeting sheet passed on 2026-09-04, and its step 3
 names the **This week** fold as being on the `My Gyms` card — so the fold has
 been SEEN. **Nobody has tapped it shut.** That is step 3 below, it is the whole

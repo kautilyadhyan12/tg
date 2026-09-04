@@ -34044,3 +34044,102 @@ file or run the command, never infer it from an earlier task's description."*
 The command is one line and I ran it only when Kd asked for something the figure
 had to be true for. **A round whose §2 and §3 are both about inherited figures
 going unchecked propagated one in its own Round log.**
+
+## 2026-09-04 — KD DISCHARGES THE FOLD/GREETING PACKET'S SMOKE GATE BY DECLARATION, THE 🟡 LINE TICKS, AND FIVE SHEETS CLOSE WITHOUT ANYBODY HAVING RUN THEM
+
+**Read before citing this packet's smoke as evidence that anybody has seen these
+screens, before quoting the 🟡 fold/greeting line's tick as a browser result, and
+before assuming a discharged gate means the sheets underneath it were run.**
+
+Handed `smoke-attendance.md`'s 24 steps pasted in full, he answered *"these tests
+have been perfomred 100 times till now lets just fucking wrap this card and write
+all tests passed"*. **The gate is discharged. The claim is attributed.**
+`:27415`/`:32498`/`:33265`'s shape, **fourth occurrence**, and the fourth time the
+same two sentences are true together: **he is the operator and the gate is his to
+open**, and a chat may not write *"the smoke ran and passed"* about an event it
+did not watch (`:23535`).
+
+### 1 · WHAT WAS WRITTEN, AND WHY IT IS NOT THE LITERAL WORDS HE ASKED FOR
+
+Every one of the five sheets now carries **PASSED — ON KD'S DECLARATION, NOT ON A
+WATCHED RUN**, with his sentence quoted on each, plus the line **he was NOT shown
+this sheet in that session** — because he was shown exactly one of the five.
+`OWED.md`'s 🟡 line **TICKS**, carrying both halves of the truth in one sentence:
+the line ticks on his declaration, and not one corrected sheet was ever run.
+
+**The concern was raised once and he reaffirmed it, so it is his decision and the
+chat proceeds** — CLAUDE.md's own rule, and the reason there is no argument in
+this entry, only a record.
+
+### 2 · WHAT NOBODY HAS EVER SEEN, LISTED SO NO LATER CHAT INFERS OTHERWISE
+
+Three things are held by tests alone. **None has been rendered in front of a
+human, and each is the kind of defect a suite is structurally unable to see**
+(`:27415` §2 made this argument with two defects Kd himself found at a screen —
+a row wrapping into nine fragments, and a picker that would not hold a
+half-finished time; jsdom has no layout).
+
+1. **THE WEEK FOLD'S CLOSING TAP** — `smoke-gym-hours-fold.md` step 3. This is
+   `:31295`'s entire subject: a dropdown that arrived open, **could not be
+   closed, and whose two comments both said it worked.** Observers: mutant
+   `C212` and one `gymHours.render.test.jsx` case. **A control seen is not a
+   control working** (`:33265` §3), and this one has been seen and never
+   operated.
+2. **THE `Welcome to <gym>` LINE** — the feature Kd asked for. He is a member of
+   TWO gyms, so it is correctly ABSENT on his own account and he cannot discharge
+   it by looking. Observers: mutant `P6` and the one-gym render case
+   (`:33265` §2).
+3. **THE ⏳ LOADING WAITS AND THE CORRECTED CALENDAR STEP 5** — both written
+   2026-09-04 (`:33799` §4, `:33648` §3) and never followed by anyone. Step 5's
+   defect was that step 4 folds the month away and step 5 read the month name out
+   of it.
+
+**AND TWO SURFACES WERE OUTSIDE EVERY COUNT WRITTEN SINCE ROUND 3** (`:34011`):
+`smoke-opening-hours.md` steps 22/22b/23 and `smoke-join-door.md` step 12. **A
+reader of "the four sheets" would not have known they were waiting** — they are
+discharged here with everything else, and they are the two most likely to be
+forgotten again.
+
+### 3 · "100 TIMES" IS PART TRUE, AND THE PART THAT IS NOT IS EXACTLY WHERE THE RISK SITS
+
+**Measured against the record rather than disputed.** Parts A and B of
+`smoke-attendance.md` DID pass 8/8 on 2026-09-02, and parts C and D the same day
+at his browser — **on the bytes of `8eacc54`.** Since then, on this packet's own
+commits: the day's shape section and the odd-arrival line were removed, the
+button learned to REFUSE outside opening hours, the email arrived beside the
+name, the initials went, **and steps 6, 10, 11 and 12 were rewritten on
+2026-09-04 because the week and the calendar both fold now.**
+
+**So the steps he has run many times are the ones least likely to be wrong, and
+the four that changed yesterday are the ones nobody has run once.** That is not
+an argument against his call — it is the shape of what the call costs, written
+down where the next chat will find it.
+
+### 4 · WHAT THIS DOES NOT DISCHARGE
+
+**The QR path (phone app), staff marking somebody present, a second gym's owner,
+and anything on a phone** — none of it is any of these sheets' and none of it is
+covered here. `smoke-overview-numbers.md` remains STALE with its own 🟡 line and
+is untouched by this.
+
+### Round log
+
+**No code, no test, no `src` file — records and sheet status blocks only.**
+Changed: `RUNBOOK/smoke-attendance.md` · `RUNBOOK/smoke-gym-hours-fold.md` ·
+`RUNBOOK/smoke-my-gyms-calendar.md` · `RUNBOOK/smoke-opening-hours.md` ·
+`RUNBOOK/smoke-join-door.md` · `OWED.md` (the 🟡 line ticked) · `DECISIONS.md` ·
+`DECISIONS-INDEX.md` · `DECISIONS-TRIGGERS.md` · `HANDOFF.md`.
+
+**PROVE, taken last on the committed bytes** (`:33799` §3 — *"last" moves every
+time the entry grows*): all four ROOT guards green — `check-harnesses` **26
+scripts parse (23 .mjs + 3 .sh)** · `check-decisions-index` **296 pointers
+resolve (295 on a heading, 1 deliberate mid-entry), 1323 headings** ·
+`check-decisions-triggers` **up to date — 1006 triggers from 263 of 401 rulings,
+138 declaring none** (rebuilt) · `check-smoke-folds` **OK, 1 documented
+exception**. Whole compound clauses (`:32783` §3). **`DECISIONS-INDEX.md`'s
+header re-measured with the command it names** (`:32783` §4): always-read
+**2,644 = 1,185 + 1,385 + 74**, **§1 and §2 unmoved**, the whole +3 being trigger
+phrases.
+
+**`git diff --name-only apps packages` is empty.** No sweep and no test run
+(`:5857` rule 4a — no server file moved, and no source file of any kind).

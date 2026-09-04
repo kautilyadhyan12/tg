@@ -31,8 +31,16 @@ that card lives** (Settings → Gym draws it too).
 
 **The screen changed twice and this sheet was stale, not wrong** — the code is
 what he ruled, and correcting the steps is what stops a later run reporting a
-failure that is not one. **None of the three has been re-run since either edit**;
-the fold's own sheet is `smoke-gym-hours-fold.md`.
+failure that is not one. ~~**None of the three has been re-run since either
+edit**~~ — **DISCHARGED 2026-09-04 ON KD'S DECLARATION, still not re-run:**
+*"these tests have been perfomred 100 times till now lets just fucking wrap this
+card and write all tests passed"*, given after being handed
+`smoke-attendance.md` in full and asking for the card wrapped. **He was NOT shown
+these three steps in that session** (`:27415`'s shape — the gate is his, the
+claim is attributed). The fold's own sheet is `smoke-gym-hours-fold.md`.
+**AND THESE THREE WERE OUTSIDE EVERY "four sheets" COUNT WRITTEN SINCE ROUND 3**
+(`:34011`), so a reader of those counts would not have known they were waiting at
+all.
 
 **Status: 26 steps PASSED ON KD'S DECLARATION, 2026-09-01, NOT ON A WATCHED RUN
 — and STEP 22b PASSED ON AN ACTUAL RUN the same day, watched by Kd at the

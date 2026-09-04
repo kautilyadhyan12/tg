@@ -1,6 +1,66 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FOLD/GREETING PACKET IS CLOSED. Kd DISCHARGED THE SMOKE GATE BY
+      DECLARATION and the 🟡 `OWED.md` line TICKS. DECISIONS `:34048`.
+      **START HERE: NOTHING IS OUTSTANDING ON THIS PACKET.** T3 ended at round 4
+      with ZERO Critical/High (`:33799`); the smoke gate is discharged, NOT run.
+      **NO app source was touched by any of the four rounds or by this
+      discharge** — `git diff --name-only apps packages` is empty throughout.
+
+  1. **THE WORDS, AND THE FOURTH TIME THIS HAS HAPPENED.** Handed
+     `smoke-attendance.md`'s 24 steps pasted in full, he answered *"these tests
+     have been perfomred 100 times till now lets just fucking wrap this card and
+     write all tests passed"*. **`:27415`/`:32498`/`:33265`'s shape exactly** —
+     the gate is his to open; a chat may not write *"the smoke ran and passed"*
+     about an event it did not watch (`:23535`). Every sheet says **PASSED — ON
+     KD'S DECLARATION, NOT ON A WATCHED RUN**, and each adds **he was NOT shown
+     this sheet**, because he was shown ONE of five.
+  2. **DO NOT CITE ANY OF THESE FIVE SHEETS AS BROWSER EVIDENCE.**
+     `smoke-attendance.md` · `smoke-gym-hours-fold.md` ·
+     `smoke-my-gyms-calendar.md` · `smoke-opening-hours.md` 22/22b/23 ·
+     `smoke-join-door.md` step 12. The 🟡 line's tick is a DECLARATION, and its
+     own text says so in the same sentence.
+  3. **THREE THINGS NOBODY HAS EVER SEEN RENDER, held by tests alone** (`:34048`
+     §2): **the week fold's CLOSING tap** — `:31295`'s whole subject, a dropdown
+     that arrived open, could not be closed, and whose two comments both claimed
+     it worked; observers `C212` + one render case · **the `Welcome to <gym>`
+     line** — absent on Kd's own two-gym account, so he CANNOT discharge it by
+     looking; observers `P6` + one render case · **the ⏳ loading waits and the
+     corrected calendar step 5**, both written 2026-09-04 and never followed.
+  4. **"100 TIMES" MEASURED RATHER THAN DISPUTED** (`:34048` §3): parts A/B DID
+     pass 8/8 on 2026-09-02 and C/D the same day — **on `8eacc54`'s bytes**.
+     Since then the button learned to REFUSE, the email arrived beside the name,
+     the initials went, and **steps 6, 10, 11 and 12 were rewritten**. **The
+     steps run many times are the least likely to be wrong; the four that
+     changed yesterday are the ones nobody has run once.**
+  5. **TWO SURFACES HAD BEEN OUTSIDE EVERY COUNT SINCE ROUND 3** (`:34011`):
+     `smoke-opening-hours.md` 22/22b/23 and `smoke-join-door.md` step 12. "The
+     four sheets" was round 3's LOCAL count and rounds 3 AND 4 carried it as if
+     it described the packet. Derived, not inherited — V4.
+
+PROVE: four ROOT guards green, taken LAST on the committed bytes — harnesses
+       **26 scripts parse (23 .mjs + 3 .sh)**, index **296 pointers resolve
+       (295 on a heading, 1 deliberate mid-entry), 1323 headings**, triggers
+       **up to date — 1006 triggers from 263 of 401 rulings, 138 declaring
+       none** (rebuilt), smoke-folds **OK, 1 documented exception**. Whole
+       compound clauses (`:32783` §3). Header re-measured with its own command:
+       always-read **2,644 = 1,185 + 1,385 + 74**, §1 and §2 UNMOVED.
+       No sweep, no test run: records and sheet status blocks only.
+
+OPEN:  **NOT discharged by this and named so nobody assumes it was:** the QR
+       path (phone app) · staff marking somebody present · a second gym's owner ·
+       anything on a phone. `RUNBOOK/smoke-overview-numbers.md` stays STALE with
+       its own 🟡 line, untouched.
+       Still open: the ⚪ line carrying `tools/check-smoke-folds.mjs`'s THREE
+       measured limits (`:33799`), the ⚪ bare-`--` scoping footgun in
+       `apps/api/scripts/test-local.mjs`, and `:33334` §3's `--check` flag card.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) —
+       Kd's. `GymHoursNote.jsx` shows in `git status` for the CRLF reason and is
+       deliberately NOT staged (`:25567`).
+```
+
+```
 TASK: T3 ROUND 4 (DIFF-ONLY) — ZERO Critical/High, **THE PACKET SHIPS**
       (`:5348` rule 1). FOUR Low, ALL FIXED. DECISIONS `:33799`.
       **START HERE: THERE IS NO ROUND 5. A Low finding buys no round.** The

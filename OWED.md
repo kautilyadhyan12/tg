@@ -183,8 +183,19 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       forwarded arguments or refuse it by name. Not fixed on the card that found
       it (R1.1) — it is nowhere near the calendar packet's diff.
 
-- [ ] 🟡 **THE DASHBOARD'S GYM GREETING AND THE HOURS FOLD ARE BUILT AND
-      NEITHER HAS BEEN SEEN IN A BROWSER OR REVIEWED** (2026-09-04, DECISIONS
+- [x] 🟡 ~~**THE DASHBOARD'S GYM GREETING AND THE HOURS FOLD ARE BUILT AND
+      NEITHER HAS BEEN SEEN IN A BROWSER OR REVIEWED**~~ **— DONE 2026-09-04,
+      BOTH GATES CLOSED.** T3 by four rounds ending in ZERO Critical/High
+      (`:33799`); the smoke gate **DISCHARGED ON KD'S DECLARATION, NOT ON A
+      WATCHED RUN** (`:34048`) — *"these tests have been perfomred 100 times till
+      now lets just fucking wrap this card and write all tests passed"*.
+      **HE IS THE OPERATOR AND THE GATE IS HIS** (`:27415`, `:32498`, `:33265`,
+      and this is the fourth time). **WHAT IS NOT CLAIMED: that any step was
+      observed** — he was handed `smoke-attendance.md`'s 24 steps in full and
+      shown none of the other four sheets. Named on each sheet's own status
+      block, and the three things nobody has ever seen render are listed at
+      `:34048` §2 rather than left to be assumed away.
+      (2026-09-04, DECISIONS
       `:32929` and `:33091`). Kd took the *"You're a member of xyz"* card off the
       dashboard at his own browser — *"its really looking bad in the dashboard
       and completely destroying the user experience it should have been in my
@@ -282,8 +293,11 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       **ROUND 4 (2026-09-04, DECISIONS `:33799`) FOUND ZERO Critical/High, SO THE
       PACKET SHIPS** (`:5348` rule 1) **AND THE T3 HALF OF THIS LINE IS
       SATISFIED.** Four Low, all fixed in that round, none of which bought
-      another round. **THE LINE STILL DOES NOT TICK, and the reason is the only
-      one left: NOT ONE CORRECTED SHEET HAS BEEN RUN.**
+      another round. ~~**THE LINE STILL DOES NOT TICK, and the reason is the only
+      one left: NOT ONE CORRECTED SHEET HAS BEEN RUN.**~~ **— THE LINE TICKS ON
+      KD'S DECLARATION, 2026-09-04 (`:34048`), AND NOT ONE CORRECTED SHEET WAS
+      EVER RUN. Both halves of that sentence are true and are kept together on
+      purpose.**
       Four rounds, three of them with a Critical/High, every one of those in
       sheet prose and none in the app.
       **AND THE COUNT IS SIX, NOT "the four sheets" ROUNDS 3 AND 4 BOTH WROTE**

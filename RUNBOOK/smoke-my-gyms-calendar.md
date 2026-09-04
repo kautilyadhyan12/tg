@@ -2,8 +2,18 @@
 
 **Card:** DECISIONS `:32197` (web) on top of `:31921` (server), as corrected at
 Kd's browser the same day (`:32395`).
-**Status: 3 OBSERVED · 9 DECLARED · 1 STRUCK.** The `OWED.md` calendar line does
-not tick until **T3** has run, which is now the only gate left on it.
+**Status: 3 OBSERVED · 9 DECLARED · 1 STRUCK — AND THE PACKET'S GATE IS NOW
+DISCHARGED ON KD'S DECLARATION (2026-09-04).** *"these tests have been perfomred
+100 times till now lets just fucking wrap this card and write all tests
+passed"*, given after being handed `smoke-attendance.md` in full and asking for
+the card wrapped. He was NOT shown this sheet in that session.
+**THE CORRECTED STEP 5 HAS STILL NEVER BEEN RUN BY ANYBODY** — T3 round 3 found
+that step 4 folds the month away and step 5 then read the month name out of it,
+so every step from 5 down inherited a shut fold; the fix re-opens it and the
+📣 declarations below predate that wording. **T3 is no longer a gate — round 4
+found zero Critical/High (`:33799`) — so nothing mechanical is outstanding here;
+what is outstanding is that a human has looked at steps 4–13 exactly once, in
+their pre-correction form.**
 
 **⚠️ THIS SHEET DESCRIBES THE CALENDAR AS IT IS AFTER KD'S CORRECTION — folded
 away behind a calendar icon, opened by a click.** Its first version described a

@@ -238,9 +238,24 @@ unobserved for two more commits before anybody noticed.
 
 ## RESULT
 
-**NOT YET RUN.** This sheet was rewritten 2026-09-03 against the screens as they
-stand after `a1c5005`, `dba7cbe`, `00c2699` and the rulings at `DECISIONS.md`
-`:30867`, `:31008`, `:31098`, `:31295`, `:31352` and `:31508`.
+**PASSED — ON KD'S DECLARATION, NOT ON A WATCHED RUN (2026-09-04).** Handed all
+24 steps in full, he answered *"these tests have been perfomred 100 times till
+now lets just fucking wrap this card and write all tests passed"*. **The gate is
+his to open and it is open**; what is NOT claimed is that any step above was
+observed. `:27415`/`:32498`/`:33265`'s shape, fourth occurrence.
+
+**HIS "100 TIMES" IS PART TRUE AND THE PART THAT IS NOT IS WHY THIS PARAGRAPH
+EXISTS.** Parts A and B did pass 8/8 on 2026-09-02 and parts C and D the same
+day at his browser — **on the bytes of `8eacc54`.** Since then the day's shape
+section and the odd-arrival line were removed, the button learned to refuse, the
+email arrived beside the name, the initials went, **and steps 6, 10, 11 and 12
+were REWRITTEN on 2026-09-04** because the week and the calendar both fold now.
+**So the steps most likely to be wrong are the four nobody has ever run**, and
+the ⏳ waits in 10 and 12 were added the same day and have never been followed.
+
+~~**NOT YET RUN.**~~ This sheet was rewritten 2026-09-03 against the screens as
+they stand after `a1c5005`, `dba7cbe`, `00c2699` and the rulings at
+`DECISIONS.md` `:30867`, `:31008`, `:31098`, `:31295`, `:31352` and `:31508`.
 
 **WHAT THE PREVIOUS VERSION'S PASS COVERED, kept because it is real and must not
 be re-claimed by this sheet** (`:29410`, `:29870`): parts A and B passed 8/8 on

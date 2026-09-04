@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,182 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,185 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,15 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,641 lines, MEASURED 2026-09-04 and not estimated**
-(1,182 + 1,385 + 74). **THE TWENTY-EIGHTH MEASUREMENT IS THE ROUND THAT SHIPPED
+**ALWAYS-READ TOTAL: 2,644 lines, MEASURED 2026-09-04 and not estimated**
+(1,185 + 1,385 + 74). **THE TWENTY-NINTH MEASUREMENT IS A SMOKE GATE DISCHARGED
+BY DECLARATION — five sheets closed, a 🟡 line ticked — AND IT COST THREE LINES,
+all trigger phrases, §1 AND §2 UNMOVED**: `:27415` and `:33265` are the same
+event and both sit in §1B, so this went there too. **Seventh measurement across
+two afternoons, at +5, +6, +3, +5, +4, +10 and +3** — a declaration is the
+cheapest thing this record carries and the most expensive thing it hides, which
+is why `:34048` §2 lists what nobody has seen rather than letting the tick speak
+for it. **THE TWENTY-EIGHTH MEASUREMENT IS THE ROUND THAT SHIPPED
 THIS PACKET — zero Critical/High, four Low all fixed — AND IT COST TEN LINES,
 EVERY ONE OF THEM A TRIGGER PHRASE, §1 AND §2 UNMOVED AT 1,385 AND 74**: its
 record is a ROUND record and went to §1B, where `:24813` sends it. **Sixth
@@ -5297,6 +5304,31 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   inherited figures going unchecked.** One thing observed and deliberately NOT
   asserted: `:33334`'s heading says *"four sheets"* while its §1 lists **three**
   files — round 1's record to settle, not this round's.
+- **:34048** — 2026-09-04 — **KD DISCHARGES THE FOLD/GREETING PACKET'S SMOKE
+  GATE BY DECLARATION, THE 🟡 LINE TICKS, AND FIVE SHEETS CLOSE WITHOUT ANYBODY
+  HAVING RUN THEM.** **Read before citing this packet's smoke as evidence that
+  anybody has seen these screens, before quoting the 🟡 fold/greeting line's tick
+  as a browser result, and before assuming a discharged gate means the sheets
+  underneath it were run.** Handed `smoke-attendance.md`'s 24 steps in full he
+  answered *"these tests have been perfomred 100 times till now lets just
+  fucking wrap this card and write all tests passed"*. **`:27415`/`:32498`/
+  `:33265`'s shape, FOURTH occurrence** — the gate is his to open, and a chat may
+  not write *"the smoke ran and passed"* about an event it did not watch
+  (`:23535`). Every sheet says **PASSED — ON KD'S DECLARATION, NOT ON A WATCHED
+  RUN**, and each adds **he was NOT shown this sheet**, because he was shown one
+  of five. **THREE THINGS NOBODY HAS EVER SEEN RENDER, held by tests alone:** the
+  week fold's CLOSING tap (`:31295`'s whole subject — a dropdown that arrived
+  open and could not be closed; observers `C212` + one render case) · the
+  `Welcome to <gym>` line (absent on his own two-gym account, so he cannot
+  discharge it by looking; observers `P6` + one render case) · the ⏳ loading
+  waits and the corrected calendar step 5, both written the same day. **His "100
+  times" measured rather than disputed:** parts A/B DID pass 8/8 on 2026-09-02
+  and C/D the same day — **on `8eacc54`'s bytes**, since when the button learned
+  to refuse, the email arrived, the initials went and steps 6/10/11/12 were
+  rewritten. **The steps run many times are the ones least likely to be wrong;
+  the four that changed yesterday are the ones nobody has run once.** Not
+  discharged and named: the QR path, staff marking, a second gym's owner, any
+  phone.
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
