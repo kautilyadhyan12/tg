@@ -175,6 +175,18 @@ const HOURS_SUITE = 'test/orgs.hours.test.ts';
  *  never lands) — so a slow database mutant is exactly what these rows are for. */
 const ATTENDANCE_SUITE = 'test/orgs.attendance.test.ts';
 
+/** "ON A ROLL" AND THE CHEER (Kd :29961 ruling 4, and his 2026-09-04 answer
+ *  *"both weeks and days run"*). Its own suite for the same reason the two above
+ *  have theirs: every guarantee here needs attendance spread across WEEKS, which
+ *  no route can create — the mark endpoint only ever writes today — so the
+ *  fixtures insert dated rows directly.
+ *
+ *  It sits in :5857 rule 4a's expensive columns twice: OWNERSHIP (whose visits
+ *  count, whose cheer lands on whose card, who may press the button) and NUMBERS
+ *  A USER SEES (two streak figures and a visit count, side by side, on the
+ *  screen :30624 already caught arranging true numbers into a false sentence). */
+const CHEERS_SUITE = 'test/orgs.cheers.test.ts';
+
 /** The gamification module is not `modules/orgs`, and one row aims there
  *  deliberately: Kd ruled on 2026-09-01 that going to the gym keeps a STREAK
  *  alive and did NOT rule that it pays XP (:27900 §3), and until that card the
@@ -3101,6 +3113,114 @@ const MUTANTS = [
     expect: "exactly one page of people",
     from: '      ORDER BY first_marked_at, a.user_id\n      LIMIT ${limit + 1}',
     to: '      ORDER BY first_marked_at, a.user_id\n      LIMIT ${limit}',
+  },
+  {
+    id: 'O261',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE ON-A-ROLL LIST STOPS ASKING WHICH GYM. Every visit in the database feeds every gym panel, so a member who trains hard at gym B is shown to gym A owner as one of THEIR regulars - and cheered for it. It is :26469 §1.3 one forbidden thing (a gym is never shown what a member did away from it) arriving through the panel built to celebrate loyalty. INVISIBLE on a one-gym fixture, which is why the test builds two gyms and one member of both (:28221 §3b)",
+    expect: "counts only this gym's visits, for a member of two gyms",
+    from: '      WHERE a.gym_id = ${input.gymId} AND a.day > b.floor_day AND a.day <= b.today',
+    to: '      WHERE a.day > b.floor_day AND a.day <= b.today',
+  },
+  {
+    id: 'O262',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "REMOVED MEMBERS COME BACK. Nothing deletes attendance, so a person the gym took off its roster keeps their streak and stays on the owner home screen - a ghost the Members list does not contain, with a live Cheer button beside it. The population is the ROSTER and not the attendance table, and this is the predicate that says so",
+    expect: "leaves out somebody the gym has removed",
+    from: '      WHERE m.gym_id = ${input.gymId} AND m.removed_at IS NULL AND m.complimentary = false',
+    to: '      WHERE m.gym_id = ${input.gymId} AND m.complimentary = false',
+  },
+  {
+    id: 'O263',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE TWO FIGURES BECOME ONE, SERVED TWICE. Kd ruled BOTH units on 2026-09-04 (both weeks and days run) precisely because they fail in opposite directions, and a row reading 1 week running beside 1 day in a row, for somebody who has come every week for a month, is the screen contradicting what the gym knows. It is :30399 §6 C155 shape exactly - a defect only a fixture whose two numbers DISAGREE can see, which is why the once-a-week member sits beside the three-days-running one",
+    expect: "reports weeks AND days running",
+    from: '           ws.weeks_running,\n           coalesce(ds.days_running, 0) AS days_running,',
+    to: '           coalesce(ds.days_running, 0) AS weeks_running,\n           coalesce(ds.days_running, 0) AS days_running,',
+  },
+  {
+    id: 'O264',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "A DEAD STREAK COUNTS AS ALIVE. The window widens from one week to four, so somebody who stopped coming a month ago is listed as on a roll and cheered for a habit they have abandoned - the app telling a gym something false about its own members, and telling the member something false about themselves. A test that only checks the people who SHOULD be listed passes under this perfectly",
+    expect: "leaves out members whose streak has died",
+    from: '      HAVING max(wg.wk) >= (SELECT this_week FROM b) - 7',
+    to: '      HAVING max(wg.wk) >= (SELECT this_week FROM b) - 28',
+  },
+  {
+    id: 'O265',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE FLOOR GOES AND ONE VISIT IS A STREAK. Everybody who came this week appears under a heading that says on a roll, which makes the panel a list of recent visitors wearing a loyalty label - and the word Kd used was continous. ON_A_ROLL_MIN_WEEKS is a chat call with its cost stated, so this mutant is what stops it being quietly relaxed to nothing",
+    expect: "members with only one week",
+    from: '    WHERE ws.weeks_running >= ${ON_A_ROLL_MIN_WEEKS}::int',
+    to: '    WHERE ws.weeks_running >= 1::int',
+  },
+  {
+    id: 'O266',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE CAP STRETCHES FROM SEVEN DAYS TO THIRTY. Kd ruled one per member per week and Part 3 §4.1 specifies rate-limit 1/member/7d for the same button, so this makes the product refuse something he ruled ALLOWED - the failure direction a test that only proves the refusal cannot see (:7104 PG1). The cheer at seven days and one minute is the observer",
+    expect: "allows one just outside",
+    from: "        AND created_at > now() - interval '7 days'",
+    to: "        AND created_at > now() - interval '30 days'",
+  },
+  {
+    id: 'O267',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE CAP STOPS ASKING WHICH GYM, so one gym cheering a member spends every OTHER gym allowance for that person. A member of two gyms gets one message a week between them and the second gym owner is told they have already done it, having never pressed anything. Sibling of O261 on the WRITE side - the same missing predicate, a different query, and a guard covering one of two readers is not a guard (:28452 §1)",
+    expect: "puts one gym's cheer on that gym's card",
+    from: "      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n        AND created_at > now() - interval '7 days'",
+    to: "      WHERE user_id = ${input.userId}\n        AND created_at > now() - interval '7 days'",
+  },
+  {
+    id: 'O268',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "A REMOVED MEMBER CAN STILL BE CHEERED. The list is one guard and the door is another; with this gone, a panel somebody had open before a removal keeps working, and the app writes an encouraging message to a person the gym has just taken off its roster. O262 is the same failure on the READ side, and the two are mutated apart because they are two queries",
+    expect: "leaves out somebody the gym has removed",
+    from: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL`;',
+    to: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;',
+  },
+  {
+    id: 'O269',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "ONE GYM CHEER APPEARS ON EVERY GYM CARD. A member of two gyms opens My Gyms and both cards say they were cheered, for a gym that never sent anything - the member own screen inventing a relationship. Sibling of O270: each names the whole predicate and deletes ITS OWN half, because a pair re-anchored by pattern rather than by meaning quietly becomes one mutant (:28221 §4)",
+    expect: "puts one gym's cheer on that gym's card",
+    from: '      WHERE c.gym_id = g.id AND c.user_id = ${userId}',
+    to: '      WHERE c.user_id = ${userId}',
+  },
+  {
+    id: 'O270',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "EVERY MEMBER OF A GYM SEES A CHEER MEANT FOR SOMEBODY ELSE - a message addressed to one person shown to the whole roster, which is the privacy half of the same line O269 attacks from the other side. Its observer is the OTHER member of the same gym, who was cheered by nobody and must see null",
+    expect: "puts one gym's cheer on that gym's card",
+    from: '      WHERE c.gym_id = g.id AND c.user_id = ${userId}',
+    to: '      WHERE c.gym_id = g.id',
+  },
+  {
+    id: 'O271',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE VISIT COUNT STOPS DESCRIBING THE STREAK and covers the whole lookback window instead, so a row reads 4 weeks running beside 11 visits where five of those visits were last winter. Both figures are true and the SENTENCE is false, which is :30624 on this very screen one card ago - two correct numbers arranged into a wrong one. Only a fixture with a visit OUTSIDE the streak can see it, which is what the 60-day visit is for",
+    expect: "reports weeks AND days running",
+    from: '               AND v.day >= ws.streak_from AND v.day <= (SELECT today FROM b)) AS visits,',
+    to: '               AND v.day > (SELECT floor_day FROM b) AND v.day <= (SELECT today FROM b)) AS visits,',
+  },
+  {
+    id: 'O272',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE ISLAND ARITHMETIC GOES AND EVERY DAY BECOMES ITS OWN RUN, so daysRunning is 1 for everybody who has ever attended - the number Kd asked for, permanently stuck at its floor and never obviously broken. day minus row_number() is the whole mechanism and it looks like an incantation, which is exactly the kind of line a later reader tidies",
+    expect: "reports weeks AND days running",
+    from: '             day - (row_number() OVER (PARTITION BY user_id ORDER BY day))::int AS grp',
+    to: '             day AS grp',
   },
 ];
 

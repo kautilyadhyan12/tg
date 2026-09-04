@@ -20,8 +20,11 @@ import {
   ATTENDANCE_VISITS_PER_PERSON,
   gymAttendanceHoursStatusSchema,
   gymAttendanceMethodSchema,
+  gymCheerPresetSchema,
   gymClockFormatSchema,
   gymHoursModeSchema,
+  ON_A_ROLL_LIMIT,
+  ON_A_ROLL_MIN_WEEKS,
   OVERVIEW_MONTH_DAYS,
   OVERVIEW_WEEKS,
   orgApplicationStatusSchema,
@@ -34,6 +37,7 @@ import {
 import type {
   GymAttendanceHoursStatus,
   GymAttendanceMethod,
+  GymCheerPreset,
   GymClockFormat,
   GymHoursMode,
   OrgApplicationStatus,
@@ -106,6 +110,19 @@ export interface MyOrgRow extends OrgRow {
    *  expired — :21580's seat-meter precedent, the same instrument for the same
    *  hazard. */
   consoleReadOnly: boolean;
+  /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
+   *  ruling 4 reaching the member, and the whole of its delivery.
+   *
+   *  **UNLIKE THE FOUR FIELDS ABOVE, THIS ONE IS FOR A PLAIN MEMBER** and the
+   *  service does NOT null it for a non-staff caller. Those four are facts about
+   *  the GYM that §2.4 keeps from a member; this is a message addressed TO them,
+   *  and withholding it would hide the feature from the only person it is for.
+   *
+   *  **It carries the preset and the instant, never the sender.**
+   *  `gym_cheers.sent_by_user_id` is stored and deliberately not read here —
+   *  §2.4's mirror, a member learns their gym cheered them and not who was on
+   *  the desk. */
+  latestCheer: { preset: string; sentAt: Date } | null;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -393,6 +410,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_seat_cap: number | null;
       seats_used: number;
       owner_trial_used: boolean;
+      cheer_preset: string | null;
+      cheer_sent_at: Date | null;
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
@@ -466,11 +485,37 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              WHERE ts.owner_type = 'gym'
                AND tg.owner_user_id = g.owner_user_id
                AND ts.trial_ends_at IS NOT NULL
-           ) AS owner_trial_used
+           ) AS owner_trial_used,
+           ch.preset AS cheer_preset,
+           ch.created_at AS cheer_sent_at
     FROM gyms g
     LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
     LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
                            AND m.removed_at IS NULL
+    -- THE NEWEST CHEER THIS GYM HAS SENT THE CALLER (:29961 ruling 4).
+    --
+    -- NO BACKTICKS IN THIS BLOCK EITHER — one ends the template literal and the
+    -- rest of the query becomes parse errors. Three recorded slips in this one
+    -- template already (:12227, the seat meter, the trial-used EXISTS).
+    --
+    -- A LATERAL AND NOT A SECOND ROUND TRIP: the member's card needs this beside
+    -- the gym it belongs to, and a separate read would have to be re-joined in
+    -- JavaScript by gym id. Correlated per gym, the outer query is capped at
+    -- MY_ORGS_LIMIT, and gym_cheers_user_created_idx leads with user_id,
+    -- which is this predicate's own leading column.
+    --
+    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY. Dropping
+    -- user_id hands somebody another member's cheer; dropping gym_id puts
+    -- one gym's cheer on a different gym's card, for a gym that never sent it.
+    -- Neither is visible on a fixture with one gym or one member, which is why
+    -- the test builds two of each (:28221 §3b).
+    LEFT JOIN LATERAL (
+      SELECT c.preset, c.created_at
+      FROM gym_cheers c
+      WHERE c.gym_id = g.id AND c.user_id = ${userId}
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    ) ch ON true
     -- §4.1's live set, the same three statuses seatCapFor, startGymTrial and
     -- getCandidates treat as granting — so past_due still counts during v1
     -- §10's grace. subs_one_live_uq already permits only one such row per gym;
@@ -514,6 +559,15 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     // schema defaults it to null for an old api, so a definite `true` is the
     // only thing that ever greys a control out.
     consoleReadOnly: r.sub_status === null,
+    // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
+    // preset without an instant is impossible — and writing it as two
+    // independent `=== null` tests would let a future edit produce a cheer with
+    // no time on it, which the member's screen renders as "cheered" with nothing
+    // to say when.
+    latestCheer:
+      r.cheer_preset === null || r.cheer_sent_at === null
+        ? null
+        : { preset: r.cheer_preset, sentAt: r.cheer_sent_at },
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
@@ -4656,4 +4710,235 @@ export async function getOrgOverview(
       visitors: Number(w.visitors),
     })),
   };
+}
+
+export interface GymRegularRow {
+  userId: string;
+  displayName: string;
+  weeksRunning: number;
+  daysRunning: number;
+  visits: number;
+  cheerableAt: Date | null;
+}
+
+/** HOW FAR BACK THE STREAK SEARCH LOOKS.
+ *
+ *  **A BOUND IS NOT OPTIONAL ON A TABLE THAT ONLY GROWS** (:10596's class), and
+ *  this one is generous on purpose: at 400 days a member who has come every
+ *  week for a year still reads the full 52, so the cap is invisible to any real
+ *  gym and the scan stays bounded for a gym with years of history.
+ *
+ *  **THE FAILURE DIRECTION IS TRUNCATION, NEVER A WRONG STREAK.** Islands are
+ *  built from the days INSIDE the window, so a streak longer than the window
+ *  reports the window rather than a number that is too big — understating a
+ *  regular's loyalty, which is the safe way for this figure to be wrong. */
+const REGULARS_LOOKBACK_DAYS = 400;
+
+/** THE MEMBERS WHO KEEP TURNING UP — Kd's ruling of 2026-09-04, *"both weeks and
+ *  days run"*, over his own :29961 ruling 4.
+ *
+ *  **EVERY FIGURE COMES FROM `gym_attendance` AT THIS GYM AND NOWHERE ELSE.**
+ *  :26469 §1.3 is his ruling that a gym is never shown what a member did away
+ *  from it. **`getStreakDays` in `modules/gamification` is the obvious function
+ *  to reach for and is wrong TWICE OVER**: it unions workouts from every gym and
+ *  from home, AND it spends Part 7 §3.2 freezes, so it reports days on which
+ *  nobody attended anything. A gym-facing *"5 days in a row"* for a member who
+ *  came three times is :5807 on the screen an owner makes decisions from.
+ *  **This module must never import from `gamification/`**, and the freeze test
+ *  in `orgs.cheers.test.ts` is what holds that after today.
+ *
+ *  **SO A MEMBER MAY SEE A LONGER STREAK IN THEIR OWN APP THAN THEIR GYM SHOWS,
+ *  AND THAT IS CORRECT** — "did I keep my streak alive" and "how often is this
+ *  person actually here" are different questions. The deliberate divergence is
+ *  :27900 §4's shape, commented here as that entry requires rather than only in
+ *  the record.
+ *
+ *  **BOTH STREAKS ARE ALIVE ON A GAP OF ≤ 1, WHICH IS BORROWED AND NOT
+ *  INVENTED.** `streak.ts`'s `reconcile` treats a gap of one as "nothing missed
+ *  yet — today is still open", so a member who came yesterday and not yet today
+ *  keeps their streak. Using the same rule means these two figures differ from
+ *  the member's own by freezes ALONE, rather than by a second arbitrary
+ *  convention nobody can explain.
+ *
+ *  **THE ISLAND ARITHMETIC, because it is the part that looks like magic.** For
+ *  each member, `day - row_number()` is CONSTANT across a run of consecutive
+ *  days and changes at every gap — so grouping by it gives one row per unbroken
+ *  run, and `count(*)` is that run's length. The weekly half is the same trick
+ *  with Mondays and a stride of 7. The run that matters is the one ending at
+ *  today or yesterday, and there can be at most ONE of those per member: two
+ *  islands ending inside that window would be adjacent and would therefore be
+ *  one island.
+ *
+ *  **`visits` COVERS THE WEEK-STREAK'S OWN SPAN AND NOT A FIXED WINDOW.**
+ *  "5 weeks running · 11 visits" has to describe one stretch of time or it is
+ *  :30624's defect exactly — two true figures arranged into a false sentence, on
+ *  this very screen, one card ago. */
+export async function getGymRegulars(
+  sql: SqlOrTx,
+  input: { gymId: string; limit?: number | undefined },
+): Promise<GymRegularRow[] | null> {
+  const gymRows = await sql<{ today: string }[]>`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const limit = Math.min(input.limit ?? ON_A_ROLL_LIMIT, ON_A_ROLL_LIMIT);
+
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      weeks_running: string;
+      days_running: string;
+      visits: string;
+      cheerable_at: Date | null;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             date_trunc('week', ${gym.today}::date)::date AS this_week,
+             ${gym.today}::date - ${REGULARS_LOOKBACK_DAYS}::int AS floor_day
+    ),
+    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S. Restricting to live,
+    -- non-complimentary members is what stops this panel naming somebody the
+    -- Members screen does not list — a removed member's visits are still in the
+    -- table and would otherwise keep a ghost on the owner's home screen. The
+    -- same population month.visitors counts, so the two panes agree.
+    mem AS (
+      SELECT m.user_id FROM gym_members m
+      WHERE m.gym_id = ${input.gymId} AND m.removed_at IS NULL AND m.complimentary = false
+    ),
+    d AS (
+      SELECT DISTINCT a.user_id, a.day
+      FROM gym_attendance a JOIN mem ON mem.user_id = a.user_id CROSS JOIN b
+      WHERE a.gym_id = ${input.gymId} AND a.day > b.floor_day AND a.day <= b.today
+    ),
+    -- DAY ISLANDS. day minus row_number() is constant inside a consecutive run.
+    dg AS (
+      SELECT user_id, day,
+             day - (row_number() OVER (PARTITION BY user_id ORDER BY day))::int AS grp
+      FROM d
+    ),
+    day_streak AS (
+      SELECT dg.user_id, count(*)::int AS days_running
+      FROM dg
+      GROUP BY dg.user_id, dg.grp
+      HAVING max(dg.day) >= (SELECT today FROM b) - 1
+    ),
+    -- WEEK ISLANDS, the same trick with a stride of 7 over Mondays.
+    -- date_trunc(week) is Monday in Postgres, which is the calendar the
+    -- 8-week chart above is already bucketed by — a second answer to "which
+    -- Monday" computed in JavaScript is how two panes on one screen disagree.
+    w AS (
+      SELECT DISTINCT user_id, date_trunc('week', day)::date AS wk FROM d
+    ),
+    wg AS (
+      SELECT user_id, wk,
+             wk - ((row_number() OVER (PARTITION BY user_id ORDER BY wk)) * 7)::int AS grp
+      FROM w
+    ),
+    week_streak AS (
+      SELECT wg.user_id, count(*)::int AS weeks_running, min(wg.wk) AS streak_from
+      FROM wg
+      GROUP BY wg.user_id, wg.grp
+      HAVING max(wg.wk) >= (SELECT this_week FROM b) - 7
+    )
+    SELECT ws.user_id,
+           u.display_name,
+           ws.weeks_running,
+           coalesce(ds.days_running, 0) AS days_running,
+           -- COUNTED OVER THE STREAK'S OWN SPAN, so the two numbers on the row
+           -- describe one stretch of time. Bounded by the same window d is.
+           (SELECT count(*) FROM gym_attendance v
+             WHERE v.gym_id = ${input.gymId} AND v.user_id = ws.user_id
+               AND v.day >= ws.streak_from AND v.day <= (SELECT today FROM b)) AS visits,
+           -- WHEN THIS GYM MAY CHEER THEM AGAIN — the server's answer to the
+           -- server's own rule, so two open consoles cannot disagree. NULL means
+           -- the window is open now.
+           (SELECT c.created_at + interval '7 days'
+              FROM gym_cheers c
+             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id
+               AND c.created_at > now() - interval '7 days'
+             ORDER BY c.created_at DESC LIMIT 1) AS cheerable_at
+    FROM week_streak ws
+    JOIN users u ON u.id = ws.user_id
+    LEFT JOIN day_streak ds ON ds.user_id = ws.user_id
+    WHERE ws.weeks_running >= ${ON_A_ROLL_MIN_WEEKS}::int
+    ORDER BY ws.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
+             u.display_name ASC, ws.user_id ASC
+    LIMIT ${limit}`;
+
+  return rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    weeksRunning: Number(r.weeks_running),
+    daysRunning: Number(r.days_running),
+    visits: Number(r.visits),
+    cheerableAt: r.cheerable_at,
+  }));
+}
+
+export type SendCheerOutcome =
+  | { kind: "sent"; preset: GymCheerPreset; sentAt: Date }
+  | { kind: "not_found" }
+  | { kind: "too_soon"; cheerableAt: Date };
+
+/** ONE TAP — Kd's :29961 ruling 4.
+ *
+ *  **THE CAP IS CHECKED HERE, UNDER THE GYM LOCK, AND NOT BY A CONSTRAINT.**
+ *  Kd's *"one per member per week"* and Part 3 §4.1's `rate-limit 1/member/7d`
+ *  are both a ROLLING seven days, which no UNIQUE or CHECK can express (the
+ *  migration says so at length, including the `EXCLUDE USING gist` route that
+ *  would and the extension it would cost). So this is a check-then-act, and it
+ *  is safe for the reason the seat claim is: `lockOrgRow` serialises it, so two
+ *  members of staff pressing at once cannot both pass the check.
+ *
+ *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
+ *  staff sit at one desk, and the button is on the screen they all land on.
+ *
+ *  **THE RECIPIENT MUST BE A LIVE MEMBER OF THIS GYM AND THAT IS THE WHOLE
+ *  CONDITION** (:27992 §2 — the app never asks whether a member has paid the
+ *  gym; `members.remove` is the gym's remedy for anyone else). A stranger's uuid
+ *  answers `not_found` rather than a sentence distinguishing "no such person"
+ *  from "not your member" (R3.2). */
+export async function sendGymCheer(
+  sql: Sql,
+  input: { gymId: string; userId: string; sentByUserId: string; preset: GymCheerPreset },
+): Promise<SendCheerOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const member = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM gym_members
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL`;
+    if (member.length === 0) return { kind: "not_found" };
+
+    // THE ROLLING WINDOW, READ INSIDE THE LOCK. `>` and not `>=`: a cheer sent
+    // exactly seven days ago has served its week, and the boundary is the one
+    // direction a test can only see with a fixture standing on it.
+    const recent = await tx<{ cheerable_at: Date }[]>`
+      SELECT created_at + interval '7 days' AS cheerable_at
+      FROM gym_cheers
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND created_at > now() - interval '7 days'
+      ORDER BY created_at DESC LIMIT 1`;
+    const blocked = recent[0];
+    if (blocked !== undefined) return { kind: "too_soon", cheerableAt: blocked.cheerable_at };
+
+    const inserted = await tx<{ preset: string; created_at: Date }[]>`
+      INSERT INTO gym_cheers (gym_id, user_id, sent_by_user_id, preset)
+      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
+      RETURNING preset, created_at`;
+    const row = inserted[0];
+    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
+    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
+    if (row === undefined) throw new Error("cheer vanished inside its own transaction");
+
+    return {
+      kind: "sent",
+      preset: gymCheerPresetSchema.parse(row.preset),
+      sentAt: row.created_at,
+    };
+  });
 }

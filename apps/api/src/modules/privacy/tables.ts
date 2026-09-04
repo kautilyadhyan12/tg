@@ -177,9 +177,9 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // list Kd is asked to RULE on has to be complete, or the ruling is partial:
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
-//   gym_join_applications · gym_attendance · gym_closures · api_cost_events ·
-//   usage_daily · trace_samples · gyms.owner_user_id · subscriptions.owner_id ·
-//   exercise_definitions.published_by
+//   gym_join_applications · gym_attendance · gym_cheers · gym_closures ·
+//   api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
+//   subscriptions.owner_id · exercise_definitions.published_by
 //
 // `gym_closures.created_by_user_id` JOINED THIS LIST 2026-09-02, FOUND BY THE
 // AUTOMATED CHECK BELOW ON THE DAY IT WAS WRITTEN — which is the argument for
@@ -211,6 +211,18 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // RULE IT WITH THE OTHER TWO — and note it is the one whose Day-0 half is NOT
 // handled, since nothing closes or cancels an attendance the way a membership
 // and an application are closed.
+//
+// `gym_cheers` JOINED THIS LIST 2026-09-04, ON THE DAY THE TABLE WAS CREATED
+// AND BY THE CARD THAT CREATED IT — which is the first time that has happened
+// here, and the whole point of the automated walk below. It carries TWO links to
+// `users`: the member cheered and the staff member who pressed the button. The
+// SECOND is the one worth naming, because a name-and-purpose scan slides past
+// it — `sent_by_user_id` records WHICH PERSON sent an encouraging message to
+// which member on which date, so an erasure that removed only the recipient's
+// rows would leave the sender's record of them intact.
+// Same footing as the three above, same open question, RULE IT WITH THEM. Its
+// Day-0 half is NOT handled, like `gym_attendance`'s: nothing closes or cancels
+// a cheer the way a membership and an application are closed.
 //
 // THE LAST TWO WERE MISSED at first review and added after T3 F4. The
 // enumeration method is why, and it is worth stating so the next person
@@ -260,6 +272,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_staff",
   "gym_join_applications",
   "gym_attendance",
+  "gym_cheers",
   "gym_closures",
   "api_cost_events",
   "usage_daily",

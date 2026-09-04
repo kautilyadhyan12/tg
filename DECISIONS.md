@@ -34236,3 +34236,206 @@ documented exception**. Header re-measured with its own command: always-read
 paragraph below the one being corrected, so the sheet would have asserted both
 that he had and that he had not. Struck in place rather than deleted (`:20587`,
 `:7298` — a sentence that outlives the condition that raised it).
+
+## 2026-09-04 — "ON A ROLL" AND THE CHEER, SERVER HALF: a gym can tell who keeps turning up and send them one tap of encouragement — and a field I added to the response was invisible because the guard that protects old clients also hides a missing line
+
+**Read before adding any reader or writer of `gym_cheers`, before adding a
+SEVENTEENTH write door to the orgs module, before computing any streak on a
+gym-facing surface, before reaching for `getStreakDays` or `replayActivityDays`
+anywhere a GYM can see, before writing any rolling-window cap, before adding a
+field to `/v1/orgs/mine` (the repo half is not the response — §4), and before
+writing a backtick inside a `sql` template literal.**
+
+Builds `CARD-gym-overview-people.md` §4a — slice 1 of the people-lists card,
+which Kd chose over the three other panels. He approved migration `0021` as SQL
+(T5/R4.4) before anything else was written.
+
+### 1 · WHAT SHIPS, AND THE ONE THING THAT DOES NOT
+
+Migration `0021_gym_cheers` — the table, its four-preset CHECK, two indexes, all
+three FKs `ON DELETE RESTRICT`. `POST /v1/orgs/:gymId/members/:userId/cheer`,
+the **SIXTEENTH** write door (`CONSOLE_WRITE_COUNT` 15 → 16, raised WITH its list
+entry, never ahead of it — `:26812` §3). `onARoll` on the existing
+`GET /v1/orgs/:gymId/overview`. `latestCheer` on `GET /v1/orgs/mine`. The
+contracts once, in `@app/shared`.
+
+**NO SCREEN EXISTS. The web half (§4b) is unbuilt**, so no owner can press
+anything and no member can see a cheer. **No browser smoke was run and none was
+offered** — there is nothing to click, and saying so is `:26012`'s shape rather
+than inventing a step. **T3 is UNRUN.** The `OWED.md` line does not tick.
+
+### 2 · KD RULED BOTH UNITS, AND HIS ANSWER BEAT THE RECOMMENDATION
+
+Three arms were put to him with weeks recommended — consecutive WEEKS · consecutive
+DAYS · most visits in 30 days. **He took a fourth: *"both weeks and days run"*.**
+
+**THE REASON IT IS BETTER IS THAT THE TWO FAIL IN OPPOSITE DIRECTIONS**, which
+the recommendation had half-stated as its own cost and not followed through:
+weeks alone cannot tell a once-a-week member from a daily one; days alone is
+empty at almost every gym, because almost nobody trains daily. Together one row
+says *"steady for months"* and *"here right now"*.
+
+**IT COST TWO THINGS AND BOTH ARE BUILT**: `daysRunning` is drawn only at 2 or
+more (a row reading *"5 weeks running · 1 day in a row"* is `:30624`'s recorded
+defect on this exact screen — two true figures arranged into a false sentence),
+and `visits` is counted over the WEEK-STREAK'S OWN SPAN so the row describes one
+stretch of time rather than three windows side by side.
+
+### 3 · THE FINDING THAT OUTLIVES THIS CARD: THE MEMBER'S OWN STREAK IS WRONG HERE TWICE OVER
+
+`getStreakDays` is the obvious function to reach for and would have been wrong in
+two independent ways at once:
+
+1. **It unions workouts from every gym and from home** — `:26469` §1.3's one
+   forbidden thing, a gym being shown what a member did away from it.
+2. **`replayActivityDays` SPENDS PART 7 §3.2 FREEZES.** `reconcile` advances
+   `lastActivityDate` across missed days, so a member's own app can legitimately
+   show a streak they did not physically attend. **A gym-facing *"5 days in a
+   row"* for somebody who came three times is `:5807` on the screen an owner
+   makes decisions from.**
+
+**SO THE MEMBER MAY SEE A LONGER STREAK IN THEIR OWN APP THAN THEIR GYM SHOWS,
+AND THAT IS CORRECT** — two different questions. The divergence is `:27900` §4's
+shape and is commented where the query is written, not only here.
+
+**WHAT HOLDS IT AFTER TODAY IS TWO INSTRUMENTS, because one was not enough.** A
+behavioural test asserts the gap is not bridged while a seeded `streaks` row says
+`current: 4` — but that test only proves TODAY's answer. **A source guard asserts
+`modules/orgs/repo.ts` imports nothing from `gamification/`, and it runs OUTSIDE
+the `DATABASE_URL` gate deliberately**, because a guard that goes quiet on a
+machine with no Postgres is `:5199`'s class.
+
+### 4 · MY OWN PROVE FOUND THREE FAULTS, AND THE MIDDLE ONE IS THE PART TO KEEP
+
+The first suite run was **10 failed / 3 passed**. None was findable by reading.
+
+**(a) `b.today` IN A `HAVING` WITHOUT A `GROUP BY`.** Both island CTEs
+`CROSS JOIN`ed the one-row `b` and then tested `b.today` / `b.this_week` in
+`HAVING`, which Postgres refuses (42803). A plain 500 on every read, caught the
+first time anything ran. Both became scalar sub-selects over `b`, which is what
+they always meant.
+
+**(b) THE FIELD WAS IN THE REPO, IN THE SCHEMA, AND NOT IN THE RESPONSE — AND
+`.default(null)` IS WHAT MADE THAT SILENT.** `latestCheer` was read by the
+lateral, typed on `MyOrgRow`, and declared in `myOrgSchema`; **`listMyOrgs`'s
+mapping never mentioned it.** The Zod default filled `null` in, the response
+parsed cleanly, `tsc` was happy, and every member's card said they had never been
+cheered.
+
+**THE DEFENCE AND THE DEFECT ARE THE SAME LINE, WHICH IS WHY THIS IS WORTH A
+TRIGGER.** `.default(null)` exists because a REQUIRED field destroys the member's
+whole gym card during any web-newer-than-api window — `:12660` wrote that down
+for `formerOrgs` and `:31222` is the day somebody added a required field four
+hours after citing `:12660`. **The very thing that protects an old client also
+hides a missing line in a new one**, and there is no arrangement of those two
+that gets both. **STANDING: a field on a repo row is not a field on a response.
+The mapping is a third place, and on a schema with a default nothing will tell
+you.** What told me was a test asserting the member's SCREEN, not the query.
+
+**(c) THE ERROR BODY'S KEY IS `error`, NOT `code`.** Four of my assertions read
+`.code`; `app.ts`'s handler sends `{ error, message, requestId }`. My tests were
+wrong and the code was right — worth recording only because three of those four
+assertions were the ones proving Kd's cap and the tenancy refusal, so they would
+have passed on any status code with any body.
+
+### 5 · `ON DELETE RESTRICT` BIT IMMEDIATELY, AND THE BITE WAS THE FK WORKING
+
+`orgs.routes.test.ts` went 147 passed / FILE FAILED: its teardown deletes gyms,
+and the cheer rows its new `consoleWrites` entry creates blocked them with a
+23503. **That is not a defect — it is the constraint doing its job**, since the
+only path in this product that hard-deletes a gym is a test teardown. Its cleanup
+gained the three deletes, by BOTH actor keys, on the attendance suite's own
+recorded reasoning (`:10726` Low-2).
+
+**And it is incidental EVIDENCE that the door really fires in that suite**: the
+rows exist only because the list's positive control — a gym on a live plan is NOT
+refused — actually writes one.
+
+### 6 · CALLS MADE FOR KD, EACH WITH ITS COST, EACH REVERSIBLE IN ONE LINE
+
+The habit `:27992` §1 and `:28055` §1 both earned: a chat's call, flagged with
+its cost at the gate, produced a Kd ruling in one line — once reversing it, once
+ratifying it.
+
+1. **THE CAP IS A CHECK UNDER `lockOrgRow`, NOT A CONSTRAINT.** Kd's *"one per
+   member per week"* and Part 3 §4.1's `rate-limit 1/member/7d` are both a
+   ROLLING seven days, which no UNIQUE or CHECK can express. `:27992`'s *"put the
+   ruling in a constraint"* applies where a constraint CAN say it; **saying so is
+   better than a calendar-week UNIQUE, which is expressible and enforces a
+   DIFFERENT rule while looking like this one** — a Sunday cheer and a Monday
+   cheer, one day apart, both allowed. (`EXCLUDE USING gist` over a `tstzrange`
+   would express it and needs `btree_gist`, an extension nobody has asked for —
+   R1.4. Recorded as considered, not missed.)
+2. **THE GATE IS `members.read`, NOT A TENTH PRIVILEGE.** Part 3 §2.2 grants
+   *Send "we miss you" nudge* to all three roles — exactly the set holding
+   `members.read` — so no new vocabulary is needed to match the spec. **Cost: an
+   owner cannot stop one staffer cheering without also taking their roster.**
+   Nobody has asked to, and minting `members.cheer` is a MIGRATION in this repo
+   (`:28107`) — DDL CHECK, backfill, role templates, tick box, two "newest"
+   fixtures.
+3. **`ON_A_ROLL_MIN_WEEKS = 2`**, because a streak of one is not a streak — the
+   meaning of the word rather than an invented number. **Cost: a gym in its first
+   fortnight sees an empty panel**, and the empty state has to say why.
+4. **This file is the people-lists card SLICED**, rather than a new filename, so
+   `OWED.md`'s tracked name stays true.
+
+### 7 · THE SPEC ALREADY HAD HALF OF THIS, WHICH IS WORTH MORE THAN IT SOUNDS
+
+`03-part3-org-console.md:280` specifies the at-risk list's one-tap nudge with
+**`rate-limit 1/member/7d`** — **Kd's *"one per member per week"* is the spec's
+own number, arrived at independently**, not a figure a chat picked (R0.2). `:207`
+names the endpoint shape `POST /members/:uid/nudge`; §2.2's matrix grants it to
+all three roles.
+
+**So the cheer and the spec's at-risk nudge are ONE MECHANISM pointed opposite
+ways** — same store, same cap, same one tap, different sentence and different
+list. **The at-risk panel later adds a query and a preset, not a subsystem**, and
+its `OWED.md` line says so now.
+
+### 8 · THE BACKTICK, FOR THE FOURTH RECORDED TIME, IN THE FILE THAT WARNS ABOUT IT TWICE
+
+Both new queries carried backticked identifiers inside their `sql` template
+comments (`` `gym_cheers_user_created_idx` ``, `` `month.visitors` ``,
+`` `date_trunc('week', ...)` ``). **One backtick ends the literal and the rest of
+the query becomes a run of parse errors.** `:12227` recorded it, `listOrgsForUser`
+carries two warnings about it in its own comments, `:31098` walked into it in a
+`sql` comment eight days ago — and I did it twice in one card, in the same file,
+having read those warnings while editing around them.
+
+**`tsc` caught it in seconds and nothing reached a database, so the COST was
+nothing and the RATE is the finding.** A warning in a comment has now failed to
+prevent this four times; what catches it every time is the typechecker.
+
+### Round log
+
+**PROVE, all LOCAL (`127.0.0.1:5433`, per `:13659`) and all on the final bytes.**
+`orgs.cheers` **13/13** (new file) · `orgs.routes` **147/147** ·
+`db.migration` **17/17** (+1) · `orgs.overview` **13/13** ·
+`privacy.purge` **19/19** · `@app/shared` **52/52** ·
+`tsc --noEmit` exit 0 on `api` and `@app/shared`, **and PROVEN REAL by planting a
+type error** (TS2322 on `GymRegularRow.userId`, restored, re-run clean) ·
+`eslint --max-warnings=0` exit 0 on nine api files and one shared file ·
+`node --check` on the harness.
+
+**AUDIT — a stated SUBSET of 262: `MUTATE_ONLY=O261…O272`, 12 mutants, 12 RED, 0
+ALIVE, 0 never ran**, all seven controls GREEN and tallied first, restore
+sha256-verified after every mutant, 457 gym + subscription rows fingerprinted
+with no unattributed changes, and the harness printed its own *"THIS IS NOT A
+FULL SWEEP"*. Database named in the output. Every row sits in `:5857` rule 4a's
+always-mutated columns — ownership (whose visits count, whose cheer lands on
+whose card, who may press) and numbers a user sees. Database mutants are in scope
+because this card changes SERVER behaviour.
+
+**ANCHORS WERE CHECKED BEFORE THE SWEEP RATHER THAN BY IT**: all twelve match
+exactly one line, verified by a script, because the harness's own abort costs a
+suite run per bad anchor.
+
+**MIGRATION VERIFIED ON THE DEPLOYED CATALOGUE, NOT OFF THE FILE** (`:20222`,
+`:28221` §6): `to_regclass` finds the table, `pg_get_constraintdef` returns the
+CHECK with exactly the four presets, both indexes are present, all three FKs read
+`ON DELETE RESTRICT`, and the table holds **0 rows** — nothing was invented for
+anybody. Its journal entry is in this commit.
+
+**NOT RUN AND NOT CLAIMED:** the full api suite (the pre-existing seed-count
+flake `CLAUDE.md` and `:13746` both document), any web suite (no
+`apps/web` file was touched), and gitleaks.

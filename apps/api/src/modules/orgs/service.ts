@@ -39,6 +39,7 @@ import {
   removeOrgCodeResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  sendGymCheerResponseSchema,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from "./schemas.js";
@@ -53,6 +54,8 @@ import type {
   GymAttendanceVisit,
   MarkGymAttendanceResponse,
   OrgOverviewResponse,
+  SendGymCheerRequest,
+  SendGymCheerResponse,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -466,6 +469,23 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // "locked"** — C97's rule, and the reason this is a field of its own rather
       // than `subscription === null` read at the client.
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
+      // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
+      // on this response that is NOT withheld from a plain member.
+      //
+      // **THE FOUR FIELDS ABOVE ARE FACTS ABOUT THE GYM; THIS IS A MESSAGE
+      // ADDRESSED TO THE READER.** §2.4's boundary keeps a gym's business from
+      // its members, and applying it here would hide the feature from the only
+      // person it exists for — the mirror-image mistake to the one :23128's
+      // Low-8 corrected on `ownerTrialUsed`. The row is already scoped to this
+      // user by the lateral's own `c.user_id` predicate, so there is nothing
+      // here that belongs to anybody else.
+      //
+      // No staff gate, and no sender either: the member learns their gym cheered
+      // them, never which member of staff pressed it.
+      latestCheer:
+        r.latestCheer === null
+          ? null
+          : { preset: r.latestCheer.preset, sentAt: r.latestCheer.sentAt.toISOString() },
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
       };
@@ -2614,6 +2634,21 @@ export async function getOrgOverview(
   const row = await repo.getOrgOverview(deps.sql, { gymId });
   if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
 
+  /** THE REGULARS RIDE ON THIS READ RATHER THAN TAKING ONE OF THEIR OWN.
+   *
+   *  `Overview.jsx` already issues four reads in one `Promise.allSettled` and
+   *  :30399's own trigger warns before adding a fourth; a fifth would be a fifth
+   *  outcome to reconcile on the screen whose error handling is already the
+   *  subtlest thing on it. This question is attendance-derived and this route is
+   *  already gated on `attendance.read`, so it belongs in this answer.
+   *
+   *  **A SECOND `null` HERE WOULD BE UNREACHABLE AND IS STILL NOT ASSUMED AWAY**
+   *  — both reads resolve the same gym id microseconds apart, so this can only
+   *  be null if the gym vanished between them. It reads as an empty list rather
+   *  than a 404, because the numbers above are already computed and throwing
+   *  them away over a race nobody can produce would turn a whole screen off. */
+  const regulars = (await repo.getGymRegulars(deps.sql, { gymId })) ?? [];
+
   /** **NULL AND NOT ZERO WHEN THERE ARE NO MEMBERS.** A gym nobody has joined
    *  has no adoption to state, and "0%" would tell an owner on their first day
    *  that their members are ignoring them. :8267's class — the difference
@@ -2637,6 +2672,86 @@ export async function getOrgOverview(
         month: { visitors: row.monthVisitors, members: row.members, adoptionPct },
       },
       weeks: row.weeks,
+      onARoll: regulars.map((r) => ({
+        userId: r.userId,
+        displayName: r.displayName,
+        weeksRunning: r.weeksRunning,
+        daysRunning: r.daysRunning,
+        visits: r.visits,
+        cheerableAt: r.cheerableAt === null ? null : r.cheerableAt.toISOString(),
+      })),
     },
   });
+}
+
+/** A GYM CHEERS ONE OF ITS MEMBERS ON — Kd's :29961 ruling 4, and the SIXTEENTH
+ *  write door in this module.
+ *
+ *  **IT IS BEHIND `requireWritablePrivilege`, WHICH IS A DECISION AND NOT A
+ *  DEFAULT.** :22215 is Kd's ruling that a gym without a live plan gets nothing,
+ *  and :23711 built it as twelve doors that now number sixteen — so a lapsed gym
+ *  and an archived gym are refused here by gates that already existed, with no
+ *  new refusal vocabulary invented (:26812's phrasing). A cheer is a gym acting
+ *  on its members; a gym that has stopped paying stops acting.
+ *
+ *  **THE GATE IS `members.read` AND NOT A TENTH PRIVILEGE — a call made for Kd,
+ *  with its cost, at the gate (the habit :27992 §1 and :28055 §1 both earned).**
+ *  Part 3 §2.2 grants *Send "we miss you" nudge* to all three roles, which is
+ *  exactly the set that already holds `members.read`, so this needs no new
+ *  vocabulary to match the spec. **What it costs: an owner cannot stop one
+ *  staffer cheering without also taking away their roster.** Nobody has asked
+ *  to, and minting `members.cheer` is a migration in this repo rather than a
+ *  list edit (:28107's standing rule) — DDL CHECK, backfill, role templates, a
+ *  tick box and two "newest" fixtures. Reversible in one line if he wants it.
+ *
+ *  **THE PRIVILEGE IS CHECKED BEFORE THE MEMBERSHIP, and the order is an
+ *  information boundary** (:23711 §2): a stranger keeps `requirePrivilege`'s 404
+ *  and learns nothing about who belongs to this gym. Reversed, anybody holding
+ *  two uuids could probe a gym's roster. */
+export async function sendOrgCheer(
+  deps: OrgsDeps,
+  actorUserId: string,
+  gymId: string,
+  targetUserId: string,
+  input: SendGymCheerRequest,
+): Promise<SendGymCheerResponse> {
+  await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
+
+  const outcome = await repo.sendGymCheer(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    sentByUserId: actorUserId,
+    preset: input.preset,
+  });
+
+  switch (outcome.kind) {
+    case "not_found":
+      // ONE SENTENCE FOR "no such person" AND "not your member" (R3.2). The
+      // caller is authorised for THIS gym, so the only thing this hides is
+      // whether a uuid they already hold belongs to somebody else's roster.
+      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+    case "too_soon":
+      // **THE INSTANT IS DELIBERATELY NOT ON THE ERROR, and the reason is scope
+      // rather than taste.** `OrgsError` carries a status, a code and a
+      // sentence, and sixteen doors share it; widening it for one rare path is
+      // R1.1's drive-by. The screen does not need it either: `cheerableAt`
+      // already rides on the overview payload, so a refused send is answered by
+      // re-reading the list the button lives in — which is what a stale page
+      // needs anyway.
+      //
+      // **THIS IS ONLY REACHABLE FROM A STALE OR RACING SCREEN**, because the
+      // button is drawn dead whenever `cheerableAt` is set. It is the server
+      // keeping the last word, not the ordinary path (:24141 §3a).
+      throw new OrgsError(
+        409,
+        "cheer_already_sent",
+        "You've already cheered this member this week.",
+      );
+    case "sent":
+      return sendGymCheerResponseSchema.parse({
+        cheer: { preset: outcome.preset, sentAt: outcome.sentAt.toISOString() },
+      });
+    default:
+      return assertNever(outcome);
+  }
 }

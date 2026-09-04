@@ -136,6 +136,17 @@ d("orgs routes (real Postgres)", () => {
     // shape (`gyms.owner_user_id` with no onDelete) failed all 46 tests with a
     // 23503 that named nothing useful.
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
+    // BEFORE gyms, and by BOTH actor keys, for the reason the line above gives:
+    // `gym_cheers` carries three FKs with no cascade (R4.3's default), so one
+    // row left behind blocks the gym DELETE with a 23503 — which is exactly what
+    // it did the first time the cheer joined `consoleWrites` below, since that
+    // list's positive control (a gym on a live plan is NOT refused) really does
+    // write one. **That failure is the FK working**, not a defect: nothing in
+    // this product hard-deletes a gym, and the only path that does is this
+    // teardown.
+    await sql`DELETE FROM gym_cheers WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_cheers WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+    await sql`DELETE FROM gym_cheers WHERE sent_by_user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
@@ -6133,8 +6144,13 @@ d("orgs routes (real Postgres)", () => {
    *  `DELETE /closures/:day`, and this test went red on the count before anybody
    *  thought to check whether the new doors were gated. That is the guard doing
    *  exactly its job — the number is raised WITH the three lines below, never
-   *  ahead of them. */
-  const CONSOLE_WRITE_COUNT = 15;
+   *  ahead of them.
+   *
+   *  **15 → 16 on 2026-09-04**: the cheer (:29961 ruling 4). :26812's own
+   *  trigger reads *"before adding a sixteenth write door to the orgs module"*,
+   *  so this door was expected here before it was written — and the line below
+   *  went in with the number, not after it. */
+  const CONSOLE_WRITE_COUNT = 16;
 
   /** EVERY WRITE THE CONSOLE HAS, as `{ name, run }`. Written out rather than
    *  derived, for the reason the "every route requires authentication" test at the
@@ -6173,6 +6189,10 @@ d("orgs routes (real Postgres)", () => {
       { name: "PUT /hours", run: () => put(`/v1/orgs/${id}/hours`, { mode: "open_24h" }, { cookies }) },
       { name: "POST /closures", run: () => post(`/v1/orgs/${id}/closures`, { day: "2099-01-01" }, { cookies }) },
       { name: "DELETE /closures/:day", run: () => del(`/v1/orgs/${id}/closures/2099-01-01`, { cookies }) },
+      // THE CHEER (:29961 ruling 4). A gym that has stopped paying stops acting
+      // on its members, encouragement included — no new refusal vocabulary, the
+      // same 409 every door above answers with.
+      { name: "POST /members/:userId/cheer", run: () => post(`/v1/orgs/${id}/members/${g.member.userId}/cheer`, { preset: "keep_going" }, { cookies }) },
     ];
   };
 
@@ -6196,8 +6216,8 @@ d("orgs routes (real Postgres)", () => {
    *  **The honest limit, stated rather than implied:** this recognises
    *  `await requireWritablePrivilege(`. A door gated some other way — a different
    *  helper, or the call assigned rather than awaited — is not seen. What it
-   *  covers is the next door added in the style all fifteen use today. */
-  it("the fifteen are the module's fifteen", () => {
+   *  covers is the next door added in the style all sixteen use today. */
+  it("the sixteen are the module's sixteen", () => {
     const src = readFileSync(new URL("../src/modules/orgs/service.ts", import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|\s)\/\/.*$/gm, "$1");

@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { ORG_PRIVILEGES } from "@app/shared";
+import { GYM_CHEER_PRESETS, ORG_PRIVILEGES } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -547,6 +547,42 @@ d("0001_init on a real database", () => {
     // this was not a hypothetical shape.
     const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
     expect(inCheck).toEqual([...ORG_PRIVILEGES].sort());
+  });
+
+  /** `0021`'s PRESET CHECK LISTS EXACTLY THE FOUR LINES THE CODE KNOWS — the
+   *  privilege guard above, applied to Kd's :29961 ruling 4 the day the table was
+   *  created rather than a card later.
+   *
+   *  **THE RULING IS *"no free-text box"*, AND THIS IS WHAT MAKES IT A PROPERTY
+   *  OF THE DATABASE.** The Zod enum refuses a typed sentence at the boundary;
+   *  this refuses one that arrives any other way, including from a future writer
+   *  in this repo that never passes through the route.
+   *
+   *  **BOTH DIRECTIONS OF DRIFT FAIL SOMEWHERE FAR FROM THE EDIT, which is the
+   *  reason this is pinned at all** (the privilege CHECK's own recorded shape):
+   *    · add a fifth preset to `GYM_CHEER_PRESETS` without a migration ⇒ the
+   *      route accepts it, the INSERT raises an unmapped 23514, and **pressing
+   *      the button 500s**;
+   *    · drop one from the CHECK ⇒ a preset the screen still offers becomes
+   *      unsendable for one member of staff and nobody learns why.
+   *
+   *  It reads the DEPLOYED predicate, never a copy of the DDL — `pg_catalog` is
+   *  also the only thing that can tell you the migration RAN, since a `.sql` file
+   *  the journal does not name is applied silently and reports success
+   *  (:28221 §6). */
+  it("0021's preset CHECK lists exactly the cheer presets the code knows", async () => {
+    const [defRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_cheers'::regclass
+        AND conname = 'gym_cheers_preset_check'`;
+    const def = defRow?.def;
+    if (def === undefined) throw new Error("gym_cheers_preset_check is not on the table");
+
+    // `[^']*` for the privilege guard's own recorded reason: a narrow character
+    // class silently skips any name that falls outside it, which is a drift
+    // detector that cannot see half its vocabulary.
+    const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+    expect(inCheck).toEqual([...GYM_CHEER_PRESETS].sort());
   });
 
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the

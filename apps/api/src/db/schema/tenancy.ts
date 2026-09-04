@@ -308,6 +308,58 @@ export const gymAttendance = pgTable(
   ],
 );
 
+/** A GYM CHEERING ONE OF ITS MEMBERS ON — Kd's ruling of 2026-09-02 (:29961
+ *  ruling 4), his own addition at the overview-numbers gate.
+ *
+ *  **`preset` IS A KEY, NEVER A SENTENCE.** The four names are the whole
+ *  vocabulary and the CHECK is what makes that survive this file's author
+ *  (:27992 §1's shape) — a later writer accepting typed text gets 23514 rather
+ *  than a comment it did not read. The words live in the web bundle, so copy
+ *  changes are a deploy and not a data migration, and no preset may carry a
+ *  NUMBER: "4 weeks!" is true when sent and false the week after, which is
+ *  :7298's class of sentence outliving its condition.
+ *
+ *  **NOTHING HERE ENFORCES "ONE PER MEMBER PER WEEK", DELIBERATELY.** Kd's cap
+ *  and Part 3 §4.1's `rate-limit 1/member/7d` are both a ROLLING seven days,
+ *  which no UNIQUE can express; `sendGymCheer` checks it inside the transaction
+ *  under `lockOrgRow`, and a mutant is what holds it. A calendar-week UNIQUE
+ *  would be expressible and would enforce a DIFFERENT rule while looking like
+ *  this one — a Sunday cheer and a Monday cheer, one day apart, both allowed.
+ *
+ *  **`ON DELETE RESTRICT` throughout** (R4.3's default). It joins
+ *  `USER_LINKED_NOT_PURGED_TABLES` in the same commit, and the automated FK walk
+ *  in `privacy/tables.ts` is what makes that a requirement rather than a
+ *  courtesy — two earlier tables had to be noticed by a person instead. */
+export const gymCheers = pgTable(
+  "gym_cheers",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** Stored separately from `user_id` from day one, exactly as
+     *  `gym_attendance.marked_by_user_id` is (:27900 §5): the member never sees
+     *  it (§2.4), and it is what makes "who has been cheering" answerable later
+     *  without rewriting history. */
+    sentByUserId: uuid("sent_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    preset: text("preset").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check(
+      "gym_cheers_preset_check",
+      sql`${t.preset} IN ('keep_going','on_a_roll','consistency','strong_streak')`,
+    ),
+    index("gym_cheers_gym_user_created_idx").on(t.gymId, t.userId, t.createdAt.desc()),
+    index("gym_cheers_user_created_idx").on(t.userId, t.createdAt.desc()),
+  ],
+);
+
 export const gymCodes = pgTable("gym_codes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   gymId: uuid("gym_id")

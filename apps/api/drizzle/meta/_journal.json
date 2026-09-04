@@ -141,6 +141,13 @@
       "when": 1788220800003,
       "tag": "0020_org_daily_stats_visits",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788220800004,
+      "tag": "0021_gym_cheers",
+      "breakpoints": true
     }
   ]
 }

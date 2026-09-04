@@ -714,6 +714,70 @@ export type RotateOrgCodeResponse = z.infer<typeof rotateOrgCodeResponseSchema>;
 export const removeOrgCodeResponseSchema = z.object({ status: z.literal("removed") });
 export type RemoveOrgCodeResponse = z.infer<typeof removeOrgCodeResponseSchema>;
 
+/** ── THE CHEER (Kd ruling 2026-09-02, `DECISIONS.md:29961` ruling 4) ─────────
+ *
+ *  His own addition at the overview-numbers gate, unprompted: *"if some mebers
+ *  comes to gym reguraly and maintains a continous streak the gym can send
+ *  inpiring things like emojy short message etc"*.
+ *
+ *  **RULED: an emoji plus a ready-made line, ONE TAP, one per member per week,
+ *  NO FREE-TEXT BOX.** He was shown the "let the owner type" arm with its full
+ *  cost — a length cap, a rate limit, a report path for the member, an operator
+ *  view of what was sent — and took the presets. It is the second time he has
+ *  chosen that shape; the first is his own PACT design, *"no free text ever,
+ *  only one-tap compliments"* (:18128), for a different reason.
+ *
+ *  **THE WIRE CARRIES THE KEY AND NOT THE SENTENCE.** The words live in the web
+ *  bundle, so a copy change is a deploy rather than a data migration, and the
+ *  wording of every cheer ever sent is not frozen in one language in a column.
+ *  `gym_cheers.preset` carries a CHECK listing these four names in DDL — **a
+ *  fifth added here alone compiles, passes every unit test and 23514s in
+ *  Postgres the first time somebody presses it**, which is exactly the trap
+ *  :28107 recorded for `ORG_PRIVILEGES`. The array and the CHECK move in ONE
+ *  commit, and `db.migration.test.ts` reads the constraint back out of
+ *  `pg_get_constraintdef` and compares it to this list.
+ *
+ *  **NO PRESET MAY EVER CONTAIN A NUMBER.** A stored *"4 weeks!"* is true the
+ *  minute it is sent and false the week after — :7298's class, a sentence that
+ *  outlives the condition that raised it. The streak figure is drawn live beside
+ *  the member's name and never baked into the message. */
+export const GYM_CHEER_PRESETS = [
+  "keep_going",
+  "on_a_roll",
+  "consistency",
+  "strong_streak",
+] as const;
+export const gymCheerPresetSchema = z.enum(GYM_CHEER_PRESETS);
+export type GymCheerPreset = z.infer<typeof gymCheerPresetSchema>;
+
+/** ONE CHEER, as the member's own screen receives it.
+ *
+ *  **`sentAt` IS AN INSTANT AND NOT A GYM-DAY, which is the opposite of every
+ *  attendance field beside it and is deliberate.** A visit belongs to the gym's
+ *  calendar (:26469 §5, trap #8) because the gym counts it; a cheer is read by
+ *  the MEMBER, wherever they are, and "2 hours ago" is the only rendering that
+ *  is true for both of them. */
+export const gymCheerSchema = z
+  .object({
+    preset: gymCheerPresetSchema,
+    sentAt: z.string(),
+  })
+  .strict();
+export type GymCheer = z.infer<typeof gymCheerSchema>;
+
+/** WHAT A GYM SENDS. **The body carries only which of the four lines** — the
+ *  gym, the member and the sender all come from the URL and the session, because
+ *  every one of them grants something (R3.1) and `markGymAttendanceRequestSchema`
+ *  is the same decision one feature over. `.strict()` is what turns that from a
+ *  claim into a refusal. */
+export const sendGymCheerRequestSchema = z
+  .object({ preset: gymCheerPresetSchema })
+  .strict();
+export type SendGymCheerRequest = z.infer<typeof sendGymCheerRequestSchema>;
+
+export const sendGymCheerResponseSchema = z.object({ cheer: gymCheerSchema });
+export type SendGymCheerResponse = z.infer<typeof sendGymCheerResponseSchema>;
+
 /** One row of "my orgs". A single row carries BOTH relationships because the
  *  default owner IS a member (Part 3 §4.0 step 6) — two lists would show the
  *  same gym twice and invite a screen that double-counts it. */
@@ -880,6 +944,29 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  everybody: a trainer whose buttons no longer work is owed the sentence
    *  saying why. A plain member is told nothing, on §2.4's boundary. */
   consoleReadOnly: z.boolean().nullable().default(null),
+  /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's ruling of
+   *  2026-09-02 (:29961 ruling 4), reaching the member.
+   *
+   *  **THIS IS THE WHOLE DELIVERY MECHANISM, and it is a READ rather than a
+   *  send.** Nothing in this product sends anything (:29961 §4's standing
+   *  lesson: *"send" means "write something a screen will show"*), so the cheer
+   *  waits here and `My Gyms` draws it. At stage 6 the phone app turns the same
+   *  row into a real notification with nothing rebuilt.
+   *
+   *  **IT CARRIES THE PRESET AND THE TIME, NEVER WHO PRESSED THE BUTTON.**
+   *  `gym_cheers.sent_by_user_id` is stored from day one and is deliberately not
+   *  on this response — Part 3 §2.4 is a promise about what a gym learns of a
+   *  member, and this is its mirror: a member is told their gym cheered them,
+   *  not which member of staff was on the desk.
+   *
+   *  **`.default(null)` IS LOAD-BEARING AND IS THE THIRD TIME THAT SENTENCE HAS
+   *  BEEN WRITTEN IN THIS FILE.** `orgsApi.js` treats a contract mismatch as a
+   *  HARD failure, so a REQUIRED field here destroys the member's whole gym card
+   *  during any window where the web bundle is newer than the api — :12660 wrote
+   *  it down for `formerOrgs`, and :31222 is the day somebody added a required
+   *  field four hours after citing :12660 and killed the Attendance screen in
+   *  Kd's own browser. */
+  latestCheer: gymCheerSchema.nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });
@@ -2110,6 +2197,76 @@ export const orgOverviewWeekSchema = z
   .strict();
 export type OrgOverviewWeek = z.infer<typeof orgOverviewWeekSchema>;
 
+/** HOW MANY REGULARS THE SERVER WILL EVER SEND, and the floor a streak must
+ *  clear to be one.
+ *
+ *  **THE LIST IS A PREVIEW AND CARRIES NO TOTAL, deliberately.** Kd's ruling 14
+ *  (:27992 §3) is that counts come from the server or they are wrong, and the
+ *  answer here is not to serve a bigger number but to serve no number at all —
+ *  there is nothing on this payload a screen could add up into "your gym has N
+ *  regulars", because that figure would be the page's length wearing a total's
+ *  clothes. */
+export const ON_A_ROLL_LIMIT = 10;
+
+/** **TWO IS A FLOOR AND NOT A THRESHOLD KD RULED — it is a chat's call, with its
+ *  cost.** A "streak" of one week is not a streak, so this is the meaning of the
+ *  word rather than an invented number (R0.2's line): one visit ever would
+ *  otherwise put a brand-new member on a list headed *"on a roll"*.
+ *
+ *  **WHAT IT COSTS, stated rather than discovered: a gym in its first fortnight
+ *  sees an empty panel**, and the empty state has to be honest about why instead
+ *  of implying nobody is turning up. Reversible in one line if Kd wants
+ *  everyone who came recently listed. */
+export const ON_A_ROLL_MIN_WEEKS = 2;
+
+/** ONE MEMBER WHO KEEPS TURNING UP — **KD RULED BOTH UNITS, 2026-09-04:
+ *  *"both weeks and days run"***, choosing a fourth arm over the three put to
+ *  him (weeks, recommended · days · most visits in 30 days).
+ *
+ *  **HIS ANSWER IS BETTER THAN THE RECOMMENDATION AND THE REASON GENERALISES:
+ *  the two fail in opposite directions.** Weeks alone cannot tell a once-a-week
+ *  member from a daily one — the recommendation's own stated cost. Days alone is
+ *  empty at almost every gym, because almost nobody trains every day. Together
+ *  one row says both *"steady for months"* and *"here right now"*.
+ *
+ *  **BOTH ARE COUNTED FROM `gym_attendance` AT THIS GYM AND NOWHERE ELSE.**
+ *  :26469 §1.3 is Kd's ruling that a gym is never shown what a member did away
+ *  from it, and `getStreakDays` — the member's own streak — is the obvious
+ *  function to reach for and is wrong TWICE: it unions workouts anywhere, and it
+ *  spends Part 7 §3.2 FREEZES, so it reports days nobody attended. A gym-facing
+ *  figure built on it would print *"5 days in a row"* for somebody who came
+ *  three times, which is :5807 on a screen an owner makes decisions from.
+ *
+ *  **SO THE MEMBER MAY SEE A LONGER STREAK IN THEIR OWN APP THAN THEIR GYM
+ *  SHOWS, DELIBERATELY.** They are different questions — "have I kept my streak
+ *  alive" against "how often is this person actually here" — and the divergence
+ *  is recorded here and commented where the query is written, on the shape
+ *  :27900 §4 used for the same class.
+ *
+ *  **`visits` COVERS THE SAME SPAN AS `weeksRunning` AND NOT A FIXED WINDOW.**
+ *  "5 weeks running · 11 visits" has to describe ONE stretch of time or it is
+ *  :30624's defect — two true figures arranged into a false sentence, which is
+ *  this exact screen's recorded failure from one card earlier. */
+export const orgRegularSchema = z
+  .object({
+    userId: z.string().uuid(),
+    displayName: z.string(),
+    weeksRunning: z.number().int().min(1),
+    daysRunning: z.number().int().min(0),
+    visits: z.number().int().min(1),
+    /** WHETHER THIS GYM HAS ALREADY CHEERED THEM INSIDE SEVEN DAYS — **the
+     *  server's answer, because it is the server's rule** (Kd's cap, and Part 3
+     *  §4.1's `rate-limit 1/member/7d`). A screen that worked this out from a
+     *  cheer it had just sent would be right until the page was reloaded, and
+     *  wrong for anybody looking at a second browser.
+     *
+     *  `null` means the window is open. A string is the instant it opens again,
+     *  so the button can say WHEN rather than only that it cannot. */
+    cheerableAt: z.string().nullable(),
+  })
+  .strict();
+export type OrgRegular = z.infer<typeof orgRegularSchema>;
+
 /** WHAT `GET /v1/orgs/:gymId/overview` ANSWERS.
  *
  *  **EVERY FIGURE IS COMPUTED BY THE SERVER AND A CLIENT MUST RENDER RATHER
@@ -2180,6 +2337,23 @@ export const orgOverviewSchema = z
       .strict(),
     /** Oldest first, so a chart draws it left to right without reversing. */
     weeks: z.array(orgOverviewWeekSchema).max(OVERVIEW_WEEKS),
+    /** THE MEMBERS WHO KEEP TURNING UP, longest streak first.
+     *
+     *  **IT RIDES ON THIS PAYLOAD RATHER THAN TAKING A READ OF ITS OWN, AND THAT
+     *  IS A DELIBERATE CHOICE ABOUT A SCREEN.** `Overview.jsx` already issues
+     *  FOUR reads in one `Promise.allSettled`; :30399's own trigger warns before
+     *  adding a fourth, and a fifth would be a fifth outcome to reconcile on a
+     *  screen whose error handling is already the subtlest thing on it. This
+     *  question is attendance-derived and this route is already gated on
+     *  `attendance.read`, so it belongs in the same answer.
+     *
+     *  **`.default([])` BECAUSE THIS SCHEMA IS `.strict()` AND SHARED.** An api
+     *  older than the bundle sends no such key; without the default that is a
+     *  contract mismatch, which `orgsApi.js` treats as a HARD failure, and the
+     *  console's whole home screen draws nothing — :31222, in Kd's own browser,
+     *  four hours after the entry warning about it was cited. R4.4's
+     *  expand-then-contract, applied to a response. */
+    onARoll: z.array(orgRegularSchema).max(ON_A_ROLL_LIMIT).default([]),
   })
   .strict();
 export type OrgOverview = z.infer<typeof orgOverviewSchema>;

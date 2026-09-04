@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER, **SERVER HALF ONLY — BUILT, NOT DONE**.
+      DECISIONS `:34240`. **START HERE: THE `OWED.md` LINE DOES NOT TICK.**
+      No screen exists, **no browser smoke was run and none was offered**
+      (nothing to click — `:26012`'s shape), and **T3 is UNRUN**. The next
+      artefact is `CARD-gym-overview-people.md` §4b, the web half.
+
+  1. **KD CHOSE THIS FEATURE** over the three other people-list panels, then
+     **RULED BOTH STREAK UNITS — *"both weeks and days run"*** — over a
+     recommendation of weeks alone. He approved migration `0021` as SQL first
+     (T5/R4.4). His answer is better because the two fail in OPPOSITE
+     directions; the entry carries why.
+  2. **THE FINDING WITH THE WIDEST REACH: a field on a repo row is not a field
+     on a RESPONSE, and `.default(null)` makes the gap SILENT.** `latestCheer`
+     was in the repo, on the type and in the schema, and missing from
+     `listMyOrgs`'s mapping — response parsed, `tsc` green, every member's card
+     said they had never been cheered. **The default that protects an old client
+     is the same line that hides a missing new one** (`:12660`, `:31222`).
+  3. **NEVER REACH FOR `getStreakDays`/`replayActivityDays` ON A GYM SURFACE.**
+     Wrong twice: it unions workouts from everywhere (`:26469` §1.3) AND spends
+     Part 7 §3.2 FREEZES, so it reports days nobody attended. Held by a
+     behavioural test AND a source guard that runs outside the `DATABASE_URL`
+     gate.
+  4. **THE BACKTICK-IN-A-`sql`-TEMPLATE TRAP, FOURTH RECORDED TIME**, twice in
+     one card, in the file carrying two warnings about it. `tsc` caught it in
+     seconds — the RATE is the finding, not the cost.
+  5. **`ON DELETE RESTRICT` bit at once and the bite was the FK WORKING**:
+     `orgs.routes` went 147 passed / FILE FAILED on a 23503 in its teardown,
+     which is also evidence the new door really fires in that suite.
+
+PROVE: all LOCAL (`127.0.0.1:5433`), final bytes. `orgs.cheers` **13/13** (new)
+       · `orgs.routes` **147/147** · `db.migration` **17/17** ·
+       `orgs.overview` **13/13** · `privacy.purge` **19/19** · shared **52/52**
+       · `tsc` exit 0 on api + shared, **PROVEN REAL by planting a type error**
+       · eslint clean on ten files. **SWEEP a stated SUBSET of 262:
+       O261-O272, 12 RED, 0 ALIVE, 0 never ran**, controls green and tallied,
+       restores sha256-verified. Four ROOT guards green with REAL exit codes
+       (`:13247`): harnesses **26 scripts**, index **297 pointers / 1336
+       headings**, triggers **up to date, 1017 from 265 of 403**, smoke-folds
+       **OK**. Migration read back out of `pg_catalog` — table, CHECK with
+       exactly four presets, both indexes, three FKs RESTRICT, **0 rows**.
+       Always-read re-measured with the header's own command: **2,655 =
+       1,196 + 1,385 + 74**, §1 and §2 UNMOVED.
+
+OPEN:  **The whole web half** — the panel, the button and the member's card.
+       **The smoke, when it comes, needs state nobody has**: Kd's own gym has no
+       member with visits in two consecutive weeks, so that history must be
+       built before he is handed a sheet or the step cannot pass (`:29870`).
+       Four calls made FOR him, each reversible in one line and each with its
+       cost in `:34240` §6: the cap as a check rather than a constraint · the
+       gate being `members.read` rather than a tenth privilege ·
+       `ON_A_ROLL_MIN_WEEKS = 2` · this file being the people-lists card sliced.
+       **STILL UNPUSHED and now larger: this branch has never reached GitHub
+       since 2026-09-02, so CI has seen none of it.** Kd has been told twice.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`).
+```
+
+```
 TASK: THE FOLD/GREETING PACKET IS CLOSED. Kd DISCHARGED THE SMOKE GATE BY
       DECLARATION and the 🟡 `OWED.md` line TICKS. DECISIONS `:34048`.
       **START HERE: NOTHING IS OUTSTANDING ON THIS PACKET.** T3 ended at round 4

@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,188 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,196 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,12 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,647 lines, MEASURED 2026-09-04 and not estimated**
-(1,188 + 1,385 + 74). **THE THIRTY-FIRST IS KD DELETING A PARAGRAPH ABOUT HOW A
+**ALWAYS-READ TOTAL: 2,655 lines, MEASURED 2026-09-04 and not estimated**
+(1,196 + 1,385 + 74). **THE THIRTY-SECOND IS A WHOLE SERVER HALF — a migration,
+a new table, the sixteenth write door, two new response fields, thirteen tests
+and twelve mutants — AND IT COST EIGHT LINES, every one of them a trigger
+phrase, §1 AND §2 UNMOVED.** Its record is a CARD record and went to §1B, where
+`:24813` sends it. **THE THIRTY-FIRST IS KD DELETING A PARAGRAPH ABOUT HOW A
 CHAT PHRASED ITSELF TO HIM: +1 always-read line for the trigger that stops it
 recurring, ~14 lines of prose gone from three files.** **THE THIRTIETH MEASUREMENT IS AN ADDENDUM THAT COST TWO
 LINES AND SAVED A FALSE ONE** — Kd answered the discharge's own "nobody has seen
@@ -1674,6 +1678,57 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:34240** — 2026-09-04 — **"ON A ROLL" AND THE CHEER, SERVER HALF: a gym can
+  tell who keeps turning up and send them one tap of encouragement — and a field
+  I added to the response was invisible because the guard that protects old
+  clients also hides a missing line.** **Read before adding any reader or writer
+  of `gym_cheers`, before adding a SEVENTEENTH write door to the orgs module,
+  before computing any streak on a gym-facing surface, before reaching for
+  `getStreakDays` or `replayActivityDays` anywhere a GYM can see, before writing
+  any rolling-window cap, before adding a field to `/v1/orgs/mine`, and before
+  writing a backtick inside a `sql` template literal.**
+  Slice 1 of `CARD-gym-overview-people.md`, which Kd chose over the three other
+  panels; he approved migration `0021` as SQL first (T5/R4.4). **KD RULED BOTH
+  UNITS — *"both weeks and days run"* — over a recommendation of weeks alone, and
+  his answer is better because the two fail in OPPOSITE directions**: weeks
+  cannot tell a once-a-week member from a daily one, days is empty at almost
+  every gym. **THE FINDING THAT OUTLIVES THE CARD: the member's own streak is
+  wrong here TWICE — `getStreakDays` unions workouts from everywhere (:26469
+  §1.3's one forbidden thing) AND `replayActivityDays` SPENDS Part 7 §3.2
+  freezes, so it reports days nobody attended.** A gym-facing *"5 days in a row"*
+  for somebody who came three times is :5807. Held by two instruments, because a
+  behavioural test only proves today's answer: a seeded `streaks` row saying 4
+  against an honest 2, plus a source guard that `modules/orgs/repo.ts` imports
+  nothing from `gamification/` — run OUTSIDE the `DATABASE_URL` gate on purpose
+  (:5199). **THE SECOND FINDING IS THE ONE WITH A TRIGGER: `latestCheer` was in
+  the repo row, on the type and in the schema, and NOT in `listMyOrgs`'s mapping
+  — and `.default(null)` made that silent.** The response parsed, `tsc` was
+  happy, every member's card said they had never been cheered. **The defence and
+  the defect are the same line** — that default exists because a required field
+  destroys the gym card during a web-newer-than-api window (:12660, then :31222
+  four hours after citing it) — **so a field on a repo row is not a field on a
+  response; the mapping is a third place, and on a schema with a default nothing
+  tells you.** Two more faults its own PROVE found: `b.today` in a `HAVING`
+  without a `GROUP BY` (42803, both island CTEs), and four assertions reading
+  `.code` when the error body's key is `error`. **`ON DELETE RESTRICT` bit
+  immediately and the bite was the FK WORKING** — `orgs.routes` went 147 passed /
+  file failed on a 23503 in its teardown, which is also incidental evidence that
+  the new door really fires there. **The cap is a check under `lockOrgRow` and
+  NOT a constraint, stated rather than implied**: Kd's cap and Part 3 §4.1's
+  `rate-limit 1/member/7d` are both ROLLING seven days, and a calendar-week
+  UNIQUE is expressible and enforces a DIFFERENT rule while looking like this
+  one. **The spec already had half of it — that `1/member/7d` is the SPEC's own
+  number, matched independently by Kd (R0.2), and `POST /members/:uid/nudge` is
+  its endpoint shape — so the at-risk nudge later adds a query and a preset, not
+  a subsystem.** Gate: `members.read`, not a tenth privilege (§2.2 grants the
+  nudge to all three roles), with its cost stated. **The backtick trap for the
+  FOURTH recorded time, twice in one card, in the file carrying two warnings
+  about it; `tsc` caught it in seconds — the rate is the finding, not the cost.**
+  `orgs.cheers` 13/13 · `orgs.routes` 147/147 · `db.migration` 17/17 ·
+  `orgs.overview` 13/13 · `privacy.purge` 19/19 · shared 52/52 · SWEEP a stated
+  SUBSET of 262: O261–O272, **12 RED, 0 ALIVE**. Migration read back out of
+  `pg_catalog`, 0 rows. **No screen, no smoke, T3 UNRUN; the `OWED.md` line does
+  not tick.**
 - **:29870** — 2026-09-02 — **SHEET PARTS C AND D PASS AT KD'S BROWSER AND THE
   ATTENDANCE `OWED.md` LINE TICKS — the card is CLOSED.** **Read before citing
   `smoke-attendance.md` as covering anything, before ticking a gate on a sheet

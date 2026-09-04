@@ -7832,12 +7832,20 @@ file and is stated so nobody reads these as lower priority than they are.
       is untouched and still owed. Owed: ~~**who came today**~~ (names and times, a summary
       linking to the Attendance section that exists) · **when they come**
       (visits per opening session, off `gym_attendance.slot_key` and the stored
-      session window — the staffing number) · **on a roll** (members on an
-      attendance streak, beside the cheer below) · **slipping away** (§4.1's
+      session window — the staffing number) · ~~**on a roll** (members on an
+      attendance streak, beside the cheer below)~~ **— ITS SERVER HALF SHIPPED
+      2026-09-04 (Kd chose it from the four); the PANEL is owed with the cheer's
+      web half, see that line** · **slipping away** (§4.1's
       at-risk list, redefined onto VISITS per :26469 rather than the spec's
       workouts-anywhere) · **this week's roster** (joined · left · still
-      waiting) · **§5.1's activation checklist**. **Not started, no document
-      yet** (`CARD-gym-overview-people.md` when it is written). **THE TRAP THAT
+      waiting) · **§5.1's activation checklist**. ~~**Not started, no document
+      yet** (`CARD-gym-overview-people.md` when it is written).~~ **— THE
+      DOCUMENT EXISTS 2026-09-04 and is that filename, taken ONE SLICE AT A
+      TIME** (a chat's call, stated with its cost: five panels in one card is
+      what :29961 ruling 3 already refused once, and keeping the name this line
+      already tracks is what stops the filename drifting). **Slice 1 is "on a
+      roll" + the cheer; the other three panels and the checklist are untouched
+      and still owed here.** **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
       a gym — it is the obvious thing to reach for on exactly these screens.
@@ -7858,6 +7866,24 @@ file and is stated so nobody reads these as lower priority than they are.
       already uses, and it becomes a real push for free at stage 6 with nothing
       rebuilt. **A card that promises a member will be NOTIFIED is promising a
       channel that does not exist.**
+      **⚙️ THE SERVER HALF IS BUILT, 2026-09-04, AND THIS LINE DOES NOT TICK.**
+      Kd chose this feature over the three other people-list panels and approved
+      migration `0021_gym_cheers` as SQL (T5/R4.4). Shipped: the table with its
+      four-preset CHECK · `POST /v1/orgs/:gymId/members/:userId/cheer`, the
+      **SIXTEENTH** write door (`CONSOLE_WRITE_COUNT` 15 → 16, raised WITH its
+      list entry) · the rolling-seven-day cap, checked under `lockOrgRow` because
+      no constraint can express a rolling window · `latestCheer` on
+      `/v1/orgs/mine`, `.default(null)` · `onARoll` on the existing overview
+      payload, `.default([])`.
+      **WHAT IS OWED AND IS WHY IT DOES NOT TICK: THE WHOLE WEB HALF.** No screen
+      exists, so no owner can press anything and no member can see a cheer —
+      `CARD-gym-overview-people.md` §4b is the card. **No browser smoke was run
+      and none was offered** (there is nothing to click — :26012's shape, not an
+      invented step) and **T3 is UNRUN**.
+      **AND THE SMOKE, WHEN IT COMES, NEEDS STATE NOBODY HAS:** the panel only
+      draws for a member with visits in two or more consecutive weeks, and Kd's
+      own gym has no such history. That has to be built before he is handed a
+      sheet, or the step cannot pass (:29870's stale-setup lesson).
 - [ ] ⚪ **`org_live_counters` IS NOT BUILT and the Overview reads "today" live
       from Postgres instead (chat's call at the overview-numbers gate,
       2026-09-02, with its cost stated).** Part 3 §3.2 specifies a Redis key with

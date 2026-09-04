@@ -24,6 +24,7 @@ import {
   markGymAttendanceRequestSchema,
   setGymHoursRequestSchema,
   memberParamsSchema,
+  sendGymCheerRequestSchema,
   myApplicationParamsSchema,
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
@@ -429,6 +430,63 @@ export function registerOrgRoutes(
       if (params === null) return;
       const overview = await service.getOrgOverview(orgDeps, requireUserId(req), params.gymId);
       return reply.status(200).send(overview);
+    },
+  );
+
+  /** ONE TAP — a gym cheering a member who keeps turning up (Kd's :29961
+   *  ruling 4, his own addition at the overview-numbers gate).
+   *
+   *  **THE BODY CARRIES ONLY WHICH OF THE FOUR LINES.** The gym comes from the
+   *  URL, the member from the URL, and the SENDER from the session — every one
+   *  of them grants something (R3.1), and a client that could name its own
+   *  sender could put a message in another staffer's mouth. `.strict()` is what
+   *  turns that from a paragraph into a refusal, and `sendGymCheerRequestSchema`
+   *  is an enum, so a typed sentence is a 400 rather than a row.
+   *
+   *  **201 AND NOT 200, and it is NOT idempotent** — unlike the attendance mark
+   *  one route above, which answers 200 because a second tap in the same session
+   *  means the same visit. A second cheer inside seven days is a REFUSAL (409),
+   *  not a repeat of the first, because Kd's cap is the feature rather than a
+   *  guard around it.
+   *
+   *  **A BUCKET OF ITS OWN, ON `orgs_nudge`'s RECORDED REASONING** — the PRODUCT
+   *  rule (one per member per week) lives in the database where a restart cannot
+   *  drop it, and this is the REQUEST floor on top. The two are different jobs:
+   *  without the floor, a staffer whose real allowance is one can hammer a
+   *  refusal loop that still costs `lockOrgRow` and a query per attempt, which
+   *  is the same shape that limiter was written for.
+   *
+   *  Its numbers, deliberately: 60/hour per account is ~sixty refusals for
+   *  somebody entitled to a handful, and comfortably above an owner cheering a
+   *  whole panel of ten in one sitting. The 3,000 per IP is the attendance
+   *  reads' figure and for the same recorded reason — **a gym's whole staff sit
+   *  behind one address, so the IP dimension cannot do the per-account job
+   *  here** (:28649). */
+  const cheerLimit = createDualRateLimit({
+    name: "orgs_cheer",
+    max: 60,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/members/:userId/cheer",
+    { preHandler: [app.authenticate, cheerLimit] },
+    async (req, reply) => {
+      const params = parseOr400(memberParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(sendGymCheerRequestSchema, req.body ?? {}, req, reply);
+      if (body === null) return;
+      const cheer = await service.sendOrgCheer(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+        body,
+      );
+      return reply.status(201).send(cheer);
     },
   );
 
