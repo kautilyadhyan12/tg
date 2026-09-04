@@ -3778,17 +3778,27 @@ then; none may be hidden or reduced to close the gap.
 - [ ] 🔴 **WHICH USER-LINKED TABLES THE DAY-14 PURGE ACTUALLY CLEARS IS STILL
       KD'S TO RULE, AND UNTIL 2026-09-02 THE QUESTION LIVED ONLY IN A CODE
       COMMENT.** `apps/api/src/modules/privacy/tables.ts` carries a SPEC-GAP list
-      of THIRTEEN tables and columns that keep a link to a purged person and that
+      of FOURTEEN tables and columns that keep a link to a purged person and that
       §5.2's prose does not name — `one_time_tokens · refresh_tokens ·
       gym_members · gym_staff · gym_join_applications · gym_attendance ·
-      gym_closures · api_cost_events · usage_daily · trace_samples ·
+      gym_cheers · gym_closures · api_cost_events · usage_daily · trace_samples ·
       gyms.owner_user_id · subscriptions.owner_id ·
       exercise_definitions.published_by`. Widening a
       deletion list on a chat's judgement is R0.2, so filing them there was
       right; **leaving the RULING untracked was not, and it is this file's own
       failure mode** — the list has been growing table by table since 2026-07-22
       (`gym_join_applications` joined it 2026-08-19 at :11072, `gym_attendance`
-      on 2026-09-02) with no line here to say anybody still owes an answer.
+      on 2026-09-02, `gym_cheers` on 2026-09-04) with no line here to say
+      anybody still owes an answer.
+      **AND THE FOURTEENTH ARRIVED THE SAME WAY THE LINE WARNS ABOUT.** The
+      cheer card put `gym_cheers` into `tables.ts` — correctly, and the FK walk
+      caught it there — **and into no other file, so the enumeration Kd rules
+      from still said THIRTEEN and did not name it.** The code comment was
+      updated and the list was not, which is precisely the failure this whole
+      line was written to record, one round after it was written. `gym_cheers`
+      records **which staff member sent an encouraging message to which member
+      on which date**, so it is a person-to-person record and not only a
+      user-linked row. (Found by the cheer card's T3 round 1, C/H-2.)
       **`gym_closures.created_by_user_id` JOINED IT LATER THE SAME DAY AND WAS
       FOUND BY A MACHINE RATHER THAN A PERSON** (attendance T3 round 2, L-7):
       the list is now also an exported array with a test walking `pg_constraint`
@@ -3811,7 +3821,8 @@ then; none may be hidden or reduced to close the gap.
       whose **Day-0** half is unhandled: a membership is closed and an
       application cancelled at Day 0, and nothing touches an attendance at all.
       (DECISIONS 2026-09-02, attendance T3 round 1 C/H-4; the thirteenth entry
-      and the automated check, attendance T3 round 2 L-7.)
+      and the automated check, attendance T3 round 2 L-7; the fourteenth,
+      `gym_cheers`, DECISIONS 2026-09-04, cheer T3 round 1 C/H-2.)
 - [ ] 🔴 **DPDP Day-14 HARD-DELETE — CODE COMPLETE 2026-07-22, BUT NOT YET
       RUNNING ANYWHERE, so it is NOT done** (branch `dpdp-day14-purge`).
       This line was first written ticked; its T3 (finding D1) proved that

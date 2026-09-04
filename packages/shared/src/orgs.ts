@@ -2219,6 +2219,26 @@ export const ON_A_ROLL_LIMIT = 10;
  *  everyone who came recently listed. */
 export const ON_A_ROLL_MIN_WEEKS = 2;
 
+/** **HOW LONG THE STREAK MUST ACTUALLY HAVE LASTED, and it exists because
+ *  counting WEEK BUCKETS is not counting WEEKS.**
+ *
+ *  `date_trunc('week', …)` is a Monday, so a Sunday visit and a Monday visit sit
+ *  in two different buckets one DAY apart. Without this floor a member whose
+ *  entire history is yesterday and today cleared `ON_A_ROLL_MIN_WEEKS` and was
+ *  shown to their owner as *"2 weeks running"* — **exactly the brand-new member
+ *  the constant above says it exists to keep off a list headed *"on a roll"***,
+ *  arriving through the calendar rather than through the floor.
+ *
+ *  **IT IS DERIVED AND NOT INVENTED (R0.2).** To have been coming for N weeks is
+ *  to have been coming for at least N−1 whole weeks of elapsed time, so this is
+ *  the arithmetic of the ruled constant rather than a second threshold somebody
+ *  picked. Change `ON_A_ROLL_MIN_WEEKS` and this follows it.
+ *
+ *  **THE SPAN IS MEASURED FROM THE FIRST REAL VISIT, NEVER FROM ITS MONDAY** —
+ *  the Monday is up to six days earlier than the day somebody actually walked
+ *  in, which is the whole size of the defect this closes. */
+export const ON_A_ROLL_MIN_SPAN_DAYS = (ON_A_ROLL_MIN_WEEKS - 1) * 7;
+
 /** ONE MEMBER WHO KEEPS TURNING UP — **KD RULED BOTH UNITS, 2026-09-04:
  *  *"both weeks and days run"***, choosing a fourth arm over the three put to
  *  him (weeks, recommended · days · most visits in 30 days).
@@ -2251,6 +2271,16 @@ export const orgRegularSchema = z
   .object({
     userId: z.string().uuid(),
     displayName: z.string(),
+    /** `min(1)` AND NOT `min(ON_A_ROLL_MIN_WEEKS)`, WHICH IS DELIBERATE AND WAS
+     *  RE-EXAMINED IN T3 ROUND 1 (L-6). The server's floor is 2, so the contract
+     *  admits a 1 the server will not send today — and tightening it to 2 would
+     *  make this schema REFUSE a value a future server could legitimately send
+     *  if Kd relaxes the floor (its own docblock says that is reversible in one
+     *  line). `orgsApi.js` treats a contract mismatch as a HARD failure, so that
+     *  edit would blank the console's whole home screen during any
+     *  api-newer-than-web window — :31222, in Kd's browser, exactly. **A
+     *  response bound is loosened toward what a NEWER server might say, never
+     *  tightened to today's behaviour** (:16101). */
     weeksRunning: z.number().int().min(1),
     daysRunning: z.number().int().min(0),
     visits: z.number().int().min(1),

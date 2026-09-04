@@ -1,6 +1,72 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER — **T3 ROUND 1 RUN AND ITS TEN FIXES SHIPPED.**
+      DECISIONS `:34443`. **START HERE: THE PACKET DID NOT SHIP THIS ROUND
+      (four Critical/High), the fixes are in, and ROUND 2 IS UNRUN.** The
+      `OWED.md` line still does NOT tick — no screen exists, so no smoke was
+      run or offered (`:26012`'s shape). Next artefact after round 2 is
+      `CARD-gym-overview-people.md` §4b, the web half.
+
+  1. **WEEK BUCKETS ARE NOT WEEKS, and it reached a screen.**
+     `date_trunc('week', …)` is a MONDAY, so a Sunday visit and a Monday visit
+     are two buckets ONE DAY apart — a member whose whole history was yesterday
+     and today read **"2 weeks running"** on the owner's home screen.
+     `ON_A_ROLL_MIN_WEEKS`'s own docblock promised that could not happen.
+     Fixed with `ON_A_ROLL_MIN_SPAN_DAYS`, DERIVED from the ruled constant.
+  2. **THE SAME MISTAKE WAS IN THE TEST AND CI WOULD HAVE CAUGHT IT ON A
+     MONDAY.** The fixture used `[0, 1]` and asserted the opposite of what it
+     built one day in seven. **PROVE was green because the day was a Friday.**
+     Fixtures now ask the gym its weekday in SQL (`gymDow`), never `new Date()`.
+  3. **THE FIX UN-COVERED O265 AND THE SWEEP WOULD NOT HAVE SAID SO** — a new
+     exclusion took over the job of the old one, so the mutant aimed at the old
+     one goes QUIET rather than red (`:15673`). Caught by asking before the
+     sweep, not after. The one-week fixture now sits in the PREVIOUS ISO week.
+  4. **`:28221` §7 WAS CITED AS AN AUDIT EXEMPTION AND SAYS THE OPPOSITE** —
+     it exempts a MEMBER tapping "I'm here", and a cheer is a STAFF action
+     behind a privilege. It was the only one of sixteen write doors with no
+     `audit_log` row. **`orgs.routes.test.ts:6226` counts privilege call sites
+     and nothing counts audit rows, so door seventeen arrives the same way.**
+  5. **TWO GUARANTEES HAD NO OBSERVER AT ALL**, both found by deleting lines to
+     see what went red: **`lockOrgRow`** (the whole of a cap no constraint can
+     express — deleting it left 13 tests and 12 mutants green, and the failure
+     is SILENT) and **the `cheerable_at` subquery** (the only channel telling a
+     screen when the button reopens). Both now driven; O274/O276/O277.
+  6. **`?.` TURNS AN ABSENCE INTO A PASS.**
+     `expect(row?.cheerableAt).not.toBeNull()` cannot fail when the row is
+     missing. Two such assertions, plus a comment claiming a proof the fixture
+     could not give (one row inside a seven-day window makes `ORDER BY` moot).
+
+PROVE: all LOCAL (`127.0.0.1:5433`), final bytes. `orgs.cheers` **18/18**
+       (was 13) · `orgs.routes` + `orgs.overview` **160/160** · `privacy.purge`
+       + `db.migration` + `orgs.attendance` **73/73** · shared **52/52** ·
+       `tsc` exit 0 on api + shared, **PROVEN REAL by a defect it caught** (two
+       backticks in `sql` comments — the FIFTH recorded time, inside the fix for
+       the fourth) · eslint clean on four files, **and lint proved a type
+       correction** by objecting that two `Number()` calls could do nothing.
+       **SWEEP a stated SUBSET of 269: O261–O279, 19 RED, 0 ALIVE, 0 never
+       ran**, thirteen controls green and tallied, restores sha256-verified,
+       463 rows fingerprinted. **Re-swept in full after the Low fixes** because
+       one edited the query O266/O267 aim at. Four ROOT guards green with real
+       exit codes: harnesses **26 scripts**, index **298 pointers / 1348
+       headings**, triggers **up to date, 1024 from 266 of 404**, smoke-folds
+       **OK**. Always-read re-measured with the header's own command:
+       **2,662 = 1,203 + 1,385 + 74**, §1 and §2 UNMOVED.
+
+OPEN:  **ROUND 2 (diff-only) IS UNRUN** — that is the next thing, and it covers
+       only the fixes and the surfaces they touch (`:5348` rule 2). Then the
+       whole web half. **The smoke, when it comes, needs state nobody has**:
+       Kd's gym has no member with visits in two consecutive weeks (`:29870`).
+       **NOT FIXED, DELIBERATELY, so round 2 does not "fix" it:**
+       `orgRegularSchema.weeksRunning` is `min(1)` against a server floor of 2 —
+       tightening it is `:31222` in Kd's browser. **NOT BUILT, `:5348` rule 6:**
+       a guard counting audit rows the way `:6226` counts privilege call sites.
+       **STILL UNPUSHED: this branch has not reached GitHub since 2026-09-02, so
+       CI has seen none of it.** `CLAUDE.md`'s pre-existing uncommitted edit and
+       `GymHoursNote.jsx`'s are STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER, **SERVER HALF ONLY — BUILT, NOT DONE**.
       DECISIONS `:34240`. **START HERE: THE `OWED.md` LINE DOES NOT TICK.**
       No screen exists, **no browser smoke was run and none was offered**

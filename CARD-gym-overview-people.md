@@ -225,9 +225,17 @@ Inside one transaction, in this order:
 4. **The rolling-7-day check**, under the lock. Already cheered inside 7 days →
    typed **409 `cheer_already_sent`**, carrying the instant the next one becomes
    available so the screen states it rather than guessing.
-5. Insert. **No `audit_log` row** — `:28221` §7's reasoning: the log records what
-   staff did TO a gym's shape, and cheers are high-volume and reversible-by-
-   nothing.
+5. Insert, ~~**No `audit_log` row** — `:28221` §7's reasoning: the log records
+   what staff did TO a gym's shape, and cheers are high-volume and
+   reversible-by-nothing.~~ **— STRUCK by T3 round 1 (C/H-3): that citation says
+   the OPPOSITE.** `:28221` §7 exempts a MEMBER tapping "I'm here" — *"the log
+   records what STAFF did, and several hundred member taps a day would bury
+   it"* — and `markGymAttendance`'s own docblock draws the line explicitly:
+   *"every other writer in this module is a console action behind a privilege"*.
+   A cheer IS one of those, and Kd's cap of one per member per 7 days disposes
+   of "high-volume". **So it writes `org.member_cheered`**, per
+   `03-part3-org-console.md:214` — *"every mutating call writes `audit_log`"* —
+   which no `DEVIATION PROPOSAL` had ever been raised against.
 
 **Rate limit:** its own `createDualRateLimit` bucket, per-account and per-IP. It
 must NOT share the attendance bucket (600/hour), which `:28649` L-5 sized for a

@@ -3874,3 +3874,50 @@ a correction's MAP is a claim exactly like its figure.
       Re-opening a fold costs no second wait (`everOpened` stays true), so only a
       fresh page load is exposed — which is why steps 10 and 12 needed the cue
       and step 11 did not.
+
+## 2026-09-04 — "on a roll" + the cheer, T3 ROUND 1 (DECISIONS :34443)
+
+Six Low, **all six FIXED in the same round** — none bought a further round
+(:5348 rule 1), and none is a deferral, so none takes an `OWED.md` line.
+
+- [x] **L-1 · THE WRITE DOOR AND THE PANEL USED DIFFERENT POPULATIONS.**
+      `getGymRegulars` excludes complimentary members; `sendGymCheer` checked
+      only `removed_at IS NULL`. So a comped member — the owner's own seat is
+      one — could **never** be drawn with a Cheer button and could still be
+      cheered by a hand-made request. The card's own §4a.4 step 3 names both
+      halves and only one was built. Fixed by adding `complimentary = false`;
+      **O278** is the standing mutant, and the fix drifted O268's anchor, which
+      the whole-table pre-check caught before a byte was written.
+- [x] **L-2 · A COMMENT THAT WAS FALSE ABOUT ITS OWN QUERY.** *"Bounded by the
+      same window `d` is"*, above the `visits` subquery — it is bounded by
+      `streak_from`, which is a MONDAY and can sit up to six days before
+      `floor_day`. Harmless at a 400-day lookback and corrected in place rather
+      than deleted, because the direction it is wrong in is the thing worth
+      knowing (:20587).
+- [x] **L-3 · A VALUE COMPUTED AND DISCARDED.** `SendCheerOutcome.too_soon`
+      carried `cheerableAt`; `service.ts` reads only `outcome.kind`, because the
+      409 deliberately omits the instant and the overview payload is where a
+      screen gets it. The field and the `interval` arithmetic that produced it
+      are gone — **a value that looks like an answer nobody is using** is the
+      thing a later chat wires to a screen.
+- [x] **L-4 · `LIMIT -n` WAS REACHABLE.** `getGymRegulars`'s `limit` was
+      `Math.min(input.limit ?? CAP, CAP)` with no floor, so a negative argument
+      would have gone straight to Postgres. **No caller passes one today, which
+      is exactly when a bound is cheapest to get right.** Now `Math.max(1, …)`.
+- [x] **L-5 · TWO ROW TYPES DECLARED `string` THAT ARE NUMBERS.**
+      `weeks_running` and `days_running` are `count(*)::int`, i.e. int4, which
+      postgres.js hands over as NUMBERS; only `visits` is a bare `count(*)`
+      (int8, a string). All three were typed `string` and wrapped in `Number()`,
+      which made the difference invisible. **Lint is what proved the correction**
+      — `no-unnecessary-type-conversion` objected that two of those conversions
+      could not do anything, which is the evidence the types really were wrong.
+- [x] **L-6 · EXAMINED AND DELIBERATELY NOT CHANGED.**
+      `orgRegularSchema.weeksRunning` is `min(1)` while the server floor is 2, so
+      the contract admits a value the server will not send. **Tightening it would
+      make the schema REFUSE a value a future server could legitimately send** —
+      the floor's own docblock calls it reversible in one line — and `orgsApi.js`
+      treats a contract mismatch as a HARD failure, so the edit blanks the
+      console's home screen in any api-newer-than-web window (:31222, in Kd's
+      browser). A response bound is loosened toward what a NEWER server might
+      say, never tightened to today's behaviour (:16101). **Recorded in the
+      schema itself so round 2 does not "fix" it.**

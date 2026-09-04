@@ -50,6 +50,7 @@ import postgres from "postgres";
 import { GYM_CHEER_PRESETS, ON_A_ROLL_MIN_WEEKS } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import * as orgRepo from "../src/modules/orgs/repo.js";
 
 /** THE ORGS REPO MUST NOT REACH INTO `gamification/`, AND THIS IS THE ONLY
  *  INSTRUMENT THAT CAN SAY SO.
@@ -254,6 +255,34 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       FROM gyms g WHERE g.id = ${gymId}`;
   };
 
+  /** THE GYM'S OWN ISO WEEKDAY — Monday 1 … Sunday 7, read from the same
+   *  expression `visit` offsets from.
+   *
+   *  **A FIXTURE OF "TODAY AND YESTERDAY" IS NOT WEEKDAY-INDEPENDENT, which is
+   *  what this exists to fix.** `date_trunc('week', …)` is a Monday, so two
+   *  consecutive days sit in ONE bucket most of the week and in TWO across a
+   *  Sunday/Monday boundary. A test that wants "inside one week" — or, below,
+   *  "two buckets as close together as the calendar allows" — has to ask the
+   *  gym which day it is. Doing it in SQL rather than with `new Date()` keeps
+   *  this file's rule: the clock is the GYM's, never the test runner's. */
+  const gymDow = async (gymId: string): Promise<number> => {
+    const rows = await sql<{ dow: number }[]>`
+      SELECT extract(isodow FROM (now() AT TIME ZONE g.timezone)::date)::int AS dow
+      FROM gyms g WHERE g.id = ${gymId}`;
+    const dow = rows[0]?.dow;
+    if (dow === undefined) throw new Error("no such gym");
+    return dow;
+  };
+
+  /** The cheer's own audit rows, filtered by ACTION — joining a member writes
+   *  its own rows into the same gym, so an unfiltered count would pass on
+   *  somebody else's evidence. */
+  const cheerAudits = (gymId: string) =>
+    sql<{ actor_user_id: string; target_id: string; meta: { preset?: string } }[]>`
+      SELECT actor_user_id, target_id, meta FROM audit_log
+      WHERE gym_id = ${gymId} AND action = 'org.member_cheered'
+      ORDER BY at ASC`;
+
   const readOverview = async (
     gymId: string,
     cookies: Record<string, string>,
@@ -272,6 +301,24 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
 
   const rollFor = (overview: Overview, userId: string): Regular | undefined =>
     overview.onARoll.find((r) => r.userId === userId);
+
+  /** WHEN THE BUTTON SHOULD COME BACK, worked out from the STORED `created_at`
+   *  and the test's OWN arithmetic.
+   *
+   *  Deliberately not `created_at + interval '7 days'` in SQL: that would be the
+   *  query under test re-derived, and a changed offset would move both sides
+   *  together. Adding the seven days in JavaScript is what makes the interval
+   *  itself observable — this subquery is the ONLY channel telling a screen when
+   *  the button reopens, since the 409 deliberately omits the instant. */
+  const sevenDaysAfterNewestCheer = async (gymId: string, userId: string): Promise<number> => {
+    const rows = await sql<{ created_at: Date }[]>`
+      SELECT created_at FROM gym_cheers
+      WHERE gym_id = ${gymId} AND user_id = ${userId}
+      ORDER BY created_at DESC LIMIT 1`;
+    const at = rows[0]?.created_at;
+    if (at === undefined) throw new Error("no cheer to measure from");
+    return at.getTime() + 7 * 24 * 60 * 60 * 1000;
+  };
 
   /** Backdate the newest cheer this gym sent this member, so the seven-day
    *  boundary can be stood on from both sides without waiting a week. */
@@ -406,9 +453,27 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       for (const daysAgo of [21, 22, 28]) await visit(org.org.id, lapsed.userId, daysAgo);
 
       // ONE WEEK ONLY — alive, and below `ON_A_ROLL_MIN_WEEKS`.
+      //
+      // **THE OFFSETS ARE PINNED TO THE GYM'S WEEKDAY, AND THE MEMBER SITS IN
+      // LAST WEEK RATHER THAN THIS ONE. Both halves are load-bearing.**
+      //
+      // It read `[0, 1]`, which lands in ONE week bucket six days a week and in
+      // TWO across a Sunday/Monday — so `weeksRunning` was 2, this member
+      // appeared, and the assertion below went red every Monday.
+      //
+      // **`[dow+5, dow+6]` is two days inside the PREVIOUS ISO week on every
+      // weekday** (last week is `dow … dow+6` days back), so it is one bucket
+      // always — and its span from today is `dow+6`, i.e. at least 7 days.
+      // **That span is what keeps O265 lethal.** Were this member recent, the
+      // new span floor would exclude them by itself, O265 could relax
+      // `ON_A_ROLL_MIN_WEEKS` to 1 with this test still green, and a fix would
+      // have quietly un-covered a guarantee it never touched (:15673).
+      const dow = await gymDow(org.org.id);
       const newcomer = await makeUser("l3-new");
       await joinAsMember(newcomer.cookies, org, owner.cookies);
-      for (const daysAgo of [0, 1]) await visit(org.org.id, newcomer.userId, daysAgo);
+      for (const daysAgo of [dow + 5, dow + 6]) {
+        await visit(org.org.id, newcomer.userId, daysAgo);
+      }
 
       // QUALIFIES — the positive control, without which every assertion below
       // would pass on a list that returned nobody at all.
@@ -423,6 +488,58 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       expect(ids, "a streak that died three weeks ago is not").not.toContain(lapsed.userId);
       expect(ids, "a single week is below the floor").not.toContain(newcomer.userId);
       expect(rollFor(overview, keeper.userId)?.weeksRunning).toBe(ON_A_ROLL_MIN_WEEKS);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** T3 ROUND 1, C/H-1 — **WEEK BUCKETS ARE NOT WEEKS.**
+   *
+   *  `date_trunc('week', …)` is a Monday, so a Sunday visit and a Monday visit
+   *  are two buckets ONE DAY apart. Somebody whose entire history was yesterday
+   *  and today therefore cleared `ON_A_ROLL_MIN_WEEKS` and was drawn on the
+   *  owner's home screen as **"2 weeks running"** — the brand-new member that
+   *  constant's own docblock says it exists to keep off a list headed *"on a
+   *  roll"*, arriving through the calendar instead of through the floor.
+   *
+   *  **THE FIXTURE HAS TO ASK THE GYM WHAT DAY IT IS, and there is no
+   *  weekday-independent version of it.** The nearest day in the previous ISO
+   *  week is `dow` days back: 1 on a Monday, 6 on a Saturday — and exactly 7 on
+   *  a Sunday, where the same two visits are a genuine week apart and the
+   *  member BELONGS on the list. Both arms are asserted rather than one being
+   *  skipped, so the seventh day is not a hole (:7104's PG1). Six days in seven
+   *  this test goes red without the span floor. */
+  it(
+    "a streak that only straddled a Monday is not two weeks running",
+    async () => {
+      const owner = await makeUser("l7-owner");
+      const org = await makeOrg(owner.cookies, "Roll Gym Seven");
+      const dow = await gymDow(org.org.id);
+
+      const justArrived = await makeUser("l7-new");
+      await joinAsMember(justArrived.cookies, org, owner.cookies);
+      for (const daysAgo of [0, dow]) await visit(org.org.id, justArrived.userId, daysAgo);
+
+      // THE POSITIVE CONTROL. Three buckets on every weekday, and fourteen days
+      // of elapsed time — without it every absence below passes on an empty
+      // list, which is how the span floor could ship as "reject everybody".
+      const keeper = await makeUser("l7-keeper");
+      await joinAsMember(keeper.cookies, org, owner.cookies);
+      for (const daysAgo of [0, 7, 14]) await visit(org.org.id, keeper.userId, daysAgo);
+
+      const overview = await readOverview(org.org.id, owner.cookies);
+      const ids = overview.onARoll.map((r) => r.userId);
+      expect(ids, "three weeks of visits is still on the list").toContain(keeper.userId);
+      expect(rollFor(overview, keeper.userId)?.weeksRunning).toBe(3);
+
+      if (dow < 7) {
+        expect(
+          ids,
+          `${String(dow)} day(s) of history is not "${String(ON_A_ROLL_MIN_WEEKS)} weeks running"`,
+        ).not.toContain(justArrived.userId);
+      } else {
+        expect(ids, "a genuine week apart still qualifies").toContain(justArrived.userId);
+        expect(rollFor(overview, justArrived.userId)?.weeksRunning).toBe(ON_A_ROLL_MIN_WEEKS);
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -529,7 +646,14 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
 
       // AND THE SENDER IS NOT ON IT — §2.4's mirror. A member learns their gym
       // cheered them, never which member of staff was on the desk.
-      expect(JSON.stringify(card)).not.toContain(owner.userId);
+      //
+      // **ALL THREE IDENTIFIERS, not just the uuid** (T3 round 1, rule 4): the
+      // id alone left the assertion green if the sender's NAME or EMAIL leaked,
+      // which is the shape a `sentBy` field would actually take.
+      const serialised = JSON.stringify(card);
+      expect(serialised).not.toContain(owner.userId);
+      expect(serialised).not.toContain(owner.email);
+      expect(serialised).not.toMatch(/Cheer c1-owner/);
     },
     TEST_TIMEOUT_MS,
   );
@@ -551,18 +675,57 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       expect(tooSoon.statusCode).toBe(409);
       expect((JSON.parse(tooSoon.body) as { error: string }).error).toBe("cheer_already_sent");
 
+      // **NOT `?.cheerableAt).not.toBeNull()`, WHICH IS WHAT THIS WAS.** When
+      // the member is absent from the list `rollFor` returns `undefined`, and
+      // `expect(undefined).not.toBeNull()` PASSES — so that assertion could not
+      // fail on a missing row, a wrong instant, or another gym's cheer. The row
+      // is asserted first, then the instant itself, against the stored
+      // `created_at` rather than against a clock (T3 round 1, rule 4).
       const blocked = await readOverview(org.org.id, owner.cookies);
-      expect(rollFor(blocked, member.userId)?.cheerableAt).not.toBeNull();
+      const blockedRow = rollFor(blocked, member.userId);
+      expect(blockedRow, "a blocked member is still on the list").toBeDefined();
+      expect(Date.parse(blockedRow?.cheerableAt ?? "")).toBe(
+        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
+      );
 
       // SEVEN DAYS AND A MINUTE — allowed. **The other direction, without which
       // a gate that simply never opens passes the test above** (:7104's PG1).
       await ageCheer(org.org.id, member.userId, "7 days 1 minute");
       expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
 
+      // **NOW BOTH ROWS ARE PUT INSIDE THE WINDOW, so `ORDER BY created_at
+      // DESC` finally decides something.** The comment here used to claim the
+      // step above proved `cheerableAt` tracks the NEWEST cheer; it could not —
+      // while the cap holds, at most one row is ever inside seven days, so the
+      // ordering was unobservable and the clause could have been deleted.
+      const ids = await sql<{ id: string }[]>`
+        SELECT id FROM gym_cheers
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}
+        ORDER BY created_at ASC`;
+      expect(ids, "two cheers have been sent by now").toHaveLength(2);
+      await sql`UPDATE gym_cheers SET created_at = now() - interval '6 days'
+                WHERE id = ${ids[0]?.id ?? ""}`;
+      await sql`UPDATE gym_cheers SET created_at = now() - interval '1 day'
+                WHERE id = ${ids[1]?.id ?? ""}`;
+
       const open = await readOverview(org.org.id, owner.cookies);
-      // Freshly cheered again, so it is closed once more — which also proves
-      // `cheerableAt` tracks the NEWEST cheer and not the first.
-      expect(rollFor(open, member.userId)?.cheerableAt).not.toBeNull();
+      const openRow = rollFor(open, member.userId);
+      expect(openRow, "still on the list with two cheers in the window").toBeDefined();
+      // Six days out (newest, one day old), never one day out (oldest, six).
+      expect(Date.parse(openRow?.cheerableAt ?? "")).toBe(
+        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
+      );
+
+      // AND IT IS THIS GYM'S ANSWER. A cheer from a DIFFERENT gym must not move
+      // it — the subquery's `c.gym_id` predicate, which nothing else drives.
+      const orgB = await makeOrg(owner.cookies, "Cheer Gym Two-B");
+      await joinAsMember(member.cookies, orgB, owner.cookies);
+      for (const daysAgo of [0, 7]) await visit(orgB.org.id, member.userId, daysAgo);
+      expect((await cheer(orgB.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
+      const afterB = rollFor(await readOverview(org.org.id, owner.cookies), member.userId);
+      expect(Date.parse(afterB?.cheerableAt ?? "")).toBe(
+        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -735,6 +898,164 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       // `members.read`, so the button is a staff door and not a member one.
       const selfCheer = await cheer(org.org.id, member.userId, member.cookies);
       expect(selfCheer.statusCode).toBe(404);
+
+      const rows = await sql<{ n: string }[]>`
+        SELECT count(*) AS n FROM gym_cheers WHERE gym_id = ${org.org.id}`;
+      expect(Number(rows[0]?.n)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** T3 ROUND 1, C/H-3 — **Part 3 §3.3: *"every mutating call writes
+   *  `audit_log`"*.** This was the only one of the sixteen console write doors
+   *  that did not, on a citation of `:28221` §7 that says the opposite: that
+   *  exemption is for a MEMBER tapping "I'm here" several hundred times a day,
+   *  and `markGymAttendance`'s own docblock draws the line — *"every other
+   *  writer in this module is a console action behind a privilege"*. */
+  it(
+    "writes an audit row naming the staffer who cheered, and none for a refusal",
+    async () => {
+      const owner = await makeUser("c8-owner");
+      const org = await makeOrg(owner.cookies, "Cheer Gym Eight");
+      const member = await makeUser("c8-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      expect(await cheerAudits(org.org.id)).toHaveLength(0);
+      expect(
+        (await cheer(org.org.id, member.userId, owner.cookies, "consistency")).statusCode,
+      ).toBe(201);
+
+      const rows = await cheerAudits(org.org.id);
+      expect(rows).toHaveLength(1);
+      // THE ACTOR IS THE SENDER AND THE TARGET IS THE RECIPIENT — the row is the
+      // only record of which staffer sent it, since the member is deliberately
+      // never told (§2.4). Swapping the two would still be one row.
+      expect(rows[0]?.actor_user_id).toBe(owner.userId);
+      expect(rows[0]?.target_id).toBe(member.userId);
+      expect(rows[0]?.meta.preset).toBe("consistency");
+
+      // A REFUSAL WRITES NOTHING. The audit row shares the insert's transaction,
+      // so a 409 that logged would be a record of something that never happened.
+      const again = await cheer(org.org.id, member.userId, owner.cookies);
+      expect(again.statusCode).toBe(409);
+      expect(await cheerAudits(org.org.id)).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** T3 ROUND 1, C/H-4 — **the refusal told the wrong person they had done it.**
+   *  The cap is per GYM (the lookup filters `gym_id` and `user_id` and nothing
+   *  else), so *"You've already cheered this member this week"* is false for the
+   *  second staffer on the desk — `:5807`, a sentence a user can see that is
+   *  not true. "This week" was wrong too: the window is a rolling seven days. */
+  it(
+    "tells a second staffer what happened, not that they did it",
+    async () => {
+      const owner = await makeUser("c9-owner");
+      const org = await makeOrg(owner.cookies, "Cheer Gym Nine");
+
+      const trainer = await makeUser("c9-trainer");
+      await joinAsMember(trainer.cookies, org, owner.cookies);
+      const hired = await post(
+        `/v1/orgs/${org.org.id}/staff`,
+        { email: "orgcheer-t-c9-trainer@example.com", role: "trainer" },
+        owner.cookies,
+      );
+      expect(hired.statusCode).toBe(201);
+
+      const member = await makeUser("c9-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
+
+      // THE TRAINER HAS PRESSED NOTHING. They hold `members.read`, so they reach
+      // the cap rather than a privilege refusal — and must not be accused of it.
+      const refused = await cheer(org.org.id, member.userId, trainer.cookies);
+      expect(refused.statusCode).toBe(409);
+      const { error, message } = JSON.parse(refused.body) as { error: string; message: string };
+      expect(error).toBe("cheer_already_sent");
+      expect(message, "the refusal must not tell the reader they did it").not.toMatch(/\byou/i);
+      expect(message, "and must not call a rolling week a calendar one").not.toMatch(/this week/i);
+      expect(message).toContain("already been cheered");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** T3 ROUND 1, "no observer" 1 — **`lockOrgRow` was holding the cap up and
+   *  nothing was holding IT up.** Deleting that one line left all thirteen tests
+   *  and all twelve mutants green, because the suite never fired two cheers at
+   *  once. The migration argues at length that a rolling window cannot be a
+   *  constraint, which makes the lock the whole of the guarantee.
+   *
+   *  TWO SEPARATE postgres clients, for `:21157`'s recorded reason: `buildApp`
+   *  pools at `max: 1`, so two `inject` calls are serialised by the CLIENT and
+   *  would pass with the lock deleted — a test that cannot fail. */
+  it(
+    "two staff pressing at the same moment send exactly one cheer",
+    async () => {
+      const owner = await makeUser("c10-owner");
+      const org = await makeOrg(owner.cookies, "Cheer Gym Ten");
+      const member = await makeUser("c10-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+
+      const a = postgres(url ?? "", { prepare: false, max: 1 });
+      const b = postgres(url ?? "", { prepare: false, max: 1 });
+      const args = {
+        gymId: org.org.id,
+        userId: member.userId,
+        sentByUserId: owner.userId,
+        preset: GYM_CHEER_PRESETS[0],
+      };
+      try {
+        const [one, two] = await Promise.all([
+          orgRepo.sendGymCheer(a, args),
+          orgRepo.sendGymCheer(b, args),
+        ]);
+        // Without the lock BOTH read "nothing recent" and BOTH insert: there is
+        // no unique index to raise, so the failure is silent and the member gets
+        // two messages. The kinds are sorted because either client may win.
+        expect([one.kind, two.kind].sort()).toEqual(["sent", "too_soon"]);
+      } finally {
+        await a.end({ timeout: 5 });
+        await b.end({ timeout: 5 });
+      }
+
+      const rows = await sql<{ n: string }[]>`
+        SELECT count(*) AS n FROM gym_cheers
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+      expect(Number(rows[0]?.n), "exactly one cheer survived the race").toBe(1);
+      expect(await cheerAudits(org.org.id)).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** T3 ROUND 1, L-1 — **the door and the panel used different populations.**
+   *  `getGymRegulars` excludes complimentary members; the write door did not, so
+   *  a comped member could never be drawn with a Cheer button and could still be
+   *  cheered by a hand-made request. The card names both halves. */
+  it(
+    "will not cheer a complimentary member, who is not on the panel either",
+    async () => {
+      const owner = await makeUser("c11-owner");
+      const org = await makeOrg(owner.cookies, "Cheer Gym Eleven");
+      const member = await makeUser("c11-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      for (const daysAgo of [0, 7, 14]) await visit(org.org.id, member.userId, daysAgo);
+
+      // THE POSITIVE CONTROL: before the flip they ARE on the panel and CAN be
+      // cheered, so the assertions below cannot pass on a member who was simply
+      // never eligible.
+      const before = await readOverview(org.org.id, owner.cookies);
+      expect(before.onARoll.map((r) => r.userId)).toContain(member.userId);
+
+      await sql`
+        UPDATE gym_members SET complimentary = true
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+
+      const refused = await cheer(org.org.id, member.userId, owner.cookies);
+      expect(refused.statusCode).toBe(404);
+      const after = await readOverview(org.org.id, owner.cookies);
+      expect(after.onARoll.map((r) => r.userId)).not.toContain(member.userId);
 
       const rows = await sql<{ n: string }[]>`
         SELECT count(*) AS n FROM gym_cheers WHERE gym_id = ${org.org.id}`;

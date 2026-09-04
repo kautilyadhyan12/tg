@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,196 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,203 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,655 lines, MEASURED 2026-09-04 and not estimated**
-(1,196 + 1,385 + 74). **THE THIRTY-SECOND IS A WHOLE SERVER HALF — a migration,
+**ALWAYS-READ TOTAL: 2,662 lines, MEASURED 2026-09-04 and not estimated**
+(1,203 + 1,385 + 74). **THE THIRTY-THIRD IS A T3 ROUND THAT DOES NOT SHIP ITS
+PACKET — four Critical/High and six Low, all ten fixed, plus seven new mutants —
+AND IT COST SEVEN LINES, every one of them a trigger phrase, §1 AND §2 UNMOVED
+AT 1,385 AND 74.** Its record is a ROUND record and went to §1B, where `:24813`
+sends it. Taken with this header's own prescribed command against the bytes being
+committed, never by adding a delta to the figures above. **THE THIRTY-SECOND IS A WHOLE SERVER HALF — a migration,
 a new table, the sixteenth write door, two new response fields, thirteen tests
 and twelve mutants — AND IT COST EIGHT LINES, every one of them a trigger
 phrase, §1 AND §2 UNMOVED.** Its record is a CARD record and went to §1B, where
@@ -1678,6 +1683,30 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:34443** — 2026-09-04 — **"ON A ROLL" AND THE CHEER, T3 ROUND 1: FOUR
+  Critical/High, THE PACKET DOES NOT SHIP — a member two days old shown to their
+  owner as "2 weeks running", and the lock the whole cap rests on could be
+  deleted with every test still green.** **Read before writing any streak, run or
+  "N weeks running" figure anywhere in this product, before trusting
+  `date_trunc('week', …)` to mean a WEEK, before citing `:28221` §7 as an
+  audit-log exemption, before writing a refusal sentence that says "you", before
+  adding a table to `privacy/tables.ts`, before adding a `cheerableAt`-style
+  "when may I do this again" field, and before assuming a `?.field` assertion can
+  fail when the row is missing.**
+  Four C/H and six Low, all ten fixed. **The one that reached a screen: week
+  BUCKETS are not weeks** — `date_trunc('week')` is a Monday, so a Sunday visit
+  and a Monday visit are two buckets ONE DAY apart, and `ON_A_ROLL_MIN_WEEKS`'s
+  own docblock promised exactly this could not happen. **The same mistake was in
+  the TEST and would have gone red every Monday in CI; PROVE was green because
+  the day was a Friday.** Also: the only one of sixteen write doors with no
+  `audit_log` row, on a citation of `:28221` §7 that says the opposite · a
+  refusal telling the second staffer they had done it · `gym_cheers` missing from
+  the `OWED.md` list Kd rules from, the round after that line was written to
+  record that failure. **Two guarantees had NO observer — `lockOrgRow`, the whole
+  of the cap, and the `cheerable_at` subquery — both deletable with all 13 tests
+  and all 12 mutants green.** **The fix un-covered O265 and the sweep would not
+  have said so** (`:15673`). 18/18, 19 mutants 19 RED, seven of them new.
+  **No screen, no smoke, the `OWED.md` line still does not tick.**
 - **:34240** — 2026-09-04 — **"ON A ROLL" AND THE CHEER, SERVER HALF: a gym can
   tell who keeps turning up and send them one tap of encouragement — and a field
   I added to the response was invisible because the guard that protects old

@@ -2742,10 +2742,16 @@ export async function sendOrgCheer(
       // **THIS IS ONLY REACHABLE FROM A STALE OR RACING SCREEN**, because the
       // button is drawn dead whenever `cheerableAt` is set. It is the server
       // keeping the last word, not the ordinary path (:24141 §3a).
+      //
+      // **THE SENTENCE SAYS WHAT HAPPENED, NOT WHO DID IT.** The cap is per
+      // GYM — the query filters on `gym_id` and `user_id` and nothing else — so
+      // "You've already cheered" is FALSE for the second staffer on the desk,
+      // who is told they did something a colleague did. "This week" was wrong
+      // too: the window is a ROLLING seven days, not a calendar week.
       throw new OrgsError(
         409,
         "cheer_already_sent",
-        "You've already cheered this member this week.",
+        "This member has already been cheered in the last 7 days.",
       );
     case "sent":
       return sendGymCheerResponseSchema.parse({

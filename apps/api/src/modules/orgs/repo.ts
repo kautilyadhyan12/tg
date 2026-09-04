@@ -24,6 +24,7 @@ import {
   gymClockFormatSchema,
   gymHoursModeSchema,
   ON_A_ROLL_LIMIT,
+  ON_A_ROLL_MIN_SPAN_DAYS,
   ON_A_ROLL_MIN_WEEKS,
   OVERVIEW_MONTH_DAYS,
   OVERVIEW_WEEKS,
@@ -4783,14 +4784,20 @@ export async function getGymRegulars(
   const gym = gymRows[0];
   if (gym === undefined) return null;
 
-  const limit = Math.min(input.limit ?? ON_A_ROLL_LIMIT, ON_A_ROLL_LIMIT);
+  // FLOORED AS WELL AS CAPPED. `Math.min` alone hands `LIMIT -3` straight to
+  // Postgres for a negative argument; there is no caller today, which is
+  // exactly when a bound like this is cheapest to get right.
+  const limit = Math.max(1, Math.min(input.limit ?? ON_A_ROLL_LIMIT, ON_A_ROLL_LIMIT));
 
   const rows = await sql<
     {
       user_id: string;
       display_name: string;
-      weeks_running: string;
-      days_running: string;
+      // int4 (`count(*)::int`) reaches JS as a NUMBER; `count(*)` alone is
+      // int8 and reaches it as a STRING. These three were all declared string,
+      // which `Number()` below made invisible.
+      weeks_running: number;
+      days_running: number;
       visits: string;
       cheerable_at: Date | null;
     }[]
@@ -4830,16 +4837,22 @@ export async function getGymRegulars(
     -- date_trunc(week) is Monday in Postgres, which is the calendar the
     -- 8-week chart above is already bucketed by — a second answer to "which
     -- Monday" computed in JavaScript is how two panes on one screen disagree.
+    -- first_day IS THE REAL FIRST VISIT IN THE BUCKET, NOT ITS MONDAY, and it
+    -- is the only reason this CTE groups instead of using DISTINCT. The two
+    -- differ by up to six days, and that gap IS the defect the span floor below
+    -- closes: two buckets can be one day apart.
     w AS (
-      SELECT DISTINCT user_id, date_trunc('week', day)::date AS wk FROM d
+      SELECT user_id, date_trunc('week', day)::date AS wk, min(day) AS first_day
+      FROM d GROUP BY user_id, date_trunc('week', day)
     ),
     wg AS (
-      SELECT user_id, wk,
+      SELECT user_id, wk, first_day,
              wk - ((row_number() OVER (PARTITION BY user_id ORDER BY wk)) * 7)::int AS grp
       FROM w
     ),
     week_streak AS (
-      SELECT wg.user_id, count(*)::int AS weeks_running, min(wg.wk) AS streak_from
+      SELECT wg.user_id, count(*)::int AS weeks_running, min(wg.wk) AS streak_from,
+             min(wg.first_day) AS first_day
       FROM wg
       GROUP BY wg.user_id, wg.grp
       HAVING max(wg.wk) >= (SELECT this_week FROM b) - 7
@@ -4849,7 +4862,11 @@ export async function getGymRegulars(
            ws.weeks_running,
            coalesce(ds.days_running, 0) AS days_running,
            -- COUNTED OVER THE STREAK'S OWN SPAN, so the two numbers on the row
-           -- describe one stretch of time. Bounded by the same window d is.
+           -- describe one stretch of time. NOT bounded by the same window d
+           -- is: streak_from is a MONDAY and can sit up to six days before
+           -- floor_day, so this can reach a little further back than the
+           -- island search did. Harmless at a 400-day lookback, and written
+           -- down because the comment here used to claim the opposite.
            (SELECT count(*) FROM gym_attendance v
              WHERE v.gym_id = ${input.gymId} AND v.user_id = ws.user_id
                AND v.day >= ws.streak_from AND v.day <= (SELECT today FROM b)) AS visits,
@@ -4865,6 +4882,10 @@ export async function getGymRegulars(
     JOIN users u ON u.id = ws.user_id
     LEFT JOIN day_streak ds ON ds.user_id = ws.user_id
     WHERE ws.weeks_running >= ${ON_A_ROLL_MIN_WEEKS}::int
+      -- AND THE STREAK MUST HAVE LASTED, not merely straddled a Monday. Week
+      -- BUCKETS are not weeks: without this, somebody whose whole history is
+      -- yesterday and today reads "2 weeks running" on the owner's home screen.
+      AND (SELECT today FROM b) - ws.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int
     ORDER BY ws.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
              u.display_name ASC, ws.user_id ASC
     LIMIT ${limit}`;
@@ -4872,8 +4893,13 @@ export async function getGymRegulars(
   return rows.map((r) => ({
     userId: r.user_id,
     displayName: r.display_name,
-    weeksRunning: Number(r.weeks_running),
-    daysRunning: Number(r.days_running),
+    // `weeks_running` and `days_running` are int4 and arrive as NUMBERS; only
+    // `visits` is a bare `count(*)`, i.e. int8, which postgres.js hands over as
+    // a STRING. All three were typed `string` and wrapped in `Number()`, which
+    // made the difference invisible — and lint is what proved the correction,
+    // by objecting that two of these conversions could not do anything.
+    weeksRunning: r.weeks_running,
+    daysRunning: r.days_running,
     visits: Number(r.visits),
     cheerableAt: r.cheerable_at,
   }));
@@ -4882,7 +4908,11 @@ export async function getGymRegulars(
 export type SendCheerOutcome =
   | { kind: "sent"; preset: GymCheerPreset; sentAt: Date }
   | { kind: "not_found" }
-  | { kind: "too_soon"; cheerableAt: Date };
+  /** NO `cheerableAt` HERE, deliberately. The 409 does not carry the instant —
+   *  `service.ts` says why, and `cheerableAt` on the overview payload is where a
+   *  screen gets it. This carried one that every caller discarded, which is a
+   *  value that looks like an answer nobody is using (T3 round 1, L-3). */
+  | { kind: "too_soon" };
 
 /** ONE TAP — Kd's :29961 ruling 4.
  *
@@ -4907,24 +4937,34 @@ export async function sendGymCheer(
   input: { gymId: string; userId: string; sentByUserId: string; preset: GymCheerPreset },
 ): Promise<SendCheerOutcome> {
   return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+    // The trailing note is not decoration, and :21157 wrote the same one for the
+    // same reason: `await lockOrgRow(tx, input.gymId);` appears a dozen times in
+    // this file, so a mutant aimed at THIS lock needs the line to name its own
+    // subject — an anchor is lengthened to reach something unique to its
+    // subject, never to include its neighbourhood (:27204 §6).
+    await lockOrgRow(tx, input.gymId); // the only guarantee behind the cap, O274
 
+    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
+    // door and the panel disagree: a comped member can never be drawn on the
+    // panel (the `mem` CTE excludes them) and could still be cheered by a
+    // hand-made request. The card names both halves — a LIVE, non-complimentary
+    // member — and only one of them was built.
     const member = await tx<{ one: number }[]>`
       SELECT 1 AS one FROM gym_members
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL`;
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND removed_at IS NULL AND complimentary = false`;
     if (member.length === 0) return { kind: "not_found" };
 
     // THE ROLLING WINDOW, READ INSIDE THE LOCK. `>` and not `>=`: a cheer sent
     // exactly seven days ago has served its week, and the boundary is the one
     // direction a test can only see with a fixture standing on it.
-    const recent = await tx<{ cheerable_at: Date }[]>`
-      SELECT created_at + interval '7 days' AS cheerable_at
+    const recent = await tx<{ one: number }[]>`
+      SELECT 1 AS one
       FROM gym_cheers
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
         AND created_at > now() - interval '7 days'
-      ORDER BY created_at DESC LIMIT 1`;
-    const blocked = recent[0];
-    if (blocked !== undefined) return { kind: "too_soon", cheerableAt: blocked.cheerable_at };
+      LIMIT 1`;
+    if (recent.length > 0) return { kind: "too_soon" };
 
     const inserted = await tx<{ preset: string; created_at: Date }[]>`
       INSERT INTO gym_cheers (gym_id, user_id, sent_by_user_id, preset)
@@ -4934,6 +4974,24 @@ export async function sendGymCheer(
     // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
     // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
     if (row === undefined) throw new Error("cheer vanished inside its own transaction");
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
+    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — the exemption
+    // this card originally cited (`:28221` §7) is about a MEMBER tapping "I'm
+    // here" several hundred times a day, and `markGymAttendance`'s own docblock
+    // spells out the distinction: *"every other writer in this module is a
+    // console action behind a privilege"*. A cheer is one of those, and Kd's
+    // own cap of one per member per seven days is what disposes of the volume
+    // half of that reasoning. It is also the only record of WHICH staffer sent
+    // it — the member is deliberately never told (§2.4).
+    await insertAudit(tx, {
+      actorUserId: input.sentByUserId,
+      gymId: input.gymId,
+      action: "org.member_cheered",
+      targetType: "user",
+      targetId: input.userId,
+      meta: { preset: input.preset },
+    });
 
     return {
       kind: "sent",

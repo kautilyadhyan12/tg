@@ -34439,3 +34439,222 @@ anybody. Its journal entry is in this commit.
 **NOT RUN AND NOT CLAIMED:** the full api suite (the pre-existing seed-count
 flake `CLAUDE.md` and `:13746` both document), any web suite (no
 `apps/web` file was touched), and gitleaks.
+
+## 2026-09-04 — "ON A ROLL" AND THE CHEER, T3 ROUND 1: FOUR Critical/High, THE PACKET DOES NOT SHIP — a member two days old shown to their owner as "2 weeks running", and the lock the whole cap rests on could be deleted with every test still green
+
+**Read before writing any streak, run or "N weeks running" figure anywhere in
+this product, before trusting `date_trunc('week', …)` to mean a WEEK, before
+citing `:28221` §7 as an audit-log exemption, before writing a refusal sentence
+that says "you", before adding a table to `privacy/tables.ts`, before adding a
+`cheerableAt`-style "when may I do this again" field, and before assuming a
+`?.field` assertion can fail when the row is missing.**
+
+Round 1 on `a20ef8d`'s cheer packet (`:34240`). **Four Critical/High, six Low,
+all ten fixed; two guarantees with NO observer at all, both now driven.** Kd
+approved the fix round after being given the four in plain words.
+
+### 1 · WEEK BUCKETS ARE NOT WEEKS, AND THIS IS THE ONE THAT REACHED A SCREEN
+
+`date_trunc('week', …)` is a **Monday**. So a Sunday visit and a Monday visit
+sit in two different buckets **one day apart**, `weeks_running` counted 2, and
+a member whose entire history was yesterday and today was drawn on the owner's
+home screen as **"2 weeks running"** — `:5807` exactly, a number a user can see
+that is false.
+
+**THE CONSTANT'S OWN DOCBLOCK PROMISED THIS COULD NOT HAPPEN:**
+`ON_A_ROLL_MIN_WEEKS` says it exists because *"one visit ever would otherwise
+put a brand-new member on a list headed on a roll"* — **and the defect walked in
+through the calendar rather than through the floor it was guarding.** A comment
+that states a guarantee is not the guarantee (`:19960`'s shape).
+
+**THE FIX IS DERIVED, NOT INVENTED (R0.2):** `ON_A_ROLL_MIN_SPAN_DAYS =
+(ON_A_ROLL_MIN_WEEKS - 1) * 7`. To have come for N weeks is to have been coming
+for at least N−1 whole weeks, so it is the arithmetic of the ruled constant and
+follows it if Kd moves it. **The span is measured from the first REAL visit, not
+from its Monday** — `w` now carries `min(day) AS first_day`, because the Monday
+is up to six days earlier than the day anybody walked in, and that gap IS the
+whole size of the defect.
+
+**AND THE SAME MISTAKE WAS IN THE TEST, one day in seven.** The "single week"
+fixture used `[0, 1]` — one bucket six days a week, **two across a
+Sunday/Monday** — so `orgs.cheers.test.ts` asserted the opposite of its own
+fixture and would have gone RED every Monday in CI. **PROVE was green because
+2026-09-04 is a Friday.** The fixture now asks the gym what weekday it is
+(`gymDow`, in SQL, never `new Date()`).
+
+### 2 · THE FIX UN-COVERED AN EXISTING MUTANT, WHICH IS THE PART TO KEEP
+
+Moving that fixture to `[dow+5, dow+6]` — two days inside the PREVIOUS ISO week
+on every weekday — was not tidying. **With a RECENT one-week member, the new
+span floor excludes them by itself, so O265 could relax `ON_A_ROLL_MIN_WEEKS` to
+1 with the suite still green.** A fix would have quietly un-covered a guarantee
+it never touched (`:15673`), and the only reason it did not is that the question
+was asked before the sweep rather than after it. **STANDING: a new exclusion can
+take over the job of an old one, and the mutant aimed at the old one goes quiet
+rather than red.** O265 re-verified RED.
+
+### 3 · `:28221` §7 WAS CITED FOR THE EXEMPTION AND SAYS THE OPPOSITE
+
+The cheer was the **only one of sixteen console write doors** with no
+`audit_log` row, against `03-part3-org-console.md:214` — *"every mutating call
+writes `audit_log`"* — with no `DEVIATION PROPOSAL` anywhere. The card cited
+`:28221` §7. **That paragraph exempts a MEMBER tapping "I'm here" several
+hundred times a day**, and `markGymAttendance`'s own docblock draws the line in
+one sentence: *"every other writer in this module is a console action behind a
+privilege"*. **A cheer is one of those**, and Kd's cap of one per member per
+seven days disposes of "high-volume" — the same card enforcing it.
+
+**THE COST WAS THE ONLY RECORD OF WHO SENT IT:** the member is deliberately
+never told which staffer cheered them (§2.4), so with no audit row the answer
+existed nowhere. Now `org.member_cheered`, inside the same transaction, so a
+409 logs nothing.
+
+**AND THE GUARD THAT LET IT THROUGH IS NAMED:** `orgs.routes.test.ts:6226`
+counts `requireWritablePrivilege` call sites and **nothing counts audit rows**,
+so the seventeenth door will arrive the same way. Not built this round —
+`:5348` rule 6 — and it is stated rather than implied.
+
+### 4 · A REFUSAL THAT ACCUSED THE READER
+
+*"You've already cheered this member this week."* **The cap is per GYM** — the
+lookup filters `gym_id` and `user_id` and nothing else — so the second staffer
+on the desk is told they did something a colleague did. `:5807`, and "this week"
+was wrong too: the window is a **rolling seven days**. Now *"This member has
+already been cheered in the last 7 days."*
+
+### 5 · TWO GUARANTEES WITH NO OBSERVER, FOUND BY ASKING WHAT COULD BE DELETED
+
+Neither is a defect in the shipped code; **both are things that could have
+become one silently**, and the round found them by deleting lines to see what
+went red.
+
+1. **`lockOrgRow` — the WHOLE of the cap.** A rolling seven days cannot be a
+   UNIQUE or a CHECK (the migration argues that at length), so the lock is the
+   only thing making a check-then-act safe. **Deleting it left all 13 tests and
+   all 12 mutants green**, because the suite never fired two cheers at once —
+   and there is no constraint to raise, so the failure is SILENT and the member
+   simply gets two messages. Its observer is now **two real postgres clients**,
+   `:21157`'s method: `buildApp` pools at `max: 1`, so two `inject` calls are
+   serialised by the CLIENT and would pass with the lock gone.
+2. **The `cheerable_at` subquery.** Drop its `gym_id`, drop the seven-day
+   filter, or change the interval — every test passed. **It is the ONLY channel
+   telling a screen when the button reopens**, because the 409 deliberately
+   omits the instant, so a wrong value here is a false date with nothing between
+   it and the user.
+
+### 6 · THREE ASSERTIONS THAT COULD NOT FAIL, AND ONE COMMENT THAT CLAIMED A PROOF
+
+`expect(rollFor(overview, id)?.cheerableAt).not.toBeNull()` — **when the member
+is absent `rollFor` returns `undefined`, and `expect(undefined).not.toBeNull()`
+PASSES.** Two such assertions could not fail on a missing row, a wrong instant,
+or another gym's cheer. **STANDING: `?.` turns an absence into a pass, so an
+assertion on an optional field asserts the ROW first.**
+
+A comment claimed the second one proved `cheerableAt` tracks the NEWEST cheer.
+**It could not: while the cap holds, at most one row is ever inside seven days**,
+so `ORDER BY created_at DESC` was unobservable and could have been deleted. The
+test now puts two rows inside the window deliberately.
+
+And `expect(JSON.stringify(card)).not.toContain(owner.userId)` caught the
+sender's **uuid only** — a leaked name or email kept it green, which is the shape
+a `sentBy` field would actually take. All three identifiers now.
+
+### 7 · WHAT WAS CHECKED HARDEST AND FOUND SOUND, so the next round does not re-derive it
+
+**Tenancy is clean and observed on all four queries** — the streak, the cap, the
+`cheerable_at` probe and `listOrgsForUser`'s lateral — with O261/O267/O269/O270
+killing each half separately on a two-gym, two-membership fixture. **The
+privilege order is right**: `requireWritablePrivilege` before the membership
+read, so a stranger keeps the 404 and cannot probe a roster. **`sent_by_user_id`
+never reaches a response.** **DPDP is mechanically safe** — §5.2 tombstones the
+`users` row, so the three `ON DELETE RESTRICT` FKs never fire.
+
+**NOT A DEFECT, examined and left alone:** `orgRegularSchema.weeksRunning` is
+`min(1)` while the server floor is 2. **Tightening it to 2 would make the schema
+REFUSE a value a future server could legitimately send** — the floor's own
+docblock calls it reversible in one line — and `orgsApi.js` treats a contract
+mismatch as a HARD failure, so that edit blanks the console's home screen in any
+api-newer-than-web window. `:31222`, in Kd's browser, exactly. **A response bound
+is loosened toward what a NEWER server might say, never tightened to today's
+behaviour** (`:16101`). Recorded so round 2 does not "fix" it.
+
+### 8 · THE `OWED.md` LINE SAID THIRTEEN, AND THE FOURTEENTH WAS IN THE CODE ONLY
+
+`gym_cheers` joined `USER_LINKED_NOT_PURGED_TABLES` correctly and the FK walk
+caught it there — **and the `OWED.md` enumeration Kd will actually rule from
+still said THIRTEEN and did not name it.** That line's own text says the
+question *"lived only in a code comment"* until 2026-09-02 and that *"the list
+Kd is asked to rule on has to be complete, or the ruling is partial"*.
+**So the failure it was written to record recurred in the round after it was
+written.** Now FOURTEEN, named. `gym_cheers` is the most person-to-person of
+them: which staff member sent a message to which member on which date.
+
+### 9 · THE BACKTICK, A FIFTH TIME, INSIDE THE FIX FOR THE FOURTH
+
+`:34240` §8 recorded the backtick-in-a-`sql`-template trap for the fourth time.
+**I then wrote two more, in the comments explaining this round's own fix**, in
+the same file. `tsc` caught both in seconds and nothing reached a database.
+**The rate is now the finding twice over: a warning in a comment has failed to
+prevent this five times, and the typechecker has caught it five times.** The
+instrument works; the convention does not.
+
+**AND `node --check` CAUGHT THE SAME CLASS IN THE HARNESS** — an apostrophe
+inside a single-quoted mutant anchor (`:13336`'s guard, on its own class). Fixed
+in the SOURCE comment rather than by escaping, matching the no-apostrophe
+convention the harness's other rows already follow.
+
+### 10 · AN ANCHOR DRIFTED UNDER THIS ROUND'S OWN FIX
+
+Adding `complimentary = false` to the write door's member check split that
+predicate over two lines, so **O268's one-line anchor matched nothing and the
+whole-table pre-check ABORTED before a byte was written** (`:5199`'s class doing
+its job). Re-anchored on its own subject — it still deletes `removed_at IS NULL`
+and nothing else — with **O278 as the sibling deleting the other half**, never
+re-aimed at whichever line came first (`:15770`, `:27204` §6).
+
+**O274's anchor needed the SOURCE changed, not the anchor lengthened.**
+`await lockOrgRow(tx, input.gymId);` appears **twelve times** in this file, so
+the line now names its own subject in a trailing comment — `:21157`'s O127
+method, and the reason it is not a two-line anchor is `:17676`'s 99-strong CRLF
+hazard.
+
+### Round log
+
+**FIXED: 4 Critical/High + 6 Low.** C/H-1 the span floor · C/H-2 the `OWED.md`
+enumeration · C/H-3 the audit row · C/H-4 the refusal sentence. Low: the write
+door's `complimentary` predicate · a false comment about what bounds `visits` ·
+a dead `cheerableAt` on the `too_soon` outcome · `getGymRegulars`'s unfloored
+`limit` (`LIMIT -n` was reachable for a negative argument) · two row types
+declared `string` that are int4 and arrive as numbers — **lint proved that one,
+by objecting that two `Number()` conversions could not do anything.**
+
+**PROVE, all LOCAL (`127.0.0.1:5433`, per `:13659`) and all on the final bytes.**
+`orgs.cheers` **18/18** (was 13) · `orgs.routes` + `orgs.overview` **160/160** ·
+`privacy.purge` + `db.migration` + `orgs.attendance` **73/73** ·
+`@app/shared` **52/52** · `tsc --noEmit` exit 0 on `api` and `@app/shared` ·
+`eslint --max-warnings=0` exit 0 on four files · `node --check` on the harness.
+
+**`tsc` IS PROVEN REAL BY A DEFECT IT ACTUALLY CAUGHT, not by a planted error:**
+the two backticks in §9 took it from exit 0 to five parse errors and back.
+
+**AUDIT — a stated SUBSET of 269: `MUTATE_ONLY=O261…O279`, 19 mutants, 19 RED, 0
+ALIVE, 0 never ran**, all thirteen controls GREEN and tallied first, restore
+sha256-verified after every mutant, 463 gym + subscription rows fingerprinted
+with no unattributed changes, and the harness printed its own *"THIS IS NOT A
+FULL SWEEP"*. Database named in the output. **Seven of the nineteen are new**
+(O273–O279) and every one of them sits in `:5857` rule 4a's always-mutated
+columns — ownership, numbers a user sees, and data a user is told.
+
+**RE-SWEPT IN FULL AFTER THE LOW FIXES**, because the `too_soon` change edited
+the query O266 and O267 aim at — a second 19/19, not the first one re-quoted.
+
+**NOT RUN AND NOT CLAIMED:** the full api suite (one run went 792/795 with the
+three failures in `catalog.seed.test.ts`, the **pre-existing** seed-count flake
+`CLAUDE.md` and `:13746` both document — no `apps/api/src` file this round
+touches is in it), any web suite (**no `apps/web` file was touched**), and
+gitleaks.
+
+**STILL TRUE AND UNCHANGED BY THIS ROUND: no screen exists, no smoke was run or
+offered (`:26012`'s shape), and the `OWED.md` line does not tick.** The web half
+(§4b) is the next artefact. **This branch has still never reached GitHub since
+2026-09-02, so CI has seen none of it.**

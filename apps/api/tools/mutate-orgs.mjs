@@ -3182,9 +3182,16 @@ const MUTANTS = [
     target: 'repo',
     suite: CHEERS_SUITE,
     why: "A REMOVED MEMBER CAN STILL BE CHEERED. The list is one guard and the door is another; with this gone, a panel somebody had open before a removal keeps working, and the app writes an encouraging message to a person the gym has just taken off its roster. O262 is the same failure on the READ side, and the two are mutated apart because they are two queries",
+    // RE-ANCHORED 2026-09-04, and the drift is the T3 round's own fix arriving:
+    // L-1 added `AND complimentary = false` to this predicate and split it over
+    // two lines, so the old one-line anchor matched nothing. **The whole-table
+    // pre-check ABORTED before a byte was written** (:5199's class doing its
+    // job, :15770's guard). It is NOT re-aimed at whichever line came first —
+    // it still deletes `removed_at IS NULL` and nothing else, which is its own
+    // subject; O278 is the sibling that deletes the other half (:27204 §6).
     expect: "leaves out somebody the gym has removed",
-    from: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL`;',
-    to: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;',
+    from: '        AND removed_at IS NULL AND complimentary = false`;',
+    to: '        AND complimentary = false`;',
   },
   {
     id: 'O269',
@@ -3221,6 +3228,78 @@ const MUTANTS = [
     expect: "reports weeks AND days running",
     from: '             day - (row_number() OVER (PARTITION BY user_id ORDER BY day))::int AS grp',
     to: '             day AS grp',
+  },
+  // ── T3 ROUND 1 (2026-09-04) ────────────────────────────────────────────────
+  // Six rows for guarantees that had NO OBSERVER AT ALL, which the round found
+  // by asking what could be DELETED with all thirteen tests and all twelve
+  // mutants above still green. Four of the six could.
+  {
+    id: 'O273',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "WEEK BUCKETS GO BACK TO PASSING AS WEEKS. date_trunc('week') is a Monday, so a Sunday visit and a Monday visit are two buckets ONE DAY apart - and somebody whose entire history is yesterday and today is drawn on the owner's home screen as 2 weeks running. That is the brand-new member ON_A_ROLL_MIN_WEEKS own docblock says it exists to keep off a list headed on a roll, arriving through the calendar instead of through the floor. It shipped in the card and was found by T3 round 1 (C/H-1)",
+    expect: "a streak that only straddled a Monday",
+    from: "      AND (SELECT today FROM b) - ws.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int\n",
+    to: '\n',
+  },
+  {
+    id: 'O274',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE CAP STOPS BEING A CAP. The rolling seven days cannot be a UNIQUE or a CHECK - the migration argues that at length - so lockOrgRow is the WHOLE guarantee, and without it two staff pressing at the same instant both read no recent cheer and both INSERT. There is no constraint to raise, so the member simply gets two messages and nothing anywhere says so. This line could be deleted with every test and every other mutant still green (T3 round 1, no-observer 1); its observer is now two real postgres clients, because buildApp pools at max: 1 and two injects would be serialised by the CLIENT",
+    // A ONE-LINE ANCHOR ONLY BECAUSE THE SOURCE NAMES THE GUARANTEE ON THAT
+    // LINE — :21157's O127 method, for the same reason: the bare call appears a
+    // dozen times in this file, and an anchor reaches for something unique to
+    // its own SUBJECT rather than to its neighbourhood (:27204 §6). A two-line
+    // anchor here would also be :17676's 99-strong CRLF hazard.
+    expect: "two staff pressing at the same moment",
+    from: '    await lockOrgRow(tx, input.gymId); // the only guarantee behind the cap, O274\n',
+    to: '\n',
+  },
+  {
+    id: 'O275',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE ONLY RECORD OF WHO SENT IT GOES. Part 3 §3.3 is every mutating call writes audit_log, and this was the one console write door of sixteen that did not - on a citation of :28221 §7 that says the opposite, since that exemption is a MEMBER tapping I'm here several hundred times a day. The member is deliberately never told which staffer cheered them (§2.4), so this row is the only place that answers it. Deleting the row leaves a door that works perfectly and remembers nothing (T3 round 1, C/H-3)",
+    expect: "writes an audit row naming the staffer",
+    from: '    await insertAudit(tx, {\n      actorUserId: input.sentByUserId,',
+    to: '    if (false) await insertAudit(tx, {\n      actorUserId: input.sentByUserId,',
+  },
+  {
+    id: 'O276',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE REOPENING DATE STOPS ASKING WHICH GYM, so one gym cheering a member greys the button on ANOTHER gym's panel and names a date that gym never earned. It is O261/O267's missing predicate in the third of the three places it has to be written, and it was the one nothing watched: the 409 deliberately omits the instant, so this subquery is the ONLY channel telling a screen when the button comes back (T3 round 1, no-observer 2)",
+    expect: "refuses a second cheer inside seven days",
+    from: '             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id\n               AND c.created_at > now()',
+    to: '             WHERE c.user_id = ws.user_id\n               AND c.created_at > now()',
+  },
+  {
+    id: 'O277',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE DATE ON THE BUTTON STOPS BEING THE DATE THE SERVER ENFORCES. The panel says come back in thirty days while sendGymCheer allows one after seven, so an owner is told a date that is false in the direction that costs them the feature - :5807 on a screen an owner makes decisions from. The two figures are written in two places and only one of them refuses anything, which is what makes this worth a row of its own",
+    expect: "refuses a second cheer inside seven days",
+    from: "    (SELECT c.created_at + interval '7 days'",
+    to: "    (SELECT c.created_at + interval '30 days'",
+  },
+  {
+    id: 'O278',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE DOOR AND THE PANEL DISAGREE ABOUT WHO IS A MEMBER. getGymRegulars excludes complimentary members - the owner's own seat is one - so with this gone a person who can NEVER be drawn with a Cheer button can still be cheered by a hand-made request, and the card's own §4a.4 step 3 names both halves. Sibling of O262/O268 on the population rather than the removal (T3 round 1, L-1)",
+    expect: "will not cheer a complimentary member",
+    from: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n        AND removed_at IS NULL AND complimentary = false`;',
+    to: '      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n        AND removed_at IS NULL`;',
+  },
+  {
+    id: 'O279',
+    target: 'service',
+    suite: CHEERS_SUITE,
+    why: "THE REFUSAL GOES BACK TO ACCUSING THE READER. The cap is per GYM - the lookup filters gym_id and user_id and nothing else - so You've already cheered this member this week is FALSE for the second staffer on the desk, who is told they did something a colleague did. It is :5807 exactly: a sentence a user can see that is not true, and it shipped in the card (T3 round 1, C/H-4). The window is a ROLLING seven days too, never a calendar week",
+    expect: "tells a second staffer what happened",
+    from: '        "This member has already been cheered in the last 7 days.",',
+    to: '        "You\'ve already cheered this member this week.",',
   },
 ];
 
