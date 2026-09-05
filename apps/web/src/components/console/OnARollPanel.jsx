@@ -54,14 +54,15 @@ import {
 // unreachable in the product. He approved the four messages at this card's own
 // gate, so the design that can send all four wins.
 //
-// ── FOUR WAYS OUT, AND KD NAMED NONE OF THEM ─────────────────────────────────
+// ── FIVE WAYS OUT, AND KD NAMED NONE OF THEM ─────────────────────────────────
 // **A CONTROL WHOSE CANCEL IS UNTESTED IS `:14840`'s RECORDED DEFECT**, so the
 // dismiss paths are a build requirement rather than polish, and its own
-// `OWED.md` line says so. All four are tested: **Send** · **Escape** · a click
-// anywhere else · **the same emoji again**. A FIFTH is the one that matters most
-// for a mis-tap — **a DIFFERENT emoji swaps the panel** rather than needing a
-// dismiss first, so the cost of pressing 🔥 when you meant 💪 is one more tap
-// and never a sent cheer.
+// `OWED.md` line says so. Four of the five CLOSE the panel and each has its own
+// case: **Send** · **Escape** · a click anywhere else · **the same emoji
+// again**. **The fifth is not a way out at all and is the one a real mis-tap
+// uses — a DIFFERENT emoji SWAPS the panel** rather than needing a dismiss
+// first, so the cost of pressing 🔥 when you meant 💪 is one more tap and never
+// a sent cheer.
 //
 // **ONE PANEL EXISTS AT A TIME, ACROSS THE WHOLE LIST**, which is why `pending`
 // is a single value here and not a second per-row `Map`. `:34992`'s C/H was
@@ -136,9 +137,25 @@ export default function OnARollPanel({
     const onKey = (event) => {
       if (event.key === 'Escape') setPending(null);
     };
+    // **`contains` IS WHAT LETS **Send** BE PRESSED AT ALL, AND THAT IS NOT
+    // OBVIOUS FROM READING IT.** A real press is `mousedown` → `mouseup` →
+    // `click`. Without this test the `mousedown` half closes the panel, React
+    // flushes it as a discrete update, and the button is GONE before the click
+    // lands — so no cheer could ever be sent, and the same-row swap would
+    // become a dismiss. **T3 round 1's Critical/High: every case in the render
+    // suite used `fireEvent.click`, which dispatches NO `mousedown`, so all 25
+    // stayed green with this line deleted.** `sends when Send is pressed the
+    // way a browser presses it` and **C227** are what hold it now.
+    //
+    // **A DETACHED REF CLOSES RATHER THAN NO-OPS** (`box === null`, not
+    // `box !== null &&`). If the row holding the panel stops drawing it, the
+    // old form left `pending` set with both listeners bound and nothing able to
+    // clear it — a later payload restoring that row would re-draw an armed
+    // **Send** nobody opened. `:34992`'s shape, in the one place this component
+    // still had it.
     const onDown = (event) => {
       const box = openBoxRef.current;
-      if (box !== null && !box.contains(event.target)) setPending(null);
+      if (box === null || !box.contains(event.target)) setPending(null);
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDown);
@@ -313,6 +330,11 @@ export default function OnARollPanel({
                                 /* **THIS OPENS; IT DOES NOT SEND.** Kd's
                                    2026-09-05 change — see the header. */
                                 onClick={() => choose(regular.userId, choice.preset)}
+                                /* IT OPENS SOMETHING, and says so — the house
+                                   pattern `Select.jsx` uses. `aria-expanded`
+                                   alone announces the state but not that there
+                                   is anything to expand. */
+                                aria-haspopup="dialog"
                                 aria-expanded={chosen?.preset === choice.preset}
                                 /* The line itself is the label a mouse and a
                                    screen reader both get, so an owner knows what

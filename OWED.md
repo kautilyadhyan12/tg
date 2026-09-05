@@ -7973,7 +7973,12 @@ file and is stated so nobody reads these as lower priority than they are.
       Escape, a click elsewhere, the same emoji again, and a DIFFERENT emoji
       which SWAPS rather than dismisses, so `:14840`'s untested-Cancel defect is
       closed rather than carried. `web` 1831/1831, C224/C225/C226 3 RED, C220
-      re-run and still RED. Sheet steps 6, 6b and 7 rewritten. Original line:
+      re-run and still RED. Sheet steps 6, 6b and 7 rewritten.
+      **T3 ROUND 1 (DECISIONS `:35511`) FOUND ONE Critical/High — the click-away
+      guard was the only thing letting **Send** be pressed at all in a browser,
+      and NOTHING could observe it** (25/25 green under its deletion, measured
+      twice). Fixed, with three cases that press the way a browser does and
+      **C227**/**C228** holding them. Original line below.
       His words: *"whenever a emojy is click a
       small window just beside the emojy should be shown and in the window show
       the emojy and the writing and a small send button not writing send symbol i

@@ -1721,6 +1721,26 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35511** — 2026-09-05 — **THE CONFIRM STEP, T3 ROUND 1: ONE Critical/High —
+  the guard that lets **Send** be pressed at all was held by nothing, and 25
+  green tests could not see the feature die.** **Read before asserting a click
+  with `fireEvent.click` where a `mousedown` listener is live, before writing a
+  case whose subject is a two-state control's END STATE, and before reading a
+  "covered by its own case" claim in a mutant's `why` as evidence.**
+  A real press is `mousedown` → `mouseup` → `click`, so deleting the
+  `contains` test closes the panel and **unmounts Send before the click lands —
+  no cheer can ever be sent**, and the same-row swap becomes a dismiss.
+  **Measured twice: 25/25 GREEN**, because every case used `fireEvent.click`,
+  which dispatches no `mousedown`. `:14840`'s class — true of the code, false of
+  the coverage — and **C226's `why` asserted the opposite in writing**
+  (`:15534`: a mutant's `why` is prose). **AND A CASE WRITTEN THIS ROUND WAS
+  ITSELF A LIAR:** stopping at the panel's END STATE stayed green, because
+  without the guard a mousedown DISMISSES and the click REOPENS into the same
+  visible state; extended to press Send, where the readings differ. Six Low
+  incl. a detached ref that made the close a NO-OP (`box === null` now closes)
+  and `confirm`'s untested close-before-send. `web` 1834/1834 · **C224–C228,
+  5 RED** · rule 3 by reversal, 3 failed / 25 passed. **Smoke unrun, `OWED.md`
+  does not tick, round 2 unrun.**
 - **:35422** — 2026-09-05 — **KD'S CONFIRM STEP: an emoji opens a small panel
   holding the words and a **Send** button, and the cheer goes only when Send is
   pressed.** **Read before shipping any irreversible one-tap control, before

@@ -396,6 +396,9 @@ describe('the panel that stands between a stray finger and a sent cheer', () => 
     fireEvent.mouseDown(document.body);
     await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
     expect(orgService.sendCheer).not.toHaveBeenCalled();
+    // AND THE EMOJI COME BACK — a dismiss that stranded the row would satisfy
+    // the two assertions above perfectly (:28976, and :14840's second half).
+    expect(await cheerButton('Great week')).toBeTruthy();
   });
 
   it('closes when the same emoji is pressed again, and nothing is sent', async () => {
@@ -405,6 +408,8 @@ describe('the panel that stands between a stray finger and a sent cheer', () => 
     fireEvent.click(await cheerButton('Great week'));
     await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
     expect(orgService.sendCheer).not.toHaveBeenCalled();
+    // AND THE EMOJI COME BACK, for the reason above.
+    expect(await cheerButton('Great week')).toBeTruthy();
   });
 
   // **THE MIS-TAP ITSELF, WHICH IS WHAT KD WAS LOOKING AT.** Pressing 🔥 when
@@ -442,6 +447,69 @@ describe('the panel that stands between a stray finger and a sent cheer', () => 
     await pressCheer('Great week');
     expect(await screen.findByText('Cheered just now.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull();
+  });
+
+  // **THE BROWSER'S OWN ORDER, WHICH EVERY OTHER CASE IN THIS FILE SKIPS.**
+  // `fireEvent.click` dispatches ONLY a click; a real press is `mousedown` →
+  // `mouseup` → `click`. The click-away listener runs on `mousedown`, so the
+  // guard that stops it eating THIS press was observed by nothing.
+  //
+  // **MEASURED, T3 ROUND 1's Critical/High: with `contains` deleted — a
+  // mousedown anywhere closing the panel — all 25 other cases stayed GREEN
+  // while the feature was dead.** In a browser the Send button unmounts between
+  // mousedown and mouseup, the click lands on nothing, and no cheer can ever be
+  // sent. `:14840`'s class exactly: the claim was true of the code and false of
+  // the coverage.
+  it('sends when Send is pressed the way a browser presses it, mousedown first', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    const send = await sendButton();
+    fireEvent.mouseDown(send);
+    fireEvent.click(send);
+    await waitFor(() => expect(orgService.sendCheer).toHaveBeenCalledTimes(1));
+    expect(orgService.sendCheer).toHaveBeenCalledWith(GYM_ID, 'r1', 'keep_going');
+  });
+
+  // THE SAME GUARD ON THE OTHER SIDE, AND THE **WHOLE JOURNEY** A MIS-TAP
+  // ACTUALLY MAKES: press the wrong emoji, correct it, send.
+  //
+  // **THE ASSERTION HAD TO GO ALL THE WAY TO THE SEND, and finding that out is
+  // this case's own lesson.** Stopping at *"the panel now reads Strong
+  // streak."* left it GREEN under the revert — without `contains`, the
+  // mousedown DISMISSES and the click REOPENS on the new preset, which lands in
+  // exactly the same visible state. **A case that observes only the end state
+  // cannot tell a swap from a close-then-open**, and it was written with a
+  // comment claiming it could (`:5348` rule 4, on a test one commit old).
+  it('swaps on a real press of another emoji, and Send then sends that line', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    const other = await cheerButton('Strong streak');
+    fireEvent.mouseDown(other);
+    fireEvent.click(other);
+    const send = await sendButton();
+    expect(send.parentElement.textContent).toContain('Strong streak.');
+    fireEvent.mouseDown(send);
+    fireEvent.click(send);
+    await waitFor(() => expect(orgService.sendCheer).toHaveBeenCalledTimes(1));
+    expect(orgService.sendCheer).toHaveBeenCalledWith(GYM_ID, 'r1', 'strong_streak');
+  });
+
+  // **THE DOCBLOCK ON `confirm` PROMISED THIS AND NOTHING HELD IT** (T3 round 1
+  // L-4; measured — dropping `setPending(null)` left 25/25 green). A Send button
+  // left sitting over an in-flight request is a second cheer one press away, and
+  // the cap makes that second one a 409 the owner never asked for.
+  it('takes the Send button away while the send is still in flight', async () => {
+    let release = () => {};
+    orgService.sendCheer.mockImplementation(
+      () => new Promise((resolve) => {
+        release = () => resolve({ data: { cheer: { preset: 'keep_going', sentAt: '2026-09-05T10:00:00.000Z' } } });
+      }),
+    );
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    fireEvent.click(await sendButton());
+    await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
+    release();
   });
 });
 

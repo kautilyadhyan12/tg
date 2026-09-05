@@ -2971,6 +2971,25 @@ const MUTANTS = [
     from: "      if (event.key === 'Escape') setPending(null);",
     to: "      if (event.key === 'Escape') return;",
   },
+  // ── T3 ROUND 1 ON THE CONFIRM STEP (2026-09-05) ────────────────────────────
+  {
+    id: 'C227',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "THE CORE FLOW GOES TO ZERO AND THE OLD SUITE COULD NOT SEE IT: a mousedown ANYWHERE closes the panel, including the one that lands on Send itself. A real press is mousedown, mouseup, click - so React flushes the close as a discrete update, the Send button unmounts before mouseup, the click reaches nothing, and NO CHEER CAN EVER BE SENT. The same-row emoji swap becomes a dismiss at the same time. MEASURED at T3 round 1: all 25 cases in this suite stayed GREEN under exactly this edit, because every one of them used fireEvent.click, which dispatches no mousedown at all - so the mousedown-to-click interleaving the guard exists for was never played. It is :14840's class, where the claim was true of the code and false of the coverage. C226 cannot cover it: that one kills the KEYBOARD arm, and the case it names asserts the panel CLOSES, never that something refuses to",
+    expect: 'sends when Send is pressed the way a browser presses it, mousedown first',
+    from: '      if (box === null || !box.contains(event.target)) setPending(null);',
+    to: '      setPending(null);',
+  },
+  {
+    id: 'C228',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "A LIVE Send BUTTON SITS OVER AN IN-FLIGHT REQUEST, so a second press is a second cheer - and the seven-day cap turns that into a 409 the owner never asked for, on a row that had just worked. confirm's own docblock promised the panel closes FIRST and nothing held that promise: T3 round 1 L-4 measured 25/25 green with the setPending(null) line simply dropped. The guarantee needs a fixture that HOLDS the send open, because on an instant mock the busy state and the closed panel are indistinguishable",
+    expect: 'takes the Send button away while the send is still in flight',
+    from: '  const confirm = async (userId, preset) => {\n    setPending(null);',
+    to: '  const confirm = async (userId, preset) => {',
+  },
 ];
 
 const abort = (msg) => {

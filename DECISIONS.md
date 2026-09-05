@@ -35507,3 +35507,85 @@ was right, `:5857` rule 4a puts copy in the NEVER-MUTATED column. **This card is
 in the always-mutated one** (which member a tap reaches, whether it reaches
 anybody at all), which is why three mutants here are proportionate and nine
 there were not. **Same rule, opposite answer.**
+
+## 2026-09-05 — THE CONFIRM STEP, T3 ROUND 1: ONE Critical/High — the guard that lets **Send** be pressed at all was held by nothing, and twenty-five green tests could not see the feature die
+
+**Read before asserting a click with `fireEvent.click` where a `mousedown`
+listener is live, before writing a case whose subject is a two-state control's
+END STATE, and before reading a "covered by its own case" claim in a mutant's
+`why` as evidence.**
+
+Round 1 on `:35422`. **ONE Critical/High and six Low, all seven fixed here.**
+The escape hatch is not armed — `:35153` (the previous round on these files)
+found zero, so there is no two-round streak. Web-only.
+
+### 1 · THE CRITICAL/HIGH: A GUARD WHOSE ONLY JOB IS INVISIBLE TO EVERY TEST
+
+`onDown` closes the panel unless the press landed inside it. **That `contains`
+test is what lets **Send** be pressed at all.** A real press is `mousedown` →
+`mouseup` → `click`; delete the test and the mousedown closes the panel, React
+flushes it as a discrete update, the button unmounts before mouseup, **the click
+reaches nothing and no cheer can ever be sent.** The same-row swap becomes a
+dismiss in the same edit.
+
+**MEASURED TWICE — by the review, then again here before acting on it: all 25
+cases stayed GREEN.** Every one used `fireEvent.click`, **which dispatches no
+`mousedown` at all**, so the interleaving the guard exists for was never played.
+`:14840`'s class exactly: the claim was true of the code and false of the
+coverage.
+
+**AND THE HARNESS ASSERTED THE OPPOSITE IN WRITING.** C226's `why` said *"the
+mouse arm … is covered by its own case"*. It is not — `closes on a click
+somewhere else` covers the arm that CLOSES, never the guard that REFUSES to.
+**A mutant's `why` is prose, and `:15534`'s trigger says so.**
+
+Three cases now press the browser's way. **C227** is the standing mutant.
+
+### 2 · A TEST I WROTE THIS ROUND WAS A LIAR, AND THE REVERSAL RUN CAUGHT IT
+
+`swaps on a real press of another emoji` first stopped at *"the panel now reads
+Strong streak."* — and stayed **GREEN under the revert**. Without `contains` the
+mousedown DISMISSES and the click REOPENS on the new preset, **landing in
+exactly the same visible state**. **A case that observes only the end state
+cannot tell a swap from a close-then-open**, and its comment claimed it could.
+Extended to press **Send** afterwards, where the two readings finally differ.
+**`:5348` rule 4 on a test one commit old, found by running the reversal rather
+than by reading it.**
+
+### 3 · THE SIX LOW
+
+**L-1** a heading read FOUR WAYS OUT where the entry, the commit and its own
+paragraph said five · **L-2** two dismiss cases asserted nothing was sent but
+not that the emoji come BACK (`:14840`'s second half; only the Escape case had
+it) · **L-3** `aria-haspopup="dialog"`, the `Select.jsx` house pattern · **L-4**
+`confirm`'s docblock promised the panel closes BEFORE the send and nothing held
+it — 25/25 green with the line dropped; **C228** holds it now, and it needs a
+fixture that HOLDS the send open, because on an instant mock a busy row and a
+closed panel are indistinguishable · **L-5** `box !== null &&` made a detached
+ref a NO-OP, leaving `pending` set with both listeners bound; now `box === null`
+CLOSES · **L-6** the `OWED.md` tick was spliced into the middle of Kd's quote.
+
+### Round log
+
+**PROVE, on the fixed bytes.** `web` **1834/1834 across 61 files, exit 0**
+(1831 + three); `onARoll.render` **25 → 28**. `eslint --max-warnings=0`
+**exit 0** on both touched files.
+
+**RULE 3, PROVEN BY REVERSAL.** Both fixes reverted together: **3 failed / 25
+passed**, and the third case was green until §2 fixed it. Restored from a copy
+taken before the revert and **verified byte-exact by sha256**
+(`2ddcbd4c…14fe036`), not by `git checkout` (`:25567`).
+
+**AUDIT — `MUTATE_ONLY=C224…C228`: 5 mutants, 5 RED, 0 ALIVE, 0 never ran**,
+five controls GREEN and tallied first, restores sha256-verified after every one.
+**No database mutants — no server behaviour changed** (`:5857` rule 4a).
+
+**REVIEW FINDING TAKEN AND NOT ACTED ON, recorded rather than dropped:** smoke
+step 6b is desktop-only — **Escape does not exist on the phone `:17765` puts
+this console on**, and the click-away rides on `mousedown`, which is the house
+pattern in `Select.jsx` and `LocationAutocomplete.jsx` too. **Pre-existing
+class, UNVERIFIED on a real device, and not this card's to fix** (R1.1). On a
+phone the sheet proves at most two of the five ways out.
+
+**NO SMOKE HAS RUN AND THE `OWED.md` LINE DOES NOT TICK. T3 ROUND 2 IS UNRUN**
+and is diff-only (`:5348` rule 2).
