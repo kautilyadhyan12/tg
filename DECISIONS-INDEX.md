@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,233 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,236 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,11 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,701 lines, MEASURED 2026-09-05 and not estimated**
-(1,233 + 1,385 + 83). **THE THIRTY-NINTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+**ALWAYS-READ TOTAL: 2,704 lines, MEASURED 2026-09-05 and not estimated**
+(1,236 + 1,385 + 83). **THE FORTIETH IS A RED CI RUN THE OPERATOR FOUND BEFORE
+THE CHAT DID — AND IT COST THREE LINES, all trigger phrases, §1 AND §2 UNMOVED.**
+Taken with this header's own prescribed command against the bytes being
+committed. **THE THIRTY-NINTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
 AND IT COST THIRTEEN, THE LARGEST IN A WEEK, OF WHICH NINE ARE §2 GROWING FOR
 THE FIRST TIME IN THIRTY-EIGHT MEASUREMENTS.** That nine is a question Kd
 re-opened about his own ruling and has not answered, which is the one thing §2
@@ -1718,6 +1721,18 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35386** — 2026-09-05 — **CI WENT RED TWICE AND KD SAW IT BEFORE I DID: a
+  new file under `apps/api/tools/` was never typechecked.** **Read before adding
+  ANY file under `apps/api`, before importing from `src/` in a tool, and before
+  calling a commit proven without naming which package's typecheck ran.** A tool
+  imported `repo.ts`; **`tsc` refuses a `.ts` import extension** (TS5097 — this
+  repo is NodeNext and every other tool writes `.js`), and `tsx` runs it happily,
+  so every check performed was green. **The miss is the PROVE:** *"no `apps/api`
+  SOURCE changed"* was reasoning about the wrong thing — that package's typecheck
+  and lint cover `src`, `test` AND `tools`, and **a file ADDED to a package is a
+  change to it.** `:28395`'s class, one direction over. **Three pushes went out
+  without CI being read** (`:25008`'s recorded cost), so two red runs sat under a
+  passing report. Fixed with `.js`; the two `as never` casts went with it (R2.2).
 - **:35317** — 2026-09-05 — **THE "ON A ROLL" SMOKE PASSES AT KD'S BROWSER AND
   THE CHEER'S 🟡 LINE TICKS — and the three things he raised while looking at it
   are worth more than the pass.** **Read before quoting this pass as covering how

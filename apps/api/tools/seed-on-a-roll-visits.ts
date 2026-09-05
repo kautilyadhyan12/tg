@@ -38,7 +38,7 @@
  *     node --import tsx tools/seed-on-a-roll-visits.ts
  */
 import postgres from "postgres";
-import { getGymRegulars } from "../src/modules/orgs/repo.ts";
+import { getGymRegulars } from "../src/modules/orgs/repo.js";
 
 /** The `owner` gym — `/console/owner`, the one the smoke sheet links to. It has
  *  five non-complimentary live members; the owner's own seat is complimentary
@@ -93,7 +93,7 @@ console.log(`\n${String(written)} written, ${String(ROWS.length - written)} alre
  *  question the screen asks, and could agree with itself while the screen
  *  disagreed. */
 console.log("\nwhat the panel will draw:");
-for (const g of (await getGymRegulars(sql as never, { gymId: GYM })) ?? []) {
+for (const g of (await getGymRegulars(sql, { gymId: GYM })) ?? []) {
   console.log(
     `  ${g.displayName}: ${String(g.weeksRunning)} weeks · ${String(g.daysRunning)} days · ${String(g.visits)} visits`,
   );

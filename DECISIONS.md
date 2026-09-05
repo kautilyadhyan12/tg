@@ -35382,3 +35382,39 @@ short understandable"*, with *"not talking about skipping"* said in the same
 breath. **That is `:24703` and it is applied, not re-ruled**: the sentence above
 finds the next chat, the three `OWED.md` lines carry what it must do, and this
 log carries what nobody has to read.
+
+## 2026-09-05 — CI WENT RED TWICE AND KD SAW IT BEFORE I DID: a new file under `apps/api/tools/` was never typechecked, because my PROVE named `web` and the root guards on a commit that touched neither
+
+**Read before adding ANY file under `apps/api`, before importing from `src/` in
+a tool, and before calling a commit proven without naming which package's
+typecheck ran.**
+
+`tools/seed-on-a-roll-visits.ts` imported `../src/modules/orgs/repo.ts`.
+**`tsc --noEmit` refuses a `.ts` import extension** (TS5097; this repo is
+NodeNext and every other tool writes `.js` — `gym-restore.ts:41`), so
+`api#typecheck` failed on runs `33955862862` and `33957127750`. **One error,
+both runs, nothing else red**; the four other CI jobs passed both times.
+
+**THE MISS IS THE PROVE, NOT THE EXTENSION.** The file RAN — `tsx` resolves a
+`.ts` import happily — so every check I performed on it was green. I reasoned
+"no `apps/api` **source** changed, so `:28395`'s fan-out does not apply" and
+**that reasoning was about the wrong thing: `apps/api`'s typecheck covers `src`,
+`test` AND `tools`** (its lint script names all three). **A file I ADDED to a
+package is a change to that package**, whatever directory it landed in.
+
+**`:28395` IS THIS EXACT CLASS, ONE DIRECTION OVER** — there a PROVE named `api`
+and `shared` but not `web`; here it named `web` and the root guards but not
+`api`. Its standing lesson holds unchanged: **name the packages your PROVE ran,
+and check that list against the packages your diff touches.**
+
+**AND I PUSHED THREE TIMES WITHOUT READING CI, WHICH IS WHY IT TOOK KD TO FIND
+IT.** `:25008` is the recorded cost of that habit (seven red pushes on one test)
+and it says so in as many words: a PROVE section is written *after* looking at
+what CI said about the last push. Two of my three pushes were already red when I
+handed him a passing report.
+
+**FIXED:** `.js`, and the two `as never` casts went with it — unnecessary
+(`gym-restore.ts` passes `sql` straight in) and R2.2 bans `as` outside adapters.
+`api` typecheck **exit 0** and `api` lint **exit 0**, both run this time; the
+tool re-run against the same database prints **0 written, 10 already there**,
+which is its `ON CONFLICT DO NOTHING` claim proven rather than asserted.
