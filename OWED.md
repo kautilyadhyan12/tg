@@ -7963,10 +7963,23 @@ file and is stated so nobody reads these as lower priority than they are.
       CHOSEN: that is Kd's, and inventing one is R0.2.** Recommendation, his to
       take or refuse: *"3 weeks in a row · 2 days in a row"*, or *"came 3 weeks
       running"* → *"3 weeks without a gap"*.
-- [ ] 🟡 **AN EMOJI SENDS THE MOMENT IT IS CLICKED, AND KD WANTS A CONFIRM STEP —
+- [x] 🟡 **AN EMOJI SENDS THE MOMENT IT IS CLICKED, AND KD WANTS A CONFIRM STEP —
       2026-09-05** (DECISIONS `:35317`).
-      **⏳ BUILT 2026-09-05 (DECISIONS `:35422`) — THIS LINE DOES NOT TICK YET:
-      NO SMOKE HAS RUN AND T3 IS UNRUN.** An emoji now opens a small panel
+      **✅ DONE 2026-09-05 — BUILT (`:35422`), REVIEWED TWICE (`:35511`,
+      `:35593`) AND SMOKED AT KD'S BROWSER, ALL THREE PARTS, commit `9e5eee4`.**
+      **THE RUN WAS STRONGER THAN THE SHEET ASKED FOR AND THAT IS THE PART TO
+      KEEP: Part B was run on the SECOND row, not the first.** The sheet names
+      `user`, who is row ONE, and this morning's cheer still blocked that row —
+      **so a defect that always cheered `onARoll[0]` would have PASSED the sheet
+      as written.** Kd used `tm` instead; the database shows the cheer landing on
+      `tm@example.com` with the 💪 preset. **`C220`'s guarantee was observed by a
+      person for the first time**, and `:35692` re-points the step so the next
+      run cannot lose it. Part C was signed in as `tm`, not `user`.
+      **SAYS NOTHING ABOUT HOW A STREAK IS EARNED** (`:35240`, `:35317`): the ten
+      visits were written into the database, never walked in through
+      `markAttendance`. **And step 6b is desktop-only** — Escape does not exist
+      on the phone `:17765` puts this console on, so on a phone the sheet proves
+      at most two of the three dismisses. An emoji now opens a small panel
       beside it holding the emoji, the sentence and a **Send** button (his gate
       ruling: *"send should not be a text but should be a button"*); only Send
       calls the server. **All FOUR ways out are built and tested** — Send,

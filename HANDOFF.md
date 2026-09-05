@@ -1,6 +1,54 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CONFIRM STEP — **THE SMOKE PASSED AT KD'S BROWSER, ALL THREE PARTS,
+      AND THE `OWED.md` LINE TICKS.** DECISIONS `:35692`. The feature is DONE:
+      built `:35422`, T3 rounds 1 and 2 (`:35511`, `:35593`), smoke 2026-09-05.
+      **No code changed by this commit** — the sheet, `OWED.md` and the record.
+
+      **START HERE: THE PASS IS STRONGER THAN THE SHEET AND THE REASON IS NOW A
+      RULE.** The sheet aimed steps 6–9 at `user`, who is **row ONE**, and
+      **`C220` sends every cheer to `onARoll[0]`** — so on the first row the
+      defect and the correct code look identical, and both earlier cheers in
+      this database went to `user`. A leftover cheer blocked that row inside the
+      seven-day cap; **Kd answered neither option put to him and just used `tm`,
+      the second row.** The database showed the cheer landing on
+      `tm@example.com` — first HUMAN observation of that guarantee. **Step 6 now
+      carries a blocked-quote rule: use the second row, never the first.**
+
+  1. **A ONE-WORD "all passed" WAS CHECKED AND HAD TO BE.** It could not have
+     been true of the sheet as written — the top row had no emoji to press.
+     `:34147`: the database answered it in ten seconds and vindicated him.
+     Generalises — **an operator who solves your blocker himself will not always
+     say which way he went.**
+  2. **WHAT THE PASS DOES NOT COVER:** nothing about how a streak is EARNED
+     (the ten visits were seeded under `:35240`, never walked in through
+     `markAttendance`), and **step 6b is desktop-only** — Escape does not exist
+     on the phone `:17765` puts this console on.
+  3. **KD'S OTHER TWO CHANGES FROM `:35317` ARE STILL OWED AND BOTH ARE HIS TO
+     ANSWER (R0.2 — DO NOT PICK EITHER):** the word *"running"* reading as the
+     sport (🟡, `OWED.md`), and his own seven-day cheer cap, which he questioned
+     and did not replace (❓, `DECISIONS-INDEX.md` §2).
+
+PROVE: No code, so no suite. Four ROOT guards green (harnesses **26** · index
+       **309 pointers, 1408 headings** · triggers **1073 from 277 of 415** ·
+       smoke-folds OK). Always-read re-measured with the header's own command:
+       **2,720 = 1,252 + 1,385 + 83**, §1 and §2 UNMOVED.
+       **PRECONDITIONS WERE CHECKED AGAINST THE DATABASE BEFORE THE RUN, NOT
+       ASSUMED** (`:15927`, `:20222`): seeded visits intact at 7 and 3, `user`
+       and `tm` live and non-complimentary, Smoke Test Gym genuinely with nobody
+       on a run, 21 migrations applied, servers answering (`/health` 200).
+
+OPEN:  **Kd picks: his two remaining changes above, or the next card.** The
+       people-lists card still owes three panels — *when they come* · *slipping
+       away* · *this week's roster*. `:26385` §5 has the wider gym-stage list;
+       `:19016` is the order. **The api and web dev servers are STILL RUNNING**
+       from the smoke.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s
+       line-ending-only one are STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: THE CONFIRM STEP — **T3 ROUND 2 RUN, DIFF-ONLY: ZERO Critical/High, THE
       PACKET SHIPS** (`:5348` rule 1). DECISIONS `:35593`, commit `7acc0cb`.
       Six Low, all fixed in that commit. Kd approved the fix round against the

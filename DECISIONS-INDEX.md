@@ -14,8 +14,15 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,716 lines, MEASURED 2026-09-05 and not estimated**
-(1,248 + 1,385 + 83). **THE FORTY-FIRST IS A T3 ROUND THAT SHIPS ITS PACKET —
+**ALWAYS-READ TOTAL: 2,720 lines, MEASURED 2026-09-05 and not estimated**
+(1,252 + 1,385 + 83). **THE FORTY-SECOND IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+AND IT COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,385
+AND 83.** Its record is a CARD record and went to §1B, where `:24813` sends it.
+**The finding it carries cost nothing extra to make findable, which is the trade
+working**: *"a smoke step that presses the FIRST row of a list"* is one phrase,
+and it is the whole of how a future chat learns that row one cannot prove the
+guarantee. Taken with this header's own prescribed command against the bytes
+being committed. **THE FORTY-FIRST IS A T3 ROUND THAT SHIPS ITS PACKET —
 zero Critical/High, six Low all fixed — AND IT COST FIVE LINES, every one a
 trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 83.** Its record is a ROUND
 record and went to §1B, where `:24813` sends it. **AND THE HEADER HAD DRIFTED
@@ -1731,6 +1738,23 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35692** — 2026-09-05 — **THE CONFIRM STEP'S SMOKE PASSES ALL THREE PARTS AT
+  KD'S BROWSER AND THE 🟡 LINE TICKS — and the run was STRONGER than the sheet,
+  because a blocked row pushed him down one.** **Read before writing a smoke step
+  that presses the FIRST row of a list, before quoting this pass as covering how
+  a streak is EARNED, before reading an operator's "all passed" as covering the
+  sheet as written, and before leaving a smoke's own residue in the database for
+  the next run.** The sheet aimed steps 6–9 at `user`, **row ONE — and `C220`
+  sends every cheer to `onARoll[0]`, so on the first row the defect and the
+  correct code are indistinguishable**; both earlier cheers in this database went
+  to `user`. A leftover cheer blocked that row inside the seven-day cap, Kd
+  answered neither option put to him and simply used `tm`, and **the database
+  showed the cheer landing on `tm@example.com`** — the first HUMAN observation of
+  that guarantee. Step 6 now carries the rule *use the second row, never the
+  first*. **A one-word "all passed" could not have been true of the sheet as
+  written, and `:34147` applied: the database answered it in ten seconds** and
+  vindicated him. **Covers nothing about how a streak is EARNED** (`:35240`'s
+  seeded visits) and **step 6b is desktop-only** (`:17765`). No code changed.
 - **:35593** — 2026-09-05 — **THE CONFIRM STEP, T3 ROUND 2 (diff-only): ZERO
   Critical/High, THE PACKET SHIPS — and TWO of the six Low are round 1's OWN Low
   fixes coming back.** **Read before trusting a fix round's own Low fixes,

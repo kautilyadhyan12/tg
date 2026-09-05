@@ -51,9 +51,9 @@ so your word is the complete evidence for it.
   corepack pnpm --filter web exec vite
   ```
 - **Your sign-in:** `owner@example.com` / **`Smoke2026!`**
-- **Part C needs the member's own sign-in**, `user@example.com`. If you do not
-  have that password, say so and it can be reset — nothing else in the sheet
-  needs it.
+- **Part C needs the sign-in of whichever member you cheer in step 6** —
+  `tm@example.com` if you follow step 6's rule. If you do not have that
+  password, say so and it can be reset; nothing else in the sheet needs it.
 
 ## The links
 
@@ -140,10 +140,22 @@ beside a three-week streak reads as though the run had just broken.
 
 ### 6 · Four things you can send, and nothing sends yet
 
+> **⚠️ USE THE SECOND ROW — `tm` — AND NEVER THE FIRST. THIS IS NOT A
+> PREFERENCE.** A defect that sends every cheer to `onARoll[0]` instead of the
+> member whose button was pressed **passes this sheet perfectly if you press the
+> top row**, because there the two are the same person. That is `C220`, which was
+> ALIVE on its first run, and the 2026-09-05 smoke is the first time a HUMAN
+> observed the guarantee — by accident, because a leftover cheer had blocked the
+> top row and Kd moved down one. **The accident is now the instruction.**
+>
+> If `tm` has been cheered in the last seven days the emoji will not be there.
+> Cheer any row that is **not the first**, and read `tm` below as that row's name.
+
 ✅ On the right of each row, four emoji: **💪 🔥 👏 🏆**.
-✅ Click **💪** on the **user** row — the top one. **Nothing is sent.** A small
-panel opens just beside the emoji, holding three things: **💪**, the words
-*"Great week — keep it going."*, and an orange button reading **Send**.
+✅ Click **💪** on the **tm** row — **the second one, for the reason above**.
+**Nothing is sent.** A small panel opens just beside the emoji, holding three
+things: **💪**, the words *"Great week — keep it going."*, and an orange button
+reading **Send**.
 ✅ The panel sits over the row below it. The list does not jump or move down.
 
 **This is the whole point of the step.** Until **Send** is pressed, nothing has
@@ -155,7 +167,7 @@ panel beside the emoji.
 
 ### 6b · Getting out of it — three ways, plus the swap
 
-Do these one at a time, on the **user** row. **After the first three the four
+Do these one at a time, on the **tm** row (step 6's rule). **After the first three the four
 emoji must be back and no cheer sent. The fourth is not a way out** — it leaves
 a panel open, on the other emoji, and that is the pass.
 
@@ -178,7 +190,7 @@ instead of swapping, that is a failure.
 
 ### 7 · Send sends it
 
-✅ With the panel open on **💪** on the **user** row, press **Send**. The panel
+✅ With the panel open on **💪** on the **tm** row, press **Send**. The panel
 closes and the four emoji on **that row only** are replaced by a
 grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again in
 7 days."* **Both are a pass.** The first is the moment before the server answers;
@@ -215,7 +227,8 @@ click.
 
 ## PART C — what the member sees
 
-*Sign out, and sign in as `user@example.com` — the member you just cheered.*
+*Sign out, and sign in as **the member you just cheered** — `tm@example.com` if you
+followed step 6's rule, not `user`.*
 
 ### 10 · The line is on their gym card
 

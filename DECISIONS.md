@@ -35688,3 +35688,73 @@ is the list `:28395` requires be checked against the diff.**
 ends the review (`:5348` rule 1 — a Low buys no round), so **the remaining gate
 is Kd's browser**, with sheet step 6b noted desktop-only: Escape does not exist
 on the phone `:17765` puts this console on.
+
+## 2026-09-05 — THE CONFIRM STEP'S SMOKE PASSES ALL THREE PARTS AT KD'S BROWSER AND THE 🟡 LINE TICKS — and the run was STRONGER than the sheet, because a blocked row pushed him down one
+
+**Read before writing a smoke step that presses the FIRST row of a list, before
+quoting this pass as covering how a streak is EARNED, before reading an
+operator's "all passed" as covering the sheet as written, and before leaving a
+smoke's own residue in the database for the next run.**
+
+`RUNBOOK/smoke-on-a-roll-cheer.md`, Parts A, B and C, on the bytes of `9e5eee4`
+(`:35422` built it, `:35511` and `:35593` reviewed it). **`OWED.md`'s
+cheer-confirm line TICKS.** Kd's words: *"excellent all passed"*, then
+*"yes did part c both passed"*.
+
+### 1 · THE PART TO KEEP: THE SHEET NAMED ROW ONE, AND ROW ONE CANNOT PROVE THE THING
+
+The sheet pointed steps 6–9 at **`user`**, who is the FIRST row of the list.
+**`C220` is the mutant that sends every cheer to `onARoll[0]` rather than to the
+member whose button was pressed — it was ALIVE on its first run (`:34809` §2) —
+and on the first row those two are the SAME PERSON, so the defect passes the
+sheet perfectly.** Both previous cheers in this database went to `user`.
+
+**It was fixed by an accident, and the accident is now the instruction.** A
+leftover cheer from the morning's smoke still blocked the top row inside the
+seven-day cap, so the chat put two options to Kd; **he answered neither and
+simply used `tm`, the second row.** The database shows the cheer landing on
+`tm@example.com` with the `keep_going` preset, three minutes before he reported
+it — **the first time a HUMAN has observed that guarantee.** Step 6 now carries a
+blocked-quote rule: *use the second row, never the first*, with the reason.
+
+**GENERALISES BEYOND THIS SHEET: a smoke step that acts on the FIRST item of a
+list cannot see code that reaches for the first item.** It is `:34809` §2's
+one-row-fixture lesson arriving in prose instead of a test, and this repo now has
+it in both places.
+
+### 2 · THE "ALL PASSED" WAS CHECKED AGAINST THE DATABASE, AND IT HAD TO BE
+
+**A one-word pass could not have been true of the sheet as written** — the top
+row had no emoji to press — so the claim and the document disagreed. `:34147` is
+the standing instruction and it applied exactly: **the question was answerable
+from the database in ten seconds**, and the answer both vindicated him and
+identified what he had actually done. `:27810`, `:31633`, `:32395` and `:23535`
+are the recorded cost of taking the word instead.
+
+**The chat also did not get an answer to the question it asked** (delete the
+residue, or use `tm`) and **did not notice until the database said so.** An
+operator who solves your blocker himself will not always tell you which way.
+
+### 3 · WHAT THIS PASS DOES NOT COVER, SO IT IS NOT QUOTED AS MORE
+
+**NOTHING ABOUT HOW A STREAK IS EARNED.** The ten visits were written into the
+database by `seed-on-a-roll-visits.ts` under Kd's `:35240` ruling, never walked
+in through `markAttendance`, which `smoke-attendance.md` covers.
+**Step 6b IS DESKTOP-ONLY** — Escape does not exist on the phone `:17765` puts
+this console on, and the click-away rides on `mousedown` — so on a phone the
+sheet proves at most two of the three dismisses. **Pre-existing class, UNVERIFIED
+on a real device** (`:35511`'s recorded finding, still not this card's to fix).
+
+### Round log
+
+**The sheet's own residue is what blocked it, and that is worth naming as a
+class**: a smoke that WRITES something capped leaves the next run of itself
+unable to repeat the step. Not fixed here — Kd's route round it turned out to be
+better than the sheet — but step 6 now tells the next runner what to do when it
+happens again.
+
+Servers were started for the run and both answered (`/health` 200, web 200);
+preconditions were checked against the database first rather than assumed
+(`:15927`, `:20222`): seeded visits intact at 7 and 3, `user` and `tm` live and
+non-complimentary, Smoke Test Gym genuinely with nobody on a run, 21 migrations
+applied. No code changed in this commit — the sheet, `OWED.md` and the record.
