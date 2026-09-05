@@ -112,9 +112,17 @@ export default function OnARollPanel({
       setRow(userId, {
         busy: false,
         outcome: already ? 'already' : null,
-        // The server's own words where it has any — the screen and the door
-        // must not come to say different things about one refusal.
-        error: errorText(err, "We couldn't send that just now. Please try again."),
+        // **AND A 409 IS DRAWN ONCE.** T3 round 1 L-3: this used to set the
+        // error text as well, so the row said the fact twice — *"Cheered in
+        // the last 7 days."* in grey beside *"This member has already been
+        // cheered in the last 7 days."* in red. Both sentences were true, so
+        // it stayed Low, but the red one contradicts the comment three lines
+        // above it: the failure channel is what this arm exists NOT to use.
+        //
+        // The outcome carries the whole of what the server said, in
+        // `cheerState`'s words, and nothing is lost — a genuine failure still
+        // gets the server's own sentence, which is the case below.
+        error: already ? null : errorText(err, "We couldn't send that just now. Please try again."),
       });
       // The refreshed payload carries the real `cheerableAt`, which turns the
       // sentence above into one that names the day. Nothing else about a

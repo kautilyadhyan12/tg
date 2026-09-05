@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER, WEB HALF — **T3 ROUND 1 RUN: ONE Critical/High,
+      THE PACKET DOES NOT SHIP THIS ROUND.** DECISIONS `:34992`. **START HERE:
+      all six findings are FIXED and T3 ROUND 2 IS UNRUN — it is DIFF-ONLY
+      (`:5348` rule 2).** The `OWED.md` line still does not tick: no smoke has
+      run and most of the sheet still cannot be. Web-only: no `apps/api`, no
+      `packages/shared`, no migration. Kd approved this fix round at the gate.
+
+  1. **A ROW SAID "Cheered just now." FOR THE WHOLE LIFE OF THE TAB.**
+     `cheerState` asked the local `outcome` BEFORE the server's `cheerableAt`,
+     and `OnARollPanel`'s taps `Map` is never cleared — so the reopening date
+     the screen had already fetched never reached the owner, and only a reload
+     corrected it. `:7298` (a sentence outliving its condition) and `:5807`.
+     Fixed by the ORDERING, not a reset: `cheerableAt` first, `outcome` as the
+     fallback for the one window where the server has not answered yet.
+  2. **THREE DOCUMENTS PROMISED THE HANDOVER AND THE SMOKE SHEET REQUIRED
+     Ctrl+R TO SEE IT.** The docblock, `reloadOverview`'s comment and `:34809`
+     §5 all describe behaviour nobody operated (`:31295`). Step 8 of the sheet
+     called the reload "the check that matters most" — **a smoke step that needs
+     a reload to see a server value is a bug report shaped like an
+     instruction.** The step now checks the date arrives on its own FIRST.
+  3. **`MyGyms.jsx` HAD NEVER BEEN A MUTATION TARGET** (L-1). The harness held
+     the member's VIEW file, which decides what the words are, and nothing that
+     decides WHICH CARD they land on — while the target block's own comment
+     claimed the member's side was covered. Measured: `gyms[0]?.latestCheer`
+     left all 59 tests green. Two rows added, **C222** and **C223**.
+  4. **A COMMENT CITED `:22029` FOR THE OPPOSITE OF WHAT IT RULED** (L-2), and
+     **a 409 was drawn twice, once through the failure channel** (L-3).
+  5. **THE REVIEW OVERSTATED ITS OWN L-4.** It said the wrong test count also
+     sat in the commit message and was therefore unfixable. `c6f47cd` carries
+     no scoped counts at all (`git log -1 --format=%B`), so both copies were
+     editable and both are struck. `:23928` on the round that raised it.
+
+PROVE: `web` **1823/1823 across 61 files, exit 0** (1817 + 6, reconciling
+       exactly: `onARollView` 27→30 · `onARoll.render` 15→17 · `myGyms.render`
+       59→60). `eslint --max-warnings=0` exit 0 on all seven touched files ·
+       `vite build` exit 0 · `node --check` on the harness.
+       **RULE 3 PROVEN BY REVERSAL:** the three new handover assertions run
+       against the SHIPPING bytes went **RED 3/47**; the two other-direction
+       guards stayed GREEN. Restored from a pre-revert copy and **sha256
+       byte-exact** (`f3fe84bc…`), never `git checkout` (`:25567`).
+       **SWEEP a stated SUBSET of 240: `MUTATE_ONLY=C215…C223`, 9 RED, 0 ALIVE,
+       0 never ran**, nine controls green and tallied first, restores
+       sha256-verified. C215–C221 RE-MEASURED, not assumed — this round moved a
+       line three of them anchor on (`:13336`).
+       Four ROOT guards green: harnesses **26 scripts** · index **301 pointers,
+       1372 headings** · triggers **up to date — 1043 from 269 of 407 rulings,
+       138 declaring none** · smoke-folds OK.
+       Always-read re-measured with the header's own command: **2,681 =
+       1,222 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite
+       (no file in either was touched, so `:28395` does not apply), and the
+       full 240-mutant console sweep.
+
+OPEN:  **T3 ROUND 2, DIFF-ONLY**, then the smoke — which is still only PARTLY
+       runnable, for `:34809`'s reason: no screen can create a visit dated two
+       weeks ago, so Parts B and C stay BLOCKED (`:26012`'s shape) unless Kd
+       rules that the rows may be written straight into the database.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s
+       line-ending-only one are STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER — **THE WEB HALF IS BUILT.** DECISIONS `:34809`.
       **START HERE: the packet is code-complete and the `OWED.md` line STILL
       DOES NOT TICK** — no smoke has run and T3 is UNRUN. Web-only: no
@@ -34,7 +96,8 @@ TASK: "ON A ROLL" + THE CHEER — **THE WEB HALF IS BUILT.** DECISIONS `:34809`.
      C219's filter named a test in a different suite, so it matched nothing and
      the control phase aborted. A mutant's suite and its filter are one claim.
 
-PROVE: `web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` 28/28 ·
+PROVE: `web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` ~~28/28~~
+       **27/27** (corrected by T3 round 1 L-4) ·
        `cheerPresets` 5/5 · `onARoll.render` 15/15 · `myGyms.render` 59/59 (51
        before) · `gymMembershipView` 39/39 (28 before) · `console.render`
        107/107 (106 before). `eslint --max-warnings=0` exit 0 on all seventeen

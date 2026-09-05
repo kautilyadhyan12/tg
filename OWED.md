@@ -7931,6 +7931,16 @@ file and is stated so nobody reads these as lower priority than they are.
       client already does correctly (`cheerLine` returns null for a code it has no
       words for, and the member's card draws nothing). **What is missing is only
       the contract admitting the value in the first place.**
+      **AND IT IS TWO DOORS, NOT ONE — added by T3 round 1 L-5 (:34992), which
+      found this line enumerating only half of what breaks.** `sendCheer` parses
+      its own response through `sendGymCheerResponseSchema`, which contains the
+      SAME `gymCheerSchema` (`apps/web/src/api/orgsApi.js:495-503`). So a fifth
+      preset also breaks the OWNER's side: the cheer lands in the database, the
+      console reports *"The server sent something this screen couldn't read"*,
+      the four emoji stay live because no outcome was set, and the owner's next
+      tap is a 409. **:34443 C/H-2 is the recorded cost of an incomplete
+      enumeration on the very line Kd rules from**, so the fix card covers both
+      readers or it is not the fix.
       **THE WARNING ALSO SITS AT THE TOP OF `apps/web/src/utils/cheerPresets.js`**,
       where somebody adding a fifth line will actually be standing — a line in this
       file alone is one nobody reads at the moment they need it.

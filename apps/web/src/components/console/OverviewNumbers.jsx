@@ -194,13 +194,22 @@ export default function OverviewNumbers({
           fourth). Nothing here fetches anything; the panel's only request is the
           one an owner's tap makes.
 
-          **KEYED BY THE GYM, AND IT IS LOAD-BEARING RATHER THAN ROUTINE**
-          (:20712, :22029, :29117). The panel holds which rows have just been
-          cheered, `/console/:orgSlug` is ONE route, and walking from gym A to
-          gym B does not remount anything here — so without the key a tap on
-          gym A's member would still read "Cheered just now" beside a name at
-          gym B. The class fix is the key at the mount site, never a reset
-          inside the panel. */}
+          **KEYED BY THE GYM, AND IT IS BELT-AND-BRACES** — the same status
+          `TrialCard`'s key has sixty lines down, and this comment used to
+          claim otherwise. T3 round 1 L-2: it said walking from gym A to gym B
+          *"does not remount anything here"* and cited `:22029`, which is the
+          ruling that made it remount. Two things clear this panel's state
+          already: `ConsoleLayout` wraps every console screen in
+          `<Fragment key={`screen:${orgSlug}`}>` (that ruling's one-line
+          redesign), and there is no gym switcher — every path between two gyms
+          goes through `ConsoleHome`, a different component in the same slot,
+          which is an unmount. `:22029` measured that journey both ways.
+
+          The panel does hold which rows have just been cheered, so the key is
+          kept: left alone rather than deleted, on the same reasoning that left
+          `TrialCard`'s standing. **The class fix is the key at the mount site,
+          never a reset inside the panel** (:20712, :29117) — that part was
+          always true and is why this is a wording fix and not a code one. */}
       <OnARollPanel
         key={gymId}
         gymId={gymId}

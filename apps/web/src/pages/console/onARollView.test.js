@@ -257,4 +257,48 @@ describe('the button, in one of four states', () => {
     });
     expect(state.kind).toBe('read-only');
   });
+
+  // ── T3 ROUND 1 C/H-1, AND THE CASE THREE LINES UP COULD NOT SEE IT ─────────
+  // `covers the tap that has landed before the refreshed payload arrives` uses
+  // the default fixture, whose `cheerableAt` is null — so it puts an outcome
+  // beside NO server instant and passes under both orderings. The two cases
+  // below are the pair that tells them apart, and they are written as a pair
+  // deliberately: neither is sufficient alone.
+  //
+  // The defect: `outcome` was asked BEFORE `cheerableAt`, and `OnARollPanel`'s
+  // `taps` map is never cleared, so "Cheered just now." held for the whole life
+  // of the mount. The date the re-read had already fetched never reached the
+  // owner — :7298 (a sentence outliving its condition) and :5807 (on screen and
+  // false).
+  it('lets the refreshed instant replace "just now" once the re-read has landed', () => {
+    const state = cheerState(regular({ cheerableAt: new Date(NOW + 7 * DAY).toISOString() }), {
+      ...CAN,
+      outcome: 'sent',
+    });
+    expect(state.disabled).toBe(true);
+    expect(state.text).toBe('Cheered — you can again in 7 days.');
+    expect(state.text).not.toMatch(/just now/);
+  });
+
+  // THE OTHER HALF, AND IT IS WHAT STOPS THE FIX BECOMING ITS OWN DEFECT: with
+  // the ordering simply swapped and nothing else, a tap whose re-read has NOT
+  // landed must still put the buttons away — otherwise a second cheer can go
+  // out while the first is in flight. A test that only asserted the case above
+  // is satisfied by deleting the outcome arms altogether.
+  it('still covers the tap whose re-read has not landed yet', () => {
+    const state = cheerState(regular({ cheerableAt: null }), { ...CAN, outcome: 'sent' });
+    expect(state.disabled).toBe(true);
+    expect(state.text).toBe('Cheered just now.');
+  });
+
+  // The same handover for the 409 arm, which reaches it by a different route:
+  // its outcome is set from an error rather than from a success, and the
+  // re-read is issued from the `catch`.
+  it('names the day for an already-cheered member once the re-read has landed', () => {
+    const state = cheerState(regular({ cheerableAt: new Date(NOW + 3 * DAY).toISOString() }), {
+      ...CAN,
+      outcome: 'already',
+    });
+    expect(state.text).toBe('Cheered — you can again in 3 days.');
+  });
 });

@@ -3973,3 +3973,53 @@ had been DONE the night before and never ticked** (`OWED.md`, `55395d0`).
       renamed, with nothing going red — :28976's class, whose two sibling
       assertions (`userId`, `email`) cannot drift because they ask the helper.
       `makeUser` now returns `displayName` and the assertion asks for it.
+
+## 2026-09-05 — "on a roll" + the cheer, THE WEB HALF, T3 ROUND 1 (DECISIONS :34992)
+
+Five Low, all fixed in the same round as the Critical/High (:5348 rule 1 —
+"no, they will be fixed"; a Low buys no round and is never left standing).
+
+- [x] **L-1 · C220's SHAPE, LEFT STANDING ON THE MEMBER'S HALF.** Every case in
+      `myGyms.render.test.jsx`'s cheer describe rendered ONE gym, so "this gym's
+      cheer" and "the first gym's cheer" were the same object and nothing could
+      tell them apart. **Measured, not argued: `latestCheer={gyms[0]?.latestCheer}`
+      left all 59 tests GREEN.** What it could not see is a member of two gyms,
+      cheered only by Iron House, reading Iron House's words under Bar Bell
+      Club's name. The code was right; nothing held it. Fixed as the class
+      (:28221 §3b): Bar Bell Club goes FIRST in the fixture so the cheered gym is
+      never index 0, plus a case asserting which card holds the message — and
+      **`MyGyms.jsx` becomes a mutation target for the first time** (C222), the
+      gap the review named: the harness held the member's VIEW file, which
+      decides what the words are, and nothing that decides which card they
+      land on.
+- [x] **L-2 · A COMMENT CITED THE RULING THAT CONTRADICTS IT.**
+      `OverviewNumbers.jsx` called `key={gymId}` *"load-bearing rather than
+      routine"* because *"walking from gym A to gym B does not remount anything
+      here"*, citing `:22029` — **which is the ruling that made it remount**
+      (`ConsoleLayout.jsx:304` wraps every console screen in a keyed Fragment),
+      and which also measured that the journey passes through `ConsoleHome`, an
+      unmount, either way. `Overview.jsx:349-359` says exactly that about
+      `TrialCard` sixty lines from the new text. Reworded to match; the key
+      stays, on the same reasoning that left `TrialCard`'s standing.
+- [x] **L-3 · A 409 WAS DRAWN TWICE, ONCE IN RED.** The already-cheered arm set
+      `outcome: 'already'` AND the error text, so the row said *"Cheered in the
+      last 7 days."* in grey beside *"This member has already been cheered in
+      the last 7 days."* in red. Both sentences true (so Low, per :5807), and
+      the second contradicts the comment three lines above it: **the failure
+      channel is what that arm exists NOT to use.** `error: null` on the already
+      arm; a genuine failure still carries the server's own words.
+- [x] **L-4 · A SCOPED TEST COUNT WAS ONE TOO HIGH.** `onARollView` is 27/27, not
+      the 28/28 recorded at DECISIONS :34954 and HANDOFF.md:37 — measured on the
+      shipping bytes, and the committed file holds 27 `it(` blocks. The headline
+      and the other five scoped figures reproduce exactly. Struck in place in
+      both copies (:20587). **AND THE REVIEW OVERSTATED ITS OWN FINDING:** it
+      said the figure was also in the commit message and therefore unfixable.
+      **It is not — that message carries no scoped counts at all** (checked with
+      `git log -1 --format=%B`), so both copies were editable. :23928's trigger,
+      on the round that raised it.
+- [x] **L-5 · AN `OWED.md` LINE ENUMERATED HALF OF WHAT BREAKS.** The fifth-preset
+      line named only the member's gym list. `sendCheer` parses its response
+      through the same `gymCheerSchema` enum, so a fifth preset also makes a
+      LANDED cheer report *"The server sent something this screen couldn't
+      read"* to the owner, with the emoji still live and the next tap a 409.
+      Sentence added to the line, both readers named.

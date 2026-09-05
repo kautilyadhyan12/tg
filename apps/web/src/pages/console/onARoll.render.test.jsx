@@ -210,6 +210,48 @@ describe('the one tap', () => {
     await waitFor(() => expect(orgService.getOverview).toHaveBeenCalledTimes(2));
   });
 
+  // **T3 ROUND 1 C/H-1, AND THE CASE ABOVE IS EXACTLY WHY IT WAS NEEDED.** That
+  // one proves the request GOES; it says nothing about the answer reaching the
+  // screen, because its mock returns the same payload both times. Measured on
+  // the shipping bytes: the row still read "Cheered just now." an hour after
+  // the tap, for the whole life of the mount, and only a reload corrected it —
+  // :7298 (a sentence outliving its condition) and :5807 (on screen and false).
+  //
+  // The second read carries the real `cheerableAt`, which is the ONLY channel
+  // that instant travels on (the 409 omits it — `:34240` §6).
+  it('draws the reopening date the re-read brought back, in place of "just now"', async () => {
+    const reopensAt = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    orgService.getOverview
+      .mockResolvedValueOnce(withRoll(ROLL))
+      .mockResolvedValue(
+        withRoll([ROLL[0], regular({ userId: 'r1', displayName: 'Priya Nair', cheerableAt: reopensAt })]),
+      );
+    drawOverview();
+    await screen.findByText('Priya Nair');
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await screen.findByText('Cheered — you can again in 7 days.')).toBeTruthy();
+    expect(screen.queryByText('Cheered just now.')).toBeNull();
+  });
+
+  // THE OTHER DIRECTION, so the fix cannot be satisfied by deleting the local
+  // flag: while the re-read is still in flight the payload has no instant on
+  // it, and the row must STILL put its buttons away or a second cheer goes out
+  // behind the first.
+  it('still puts the buttons away while the re-read is in flight', async () => {
+    let release = () => {};
+    orgService.getOverview
+      .mockResolvedValueOnce(withRoll(ROLL))
+      .mockImplementation(() => new Promise((resolve) => {
+        release = () => resolve(withRoll(ROLL));
+      }));
+    drawOverview();
+    await screen.findByText('Priya Nair');
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await screen.findByText('Cheered just now.')).toBeTruthy();
+    expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
+    release();
+  });
+
   // A FAILED RE-READ MUST NOT BE REPORTED AS A FAILED CHEER. The cheer landed;
   // saying otherwise is :5807 on a screen — a false statement about something
   // that already happened.
@@ -249,9 +291,17 @@ describe('the one tap', () => {
     });
     drawOverview();
     fireEvent.click(await cheerButton('Great week'));
-    expect(await screen.findByText('This member has already been cheered in the last 7 days.')).toBeTruthy();
+    expect(await screen.findByText('Cheered in the last 7 days.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
     expect(screen.queryByText(/just now/)).toBeNull();
+    // **AND ONCE, NOT TWICE** (T3 round 1 L-3). This used to draw the server's
+    // sentence in red as well, so the row said the same true thing through the
+    // FAILURE channel — under a comment saying a 409 is not a failure. The
+    // assertion above is this one's positive control (:28976): the fact is
+    // still on screen, in the grey the other three refusals use.
+    expect(
+      screen.queryByText('This member has already been cheered in the last 7 days.'),
+    ).toBeNull();
   });
 });
 

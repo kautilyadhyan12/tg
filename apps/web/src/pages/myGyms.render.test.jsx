@@ -1205,12 +1205,34 @@ describe('the calendar folds away', () => {
 // §4) — so a cheer is STORED on the `/v1/orgs/mine` row and READ HERE, and the
 // nav dot is the whole of its arrival.
 describe('the cheer', () => {
+  /** TWO GYMS, AND THE CHEERED ONE IS NEVER THE FIRST.
+   *
+   *  **T3 round 1 L-1, and it is C220's shape left standing on the member's
+   *  half.** Every case here used to render ONE gym, so "this gym's cheer" and
+   *  "the first gym's cheer" were the same object and no assertion could tell
+   *  them apart. Measured on the shipping bytes: `latestCheer={gyms[0]?.latestCheer}`
+   *  left the whole 59-test suite GREEN. What that cannot see is a member of two
+   *  gyms, cheered only by Iron House, reading Iron House's message on Bar Bell
+   *  Club's card.
+   *
+   *  `:28221` §3b in the shape a screen takes, and `:34809` §2 is the same
+   *  finding one surface over — a fixture with one of something cannot see code
+   *  that reaches for the wrong one. */
+  const BAR_BELL = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club' };
+
   const cheered = (over = {}) => ({
     data: {
-      orgs: [{ ...GYM, latestCheer: { preset: 'on_a_roll', sentAt: '2026-09-02T10:00:00.000Z', ...over } }],
+      orgs: [
+        BAR_BELL,
+        { ...GYM, latestCheer: { preset: 'on_a_roll', sentAt: '2026-09-02T10:00:00.000Z', ...over } },
+      ],
       formerOrgs: [],
     },
   });
+
+  /** The card a gym's name sits in — `MyGyms` draws one `rounded-2xl` box per
+   *  gym and the name is the first thing in it. */
+  const cardFor = (name) => screen.getByText(name).closest('.rounded-2xl');
 
   it('draws the line the gym chose, and how long ago', async () => {
     api.getMine.mockResolvedValue(cheered());
@@ -1220,6 +1242,18 @@ describe('the cheer', () => {
     // word, because `sentAt` is an INSTANT read by a member wherever they are
     // (the shared contract's own reasoning).
     expect(screen.getByText('2 hours ago')).toBeTruthy();
+  });
+
+  // **WHICH CARD, WHICH IS THE ASSERTION THE ONE-GYM FIXTURE COULD NOT MAKE.**
+  // Iron House cheered them; Bar Bell Club did not. A card that read the FIRST
+  // gym's cheer would put Iron House's words under Bar Bell Club's name and say
+  // a gym sent something it never sent — :5807, on screen and false.
+  it('puts the cheer on the card of the gym that sent it, and on no other', async () => {
+    api.getMine.mockResolvedValue(cheered());
+    drawScreen();
+    await screen.findByText('Bar Bell Club');
+    expect(cardFor('Iron House').textContent).toMatch(/You're on a roll\./);
+    expect(cardFor('Bar Bell Club').textContent).not.toMatch(/You're on a roll\./);
   });
 
   // **IT NEVER NAMES WHO PRESSED IT** (§2.4 — a plain member is told nothing

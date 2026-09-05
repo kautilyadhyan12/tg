@@ -137,16 +137,24 @@ it.** If hovering shows nothing, that is a failure.
 
 ❌ If every row goes quiet, the wrong thing was sent to the wrong person.
 
-### 8 · It stays sent after a reload
+### 8 · The date appears on its own, and survives a reload
 
-✅ Reload the page (**Ctrl+R**). That row now reads **"Cheered — you can again
-in 6 days."** (or however many days are left).
+✅ **Without touching anything**, within a second or two that same row changes
+from *"Cheered just now."* to **"Cheered — you can again in 6 days."** (or
+however many days are left).
+✅ Now reload the page (**Ctrl+R**). It still says the same thing.
 
-**This is the check that matters most in Part B.** It proves the screen is
-reading the server's answer rather than remembering its own click — the button
-must look the same to your colleague at the front desk as it does to you.
+**This is the check that matters most in Part B**, and it is TWO checks. The
+second proves the screen is reading the server's answer rather than remembering
+its own click — the button must look the same to your colleague at the front
+desk as it does to you. The first proves you did not have to reload to see it.
 
 ❌ Four live emoji again after a reload is a failure.
+❌ **Still reading "Cheered just now." after a few seconds is a failure**, even
+though a reload would fix it. That was the defect T3 round 1 found (DECISIONS
+`:34992`): the row kept its own word for the whole life of the tab and the date
+the screen had already fetched never reached the screen. **This step used to
+tell you to press Ctrl+R here — it was written around the bug.**
 
 ### 9 · A second cheer is refused
 

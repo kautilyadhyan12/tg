@@ -206,10 +206,30 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *                  have been a colleague, days ago. `:34443` §4 is the recorded
  *                  cost of a refusal sentence that assumed who did it.
  *
- *  Both outrank `cheerableAt` for the seconds before the refreshed payload
- *  lands, and both exist so a second tap cannot go out meanwhile. Neither
- *  MANUFACTURES a day: the sentence says what is known and stops, and the day
- *  arrives with the re-read. */
+ *  **`cheerableAt` IS ASKED FIRST AND OUTRANKS BOTH, AND THAT ORDERING IS THIS
+ *  FUNCTION'S ONE CORRECTNESS PROPERTY RATHER THAN A TIDYING.** T3 round 1
+ *  C/H-1: it was written the other way round, and because `OnARollPanel`'s
+ *  `taps` map is never cleared, `'sent'` won for the whole life of the mount.
+ *  The row said *"Cheered just now."* an hour after the tap, the reopening date
+ *  the re-read had already fetched never reached the owner, and only a reload
+ *  corrected it — `:7298`'s class, a sentence outliving the condition that
+ *  raised it, and `:5807` because the words on screen were false.
+ *
+ *  **`outcome` IS THEREFORE A FALLBACK FOR EXACTLY ONE WINDOW: the tap has
+ *  landed and the server has not yet said when the button reopens.** In that
+ *  window `cheerableAt` is still the pre-tap value (`null`), so `again` is
+ *  `null` and the outcome sentence is the only true thing there is to say. The
+ *  moment the refreshed payload arrives the server's own answer takes over. A
+ *  failed re-read leaves the payload unchanged, so the outcome sentence
+ *  correctly stays — which is what makes swallowing that failure safe
+ *  (`Overview.jsx`'s `reloadOverview`, `:34809` §5).
+ *
+ *  **THE SERVER'S ORDER IS UNTOUCHED BY THIS.** Privilege, then plan, then the
+ *  window; `again` and `outcome` are both the WINDOW, so which of the two
+ *  answers it is a question inside the third step, not a reordering of the
+ *  three. Neither MANUFACTURES a day: the outcome sentence says what is known
+ *  and stops, and the day arrives with the re-read — which it now actually
+ *  does. */
 export function cheerState(regular, options = {}) {
   const { privileges = [], readOnly = false, outcome = null, now = Date.now() } = options;
   if (!canCheer(privileges)) {
@@ -218,12 +238,6 @@ export function cheerState(regular, options = {}) {
   if (readOnly === true) {
     return { kind: 'read-only', disabled: true, text: READ_ONLY_NOTE };
   }
-  if (outcome === 'sent') {
-    return { kind: 'sent', disabled: true, text: 'Cheered just now.' };
-  }
-  if (outcome === 'already') {
-    return { kind: 'sent', disabled: true, text: 'Cheered in the last 7 days.' };
-  }
   const again = cheerAgainText(regular?.cheerableAt, now);
   if (again !== null) {
     return {
@@ -231,6 +245,12 @@ export function cheerState(regular, options = {}) {
       disabled: true,
       text: again === '' ? 'Cheered in the last 7 days.' : `Cheered — you can again ${again}.`,
     };
+  }
+  if (outcome === 'sent') {
+    return { kind: 'sent', disabled: true, text: 'Cheered just now.' };
+  }
+  if (outcome === 'already') {
+    return { kind: 'sent', disabled: true, text: 'Cheered in the last 7 days.' };
   }
   return { kind: 'live', disabled: false, text: null };
 }

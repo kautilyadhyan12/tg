@@ -34951,7 +34951,9 @@ a filter that matches nothing reports a confident green.**
 ### Round log
 
 **PROVE, all on the shipping bytes.**
-`web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` **28/28** ·
+`web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` ~~28/28~~
+**27/27 — CORRECTED by T3 round 1 L-4 (`:34992`), measured on these same
+bytes**; the headline and the other five scoped figures reproduce exactly ·
 `cheerPresets` **5/5** · `onARoll.render` **15/15** · `myGyms.render` **59/59**
 (51 before) · `gymMembershipView` **39/39** (28 before) · `console.render`
 **107/107** (106 before). `eslint --max-warnings=0` **exit 0** on all seventeen
@@ -34986,3 +34988,164 @@ app path to a visit dated two weeks ago. Part A (the empty state, the fold, and
 the control's absence from the Members roster) is runnable; Parts B and C are
 written out in full and marked BLOCKED, on `:26012`'s shape rather than
 carrying steps that cannot pass. **T3 IS UNRUN.**
+
+## 2026-09-05 — "ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND 1: ONE Critical/High, THE PACKET DOES NOT SHIP THIS ROUND — a row that said "Cheered just now." for the whole life of the tab, because a local flag was asked before the server's own answer
+
+**Read before ordering a local "I just did this" flag against a server-sent
+instant, before holding per-row state in a component that never clears it,
+before writing a fixture whose value is `null` for the very field the ordering
+turns on, before drawing one fact through both a screen's normal channel and its
+failure channel, before calling a `key` load-bearing anywhere in this console,
+before taking a review's count of a figure's COPIES as complete, and before
+mutating a feature's view file and calling its screen covered.**
+
+Round 1 on `:34809`. **ONE Critical/High and five Low, all six fixed here.** The
+escape hatch is not armed: `:34666` (round 2, the server half) found zero, so
+there is no two-round streak, and this round's C/H is in a file no earlier round
+touched. Web-only again — no `apps/api`, no `packages/shared`, no migration.
+
+### 1 · THE CRITICAL/HIGH: A SENTENCE THAT OUTLIVED THE CONDITION THAT RAISED IT
+
+`cheerState` asked `outcome` BEFORE `cheerableAt`. `OnARollPanel` holds its taps
+in a `Map` that **is never cleared**. Put together: the moment an owner taps an
+emoji the row reads *"Cheered just now."*, and it goes on reading that for as
+long as the tab is open — an hour later, a day later — while **the reopening date
+the screen had already gone and fetched never reaches them.** Only a reload
+corrects it. `:7298`'s class exactly, and `:5807` because the words on screen are
+false.
+
+**THREE THINGS IN THE PACKET SAID THIS SHOULD NOT HAPPEN, WHICH IS WHY IT IS
+WORTH A TRIGGER.** `onARollView.js`'s own docblock promised *"the day arrives
+with the re-read"*; `Overview.jsx`'s `reloadOverview` exists for no other purpose
+than fetching `cheerableAt` and says so at length; and `:34809` §5 defends
+swallowing that read's failure on the grounds that what is lost is *"one
+refreshed date"* — which was already lost on the success path. **Every one of
+those is a claim about behaviour nobody operated** (`:31295`'s standing lesson,
+one card old at the time).
+
+**THE SMOKE SHEET HAD WRITTEN IT DOWN WITHOUT ANYBODY READING IT AS A DEFECT.**
+`RUNBOOK/smoke-on-a-roll-cheer.md:140` step 8 requires **Ctrl+R before the date
+appears**, and calls itself *"the check that matters most in Part B"*. A smoke
+step that needs a reload to see a server value is a bug report in the shape of an
+instruction.
+
+**WHY NO TEST SAW IT.** `onARollView.test.js`'s *"covers the tap that has landed
+before the refreshed payload arrives"* uses the default fixture, whose
+`cheerableAt` is `null` — so it puts an outcome beside NO server instant and
+passes under BOTH orderings. The render suite's *"re-reads the numbers
+afterwards"* asserts the request GOES and its mock returns the same payload
+twice, so it says nothing about the answer arriving. **Two tests named after the
+handover, neither able to observe it.**
+
+**THE FIX IS THE ORDERING, NOT A RESET.** `cheerableAt` is computed first and a
+non-`null` answer outranks `outcome`; `outcome` becomes the fallback for exactly
+one window — the tap has landed and the server has not yet said when the button
+reopens, during which `cheerableAt` is still the pre-tap `null`. Clearing the
+`Map` on a prop change was rejected: it needs a rule for WHICH payload cleared it
+and re-creates the same question one layer up. **The server's order is untouched**
+— privilege, then plan, then the window; `again` and `outcome` are both the
+WINDOW, so this is a question inside the third step and not a reordering of the
+three.
+
+**AND THE FIX'S OWN FAILURE DIRECTION IS TESTED, because a swap is one edit away
+from a deletion.** With the outcome arms simply removed, the "date lands"
+assertion still passes and a second cheer can go out while the first is in
+flight. Two cases hold the other direction: the row must STILL put its buttons
+away while the re-read is in flight, and a FAILED re-read must leave the outcome
+sentence standing — which is what makes `:34809` §5's swallow safe.
+
+**C223 is the standing mutant** and it restores the defect in one line
+(`again !== null && outcome === null`). C217 cannot cover this: it deletes
+`cheerableAt` for every row, while the C/H leaves it working right up until
+somebody taps.
+
+### 2 · L-1 — THE SCREEN THE HARNESS HAD NEVER TOUCHED
+
+`myGyms.render.test.jsx`'s five cheer cases each rendered ONE gym, so *"this
+gym's cheer"* and *"the first gym's cheer"* were the same object. **Measured:
+`latestCheer={gyms[0]?.latestCheer}` left all 59 tests green.** The defect it
+cannot see is a member of two gyms, cheered only by Iron House, reading Iron
+House's words under Bar Bell Club's name.
+
+**`:34809` §2 is the same finding on the OWNER's half, four days old, and this is
+the member's.** The fixture now puts Bar Bell Club first so the cheered gym is
+never index 0, with a case asserting which card holds the message.
+
+**THE PART THAT GENERALISES: `apps/web/src/pages/MyGyms.jsx` had never been a
+mutation target.** The harness held `gymMembershipView.js` — which decides what
+the words ARE — and nothing that decides which card they land on, while the
+target block's own comment claimed the member's side was covered. **A feature's
+pure view file is not its screen**, which is `:28976`'s lesson quoted three lines
+above the gap it describes. **C222** closes it.
+
+### 3 · L-2 AND L-3 — TWO PLACES THE PACKET DISAGREED WITH ITSELF
+
+**L-2: a comment cited the ruling that contradicts it.** `OverviewNumbers.jsx`
+called `key={gymId}` *"load-bearing rather than routine"* because *"walking from
+gym A to gym B does not remount anything here"*, citing `:22029` — **which is the
+ruling that made it remount** (`ConsoleLayout.jsx:304`, that entry's one-line
+redesign) **and which measured that the journey passes through `ConsoleHome`, an
+unmount, either way.** `Overview.jsx:349-359` says precisely that about
+`TrialCard`, sixty lines away. Reworded to match; the key stays.
+
+**L-3: a 409 was drawn twice, once through the failure channel.** The
+already-cheered arm set `outcome: 'already'` *and* the error text, so the row
+carried the same fact in grey and in red — under a comment reading *"a 409 is a
+FACT, not a failed attempt"*. Both sentences were true, which is why it is Low
+(`:5807`) and not why it was acceptable.
+
+### 4 · L-4 — A COUNT, AND THE REVIEW'S OWN OVERSTATEMENT OF IT
+
+`onARollView` is **27/27**, not the 28/28 at `:34954` and `HANDOFF.md:37`. Struck
+in place in both (`:20587`).
+
+**AND THE REVIEW SAID THE FIGURE WAS ALSO IN THE COMMIT MESSAGE AND THEREFORE
+BEYOND REPAIR. IT IS NOT** — `c6f47cd` carries no scoped counts at all, checked
+with `git log -1 --format=%B` rather than assumed. **`:23928`'s trigger firing on
+the round that raised it:** a review's map of where a false figure lives is a
+hypothesis, and this one had two of three copies right and invented the third.
+Believing it would have left a correction unmade on the grounds that it could not
+be made.
+
+### 5 · L-5 — A DEFERRAL LINE THAT ENUMERATED HALF OF WHAT BREAKS
+
+`OWED.md`'s fifth-preset line named only the member's gym list. **`sendCheer`
+parses its own response through the same `gymCheerSchema` enum**
+(`orgsApi.js:495-503`), so a fifth preset also makes a LANDED cheer report *"The
+server sent something this screen couldn't read"* to the owner, with the four
+emoji still live and the next tap a 409. **`:34443` C/H-2 is the recorded cost of
+an incomplete enumeration on the line Kd rules from.** Both readers now named.
+
+### Round log
+
+**PROVE, on the fixed bytes, every exit code read directly.**
+`web` **1823/1823 across 61 files, exit 0** — `:34809`'s 1817 plus this round's
+six, which reconciles exactly: `onARollView` **27 → 30**, `onARoll.render`
+**15 → 17**, `myGyms.render` **59 → 60**. `eslint --max-warnings=0` **exit 0** on
+all seven touched files. `vite build` **exit 0** (its chunk-size warning is
+pre-existing). `node --check` on the harness **exit 0**.
+
+**RULE 3, PROVEN BY REVERSAL RATHER THAN ASSERTED.** The three new handover
+assertions were run against the SHIPPING bytes — `onARollView.js` restored from
+`c6f47cd` — and went **RED, 3 failed / 44 passed**. The two other-direction
+guards stayed GREEN under the same revert, which is what they are for. The file
+was then restored from a copy taken before the revert and **verified byte-exact
+by sha256** (`f3fe84bc…d2d3bb`), not by `git checkout` (`:25567`).
+
+**AUDIT — a stated SUBSET of 240: `MUTATE_ONLY=C215…C223`, 9 mutants, 9 RED, 0
+ALIVE, 0 never ran**, all nine controls GREEN and tallied first, restores
+sha256-verified after every mutant, and the harness printed its own *"THIS IS NOT
+A FULL SWEEP"*. C215–C221 were **re-measured rather than assumed** — this round
+moved a line inside the function three of them anchor on (`:13336`). Two new
+rows: **C222** (the member's card, on a target that did not exist) and **C223**
+(the C/H restored). **No database mutants: no server behaviour changed**, which
+is `:5857` rule 4a's own rule.
+
+**NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite — no file
+in either was touched, so `:28395`'s fan-out does not apply — and the full
+240-mutant console sweep.
+
+**THE `OWED.md` LINE STILL DOES NOT TICK.** No smoke has run, and Parts B and C
+of `RUNBOOK/smoke-on-a-roll-cheer.md` remain unrunnable for the reason `:34809`
+recorded: no screen in this product can create a visit dated two weeks ago.
+**T3 ROUND 2 IS UNRUN** and is diff-only (`:5348` rule 2).

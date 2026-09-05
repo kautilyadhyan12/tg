@@ -176,6 +176,13 @@ const TARGETS = {
   onarollview: { file: resolve(ROOT, 'apps/web/src/pages/console/onARollView.js') },
   onarollpanel: { file: resolve(ROOT, 'apps/web/src/components/console/OnARollPanel.jsx') },
   membershipview: { file: resolve(ROOT, 'apps/web/src/components/gym/gymMembershipView.js') },
+  // THE MEMBER'S SCREEN ITSELF, added 2026-09-05 by T3 round 1 L-1 — and the
+  // comment four lines up said "the member's own view file decides what the
+  // person being cheered is told", which is only half of it. `membershipview`
+  // decides WHAT the words are; `MyGyms.jsx` decides WHICH CARD they land on,
+  // and nothing in this repo had ever mutated that file. The gap is exactly
+  // :28976's own lesson quoted above, one feature later.
+  mygyms: { file: resolve(ROOT, 'apps/web/src/pages/MyGyms.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -2914,6 +2921,25 @@ const MUTANTS = [
     expect: 'invents nothing for a cheer it cannot describe',
     from: '  if (line === null) return null;',
     to: "  if (line === null) return { emoji: '', text: 'Your gym cheered you on.', when: null };",
+  },
+  // ── T3 ROUND 1 ON THE WEB HALF (2026-09-05) ────────────────────────────────
+  {
+    id: 'C222',
+    target: 'mygyms',
+    suite: MY_GYMS_SUITE,
+    why: "ON SCREEN AND FALSE, and it is C220's shape on the MEMBER's half: every card draws the FIRST gym's cheer, so a member of two gyms cheered only by Iron House reads Iron House's words under Bar Bell Club's name - a gym shown as having sent something it never sent. It was ALIVE until T3 round 1 L-1, because every case in the cheer describe rendered ONE gym and could not tell 'this gym's cheer' from 'the first gym's cheer'. MyGyms.jsx had never been mutated at all: the harness held the member's VIEW file, which decides what the words are, and nothing that decides which card they land on",
+    expect: 'puts the cheer on the card of the gym that sent it, and on no other',
+    from: '                <CheerNote latestCheer={gym.latestCheer} />',
+    to: '                <CheerNote latestCheer={gyms[0]?.latestCheer} />',
+  },
+  {
+    id: 'C223',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "ON SCREEN AND FALSE, and it is T3 round 1's Critical/High restored: the local 'just tapped' flag outranks the server's cheerableAt again, so the row says 'Cheered just now.' for the whole life of the mount. OnARollPanel's taps map is never cleared, so an owner reads it an hour later, the reopening date the re-read already fetched never reaches them, and only a reload corrects it - :7298, a sentence outliving the condition that raised it. C217 cannot see this: it deletes cheerableAt for EVERY row, while this leaves it working right up until somebody taps",
+    expect: 'lets the refreshed instant replace "just now" once the re-read has landed',
+    from: '  if (again !== null) {',
+    to: '  if (again !== null && outcome === null) {',
   },
 ];
 

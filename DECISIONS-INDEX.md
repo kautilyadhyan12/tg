@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,215 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,222 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,16 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,674 lines, MEASURED 2026-09-05 and not estimated**
-(1,215 + 1,385 + 74). **THE THIRTY-FIFTH IS A WHOLE WEB HALF — a new panel, a
+**ALWAYS-READ TOTAL: 2,681 lines, MEASURED 2026-09-05 and not estimated**
+(1,222 + 1,385 + 74). **THE THIRTY-SIXTH IS A T3 ROUND THAT DOES NOT SHIP ITS
+PACKET — one Critical/High and five Low, all six fixed, plus two new mutants and
+a mutation TARGET that had never existed — AND IT COST SEVEN LINES, every one a
+trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record is a ROUND record
+and went to §1B, where `:24813` sends it; **its index line added ZERO, its seven
+clauses duplicating the entry's** — the generator deduplicating, measured on the
+rebuild (1,036 → 1,043 phrases) and not assumed. Taken with this header's own
+prescribed command against the bytes being committed, never by adding a delta to
+the figures below. **THE THIRTY-FIFTH IS A WHOLE WEB HALF — a new panel, a
 new pure module, a shared copy table, four new suites' worth of cases, seven
 mutants and a smoke sheet — AND IT COST SEVEN LINES, every one a trigger phrase,
 §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record is a CARD record and went to
@@ -1695,6 +1703,28 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:34992** — 2026-09-05 — **"ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND
+  1: ONE Critical/High, THE PACKET DOES NOT SHIP THIS ROUND — a row that said
+  "Cheered just now." for the whole life of the tab, because a local flag was
+  asked before the server's own answer.** **Read before ordering a local "I just
+  did this" flag against a server-sent instant, before holding per-row state in a
+  component that never clears it, before writing a fixture whose value is `null`
+  for the very field the ordering turns on, before drawing one fact through both
+  a screen's normal channel and its failure channel, before calling a `key`
+  load-bearing anywhere in this console, before taking a review's count of a
+  figure's COPIES as complete, and before mutating a feature's view file and
+  calling its screen covered.** `cheerState` asked `outcome` before
+  `cheerableAt` and `OnARollPanel`'s taps `Map` is never cleared, so the
+  reopening date the screen had already fetched never reached the owner and only
+  a reload corrected it (`:7298`, `:5807`). **Three documents in the packet
+  promised the handover and the smoke sheet required Ctrl+R to see it** — a smoke
+  step needing a reload for a server value is a bug report shaped like an
+  instruction. Five Low, all fixed: `MyGyms.jsx` **had never been a mutation
+  target** (C222), a comment cited `:22029` for the opposite of what it ruled, a
+  409 was drawn twice, a count was one too high — **and the review overstated
+  that finding, naming a commit message that carries no counts at all
+  (`:23928`)**. **THE `OWED.md` LINE STILL DOES NOT TICK; T3 ROUND 2 IS UNRUN**
+  and is diff-only.
 - **:34809** — 2026-09-05 — **"ON A ROLL" AND THE CHEER, WEB HALF: an owner can
   see who keeps turning up and send them one tap of encouragement — and the
   mutant aimed at the sharpest thing on the screen was ALIVE, because a list with
@@ -1713,7 +1743,10 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   `attendance.read` while the cheer is gated on `members.read`. **NO SMOKE HAS
   RUN and the line does NOT tick** — most of the sheet CANNOT be run, since the
   list needs a two-consecutive-week visit history and no screen can create a
-  visit dated two weeks ago. **T3 UNRUN.**
+  visit dated two weeks ago. ~~**T3 UNRUN.**~~ **SPENT: T3 round 1 ran the same
+  day at `:34992` and found ONE Critical/High — this entry's §5, the swallowed
+  re-read, is the half that was right; the date it fetched never reached the
+  screen. Its 28/28 figure is corrected to 27/27 there.**
 - **:34666** — 2026-09-04 — **"ON A ROLL" AND THE CHEER, T3 ROUND 2 (diff-only):
   ZERO Critical/High, THE PACKET SHIPS — and a claim struck in one item of a
   numbered list was still standing two lines above it.** **Read before striking a
