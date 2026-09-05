@@ -35236,3 +35236,80 @@ in either touched, so `:28395` does not apply) and the full 240-mutant sweep.
 **THE `OWED.md` LINE STILL DOES NOT TICK.** No smoke has run, and Parts B and C
 stay unrunnable for `:34809`'s reason: no screen in this product can create a
 visit dated two weeks ago.
+
+## 2026-09-05 — KD RULES THAT THE SMOKE'S HISTORY MAY BE WRITTEN STRAIGHT INTO THE DATABASE — and applying it found the dev branch TWO migrations behind for the fourth time, with `gym_cheers` missing under the feature he was about to smoke
+
+**Read before running any browser smoke against the dev branch, before building
+the state for a smoke step yourself, and before writing a fixture row dated
+"today" in a gym whose clock is behind yours.**
+
+**HIS CALL, ASKED AND ANSWERED IN ONE LINE.** `OWED.md`'s cheer line had said for
+a day that *"building the rows directly in the database is the only route and is
+nobody's call but Kd's"*. He was asked in those terms and answered **"do all 3"**.
+`RUNBOOK/smoke-on-a-roll-cheer.md` Parts B and C stop being BLOCKED.
+
+### 1 · THE DATABASE THE BROWSER READS WAS TWO MIGRATIONS BEHIND — `:15927`'s FOURTH RECURRENCE
+
+`0020_org_daily_stats_visits` and `0021_gym_cheers` were unapplied, so
+**`gym_cheers` did not exist in the one database a browser reads.** Every gym
+console screen would have failed on the overview read — `getGymRegulars`
+sub-selects that table, and a missing relation is a plan-time error whether or
+not any row would have matched.
+
+**NOTHING ANNOUNCED IT.** It surfaced only because the fixture script listed the
+tables it was about to write to. The suite is green against a LOCAL Postgres, CI
+applies to its own ephemeral branch, and **the dev branch is applied to by hand
+and by nothing else** — `:15927`'s own diagnosis, unchanged and now measured a
+fourth time. The boot-time refusal it recommends is still unbuilt; its `OWED.md`
+line carries this recurrence.
+
+Applied and **read back out of `pg_catalog`** rather than trusted from
+`drizzle-kit`'s green line, which is what those two migrations' own headers
+instruct: the table, its `preset` CHECK and both new columns.
+
+### 2 · THE FIXTURE IS SHAPED SO THE SMOKE CAN FAIL
+
+Ten `gym_attendance` rows, two members, in `apps/api/tools/seed-on-a-roll-visits.ts`
+— insert only, `ON CONFLICT DO NOTHING`, and every value one the app itself could
+have written (`in_session` against the gym's REAL session for that weekday, so
+`gym_attendance_slot_key_agrees_check` holds).
+
+**TWO rows and not one**, with different numbers — `user` 3 weeks · 2 days · 7
+visits, `tm` 2 weeks · no day-streak · 3 visits. A single-row list cannot tell
+*"the row I pressed"* from *"the first row"*, which is the defect `:34809` §1
+found ALIVE on this very screen; and `tm`'s missing day-streak is what makes step
+5's ❌ (*"1 day in a row" must never appear*) observable rather than decorative.
+`:24893` §1 and `:27810` §2 are the standing form of this.
+
+**PART A MOVED TO A DIFFERENT GYM RATHER THAN BEING SPENT.** Writing regulars
+into the *owner* gym destroys its empty state, so Part A now runs against *Smoke
+Test Gym*, which has no non-complimentary member and is genuinely empty —
+verified over HTTP, `onARoll: []`. A fixture that silently consumes the state an
+earlier step tests is how a sheet stops proving what it claims.
+
+### 3 · A FIXTURE INSTANT IN THE FUTURE, CAUGHT BY ARITHMETIC AND NOT BY A CHECK
+
+The first run wrote today's visit at 08:00 in the gym's own zone. **The gym is
+`America/Mendoza` and Kd is at UTC+5:30, so 08:00 there was still two and a half
+hours away** — a visit stamped in the future, which no constraint in this schema
+refuses. That row was removed and 2026-09-03 used instead; every fixture instant
+is now in the past. **The gym's zone is not the reader's, and a fixture dated
+"today" has to be checked against the GYM's clock** — the same axis `:27810` §3
+declared when it chose `Asia/Kolkata` deliberately.
+
+### Round log
+
+**VERIFIED THROUGH THE REAL CODE, TWICE, never a hand-rolled second query.**
+`getGymRegulars` returned the two rows after the write; then the API was booted
+and `POST /v1/auth/login` (200) plus `GET /v1/orgs/:gymId/overview` returned the
+same two rows over HTTP — which is also the contract check `:31222` exists for.
+Smoke Test Gym returned `onARoll: []` on the same call.
+
+**No `src`, test or migration file changed.** The smoke sheet, the new tool, two
+`OWED.md` lines and this record. The departure — the chat built the state, Kd
+does the looking — is declared in the sheet itself on `:27810` §3's test: **no
+step in it contains a command.**
+
+**Both servers are running for the smoke**: api on `0.0.0.0:3000` against the
+**Neon dev branch** (`--env-file=.env`, deliberately — his gyms and accounts live
+there, `:13659`), web on `:5173`.

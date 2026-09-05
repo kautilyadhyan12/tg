@@ -11,36 +11,39 @@ about to send, or that the member sees anything afterwards.
 
 ---
 
-## ⚠️ READ THIS FIRST — most of this sheet CANNOT BE RUN YET, and that is not a
-## defect
+## ⚠️ READ THIS FIRST — the whole sheet is now runnable, and how that happened
+## matters
 
 **The list only draws a member who has visited in two or more consecutive weeks
-at your gym, and nobody in your database has done that.** The rule is
-deliberate — a "streak" of one week is not a streak — so the list is correctly
-empty today.
+at your gym.** The rule is deliberate — a "streak" of one week is not a streak.
 
-**And that history cannot be created by using the app.** When you tap *"I'm
-here"* the server decides which day it is, in the gym's own clock. It has to,
-or anybody could mark themselves present for last Tuesday. So there is no way,
-through any screen, to give somebody a visit two weeks ago.
+**That history cannot be created by using the app.** When you tap *"I'm here"*
+the server decides which day it is, in the gym's own clock. It has to, or anybody
+could mark themselves present for last Tuesday. So there is no screen, anywhere,
+that can give somebody a visit two weeks ago.
 
-**What that leaves:**
+**KD RULED ON 2026-09-05 THAT THE ROWS COULD BE WRITTEN STRAIGHT INTO THE
+DATABASE, AND THEY WERE** — ten attendance rows for two members of the *owner*
+gym, by `apps/api/tools/seed-on-a-roll-visits.ts`, which says exactly what it
+writes and why. **Part A was NOT touched by this**: the empty state below now
+belongs to *Smoke Test Gym*, which still has nobody on a run.
 
-| Part | Can you run it today? |
-|---|---|
-| **A — the empty list** | **Yes**, and it is the only part with a real ✅ below. |
-| **B — the list and the cheer** | **No.** Needs the history above. |
-| **C — what the member sees** | **No.** Needs B to have happened. |
+| Part | Where | Runnable |
+|---|---|---|
+| **A — the empty list** | **Smoke Test Gym** (`/console/smoke-test-gym`) | Yes |
+| **B — the list and the cheer** | **owner** (`/console/owner`) | Yes |
+| **C — what the member sees** | sign in as the cheered member | Yes, after B |
 
-**Parts B and C are written out in full anyway**, so that the day the history
-exists they can be run without anybody re-deriving what to look for. Until then
-this sheet does NOT tick the feature's line — nobody has seen these screens.
+**THE DEPARTURE IS DECLARED** (`:27810` §3): the chat built the state and you do
+the looking. That is legitimate here for that entry's own reason — **no step
+below contains a command.** Every one is a person at a screen reading something,
+so your word is the complete evidence for it.
 
 ---
 
 ## Before you start
 
-**Part A is yours to run start to finish. No pauses, no commands.**
+**The whole sheet is yours to run start to finish. No pauses, no commands.**
 
 - **Both servers are already running.** If you need to restart them:
   ```
@@ -48,18 +51,26 @@ this sheet does NOT tick the feature's line — nobody has seen these screens.
   corepack pnpm --filter web exec vite
   ```
 - **Your sign-in:** `owner@example.com` / **`Smoke2026!`**
+- **Part C needs the member's own sign-in**, `user@example.com`. If you do not
+  have that password, say so and it can be reset — nothing else in the sheet
+  needs it.
 
 ## The links
 
 | # | Where | Link |
 |---|---|---|
 | A | Sign in | http://localhost:5173/login |
-| B | **Your gym's home screen** | http://localhost:5173/console/owner |
-| C | **My Gyms** (the member's side) | http://localhost:5173/my-gyms |
+| B | **Smoke Test Gym's home screen** (nobody on a run) | http://localhost:5173/console/smoke-test-gym |
+| C | **The owner gym's home screen** (two people on a run) | http://localhost:5173/console/owner |
+| D | **My Gyms** (the member's side) | http://localhost:5173/my-gyms |
+
+**Two gyms, on purpose.** Part A checks what an empty list says, and *Smoke Test
+Gym* is the one that is genuinely empty. Part B needs people on it, and the
+*owner* gym is where the ten visit rows were written.
 
 ---
 
-## PART A — the empty list (runnable today)
+## PART A — the empty list
 
 Sign in at **A**, then open **B**.
 
@@ -106,19 +117,26 @@ at.
 
 ---
 
-## PART B — the list and the cheer (BLOCKED — needs a member with a two-week
-## history)
+## PART B — the list and the cheer
 
-*Do not attempt these steps today. They are written for the day that history
-exists.*
+Open **C** — the *owner* gym. This is a different gym from Part A.
 
-### 5 · A member on the list
+### 5 · Two members on the list, with different numbers
 
-✅ Under **"On a roll"**, one row per member, showing their name and a line like
-**"5 weeks running · 3 days in a row · 11 visits"**.
+✅ Under **"On a roll"**, exactly two rows, in this order:
+
+| Name | The line beside it |
+|---|---|
+| **user** | **3 weeks running · 2 days in a row · 7 visits** |
+| **tm** | **2 weeks running · 3 visits** |
+
+**The second row has no "days in a row" and that is the check.** `tm` last came
+on Wednesday, so there is no run of days to report — and the screen says nothing
+rather than saying "0" or "1".
 
 ❌ **"1 day in a row"** must never appear. One day is not a run, and printing it
-beside a five-week streak reads as though the run had just broken.
+beside a three-week streak reads as though the run had just broken.
+❌ Only one row, or the two rows the other way round, is a failure.
 
 ### 6 · Four things you can send
 
@@ -131,7 +149,8 @@ it.** If hovering shows nothing, that is a failure.
 
 ### 7 · One tap sends it
 
-✅ Click **💪** on one row. The four emoji on **that row only** are replaced by a
+✅ Click **💪** on the **user** row — the top one. The four emoji on **that row
+only** are replaced by a
 grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again in
 7 days."* **Both are a pass.** The first is the moment before the server answers;
 the second means it has already answered. Step 8 is where the date is checked.
@@ -165,13 +184,13 @@ click.
 
 ---
 
-## PART C — what the member sees (BLOCKED — needs Part B)
+## PART C — what the member sees
 
-*Sign in as the member who was cheered.*
+*Sign out, and sign in as `user@example.com` — the member you just cheered.*
 
 ### 10 · The line is on their gym card
 
-Open **C**.
+Open **D**.
 
 ✅ On the card for that gym, under its name: **💪 Great week — keep it going.**
 followed by a faint **"just now"** or **"2 hours ago"**.
@@ -193,11 +212,17 @@ known limitation and not a fault.
 
 ---
 
-## What a pass on Part A does and does not cover
+## What a pass here does and does not cover
 
-**Does:** that the section exists, is honestly worded when empty, folds, and is
-absent from the members list.
+**Does:** the section exists and is honestly worded when empty · it folds · it is
+absent from the members list · the list draws real streaks · a cheer reaches the
+member it was aimed at · the reopening date comes from the server and survives a
+reload · the member sees the line and the dot.
 
-**Does NOT:** anything about a real cheer. **No cheer has been sent by anybody,
-and no member has seen one.** Until Parts B and C run, the feature's `OWED.md`
-line does not tick.
+**Does NOT:** anything about a member's history being built the ordinary way.
+**The ten visits behind Part B were written into the database, not walked in
+through the door** — so this sheet says nothing about `markAttendance`, which
+`smoke-attendance.md` covers.
+
+**A pass is per STEP, never per message** (`:27415`, `:23535`). Report each
+number; a single word covers only what it names.

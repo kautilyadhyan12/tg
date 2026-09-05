@@ -7181,6 +7181,14 @@ file and is stated so nobody reads these as lower priority than they are.
       still lists your gyms, so it reads as one broken screen rather than a
       database a change behind. **It also rehearses the deploy**: the same gap on
       the day P2.8 cuts over is every gym's console dark.
+      **⚙️ FOURTH RECURRENCE, 2026-09-05 (DECISIONS `:35240`): the dev branch was
+      TWO migrations behind — `0020` and `0021` — so `gym_cheers` did not exist
+      in the database Kd's browser reads.** Every gym console screen would have
+      failed on the overview read, minutes before he was asked to smoke it, and
+      **nothing announced it**: it was found only because the fixture script
+      listed the tables first. Applied by hand and read back out of `pg_catalog`.
+      **The boot-time check recommended above is still not built**, and this
+      recurrence is the fourth measurement of what it would have cost to build.
       **Candidate fixes, none chosen (Kd's call, R0.2):** a boot-time check in
       `apps/api` that refuses to start against a database with pending
       migrations, naming the command — the loudest and the cheapest; or a line in
@@ -7912,6 +7920,14 @@ file and is stated so nobody reads these as lower priority than they are.
       BLOCKED** — :26012's shape, rather than carrying steps that cannot pass.
       Building the rows directly in the database is the only route and is nobody's
       call but Kd's.
+      **⚙️ KD MADE THAT CALL ON 2026-09-05 AND THE WHOLE SHEET IS NOW RUNNABLE**
+      (DECISIONS `:35240`). Ten `gym_attendance` rows for two members of the
+      *owner* gym, written by `apps/api/tools/seed-on-a-roll-visits.ts` — insert
+      only, and the panel read back through the real query and then over HTTP.
+      **Part A moved to *Smoke Test Gym***, which is genuinely empty, so the
+      empty state is still tested rather than assumed. **T3 IS DONE** (round 2,
+      `:35153`, zero Critical/High). **THIS LINE STILL DOES NOT TICK: no human
+      has looked at any of it yet.**
 - [ ] 🟡 **A FIFTH CHEER PRESET WOULD BLANK EVERY MEMBER'S GYM LIST, and adding
       one is therefore NOT a list edit** (found 2026-09-05 building the cheer's
       web half, DECISIONS :34809 §7; **pre-existing since the server half of

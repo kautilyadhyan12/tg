@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,685 lines, MEASURED 2026-09-05 and not estimated**
-(1,226 + 1,385 + 74). **THE THIRTY-SEVENTH IS THE ROUND THAT SHIPPED THIS PACKET
+**ALWAYS-READ TOTAL: 2,688 lines, MEASURED 2026-09-05 and not estimated**
+(1,229 + 1,385 + 74). **THE THIRTY-EIGHTH IS A KD APPROVAL PLUS A FOURTH
+RECURRENCE OF THE UNMIGRATED DEV BRANCH — AND IT COST THREE LINES, every one a
+trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record went to §1B: the
+ruling it carries is SPENT (it authorised one action, now taken), and what binds
+future work is on `OWED.md`'s own lines. Taken with this header's own prescribed
+command against the bytes being committed. **THE THIRTY-SEVENTH IS THE ROUND THAT SHIPPED THIS PACKET
 — zero Critical/High, three Low all prose, all fixed — AND IT COST FOUR LINES,
 every one a trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record is a
 ROUND record and went to §1B, where `:24813` sends it. Taken with this header's
@@ -1708,6 +1713,23 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35240** — 2026-09-05 — **KD RULES THAT THE SMOKE'S HISTORY MAY BE WRITTEN
+  STRAIGHT INTO THE DATABASE — and applying it found the dev branch TWO
+  migrations behind for the fourth time, with `gym_cheers` missing under the
+  feature he was about to smoke.** **Read before running any browser smoke
+  against the dev branch, before building the state for a smoke step yourself,
+  and before writing a fixture row dated "today" in a gym whose clock is behind
+  yours.** `OWED.md` had said the rows were *"nobody's call but Kd's"*; he was
+  asked in those terms and said do it. **`0020` and `0021` were unapplied, so
+  `gym_cheers` did not exist in the one database a browser reads** — every gym
+  console screen would have failed on the overview read, and **nothing announced
+  it** (`:15927`'s diagnosis, fourth measurement; the boot-time refusal is still
+  unbuilt). The fixture is **two members with different numbers**, because a
+  one-row list cannot tell the pressed row from the first row (`:34809` §1), and
+  **Part A moved to a gym that is still empty** rather than being spent. **A
+  first row was written 2.5h in the FUTURE** — the gym is `America/Mendoza`, Kd
+  is at UTC+5:30, and no constraint refuses that; removed and re-dated. Read
+  back through `getGymRegulars` and then over HTTP (`:31222`).
 - **:35153** — 2026-09-05 — **"ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND
   2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the smoke sheet asked
   the tester to catch a sentence that clears itself.** **Read before writing a
