@@ -7934,7 +7934,23 @@ file and is stated so nobody reads these as lower priority than they are.
       emoji still on the other. **The rest rests on his declaration**
       (`:33265`'s terms). **HE RAISED THREE CHANGES AT THE SCREEN; they are the
       three lines immediately below and NONE is a step failure.**
-- [ ] 🟡 **"3 WEEKS RUNNING" READS AS THE SPORT — KD AT THE SCREEN, 2026-09-05**
+- [x] 🟡 **"3 WEEKS RUNNING" READS AS THE SPORT — KD AT THE SCREEN, 2026-09-05**
+      **✅ DONE 2026-09-05. KD CHOSE *"in a row"* from three options put to him**
+      — the screen now reads *"5 weeks in a row · 3 days in a row · 11 visits"*.
+      **`streakParts` in `onARollView.js` is the only place the words are made**;
+      changed with it in one commit (`:20587`): its own docblock example, the
+      five assertions in `onARollView.test.js`, two in `onARoll.render.test.jsx`,
+      C216's anchor and two `why` texts in `mutate-console.mjs`, and the two
+      expected rows in `RUNBOOK/smoke-on-a-roll-cheer.md`.
+      **NO SWEEP AND NO REVIEW ROUND, DELIBERATELY: `:5857` rule 4a puts wording
+      and labels in the NEVER-MUTATED column**, and a plan that scheduled nine
+      mutants for a word swap was Kd's to reject — he did. `web` 1823/1823,
+      `eslint --max-warnings=0` exit 0, `node --check` on the harness exit 0.
+      **NOT TOUCHED, and each for a reason:** `CARD-gym-overview-people.md`
+      records the options he was SHOWN and cannot be rewritten without falsifying
+      what he ruled; the `apps/api` and `packages/shared` comments quoting the old
+      sentence stay, because editing them pulls a second package's checks into a
+      copy change. Original line below.
       (DECISIONS `:35317`). His words: *"someone will not come to gym for running
       but to do exercises i think people will misunderstand running with actual
       running"*. **The figure is TRUE, so this is Low by `:5807` — and it is

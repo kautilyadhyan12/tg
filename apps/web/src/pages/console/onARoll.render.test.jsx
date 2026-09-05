@@ -116,7 +116,7 @@ describe('the list of members who keep turning up', () => {
   it('draws the name and both figures Kd ruled', async () => {
     drawOverview();
     expect(await screen.findByText('Priya Nair')).toBeTruthy();
-    expect(screen.getByText('5 weeks running · 3 days in a row · 11 visits')).toBeTruthy();
+    expect(screen.getByText('5 weeks in a row · 3 days in a row · 11 visits')).toBeTruthy();
   });
 
   // :30624's class ON THE SCREEN, not only in the helper: two true figures
@@ -128,7 +128,7 @@ describe('the list of members who keep turning up', () => {
       withRoll([regular({ weeksRunning: 6, daysRunning: 1, visits: 9 })]),
     );
     drawOverview();
-    expect(await screen.findByText('6 weeks running · 9 visits')).toBeTruthy();
+    expect(await screen.findByText('6 weeks in a row · 9 visits')).toBeTruthy();
     expect(screen.queryByText(/1 day in a row/)).toBeNull();
   });
 

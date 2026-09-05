@@ -127,8 +127,8 @@ Open **C** — the *owner* gym. This is a different gym from Part A.
 
 | Name | The line beside it |
 |---|---|
-| **user** | **3 weeks running · 2 days in a row · 7 visits** |
-| **tm** | **2 weeks running · 3 visits** |
+| **user** | **3 weeks in a row · 2 days in a row · 7 visits** |
+| **tm** | **2 weeks in a row · 3 visits** |
 
 **The second row has no "days in a row" and that is the check.** `tm` last came
 on Wednesday, so there is no run of days to report — and the screen says nothing

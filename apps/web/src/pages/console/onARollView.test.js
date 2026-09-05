@@ -95,13 +95,13 @@ describe('the two streak figures', () => {
     // built from the wrong field says something different rather than the same
     // thing by luck.
     const parts = streakParts(regular({ weeksRunning: 5, daysRunning: 3 }));
-    expect(parts.weeks).toBe('5 weeks running');
+    expect(parts.weeks).toBe('5 weeks in a row');
     expect(parts.days).toBe('3 days in a row');
   });
 
   // **:30624's CLASS, WHICH IS THIS SCREEN'S OWN RECORDED DEFECT FROM ONE CARD
   // AGO**: two true figures arranged into a sentence that reads as a
-  // contradiction. "5 weeks running · 1 day in a row" invites the reading that
+  // contradiction. "5 weeks in a row · 1 day in a row" invites the reading that
   // the run just broke. One row, one story.
   it('hides a one-day streak beside a long week streak', () => {
     expect(streakParts(regular({ weeksRunning: 5, daysRunning: 1 })).days).toBeNull();
@@ -110,24 +110,24 @@ describe('the two streak figures', () => {
   });
 
   it('says a single week in the singular', () => {
-    expect(streakParts(regular({ weeksRunning: 1 })).weeks).toBe('1 week running');
+    expect(streakParts(regular({ weeksRunning: 1 })).weeks).toBe('1 week in a row');
   });
 
   it('builds the whole row in the order the panel reads it', () => {
     expect(streakText(regular({ weeksRunning: 5, daysRunning: 3, visits: 11 })))
-      .toBe('5 weeks running · 3 days in a row · 11 visits');
+      .toBe('5 weeks in a row · 3 days in a row · 11 visits');
   });
 
   // The same row WITHOUT the day clause, so the separator logic cannot leave a
   // dangling "·" and the visits figure still arrives.
   it('joins cleanly when the day clause is hidden', () => {
     expect(streakText(regular({ weeksRunning: 4, daysRunning: 1, visits: 4 })))
-      .toBe('4 weeks running · 4 visits');
+      .toBe('4 weeks in a row · 4 visits');
   });
 
   it('reads visits from its own field too', () => {
     expect(streakText(regular({ weeksRunning: 2, daysRunning: 0, visits: 1 })))
-      .toBe('2 weeks running · 1 visit');
+      .toBe('2 weeks in a row · 1 visit');
   });
 });
 

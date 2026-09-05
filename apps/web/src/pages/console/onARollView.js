@@ -91,7 +91,7 @@ export function previewRegulars(rows, max = REGULARS_PREVIEW) {
 /** THE TWO STREAK FIGURES, SEPARATELY, so a test can watch each one.
  *
  *  **`daysRunning` IS DRAWN ONLY AT 2 OR MORE, AND IT IS THE WHOLE REASON THIS
- *  RETURNS TWO PIECES.** *"5 weeks running · 1 day in a row"* is two TRUE
+ *  RETURNS TWO PIECES.** *"5 weeks in a row · 1 day in a row"* is two TRUE
  *  figures arranged into a sentence that reads as a contradiction — :30624's
  *  class, which is this exact screen's recorded defect from one card earlier,
  *  found by Kd and not by 1,659 tests. One row, one story.
@@ -105,7 +105,7 @@ export function streakParts(regular) {
   const weeks = count(regular?.weeksRunning);
   const days = count(regular?.daysRunning);
   return {
-    weeks: weeks === 1 ? '1 week running' : `${weeks} weeks running`,
+    weeks: weeks === 1 ? '1 week in a row' : `${weeks} weeks in a row`,
     days: days >= 2 ? `${days} days in a row` : null,
   };
 }
