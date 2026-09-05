@@ -33,8 +33,10 @@ import { Building2 } from 'lucide-react';
  *  measured), so a gym's cheer is STORED and waits on `My Gyms`; without
  *  something pointing at it, a member who does not open that screen never learns
  *  it happened. **It is RECENCY and not read-state** — `hasFreshCheer` — so it
- *  stays lit for the week whether or not they looked, which is the cost of not
- *  building a second table and a second write path for a dot.
+ *  stays lit for the day whether or not they looked, which is the cost of not
+ *  building a second table and a second write path for a dot. **A DAY AND NOT A
+ *  WEEK since Kd cut the cheer's cap to one per member per day (:35762)**;
+ *  `CHEER_FRESH_DAYS` is the one place that number lives (:20587).
  *
  *  **IT RIDES ON THE ITEM AND NOT ON A SECOND LIST**, so the dot cannot outlive
  *  the item it belongs to: a member removed from their last gym loses both in

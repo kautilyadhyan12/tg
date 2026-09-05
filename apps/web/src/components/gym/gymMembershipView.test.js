@@ -409,7 +409,15 @@ describe('whether the nav item carries a dot', () => {
   const gym = (sentAt) => ({ id: 'g1', name: 'Iron House', latestCheer: { preset: 'on_a_roll', sentAt } });
 
   it('lights for a cheer inside the cap and goes out after it', () => {
-    expect(hasFreshCheer([gym(new Date(NOW - DAY).toISOString())], NOW)).toBe(true);
+    expect(hasFreshCheer([gym(new Date(NOW - HOUR).toISOString())], NOW)).toBe(true);
+    // **AND THE SEVEN-DAY WINDOW IS GONE — this case is the whole of what the
+    // cap change means on the member's side and it goes RED on the old value**
+    // (T3 C/H-1). Kd cut the cheer's cap to one per member per day (:35762),
+    // so a cheer from two days ago is not news: a new one could have arrived on
+    // each of the days since, and a dot still lit for it says "new" about
+    // something the member has had for days. `NOW - DAY` used to stand here and
+    // could not tell 1 from 7.
+    expect(hasFreshCheer([gym(new Date(NOW - 2 * DAY).toISOString())], NOW)).toBe(false);
     // ONE MINUTE EITHER SIDE OF THE BOUNDARY, because a window whose only
     // tested case is "inside" is satisfied by one that never closes (:7104's
     // PG1 — a guard with one test is a door that is simply shut).

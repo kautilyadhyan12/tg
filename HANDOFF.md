@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CHEER'S GYM-DAY CAP — **T3 ROUND 1 RUN AND FIXED: TWO Critical/High,
+      so the packet does NOT ship this round** (`:5348` rule 1). DECISIONS
+      `:35944`. Five Low fixed too, logged in `BACKLOG.md`. Kd approved the fix
+      round against the listed findings before a file was touched.
+
+      **START HERE — WHAT IS OWED, IN ORDER.**
+      1. **A DIFF-ONLY ROUND 2** (`:5348` rule 2), covering only these fixes and
+         the surfaces they touch. `OWED.md`'s cheer-cap line does NOT tick.
+      2. **THE BROWSER SMOKE, WHICH IS STILL UNRUN** —
+         `RUNBOOK/smoke-on-a-roll-cheer.md`. This round rewrote step 8, so the
+         sheet was NOT safe to hand him before now.
+
+      **THREE THINGS THAT OUTLIVE THIS ROUND.**
+  1. **A RULE ENFORCED IN ONE PLACE AND REPORTED FROM ANOTHER NEEDS MUTANTS IN
+     PAIRS.** The cap's GUARD had three day-comparison mutants (O266 widening,
+     O280 UTC, O282 rolling-seven); its READER had mutants for the VALUE it
+     returns and for `gym_id`, and **none for the width of its day** — which was
+     C/H-2, and **O283 was measured ALIVE before its test existed.** Each `why`
+     now names its sibling.
+  2. **THE THIRD ROUND RUNNING WHOSE Critical/High IS "A GUARANTEE WITH NO
+     OBSERVER"** (`:34443` the lock, `:35511` the Send guard, both of these).
+     The escape hatch is NOT armed — the two rounds in between found zero — but
+     the pattern is named at `:35944` §3 and the guard is §3's standing rule,
+     not a fourth patch.
+  3. **A MUTANT CAN GO DEAD WITHOUT ANYBODY TOUCHING IT.** `C228` is a two-line
+     anchor and `OnARollPanel.jsx` is CRLF on disk / LF in git, so it matched
+     nothing and **ABORTED the whole console sweep**. `mutate-console.mjs` states
+     the one-line rule twice already. Re-anchored with the SOURCE naming its
+     subject (`:21157`'s O127); RED again.
+
+PROVE: `orgs.cheers` **19/19 LOCAL** (`127.0.0.1:5433`, `:13659`) · `web`
+       **1835/1835 across 61 files** · `shared` **52/52** · the six scoped cheer
+       suites **270/270** · `tsc --noEmit` exit 0 on **api AND shared** ·
+       `eslint --max-warnings=0` exit 0 on seven web + one api + one shared file ·
+       `node --check` on both harnesses. Four ROOT guards green (harnesses **26** ·
+       index **312 pointers, 1426 headings** · triggers **1088 from 280 of 418** ·
+       smoke-folds OK). Always-read re-measured with the header's own command:
+       **2,761 = 1,267 + 1,405 + 89**, §1 and §2 UNMOVED.
+       **AUDIT, one mutant per invocation with a sha256 check after each**
+       (`:35822` §3's route; the crash did NOT recur): **O283 RED · C228 RED ·
+       C230 RED**, controls GREEN and tallied first, all three files byte-exact
+       afterwards. **`repo.ts` is unchanged from HEAD (`abdadad6…9611c7e1`) —
+       C/H-2 needed no code change, only an observer.**
+       **RULE 3 PROVEN BY REVERSAL BOTH WAYS:** O283 run BEFORE its test → ALIVE,
+       after → RED; C/H-1's new case run against the shipping constant → RED.
+       NOT RUN, NOT CLAIMED: the full `api` suite (the seed-count flake and the
+       401 symptom on `:35822`'s OWED line), the full 273/247-mutant sweeps,
+       gitleaks in either scope.
+
+OPEN:  **Round 2, then the smoke.** `CLAUDE.md`'s pre-existing uncommitted edit is
+       STILL OUT (`:24559`) — not mine, not committed. The api and web dev servers
+       are STOPPED; the local Postgres and Redis containers are UP. Kd's two
+       remaining `:35317` changes are still his to answer (the word *"running"*
+       reading as the sport; nothing else). After that, the people-lists card
+       still owes three panels — *when they come* · *slipping away* · *this
+       week's roster* — and `:26385` §5 has the wider gym-stage list.
+```
+
+```
 TASK: THE CHEER'S CAP — **BUILT: ONE PER MEMBER PER GYM-DAY** (Kd's ruling
       `:35762`, built at `:35822`, commit `13e4253`). api + web + shared, **no
       migration**. **NO SMOKE HAS RUN AND T3 IS UNRUN**, so `OWED.md`'s line

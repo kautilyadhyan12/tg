@@ -218,14 +218,38 @@ export function cheerNote(latestCheer, now = Date.now()) {
 
 /** HOW LONG A CHEER COUNTS AS NEW, for the nav item's dot.
  *
- *  **SEVEN DAYS BECAUSE THAT IS THE CAP, and it is a DISPLAY rule that mirrors
- *  the server's rather than enforcing anything.** Kd's ruling is one cheer per
- *  member per week and Part 3 §4.1 spells the same window `rate-limit
- *  1/member/7d`, so a dot that lasted longer would still be lit when the next
- *  one could already have arrived, and one that lasted less would go dark on a
- *  message nobody had read. Named here rather than typed at the call site, so
- *  moving it is one edit (:20587). */
-export const CHEER_FRESH_DAYS = 7;
+ *  **ONE DAY BECAUSE THAT IS THE CAP, and it is a DISPLAY rule that mirrors the
+ *  server's rather than enforcing anything.** A dot that outlasted the cap would
+ *  still be lit when the next cheer could already have arrived, and one that
+ *  fell short would go dark on a message nobody had read.
+ *
+ *  **IT SAID SEVEN FOR A DAY AFTER THE SEVEN WENT.** Kd reversed his own cap to
+ *  one per member per day at :35762; the paragraph here went on arguing for a
+ *  week, citing the ruling it had replaced — so a member cheered on Monday
+ *  carried the dot until Sunday, and a member cheered daily never saw it go
+ *  dark at all. :20587 is the rule: every copy of a number moves together, and
+ *  this one was not in the ruling's own measured touch list.
+ *  **Part 3 §4.1's `rate-limit 1/member/7d` is the AT-RISK NUDGE, a different
+ *  feature** (:35762 §1), and quoting it here is what made seven look justified.
+ *
+ *  **IT IS A ROLLING 24 HOURS WHERE THE SERVER'S CAP IS A CALENDAR GYM-DAY, and
+ *  that is deliberate rather than an approximation nobody noticed.** `sentAt` is
+ *  an INSTANT and never a gym-day — `gymCheerSchema` in `@app/shared` says why:
+ *  a cheer is read by the MEMBER, wherever in the world they are, so *"2 hours
+ *  ago"* on the card below is the only rendering true for both of them, and a
+ *  dot going dark at a foreign midnight while that card still says "2 hours ago"
+ *  would be the two disagreeing about one fact.
+ *
+ *  **WHAT THE ROLLING WINDOW BUYS IS EXACT AND WORTH STATING: the gym's next
+ *  midnight is never more than 24 hours away, so the dot is always still lit for
+ *  the whole of the gym-day its cheer belongs to, and never lit for more than a
+ *  day.** It can therefore outlive the cap by up to a day and can never fall
+ *  short of it — the safe direction, since the cost is a dot a member has
+ *  already read and the alternative is a cheer that never announced itself.
+ *
+ *  Named here rather than typed at the call site, so moving it is one edit
+ *  (:20587). */
+export const CHEER_FRESH_DAYS = 1;
 
 /** SHOULD THE `My Gyms` ITEM CARRY A DOT? — a chat's call with its cost, taken
  *  at this card's gate and approved by Kd 2026-09-05.
@@ -236,7 +260,7 @@ export const CHEER_FRESH_DAYS = 7;
  *  happened. The dot is the whole of the arrival.
  *
  *  **ITS COST, stated rather than discovered: it is RECENCY and not read-state,
- *  so it stays lit for the week whether or not they looked.** The alternative is
+ *  so it stays lit for the day whether or not they looked.** The alternative is
  *  a second table and a second write path for a dot, which
  *  `CARD-gym-overview-people.md` §3.2 refused deliberately.
  *

@@ -4147,3 +4147,50 @@ diff-only round covers the FIXES and not only the code they touched.
       :28976 and skipped the case it wrote itself. C228 kills the mutant that
       matters today, so this was an inconsistency rather than a liar; the member
       is now asserted still on screen.
+
+### The cheer's gym-day cap — T3 round 1 (DECISIONS :35944)
+
+Reviews `13e4253` (`:35822`). **TWO Critical/High ⇒ the packet does NOT ship this
+round** (`:5348` rule 1) and a diff-only round 2 is owed. **FIVE Low, all fixed in
+this round** (`:5307` — everything found is fixed whatever its severity, and a Low
+buys no round). Escape hatch NOT armed: `:35153` and `:35593` each found zero.
+Kd approved the whole list before any file changed — *"fix men and please
+properly"*.
+
+**The two Critical/High are NOT here** — they are fixed or they hold the packet,
+and they are at `:35944` §§1–2. **Four of the five Low below are one shape: a
+sentence about the cap that the cap change did not move** (`:20587`), which is why
+the round grepped for the number rather than trusting the review's map.
+
+- [x] **L-1 · A FIND-AND-REPLACE LEFTOVER QUOTING A STRING THAT DOES NOT EXIST.**
+      `OnARollPanel.jsx`'s comment described the round-1 defect as drawing
+      *"Cheered in today."* — the word *in* survived the rolling-to-calendar
+      rewrite inside a quotation of on-screen text, so the comment cites a
+      sentence no code can produce. Fixed to *"Cheered today."*
+- [x] **L-2 · A HALF-REPLACED CLAUSE IN `orgsApi.js`.** *"refuses anything inside
+      the rolling the same gym-day"* — *the rolling* left behind when *seven days*
+      became *the same gym-day*. Deleted.
+- [x] **L-3 · THE SMOKE SHEET BLESSED AN OUTCOME FOR THE WRONG REASON.** Step 8
+      said *"if you run this late at night it may read 'later today'"*. **The
+      review called this a false tick and was wrong about why; the database
+      settled it** (`:34147`): the Part B gym is `America/Mendoza`, 8½ hours
+      behind Kd, and `cheerAgainText` compares calendar days in the VIEWER's zone
+      — so *"later today"* is correct for exactly 00:00–08:30 his time and the
+      hour has nothing to do with it. Rewritten to name what actually decides it,
+      with the same-zone case stated so nobody re-derives it. Detail at `:35944`
+      §5. **Low because a sheet is not a screen** (`:33648` §1, Kd's own reading).
+- [x] **L-4 · THREE MUTANT/TEST `why`s STILL DESCRIBING A ROLLING SEVEN DAYS.**
+      `orgs.cheers.test.ts`'s C/H-4 docblock, `mutate-orgs.mjs`'s **O279**, and —
+      found while re-anchoring it, not by the review — `mutate-console.mjs`'s
+      **C228**. All three explain a guarantee by a rule that no longer exists, and
+      a `why` is what a later chat reads to decide whether a mutant still means
+      anything. Each now carries the rule it guards AND the rule it was written
+      under.
+- [x] **L-5 · A RUN-ON LINE IN `packages/shared/src/orgs.ts`.** The `:35762`
+      parenthetical was inserted mid-paragraph, leaving a 100-column line in a
+      file whose every other line wraps. Broken at the paragraph.
+
+**NOT A LOW AND NOT A DEFERRAL, recorded here only so it is not looked for
+twice:** `C228` was found DEAD — a two-line anchor in a CRLF-on-disk file — and it
+**aborted the whole console sweep**, so it is an instrument fault fixed in this
+round, at `:35944` §4. Nothing about it is outstanding.

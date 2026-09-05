@@ -762,6 +762,30 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       // THE NEXT DAY — allowed. **The other direction, without which a gate
       // that simply never opens passes the test above** (:7104's PG1).
       await moveCheerToGymDay(org.org.id, member.userId, 1);
+
+      // **AND THE PANEL SAYS SO BEFORE THE SEND PROVES IT — the reader's day
+      // has to be exactly TODAY, and nothing in this file could see its WIDTH**
+      // (T3 C/H-2, measured: O283 was ALIVE).
+      //
+      // This is the one instant where it is observable. Exactly one cheer
+      // exists and it is now dated YESTERDAY, so a reader widened to
+      // `>= today - 1` names a midnight while the guard three lines below
+      // honours the send — **the console greys a button the server would
+      // accept, and quietly reinstates the wait Kd threw out** (:35762).
+      //
+      // **EVERY OTHER `toBeNull` HERE IS A MEMBER THIS GYM HAS NEVER CHEERED**,
+      // which a widened window answers identically. And the assertions on
+      // either side stand on rows that include TODAY, where :35822 §2 applies
+      // one line over: the sub-select's value stopped depending on the row it
+      // matched, so every row in a wider window yields the SAME midnight and
+      // the defect and the fix are indistinguishable (:20712).
+      const reopened = rollFor(await readOverview(org.org.id, owner.cookies), member.userId);
+      expect(reopened, "still on the list with yesterday's cheer on the clock").toBeDefined();
+      expect(
+        reopened?.cheerableAt,
+        "only TODAY's cheer may block: yesterday's must leave the window open",
+      ).toBeNull();
+
       expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
 
       // **AND YESTERDAY'S CHEER DOES NOT MOVE THE ANSWER.** Two rows exist now,
@@ -1092,7 +1116,10 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
    *  The cap is per GYM (the lookup filters `gym_id` and `user_id` and nothing
    *  else), so *"You've already cheered this member this week"* is false for the
    *  second staffer on the desk — `:5807`, a sentence a user can see that is
-   *  not true. "This week" was wrong too: the window is a rolling seven days. */
+   *  not true. "This week" was wrong twice over: the window was a rolling seven
+   *  days when this was written, and since Kd's `:35762` it is the gym's
+   *  calendar DAY. The assertion below bans the pronoun and the week; the
+   *  sentence it now guards is *"already been cheered today."* */
   it(
     "tells a second staffer what happened, not that they did it",
     async () => {

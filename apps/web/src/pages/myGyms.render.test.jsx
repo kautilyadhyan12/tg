@@ -1303,8 +1303,12 @@ describe('the dot on the nav item', () => {
 
   // WITHOUT SOMETHING POINTING AT IT, a cheer waits on a screen nobody opens.
   // That is the whole reason this exists, and it is Kd's approved call.
-  it('appears for a cheer inside the last week', async () => {
-    api.getMine.mockResolvedValue(withCheer('2026-09-01T12:00:00.000Z'));
+  // **THREE HOURS AND NOT A DAY.** This said `2026-09-01T12:00` — EXACTLY
+  // twenty-four hours before this suite's faked `NOW`, so it sat inside the old
+  // seven-day window and lands precisely ON the boundary of the one-day one Kd
+  // ruled at :35762. It went RED on the fix, which is the fixture doing its job.
+  it('appears for a cheer inside the cap', async () => {
+    api.getMine.mockResolvedValue(withCheer('2026-09-02T09:00:00.000Z'));
     drawSidebar();
     await waitFor(() => expect(screen.getByLabelText('New from your gym')).toBeTruthy());
   });
@@ -1313,8 +1317,14 @@ describe('the dot on the nav item', () => {
   // sidebar that never drew `My Gyms` would pass for the wrong reason
   // entirely — :28976, and the reason every absence assertion here carries its
   // opposite.
+  // **TWO DAYS OLD, NOT THIRTEEN — and the distance is the point.** Thirteen
+  // days was outside the old seven-day window as well, so this case could not
+  // tell the cap Kd replaced from the cap he ruled (:35762); two days is
+  // outside one and inside seven, so the screen half now observes the change
+  // the pure half does (:20712 — a fixture where the defect and the fix look
+  // alike proves neither).
   it('goes away once the cheer is older than the cap', async () => {
-    api.getMine.mockResolvedValue(withCheer('2026-08-20T12:00:00.000Z'));
+    api.getMine.mockResolvedValue(withCheer('2026-08-31T12:00:00.000Z'));
     drawSidebar();
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
     expect(screen.queryByLabelText('New from your gym')).toBeNull();

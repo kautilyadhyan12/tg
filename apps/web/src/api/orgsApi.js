@@ -474,8 +474,8 @@ export const orgService = {
    *  **NOT SAFE TO REPLAY BLINDLY, AND THE SERVER IS WHAT MAKES THAT HARMLESS**
    *  (R10.2). There is no Idempotency-Key here and nothing in this file adds a
    *  network-failure retry — but a replayed send cannot produce a second cheer:
-   *  the write takes the gym row's lock and refuses anything inside the rolling
-   *  the same gym-day with a 409 (:35762). `authApi`'s one 401 replay is therefore safe, and a
+   *  the write takes the gym row's lock and refuses anything inside the same
+   *  gym-day with a 409 (:35762). `authApi`'s one 401 replay is therefore safe, and a
    *  dropped connection leaves the owner to press again, which is a person doing
    *  it.
    *

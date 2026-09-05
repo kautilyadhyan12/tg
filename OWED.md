@@ -8030,7 +8030,24 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] 🟡 **THE CHEER CAP BECOMES ONE PER MEMBER PER DAY — KD RULED IT 2026-09-05
       (DECISIONS `:35762`).**
       **⏳ BUILT 2026-09-05 (DECISIONS `:35822`) — THIS LINE DOES NOT TICK YET:
-      NO SMOKE HAS RUN AND T3 IS UNRUN.** Both SQL sites now compare the gym's
+      NO SMOKE HAS RUN.**
+      **T3 ROUND 1 RAN 2026-09-05 (DECISIONS `:35944`): TWO Critical/High, so the
+      packet does NOT ship this round** (`:5348` rule 1) — both fixed, both were
+      guarantees with no observer, and **a diff-only round 2 is owed before this
+      line can tick even if the smoke passes.** (1) The member's *"new cheer"*
+      dot was still on a SEVEN-day window, so a member cheered on Monday carried
+      it until Sunday and a daily member never saw it go dark. (2) The reader's
+      day predicate had no observer at all: widened to include yesterday, all 19
+      tests stayed green — **measured, O283 ALIVE — and the console would grey a
+      button the server would honour.** Both now have permanent mutants (**O283**,
+      **C230**) and both went RED.
+      ~~**`packages/shared` needs NO change**~~ **— WRONG, AND THIS IS THE LINE
+      KD RULES FROM (`:34443` C/H-2's own lesson).** The CONTRACT needed none
+      (`cheerableAt` was already `z.string().nullable()`); the FILE did —
+      `orgRegularSchema.cheerableAt`'s docblock said *"inside seven days"* and
+      cited Part 3 §4.1's `1/member/7d` as its authority, which `:35762` §1
+      separates from this feature in as many words. Corrected 2026-09-05.
+      Both SQL sites now compare the gym's
       calendar date through `AT TIME ZONE` on both sides; the 409 says *"already
       been cheered today."* and the row says *"Cheered today."* / *"you can again
       tomorrow."* **No migration** — the cap stays a check-then-act under

@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,248 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,267 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,20 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,755 lines, MEASURED 2026-09-05 and not estimated**
-(1,261 + 1,405 + 89). **THE FORTY-FOURTH IS A WHOLE BUILD ACROSS THREE PACKAGES
+**ALWAYS-READ TOTAL: 2,761 lines, MEASURED 2026-09-05 and not estimated**
+(1,267 + 1,405 + 89). **THE FORTY-FIFTH IS A T3 ROUND THAT DOES NOT SHIP ITS
+PACKET — two Critical/High and five Low, all fixed, plus two new mutants and one
+resurrected — AND IT COST SIX LINES, every one a trigger phrase, §1 AND §2
+UNMOVED AT 1,405 AND 89.** Its record is a ROUND record and went to §1B, where
+`:24813` sends it. **Its index line added ZERO of the six: all six clauses
+duplicate the entry's own** — the generator deduplicating, measured on the
+rebuild (1,082 → 1,088) and not assumed. **The round's most reusable finding cost
+nothing extra to make findable**, which is the trade working: *"writing a mutant
+for a rule's GUARD without writing its sibling for the rule's READER"* is one
+phrase, and it is the whole of how a future chat learns that a rule enforced in
+one place and reported from another needs mutants in pairs. Taken with this
+header's own prescribed command against the bytes being committed.
+**THE FORTY-FOURTH IS A WHOLE BUILD ACROSS THREE PACKAGES
 — two SQL sites, six copies of a sentence, three new mutants, five re-aimed —
 AND IT COST FIVE LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
 AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
@@ -1775,6 +1787,49 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35944** — 2026-09-05 — **THE CHEER'S GYM-DAY CAP, T3 ROUND 1: TWO
+  Critical/High, THE PACKET DOES NOT SHIP — a "new cheer" dot that still meant a
+  WEEK, and a day predicate whose WIDTH nothing in nineteen tests could see.**
+  **Read before changing a cap and leaving its DISPLAY mirrors on the old number,
+  before writing a mutant for a rule's GUARD without writing its sibling for the
+  rule's READER, before trusting a review's map of where a stale figure lives,
+  before writing a two-line anchor in `mutate-console.mjs`, before quoting
+  `:35593`'s `C224…C229` sweep as reproducible on today's bytes, and before
+  telling a smoke tester that a day word on screen depends on the HOUR they run
+  at.** Round 1 on `13e4253` (`:35822`). Escape hatch NOT armed (`:35153` and
+  `:35593` each found zero). **BOTH C/H ARE THE SAME SHAPE, THREE ROUNDS RUNNING:
+  a guarantee with nothing holding it there** (`:34443`'s lock, `:35511`'s Send
+  guard, these two). **C/H-1** — `CHEER_FRESH_DAYS` was still 7 while its own
+  docblock argued for seven FROM THE CAP KD HAD REPLACED, so a member cheered
+  Monday carried the dot to Sunday and a daily member never saw it go dark, on the
+  signal that IS the delivery. **THREE copies, not the review's two**: the third
+  was `orgRegularSchema.cheerableAt` in `packages/shared`, citing Part 3 §4.1's
+  `1/member/7d` — the line `:35762` §1 separates from this feature — and
+  `OWED.md` said *"`packages/shared` needs NO change"*, true of the contract and
+  false of the file (`:34443` C/H-2's own lesson). **The dot stays a ROLLING 24
+  hours against a CALENDAR cap deliberately** (`gymCheerSchema`: `sentAt` is an
+  instant, read by the member wherever they are), and the property is exact — **it
+  is always still lit for the whole gym-day its cheer belongs to and never lit
+  more than a day.** **C/H-2** — the `cheerable_at` sub-select's day predicate,
+  widened to include yesterday, left all 19 tests green: **measured, O283 ALIVE**,
+  then RED. Cause is `:35822` §2's own lesson one line over — the value stopped
+  depending on the matched row, so a fixture holding today AND yesterday cannot
+  tell the defect from the fix (`:20712`); the observer is the instant after
+  `moveCheerToGymDay` where only YESTERDAY's cheer exists. **STANDING, and it is
+  the class guard: when a rule is ENFORCED in one place and REPORTED from
+  another, a mutant on the enforcement is not a mutant on the report — write them
+  in pairs and name the sibling in each `why`.** The guard had three day mutants
+  (O266/O280/O282); the reader had none for its width. **Also: C228 was DEAD and
+  aborted the whole console sweep** — a two-line anchor in a CRLF-on-disk,
+  LF-in-git file, against a rule this harness states twice; re-anchored onto one
+  line with the SOURCE naming its subject (`:21157`'s O127). **And the review's
+  smoke-sheet finding was RIGHT with WRONG reasoning**: the Part B gym is
+  `America/Mendoza`, not Kd's `Asia/Kolkata`, so *"later today"* is correct for
+  00:00–08:30 his time — **a review is hearsay until run, including its reasoning
+  when its conclusion holds** (`:23928`, `:24559`). `orgs.cheers` 19/19 local ·
+  `web` 1835/1835 · `shared` 52/52 · O283, C228, C230 all RED, one per
+  invocation. **Smoke still unrun; a diff-only round 2 is owed and the line does
+  NOT tick.**
 - **:35822** — 2026-09-05 — **THE CHEER'S CAP BECOMES ONE PER MEMBER PER GYM-DAY:
   built, and the crashed sweep left the SOURCE mutated TWICE.** **Read before
   changing a rolling window into a calendar one, before writing a mutant whose

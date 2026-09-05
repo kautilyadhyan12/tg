@@ -220,7 +220,7 @@ export default function OnARollPanel({
         busy: false,
         outcome: already ? 'already' : null,
         // **AND A 409 IS DRAWN ONCE.** T3 round 1 L-3: this used to set the
-        // error text as well, so the row said the fact twice — *"Cheered in
+        // error text as well, so the row said the fact twice — *"Cheered
         // today."* in grey beside *"This member has already been
         // cheered today."* in red. Both sentences were true, so
         // it stayed Low, but the red one contradicts the comment three lines
@@ -250,7 +250,7 @@ export default function OnARollPanel({
    *  a second press there would be a second cheer, and the cap makes the second
    *  one a 409 the owner never asked for. */
   const confirm = async (userId, preset) => {
-    setPending(null);
+    setPending(null); // the panel closes BEFORE the send goes out, C228
     await send(userId, preset);
   };
 

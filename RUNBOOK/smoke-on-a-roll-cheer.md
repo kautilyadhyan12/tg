@@ -209,9 +209,19 @@ seven-day wait on 2026-09-05 (DECISIONS `:35762`) — the button now comes back 
 your gym's own midnight, so a gym can say something each time somebody turns up.
 You did not reload to see it.
 
-**If you run this late at night it may read "later today" instead, and that is
-also a pass** — it means midnight is less than a calendar day away. Anything
-naming a NUMBER of days is a failure: that is the old rule still on the screen.
+**Between midnight and about 8:30 in the morning your time it reads "later
+today" instead, and that is also a pass.** This gym keeps its clock in Argentina
+— 8½ hours behind you, measured 2026-09-05 — and the screen asks whether the
+gym's midnight lands on today's date **where you are sitting**. In those hours it
+does. At every other hour of the day it says **tomorrow**, and at about 8:30 in
+the morning the gym's midnight passes and the four emoji come back on their own.
+
+**Do not read that as "late at night".** A gym keeping the same clock as you
+would say **tomorrow** at every hour, 11pm included — the sentence turns on the
+two clocks being different, not on the hour being late.
+
+Anything naming a NUMBER of days is a failure: that is the old rule still on the
+screen.
 ✅ Now reload the page (**Ctrl+R**). It still says the same thing.
 
 **This is the check that matters most in Part B**, and it is TWO checks. The

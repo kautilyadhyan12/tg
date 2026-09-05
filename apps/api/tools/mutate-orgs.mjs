@@ -3304,7 +3304,7 @@ const MUTANTS = [
     id: 'O279',
     target: 'service',
     suite: CHEERS_SUITE,
-    why: "THE REFUSAL GOES BACK TO ACCUSING THE READER. The cap is per GYM - the lookup filters gym_id and user_id and nothing else - so You've already cheered this member this week is FALSE for the second staffer on the desk, who is told they did something a colleague did. It is :5807 exactly: a sentence a user can see that is not true, and it shipped in the card (T3 round 1, C/H-4). The window is a ROLLING seven days too, never a calendar week",
+    why: "THE REFUSAL GOES BACK TO ACCUSING THE READER. The cap is per GYM - the lookup filters gym_id and user_id and nothing else - so You've already cheered this member today is FALSE for the second staffer on the desk, who is told they did something a colleague did. It is :5807 exactly: a sentence a user can see that is not true, and it shipped in the card (T3 round 1, C/H-4). The window it names has moved since: a ROLLING seven days when this row was written, and the gym's calendar DAY since Kd's :35762 - which is why the mutant swaps the PRONOUN and leaves the day word alone",
     expect: "tells a second staffer what happened",
     from: '      throw new OrgsError(409, "cheer_already_sent", "This member has already been cheered today.");',
     to: '      throw new OrgsError(409, "cheer_already_sent", "You\'ve already cheered this member today.");',
@@ -3336,6 +3336,15 @@ const MUTANTS = [
     expect: "refuses a second cheer on the same gym-day",
     from: '        AND (c.created_at AT TIME ZONE g.timezone)::date\n          = (now() AT TIME ZONE g.timezone)::date',
     to: "        AND c.created_at > now() - interval '7 days'",
+  },
+  {
+    id: 'O283',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE READER'S DAY WIDENS AND NOTHING SEES IT - O266's own shape, on the other side of the same rule, and the side that had no mutant at all. O266 widens the GUARD so a cheer is refused a day too long; this widens the READER so the panel GREYS a button the server would honour and prints a date the gym never earned, which is :5807 on the screen an owner acts from and quietly reinstates the wait Kd threw out at :35762. It was ALIVE when it was written (T3 C/H-2), measured, and the reason is :35822 §2 one line over: the subquery's SELECT value no longer depends on the row it matched, so every row inside a widened window returns the SAME midnight and a fixture holding a cheer on today AND yesterday cannot tell the defect from the fix (:20712). Its observer is the one instant where only YESTERDAY's cheer exists - after moveCheerToGymDay and before the next send",
+    expect: "refuses a second cheer on the same gym-day",
+    from: '               AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date',
+    to: '               AND (c.created_at AT TIME ZONE ${gym.timezone})::date >= ${gym.today}::date - 1',
   },
 ];
 

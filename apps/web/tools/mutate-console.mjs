@@ -2985,10 +2985,20 @@ const MUTANTS = [
     id: 'C228',
     target: 'onarollpanel',
     suite: ON_A_ROLL_RENDER_SUITE,
-    why: "A LIVE Send BUTTON SITS OVER AN IN-FLIGHT REQUEST, so a second press is a second cheer - and the seven-day cap turns that into a 409 the owner never asked for, on a row that had just worked. confirm's own docblock promised the panel closes FIRST and nothing held that promise: T3 round 1 L-4 measured 25/25 green with the setPending(null) line simply dropped. The guarantee needs a fixture that HOLDS the send open, because on an instant mock the busy state and the closed panel are indistinguishable",
+    why: "A LIVE Send BUTTON SITS OVER AN IN-FLIGHT REQUEST, so a second press is a second cheer - and the one-per-gym-day cap (:35762, seven days when this row was written) turns that into a 409 the owner never asked for, on a row that had just worked. confirm's own docblock promised the panel closes FIRST and nothing held that promise: T3 round 1 L-4 measured 25/25 green with the setPending(null) line simply dropped. The guarantee needs a fixture that HOLDS the send open, because on an instant mock the busy state and the closed panel are indistinguishable",
     expect: 'takes the Send button away while the send is still in flight',
-    from: '  const confirm = async (userId, preset) => {\n    setPending(null);',
-    to: '  const confirm = async (userId, preset) => {',
+    // RE-ANCHORED ONTO ONE LINE 2026-09-05, AND THE SOURCE NAMES ITS OWN
+    // SUBJECT SO IT CAN BE — :21157's O127 method, because `setPending(null);`
+    // appears THREE times in this file (Escape, click-away, and here) and an
+    // anchor reaches for something unique to its own subject, never for its
+    // neighbourhood (:27204 §6).
+    //
+    // **IT WAS A TWO-LINE ANCHOR AND IT WAS DEAD.** This file is CRLF on disk
+    // and LF in git (`core.autocrlf=true`), so a `\n` anchor matches nothing —
+    // which is the rule stated on `layout` above and learned twice on C53, and
+    // it ABORTED the whole console sweep rather than lying (:4267, :17676).
+    from: '    setPending(null); // the panel closes BEFORE the send goes out, C228',
+    to: '    // the panel closes BEFORE the send goes out, C228',
   },
   // ── T3 ROUND 2 ON THE CONFIRM STEP (2026-09-05) ────────────────────────────
   {
@@ -2999,6 +3009,15 @@ const MUTANTS = [
     expect: 'closes when the same emoji is pressed again, and nothing is sent',
     from: '                      <div className="relative" ref={chosen === null ? null : openBoxRef}>',
     to: '                      <div className="relative">',
+  },
+  {
+    id: 'C230',
+    target: 'membershipview',
+    suite: MEMBER_VIEW_SUITE,
+    why: "THE DOT OUTLIVES THE CAP AND KEEPS SAYING NEW - the seven-day window restored on the member's nav item after Kd cut the cheer's cap to one per member per day (:35762). Nothing in this product sends anything, so this dot is the WHOLE arrival of a cheer: with seven days back, a member cheered on Monday carries it until Sunday while six days of newer cheers could have arrived under it, and a member cheered daily never sees it go dark, so it stops meaning new at all. It is :5807 on the one signal that is supposed to mean something just happened. This is the state the code was actually in at T3 (C/H-1): the constant said seven and its own docblock argued for seven from the cap Kd had already replaced, which is why the observer is a TWO-DAY-OLD cheer - the boundary cases either side of the window move WITH the constant and cannot tell 1 from 7",
+    expect: 'lights for a cheer inside the cap and goes out after it',
+    from: 'export const CHEER_FRESH_DAYS = 1;',
+    to: 'export const CHEER_FRESH_DAYS = 7;',
   },
 ];
 

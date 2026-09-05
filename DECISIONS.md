@@ -35940,3 +35940,198 @@ what the audit above rests on (`:13746`).
 steps 6, 7, 8 and 9 are rewritten for the new wording; **step 9 now says in as
 many words that the half nobody can smoke — the button returning TOMORROW — is
 proven by the server's tests moving the clock rather than by waiting a day.**
+
+## 2026-09-05 — THE CHEER'S GYM-DAY CAP, T3 ROUND 1: TWO Critical/High, THE PACKET DOES NOT SHIP — a "new cheer" dot that still meant a WEEK, and a day predicate whose WIDTH nothing in nineteen tests could see
+
+**Read before changing a cap and leaving its DISPLAY mirrors on the old number,
+before writing a mutant for a rule's GUARD without writing its sibling for the
+rule's READER, before trusting a review's map of where a stale figure lives,
+before writing a two-line anchor in `mutate-console.mjs`, before quoting
+`:35593`'s `C224…C229` sweep as reproducible on today's bytes, and before telling
+a smoke tester that a day word on screen depends on the HOUR they run at.**
+
+Round 1 on `13e4253` (`:35822`), which builds Kd's ruling at `:35762`. **TWO
+Critical/High and five Low; all fixed here, and a diff-only round 2 is owed
+(`:5348` rules 1 and 2).** The escape hatch is NOT armed: the two rounds before
+this one in this subsystem (`:35153`, `:35593`) each found zero, so there is no
+streak. Kd approved the fix round against the listed findings before a file was
+touched, in one line — *"fix men and please properly"*.
+
+**BOTH Critical/High ARE THE SAME SHAPE AND IT IS NOW THREE ROUNDS RUNNING: a
+guarantee with nothing holding it there.** `:34443`'s no-observer 1 was the lock
+the whole cap rests on; `:35511`'s single Critical was the guard that lets **Send**
+be pressed; these two are a display mirror nobody moved and a predicate nobody
+watched. Section 3 is what was done about the CLASS rather than about the case.
+
+### 1 · C/H-1 — THE DOT STILL MEANT A WEEK, SEVEN TIMES THE CAP IT MIRRORS
+
+`CHEER_FRESH_DAYS = 7` on the member's nav item, **and its own docblock argued
+for seven FROM THE CAP KD HAD ALREADY REPLACED** — *"SEVEN DAYS BECAUSE THAT IS
+THE CAP … a dot that lasted longer would still be lit when the next one could
+already have arrived"*. That sentence is the correct rule, and it was being used
+to justify violating itself by seven times.
+
+**WHAT A MEMBER SEES:** cheered on Monday, they carry the dot through Sunday —
+six days announcing an arrival that already happened. Cheered daily, they never
+see it go dark, **so it stops meaning "new" at all**, and the same file records
+that this dot IS the delivery: *"Nothing in this product sends anything … The dot
+is the whole of the arrival."*
+
+**THE REVIEW FOUND TWO COPIES AND THERE WERE THREE** (`:20587`, `:33799`,
+`:34992` §4 — a review's count of a figure's copies is a hypothesis). The third is
+`orgRegularSchema.cheerableAt`'s docblock in `packages/shared`, which said
+*"INSIDE SEVEN DAYS"* **and cited Part 3 §4.1's `rate-limit 1/member/7d` as its
+authority** — the line `:35762` §1 separates from this feature in as many words,
+so a stale number was wearing a spec citation. **`:35762` §3's own measured touch
+list reached neither file**, and `OWED.md`'s line said *"`packages/shared` needs
+NO change"*: true of the CONTRACT, false of the FILE, on the line Kd rules from
+(`:34443` C/H-2 exactly).
+
+**THE FIX IS ONE DAY, DERIVED AND NOT PICKED (R0.2):** it is the cap. **The dot
+stays a ROLLING 24 hours while the server's cap is a CALENDAR gym-day, and that
+is deliberate** — `gymCheerSchema` rules that `sentAt` is an INSTANT and never a
+gym-day, *because a cheer is read by the MEMBER, wherever they are*, so the card
+says *"2 hours ago"* and a dot going dark at a foreign midnight beside it would be
+the two disagreeing about one fact. **The rolling window's property is exact and
+is now written down: the gym's next midnight is never more than 24 hours away, so
+the dot is ALWAYS still lit for the whole of the gym-day its cheer belongs to, and
+never lit for more than a day** — it can overrun the cap by up to a day and can
+never fall short of it, which is the safe direction.
+
+### 2 · C/H-2 — THE READER'S DAY HAD NO OBSERVER, AND THE PROOF IS A MUTANT THAT WAS ALIVE
+
+`getGymRegulars`' sub-select decides `cheerableAt`, the ONLY channel telling a
+screen when the button reopens (the 409 deliberately omits the instant,
+`:34240` §6). Its predicate must match **today** exactly. **Widened to
+`>= ${gym.today}::date - 1`, all nineteen tests stayed green: measured, O283
+ALIVE.**
+
+**THE CAUSE IS `:35822` §2's OWN STANDING LESSON, ONE LINE OVER FROM WHERE IT WAS
+LEARNED.** That entry records that the sub-select's SELECT value stopped depending
+on the row it matched, so every mutant aimed at that predicate silently weakened —
+and it re-drove `O276`, the `gym_id` half. **The WIDTH half was left, and it fails
+for the identical reason:** with rows on today AND yesterday a wider window returns
+the same midnight either way, so **the fixture cannot tell the defect from the
+fix** (`:20712`). Every other `toBeNull()` in the file is a member this gym has
+never cheered — which a widened window also answers null.
+
+**THE OBSERVER IS AN INSTANT THAT ALREADY EXISTED IN THE TEST AND NOBODY HAD
+ASSERTED AT:** after `moveCheerToGymDay(…, 1)` and before the next send, the
+member holds exactly one cheer and it is YESTERDAY's. `cheerableAt` must be null
+there. **No new fixture, no new gym, no new member.**
+
+**WHAT IT COSTS IF IT REGRESSES:** the server accepts the cheer while the console
+greys the button and says *"Cheered — you can again tomorrow."* about somebody it
+would honour — `:5807` on the screen an owner acts from, **silently reinstating
+the wait Kd threw out.**
+
+### 3 · THE CLASS, AND THE GUARD IS MUTANT PARITY BETWEEN A RULE'S TWO SIDES
+
+Three rounds, three guarantees with no observer. `:5348` rule 5 says a recurring
+CLASS gets an automated check rather than a third patch, and the honest reading
+here is that **the automated check already exists — it is the mutation harness —
+and what failed is COVERAGE, on one side of a pair.**
+
+**The cap is written in TWO places: the GUARD in `sendGymCheer` and the READER in
+`getGymRegulars`.** The guard had three mutants on its day comparison (**O266**
+widening it, **O280** bucketing it in UTC, **O282** restoring the rolling seven).
+The reader had mutants for the VALUE it returns (**O277**, **O281**) and for its
+`gym_id` (**O276**) — **and nothing at all for the width of its day.** O283 is
+O266's sibling, and it is the only one of the six that was ever ALIVE.
+
+**STANDING: when one rule is enforced in one place and reported from another, a
+mutant on the enforcement is not a mutant on the report. Write them in pairs, and
+name the sibling in each `why` so a later chat can see which half is missing.**
+Both rows now do.
+
+### 4 · A MUTANT THAT HAD ALREADY GONE DEAD, AND IT ABORTED THE WHOLE CONSOLE SWEEP
+
+Running the new **C230** aborted before a byte was written: **C228's anchor
+matched nothing.** It is a two-line anchor, `OnARollPanel.jsx` is CRLF on disk and
+LF in git (`core.autocrlf=true`), and **a newline-joined anchor cannot match a
+CRLF file.**
+
+**THIS HARNESS RECORDS THAT RULE TWICE AND C228 WAS WRITTEN AGAINST IT ANYWAY** —
+the `layout` target says *"every anchor aimed at this file must be ONE line"*, and
+C53 learned it twice, ending *"THE CRLF NOTE ON `layout` IS NOT ABOUT THAT FILE.
+It is about any file git has touched on this machine — which is every file,
+eventually."* C228 was written the day before this round, at `:35593`.
+
+**WHAT CANNOT BE SETTLED, AND IS NOT CLAIMED EITHER WAY:** `:35593` reports
+`C224…C229` as *"6 mutants, 6 RED"*. The committed bytes are LF, so the file may
+well have been LF on disk when that ran and been rewritten since — `13e4253`
+touched it. **What IS measured is that C228 is dead on today's bytes**, and that
+the pre-check ABORTED rather than reporting a confident green (`:5199` doing its
+job). Fixed the way this harness prescribes and not with a cleverer anchor: the
+SOURCE line now names its own subject (`:21157`'s O127 method), because
+`setPending(null);` appears three times in that file. RED again.
+
+### 5 · THE REVIEW WAS WRONG ABOUT THE SMOKE SHEET, AND THE DATABASE SETTLED IT IN ONE QUERY
+
+The sheet's step 8 says *"if you run this late at night it may read 'later today'
+instead"*. The review called that a false tick, on the grounds that **Kd's gym and
+Kd's browser share `Asia/Kolkata`**, where the gym's next midnight is always the
+next local day and *"later today"* could only mean something was broken.
+
+**MEASURED INSTEAD OF ARGUED (`:34147`): the Part B gym is `owner` and its zone is
+`America/Mendoza` — 8½ hours behind him.** `cheerAgainText` compares calendar days
+in the VIEWER's zone, so *"later today"* is reachable and CORRECT for exactly the
+hours **00:00–08:30 his time**, and *"tomorrow"* at every other hour. **The tick
+was right; its stated reason was wrong**, and "late at night" is a coincidence of
+one gym's zone rather than a rule. Rewritten to say what actually decides it, with
+the same-zone case named so nobody re-derives it.
+
+**STANDING, and it is `:23928`/`:24559` arriving through a finding that did NOT
+survive: a review is hearsay until run, INCLUDING its reasoning when its
+conclusion is right.** Acting on this one as written would have put a new false
+sentence into the sheet.
+
+### Round log
+
+**FIXED: 2 Critical/High + 5 Low.** C/H-1 the dot's window, in three copies ·
+C/H-2 the reader's day predicate. Low: a find-and-replace leftover in
+`OnARollPanel.jsx`'s comment (*"Cheered in today."*) · *"inside the rolling the
+same gym-day"* in `orgsApi.js` · the smoke sheet's step 8 (section 5) · two `why`s
+still describing a rolling seven days (`orgs.cheers.test.ts` and `mutate-orgs.mjs`
+O279, plus C228's in `mutate-console.mjs`, found while re-anchoring it) · a run-on
+line in `packages/shared/src/orgs.ts`.
+
+**RULE 3, PROVEN BY REVERSAL IN BOTH DIRECTIONS RATHER THAN ASSERTED.** C/H-2's
+mutant was run BEFORE its test and reported **ALIVE**, then RED with the assertion
+added — the finding measured, not argued. C/H-1's new case was run against the
+shipping constant and went **RED** (*expected true to be false*) before the
+constant moved.
+
+**AND THE WEB SUITE CAUGHT A FIXTURE THE FIX MADE FALSE**, which is the second
+half of the same evidence: `myGyms.render.test.jsx`'s *"appears for a cheer inside
+the last week"* used an instant exactly twenty-four hours before that suite's faked
+`NOW`, i.e. precisely ON the new boundary. Its partner asserted absence at
+THIRTEEN days, outside the old window as well, so it could not tell the two caps
+apart either. Now three hours and two days (`:20712`).
+
+**PROVE, all on the final bytes.** `orgs.cheers` **19/19** LOCAL
+(`127.0.0.1:5433`, `:13659`) · `web` **1835/1835 across 61 files** · `shared`
+**52/52** · the six scoped cheer suites **270/270** · `tsc --noEmit` exit 0 on
+`api` and `@app/shared` · `eslint --max-warnings=0` exit 0 on seven web files, one
+api file and one shared file · `node --check` on both harnesses. Four ROOT guards
+green (harnesses **26** · index **311 pointers, 1419 headings** · triggers up to
+date · smoke-folds OK) — re-run after this entry and its index line landed.
+
+**AUDIT — a stated SUBSET, ONE MUTANT PER INVOCATION with a sha256 comparison
+after each** (`:35822` §3's route; the crash did not recur): **O283** RED (api, of
+273) · **C228** RED and **C230** RED (web, of 247). Every control GREEN and
+tallied first. All three source files verified byte-exact afterwards —
+`repo.ts` `abdadad6…9611c7e1`, **unchanged from HEAD, because C/H-2 needed no code
+change: the SQL was already right and only its observer was missing.**
+**No database mutants beyond O283:** the only `apps/api` files this round touches
+are a TEST and a TOOL, so `:5857` rule 4a's server-behaviour condition is met by
+that one row.
+
+**NOT RUN AND NOT CLAIMED:** the full `api` suite (the pre-existing seed-count
+flake `CLAUDE.md` and `:13746` document, plus the 401 symptom `:35822` added to
+that line), the full 273- and 247-mutant sweeps, and `gitleaks` in either scope.
+
+**THE `OWED.md` LINE DOES NOT TICK.** Two Critical/High means the packet does not
+ship this round (`:5348` rule 1), **a diff-only round 2 is owed**, and the browser
+smoke is still unrun — which section 5's fix is a prerequisite for, since it
+changes what step 8 tells the tester to accept.
