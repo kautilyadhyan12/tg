@@ -131,17 +131,19 @@ it.** If hovering shows nothing, that is a failure.
 
 ### 7 · One tap sends it
 
-✅ Click **💪** on one row. The four emoji on **that row only** are replaced by
-**"Cheered just now."**
+✅ Click **💪** on one row. The four emoji on **that row only** are replaced by a
+grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again in
+7 days."* **Both are a pass.** The first is the moment before the server answers;
+the second means it has already answered. Step 8 is where the date is checked.
 ✅ The other rows still have their four emoji.
 
 ❌ If every row goes quiet, the wrong thing was sent to the wrong person.
 
 ### 8 · The date appears on its own, and survives a reload
 
-✅ **Without touching anything**, within a second or two that same row changes
-from *"Cheered just now."* to **"Cheered — you can again in 6 days."** (or
-however many days are left).
+✅ **Without touching anything**, within a second or two that same row reads
+**"Cheered — you can again in 7 days."** Seven, because the cheer you have just
+sent reopens a week from the moment you sent it. You did not reload to see it.
 ✅ Now reload the page (**Ctrl+R**). It still says the same thing.
 
 **This is the check that matters most in Part B**, and it is TWO checks. The

@@ -4023,3 +4023,42 @@ Five Low, all fixed in the same round as the Critical/High (:5348 rule 1 —
       LANDED cheer report *"The server sent something this screen couldn't
       read"* to the owner, with the emoji still live and the next tap a 409.
       Sentence added to the line, both readers named.
+
+## 2026-09-05 — "on a roll" + the cheer, THE WEB HALF, T3 ROUND 2, DIFF-ONLY (DECISIONS :35153)
+
+**ZERO Critical/High — the packet SHIPS** (:5348 rule 1). Three Low and one
+rule-4 test name, all fixed in the same commit. All three are prose: no file
+under `src` behaves differently after this round.
+
+- [x] **L-1 · THE SHEET NAMED THE WRONG NUMBER OF DAYS.** `smoke-on-a-roll-cheer.md`
+      step 8 promised *"you can again in **6** days"*. The server writes
+      `created_at + interval '7 days'` and `cheerAgainText` counts calendar days,
+      so a cheer sent seconds earlier reads **7** — pinned by this packet's own
+      new render case. Hedged by *"(or however many days are left)"*, so it could
+      not have failed the run; the figure a beginner reads was still wrong. One
+      copy, grepped rather than taken from the review's map (:33799, :20587).
+- [x] **L-2 · THE SHEET ASKED THE TESTER TO CATCH A SENTENCE THAT CLEARS ITSELF.**
+      Step 7's ✅ required seeing *"Cheered just now."* — the state T3 round 1's
+      own fix makes transient, and which step 8 six lines below says changes on
+      its own *"within a second or two"*. Against a local dev server the re-read
+      lands in milliseconds, **so the state a tester is most likely to find is
+      the one the sheet calls a failure.** Step 7 now accepts either sentence;
+      step 8 keeps the real check and its ✅ is the END STATE rather than a
+      transition. :32498/:33265 §1's family, reached through a FIX not a ruling.
+- [x] **L-3 · "CORRECTLY STAYS" WAS A CLAIM ABOUT THE ONE BRANCH THAT DOES NOT.**
+      `onARollView.js`'s docblock said a failed re-read leaves the outcome
+      sentence *"correctly stays"*. It stays; it does not stay correct —
+      `reloadOverview` swallows the failure and nothing re-reads after it, so
+      *"Cheered just now."* holds for the rest of the mount (:7298, in the
+      failure arm of the function that fixed the success arm). **The behaviour is
+      unchanged and deliberately so** — round 1 chose and tested it, an error
+      card would be :5807 — so the word was the defect. `Overview.jsx` now names
+      the stale adverb too, so the two copies cannot drift (:20587).
+- [x] **RULE 4 · A TEST NAMED AFTER SOMETHING IT CANNOT SEE.** *"re-reads the
+      numbers afterwards so the reopening date comes from the server"* returns
+      the same payload from both mocked reads, so it observes the REQUEST and
+      never the answer — :34992 §1 said so while adding the case that DOES
+      observe it, and left the name. Renamed to *"goes back to the server after a
+      cheer"* rather than deleted. **Checked first that no mutant filtered on the
+      old name** — each `expect` in `mutate-console.mjs` is a substring of a test
+      NAME, and C220 is the only render-suite row (:14840).

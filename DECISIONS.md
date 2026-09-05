@@ -35149,3 +35149,90 @@ in either was touched, so `:28395`'s fan-out does not apply — and the full
 of `RUNBOOK/smoke-on-a-roll-cheer.md` remain unrunnable for the reason `:34809`
 recorded: no screen in this product can create a visit dated two weeks ago.
 **T3 ROUND 2 IS UNRUN** and is diff-only (`:5348` rule 2).
+
+## 2026-09-05 — "ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the smoke sheet asked the tester to catch a sentence that clears itself
+
+**Read before writing a smoke ✅ that names a state the screen replaces on its
+own, before writing the LENGTH of a cooldown window into a smoke sheet, before
+writing "correctly" about what survives a failure branch, and before renaming a
+test — a mutant selects its test by NAME.**
+
+Round 2 on `:34992`, diff-only (`:5348` rule 2). **ZERO Critical/High, so the
+packet SHIPS.** Three Low and one rule-4 test name, all fixed here; the escape
+hatch is not armed. Web-only: no `apps/api`, no `packages/shared`, no migration.
+Kd approved the fix round and asked in the same message that the record stay
+short — `:24703`, applied rather than re-ruled.
+
+### 1 · L-1, L-2 — THE SHEET COULD HAVE FAILED A WORKING SCREEN, TWICE
+
+**Step 8 named the wrong number.** It promised *"you can again in **6** days"*;
+the server writes `created_at + interval '7 days'` (`orgs/repo.ts:4884`) and
+`cheerAgainText` counts calendar days, so a cheer sent seconds earlier reads
+**7** — which this packet's own new case already pins. **One copy, grepped, not
+assumed from the review's map** (`:33799`, `:20587`).
+
+**Step 7 required the tester to SEE *"Cheered just now."*** — the state round
+1's fix makes transient, and which step 8 six lines below says changes on its
+own *"within a second or two"*. Against a local dev server the re-read lands in
+milliseconds, **so the state a tester is most likely to find is the one the
+sheet calls a failure.** Step 7 now accepts either sentence; step 8 keeps the
+real check and its ✅ is the END STATE, not a transition nobody can be sure of
+catching. `:32498`/`:33265` §1's family, arriving through a FIX rather than a
+ruling.
+
+### 2 · L-3 — "CORRECTLY STAYS" WAS A CLAIM ABOUT THE ONE BRANCH THAT DOES NOT
+
+`onARollView.js`'s docblock said a failed re-read leaves the outcome sentence
+*"correctly stays"*. It stays; it does not stay correct. `reloadOverview`
+swallows that failure (`Overview.jsx`, `:34809` §5) and nothing re-reads after
+it, so on that branch *"Cheered just now."* holds for the rest of the mount —
+**`:7298` alive in the failure arm of the function that fixed the success arm.**
+
+**THE BEHAVIOUR IS UNCHANGED, DELIBERATELY.** Round 1 chose it and tests it: the
+instant never arrived, the cheer DID land, and an error card would be `:5807` on
+a screen. The word was the defect. Both files now say what actually makes the
+swallow safe — the button is dead either way and the server owns the cap — and
+`Overview.jsx` names the stale adverb as part of what is lost, so the two copies
+cannot drift apart (`:20587`). Low on `:33648` §1's reading, which is Kd's own:
+a comment and a sheet are not `:5807`'s worked examples, both of which are a
+SCREEN printing a false number.
+
+### 3 · RULE 4 — A TEST NAMED AFTER SOMETHING IT CANNOT SEE
+
+*"re-reads the numbers afterwards so the reopening date comes from the server"*
+returns the same payload from both mocked reads, so it observes the REQUEST and
+never the answer. `:34992` §1 wrote that down while adding the case that DOES
+observe it, and left the name standing. **Renamed to *"goes back to the server
+after a cheer"*, not deleted** — the request going at all is worth pinning.
+
+**CHECKED BEFORE RENAMING:** each `expect` in `mutate-console.mjs` is an ASCII
+substring of a test NAME (that file, `:1612`), so a rename can silently orphan a
+mutant. The only render-suite mutant is C220, filtering *"sends the gym, the
+member and the line the owner actually pressed"*; no filter held the old name.
+`:14840` is the recorded cost of getting that wrong.
+
+### Round log
+
+**PROVE, on the fixed bytes.** `web` **1823/1823 across 61 files** — unchanged,
+because a rename is not a new case. `eslint --max-warnings=0` **exit 0** on the
+three touched JS files. **Four ROOT guards green:** harnesses 26 scripts · index
+301 pointers, 1372 headings · triggers up to date · **smoke-folds OK on the
+edited sheet**.
+
+**AUDIT — a stated SUBSET of 240: `MUTATE_ONLY=C215…C223`, 9 RED, 0 ALIVE, 0
+never ran**, nine controls GREEN and tallied first, restores sha256-verified
+after every mutant. Re-measured rather than assumed: this round moved lines
+inside a file three of them anchor on and renamed a case in a suite one runs
+against (`:13336`). **No database mutants — no server behaviour changed**
+(`:5857` rule 4a).
+
+**NO RULE-3 REGRESSION TEST, and that IS the round:** all three Low are prose,
+so there is no code change for a test to fail without. Nothing under `src`
+behaves differently.
+
+**NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite (no file
+in either touched, so `:28395` does not apply) and the full 240-mutant sweep.
+
+**THE `OWED.md` LINE STILL DOES NOT TICK.** No smoke has run, and Parts B and C
+stay unrunnable for `:34809`'s reason: no screen in this product can create a
+visit dated two weeks ago.

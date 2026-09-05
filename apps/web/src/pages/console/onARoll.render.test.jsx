@@ -202,7 +202,14 @@ describe('the one tap', () => {
   // THE SERVER OWNS `cheerableAt`, so the screen has to go and get it. Without
   // this read the button's sentence would be right until the page was reloaded
   // and wrong in a second browser looking at the same gym.
-  it('re-reads the numbers afterwards so the reopening date comes from the server', async () => {
+  //
+  // **ITS NAME USED TO SAY "so the reopening date comes from the server", AND
+  // THIS CASE CANNOT SEE THAT** — its mock returns the same payload both times,
+  // so it observes the REQUEST and never the answer. T3 round 2 listed it under
+  // `:5348` rule 4. The guarantee the old name claimed is held by the case
+  // below, written for it in round 1; renamed rather than deleted, because
+  // "the request goes at all" is still worth pinning on its own.
+  it('goes back to the server after a cheer', async () => {
     drawOverview();
     await screen.findByText('Priya Nair');
     expect(orgService.getOverview).toHaveBeenCalledTimes(1);

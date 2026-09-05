@@ -219,10 +219,17 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *  landed and the server has not yet said when the button reopens.** In that
  *  window `cheerableAt` is still the pre-tap value (`null`), so `again` is
  *  `null` and the outcome sentence is the only true thing there is to say. The
- *  moment the refreshed payload arrives the server's own answer takes over. A
- *  failed re-read leaves the payload unchanged, so the outcome sentence
- *  correctly stays — which is what makes swallowing that failure safe
- *  (`Overview.jsx`'s `reloadOverview`, `:34809` §5).
+ *  moment the refreshed payload arrives the server's own answer takes over.
+ *
+ *  **A FAILED RE-READ LEAVES THAT SENTENCE STANDING, WHICH IS NOT THE SAME AS
+ *  LEAVING IT TRUE.** `reloadOverview` swallows its own failure (`Overview.jsx`,
+ *  `:34809` §5) and nothing re-reads after it, so on that one branch *"just
+ *  now"* goes stale for the rest of the mount — `:7298` alive in the failure arm
+ *  of the function that fixed the success arm. It is kept because nothing truer
+ *  exists to put there: the instant never arrived and the cheer DID land, so an
+ *  error would be `:5807` on a screen. **What makes the swallow safe is that the
+ *  button is dead either way and the server owns the cap — not that the sentence
+ *  stays correct.**
  *
  *  **THE SERVER'S ORDER IS UNTOUCHED BY THIS.** Privilege, then plan, then the
  *  window; `again` and `outcome` are both the WINDOW, so which of the two

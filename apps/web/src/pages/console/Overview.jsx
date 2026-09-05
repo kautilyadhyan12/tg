@@ -267,8 +267,11 @@ export default function Overview() {
    *  landed — the panel returns before calling this if the send threw. An error
    *  card here would tell an owner their cheer failed when it did not, which is
    *  :5807 on a screen: a false statement about something that already happened.
-   *  What is lost by staying quiet is one refreshed date, and the button is
-   *  already dead behind the local flag. */
+   *  What is lost by staying quiet is one refreshed date **and, with it, the
+   *  adverb** — the row goes on saying *"Cheered just now."* for the rest of the
+   *  mount, which `onARollView.js` names as the cost rather than defending as
+   *  correct. The button is dead behind the local flag either way, and the
+   *  server owns the cap. */
   const reloadOverview = async () => {
     try {
       const res = await orgService.getOverview(gymId);

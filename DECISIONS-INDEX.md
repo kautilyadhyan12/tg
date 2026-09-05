@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,222 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,226 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,13 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,681 lines, MEASURED 2026-09-05 and not estimated**
-(1,222 + 1,385 + 74). **THE THIRTY-SIXTH IS A T3 ROUND THAT DOES NOT SHIP ITS
+**ALWAYS-READ TOTAL: 2,685 lines, MEASURED 2026-09-05 and not estimated**
+(1,226 + 1,385 + 74). **THE THIRTY-SEVENTH IS THE ROUND THAT SHIPPED THIS PACKET
+— zero Critical/High, three Low all prose, all fixed — AND IT COST FOUR LINES,
+every one a trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record is a
+ROUND record and went to §1B, where `:24813` sends it. Taken with this header's
+own prescribed command against the bytes being committed, never by adding a delta
+to the figures below. **THE THIRTY-SIXTH IS A T3 ROUND THAT DOES NOT SHIP ITS
 PACKET — one Critical/High and five Low, all six fixed, plus two new mutants and
 a mutation TARGET that had never existed — AND IT COST SEVEN LINES, every one a
 trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record is a ROUND record
@@ -1703,6 +1708,24 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35153** — 2026-09-05 — **"ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND
+  2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the smoke sheet asked
+  the tester to catch a sentence that clears itself.** **Read before writing a
+  smoke ✅ that names a state the screen replaces on its own, before writing the
+  LENGTH of a cooldown window into a smoke sheet, before writing "correctly"
+  about what survives a failure branch, and before renaming a test — a mutant
+  selects its test by NAME.** Three Low, all prose, all fixed. Step 8 promised
+  *"in 6 days"* against a seven-day window. **Step 7 required the tester to SEE
+  *"Cheered just now."*, the state round 1's own fix makes transient** — the
+  re-read lands in milliseconds locally, so the ✅ most likely to be observed was
+  the one the sheet calls a failure. And a docblock said a failed re-read leaves
+  the outcome sentence *"correctly stays"*: it stays, it does not stay correct
+  (`:7298` alive in the failure arm of the function that fixed the success arm).
+  **The behaviour is unchanged and deliberately so — the word was the defect.**
+  Plus the rule-4 test name `:34992` had already identified and left standing,
+  renamed after checking no mutant filtered on it (`:14840`). **NO RULE-3 TEST,
+  because no code behaviour changed.** **THE `OWED.md` LINE STILL DOES NOT
+  TICK** — no smoke has run, Parts B and C stay unrunnable.
 - **:34992** — 2026-09-05 — **"ON A ROLL" AND THE CHEER, THE WEB HALF, T3 ROUND
   1: ONE Critical/High, THE PACKET DOES NOT SHIP THIS ROUND — a row that said
   "Cheered just now." for the whole life of the tab, because a local flag was

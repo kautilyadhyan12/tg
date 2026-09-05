@@ -1,6 +1,50 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER, WEB HALF — **T3 ROUND 2 RUN, DIFF-ONLY: ZERO
+      Critical/High, THE PACKET SHIPS** (`:5348` rule 1). DECISIONS `:35153`.
+      **START HERE: the code is done and reviewed. What remains is the SMOKE,
+      and it is still only PARTLY runnable** — `:34809`/`:26012`'s reason: no
+      screen in this product can create a visit dated two weeks ago, so Parts B
+      and C of `RUNBOOK/smoke-on-a-roll-cheer.md` stay BLOCKED unless Kd rules
+      that the rows may be written straight into the database. **The `OWED.md`
+      line therefore still does NOT tick.** Web-only: no `apps/api`, no
+      `packages/shared`, no migration. Kd approved this fix round at the gate.
+
+  1. **THE SMOKE SHEET COULD HAVE FAILED A WORKING SCREEN, TWICE.** Step 8 named
+     *"in 6 days"* against a SEVEN-day window. Step 7 required the tester to SEE
+     *"Cheered just now."* — the state round 1's own fix makes transient — so
+     the ✅ most likely to be observed was the one the sheet calls a failure.
+     Step 7 now accepts either sentence; step 8's ✅ is the END STATE.
+  2. **A DOCBLOCK SAID A FAILED RE-READ LEAVES THE SENTENCE "correctly stays".**
+     It stays; it does not stay correct. **The behaviour is UNCHANGED and
+     deliberately so** — round 1 chose and tested it. The word was the defect,
+     corrected in `onARollView.js` and `Overview.jsx` together (`:20587`).
+  3. **THE RULE-4 NAME ROUND 1 IDENTIFIED AND LEFT STANDING IS RENAMED.**
+     Checked first that no mutant filtered on it (`:14840`).
+
+PROVE: `web` **1823/1823 across 61 files** (unchanged — a rename is not a case) ·
+       `eslint --max-warnings=0` exit 0 on three files · four ROOT guards green
+       (harnesses 26 · index 302 pointers, 1377 headings · triggers up to date,
+       1047 from 270 of 408 · smoke-folds OK on the edited sheet) ·
+       **SWEEP a stated SUBSET of 240: `MUTATE_ONLY=C215…C223`, 9 RED, 0 ALIVE,
+       0 never ran**, nine controls green, restores sha256-verified — re-measured
+       because this round moved lines three of them anchor on (`:13336`).
+       Always-read re-measured with the header's own command: **2,685 =
+       1,226 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **NO RULE-3 TEST and that IS the round:** all three Low are prose, so
+       there is no code change for a test to fail without.
+       **NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite
+       (nothing in either touched, so `:28395` does not apply) and the full
+       240-mutant sweep.
+
+OPEN:  **THE SMOKE.** Part A is runnable today; B and C are not, for the reason
+       above. `CLAUDE.md`'s pre-existing uncommitted edit and
+       `GymHoursNote.jsx`'s line-ending-only one are STILL OUT (`:24559`) — not
+       mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER, WEB HALF — **T3 ROUND 1 RUN: ONE Critical/High,
       THE PACKET DOES NOT SHIP THIS ROUND.** DECISIONS `:34992`. **START HERE:
       all six findings are FIXED and T3 ROUND 2 IS UNRUN — it is DIFF-ONLY
