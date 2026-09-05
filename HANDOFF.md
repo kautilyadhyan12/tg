@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CHEER'S CAP — **BUILT: ONE PER MEMBER PER GYM-DAY** (Kd's ruling
+      `:35762`, built at `:35822`, commit `13e4253`). api + web + shared, **no
+      migration**. **NO SMOKE HAS RUN AND T3 IS UNRUN**, so `OWED.md`'s line
+      does NOT tick.
+
+      **START HERE — TWO THINGS THIS ROUND FOUND THAT OUTLIVE IT.**
+
+  1. **A MUTANT CAME BACK ALIVE BECAUSE THE RULE CHANGED, NOT BECAUSE A TEST
+     GOT WORSE.** `O276` guards the `gym_id` predicate on `cheerable_at`. Under
+     the old rolling window the subquery returned the MATCHED row's
+     `created_at + 7 days`, so another gym's cheer moved the value; it now
+     returns the same midnight whichever row matched, **so on a member this gym
+     has already cheered the predicate cannot change the answer at all.**
+     Re-driven on a member only the OTHER gym cheered. **STANDING: when a value
+     stops depending on the row a predicate selects, every mutant aimed at that
+     predicate silently weakens.**
+  2. **`mutate-orgs.mjs` CRASHED ON `writeFileSync` TWICE AND LEFT `repo.ts`
+     HOLDING A MUTANT BOTH TIMES** (O278, then O276) — `:15770`'s class, in
+     `src` rather than in a tool. **Caught by reading the file; the harness
+     cannot report a restore it crashed before performing.** NOT the dev
+     servers (stopped, and it recurred). **The route that works is ONE MUTANT
+     PER INVOCATION with a sha256 check against a pre-sweep copy after each.**
+     Do that until somebody finds the cause.
+
+PROVE: `api` **796/796 across 51 files, exit 0** LOCAL · `orgs.cheers` 19/19 ·
+       `web` **1835/1835 across 61 files** · `shared` 52/52 · `tsc --noEmit`
+       exit 0 (api, shared) · `eslint --max-warnings=0` exit 0 on ten files ·
+       `node --check` on the harness. **SWEEP: O266, O267, O274, O276–O282 —
+       10 RED, 0 ALIVE, 0 never ran**, controls GREEN and tallied first,
+       restores sha256-verified.
+       Four ROOT guards green (harnesses 26 · index **311 pointers, 1419
+       headings** · triggers **1082 from 279 of 417** · smoke-folds OK).
+       Always-read: **2,755 = 1,261 + 1,405 + 89**, §1 and §2 unmoved.
+       **THE FULL api SUITE FLAKED TWICE AND NEITHER WAS THIS CARD** — one run
+       21 failures (`workouts.sync` 401s), one 3 (`catalog.seed`'s global
+       counts), two runs of the same bytes 796/796, **and HEAD was measured at
+       795/795 first**, which is what makes that attribution honest. The 401
+       symptom is new and is on that `OWED.md` line.
+       **TWO TRAPS THIS REPO HAD ALREADY RECORDED, BOTH WALKED INTO:** a
+       backtick in a comment inside a `sql` template ends the template
+       (`:30094` §3b — `tsc` caught it), and `pnpm ... test:local -- <file>`
+       does NOT scope (the `--` is eaten; that cost the first, misleading
+       21-failure run).
+
+OPEN:  **The smoke and T3 on this change.** Sheet steps 6, 7, 8 and 9 are
+       rewritten; **step 9 says in as many words that the half nobody can smoke
+       — the button returning TOMORROW — is proven by the server's tests moving
+       the clock, not by waiting a day.** After that Kd picks the next card; the
+       people-lists card still owes three panels (*when they come* · *slipping
+       away* · *this week's roster*). `:26385` §5 has the gym-stage list.
+       **The api and web dev servers were STOPPED** during this card (they were
+       suspected in the harness crash and cleared).
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) —
+       not mine, not committed. `GymHoursNote.jsx`'s line-ending-only change is
+       no longer in the tree.
+```
+
+```
 TASK: THE CONFIRM STEP — **THE SMOKE PASSED AT KD'S BROWSER, ALL THREE PARTS,
       AND THE `OWED.md` LINE TICKS.** DECISIONS `:35692`. The feature is DONE:
       built `:35422`, T3 rounds 1 and 2 (`:35511`, `:35593`), smoke 2026-09-05.
