@@ -34,6 +34,7 @@ import {
   removeMemberResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  sendGymCheerResponseSchema,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from '@app/shared';
@@ -458,6 +459,47 @@ export const orgService = {
       nudgeApplicationResponseSchema,
       'that reminder',
       authApi.post(`/v1/orgs/applications/${applicationId}/nudge`, {}),
+    ),
+
+  /** POST /v1/orgs/:gymId/members/:userId/cheer — one tap of encouragement to a
+   *  member who keeps turning up (Kd's :29961 ruling 4).
+   *
+   *  **THE BODY CARRIES ONLY WHICH OF THE FOUR LINES.** The gym, the member and
+   *  the sender all come from the URL and the session, because every one of them
+   *  grants something (R3.1) — the same decision `markAttendance` above makes
+   *  about the day and the method. `sendGymCheerRequestSchema` is `.strict()`,
+   *  so a field added here hopefully is a 400 rather than a value quietly
+   *  ignored.
+   *
+   *  **NOT SAFE TO REPLAY BLINDLY, AND THE SERVER IS WHAT MAKES THAT HARMLESS**
+   *  (R10.2). There is no Idempotency-Key here and nothing in this file adds a
+   *  network-failure retry — but a replayed send cannot produce a second cheer:
+   *  the write takes the gym row's lock and refuses anything inside the rolling
+   *  seven days with a 409. `authApi`'s one 401 replay is therefore safe, and a
+   *  dropped connection leaves the owner to press again, which is a person doing
+   *  it.
+   *
+   *  **THE REFUSALS ARRIVE AS THE SERVER'S OWN SENTENCES and the screen prints
+   *  them**: 404 for somebody who is not a live member of this gym (one sentence
+   *  for "no such person" and "not yours" — R3.2), 403 without `members.read`,
+   *  409 `gym_not_on_plan` for a gym with no live plan, and 409
+   *  `cheer_already_sent` inside the seven days. **The 409 deliberately does NOT
+   *  carry the instant the window reopens** — `cheerableAt` on the overview
+   *  payload does, which is what a stale page needs re-read anyway
+   *  (`:34240` §6, and `:34666` §1 is the day a struck claim about that survived
+   *  two lines above the strike).
+   *
+   *  The path segments are encoded like every other in this file. Both reach
+   *  here as uuids from the server's own responses, so nothing can be smuggled
+   *  in today; this is the FILE'S PATTERN rather than a fix for a live hole. */
+  sendCheer: (gymId, userId, preset) =>
+    readThrough(
+      sendGymCheerResponseSchema,
+      'that cheer',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/members/${encodeURIComponent(userId)}/cheer`,
+        { preset },
+      ),
     ),
 
   /** GET /v1/orgs/:gymId/applications — the console's confirm queue, oldest

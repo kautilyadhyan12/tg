@@ -7845,8 +7845,9 @@ file and is stated so nobody reads these as lower priority than they are.
       (visits per opening session, off `gym_attendance.slot_key` and the stored
       session window — the staffing number) · ~~**on a roll** (members on an
       attendance streak, beside the cheer below)~~ **— ITS SERVER HALF SHIPPED
-      2026-09-04 (Kd chose it from the four); the PANEL is owed with the cheer's
-      web half, see that line** · **slipping away** (§4.1's
+      2026-09-04 (Kd chose it from the four) AND ITS PANEL SHIPPED 2026-09-05
+      (DECISIONS :34809); what is still owed on it is the SMOKE and T3, tracked
+      on the cheer's line below rather than here** · **slipping away** (§4.1's
       at-risk list, redefined onto VISITS per :26469 rather than the spec's
       workouts-anywhere) · **this week's roster** (joined · left · still
       waiting) · **§5.1's activation checklist**. ~~**Not started, no document
@@ -7886,15 +7887,53 @@ file and is stated so nobody reads these as lower priority than they are.
       no constraint can express a rolling window · `latestCheer` on
       `/v1/orgs/mine`, `.default(null)` · `onARoll` on the existing overview
       payload, `.default([])`.
-      **WHAT IS OWED AND IS WHY IT DOES NOT TICK: THE WHOLE WEB HALF.** No screen
+      ~~**WHAT IS OWED AND IS WHY IT DOES NOT TICK: THE WHOLE WEB HALF.** No screen
       exists, so no owner can press anything and no member can see a cheer —
-      `CARD-gym-overview-people.md` §4b is the card. **No browser smoke was run
-      and none was offered** (there is nothing to click — :26012's shape, not an
-      invented step) and **T3 is UNRUN**.
-      **AND THE SMOKE, WHEN IT COMES, NEEDS STATE NOBODY HAS:** the panel only
-      draws for a member with visits in two or more consecutive weeks, and Kd's
-      own gym has no such history. That has to be built before he is handed a
-      sheet, or the step cannot pass (:29870's stale-setup lesson).
+      `CARD-gym-overview-people.md` §4b is the card.~~ **— THE WEB HALF IS BUILT,
+      2026-09-05 (DECISIONS :34809), AND THIS LINE STILL DOES NOT TICK.** Shipped:
+      the folding **On a roll** panel on the console's home screen, riding on the
+      overview payload rather than a fifth read · four emoji, one tap each,
+      carrying Kd's four approved lines (`utils/cheerPresets.js`, read by both
+      surfaces) · the button's FOUR states, the fourth being a role holding
+      `attendance.read` but not `members.read` (:12518 C/H-2's class) · the cheer
+      on the member's **My gyms** card · a recency dot on that nav item, Kd's
+      approved call. **No `apps/api` and no `packages/shared` file moved.**
+      **WHAT IS OWED NOW: THE SMOKE AND T3.** **No browser smoke was run**
+      and **T3 is UNRUN**.
+      **AND THE SMOKE NEEDS STATE NOBODY HAS — NOW MEASURED AND WORSE THAN THIS
+      LINE SAID:** the panel only draws for a member with visits in two or more
+      consecutive weeks, and Kd's own gym has no such history. **That history
+      cannot be created through ANY screen**, because `markAttendance` decides the
+      day server-side (deliberately — a client that could name its own day could
+      mark itself present for last Tuesday), so there is no app path to a visit
+      dated two weeks ago. `RUNBOOK/smoke-on-a-roll-cheer.md` therefore ships with
+      **Part A runnable** (the empty state, the fold, and the control's absence
+      from the Members roster) and **Parts B and C written out in full and marked
+      BLOCKED** — :26012's shape, rather than carrying steps that cannot pass.
+      Building the rows directly in the database is the only route and is nobody's
+      call but Kd's.
+- [ ] 🟡 **A FIFTH CHEER PRESET WOULD BLANK EVERY MEMBER'S GYM LIST, and adding
+      one is therefore NOT a list edit** (found 2026-09-05 building the cheer's
+      web half, DECISIONS :34809 §7; **pre-existing since the server half of
+      2026-09-04**, not created by that card).
+      `gymCheerSchema.preset` is a `z.enum` over the four codes in
+      `GYM_CHEER_PRESETS`, and `apps/web/src/api/orgsApi.js` treats a contract
+      mismatch as a **HARD failure**. So an api that added a fifth preset and sent
+      it to an older bundle would not lose one line — **`/v1/orgs/mine` would fail
+      to parse and the member's whole `My gyms` screen, and the console's gym
+      list, would draw nothing at all.** That is :31222 in Kd's own browser, which
+      is the recorded cost of a REQUIRED field on this exact response, and
+      :16101's standing rule pointing the other way: **a response bound is
+      loosened toward what a NEWER server might say, never tightened to today's
+      behaviour.**
+      **THE FIX IS A `packages/shared` CHANGE AND SO A DIFFERENT CARD** (R1.1) —
+      the preset would have to survive parsing and be dropped at render, which the
+      client already does correctly (`cheerLine` returns null for a code it has no
+      words for, and the member's card draws nothing). **What is missing is only
+      the contract admitting the value in the first place.**
+      **THE WARNING ALSO SITS AT THE TOP OF `apps/web/src/utils/cheerPresets.js`**,
+      where somebody adding a fifth line will actually be standing — a line in this
+      file alone is one nobody reads at the moment they need it.
 - [ ] ⚪ **`org_live_counters` IS NOT BUILT and the Overview reads "today" live
       from Postgres instead (chat's call at the overview-numbers gate,
       2026-09-02, with its cost stated).** Part 3 §3.2 specifies a Redis key with

@@ -26,10 +26,22 @@ import { Building2 } from 'lucide-react';
  *  In its own module rather than beside the component because the sidebar file
  *  may export components only (`react-refresh/only-export-components`) — and
  *  the list it edits deliberately stays in `Sidebar.jsx`, where the removal
- *  ruling's own comment and the mutation harness that guards it both live. */
-export function navWithMyGyms(items, gymCount) {
+ *  ruling's own comment and the mutation harness that guards it both live.
+ *
+ *  **`dot` — THE WHOLE ARRIVAL OF A CHEER, added 2026-09-05 with Kd's approval
+ *  at the web half's gate.** Nothing in this product sends anything (:29961 §4,
+ *  measured), so a gym's cheer is STORED and waits on `My Gyms`; without
+ *  something pointing at it, a member who does not open that screen never learns
+ *  it happened. **It is RECENCY and not read-state** — `hasFreshCheer` — so it
+ *  stays lit for the week whether or not they looked, which is the cost of not
+ *  building a second table and a second write path for a dot.
+ *
+ *  **IT RIDES ON THE ITEM AND NOT ON A SECOND LIST**, so the dot cannot outlive
+ *  the item it belongs to: a member removed from their last gym loses both in
+ *  the same expression. */
+export function navWithMyGyms(items, gymCount, { dot = false } = {}) {
   if (!Array.isArray(items) || !Number.isInteger(gymCount) || gymCount <= 0) return items;
-  const myGyms = { to: '/my-gyms', icon: Building2, label: 'My Gyms' };
+  const myGyms = { to: '/my-gyms', icon: Building2, label: 'My Gyms', dot: dot === true };
   const at = items.findIndex((item) => item.to === '/settings');
   if (at < 0) return [...items, myGyms];
   return [...items.slice(0, at), myGyms, ...items.slice(at)];

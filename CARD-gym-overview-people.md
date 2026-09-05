@@ -1,10 +1,15 @@
 # CARD — "On a roll", and the gym's one-tap cheer
 
-**STATUS: WRITTEN, UNAPPROVED.** Kd chose this feature over the three other
+**STATUS: BOTH HALVES BUILT — server 2026-09-04 (`DECISIONS.md:34240`), web
+2026-09-05 (`:34809`). The web half's SMOKE and T3 are both UNRUN, so the
+`OWED.md` line does not tick.** See §7.
+
+~~**WRITTEN, UNAPPROVED.** Kd chose this feature over the three other
 people-list panels on 2026-09-04. **That choice is a FEATURE-SHAPE approval and
 is NOT a code gate** — `:26777` is the recorded cost of treating one as the
 other. Nothing is built until he has seen the file list, the migration SQL and
-the test list below and said go.
+the test list below and said go.~~ **— both gates passed; the sentence is kept
+because the rule it states did not stop being true.**
 
 **THIS FILE IS THE PEOPLE-LISTS CARD, TAKEN ONE SLICE AT A TIME.** `OWED.md`'s
 people-lists line names this filename for all five panels; building five panels
@@ -78,7 +83,16 @@ adds a query and a preset, not a subsystem.
 | 5 | `latestCheer` on each gym row of `GET /v1/orgs/mine` | `modules/orgs/repo.ts` |
 | 6 | The contracts, once | `packages/shared/src/orgs.ts` |
 | 7 | An "On a roll" panel with its cheer button | `components/console/OnARollPanel.jsx` + `pages/console/onARollView.js` |
-| 8 | The cheer on the member's gym card | `components/gym/GymMembershipCard.jsx` + `gymMembershipView.js` |
+| 8 | The cheer on the member's gym card | ~~`components/gym/GymMembershipCard.jsx`~~ **`pages/MyGyms.jsx`** + `gymMembershipView.js` |
+
+**CORRECTED 2026-09-05, WHEN §4b WAS BUILT.** §4b.5 says *"the My Gyms gym
+card"* and this row named a different component — and §4b is right. `:33091`
+took the membership row off the dashboard, so `GymMembershipCard` now draws on
+Settings → Gym only, while `My Gyms` renders its own gym rows straight from
+`useMyGyms` → `memberOrgs`, which returns the WHOLE `/v1/orgs/mine` row and
+therefore already carries `latestCheer`. Putting the cheer through
+`gymStatusRows` would have been a second path to a field one screen already
+holds. `gymMembershipView.js` is still correct: the pure helpers live there.
 
 ### 3.2 What this slice does NOT build, each with its home
 
@@ -310,7 +324,26 @@ current-week boundary · the privilege/gate order · the `.default([])` ·
 each, because a single fixture can satisfy both)** · **the `>= 2` rule that
 hides a one-day streak.**
 
-### 4b · WEB HALF (a separate chat, after 4a's T3)
+### 4b · WEB HALF (a separate chat, after 4a's T3) — **BUILT 2026-09-05, `DECISIONS.md:34809`. Smoke and T3 both UNRUN.**
+
+**FOUR THINGS CHANGED BETWEEN THIS PLAN AND WHAT SHIPPED, each declared rather
+than made quietly (R0.3):**
+
+1. **FOUR BUTTONS, NOT ONE.** §1's *"one button"* and §6.2.3's four approved
+   lines cannot both be built — one button sends one preset and leaves three of
+   Kd's four lines unreachable. Four emoji on the row is still ONE TAP (nothing
+   opens first, nothing is typed), and Kd approved the four messages at this
+   card's gate. Detail at `:34809` §6.
+2. **A FOURTH BUTTON STATE**, which §4b.3 did not name: the overview read is
+   gated on `attendance.read` and the cheer on `members.read`, so a staffer can
+   legitimately SEE this list and be refused every button on it. Drawing a live
+   control there is `:12518` C/H-2 exactly. `:34809` §3.
+3. **THE MEMBER'S HALF IS `MyGyms.jsx`**, not `GymMembershipCard` — see the
+   correction under §3.1.
+4. **A 409 TAKES ITS OWN OUTCOME VALUE**, separate from "you just sent one",
+   because the cap is per GYM and the cheer may have been a colleague's days
+   ago. `:34809` §4, and `:34443` §4 is what one wrong pronoun already cost on
+   this feature.
 
 1. **`onARollView.js`** — pure, tested without a browser: **both streak
    sentences and the rule that hides a one-day streak** (§4a.2), the visits
@@ -451,7 +484,17 @@ on the list Kd asked for instead.
 
 ## 7 · THE GATE
 
-Not passed. Kd has chosen the feature; he has **not** seen or approved this file
+~~Not passed. Kd has chosen the feature; he has **not** seen or approved this file
 list, the migration SQL (§4a.1), the test list (§4a.6), or §6's one question and
-five calls. `:26777` is the recorded cost of building at a gate that was never
-passed.
+five calls.~~ **— PASSED IN TWO PARTS, AND BOTH HALVES ARE NOW BUILT.**
+
+- **§4a, the server half** — Kd approved migration `0021` as SQL (T5/R4.4) and
+  the build; shipped 2026-09-04 (`:34240`), then T3 rounds 1 (`:34443`) and 2
+  (`:34666`), which the packet passed with zero Critical/High.
+- **§4b, the web half** — Kd approved the plan, the four preset lines and the
+  nav dot on 2026-09-05; shipped the same day (`:34809`).
+
+**WHAT IS STILL OPEN: the smoke and T3 on the web half.** `OWED.md`'s cheer line
+carries both, and the reason the smoke is only partly runnable — the list needs
+a two-consecutive-week visit history that no screen in this product can create.
+`:26777` remains the recorded cost of building at a gate that was never passed.

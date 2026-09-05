@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { gymStatusRows, memberOrgs, nudgeState } from './gymMembershipView';
+import {
+  CHEER_FRESH_DAYS,
+  cheerAge,
+  cheerNote,
+  gymStatusRows,
+  hasFreshCheer,
+  memberOrgs,
+  nudgeState,
+} from './gymMembershipView';
 
 // The rules that stop the app saying two things about one gym.
 //
@@ -337,5 +345,97 @@ describe('which gyms a person is actually a member of', () => {
   it('answers an empty list for anything that is not a list', () => {
     expect(memberOrgs(null)).toEqual([]);
     expect(memberOrgs(undefined)).toEqual([]);
+  });
+});
+
+// ── THE CHEER, on the member's side ─────────────────────────────────────────
+// Kd's :29961 ruling 4. **A cheer is STORED and waits on a screen** — nothing in
+// this product pushes anything — so the two questions here are "what does it
+// say" and "is it new enough to point at".
+
+const NOW = Date.parse('2026-09-05T12:00:00.000Z');
+const HOUR = 3600000;
+const DAY = 24 * HOUR;
+
+describe('how long ago the gym cheered', () => {
+  // **ELAPSED TIME AND NEVER A CALENDAR WORD**, which is what the contract asked
+  // for: `sentAt` is an INSTANT, deliberately unlike every attendance field
+  // beside it, because a visit belongs to the GYM's calendar while a cheer is
+  // read by the member wherever they are. No day words means no way to break
+  // `joinClock`'s standing rule, which four review rounds paid for.
+  it('counts in elapsed time, with no day words in it at all', () => {
+    expect(cheerAge(new Date(NOW - 5 * 60000).toISOString(), NOW)).toBe('just now');
+    expect(cheerAge(new Date(NOW - HOUR).toISOString(), NOW)).toBe('1 hour ago');
+    expect(cheerAge(new Date(NOW - 5 * HOUR).toISOString(), NOW)).toBe('5 hours ago');
+    expect(cheerAge(new Date(NOW - DAY).toISOString(), NOW)).toBe('1 day ago');
+    expect(cheerAge(new Date(NOW - 3 * DAY).toISOString(), NOW)).toBe('3 days ago');
+  });
+
+  // Silence rather than a guess — the rule every helper in `joinClock` follows,
+  // and "in 3 hours" about something that already happened is nonsense a clock
+  // skew should not be able to put on screen.
+  it('says nothing about an unreadable or future instant', () => {
+    expect(cheerAge('not-an-instant', NOW)).toBeNull();
+    expect(cheerAge(null, NOW)).toBeNull();
+    expect(cheerAge(undefined, NOW)).toBeNull();
+    expect(cheerAge(new Date(NOW + HOUR).toISOString(), NOW)).toBeNull();
+  });
+});
+
+describe('what the member is shown', () => {
+  it('gives the words and the time for a cheer it understands', () => {
+    expect(cheerNote({ preset: 'on_a_roll', sentAt: new Date(NOW - 2 * HOUR).toISOString() }, NOW))
+      .toEqual({ emoji: '🔥', text: "You're on a roll.", when: '2 hours ago' });
+  });
+
+  // **THE TWO ABSENCES ARE DIFFERENT AND ONLY ONE OF THEM SILENCES THE LINE.**
+  // A readable preset with an unreadable instant is still a real message the
+  // gym sent; throwing the words away over a timestamp nobody reads would lose
+  // the thing the feature exists for.
+  it('keeps the words when only the instant is unreadable', () => {
+    const note = cheerNote({ preset: 'on_a_roll', sentAt: 'rubbish' }, NOW);
+    expect(note.text).toBe("You're on a roll.");
+    expect(note.when).toBeNull();
+  });
+
+  it('invents nothing for a cheer it cannot describe', () => {
+    expect(cheerNote(null, NOW)).toBeNull();
+    expect(cheerNote(undefined, NOW)).toBeNull();
+    expect(cheerNote({ preset: 'a_fifth_one', sentAt: new Date(NOW).toISOString() }, NOW)).toBeNull();
+  });
+});
+
+describe('whether the nav item carries a dot', () => {
+  const gym = (sentAt) => ({ id: 'g1', name: 'Iron House', latestCheer: { preset: 'on_a_roll', sentAt } });
+
+  it('lights for a cheer inside the cap and goes out after it', () => {
+    expect(hasFreshCheer([gym(new Date(NOW - DAY).toISOString())], NOW)).toBe(true);
+    // ONE MINUTE EITHER SIDE OF THE BOUNDARY, because a window whose only
+    // tested case is "inside" is satisfied by one that never closes (:7104's
+    // PG1 — a guard with one test is a door that is simply shut).
+    const cap = CHEER_FRESH_DAYS * DAY;
+    expect(hasFreshCheer([gym(new Date(NOW - cap + 60000).toISOString())], NOW)).toBe(true);
+    expect(hasFreshCheer([gym(new Date(NOW - cap - 60000).toISOString())], NOW)).toBe(false);
+  });
+
+  it('is false for a member no gym has cheered', () => {
+    expect(hasFreshCheer([{ id: 'g1', name: 'Iron House', latestCheer: null }], NOW)).toBe(false);
+    expect(hasFreshCheer([], NOW)).toBe(false);
+    expect(hasFreshCheer(null, NOW)).toBe(false);
+  });
+
+  // A MEMBER OF SEVERAL GYMS: one fresh cheer anywhere lights the one item.
+  it('answers about the whole list and not only the first gym', () => {
+    expect(
+      hasFreshCheer(
+        [{ id: 'g0', name: 'Old', latestCheer: null }, gym(new Date(NOW - HOUR).toISOString())],
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it('never lights on an unreadable or future instant', () => {
+    expect(hasFreshCheer([gym('rubbish')], NOW)).toBe(false);
+    expect(hasFreshCheer([gym(new Date(NOW + DAY).toISOString())], NOW)).toBe(false);
   });
 });

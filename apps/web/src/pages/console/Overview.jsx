@@ -249,6 +249,41 @@ export default function Overview() {
     setCodes({ loading: false, error: null, retryable: true, list: res.data?.codes ?? [] });
   };
 
+  /** Re-read the NUMBERS ONLY, after a cheer goes out.
+   *
+   *  Not `retry()`, for `reloadCodes`'s reason one level up: bumping `attempt`
+   *  re-runs all five reads, so a tap on one member's name would blank and
+   *  redraw the join code, the member count, the waiting figure and the day's
+   *  people — a whole-screen flash for a change that touched one row.
+   *
+   *  **WHAT IT IS ACTUALLY FETCHING is `cheerableAt`**, which is the server's
+   *  answer to "when does this button reopen" and the only channel that carries
+   *  it (the 409 deliberately omits the instant — `:34240` §6). The panel holds
+   *  a local "just sent" flag for the seconds in between, so this read is what
+   *  makes the sentence survive a reload and agree with a second browser.
+   *
+   *  **IT SWALLOWS ITS OWN FAILURE, WHICH IS THE OPPOSITE OF EVERY OTHER ARM ON
+   *  THIS SCREEN, AND THAT IS THE POINT.** By the time it runs the cheer HAS
+   *  landed — the panel returns before calling this if the send threw. An error
+   *  card here would tell an owner their cheer failed when it did not, which is
+   *  :5807 on a screen: a false statement about something that already happened.
+   *  What is lost by staying quiet is one refreshed date, and the button is
+   *  already dead behind the local flag. */
+  const reloadOverview = async () => {
+    try {
+      const res = await orgService.getOverview(gymId);
+      setOverview({
+        loading: false,
+        error: null,
+        retryable: true,
+        data: res.data?.overview ?? null,
+      });
+    } catch {
+      // Deliberately nothing — see above. The cheer landed; only the refreshed
+      // `cheerableAt` is missed, and the panel's own state covers the button.
+    }
+  };
+
   if (orgLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -356,6 +391,25 @@ export default function Overview() {
              (`emptyDayReason`'s rule, one screen over). It rides on the org row
              this screen already holds — no read of its own. */
           manualAttendanceEnabled={org.manualAttendanceEnabled}
+          /* THE CHEER'S THREE FACTS, and each is a DIFFERENT question the panel
+             cannot answer from the payload it draws.
+
+             `privileges` — the overview read is gated on `attendance.read`
+             while the cheer is gated on `members.read`. Two ticks, either of
+             which an owner may take away, so a staffer can legitimately SEE
+             this list and be refused the button on it. Drawing a live control
+             over that is :12518 C/H-2 — the trainer handed a Remove button the
+             server would refuse, one screen over.
+
+             `readOnly` — a cheer is a WRITE, and :23711 put every write on this
+             console behind the same gate. A lapsed gym stops acting on its
+             members; the button greys with the server's own sentence.
+
+             `onCheered` — the server owns `cheerableAt`. See `reloadOverview`. */
+          gymId={org.id}
+          privileges={viewerPrivileges(org)}
+          readOnly={consoleIsReadOnly(org)}
+          onCheered={reloadOverview}
         />
       ) : null}
 

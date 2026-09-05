@@ -1068,6 +1068,35 @@ describe('Members', () => {
     expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
     expect(screen.getByText('Kd Owner')).toBeTruthy();
   });
+
+  // **NO CHEER CONTROL ON THE ROSTER, EVER, AND IT IS A BUILD CONSTRAINT THE
+  // SERVER HALF'S REVIEW WROTE FOR THIS SCREEN** (`:34666` §4).
+  //
+  // The cheer's write door and the "on a roll" panel agree on their population:
+  // both exclude COMPLIMENTARY members. **The roster does not** — it draws a
+  // comped member with an orange *Complimentary* badge (`:15093`), which is
+  // exactly what `ownerSeat` is. So a Cheer button here would answer *"That
+  // person isn't a member of this gym."* about somebody the owner is looking
+  // at, badge and all — :5807 on a screen.
+  //
+  // The one-sentence 404 is `:34240` §6's deliberate choice ("never a sentence
+  // naming whether the person exists"), so **a control here needs that refusal
+  // RE-RULED first**. This test is what makes that a decision rather than an
+  // omission somebody quietly fills in.
+  it('offers no way to cheer from the roster, where a comped member would be refused', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    // POSITIVE CONTROL, and it is the whole reason the absence below means
+    // anything (:28976): the roster IS drawn, and the row that would produce
+    // the false refusal — the complimentary seat with its badge — is on screen.
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.getByText('Complimentary')).toBeTruthy();
+
+    expect(screen.queryByText(/cheer/i)).toBeNull();
+    expect(screen.queryByLabelText(/cheer/i)).toBeNull();
+    expect(screen.queryByTitle(/keep it going/i)).toBeNull();
+  });
 });
 
 // ── Waiting to join ─────────────────────────────────────────────────────────

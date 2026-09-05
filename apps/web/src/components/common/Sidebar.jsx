@@ -14,6 +14,11 @@ import { useMyGyms } from '../../hooks/useMyGyms';
 // the removal ruling's comment and the mutation harness that guards it both
 // point at this file. See `sidebarNav.js` for why the two items are different.
 import { navWithMyGyms } from './sidebarNav';
+// A CHEER'S ONLY ARRIVAL. Nothing in this product pushes a notification
+// (:29961 §4), so `My Gyms` is where a gym's message waits — and a message
+// waiting on a screen nobody opens is a message nobody gets. Same `gyms` rows
+// the item itself is drawn from, so the dot cannot outlive the item.
+import { hasFreshCheer } from '../gym/gymMembershipView';
 
 const navItems = [
   { to: '/dashboard',       icon: LayoutDashboard, label: 'Dashboard'  },
@@ -227,7 +232,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
         style={{ padding: collapsed ? '12px 8px' : '12px' }}
       >
         <div className="space-y-0.5">
-          {navWithMyGyms(navItems, gyms.length).map(({ to, icon: Icon, label }) => (
+          {navWithMyGyms(navItems, gyms.length, { dot: hasFreshCheer(gyms) }).map(({ to, icon: Icon, label, dot }) => (
             <NavLink
               key={to}
               to={to}
@@ -274,6 +279,33 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
                       {label}
                     </span>
                   )}
+                  {/* THE CHEER'S DOT, and it must survive a COLLAPSED rail —
+                      which is where the label it would otherwise sit beside
+                      does not exist. A member with the rail shut still has the
+                      icon, so the dot is drawn in BOTH states, inline: it
+                      follows the label when there is one and the icon when
+                      there is not. No absolute positioning, deliberately —
+                      that would need a `relative` on the row and would put the
+                      mark outside the flow, where the collapsed rail's own
+                      `overflow-hidden` could clip it away silently.
+
+                      `aria-label` rather than a bare coloured circle: a mark
+                      that carries meaning and cannot be read is a promise to
+                      the sighted only (:32395's class, an icon at 16px). */}
+                  {dot === true ? (
+                    <span
+                      className={collapsed ? '' : 'ml-auto'}
+                      role="status"
+                      aria-label="New from your gym"
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: '#FF8A1F',
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : null}
                 </div>
               )}
             </NavLink>

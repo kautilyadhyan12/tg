@@ -62,7 +62,26 @@ export const attendee = (userId, displayName, visits) => ({
   })),
 });
 
-export const overview = ({ today, week, month, weeks, timezone } = {}) => ({
+/** ONE MEMBER WHO KEEPS TURNING UP, in the shape `orgRegularSchema` pins.
+ *
+ *  **THE TWO STREAK FIGURES DEFAULT TO DIFFERENT NUMBERS, DELIBERATELY.** Kd
+ *  ruled both units and they answer different questions, so a fixture where they
+ *  move together cannot see a sentence built from the wrong field — which is how
+ *  C155 passed under its own mutant on this screen one card ago (:30399 §6).
+ *  Every caller may override either, and the ones that matter do.
+ *
+ *  `cheerableAt` is null by default: the window is OPEN, so the button is live
+ *  and a test about the dead states has to say so explicitly. */
+export const regular = ({ userId, displayName, weeksRunning, daysRunning, visits, cheerableAt } = {}) => ({
+  userId: userId ?? 'r1',
+  displayName: displayName ?? 'Priya Nair',
+  weeksRunning: weeksRunning ?? 5,
+  daysRunning: daysRunning ?? 3,
+  visits: visits ?? 11,
+  cheerableAt: cheerableAt ?? null,
+});
+
+export const overview = ({ today, week, month, weeks, timezone, onARoll } = {}) => ({
   data: {
     overview: {
       timezone: timezone ?? 'America/Chicago',
@@ -73,6 +92,13 @@ export const overview = ({ today, week, month, weeks, timezone } = {}) => ({
         month: { visitors: 0, members: 0, adoptionPct: null, ...month },
       },
       weeks: weeks ?? WEEK_STARTS.map((weekStart) => ({ weekStart, visits: 0, visitors: 0 })),
+      // EMPTY BY DEFAULT, like everything else in this fixture and for the same
+      // reason: a gym with no attendance has nobody on a run, so the five suites
+      // that merely RENDER this screen keep seeing the screen they were written
+      // against. It is also what an api older than this bundle sends — the
+      // shared schema's `.default([])` — so the quiet case is the true one twice
+      // over.
+      onARoll: onARoll ?? [],
     },
   },
 });

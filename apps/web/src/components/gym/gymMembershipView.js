@@ -22,6 +22,15 @@
 // — so a person who was refused, asked again, and was let in has THREE rows
 // about one gym, of which only the newest is true. **One gym, one row, and the
 // most recent fact wins**: member beats waiting beats refused.
+//
+// **THE CHEER'S HELPERS AT THE BOTTOM ARE MEMBER-SIDE TOO, AND DELIBERATELY DO
+// NOT FEED `gymStatusRows`.** `latestCheer` rides on the `/v1/orgs/mine` row and
+// `My Gyms` reads that row WHOLE (`useMyGyms` → `memberOrgs`), so putting the
+// cheer through the row-ranking above would be a second path to a field one
+// screen already has. The rows above answer "where do I stand with this gym";
+// a cheer is a message, and Kd ruled where messages live (:33091 — gym things
+// are on `My Gyms`, and the dashboard keeps only the greeting).
+import { cheerLine } from '../../utils/cheerPresets';
 
 /** Rank of what we can say about a gym. Higher wins; the comparison is what
  *  stops a stale refusal outliving the membership that followed it.
@@ -160,4 +169,87 @@ export function nudgeState(row, now = Date.now()) {
   if (Number.isNaN(last.getTime())) return { ready: true, reason: 'never' };
   const ready = now - last.getTime() >= 24 * 60 * 60 * 1000;
   return { ready, reason: ready ? 'due' : 'recent' };
+}
+
+/** HOW LONG AGO THE GYM CHEERED, IN WORDS.
+ *
+ *  **ELAPSED TIME, NEVER A CALENDAR WORD, AND THE CONTRACT ASKED FOR IT THAT
+ *  WAY.** `gymCheerSchema.sentAt` is an INSTANT and not a gym-day — deliberately
+ *  the opposite of every attendance field beside it — because a visit belongs to
+ *  the GYM's calendar while a cheer is read by the MEMBER, wherever they are.
+ *  So there is no "today"/"yesterday" here at all, and `joinClock`'s standing
+ *  rule (a day word compares calendar days, a duration measures elapsed time)
+ *  is satisfied by this function only ever printing durations. `nudgedLabel` is
+ *  the same shape one file over.
+ *
+ *  Null on anything unreadable, and null on an instant in the FUTURE: a clock
+ *  skew must produce silence rather than "in 3 hours", which is the same rule
+ *  every helper in `joinClock` follows. */
+export function cheerAge(sentAt, now = Date.now()) {
+  const at = new Date(typeof sentAt === 'string' ? sentAt : '');
+  if (Number.isNaN(at.getTime()) || !Number.isFinite(now)) return null;
+  const minutes = Math.floor((now - at.getTime()) / 60000);
+  if (minutes < 0) return null;
+  if (minutes < 60) return 'just now';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
+}
+
+/** WHAT THE MEMBER'S GYM CARD SHOWS, or null.
+ *
+ *  **NOTHING IS EVER INVENTED HERE.** No cheer, an unreadable one, or a preset
+ *  this bundle has no words for all produce null and the card draws nothing —
+ *  silence claims nothing, where a placeholder would put words in a gym's mouth.
+ *  That is the same rule the row-building loops above follow: a row the app
+ *  cannot describe truthfully is a row it must not draw.
+ *
+ *  **`when` MAY BE NULL WHILE THE LINE IS NOT.** A readable preset with an
+ *  unreadable instant is still a real cheer and the words are still true; only
+ *  the "when" goes missing. Collapsing the two would throw away a message the
+ *  gym actually sent over a timestamp nobody reads. */
+export function cheerNote(latestCheer, now = Date.now()) {
+  if (latestCheer === null || typeof latestCheer !== 'object') return null;
+  const line = cheerLine(latestCheer.preset);
+  if (line === null) return null;
+  return { emoji: line.emoji, text: line.text, when: cheerAge(latestCheer.sentAt, now) };
+}
+
+/** HOW LONG A CHEER COUNTS AS NEW, for the nav item's dot.
+ *
+ *  **SEVEN DAYS BECAUSE THAT IS THE CAP, and it is a DISPLAY rule that mirrors
+ *  the server's rather than enforcing anything.** Kd's ruling is one cheer per
+ *  member per week and Part 3 §4.1 spells the same window `rate-limit
+ *  1/member/7d`, so a dot that lasted longer would still be lit when the next
+ *  one could already have arrived, and one that lasted less would go dark on a
+ *  message nobody had read. Named here rather than typed at the call site, so
+ *  moving it is one edit (:20587). */
+export const CHEER_FRESH_DAYS = 7;
+
+/** SHOULD THE `My Gyms` ITEM CARRY A DOT? — a chat's call with its cost, taken
+ *  at this card's gate and approved by Kd 2026-09-05.
+ *
+ *  **WHY IT EXISTS: NOTHING IN THIS PRODUCT SENDS ANYTHING.** No mailer, no
+ *  SMTP, no notifications table — measured at :29961 §4 — so a cheer is STORED
+ *  and waits on a screen, and a member who never opens `My gyms` never learns it
+ *  happened. The dot is the whole of the arrival.
+ *
+ *  **ITS COST, stated rather than discovered: it is RECENCY and not read-state,
+ *  so it stays lit for the week whether or not they looked.** The alternative is
+ *  a second table and a second write path for a dot, which
+ *  `CARD-gym-overview-people.md` §3.2 refused deliberately.
+ *
+ *  Reads the same `latestCheer` the card below draws — one field answering one
+ *  question, so the dot and the card cannot disagree about whether a cheer
+ *  exists. */
+export function hasFreshCheer(orgs, now = Date.now()) {
+  const cutoff = CHEER_FRESH_DAYS * 24 * 60 * 60 * 1000;
+  return (Array.isArray(orgs) ? orgs : []).some((org) => {
+    const sentAt = org?.latestCheer?.sentAt;
+    const at = new Date(typeof sentAt === 'string' ? sentAt : '');
+    if (Number.isNaN(at.getTime()) || !Number.isFinite(now)) return false;
+    const age = now - at.getTime();
+    return age >= 0 && age < cutoff;
+  });
 }

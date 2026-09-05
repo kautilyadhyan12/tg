@@ -91,6 +91,16 @@ const ATTENDANCE_VIEW_SUITE = 'src/pages/console/attendanceView.test.js';
 const MEMBER_ATTENDANCE_VIEW_SUITE = 'src/components/gym/attendanceView.test.js';
 const MY_GYMS_SUITE = 'src/pages/myGyms.render.test.jsx';
 
+/** "ON A ROLL" AND THE CHEER (Kd :29961 ruling 4), added 2026-09-05 with the web
+ *  half. THREE suites because the feature has three readers and a mutant is a
+ *  claim about ONE call site (:15770): the view file decides WHICH sentence and
+ *  whether the button is live, the render suite decides what an OWNER sees and
+ *  what a tap actually sends, and the member's own view file decides what the
+ *  person being cheered is told. */
+const ON_A_ROLL_VIEW_SUITE = 'src/pages/console/onARollView.test.js';
+const ON_A_ROLL_RENDER_SUITE = 'src/pages/console/onARoll.render.test.jsx';
+const MEMBER_VIEW_SUITE = 'src/components/gym/gymMembershipView.test.js';
+
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
   api: { file: resolve(ROOT, 'apps/web/src/api/orgsApi.js') },
@@ -156,6 +166,16 @@ const TARGETS = {
   // My Gyms (:28976) is the recorded cost of mutating only the first kind.
   memberattendanceview: { file: resolve(ROOT, 'apps/web/src/components/gym/attendanceView.js') },
   attendancepanel: { file: resolve(ROOT, 'apps/web/src/components/gym/AttendancePanel.jsx') },
+  // "ON A ROLL" AND THE CHEER (Kd :29961 ruling 4), added 2026-09-05. THREE
+  // targets for one feature, because a mutant is a claim about ONE call site
+  // (:15770): the view file decides which sentence and whether the button is
+  // live, the panel decides which member a tap actually reaches, and the
+  // member's own view file decides what the person being cheered is told.
+  // Round 1 of My Gyms (:28976) is the recorded cost of mutating only the pure
+  // half of a feature that has a screen.
+  onarollview: { file: resolve(ROOT, 'apps/web/src/pages/console/onARollView.js') },
+  onarollpanel: { file: resolve(ROOT, 'apps/web/src/components/console/OnARollPanel.jsx') },
+  membershipview: { file: resolve(ROOT, 'apps/web/src/components/gym/gymMembershipView.js') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -2831,6 +2851,69 @@ const MUTANTS = [
     expect: 'is not offered at all by a gym that never closes',
     from: "        {hours.mode === 'scheduled' ? (",
     to: "        {hours.mode !== 'unset' ? (",
+  },
+  {
+    id: 'C215',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "NUMBER ON SCREEN: a one-day streak is printed beside a long week streak, so an owner reads 5 weeks running - 1 day in a row, two TRUE figures arranged into a sentence that reads as a contradiction. This is :30624's class, which is this exact screen's recorded defect from one card earlier, found by Kd and not by 1659 tests. It is also the meaning of the word: a streak of one is not a streak",
+    expect: 'hides a one-day streak beside a long week streak',
+    from: "    days: days >= 2 ? `${days} days in a row` : null,",
+    to: "    days: days >= 1 ? `${days} days in a row` : null,",
+  },
+  {
+    id: 'C216',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "NUMBER ON SCREEN: the WEEK figure is built from the DAY field, so a member who has come for five weeks and three days running is shown to their owner as 3 weeks running. Kd ruled BOTH units precisely because they answer different questions, and a fixture where the two move together cannot see this - which is how C155 passed under its own mutant on this screen one card ago",
+    expect: 'reads each figure from its own field',
+    from: "    weeks: weeks === 1 ? '1 week running' : `${weeks} weeks running`,",
+    to: "    weeks: days === 1 ? '1 week running' : `${days} weeks running`,",
+  },
+  {
+    id: 'C217',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "ON SCREEN AND FALSE: the server's cheerableAt is ignored, so a member cheered yesterday is shown a LIVE button and the sentence saying when it reopens vanishes. Every tap is then a 409 the owner cannot predict, and cheerableAt is the ONLY channel carrying that instant - the 409 deliberately omits it (:34240 section 6)",
+    expect: 'is dead and SAYS SO once a cheer has gone out inside seven days',
+    from: "  const again = cheerAgainText(regular?.cheerableAt, now);",
+    to: "  const again = null;",
+  },
+  {
+    id: 'C218',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "WRITE GATE: a gym with no live plan keeps a live cheer button. :23711 put every write door on this console behind one gate and :22215 is Kd's ruling that a gym without a plan gets nothing - a screen-deep rule wearing a server's clothes is exactly what that entry refused. The server still refuses the tap; what this ships is a console that offers it",
+    expect: "greys on a gym with no plan, in the server's own words",
+    from: '  if (readOnly === true) {',
+    to: '  if (readOnly === false) {',
+  },
+  {
+    id: 'C219',
+    target: 'onarollview',
+    suite: ON_A_ROLL_VIEW_SUITE,
+    why: "OWNERSHIP: a live cheer button is drawn for a role the server will refuse. The overview read is gated on attendance.read and the cheer on members.read, so a trainer can legitimately SEE this list - and this is :12518 C/H-2 exactly, the trainer handed a Remove button one screen over, who taps it, reads a confirm sheet and is then told their role does not allow it",
+    expect: 'asks for the power the server asks for',
+    from: "  return Array.isArray(privileges) && privileges.includes('members.read');",
+    to: '  return true;',
+  },
+  {
+    id: 'C220',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "OWNERSHIP, AND THE SHARPEST ROW HERE: the cheer is sent to the FIRST member on the list rather than the one whose button was pressed, so an owner encouraging Priya sends it to somebody else - and the cap then locks that person out for a week. The wrong person is told the gym noticed them, the right one is told nothing, and no error appears anywhere",
+    expect: 'sends the gym, the member and the line the owner actually pressed',
+    from: '      await orgService.sendCheer(gymId, userId, preset);',
+    to: '      await orgService.sendCheer(gymId, overview.onARoll[0].userId, preset);',
+  },
+  {
+    id: 'C221',
+    target: 'membershipview',
+    suite: MEMBER_VIEW_SUITE,
+    why: "ON SCREEN AND FALSE, on the MEMBER's side: a preset this bundle has no words for is drawn as a cheer anyway, so a member is shown a message their gym never sent. The words live on the client deliberately - the server stores a code, never a sentence - so an unknown code has no honest rendering and silence is the only true answer",
+    expect: 'invents nothing for a cheer it cannot describe',
+    from: '  if (line === null) return null;',
+    to: "  if (line === null) return { emoji: '', text: 'Your gym cheered you on.', when: null };",
   },
 ];
 

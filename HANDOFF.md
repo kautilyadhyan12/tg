@@ -1,6 +1,76 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER — **THE WEB HALF IS BUILT.** DECISIONS `:34809`.
+      **START HERE: the packet is code-complete and the `OWED.md` line STILL
+      DOES NOT TICK** — no smoke has run and T3 is UNRUN. Web-only: no
+      `apps/api`, no `packages/shared`, no migration. Kd approved the plan, the
+      four preset lines and the nav dot at the gate.
+
+  1. **A MUTANT AIMED AT THE SHARPEST THING ON THE SCREEN WAS ALIVE.** C220
+     sends the cheer to `onARoll[0]` instead of the pressed row — the wrong
+     member is encouraged, the cap locks THEM out for a week, the right one is
+     told nothing, and **no error appears anywhere**. It survived because the
+     fixture had ONE name on the list, so "pressed row" and "row zero" were the
+     same person. `:28221` §3b in the shape a SCREEN takes. Fixed in the
+     fixture (two rows, Asha first), with the negative asserted explicitly.
+  2. **A FOURTH BUTTON STATE THE CARD NEVER NAMED.** The overview read is gated
+     on `attendance.read`, the cheer on `members.read` — two ticks an owner may
+     remove independently — so a staffer can legitimately SEE the list and be
+     refused every button on it. That is `:12518` C/H-2 exactly. The four states
+     are answered in the SERVER's order (privilege → plan → window).
+  3. **A 409 IS A FACT, NOT A FAILED ATTEMPT**, and it takes its own outcome
+     value: the cap is per GYM, so *"Cheered just now"* would repeat `:34443`
+     §4's wrong pronoun. `'sent'` and `'already'` are two different true
+     sentences.
+  4. **THE POST-CHEER RE-READ SWALLOWS ITS OWN FAILURE, DELIBERATELY** — the
+     opposite of every other arm on that screen. The send's `catch` returns
+     first, so by then the cheer HAS landed and an error card would say it
+     failed when it did not (`:5807`).
+  5. **FOUR BUTTONS, AND THE DEPARTURE IS DECLARED.** The card's §1 says "one
+     button" and §6.2.3 lists four approved lines; both cannot be built. Four
+     emoji is still one tap and reaches all four. `:34809` §6.
+  6. **THE HARNESS'S OWN GUARD CAUGHT A BAD MUTANT before a byte was written** —
+     C219's filter named a test in a different suite, so it matched nothing and
+     the control phase aborted. A mutant's suite and its filter are one claim.
+
+PROVE: `web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` 28/28 ·
+       `cheerPresets` 5/5 · `onARoll.render` 15/15 · `myGyms.render` 59/59 (51
+       before) · `gymMembershipView` 39/39 (28 before) · `console.render`
+       107/107 (106 before). `eslint --max-warnings=0` exit 0 on all seventeen
+       touched web files · `vite build` exit 0 · `node --check` on the harness.
+       **SWEEP a stated SUBSET of 238: `MUTATE_ONLY=C215…C221`, 7 RED, 0 ALIVE,
+       0 never ran**, seven controls green and tallied first, restores
+       sha256-verified, anchors checked BEFORE the sweep. **C220 was ALIVE on
+       the first pass — see finding 1.**
+       Four ROOT guards green: harnesses · index **300 pointers, 1365
+       headings** · triggers **up to date — 1036 from 268 of 406 rulings, 138
+       declaring none** · smoke-folds OK.
+       Always-read re-measured with the header's own command: **2,674 =
+       1,215 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **gitleaks NAMED WITH ITS SCOPE** (`:34666` L-2): `protect` (working
+       tree) and `detect` (FULL HISTORY, the scope CI runs) — figures in the
+       commit message.
+       **NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite
+       (no file in either was touched), and the full 238-mutant console sweep.
+
+OPEN:  **THE SMOKE AND T3, and the smoke is only PARTLY RUNNABLE.**
+       `RUNBOOK/smoke-on-a-roll-cheer.md`: Part A (empty state, the fold, the
+       control's absence from the Members roster) can run today; **Parts B and
+       C cannot**, because the list needs a member with visits in two or more
+       consecutive weeks and **no screen in this product can create one** —
+       `markAttendance` decides the day server-side, deliberately. Writing the
+       rows straight into the database is the only route and is Kd's call.
+       **NEW `OWED.md` LINE:** a FIFTH cheer preset would blank every member's
+       gym list, because `gymCheerSchema.preset` is a `z.enum` and `orgsApi.js`
+       treats a contract mismatch as a hard failure (`:16101`, `:31222`).
+       Pre-existing since the server half; the fix is a `packages/shared` change
+       and so a different card.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s are
+       STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER — **T3 ROUND 2 RUN: ZERO Critical/High, THE
       PACKET SHIPS.** DECISIONS `:34666`. **START HERE: the packet ships and
       the `OWED.md` line STILL DOES NOT TICK** — no screen exists, so no smoke

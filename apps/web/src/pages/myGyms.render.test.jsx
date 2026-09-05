@@ -1198,3 +1198,98 @@ describe('the calendar folds away', () => {
     expect(overTheFlame.contains(inside)).toBe(true);
   });
 });
+
+// ── WHAT THE GYM SAID ────────────────────────────────────────────────────────
+// Kd's :29961 ruling 4, arriving where it can. **Nothing in this product sends
+// anything** — no mailer, no SMTP, no notifications table (measured at :29961
+// §4) — so a cheer is STORED on the `/v1/orgs/mine` row and READ HERE, and the
+// nav dot is the whole of its arrival.
+describe('the cheer', () => {
+  const cheered = (over = {}) => ({
+    data: {
+      orgs: [{ ...GYM, latestCheer: { preset: 'on_a_roll', sentAt: '2026-09-02T10:00:00.000Z', ...over } }],
+      formerOrgs: [],
+    },
+  });
+
+  it('draws the line the gym chose, and how long ago', async () => {
+    api.getMine.mockResolvedValue(cheered());
+    drawScreen();
+    expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
+    // `NOW` is 12:00 and the cheer landed at 10:00 — elapsed, never a calendar
+    // word, because `sentAt` is an INSTANT read by a member wherever they are
+    // (the shared contract's own reasoning).
+    expect(screen.getByText('2 hours ago')).toBeTruthy();
+  });
+
+  // **IT NEVER NAMES WHO PRESSED IT** (§2.4 — a plain member is told nothing
+  // about a gym's staff), and the server does not even send it:
+  // `sent_by_user_id` never reaches a response. This is the client half of that
+  // guarantee.
+  it('says the gym cheered them and never which member of staff', async () => {
+    api.getMine.mockResolvedValue(cheered());
+    drawScreen();
+    // POSITIVE CONTROL FIRST — :28976's vacuity class. An absence assertion
+    // over a card that never rendered passes perfectly.
+    expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/sent by/i);
+    expect(document.body.textContent).not.toMatch(/Kd Owner/);
+  });
+
+  // NOTHING INVENTED, EVER. The three absences are different — no cheer, an
+  // unreadable instant, a preset this bundle has no words for — and only the
+  // middle one still draws the words.
+  it('draws nothing at all for a gym that has never cheered', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null }], formerOrgs: [] } });
+    drawScreen();
+    expect(await screen.findByText('Iron House')).toBeTruthy();
+    expect(screen.queryByText(/on a roll/i)).toBeNull();
+    expect(screen.queryByText(/keep it going/i)).toBeNull();
+  });
+
+  it('still shows the words when it cannot say when', async () => {
+    api.getMine.mockResolvedValue(cheered({ sentAt: 'not-an-instant' }));
+    drawScreen();
+    expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
+    expect(screen.queryByText(/ago/)).toBeNull();
+  });
+
+  it('draws nothing for a preset it has no words for', async () => {
+    api.getMine.mockResolvedValue(cheered({ preset: 'something_new' }));
+    drawScreen();
+    expect(await screen.findByText('Iron House')).toBeTruthy();
+    expect(screen.queryByText(/on a roll/i)).toBeNull();
+  });
+});
+
+describe('the dot on the nav item', () => {
+  const withCheer = (sentAt) => ({
+    data: { orgs: [{ ...GYM, latestCheer: { preset: 'on_a_roll', sentAt } }], formerOrgs: [] },
+  });
+
+  // WITHOUT SOMETHING POINTING AT IT, a cheer waits on a screen nobody opens.
+  // That is the whole reason this exists, and it is Kd's approved call.
+  it('appears for a cheer inside the last week', async () => {
+    api.getMine.mockResolvedValue(withCheer('2026-09-01T12:00:00.000Z'));
+    drawSidebar();
+    await waitFor(() => expect(screen.getByLabelText('New from your gym')).toBeTruthy());
+  });
+
+  // **THE POSITIVE CONTROL IS THE ITEM ITSELF.** A dot asserted absent on a
+  // sidebar that never drew `My Gyms` would pass for the wrong reason
+  // entirely — :28976, and the reason every absence assertion here carries its
+  // opposite.
+  it('goes away once the cheer is older than the cap', async () => {
+    api.getMine.mockResolvedValue(withCheer('2026-08-20T12:00:00.000Z'));
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+  });
+
+  it('is absent for a member nobody has cheered', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null }], formerOrgs: [] } });
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+  });
+});

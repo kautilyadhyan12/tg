@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { ConsoleCard, ConsoleSection } from './ConsoleStates';
+import OnARollPanel from './OnARollPanel';
 import { isExceptionStatus, peopleLabel, personTimes } from '../../pages/console/attendanceView';
 import {
   CHART_HEIGHT,
@@ -66,7 +67,16 @@ const MUTED = 'rgba(255,255,255,0.45)';
 const FAINT = 'rgba(255,255,255,0.28)';
 const HAIRLINE = 'rgba(255,255,255,0.07)';
 
-export default function OverviewNumbers({ overview, day, orgSlug, manualAttendanceEnabled }) {
+export default function OverviewNumbers({
+  overview,
+  day,
+  orgSlug,
+  manualAttendanceEnabled,
+  gymId,
+  privileges,
+  readOnly = false,
+  onCheered = () => {},
+}) {
   const state = numbersState(overview);
 
   // §4.1's own edge — *"org with 0 members ever → Overview IS the checklist +
@@ -172,6 +182,33 @@ export default function OverviewNumbers({ overview, day, orgSlug, manualAttendan
           </ConsoleSection>
         </div>
       )}
+
+      {/* ── ON A ROLL, and the one tap that says so ──────────────────────────
+          Kd's :29961 ruling 4 and the second of the two people lists on this
+          card, so it sits beside "Who came today" rather than under the chart:
+          one is who is in the building, the other is who keeps coming back.
+
+          **IT RIDES ON THE PAYLOAD THIS COMPONENT ALREADY HAS.** `onARoll` is a
+          field of `GET /v1/orgs/:gymId/overview`, put there so this screen did
+          not have to grow a fifth read (:30399's own trigger warns before a
+          fourth). Nothing here fetches anything; the panel's only request is the
+          one an owner's tap makes.
+
+          **KEYED BY THE GYM, AND IT IS LOAD-BEARING RATHER THAN ROUTINE**
+          (:20712, :22029, :29117). The panel holds which rows have just been
+          cheered, `/console/:orgSlug` is ONE route, and walking from gym A to
+          gym B does not remount anything here — so without the key a tap on
+          gym A's member would still read "Cheered just now" beside a name at
+          gym B. The class fix is the key at the mount site, never a reset
+          inside the panel. */}
+      <OnARollPanel
+        key={gymId}
+        gymId={gymId}
+        overview={overview}
+        privileges={privileges}
+        readOnly={readOnly}
+        onCheered={onCheered}
+      />
 
       {/* **THE CHART IS ALWAYS DRAWN, AND REMOVING IT WAS MY OWN OVERREACH.**
           Kd asked whether it was CORRECT — *"are the graph even correct or just

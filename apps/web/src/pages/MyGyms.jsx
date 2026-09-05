@@ -3,6 +3,7 @@ import { Building2, Loader2 } from 'lucide-react';
 import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
+import { cheerNote } from '../components/gym/gymMembershipView';
 
 // MY GYMS — Kd's ruling of 2026-09-02, in his words: *"whenever a user joins a
 // gym and gym approves them a new option will appear besides the other option
@@ -27,6 +28,27 @@ import AttendancePanel from '../components/gym/AttendancePanel';
 // gym's opening times (:26684 §2) and attendance (:26469, :27900). The owner's
 // side of attendance — who came, by session — is the console's own section
 // (:28107) and is not reachable from here.
+
+/** One gym's newest cheer, or nothing at all.
+ *
+ *  A component rather than an inline ternary because it has two independent
+ *  absences — no cheer, and a cheer whose instant is unreadable — and the second
+ *  must still draw the WORDS. `cheerNote` owns both rules and is tested without
+ *  a browser. */
+function CheerNote({ latestCheer }) {
+  const note = cheerNote(latestCheer ?? null);
+  if (note === null) return null;
+  return (
+    <p className="text-sm mt-1" style={{ color: '#FF8A1F' }}>
+      <span aria-hidden="true">{note.emoji}</span> {note.text}
+      {note.when === null ? null : (
+        <span className="text-xs ml-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          {note.when}
+        </span>
+      )}
+    </p>
+  );
+}
 
 export default function MyGyms() {
   const { loading, error, gyms, reload } = useMyGyms();
@@ -120,6 +142,29 @@ export default function MyGyms() {
                 <p className="text-sm font-semibold truncate" style={{ color: '#fff' }}>
                   {gym.name}
                 </p>
+                {/* ── WHAT THE GYM SAID ────────────────────────────────────
+                    Kd's :29961 ruling 4, arriving at the only place it can:
+                    **nothing in this product SENDS anything** — no mailer, no
+                    SMTP, no notifications table — so a cheer is STORED and read
+                    here, the shape `nudgeApplication` already uses. At stage 6
+                    it becomes a real push with nothing rebuilt.
+
+                    **FIRST ON THE CARD, ABOVE THE HOURS, BECAUSE IT IS THE ONE
+                    THING HERE ADDRESSED TO THE READER.** The hours and the
+                    attendance button are facts and controls; this is a message
+                    somebody sent them.
+
+                    **IT NEVER NAMES WHO PRESSED IT.** The server does not send
+                    that — `sent_by_user_id` never reaches a response — and a
+                    plain member is told nothing about a gym's staff (§2.4).
+
+                    NOTHING AT ALL when there is no cheer, when the instant or
+                    the preset is unreadable, or when this bundle has no words
+                    for the preset. `cheerNote` returns null and silence claims
+                    nothing; an invented line would put words in a gym's mouth.
+                    No read of its own either — `latestCheer` is a field of the
+                    `/v1/orgs/mine` row this screen already holds. */}
+                <CheerNote latestCheer={gym.latestCheer} />
                 {/* The same reader ~~the member's dashboard card and~~ the
                     owner's Settings panel uses, so no two screens can disagree
                     about when a gym is open. **STRUCK 2026-09-04:** `:33091`

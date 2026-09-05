@@ -34805,3 +34805,184 @@ helper. `node --check` covers the harness (`:13336`'s guard) and the anchor
 pre-check covers the drift. **The one figure that would change is O273's verdict
 on a Sunday, which §3 records rather than measures** — today is a Friday and
 re-running it would reproduce round 1's number, not test the claim.
+
+## 2026-09-05 — "ON A ROLL" AND THE CHEER, WEB HALF: an owner can see who keeps turning up and send them one tap of encouragement — and the mutant aimed at the sharpest thing on the screen was ALIVE, because a list with one name in it cannot tell the pressed row from the first row
+
+**Read before drawing any control whose READ and whose WRITE are gated on
+different privileges, before writing a render fixture that puts ONE row in a
+list a person picks from, before adding a preset to `GYM_CHEER_PRESETS`, before
+reporting a failed background re-read to a user, before turning a 409 into an
+error message, before putting a cheer control anywhere the Members roster is
+drawn, and before pointing a mutant's `expect` filter at a test in a different
+suite.**
+
+Builds `CARD-gym-overview-people.md` §4b, the half `:34240` left. **NOTHING ON
+THE SERVER CHANGED** — no migration, no `apps/api` file, no `packages/shared`
+change — so `:28395`'s fan-out does not apply and `web` is the whole of the
+suite that could move. Kd approved the plan, the four preset lines and the nav
+dot at this card's gate.
+
+### 1 · WHAT AN OWNER AND A MEMBER NOW SEE
+
+Under the numbers on the console's home screen, a folding **"On a roll"**
+section: one row per member who keeps turning up, reading *"Priya Nair · 5 weeks
+running · 3 days in a row · 11 visits"*, with four emoji beside it. One tap
+sends one of Kd's four approved lines. The member reads it on **My gyms**, on
+that gym's card, under a small orange dot on the nav item.
+
+`onARollView.js` holds every sentence and every "is this drawn at all" question,
+pure and tested without a browser; `OnARollPanel.jsx` is markup;
+`utils/cheerPresets.js` holds the four lines, read by BOTH surfaces.
+
+### 2 · THE MUTANT THAT WAS ALIVE, AND IT IS THE FINDING WORTH KEEPING
+
+**C220 sends the cheer to `onARoll[0]` instead of the member whose button was
+pressed.** An owner encouraging Priya cheers somebody else; the seven-day cap
+then locks the wrong person out for a week; the right person is told nothing;
+and **no error appears anywhere**, because the send succeeds.
+
+**It survived its own test.** The fixture had ONE member on the list, so the
+pressed row and row zero were the same person and `toHaveBeenCalledWith` agreed
+with both readings. **This is `CARD-gym-overview-people.md` §5 risk 4 and
+`:28221` §3b in the shape a SCREEN takes** — that entry says a one-gym,
+one-membership fixture cannot see a missing tenancy predicate, and the same
+sentence is true of a one-row list and a wrong-row index.
+
+Fixed in the FIXTURE and not in the mutant: the panel's suite now draws two
+people with Asha first, so every tap in the file lands on a row that is not row
+zero, and the assertion carries its negative (`not.toHaveBeenCalledWith(…, 'r0',
+…)`) rather than leaving the point to the argument list. **STANDING: a fixture
+with one of something cannot see code that reaches for the wrong one, and that
+is as true of a list on a screen as it is of a table in a database.**
+
+### 3 · A CONTROL WHOSE READ AND WHOSE WRITE ARE GATED DIFFERENTLY, WHICH IS A FOURTH BUTTON STATE THE CARD DID NOT NAME
+
+`GET /v1/orgs/:gymId/overview` is gated on **`attendance.read`**; the cheer is
+gated on **`members.read`**. Both are ticks an owner may take away
+independently, so **a staffer can legitimately SEE this list and be refused
+every button on it** — which is `:12518` C/H-2 exactly, the trainer drawn a
+Remove button the server would refuse, who taps it, reads a confirm sheet, and
+is then told their role does not allow it.
+
+The card's §4b.3 named three button states. This is a fourth, added rather than
+discovered later, and `canCheer` reads the privilege the SERVER reads rather
+than a role name (`:11429`'s seam). **Hiding is not the enforcement and is not
+pretending to be** (R3.3): the 403 stays where it is.
+
+**AND THE ORDER OF THE FOUR IS THE SERVER'S ORDER, ASSERTED RATHER THAN
+ASSUMED.** `sendOrgCheer` checks the privilege first, the plan second and the
+seven-day window last, so a staffer without the tick at a lapsed gym is told
+about their ROLE — the refusal they would actually meet. A screen answering in a
+different order would give a reason the server never would.
+
+### 4 · A 409 IS A FACT AND NOT A FAILED ATTEMPT, AND SAYING "JUST NOW" ABOUT IT WOULD REPEAT `:34443` §4
+
+When the send is refused with `cheer_already_sent`, the server has just told the
+screen that this member HAS been cheered inside seven days; the page was stale.
+Leaving four live emoji under that sentence is a control the console knows will
+be refused again.
+
+So the row takes the state the server described — **and it takes a SECOND
+outcome value rather than reusing the one meaning "you just did this"**. The cap
+is per GYM, so the cheer may have been a colleague's, days ago. `:34443` §4 is
+the recorded cost of one wrong pronoun on this exact feature (*"You've already
+cheered this member this week"* — false for the second staffer on the desk, and
+"this week" was wrong too). `'sent'` says *"Cheered just now."*; `'already'`
+says *"Cheered in the last 7 days."*
+
+### 5 · A FAILED BACKGROUND RE-READ MUST NOT BE REPORTED AS A FAILED WRITE
+
+The panel re-reads the overview after a cheer, because `cheerableAt` is the
+server's answer to *"when does this button reopen"* and the only channel
+carrying it — the 409 deliberately omits the instant (`:34240` §6).
+
+**That read swallows its own failure, which is the opposite of every other arm
+on that screen, and the reason is worth stating rather than leaving as an
+oddity.** By the time it runs the cheer HAS landed: the send's `catch` returns
+before reaching it. An error card there would tell an owner their cheer failed
+when it did not — `:5807` on a screen, a false statement about something that
+already happened. What staying quiet costs is one refreshed date, and the button
+is already dead behind the row's own flag. `Overview.jsx` says so at length
+where `reloadOverview` is written, and a render case proves it by failing the
+re-read after a successful send.
+
+### 6 · FOUR BUTTONS, AND THE DEPARTURE FROM THE CARD'S OWN WORDING IS DECLARED
+
+Kd ruled ONE TAP and NO FREE TEXT (`:29961` ruling 4). **The card's plain-words
+§1 says *"one button"*; §6.2.3 lists FOUR approved lines. Those two cannot both
+be built** — one button sends one preset, leaving three of the four lines
+unreachable in the product.
+
+Four emoji on the row honour the ruling literally: any one of them SENDS, with
+nothing to open first and nothing to type. A picker that opened and then sent
+would be the two-tap version. **Kd approved the four messages at this card's
+gate**, so the design that can send all four wins. Declared here and in the
+component rather than made quietly (R0.3).
+
+Each button's `title` and `aria-label` carry the whole sentence, so an owner
+reads what they are about to send before sending it — an emoji alone is not a
+promise anybody can read (`:32395`'s class).
+
+### 7 · THE HAZARD THIS CARD FOUND AND DID NOT FIX, WITH ITS `OWED.md` LINE
+
+`gymCheerSchema.preset` is a `z.enum` over the server's four codes, and
+`orgsApi.js` treats a contract mismatch as a HARD failure. **An api that added a
+FIFTH preset and sent it to an older bundle would blank the member's whole gym
+list**, not just one line — `:16101`'s rule ("a response bound is loosened
+toward what a NEWER server might say") pointing at a field in
+`packages/shared`.
+
+**It pre-dates this card and this card does not make it reachable**:
+`latestCheer` has ridden on `/v1/orgs/mine` since the server half shipped, and
+`orgsApi.js` has parsed it on every console and My Gyms load since then. Fixing
+it is a shared-contract change, i.e. a different card (R1.1). Own `OWED.md`
+line, and the warning also sits at the top of `cheerPresets.js`, where somebody
+adding a fifth line will actually be standing.
+
+### 8 · THE HARNESS'S OWN GUARD CAUGHT A BAD MUTANT BEFORE A BYTE WAS WRITTEN
+
+C219's `expect` filter named a test in the RENDER suite while its `suite` was
+the PURE one, so the filter matched nothing. **The control phase aborted with
+*"that filter matches no test, so its mutants would prove nothing"*** — the
+guard `:14840` earned, working on its own class, before any file was touched.
+**A mutant's suite and its filter are one claim and have to be checked together;
+a filter that matches nothing reports a confident green.**
+
+### Round log
+
+**PROVE, all on the shipping bytes.**
+`web` **1817/1817 across 61 files, exit 0**. Scoped: `onARollView` **28/28** ·
+`cheerPresets` **5/5** · `onARoll.render` **15/15** · `myGyms.render` **59/59**
+(51 before) · `gymMembershipView` **39/39** (28 before) · `console.render`
+**107/107** (106 before). `eslint --max-warnings=0` **exit 0** on all seventeen
+touched web files. `vite build` **exit 0** (its chunk-size warning is
+pre-existing). `node --check` on the harness.
+
+**No `packages/shared` and no `apps/api` change**, so `web` is the whole of the
+suite that could move (`:28395`).
+
+**AUDIT — a stated SUBSET of 238: `MUTATE_ONLY=C215…C221`, 7 mutants, 7 RED, 0
+ALIVE, 0 never ran**, all seven controls GREEN and tallied first, restores
+sha256-verified after every mutant, and the harness printed its own *"THIS IS
+NOT A FULL SWEEP"*. **C220 was ALIVE on the first pass and §2 is that finding.**
+Every row sits in `:5857` rule 4a's always-mutated columns — ownership (which
+member a tap reaches, which role may press) and numbers a user sees. **No
+database mutants: this card changes no server behaviour**, which is 4a's own
+rule.
+
+**ANCHORS WERE CHECKED BEFORE THE SWEEP RATHER THAN BY IT** — all seven match
+exactly one line in their target file, verified by a script, because the
+harness's own abort costs a suite run per bad anchor.
+
+**NOT RUN AND NOT CLAIMED:** any `apps/api` or `packages/shared` suite (no file
+in either was touched), and the full 238-mutant console sweep.
+
+**NO SMOKE HAS RUN AND THE `OWED.md` LINE DOES NOT TICK.**
+`RUNBOOK/smoke-on-a-roll-cheer.md` is written and unrun, and **most of it cannot
+be run at all today**: the list draws only a member with visits in two or more
+consecutive weeks, and **that history cannot be created through any screen** —
+`markAttendance` decides the day server-side, deliberately, so there is no
+app path to a visit dated two weeks ago. Part A (the empty state, the fold, and
+the control's absence from the Members roster) is runnable; Parts B and C are
+written out in full and marked BLOCKED, on `:26012`'s shape rather than
+carrying steps that cannot pass. **T3 IS UNRUN.**
