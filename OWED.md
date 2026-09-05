@@ -7870,7 +7870,7 @@ file and is stated so nobody reads these as lower priority than they are.
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
       a gym — it is the obvious thing to reach for on exactly these screens.
       **And every count comes from the SERVER** (:27992 §3, :29250).
-- [ ] 🟡 **A GYM CANNOT CHEER A MEMBER ON — Kd's own addition at the
+- [x] 🟡 **A GYM CANNOT CHEER A MEMBER ON — Kd's own addition at the
       overview-numbers gate, 2026-09-02 (DECISIONS :29961 ruling 4), tracked
       NOWHERE before this line (grep-verified).** His words: *"if some mebers
       comes to gym reguraly and maintains a continous streak the gym can send
@@ -7926,8 +7926,66 @@ file and is stated so nobody reads these as lower priority than they are.
       only, and the panel read back through the real query and then over HTTP.
       **Part A moved to *Smoke Test Gym***, which is genuinely empty, so the
       empty state is still tested rather than assumed. **T3 IS DONE** (round 2,
-      `:35153`, zero Critical/High). **THIS LINE STILL DOES NOT TICK: no human
-      has looked at any of it yet.**
+      `:35153`, zero Critical/High).
+      **✅ THIS LINE TICKS 2026-09-05 (DECISIONS `:35317`): KD RAN THE SHEET AND
+      REPORTED *"its working and all passed"*.** Steps 5, 7, 8 and 9 are
+      corroborated by his own screenshot — two rows with the right figures,
+      *"Cheered — you can again in 7 days."* on the row he pressed, four live
+      emoji still on the other. **The rest rests on his declaration**
+      (`:33265`'s terms). **HE RAISED THREE CHANGES AT THE SCREEN; they are the
+      three lines immediately below and NONE is a step failure.**
+- [ ] 🟡 **"3 WEEKS RUNNING" READS AS THE SPORT — KD AT THE SCREEN, 2026-09-05**
+      (DECISIONS `:35317`). His words: *"someone will not come to gym for running
+      but to do exercises i think people will misunderstand running with actual
+      running"*. **The figure is TRUE, so this is Low by `:5807` — and it is
+      still wrong for the reader**, on a screen a gym owner scans in seconds, in
+      a product that also HAS a running feature (`:16924`, `:18128`), which is
+      exactly why the word collides. **NOT ONLY THIS SCREEN:** `streakParts` in
+      `apps/web/src/pages/console/onARollView.js` writes both halves, and the
+      member's own side may use the same vocabulary — **grep before wording, and
+      change every copy in one commit** (`:20587`). **NO REPLACEMENT WORD IS
+      CHOSEN: that is Kd's, and inventing one is R0.2.** Recommendation, his to
+      take or refuse: *"3 weeks in a row · 2 days in a row"*, or *"came 3 weeks
+      running"* → *"3 weeks without a gap"*.
+- [ ] 🟡 **AN EMOJI SENDS THE MOMENT IT IS CLICKED, AND KD WANTS A CONFIRM STEP —
+      2026-09-05** (DECISIONS `:35317`). His words: *"whenever a emojy is click a
+      small window just beside the emojy should be shown and in the window show
+      the emojy and the writing and a small send button not writing send symbol i
+      think you are understanding it is not like a big pop up"*.
+      **THE SHAPE IS HIS AND IS SPECIFIC: a small panel BESIDE the emoji — not a
+      modal, not a full-width row** — carrying the emoji, the sentence it will
+      send, and a small button reading the WORD **Send** (he ruled out a send
+      icon in the same breath). **It replaces nothing:** the tooltip that shows
+      the sentence on hover (step 6) is the thing this makes permanent for a
+      finger, since a hover does not exist on a phone (`:17765` — every console
+      feature ships on both).
+      **WHY IT MATTERS MORE THAN IT LOOKS: the cheer is capped and the send is
+      IRREVERSIBLE.** One mis-tap spends that member's whole window, tells the
+      wrong person the gym noticed them, and `:34809` §1's C220 is the recorded
+      shape of the damage. Today the only thing between a stray finger and that
+      is nothing at all.
+      **IT NEEDS A DISMISS PATH, which he did not name and a chat must not skip**
+      — clicking away, Escape, and choosing a different emoji all have to close
+      it (`:14840`: a control whose Cancel is untested).
+- [ ] ❓ **KD QUESTIONED THE SEVEN-DAY CHEER COOLDOWN — HIS OWN RULING — AND HAS
+      NOT SAID WHAT SHOULD REPLACE IT, 2026-09-05** (DECISIONS `:35317`). His
+      words: *"after chering gym can sheer after 7 days men what is even this"*.
+      **THE CAP IS `:29961` RULING 4, HIS OWN** — *"capped one per member per
+      week"* — and Part 3 §4.1 specifies the same `rate-limit 1/member/7d` for
+      the at-risk nudge. So this is a REVERSAL he is entitled to make and nobody
+      else may make for him (R0.2). **DO NOT PICK A NUMBER.**
+      **TWO READINGS AND THEY LEAD TO DIFFERENT BUILDS, so ask which:** (a) the
+      WAIT is too long — a gym seeing somebody every day cannot say anything for
+      a week; or (b) the SENTENCE is the problem — the row spends its width
+      telling an owner when they may act again, which is the app's rule shown as
+      if it were news. **(b) is a wording fix on one screen; (a) changes the
+      server's cap, `gym_cheers`' read, and both surfaces.**
+      **RECOMMENDATION, his to refuse: one per member per DAY.** It keeps the
+      thing the cap exists for — a member cannot be spammed, and a gym cannot
+      make the gesture meaningless by repeating it — while letting a gym react to
+      each visit, which is what the feature is for. **Cost stated: a member who
+      comes daily could collect seven cheers a week, and the four preset lines
+      would repeat.**
 - [ ] 🟡 **A FIFTH CHEER PRESET WOULD BLANK EVERY MEMBER'S GYM LIST, and adding
       one is therefore NOT a list edit** (found 2026-09-05 building the cheer's
       web half, DECISIONS :34809 §7; **pre-existing since the server half of

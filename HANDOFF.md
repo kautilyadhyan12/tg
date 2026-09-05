@@ -1,6 +1,49 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER — **THE SMOKE PASSED AT KD'S BROWSER AND THE
+      `OWED.md` LINE TICKS.** DECISIONS `:35317`. The feature is DONE: server
+      half `:34240`, web half `:34809`, T3 rounds 1 and 2 (`:34992`, `:35153`,
+      zero Critical/High), smoke passed 2026-09-05.
+
+      **START HERE: KD RAISED THREE CHANGES AT THE SCREEN AND ASKED FOR THEM
+      RECORDED, NOT BUILT.** All three are `OWED.md` lines carrying his own
+      words, the shapes he specified, and a recommendation each. **Nothing was
+      built and no code file was touched by this commit.**
+
+  1. 🟡 **"3 weeks running" READS AS THE SPORT.** *"someone will not come to gym
+     for running but to do exercises"*. The figure is TRUE so it is Low
+     (`:5807`) — and this product HAS a running feature, which is why the word
+     collides. **The replacement word is Kd's (R0.2).** `streakParts` in
+     `onARollView.js` writes both halves; grep for every copy first (`:20587`).
+  2. 🟡 **ONE TAP SENDS AN IRREVERSIBLE, CAPPED CHEER.** He wants a small panel
+     BESIDE the emoji — the emoji, the sentence, and a button reading the WORD
+     **Send** — *"not like a big pop up"*. **It needs a dismiss path he did not
+     name** (click-away, Escape, choosing another emoji — `:14840`).
+  3. ❓ **HE QUESTIONED HIS OWN SEVEN-DAY CAP** (`:29961` ruling 4) and did NOT
+     say what replaces it. **DO NOT PICK A NUMBER (R0.2).** Two readings build
+     differently — the WAIT, or the ROW announcing the rule. Also `DECISIONS-
+     INDEX.md` §2.
+
+PROVE: no code changed, so nothing to run. Four ROOT guards green (harnesses 26 ·
+       index 304 pointers, 1386 headings · triggers 1054 from 272 of 410 ·
+       smoke-folds OK). Always-read re-measured with the header's own command:
+       **2,701 = 1,233 + 1,385 + 83** — §2 grew for the FIRST time in 38
+       measurements, and item 3 is why.
+       **THE PASS ITSELF:** steps 5, 7, 8 and 9 are corroborated by Kd's
+       screenshot; the rest is his declaration (`:33265`). **It says nothing
+       about how a streak is EARNED** — the visits were written into the
+       database (`:35240`), never walked in through `markAttendance`.
+
+OPEN:  Kd picks the next card. The people-lists card has THREE panels still
+       owed — *when they come* · *slipping away* · *this week's roster* — plus
+       §5.1's activation checklist, one slice at a time. `:26385` §5 has the
+       wider gym-stage list; `:19016` is the order.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s
+       line-ending-only one are STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER, WEB HALF — **T3 ROUND 2 RUN, DIFF-ONLY: ZERO
       Critical/High, THE PACKET SHIPS** (`:5348` rule 1). DECISIONS `:35153`.
       **START HERE: the code is done and reviewed. What remains is the SMOKE,

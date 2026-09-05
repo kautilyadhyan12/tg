@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,226 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,233 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -12,10 +12,15 @@
    and never *"nothing binds me"*.
 2. **§1 below — STANDING RULES. 1,385 lines** (~680 at the split; 797 on
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
-3. **§2 below — OPEN. 74 lines.** The only forward-looking part of this file.
+3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,688 lines, MEASURED 2026-09-05 and not estimated**
-(1,229 + 1,385 + 74). **THE THIRTY-EIGHTH IS A KD APPROVAL PLUS A FOURTH
+**ALWAYS-READ TOTAL: 2,701 lines, MEASURED 2026-09-05 and not estimated**
+(1,233 + 1,385 + 83). **THE THIRTY-NINTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+AND IT COST THIRTEEN, THE LARGEST IN A WEEK, OF WHICH NINE ARE §2 GROWING FOR
+THE FIRST TIME IN THIRTY-EIGHT MEASUREMENTS.** That nine is a question Kd
+re-opened about his own ruling and has not answered, which is the one thing §2
+exists to hold; the record went to §1B and the four trigger phrases are the rest.
+**§1 UNMOVED AT 1,385.** **THE THIRTY-EIGHTH IS A KD APPROVAL PLUS A FOURTH
 RECURRENCE OF THE UNMIGRATED DEV BRANCH — AND IT COST THREE LINES, every one a
 trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 74.** Its record went to §1B: the
 ruling it carries is SPENT (it authorised one action, now taken), and what binds
@@ -1713,6 +1718,23 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35317** — 2026-09-05 — **THE "ON A ROLL" SMOKE PASSES AT KD'S BROWSER AND
+  THE CHEER'S 🟡 LINE TICKS — and the three things he raised while looking at it
+  are worth more than the pass.** **Read before quoting this pass as covering how
+  a streak is EARNED, before wording any "N weeks running" figure in this
+  product, before shipping any irreversible one-tap control, and before treating
+  the seven-day cheer cap as settled.** *"its working and all passed looking
+  good"*. **His screenshot corroborates steps 5, 7, 8 and 9** — the right figures,
+  the reopening date on the row he pressed, four live emoji still on the other;
+  the rest is his declaration (`:33265`). **It says NOTHING about how a streak is
+  earned**: the visits were written into the database (`:35240`). **Three changes
+  raised at the screen, none a step failure, each on its own `OWED.md` line and
+  none built:** *"3 weeks running"* reads as the SPORT in a product that also has
+  a running feature · a one-tap send with nothing between a stray finger and an
+  irreversible CAPPED action, for which he specified a small panel beside the
+  emoji with a **Send** word-button, *"not like a big pop up"* · and **he
+  questioned his own seven-day cap** (`:29961` ruling 4), which has two readings
+  that build differently and is his to settle (R0.2).
 - **:35240** — 2026-09-05 — **KD RULES THAT THE SMOKE'S HISTORY MAY BE WRITTEN
   STRAIGHT INTO THE DATABASE — and applying it found the dev branch TWO
   migrations behind for the fourth time, with `gym_cheers` missing under the
@@ -5572,6 +5594,15 @@ findable from §1B by construction and never needs to sit in §1 at all.**
 
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
+
+- **:35317** — 2026-09-05 — **OPEN: THE SEVEN-DAY CHEER COOLDOWN.** Kd
+  questioned his own `:29961` ruling 4 at the screen — *"after chering gym can
+  sheer after 7 days men what is even this"* — and did NOT say what replaces it.
+  **A chat may not pick the number (R0.2).** Two readings that build
+  differently: the WAIT is too long, or the ROW should stop announcing the rule.
+  Recommendation on its `OWED.md` line (one per member per DAY, with its cost);
+  he has not chosen. **Check before touching `gym_cheers`' cap, the cheer's
+  copy, or Part 3 §4.1's `1/member/7d` nudge limit.**
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section
   every session**; it is the only forward-looking part of the file.

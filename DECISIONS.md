@@ -35313,3 +35313,72 @@ step in it contains a command.**
 **Both servers are running for the smoke**: api on `0.0.0.0:3000` against the
 **Neon dev branch** (`--env-file=.env`, deliberately — his gyms and accounts live
 there, `:13659`), web on `:5173`.
+
+## 2026-09-05 — THE "ON A ROLL" SMOKE PASSES AT KD'S BROWSER AND THE CHEER'S 🟡 LINE TICKS — and the three things he raised while looking at it are worth more than the pass
+
+**Read before quoting this pass as covering how a streak is EARNED, before
+wording any "N weeks running" figure in this product, before shipping any
+irreversible one-tap control, and before treating the seven-day cheer cap as
+settled.**
+
+Kd ran `RUNBOOK/smoke-on-a-roll-cheer.md` end to end and reported **"its working
+and all passed looking good"**. **`OWED.md`'s cheer line TICKS on this commit**,
+naming the server half (`:34240`), the web half (`:34809`), T3 rounds 1 and 2
+(`:34992`, `:35153`) and the fixture that made it runnable (`:35240`).
+
+### 1 · WHAT THE PASS COVERS, AND THE PART THAT IS NOT HIS WORD ALONE
+
+**His screenshot corroborates steps 5, 7, 8 and 9 directly** — two rows in the
+right order with the right figures, *"Cheered — you can again in 7 days."* on the
+row he pressed, and **four live emoji still on the other row**, which is step 7's
+real check and the surface of `:34809` §1's C220. **Steps 1–4, 6, 10 and 11 rest
+on his declaration** (`:33265`'s terms), and a pass is per STEP, never per
+message.
+
+**IT SAYS NOTHING ABOUT HOW A STREAK IS EARNED.** The ten visits behind it were
+written into the database (`:35240`); nobody has walked one in through
+`markAttendance` and had it appear here.
+
+### 2 · THREE CHANGES HE RAISED AT THE SCREEN, EACH ON ITS OWN `OWED.md` LINE
+
+None is a step failure and none was built — he asked for them recorded, not
+made. **The detail, the shapes he specified and the recommendations live on those
+three lines**; what belongs here is why they are not Low-and-forgotten:
+
+**(a) *"3 weeks running"* reads as the SPORT.** *"someone will not come to gym
+for running but to do exercises"*. The figure is TRUE, so `:5807` puts it in Low
+— **and it is a word collision this product creates for itself**, because it
+also has a running feature (`:16924`). The replacement word is his to choose
+(R0.2).
+
+**(b) A one-tap send with nothing between a stray finger and an irreversible,
+CAPPED action.** He wants a small panel beside the emoji — the emoji, the
+sentence, and a button reading the word **Send** — *"not like a big pop up"*.
+**The hover tooltip that shows the sentence today does not exist on a phone**,
+and `:17765` puts every console feature on both surfaces, so this is the check
+becoming real rather than a second one.
+
+**(c) HE QUESTIONED HIS OWN SEVEN-DAY CAP** — *"after chering gym can sheer after
+7 days men what is even this"* — which is `:29961` ruling 4 in his own words.
+**A chat may not pick the replacement (R0.2), and there are TWO readings that
+build differently**: the WAIT being too long, or the ROW spending its width
+announcing the app's rule. Both are on the line, with a recommendation and its
+cost; he decides.
+
+### Round log
+
+No code, test, harness or migration file is touched: `OWED.md` (the tick and
+three new lines), this entry, its index line, `DECISIONS-TRIGGERS.md` rebuilt,
+`HANDOFF.md`.
+
+**The servers this run used were LOCAL and are named so nobody assumes
+otherwise** — api on `0.0.0.0:3000` against the **Neon dev branch**
+(`--env-file=.env`, deliberately: his gyms live there), web on `:5173`, both
+started for this run and both stopped after it.
+
+**Kd asked for the record to stay short in the same session** — *"document only
+important things dont write unnecessary things in documentation ... keep things
+short understandable"*, with *"not talking about skipping"* said in the same
+breath. **That is `:24703` and it is applied, not re-ruled**: the sentence above
+finds the next chat, the three `OWED.md` lines carry what it must do, and this
+log carries what nobody has to read.
