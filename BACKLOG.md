@@ -3921,3 +3921,55 @@ Six Low, **all six FIXED in the same round** — none bought a further round
       browser). A response bound is loosened toward what a NEWER server might
       say, never tightened to today's behaviour (:16101). **Recorded in the
       schema itself so round 2 does not "fix" it.**
+
+## 2026-09-04 — "on a roll" + the cheer, T3 ROUND 2 (DECISIONS :34666)
+
+**ZERO Critical/High, so the packet SHIPS** (:5348 rule 1). Six Low, all six
+fixed in this commit; none bought a further round and none is a deferral, so
+none takes an `OWED.md` line. **A seventh item was found by this session rather
+than by the review and IS an `OWED.md` change — the full-history gitleaks line
+had been DONE the night before and never ticked** (`OWED.md`, `55395d0`).
+
+- [x] **L-1 · THE CARD STILL PROMISED THE 409 CARRIES THE INSTANT.** Round 1's
+      Low-3 removed `cheerableAt` from the `too_soon` outcome and struck step 5
+      of the same numbered list; **step 4, two lines above it, kept saying the
+      error carries the instant the next cheer becomes available.** The web half
+      (§4b) is built from this card, so the next chat would have built a screen
+      reading a field that is not there. Struck in place, pointing at
+      `cheerableAt` on the overview payload, which is where it actually lives.
+- [x] **L-2 · THE RECORD CONTRADICTED ITSELF ABOUT GITLEAKS INSIDE ONE COMMIT.**
+      `:34655` listed gitleaks under *"NOT RUN AND NOT CLAIMED"*; the commit
+      message said *"no leaks in this change"*. Both true, of **different
+      tools**: `protect` (working tree) ran and was clean, `detect` (full
+      history) did not — and `detect` is the job CI runs, which then went RED.
+      Naming a tool without its scope is what let one commit hold two true
+      sentences that read as a contradiction. Struck in place (:20587).
+- [x] **L-3 · A MUTANT THAT IS EQUIVALENT ON SUNDAYS AND SAID SO NOWHERE.**
+      O273 deletes the span floor. Its test builds two visits at `[0, isodow]`,
+      so on `isodow = 7` they are a genuine seven days apart, the member belongs
+      on the list, and the test asserts that arm instead — the floor cannot fail
+      on the one weekday where the nearest previous bucket is already 7 days
+      back. **A sweep run on a Sunday reports O273 ALIVE**, and "19 RED, 0 ALIVE"
+      is a Friday measurement quoted without its weekday. Written into the
+      mutant's own `why`, where a future sweep reads it.
+- [x] **L-4 · THE 404 BECAME FALSE FOR COMPED MEMBERS AND NO SCREEN CAN REACH
+      IT YET.** Round 1's own L-1 fix added `complimentary = false` to the write
+      door, so a comped member now gets *"That person isn't a member of this
+      gym."* — and the roster draws them with an orange **Complimentary** badge
+      (:15093). Unreachable today (no screen; the panel excludes them), reachable
+      the moment §4b puts a Cheer control on the roster. **Recorded as a build
+      constraint in §4b rather than fixed in code**: the one-sentence 404 is step
+      3's deliberate choice (:34240 §6), so a second sentence is a re-ruling and
+      not a patch.
+- [x] **L-5 · THE CLAMP BOUNDED ONE DIRECTION.** Round 1's L-4 floored
+      `getGymRegulars`'s `limit` against `LIMIT -3`; `Math.max(1, Math.min(x, 10))`
+      still hands Postgres `LIMIT 2.5` and `LIMIT NaN`. **No route schema reaches
+      this value — no route passes a limit at all — so the clamp is the only
+      parser it ever meets** and has to be total. `Math.trunc` first, then
+      `Number.isFinite`, because `Math.max(1, NaN)` is NaN.
+- [x] **L-6 · AN ABSENCE ASSERTION THAT HAND-COPIED ITS SUBJECT.**
+      `not.toMatch(/Cheer c1-owner/)` duplicated `makeUser`'s own
+      `` `Cheer ${local}` ``. Correct today, and vacuous the moment the label is
+      renamed, with nothing going red — :28976's class, whose two sibling
+      assertions (`userId`, `email`) cannot drift because they ask the helper.
+      `makeUser` now returns `displayName` and the assertion asks for it.

@@ -4784,10 +4784,18 @@ export async function getGymRegulars(
   const gym = gymRows[0];
   if (gym === undefined) return null;
 
-  // FLOORED AS WELL AS CAPPED. `Math.min` alone hands `LIMIT -3` straight to
-  // Postgres for a negative argument; there is no caller today, which is
-  // exactly when a bound like this is cheapest to get right.
-  const limit = Math.max(1, Math.min(input.limit ?? ON_A_ROLL_LIMIT, ON_A_ROLL_LIMIT));
+  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER. `Math.min` alone hands
+  // `LIMIT -3` straight to Postgres for a negative argument (T3 round 1);
+  // `Math.max(1, Math.min(…))` still hands it `LIMIT 2.5` and `LIMIT NaN`
+  // (round 2). **This bound is the ONLY parser this value ever meets** — no
+  // route schema reaches it, because no route passes a limit at all — so it
+  // has to be total rather than merely floored. `Math.trunc` first so the
+  // clamp works on a whole number; `Number.isFinite` because `Math.max(1, NaN)`
+  // is NaN and would reach the query.
+  const asked = Math.trunc(input.limit ?? ON_A_ROLL_LIMIT);
+  const limit = Number.isFinite(asked)
+    ? Math.max(1, Math.min(asked, ON_A_ROLL_LIMIT))
+    : ON_A_ROLL_LIMIT;
 
   const rows = await sql<
     {

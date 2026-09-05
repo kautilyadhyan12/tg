@@ -34651,10 +34651,148 @@ the query O266 and O267 aim at — a second 19/19, not the first one re-quoted.
 **NOT RUN AND NOT CLAIMED:** the full api suite (one run went 792/795 with the
 three failures in `catalog.seed.test.ts`, the **pre-existing** seed-count flake
 `CLAUDE.md` and `:13746` both document — no `apps/api/src` file this round
-touches is in it), any web suite (**no `apps/web` file was touched**), and
-gitleaks.
+touches is in it), any web suite (**no `apps/web` file was touched**), ~~and
+gitleaks~~ **— STRUCK by round 2 (L-2): this commit ran `gitleaks protect` over
+the working tree, clean, and its commit message says so. What was not run is
+`gitleaks detect` over FULL HISTORY, which is the job CI runs — and it went RED
+on this commit. Naming the tool without its scope made a true sentence and a
+true commit message contradict each other. See `:34666` §2.**
 
 **STILL TRUE AND UNCHANGED BY THIS ROUND: no screen exists, no smoke was run or
 offered (`:26012`'s shape), and the `OWED.md` line does not tick.** The web half
 (§4b) is the next artefact. **This branch has still never reached GitHub since
 2026-09-02, so CI has seen none of it.**
+
+## 2026-09-04 — "ON A ROLL" AND THE CHEER, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and a claim struck in one item of a numbered list was still standing two lines above it
+
+**Read before striking a claim inside a numbered list, before naming a tool in a
+PROVE section without naming its SCOPE, before quoting a mutation figure without
+the WEEKDAY it was measured on, before narrowing a write door's population
+without re-reading the sentence it refuses with, and before trusting a clamp that
+no schema stands above.**
+
+Diff-only round 2 over `0108449` (`:34443`), fresh chat, `:5348` rule 2. **Six
+Low, zero Critical/High, so the packet SHIPS** (rule 1) — but **`OWED.md`'s line
+still does NOT tick: no screen exists, so no smoke has run** (`:26012`'s shape).
+The escape hatch did not fire: round 1 carried four Critical/High and this round
+carries none. Kd approved the list before a byte was written (*"fix all"*).
+Every finding was reproduced against the code first (`:23928`, `:24559` — a
+review is hearsay until run), and all six held.
+
+### 1 · A STRIKETHROUGH IS SCOPED TO THE ITEM IT IS IN, AND THE NEXT CHAT READS THE WHOLE LIST
+
+Round 1's Low-3 deleted `cheerableAt` from the `too_soon` outcome and struck
+**step 5** of `CARD-gym-overview-people.md` §4a.4's numbered list. **Step 4, two
+lines above it, still said the 409 carries *"the instant the next one becomes
+available so the screen states it rather than guessing"*.**
+
+**The card is the build document for the web half (§4b), which is the very next
+artefact**, so the next chat would have drawn a screen reading a field the server
+does not send — and it would have been reading a sentence that survived the round
+which removed the thing it describes.
+
+**STANDING: strike a claim and then COUNT THE OTHER ITEMS.** A numbered list
+reads as one statement and is edited one item at a time; `:20587`'s *"correct a
+figure in ALL of its copies"* applies inside a single block, not only across
+files. Grep-verified this session: **one copy, and it was that one.**
+
+### 2 · A TOOL NAMED WITHOUT ITS SCOPE MADE TWO TRUE RECORDS CONTRADICT EACH OTHER
+
+`:34655` listed **gitleaks** under *"NOT RUN AND NOT CLAIMED"*. `0108449`'s commit
+message said *"gitleaks: no leaks in this change"*. **Both are true and they are
+about different tools:** `gitleaks protect` reads the WORKING TREE and ran clean;
+`gitleaks detect` reads FULL HISTORY, did not run — **and it is the job CI runs.**
+
+**CI then went RED on it**, on a commit that changed no code, over three prose
+sentences of the form *"API half: `kcalPointForSetsV…`"* — a function name beside
+the word API, which is the shape of `api_key = <secret>`. Fixed in `55395d0` by
+pinning three fingerprints. **That commit has no entry of its own, so this is the
+only place a later reader will find it** (`:28976`'s precedent — a commit message
+cannot be edited afterwards).
+
+**STANDING: a PROVE line names the TOOL AND ITS SCOPE.** *"gitleaks"* is not a
+claim; *"`protect`, working tree"* is.
+
+**AND IT CLOSED AN `OWED.md` LINE NOBODY TICKED.** That line predicted this
+exactly — *"a scanner that is routinely red is a scanner nobody reads"* — and
+`55395d0` is its fix. **It sat DONE and open for a day**, which is the deferral
+rule failing in the direction nobody watches: an item that is finished and still
+listed costs the next chat the same re-derivation as one that was never started.
+Ticked here, dated, commit named, CI run named.
+
+### 3 · A MUTANT CAN BE EQUIVALENT ON ONE WEEKDAY, AND "0 ALIVE" WILL NOT SAY SO
+
+**O273** deletes the span floor that fixed round 1's C/H-1. Its test builds two
+visits at `[0, isodow]` — so on **`isodow = 7`, a Sunday, they are a genuine
+seven days apart**, the member BELONGS on the list, and the test asserts that arm
+instead. The floor cannot fail on the one weekday where the nearest previous
+bucket is already seven days back.
+
+**So a sweep run on a Sunday reports O273 ALIVE, and round 1's "19 RED, 0 ALIVE"
+is a FRIDAY measurement quoted without its weekday.** The test's own docblock had
+recorded the arithmetic (*"six days in seven this test goes red"*); the MUTANT,
+which is what a sweep reader looks at, had not. Written into its `why`.
+
+**STANDING: this repo already knows a green PROVE can be a property of the day
+it ran on** — that is round 1's C/H-1 in its own words. **The same is true of a
+RED one, and of an ALIVE one.**
+
+### 4 · NARROWING A WRITE DOOR MADE ITS REFUSAL SENTENCE FALSE, AND ONLY THE MISSING SCREEN HIDES IT
+
+Round 1's own Low-1 added `complimentary = false` to the cheer door so it matched
+the panel's population. **The refusal sentence did not move with it:** a
+complimentary member — a trainer, and the owner's own seat — is now told
+*"That person isn't a member of this gym."* while the Members roster draws them
+with an orange **Complimentary** badge (`:15093`).
+
+**Not fixed in code, and that is the finding rather than a deferral.** The
+one-sentence 404 is `:34240` §6's deliberate choice — *"never a sentence naming
+whether the person exists"* — so a second sentence is a re-ruling, not a patch.
+**Recorded instead as a build constraint on §4b: the Cheer control lives on the
+panel and never on the roster**, and a control anywhere the roster is drawn needs
+the refusal re-ruled FIRST.
+
+**STANDING: when a fix narrows WHO a door accepts, re-read what it says to the
+people it has just started refusing.** A population change and a copy change are
+the same edit, and only one of them is in the diff.
+
+### 5 · A CLAMP WITH NO SCHEMA ABOVE IT IS THE ONLY PARSER THAT VALUE MEETS
+
+Round 1's Low-4 floored `getGymRegulars`'s `limit` because `Math.min` alone hands
+Postgres `LIMIT -3`. **`Math.max(1, Math.min(x, 10))` still hands it `LIMIT 2.5`
+and `LIMIT NaN`** — `Math.max(1, NaN)` is NaN.
+
+**R2.3 says every external input crosses the boundary through a schema; this
+value never crosses one**, because no route passes a limit at all. **A bound
+reached only from inside the server is where R2.3 silently stops applying**, and
+"there is no caller today" is the argument for making it total, not for stopping
+half way — which is what round 1 itself said one sentence earlier.
+
+### Round log
+
+**PROVE, all LOCAL (`127.0.0.1:5433`, `:13659`), on the final bytes.** Figures in
+the commit message and the `HANDOFF.md` block; both quote the same runs.
+
+**L-6's ASSERTION WAS PROVEN LIVE RATHER THAN ASSUMED, because it is an absence
+assertion and `:28976` is the class where those are vacuous.** No mutant covers
+the sender leak — that assertion is its only observer — so `sentBy` was added for
+real, through the lateral, the row type, the mapping, the service and the shared
+schema, and the test went RED at exactly `orgs.cheers.test.ts:661`
+(*"expected … not to contain 'Cheer c1-owner'"*). **Reverted by replacing the
+strings, never `git checkout --`** (`:31921` §4b): `service.ts` and
+`packages/shared/src/orgs.ts` are byte-identical to HEAD in `git diff`, and
+`repo.ts` differs only by L-5.
+
+**AND THE PROBE FOUND A GUARANTEE STRONGER THAN THE TEST, which is why it is
+recorded:** `gymCheerSchema` is `.strict()` and the send response uses it, so the
+FIRST attempt — a required `sentBy` — 500'd the send door before the member's
+card was ever read. **A future `sentBy` cannot reach a member by being added to
+the repo alone; the contract refuses it.** The test guards the case where
+somebody adds it to both.
+
+**The sweep was NOT re-run for its own sake.** L-3 edits a mutant's prose and no
+mutant's `from`/`to`; L-5 edits a line no mutant anchors on; L-6 edits a test
+helper. `node --check` covers the harness (`:13336`'s guard) and the anchor
+pre-check covers the drift. **The one figure that would change is O273's verdict
+on a Sunday, which §3 records rather than measures** — today is a Friday and
+re-running it would reproduce round 1's number, not test the claim.

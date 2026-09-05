@@ -1,6 +1,70 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: "ON A ROLL" + THE CHEER — **T3 ROUND 2 RUN: ZERO Critical/High, THE
+      PACKET SHIPS.** DECISIONS `:34666`. **START HERE: the packet ships and
+      the `OWED.md` line STILL DOES NOT TICK** — no screen exists, so no smoke
+      was run or offered (`:26012`'s shape). Next artefact is
+      `CARD-gym-overview-people.md` §4b, the web half. Six Low, all fixed.
+
+  1. **A STRIKETHROUGH IS SCOPED TO THE ITEM IT IS IN.** Round 1 struck step 5
+     of the card's §4a.4 list and left step 4, two lines up, still promising the
+     409 carries the instant. **The card is what §4b is built from**, so the
+     next chat would have drawn a screen reading a field the server does not
+     send. Grep-verified one copy repo-wide; struck in place.
+  2. **A TOOL NAMED WITHOUT ITS SCOPE MADE TWO TRUE RECORDS CONTRADICT.**
+     `:34655` said gitleaks was NOT RUN; the commit message said no leaks. Both
+     true — `protect` (working tree) ran, `detect` (full history) did not, and
+     `detect` is the job CI runs. **CI then went RED on `0108449`**, over prose
+     reading "API half: `kcalPointForSetsV…`". `55395d0` pinned three.
+  3. **THAT CLOSED AN `OWED.md` LINE THAT HAD SAT DONE AND UNTICKED.** Found by
+     grepping the record, not by the review. Ticked, dated, commit + CI run
+     named.
+  4. **A MUTANT CAN BE EQUIVALENT ON ONE WEEKDAY.** O273 is ALIVE on a Sunday —
+     its fixture's two visits are a genuine 7 days apart on `isodow 7`, so the
+     span floor cannot fail. **"19 RED, 0 ALIVE" was a FRIDAY measurement.**
+     Written into the mutant's own `why`.
+  5. **NARROWING A WRITE DOOR MADE ITS REFUSAL FALSE.** Round 1's own fix added
+     `complimentary = false`, so a comped member is now told they are not a
+     member while the roster draws them with a Complimentary badge. Unreachable
+     (no screen); recorded as a §4b build constraint — **the Cheer control never
+     sits on the roster** — because the one-sentence 404 is a Kd-level choice.
+  6. **L-6's ABSENCE ASSERTION WAS PROVEN LIVE, NOT ASSUMED** (`:28976`'s
+     vacuity class): `sentBy` added for real through five files, RED at
+     `orgs.cheers.test.ts:661`, reverted by replacing strings (`git diff` clean
+     on `service.ts` and `packages/shared/src/orgs.ts`). **The probe also found
+     that `gymCheerSchema` is `.strict()`, so a `sentBy` added to the repo alone
+     500s the send door before it can reach anybody.**
+
+PROVE: all LOCAL (`127.0.0.1:5433`), final bytes, exit codes read directly.
+       `orgs.cheers` **18/18** · `orgs.overview` + `orgs.routes` **160/160** ·
+       `tsc --noEmit` exit 0 on api AND shared · `eslint --max-warnings=0`
+       exit 0 on three files · `node --check` on the harness exit 0.
+       Four ROOT guards green: harnesses **26 scripts (23 .mjs + 3 .sh)**,
+       index **299 pointers resolve (298 on a heading, 1 deliberate
+       mid-entry), 1355 headings**, triggers **up to date — 1029 from 267 of
+       405 rulings, 138 declaring none**, smoke-folds **OK**.
+       Always-read re-measured with the header's own command: **2,667 =
+       1,208 + 1,385 + 74**, §1 and §2 UNMOVED.
+       **CI: run `33905568207` on `55395d0`, all five jobs success, branch
+       `web-repoint`** — read, not assumed (`:25008`).
+       **SWEEP NOT RE-RUN AND SAID SO:** L-3 edits a mutant's prose, L-5 a line
+       no mutant anchors on, L-6 a test helper. The one figure that would move
+       is O273 on a Sunday, which is recorded rather than measured.
+
+OPEN:  **The whole web half (§4b)**, and it now carries TWO written
+       constraints from this round: the 409 does NOT carry the instant
+       (`cheerableAt` on the overview payload does), and **no Cheer control
+       anywhere the Members roster is drawn** without the refusal being
+       re-ruled first. **The smoke, when it comes, needs state nobody has**:
+       Kd's gym has no member with visits in two consecutive weeks (`:29870`).
+       **NOT BUILT, `:5348` rule 6:** a guard counting audit rows the way
+       `orgs.routes.test.ts:6226` counts privilege call sites.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s are
+       STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER — **T3 ROUND 1 RUN AND ITS TEN FIXES SHIPPED.**
       DECISIONS `:34443`. **START HERE: THE PACKET DID NOT SHIP THIS ROUND
       (four Critical/High), the fixes are in, and ROUND 2 IS UNRUN.** The

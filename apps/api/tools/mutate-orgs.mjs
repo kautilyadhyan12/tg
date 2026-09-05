@@ -3237,7 +3237,7 @@ const MUTANTS = [
     id: 'O273',
     target: 'repo',
     suite: CHEERS_SUITE,
-    why: "WEEK BUCKETS GO BACK TO PASSING AS WEEKS. date_trunc('week') is a Monday, so a Sunday visit and a Monday visit are two buckets ONE DAY apart - and somebody whose entire history is yesterday and today is drawn on the owner's home screen as 2 weeks running. That is the brand-new member ON_A_ROLL_MIN_WEEKS own docblock says it exists to keep off a list headed on a roll, arriving through the calendar instead of through the floor. It shipped in the card and was found by T3 round 1 (C/H-1)",
+    why: "WEEK BUCKETS GO BACK TO PASSING AS WEEKS. date_trunc('week') is a Monday, so a Sunday visit and a Monday visit are two buckets ONE DAY apart - and somebody whose entire history is yesterday and today is drawn on the owner's home screen as 2 weeks running. That is the brand-new member ON_A_ROLL_MIN_WEEKS own docblock says it exists to keep off a list headed on a roll, arriving through the calendar instead of through the floor. It shipped in the card and was found by T3 round 1 (C/H-1). ** ALIVE ON A SUNDAY, AND THAT IS EQUIVALENCE RATHER THAN A REGRESSION (T3 round 2): its test builds the two visits at [0, isodow], so on isodow 7 they are a genuine seven days apart, the member BELONGS on the list, and the test asserts that arm instead. The span floor cannot fail on the one weekday where the nearest previous bucket is already 7 days back. Six days in seven this row is RED; on the seventh, re-read the test docblock rather than the code. Quote the WEEKDAY beside any sweep figure that includes O273 **",
     expect: "a streak that only straddled a Monday",
     from: "      AND (SELECT today FROM b) - ws.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int\n",
     to: '\n',

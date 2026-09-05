@@ -9049,9 +9049,21 @@ file and is stated so nobody reads these as lower priority than they are.
       cover"* with the reason. Those guarantees rest on tests and mutants alone
       until this line ticks — **which makes this the cheapest way to buy back a
       browser check the project currently cannot perform.**
-- [ ] ⚪ **`gitleaks detect` OVER FULL HISTORY EXITS NON-ZERO ON TWO FALSE
+- [x] ⚪ **DONE 2026-09-04, commit `55395d0`** — three fingerprints pinned, not
+      the two below: a local full-history scan found a THIRD of the identical
+      class (`OWED.md`, `kcalPointForSetsV3`) that no CI run had reached yet, and
+      pinning only what went red would have left the next full scan to fail on
+      the one already known. **CI's `gitleaks (full history)` job is GREEN on
+      `55395d0`** (run `33905568207`, branch `web-repoint`, all five jobs
+      success). **The prediction below held exactly and is why this was ⚪ and not
+      ⚫:** CI went red on this rule on 2026-09-04, on a commit that changed no
+      code — a scanner that is routinely red is a scanner nobody reads, and the
+      first time it said something real it had to be told apart from the noise.
+      `.gitleaksignore` carries the reason at length, including the shape that
+      will fire again: **the word "API" beside a backticked identifier.**
+      ~~`gitleaks detect` OVER FULL HISTORY EXITS NON-ZERO ON TWO FALSE
       POSITIVES IN `HANDOFF.md`, and they are not in `.gitleaksignore` — measured
-      2026-08-27.** Both are the `generic-api-key` rule firing on the prose
+      2026-08-27.~~ Both are the `generic-api-key` rule firing on the prose
       *"API half: `kcalPointForSetsV3`"* in handoff blocks from commits
       `9b54454a` and `84ff14d7` (2026-08-11): an 18-character "secret" that is a
       TypeScript function name. **Verified non-secrets before writing this line,

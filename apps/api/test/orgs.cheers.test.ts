@@ -181,12 +181,17 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
 
   const makeUser = async (local: string) => {
     const email = `orgcheer-t-${local}@example.com`;
+    // RETURNED, NOT RE-TYPED BY THE CALLER. The leak assertion below asserts on
+    // this exact string; a caller spelling it out again is a copy that a rename
+    // makes vacuous with nothing going red (T3 round 2, `:28976`'s class — an
+    // absence assertion whose subject has quietly stopped existing).
+    const displayName = `Cheer ${local}`;
     const reg = await api().inject({
       method: "POST",
       url: "/v1/auth/register",
       remoteAddress: nextIp(),
       headers: { "content-type": "application/json" },
-      payload: JSON.stringify({ email, password: PASSWORD, displayName: `Cheer ${local}` }),
+      payload: JSON.stringify({ email, password: PASSWORD, displayName }),
     });
     expect(reg.statusCode).toBe(201);
     const { userId } = JSON.parse(reg.body) as { userId: string };
@@ -198,7 +203,7 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       payload: JSON.stringify({ email, password: PASSWORD }),
     });
     expect(login.statusCode).toBe(200);
-    return { userId, email, cookies: cookieMap(login) };
+    return { userId, email, displayName, cookies: cookieMap(login) };
   };
 
   const subscribeGym = async (gymId: string) => {
@@ -653,7 +658,7 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       const serialised = JSON.stringify(card);
       expect(serialised).not.toContain(owner.userId);
       expect(serialised).not.toContain(owner.email);
-      expect(serialised).not.toMatch(/Cheer c1-owner/);
+      expect(serialised).not.toContain(owner.displayName);
     },
     TEST_TIMEOUT_MS,
   );

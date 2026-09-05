@@ -223,8 +223,15 @@ Inside one transaction, in this order:
    condition, exactly as attendance asks it (`:27992` §2: no dues check, ever).
    Otherwise 404, never a sentence naming whether the person exists.
 4. **The rolling-7-day check**, under the lock. Already cheered inside 7 days →
-   typed **409 `cheer_already_sent`**, carrying the instant the next one becomes
-   available so the screen states it rather than guessing.
+   typed **409 `cheer_already_sent`**, ~~carrying the instant the next one
+   becomes available so the screen states it rather than guessing.~~
+   **— STRUCK by T3 round 1's Low-3, and round 2 found this copy still
+   standing.** The error carries a status, a code and a sentence and nothing
+   else: `OrgsError` is shared by seventeen doors, and widening it for one rare
+   path is R1.1's drive-by. **The instant reaches the screen on
+   `cheerableAt` in the overview payload**, which is also what a stale page
+   needs re-read anyway — `service.ts` says so at length where the 409 is
+   thrown.
 5. Insert, ~~**No `audit_log` row** — `:28221` §7's reasoning: the log records
    what staff did TO a gym's shape, and cheers are high-volume and
    reversible-by-nothing.~~ **— STRUCK by T3 round 1 (C/H-3): that citation says
@@ -322,6 +329,16 @@ hides a one-day streak.**
    frees up · and greyed with a true sentence on a read-only (lapsed) gym
    (`:24141` — every dead button is greyed with a sentence saying why, never
    silently inert).
+   **AND IT LIVES ON THIS PANEL ONLY — NEVER ON THE MEMBERS ROSTER** (T3 round
+   2). The panel and the write door agree on their population: both exclude
+   complimentary members (§4a.4 step 3). **The roster does not** — it draws a
+   comped member with an orange *Complimentary* badge (`:15093`), so a Cheer
+   control there would answer *"That person isn't a member of this gym"* about
+   somebody the owner is looking at, badge and all. That is `:5807` on a screen,
+   and it is unreachable today only because no screen exists. **A Cheer control
+   anywhere the roster is drawn needs the refusal to be re-ruled FIRST** — the
+   one-sentence 404 is step 3's deliberate choice, not an oversight to route
+   around.
 4. **The presets carry NO NUMBERS.** A stored line saying "4 weeks!" is true the
    minute it is sent and false the week after — `:7298`'s class, a sentence that
    outlives the condition that raised it. The streak figure is drawn live beside
