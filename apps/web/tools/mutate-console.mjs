@@ -2990,6 +2990,16 @@ const MUTANTS = [
     from: '  const confirm = async (userId, preset) => {\n    setPending(null);',
     to: '  const confirm = async (userId, preset) => {',
   },
+  // ── T3 ROUND 2 ON THE CONFIRM STEP (2026-09-05) ────────────────────────────
+  {
+    id: 'C229',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "THE CLICK-AWAY GUARD'S SCOPE, WHICH IS THE HALF A REFACTOR MOVES. C227 kills the contains TEST in onDown; this kills the WIRING that gives it anything to test, by detaching the ref from the wrapper that holds the emoji and the panel together. openBoxRef.current is then always null, every mousedown closes, and way out 4 dies in the browser's own event order: the mousedown DISMISSES and the click RE-OPENS, so the panel is left ARMED after the owner pressed the same emoji to get rid of it - landing in a state a click-only test cannot tell from a close. MEASURED at T3 round 2: the click-only form of that case stayed GREEN under exactly this edit, which is why it now presses mouseDown first. It also exercises the box === null arm the L-5 fix added, whose live path nothing else reaches",
+    expect: 'closes when the same emoji is pressed again, and nothing is sent',
+    from: '                      <div className="relative" ref={chosen === null ? null : openBoxRef}>',
+    to: '                      <div className="relative">',
+  },
 ];
 
 const abort = (msg) => {

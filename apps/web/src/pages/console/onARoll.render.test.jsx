@@ -405,10 +405,19 @@ describe('the panel that stands between a stray finger and a sent cheer', () => 
     drawOverview();
     fireEvent.click(await cheerButton('Great week'));
     expect(await sendButton()).toBeTruthy();
-    fireEvent.click(await cheerButton('Great week'));
+    // **PRESSED THE WAY A BROWSER PRESSES IT** (T3 round 2 L-1). A bare `click`
+    // dispatches NO `mousedown`, so this case could not see the click-away
+    // guard's SCOPE break: with the ref moved off the wrapper that holds the
+    // emoji, the `mousedown` DISMISSES and the `click` RE-OPENS, landing in
+    // exactly the visible state a close would — `:35511` §2's shape, arriving
+    // on the way out instead of on the swap. **C229** is that mutant, and the
+    // click-only form of this case stays GREEN under it.
+    const same = await cheerButton('Great week');
+    fireEvent.mouseDown(same);
+    fireEvent.click(same);
     await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
     expect(orgService.sendCheer).not.toHaveBeenCalled();
-    // AND THE EMOJI COME BACK, for the reason above.
+    // AND THE EMOJI COME BACK — `:28976`, as in the click-away case above.
     expect(await cheerButton('Great week')).toBeTruthy();
   });
 
@@ -509,6 +518,11 @@ describe('the panel that stands between a stray finger and a sent cheer', () => 
     fireEvent.click(await cheerButton('Great week'));
     fireEvent.click(await sendButton());
     await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
+    // **AND THE MEMBER IS STILL ON SCREEN** (T3 round 2 L-6). The absence above
+    // is satisfied just as well by a row that vanished ENTIRELY mid-send —
+    // `:28976` — and this case's whole subject is what the owner is looking at
+    // while they wait. The two sibling dismiss cases carry the same control.
+    expect(screen.getByText('Priya Nair')).toBeTruthy();
     release();
   });
 });

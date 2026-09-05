@@ -7969,10 +7969,12 @@ file and is stated so nobody reads these as lower priority than they are.
       NO SMOKE HAS RUN AND T3 IS UNRUN.** An emoji now opens a small panel
       beside it holding the emoji, the sentence and a **Send** button (his gate
       ruling: *"send should not be a text but should be a button"*); only Send
-      calls the server. **All five ways out are built and tested** — Send,
-      Escape, a click elsewhere, the same emoji again, and a DIFFERENT emoji
-      which SWAPS rather than dismisses, so `:14840`'s untested-Cancel defect is
-      closed rather than carried. `web` 1831/1831, C224/C225/C226 3 RED, C220
+      calls the server. **All FOUR ways out are built and tested** — Send,
+      Escape, a click elsewhere and the same emoji again — **plus the SWAP,
+      which is not a way out**: a DIFFERENT emoji replaces the panel rather than
+      dismissing it, so `:14840`'s untested-Cancel defect is closed rather than
+      carried. (This line and the panel's own heading both read *"five"* until
+      T3 round 2 counted the swap out of the total — `:20587`.) `web` 1831/1831, C224/C225/C226 3 RED, C220
       re-run and still RED. Sheet steps 6, 6b and 7 rewritten.
       **T3 ROUND 1 (DECISIONS `:35511`) FOUND ONE Critical/High — the click-away
       guard was the only thing letting **Send** be pressed at all in a browser,

@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,236 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,248 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -14,8 +14,18 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,704 lines, MEASURED 2026-09-05 and not estimated**
-(1,236 + 1,385 + 83). **THE FORTIETH IS A RED CI RUN THE OPERATOR FOUND BEFORE
+**ALWAYS-READ TOTAL: 2,716 lines, MEASURED 2026-09-05 and not estimated**
+(1,248 + 1,385 + 83). **THE FORTY-FIRST IS A T3 ROUND THAT SHIPS ITS PACKET —
+zero Critical/High, six Low all fixed — AND IT COST FIVE LINES, every one a
+trigger phrase, §1 AND §2 UNMOVED AT 1,385 AND 83.** Its record is a ROUND
+record and went to §1B, where `:24813` sends it. **AND THE HEADER HAD DRIFTED
+AGAIN, WHICH IS WHY THE FIGURE MOVED BY TWELVE AND NOT BY FIVE: `1,236` was
+already `1,243` on disk** — the two commits before this one added rulings and
+re-measured nothing — **so seven of the twelve are theirs and five are mine.**
+Fourth recorded time this header has misreported itself, which keeps the drift
+the standing finding rather than any one delta; taken with this header's own
+prescribed command against the bytes being committed, never by adding a delta to
+the figures below. **THE FORTIETH IS A RED CI RUN THE OPERATOR FOUND BEFORE
 THE CHAT DID — AND IT COST THREE LINES, all trigger phrases, §1 AND §2 UNMOVED.**
 Taken with this header's own prescribed command against the bytes being
 committed. **THE THIRTY-NINTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
@@ -1721,6 +1731,29 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35593** — 2026-09-05 — **THE CONFIRM STEP, T3 ROUND 2 (diff-only): ZERO
+  Critical/High, THE PACKET SHIPS — and TWO of the six Low are round 1's OWN Low
+  fixes coming back.** **Read before trusting a fix round's own Low fixes,
+  before copying an `aria-haspopup` from a neighbouring component, before
+  counting a swap or a retry into a total of ways out, before closing a fix
+  round without its `BACKLOG.md` block, and before writing a comment that names
+  a live failure nobody has reached.** Round 1's L-1 made a heading FIVE and
+  then wrote three lines under it saying the fifth *"is not a way out at all"*;
+  its L-3 added `aria-haspopup="dialog"` copying only the TRIGGER half of
+  `Select.jsx`'s pair, announcing a dialog this panel deliberately is not
+  (`:23578`). **`:6277`'s shape one severity down, and the argument for rule 2
+  being DIFF-only rather than fixes-exempt.** Round 1 also left its own
+  Critical/High class on the one way out it did not rewrite — **`C229` detaches
+  `openBoxRef` from the wrapper, the edit a refactor makes, and the click-only
+  case was ALIVE under it, RED once `mouseDown` is pressed first**; it is not
+  C227 one layer over (that kills the TEST, this the WIRING). Also: no
+  `BACKLOG.md` block for six fixed Lows, `OWED.md` counting the swap into a
+  total, and an absence assertion with no positive control (`:28976`) in the
+  case that round wrote itself. `web` **1834/1834, unchanged and correctly so**
+  (assertions added to existing cases, no new case) · **C224–C229, 6 RED, 0
+  ALIVE**, run UNPIPED with its exit code read (`:10726` §2). **Smoke unrun,
+  `OWED.md` does not tick; zero Critical/High ends the review and Kd's browser
+  is the remaining gate.**
 - **:35511** — 2026-09-05 — **THE CONFIRM STEP, T3 ROUND 1: ONE Critical/High —
   the guard that lets **Send** be pressed at all was held by nothing, and 25
   green tests could not see the feature die.** **Read before asserting a click
@@ -1753,10 +1786,12 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   "sends on sight" half is what he reversed**, because the cheer is capped and
   irreversible and `:34809` §2 is the recorded damage. **It also makes the hover
   real**: each emoji's `title` already showed the sentence, and a hover does not
-  exist on a phone (`:17765`). **FIVE WAYS OUT, none of which he named and
-  `:14840` requires:** Send · Escape · a click elsewhere · the same emoji again ·
-  **and a DIFFERENT emoji SWAPS rather than dismisses**, which is the one a real
-  mis-tap uses. **ONE `pending` value, never a second per-row `Map`** —
+  exist on a phone (`:17765`). **~~FIVE WAYS OUT~~ FOUR WAYS OUT, PLUS THE SWAP
+  — none of which he named and `:14840` requires:** Send · Escape · a click
+  elsewhere · the same emoji again · **and a DIFFERENT emoji SWAPS rather than
+  dismisses**, which is the one a real mis-tap uses and is **NOT a fifth way
+  out** — miscount corrected in the code and in `OWED.md` by `:35593` L-4, and
+  struck here rather than deleted so the pointer cannot re-assert it. **ONE `pending` value, never a second per-row `Map`** —
   `:34992`'s Critical/High was exactly that, uncleared. The click-away ref is on
   the open row only, so the cross-row swap needs no code. **The Send button is
   found by MEMBER, never by the word** — five rows can each hold one.

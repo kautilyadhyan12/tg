@@ -4062,3 +4062,88 @@ under `src` behaves differently after this round.
       cheer"* rather than deleted. **Checked first that no mutant filtered on the
       old name** — each `expect` in `mutate-console.mjs` is a substring of a test
       NAME, and C220 is the only render-suite row (:14840).
+
+## 2026-09-05 — the confirm step, T3 ROUND 1 (DECISIONS :35511)
+
+**ONE Critical/High and six Low** — the C/H is in the entry, not here. The six
+Low were all fixed in commit `acd1e7b`, **and this block was written one round
+late**: round 2 found the missing log as its own Low-3, which is why a fix round
+that logs nothing looks identical to one that had nothing to log (:5348 rule 1).
+
+- [x] **L-1 · THE HEADING COUNTED THE WAYS OUT WRONG.** `OnARollPanel.jsx`'s
+      section read *FOUR WAYS OUT* where the entry, the commit message and the
+      paragraph beneath it all said five. Changed to five.
+      **⚠️ REVERSED BY ROUND 2's Low-4 — five was the wrong direction: the swap
+      is not a way out, and the paragraph had to write three lines saying so
+      under a heading that contradicted them.**
+- [x] **L-2 · TWO DISMISS CASES NEVER CHECKED THE EMOJI CAME BACK.** *closes on
+      a click somewhere else* and *closes when the same emoji is pressed again*
+      asserted the panel gone and nothing sent — both satisfied by a row that
+      stranded itself entirely. Only the Escape case had the positive control
+      (:28976, :14840's second half). Added to both.
+- [x] **L-3 · THE EMOJI DID NOT SAY IT OPENED ANYTHING.** Added
+      `aria-haspopup="dialog"` beside `aria-expanded`, citing `Select.jsx`.
+      **⚠️ REVERSED BY ROUND 2's Low-2 — the house pattern is a PAIR and only
+      the trigger half was copied, so the attribute announced a dialog the
+      markup never delivers.**
+- [x] **L-4 · A DOCBLOCK PROMISED THE PANEL CLOSES BEFORE THE SEND.** Nothing
+      held it: 25/25 stayed green with `setPending(null)` dropped from
+      `confirm`, leaving a live **Send** over an in-flight request and a second
+      press one 409 away. **C228** holds it now, with a fixture that HOLDS the
+      send open — on an instant mock a busy row and a closed panel are
+      indistinguishable.
+- [x] **L-5 · A DETACHED REF WAS A NO-OP INSTEAD OF A CLOSE.** `box !== null &&`
+      left `pending` set with both listeners bound; now `box === null` CLOSES.
+      **Round 2 could not reach the live failure the comment claimed** and the
+      wording is corrected there; the guard stays as defence in depth and
+      **C229** now holds the ref's scope.
+- [x] **L-6 · THE `OWED.md` TICK WAS SPLICED INTO KD'S QUOTE.** The status
+      marker landed mid-sentence inside his own words. Moved out.
+
+## 2026-09-05 — the confirm step, T3 ROUND 2, DIFF-ONLY (DECISIONS :35593)
+
+**ZERO Critical/High — the packet SHIPS** (:5348 rule 1). Six Low, all fixed in
+the same commit. **TWO OF THE SIX ARE ROUND 1's OWN LOW FIXES BEING CORRECTED**
+(its L-1 and L-3), which is :6277's shape one severity down and the reason a
+diff-only round covers the FIXES and not only the code they touched.
+
+- [x] **L-1 · THE ONE WAY OUT ROUND 1 DID NOT RE-TEST.** *closes when the same
+      emoji is pressed again* was still `fireEvent.click`-only — the exact
+      coverage gap that round's Critical/High was about, left on the one path it
+      did not rewrite. **Measured: moving `openBoxRef` off the wrapper leaves the
+      suite 28/28 GREEN**, while in a browser that `mousedown` dismisses and the
+      `click` re-opens, so the panel is left ARMED after the owner pressed the
+      same emoji to be rid of it. The case now presses `mouseDown` first and
+      **C229** is its mutant (:14840, :35511 §2).
+- [x] **L-2 · `aria-haspopup="dialog"` WITH NO DIALOG.** Round 1's own L-3 fix.
+      `Select.jsx` is a PAIR — `haspopup="listbox"` on the trigger, `role=
+      "listbox"` on the list — and only the trigger half was copied, while this
+      panel declines dialog semantics on purpose (no backdrop, no focus trap,
+      :23578 *"deliberately not entered"*). Dropped; `aria-expanded` is the whole
+      of what a disclosure owes.
+- [x] **L-3 · SIX LOWS FIXED AND NONE LOGGED.** Commit `acd1e7b` carried no
+      `BACKLOG.md` change, while the round before it (:35153) wrote its three
+      Lows and its rule-4 item with `[x]` ticks in the same commit that fixed
+      them. The missing block is immediately above this one (:5348 rule 1 —
+      a Low is accounted for in `BACKLOG.md` or it is invisible).
+- [x] **L-4 · A HEADING FALSE BY ITS OWN PARAGRAPH.** Round 1's L-1 changed
+      *FOUR WAYS OUT* to *FIVE*, then needed three lines under it explaining that
+      the fifth *"is not a way out at all"*. `onARoll.render.test.jsx:342`,
+      untouched by both rounds, already had the coherent phrasing — *"all four
+      ways out are here, plus the swap"*. Both live copies now say four plus the
+      swap: the panel's heading and `OWED.md`'s line, which had counted the swap
+      into a total in the same commit that ruled it out of one (:20587).
+- [x] **L-5 · A COMMENT STATED A FAILURE NOTHING CAN REACH.** It described a
+      later payload re-drawing an armed **Send** nobody opened. `OnARollPanel`
+      mounts under `key={gymId}` inside `ConsoleLayout`'s own per-screen key, so
+      a gym switch REMOUNTS, and the only refresh that keeps it mounted runs
+      through `confirm`, which nulls `pending` first. The guard is safe and
+      strictly better; the comment now says defence-in-depth and names what
+      would have to change for it to matter (V1).
+- [x] **L-6 · AN ABSENCE ASSERTION WITH NO POSITIVE CONTROL.** *takes the Send
+      button away while the send is still in flight* checked only that the
+      button was gone — a row that vanished entirely mid-send satisfies it. This
+      round's own commit added controls to two sibling absence-assertions citing
+      :28976 and skipped the case it wrote itself. C228 kills the mutant that
+      matters today, so this was an inconsistency rather than a liar; the member
+      is now asserted still on screen.

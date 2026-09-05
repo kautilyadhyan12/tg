@@ -54,15 +54,16 @@ import {
 // unreachable in the product. He approved the four messages at this card's own
 // gate, so the design that can send all four wins.
 //
-// ── FIVE WAYS OUT, AND KD NAMED NONE OF THEM ─────────────────────────────────
+// ── FOUR WAYS OUT, PLUS THE SWAP — AND KD NAMED NONE OF THEM ─────────────────
 // **A CONTROL WHOSE CANCEL IS UNTESTED IS `:14840`'s RECORDED DEFECT**, so the
 // dismiss paths are a build requirement rather than polish, and its own
-// `OWED.md` line says so. Four of the five CLOSE the panel and each has its own
-// case: **Send** · **Escape** · a click anywhere else · **the same emoji
-// again**. **The fifth is not a way out at all and is the one a real mis-tap
-// uses — a DIFFERENT emoji SWAPS the panel** rather than needing a dismiss
-// first, so the cost of pressing 🔥 when you meant 💪 is one more tap and never
-// a sent cheer.
+// `OWED.md` line says so. FOUR paths CLOSE the panel and each has its own case:
+// **Send** · **Escape** · a click anywhere else · **the same emoji again**.
+// **The SWAP is not a way out, and this heading said FIVE until T3 round 2** —
+// a DIFFERENT emoji replaces the panel rather than needing a dismiss first, so
+// the cost of pressing 🔥 when you meant 💪 is one more tap and never a sent
+// cheer. It is the path a real mis-tap uses, which is why it is named here and
+// not why it is counted.
 //
 // **ONE PANEL EXISTS AT A TIME, ACROSS THE WHOLE LIST**, which is why `pending`
 // is a single value here and not a second per-row `Map`. `:34992`'s C/H was
@@ -148,11 +149,18 @@ export default function OnARollPanel({
     // way a browser presses it` and **C227** are what hold it now.
     //
     // **A DETACHED REF CLOSES RATHER THAN NO-OPS** (`box === null`, not
-    // `box !== null &&`). If the row holding the panel stops drawing it, the
-    // old form left `pending` set with both listeners bound and nothing able to
-    // clear it — a later payload restoring that row would re-draw an armed
-    // **Send** nobody opened. `:34992`'s shape, in the one place this component
-    // still had it.
+    // `box !== null &&`). **THIS IS DEFENCE IN DEPTH, NOT A LIVE FIX, AND THE
+    // COMMENT USED TO CLAIM OTHERWISE** — T3 round 2 went looking for the
+    // re-armed **Send** it described and could not reach it: this panel is
+    // REMOUNTED rather than re-rendered whenever the gym changes
+    // (`OverviewNumbers.jsx`'s `key={gymId}`, inside `ConsoleLayout`'s own
+    // per-screen key), and the only refresh that keeps it mounted runs through
+    // `confirm`, which nulls `pending` first. So a detached ref with `pending`
+    // still set has no path back to a drawn row TODAY. What it guards is the
+    // SHAPE `:34992`'s Critical/High arrived in — state this component holds
+    // and nothing clears — against a future mount site that does not key.
+    // **`C229` is what holds the ref's SCOPE**, which is the half a refactor
+    // moves.
     const onDown = (event) => {
       const box = openBoxRef.current;
       if (box === null || !box.contains(event.target)) setPending(null);
@@ -330,11 +338,21 @@ export default function OnARollPanel({
                                 /* **THIS OPENS; IT DOES NOT SEND.** Kd's
                                    2026-09-05 change — see the header. */
                                 onClick={() => choose(regular.userId, choice.preset)}
-                                /* IT OPENS SOMETHING, and says so — the house
-                                   pattern `Select.jsx` uses. `aria-expanded`
-                                   alone announces the state but not that there
-                                   is anything to expand. */
-                                aria-haspopup="dialog"
+                                /* **`aria-expanded` ALONE, AND DELIBERATELY NO
+                                   `aria-haspopup`** (T3 round 2). The house
+                                   pattern is a PAIR: `Select.jsx` announces
+                                   `haspopup="listbox"` on its trigger AND
+                                   carries `role="listbox"` on the list it
+                                   opens. Only the trigger half was copied
+                                   here, so `haspopup="dialog"` promised a
+                                   dialog this panel deliberately is not — no
+                                   backdrop, no focus trap, `:23578`'s
+                                   territory not entered — and announced to a
+                                   screen reader something the markup never
+                                   delivers. This is a DISCLOSURE, and
+                                   `aria-expanded` is the whole of what it owes.
+                                   Adding `haspopup` back means adding the role
+                                   and the dialog behaviour with it. */
                                 aria-expanded={chosen?.preset === choice.preset}
                                 /* The line itself is the label a mouse and a
                                    screen reader both get, so an owner knows what

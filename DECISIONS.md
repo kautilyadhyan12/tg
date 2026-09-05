@@ -35589,3 +35589,102 @@ phone the sheet proves at most two of the five ways out.
 
 **NO SMOKE HAS RUN AND THE `OWED.md` LINE DOES NOT TICK. T3 ROUND 2 IS UNRUN**
 and is diff-only (`:5348` rule 2).
+
+## 2026-09-05 — THE CONFIRM STEP, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and TWO of the six Low are round 1's OWN Low fixes coming back
+
+**Read before trusting a fix round's own Low fixes, before copying an
+`aria-haspopup` from a neighbouring component, before counting a swap or a retry
+into a total of ways out, before closing a fix round without its `BACKLOG.md`
+block, and before writing a comment that names a live failure nobody has
+reached.**
+
+Round 2 on `:35422`, diff-only (`:5348` rule 2), covering `:35511`'s fixes and
+the surfaces they touch. **ZERO Critical/High — the packet SHIPS** (rule 1).
+**Six Low, all fixed here.** The escape hatch is not armed: `:35153` zero,
+`:35511` one, this round zero — no two-round streak. Web-only.
+
+### 1 · THE FINDING IS THAT A FIX ROUND NEEDS REVIEWING LIKE ANY OTHER CODE
+
+**Two of the six Low are round 1's own Low fixes, wrong in the direction its
+reviewer pointed.** Its L-1 changed a heading from FOUR WAYS OUT to FIVE, and
+then had to write three lines beneath it explaining that the fifth *"is not a
+way out at all"* — a heading made false by its own paragraph. Its L-3 added
+`aria-haspopup="dialog"` citing `Select.jsx`, **and copied only half of that
+pattern**: `Select.jsx` pairs `haspopup="listbox"` on the trigger with
+`role="listbox"` on the list it opens, while this panel declines dialog
+semantics deliberately — no backdrop, no focus trap, `:23578`'s territory *"not
+entered"*. The attribute announced to a screen reader something the markup never
+delivers.
+
+**This is `:6277`'s shape one severity down** — there a round's own Low fix
+shipped a Critical — and it is the argument for rule 2 being *diff-only* rather
+than *fixes-exempt*: **the diff a re-review reads is the FIX, not only the code
+the fix was about.**
+
+### 2 · THE COVERAGE GAP ROUND 1 LEFT ON THE ONE PATH IT DID NOT REWRITE
+
+`:35511`'s Critical/High was that every case used `fireEvent.click`, which
+dispatches no `mousedown`, so the click-away guard's whole job was invisible. It
+rewrote three cases. **`closes when the same emoji is pressed again` was not one
+of them** — the exact class, left on a way out.
+
+**MEASURED BOTH WAYS RATHER THAN ARGUED.** A new mutant **C229** detaches
+`openBoxRef` from the wrapper that holds the emoji and the panel together, which
+is the edit a refactor makes: `openBoxRef.current` is then always `null`, every
+`mousedown` closes, and in the browser's own event order the `mousedown`
+DISMISSES while the `click` RE-OPENS — **so the owner who pressed the same emoji
+to be rid of the panel is left with it ARMED.** With the case in its click-only
+form **C229 was ALIVE**; with `mouseDown` pressed first it is **RED**. The
+click-only run was taken on a copy and the file restored byte-exact by sha256
+(`8cae0c2f…5fc11fd3`), not by `git checkout` (`:25567`).
+
+**C229 IS NOT C227 ONE LAYER OVER.** C227 kills the `contains` TEST inside
+`onDown`; C229 kills the WIRING that gives it anything to test. A refactor moves
+the second and leaves the first reading perfectly.
+
+### 3 · THE SIX LOW
+
+**L-1** the same-emoji way out was still `fireEvent.click`-only (§2 above;
+**C229**) · **L-2** `aria-haspopup="dialog"` with no dialog, round 1's own L-3
+(§1) · **L-3** commit `acd1e7b` fixed six Low and wrote NO `BACKLOG.md` block,
+while the round before it wrote one in the same commit — **a fix round that logs
+nothing is indistinguishable from one that had nothing to log**, and both blocks
+are now filed · **L-4** the FIVE WAYS OUT heading and `OWED.md`'s *"All five
+ways out are built and tested"*, which counted the swap into a total in the same
+commit that ruled it out of one; `onARoll.render.test.jsx`, untouched by both
+rounds, already had the coherent phrasing (`:20587`) · **L-5** a comment stated
+a live failure — a later payload re-drawing an armed **Send** — that this round
+could not reach, the panel being REMOUNTED on `key={gymId}` inside
+`ConsoleLayout`'s per-screen key while the only refresh that keeps it mounted
+runs through `confirm`, which nulls `pending` first; the guard is safe and
+strictly better, so the WORD was the defect (`:19960`'s shape in prose, as
+`:31295`) · **L-6** `takes the Send button away while the send is still in
+flight` asserted only an absence, which a row that vanished entirely satisfies —
+**and this round's own commit added positive controls to two sibling
+absence-assertions citing `:28976` and skipped the case it wrote itself.**
+
+### Round log
+
+**PROVE, on the fixed bytes.** `web` **1834/1834 across 61 files, exit 0** —
+**unchanged, and that is correct**: this round adds assertions to existing cases
+and no new case, where `:35511` added three (25 → 28).
+`eslint --max-warnings=0` **exit 0** on both touched files; `node --check` on
+the harness **exit 0**.
+
+**AUDIT — `MUTATE_ONLY=C224…C229`: 6 mutants, 6 RED, 0 ALIVE, 0 never ran**, six
+controls GREEN and tallied first, restores sha256-verified after every one.
+**RUN UNPIPED WITH ITS EXIT CODE READ — `HARNESS EXIT CODE: 0`, genuinely.** The
+first run of it went through `| tail`, which is `:10726` §2 and `:5906` before
+it: a pipe replaces the harness's own status with `tail`'s, so a sweep that
+ABORTED would have reported success. Caught by this file's own trigger list
+before the figure was quoted, not after.
+
+**No database mutants and no `apps/api` run — no server behaviour changed**
+(`:5857` rule 4a). Diff touches `apps/web/src`, `apps/web/tools`, `OWED.md`,
+`BACKLOG.md` and the record; **the PROVE names `web` and the root guards, which
+is the list `:28395` requires be checked against the diff.**
+
+**NO SMOKE HAS RUN AND THE `OWED.md` LINE DOES NOT TICK.** Zero Critical/High
+ends the review (`:5348` rule 1 — a Low buys no round), so **the remaining gate
+is Kd's browser**, with sheet step 6b noted desktop-only: Escape does not exist
+on the phone `:17765` puts this console on.
