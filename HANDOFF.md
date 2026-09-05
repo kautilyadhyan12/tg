@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CONFIRM STEP — **T3 ROUND 2 RUN, DIFF-ONLY: ZERO Critical/High, THE
+      PACKET SHIPS** (`:5348` rule 1). DECISIONS `:35593`, commit `7acc0cb`.
+      Six Low, all fixed in that commit. Kd approved the fix round against the
+      listed findings before a file was touched. Web-only: no `apps/api`, no
+      `packages/shared`, no migration.
+
+      **START HERE: THE CODE IS DONE AND REVIEWED. THE ONLY GATE LEFT IS KD'S
+      BROWSER** — `RUNBOOK/smoke-on-a-roll-cheer.md`, whose steps 6, 6b and 7
+      were rewritten for the confirm step by `:35422`. **`OWED.md`'s cheer-
+      confirm line does NOT tick until that runs.** Part B still needs the
+      seeded history Kd allowed at `:35240`. **Step 6b is DESKTOP-ONLY** —
+      Escape does not exist on the phone `:17765` puts this console on, so on a
+      phone the sheet proves at most two of the four ways out.
+
+  1. **THE FINDING WORTH CARRYING: two of this round's six Low were ROUND 1's
+     OWN Low fixes.** Its L-1 made a heading say FIVE WAYS OUT and then needed
+     three lines under it saying the fifth is not one; its L-3 added
+     `aria-haspopup="dialog"` copying only the TRIGGER half of `Select.jsx`'s
+     pair. **`:6277`'s shape one severity down** — a diff-only re-review reads
+     the FIX, not only the code the fix was about.
+  2. **`C229` IS NEW AND IS NOT `C227` ONE LAYER OVER.** C227 kills the
+     `contains` test inside `onDown`; C229 detaches `openBoxRef` from the
+     wrapper, which is the edit a refactor makes. **Measured both ways: the
+     click-only case was ALIVE under it, RED once `mouseDown` is pressed
+     first.**
+  3. **KD'S OTHER TWO CHANGES ARE STILL OWED** — the word *"running"* reading
+     as the sport (🟡, his word to pick, R0.2) and his own seven-day cap, which
+     he questioned and did not replace (❓, `DECISIONS-INDEX.md` §2, `:35317`).
+     **DO NOT PICK EITHER.**
+
+PROVE: `web` **1834/1834 across 61 files, exit 0** — unchanged, and correctly
+       so: assertions were added to existing cases and no case was added, where
+       `:35511` added three. `eslint --max-warnings=0` exit 0 on both touched
+       files; `node --check` on the harness exit 0.
+       **SWEEP `MUTATE_ONLY=C224…C229`: 6 RED, 0 ALIVE, 0 never ran**, six
+       controls GREEN and tallied first, restores sha256-verified.
+       **RUN UNPIPED WITH ITS EXIT CODE READ — `HARNESS EXIT CODE: 0`.** The
+       first run went through `| tail`, which is `:10726` §2 and `:5906` before
+       it; caught from this repo's own trigger list before the figure was
+       quoted. No database mutants, no `apps/api` run — no server behaviour
+       changed (`:5857` rule 4a).
+       Four ROOT guards green (harnesses **26** · index **308 pointers, 1403
+       headings** · triggers **1069 from 276 of 414** · smoke-folds OK).
+       Always-read re-measured with the header's own command:
+       **2,716 = 1,248 + 1,385 + 83**, §1 and §2 UNMOVED. **The header had
+       drifted seven lines before this commit touched it** — the two commits
+       before re-measured nothing — so five of the twelve are this round's.
+
+OPEN:  **Kd's smoke on the confirm step.** After it: his other two changes above,
+       then he picks the next card — the people-lists card still owes three
+       panels (*when they come* · *slipping away* · *this week's roster*).
+       `:26385` §5 has the wider gym-stage list; `:19016` is the order.
+       `CLAUDE.md`'s pre-existing uncommitted edit and `GymHoursNote.jsx`'s
+       line-ending-only one are STILL OUT (`:24559`) — not mine, not committed.
+```
+
+```
 TASK: "ON A ROLL" + THE CHEER — **THE SMOKE PASSED AT KD'S BROWSER AND THE
       `OWED.md` LINE TICKS.** DECISIONS `:35317`. The feature is DONE: server
       half `:34240`, web half `:34809`, T3 rounds 1 and 2 (`:34992`, `:35153`,
