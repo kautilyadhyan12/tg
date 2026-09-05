@@ -34773,6 +34773,15 @@ half way — which is what round 1 itself said one sentence earlier.
 **PROVE, all LOCAL (`127.0.0.1:5433`, `:13659`), on the final bytes.** Figures in
 the commit message and the `HANDOFF.md` block; both quote the same runs.
 
+**GITLEAKS, NAMED WITH ITS SCOPE, WHICH IS THIS ROUND'S OWN L-2:**
+`gitleaks protect` (working tree) exit 0, no leaks, before the commit ·
+**`gitleaks detect` (FULL HISTORY, the scope CI runs) exit 0 — 525 commits
+scanned, no leaks found** — run AFTER `066f0b1` existed, because a full-history
+figure quoted against a tree that does not contain the round is `:33799`'s trap.
+**CI on `066f0b1`: run `33940044855`, all five jobs success**, `gitleaks (full
+history)` and `api tests on local Postgres` among them — read, not assumed
+(`:25008`).
+
 **L-6's ASSERTION WAS PROVEN LIVE RATHER THAN ASSUMED, because it is an absence
 assertion and `:28976` is the class where those are vacuous.** No mutant covers
 the sender leak — that assertion is its only observer — so `sentBy` was added for

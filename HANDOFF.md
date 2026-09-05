@@ -46,8 +46,13 @@ PROVE: all LOCAL (`127.0.0.1:5433`), final bytes, exit codes read directly.
        405 rulings, 138 declaring none**, smoke-folds **OK**.
        Always-read re-measured with the header's own command: **2,667 =
        1,208 + 1,385 + 74**, §1 and §2 UNMOVED.
-       **CI: run `33905568207` on `55395d0`, all five jobs success, branch
-       `web-repoint`** — read, not assumed (`:25008`).
+       **gitleaks NAMED WITH ITS SCOPE** (this round's own L-2): `protect`
+       (working tree) exit 0 before the commit · **`detect` (FULL HISTORY, the
+       CI scope) exit 0, 525 commits scanned, no leaks** — run AFTER `066f0b1`
+       existed (`:33799`).
+       **CI ON THIS ROUND: run `33940044855` on `066f0b1`, ALL FIVE JOBS
+       SUCCESS**, branch `web-repoint` — read, not assumed (`:25008`). The
+       previous green was `33905568207` on `55395d0`.
        **SWEEP NOT RE-RUN AND SAID SO:** L-3 edits a mutant's prose, L-5 a line
        no mutant anchors on, L-6 a test helper. The one figure that would move
        is O273 on a Sunday, which is recorded rather than measured.
