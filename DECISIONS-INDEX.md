@@ -1721,6 +1721,27 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35422** — 2026-09-05 — **KD'S CONFIRM STEP: an emoji opens a small panel
+  holding the words and a **Send** button, and the cheer goes only when Send is
+  pressed.** **Read before shipping any irreversible one-tap control, before
+  adding a dismiss path to anything in this console, before holding per-row state
+  in `OnARollPanel`, and before finding a "Send" button by its visible text.**
+  The second of `:35317` §2's three changes. *"a small window just beside the
+  emojy … the emojy and the writing and a small send button … not like a big pop
+  up"*, plus **"send should not be a text but should be a button"** at the gate.
+  **`:29961` ruling 4's four choices and no-typing halves are UNTOUCHED — the
+  "sends on sight" half is what he reversed**, because the cheer is capped and
+  irreversible and `:34809` §2 is the recorded damage. **It also makes the hover
+  real**: each emoji's `title` already showed the sentence, and a hover does not
+  exist on a phone (`:17765`). **FIVE WAYS OUT, none of which he named and
+  `:14840` requires:** Send · Escape · a click elsewhere · the same emoji again ·
+  **and a DIFFERENT emoji SWAPS rather than dismisses**, which is the one a real
+  mis-tap uses. **ONE `pending` value, never a second per-row `Map`** —
+  `:34992`'s Critical/High was exactly that, uncleared. The click-away ref is on
+  the open row only, so the cross-row swap needs no code. **The Send button is
+  found by MEMBER, never by the word** — five rows can each hold one.
+  `web` 1831/1831 · **C224/C225/C226 3 RED**, C220 re-run and still RED
+  (`:13336`). **No smoke, T3 UNRUN, the `OWED.md` line does not tick.**
 - **:35386** — 2026-09-05 — **CI WENT RED TWICE AND KD SAW IT BEFORE I DID: a
   new file under `apps/api/tools/` was never typechecked.** **Read before adding
   ANY file under `apps/api`, before importing from `src/` in a tool, and before

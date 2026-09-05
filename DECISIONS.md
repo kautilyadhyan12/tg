@@ -35418,3 +35418,92 @@ handed him a passing report.
 `api` typecheck **exit 0** and `api` lint **exit 0**, both run this time; the
 tool re-run against the same database prints **0 written, 10 already there**,
 which is its `ON CONFLICT DO NOTHING` claim proven rather than asserted.
+
+## 2026-09-05 — KD'S CONFIRM STEP: an emoji opens a small panel holding the words and a **Send** button, and the cheer goes only when Send is pressed
+
+**Read before shipping any irreversible one-tap control, before adding a dismiss
+path to anything in this console, before holding per-row state in
+`OnARollPanel`, and before finding a "Send" button by its visible text.**
+
+Builds the second of the three changes Kd raised at the screen (`:35317` §2b,
+`OWED.md`'s cheer-confirm line). His words: *"whenever a emojy is click a small
+window just beside the emojy should be shown and in the window show the emojy
+and the writing and a small send button not writing send symbol … it is not like
+a big pop up"*, and at the gate **"send should not be a text but should be a
+button"**. Web-only: no `apps/api`, no `packages/shared`, no migration.
+
+### 1 · WHAT CHANGED, AND WHICH HALF OF THE RULING DID NOT
+
+`:29961` ruling 4 is ONE TAP and NO FREE TEXT. **The four choices and the no-
+typing half are untouched; the "sends on sight" half is the part he reversed.**
+An emoji now sets `pending` and draws a panel; only **Send** calls `sendCheer`.
+
+**IT IS NOT POLITENESS.** The cheer is **capped and irreversible** — one stray
+finger spends that member's whole seven-day window, tells the wrong person the
+gym noticed them, and nothing in this product can undo it. `:34809` §2 (C220,
+ALIVE on its first run) is the recorded shape of that damage.
+
+**IT ALSO MAKES THE HOVER REAL.** Each emoji's `title` already showed an owner
+the sentence before they committed — and **a hover does not exist on a phone**,
+where `:17765` puts every console feature. The panel is that same promise,
+reachable by a finger.
+
+### 2 · FIVE WAYS OUT, AND KD NAMED NONE OF THEM
+
+`:14840` is this repo's cost of shipping a control whose Cancel nobody tested,
+and the `OWED.md` line said so before a line was written. **Send · Escape · a
+click anywhere else · the same emoji again** — each with its own case asserting
+**nothing was sent**.
+
+**THE FIFTH IS THE ONE A REAL MIS-TAP USES: a DIFFERENT emoji SWAPS the panel**
+rather than needing a dismiss first, so pressing 🔥 when you meant 💪 costs one
+more tap. **C225 is that guarantee's mutant** — Send always sending the first
+preset — and only a case that SWAPS before pressing can see it: a test that
+opens one emoji and sends it agrees with both readings.
+
+### 3 · ONE `pending`, NOT A SECOND PER-ROW `Map`
+
+`:34992`'s Critical/High was per-row state in this very component that nothing
+ever cleared. **A single value that every path sets back to `null` cannot
+accumulate that way**, and it gives "one panel at a time across the list" for
+free rather than as a second rule. The click-away ref is attached ONLY to the
+row holding the panel, so another row's emoji is *outside* — `mousedown` closes,
+its own `click` opens, and the swap across rows needs no code of its own.
+
+### 4 · THE SEND BUTTON IS FOUND BY THE MEMBER, NEVER BY THE WORD
+
+Five rows can each hold a button reading "Send". `aria-label` carries
+`Send to {name}: {line}`, and the test helper matches on that — **a
+`getByText('Send')` would be satisfied by the wrong row's button**, which is
+`:34809` §2's wrong-member defect arriving through a test helper.
+
+### Round log
+
+**PROVE, on the shipping bytes.** `web` **1831/1831 across 61 files, exit 0**
+(1823 + this round's eight); `onARoll.render` **17 → 25**.
+`eslint --max-warnings=0` **exit 0** on both touched files. `vite build`
+**exit 0**. `node --check` on the harness **exit 0**. Two ROOT guards green:
+harnesses **26 scripts**, smoke-folds **OK on the edited sheet**.
+
+**RULE 3, PROVEN BY REVERSAL: `MUTATE_ONLY=C224,C225,C226` — 3 RED, 0 ALIVE, 0
+never ran**, three controls GREEN and tallied first, restores sha256-verified.
+C224 restores send-on-sight (the screen Kd reversed), C225 sends the first
+preset regardless of the panel, C226 kills the Escape arm. **C220 was re-run
+rather than assumed** — this round rewrote the file it anchors on (`:13336`) —
+and is still RED.
+
+**NO DATABASE MUTANTS AND NO `apps/api` RUN: no server behaviour changed**
+(`:5857` rule 4a; `:28395`'s fan-out does not apply).
+
+**NO SMOKE HAS RUN AND THE `OWED.md` LINE DOES NOT TICK.** Sheet steps 6, 6b and
+7 are rewritten for the confirm step — 6b is the four dismiss paths plus the
+swap — and Part B needs the seeded history (`:35240`). **T3 IS UNRUN.**
+
+**THE PROCESS NOTE, because it is why this card looks different from the last
+one.** The wording change immediately before it was planned with nine mutants,
+two `apps/api` comment edits and a review round; Kd rejected all of it — *"why
+on earth are you suggesting review databas mutation for a word change"* — and he
+was right, `:5857` rule 4a puts copy in the NEVER-MUTATED column. **This card is
+in the always-mutated one** (which member a tap reaches, whether it reaches
+anybody at all), which is why three mutants here are proportionate and nine
+there were not. **Same rule, opposite answer.**

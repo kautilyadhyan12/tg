@@ -2941,6 +2941,36 @@ const MUTANTS = [
     from: '  if (again !== null) {',
     to: '  if (again !== null && outcome === null) {',
   },
+  // ── KD'S CONFIRM STEP (2026-09-05) ─────────────────────────────────────────
+  // All three guard an IRREVERSIBLE, CAPPED send. :5857 rule 4a's always-mutated
+  // columns: which member a tap reaches, and whether it reaches anybody at all.
+  {
+    id: 'C224',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "THE CONFIRM STEP IS GONE AND THE EMOJI SENDS ON SIGHT AGAIN - the exact screen Kd looked at on 2026-09-05 and reversed. One stray finger then spends that member's whole seven-day window, tells the wrong person the gym noticed them, and there is no undo anywhere in the product. It is the shape a later chat's tidy-up takes: choose and confirm look like an indirection worth collapsing, and collapsing them is the defect",
+    expect: 'opens on the emoji and sends nothing',
+    from: '                                onClick={() => choose(regular.userId, choice.preset)}',
+    to: '                                onClick={() => send(regular.userId, choice.preset)}',
+  },
+  {
+    id: 'C225',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "THE PANEL SHOWS ONE LINE AND SENDS ANOTHER: Send always sends the FIRST preset rather than the one on screen, so an owner who mis-tapped, corrected it to the emoji they meant, and read the right sentence in the panel still sends the wrong words. It is C220's wrong-thing-sent defect on the other axis - that one reaches the wrong MEMBER, this one sends the wrong LINE - and neither shows an error. Only a case that SWAPS the choice before pressing Send can see it: a test that opens one emoji and sends it agrees with both readings",
+    expect: 'swaps to a different emoji, and Send then sends that one',
+    from: '                              onClick={() => confirm(regular.userId, chosen.preset)}',
+    to: '                              onClick={() => confirm(regular.userId, CHEER_CHOICES[0].preset)}',
+  },
+  {
+    id: 'C226',
+    target: 'onarollpanel',
+    suite: ON_A_ROLL_RENDER_SUITE,
+    why: "THE PANEL CANNOT BE DISMISSED WITH THE KEYBOARD, which is :14840 exactly - a control whose Cancel nobody tested - and the cheer's own OWED.md line names that entry as the reason the dismiss paths are a build requirement rather than polish. An owner who opens the wrong emoji and reaches for Escape is left with a live Send button they did not want, on an action that cannot be undone. The mouse arm is C226's sibling in the same effect and is covered by its own case",
+    expect: 'closes on Escape, and nothing is sent',
+    from: "      if (event.key === 'Escape') setPending(null);",
+    to: "      if (event.key === 'Escape') return;",
+  },
 ];
 
 const abort = (msg) => {

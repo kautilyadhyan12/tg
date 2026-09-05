@@ -7964,7 +7964,17 @@ file and is stated so nobody reads these as lower priority than they are.
       take or refuse: *"3 weeks in a row · 2 days in a row"*, or *"came 3 weeks
       running"* → *"3 weeks without a gap"*.
 - [ ] 🟡 **AN EMOJI SENDS THE MOMENT IT IS CLICKED, AND KD WANTS A CONFIRM STEP —
-      2026-09-05** (DECISIONS `:35317`). His words: *"whenever a emojy is click a
+      2026-09-05** (DECISIONS `:35317`).
+      **⏳ BUILT 2026-09-05 (DECISIONS `:35422`) — THIS LINE DOES NOT TICK YET:
+      NO SMOKE HAS RUN AND T3 IS UNRUN.** An emoji now opens a small panel
+      beside it holding the emoji, the sentence and a **Send** button (his gate
+      ruling: *"send should not be a text but should be a button"*); only Send
+      calls the server. **All five ways out are built and tested** — Send,
+      Escape, a click elsewhere, the same emoji again, and a DIFFERENT emoji
+      which SWAPS rather than dismisses, so `:14840`'s untested-Cancel defect is
+      closed rather than carried. `web` 1831/1831, C224/C225/C226 3 RED, C220
+      re-run and still RED. Sheet steps 6, 6b and 7 rewritten. Original line:
+      His words: *"whenever a emojy is click a
       small window just beside the emojy should be shown and in the window show
       the emojy and the writing and a small send button not writing send symbol i
       think you are understanding it is not like a big pop up"*.

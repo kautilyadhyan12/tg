@@ -157,19 +157,38 @@ describe('the list of members who keep turning up', () => {
   });
 });
 
-describe('the one tap', () => {
-  /** WAITS, and it has to: the screen resolves the gym and then the five reads
-   *  before a single row exists. A synchronous `getBy` here would race the
-   *  loading spinner rather than the code under test. */
-  const cheerButton = (label) =>
-    screen.findByLabelText(new RegExp(`^Cheer Priya Nair: ${label}`));
+/** WAITS, and it has to: the screen resolves the gym and then the five reads
+ *  before a single row exists. A synchronous `getBy` here would race the
+ *  loading spinner rather than the code under test. */
+const cheerButton = (label) =>
+  screen.findByLabelText(new RegExp(`^Cheer Priya Nair: ${label}`));
 
+/** THE **Send** BUTTON INSIDE PRIYA'S OPEN PANEL.
+ *
+ *  **MATCHED BY THE MEMBER, NOT BY THE WORD.** Five rows can each hold a button
+ *  reading "Send", so `getByText('Send')` would be ambiguous the moment a second
+ *  panel could exist — and worse, would pass while pressing the wrong row's.
+ *  That is `:34809` §2's wrong-member defect arriving through a test helper. */
+const sendButton = () => screen.findByLabelText(/^Send to Priya Nair: /);
+
+/** THE TWO TAPS KD'S CONFIRM STEP MADE OF THE ONE, 2026-09-05: choose, then
+ *  **Send**. Every case that used to click an emoji and expect a cheer goes
+ *  through here — so a panel quietly removed would fail this helper's SECOND
+ *  click rather than silently making nine tests pass a screen that sends on
+ *  sight again. */
+const pressCheer = async (label) => {
+  fireEvent.click(await cheerButton(label));
+  fireEvent.click(await sendButton());
+};
+
+describe('the one tap', () => {
   // **PRIYA IS THE SECOND ROW, AND THAT IS THE WHOLE ASSERTION.** `ROLL` puts
   // Asha first precisely so `onARoll[0]` is not the member being pressed — see
   // the fixture's own note, and C220, which was ALIVE until it was.
   it('sends the gym, the member and the line the owner actually pressed', async () => {
     drawOverview();
     fireEvent.click(await screen.findByLabelText('Cheer Priya Nair: Great week — keep it going.'));
+    fireEvent.click(await sendButton());
     await waitFor(() => expect(orgService.sendCheer).toHaveBeenCalledTimes(1));
     expect(orgService.sendCheer).toHaveBeenCalledWith(GYM_ID, 'r1', 'keep_going');
     // AND NOT ASHA, said out loud rather than left to the argument list: the
@@ -183,6 +202,7 @@ describe('the one tap', () => {
   it('sends a different line from a different button', async () => {
     drawOverview();
     fireEvent.click(await screen.findByLabelText('Cheer Priya Nair: Strong streak.'));
+    fireEvent.click(await sendButton());
     await waitFor(() => expect(orgService.sendCheer).toHaveBeenCalledTimes(1));
     expect(orgService.sendCheer).toHaveBeenCalledWith(GYM_ID, 'r1', 'strong_streak');
   });
@@ -194,7 +214,7 @@ describe('the one tap', () => {
   // pass under a panel that never disables anything.
   it('puts the buttons away once the cheer has gone, and says so', async () => {
     drawOverview();
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Cheered just now.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
   });
@@ -213,7 +233,7 @@ describe('the one tap', () => {
     drawOverview();
     await screen.findByText('Priya Nair');
     expect(orgService.getOverview).toHaveBeenCalledTimes(1);
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     await waitFor(() => expect(orgService.getOverview).toHaveBeenCalledTimes(2));
   });
 
@@ -235,7 +255,7 @@ describe('the one tap', () => {
       );
     drawOverview();
     await screen.findByText('Priya Nair');
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Cheered — you can again in 7 days.')).toBeTruthy();
     expect(screen.queryByText('Cheered just now.')).toBeNull();
   });
@@ -253,7 +273,7 @@ describe('the one tap', () => {
       }));
     drawOverview();
     await screen.findByText('Priya Nair');
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Cheered just now.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
     release();
@@ -266,7 +286,7 @@ describe('the one tap', () => {
     drawOverview();
     await screen.findByText('Priya Nair');
     orgService.getOverview.mockRejectedValue(new Error('network'));
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Cheered just now.')).toBeTruthy();
     expect(screen.queryByText(/couldn't send/i)).toBeNull();
   });
@@ -276,7 +296,7 @@ describe('the one tap', () => {
       response: { status: 500, data: { error: 'server_error', message: 'Something went wrong.' } },
     });
     drawOverview();
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Something went wrong.')).toBeTruthy();
     // A GENUINE FAILURE LEAVES THE BUTTONS, because pressing again is the
     // retry and the cheer did not happen.
@@ -297,7 +317,7 @@ describe('the one tap', () => {
       },
     });
     drawOverview();
-    fireEvent.click(await cheerButton('Great week'));
+    await pressCheer('Great week');
     expect(await screen.findByText('Cheered in the last 7 days.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
     expect(screen.queryByText(/just now/)).toBeNull();
@@ -309,6 +329,119 @@ describe('the one tap', () => {
     expect(
       screen.queryByText('This member has already been cheered in the last 7 days.'),
     ).toBeNull();
+  });
+});
+
+// KD'S CONFIRM STEP, 2026-09-05: *"whenever a emojy is click a small window just
+// beside the emojy should be shown and in the window show the emojy and the
+// writing and a small send button"*.
+//
+// **THE CHEER IS CAPPED AND IRREVERSIBLE**, so the case that matters most is the
+// one asserting NOTHING WAS SENT. `:14840` is this repo's recorded cost of
+// shipping a control whose Cancel nobody tested, and the cheer's own `OWED.md`
+// line names it — so all four ways out are here, plus the swap, which is the one
+// a real mis-tap actually uses.
+describe('the panel that stands between a stray finger and a sent cheer', () => {
+  it('opens on the emoji and sends nothing', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await sendButton()).toBeTruthy();
+    // THE WHOLE POINT OF THE CARD, said as an assertion rather than left to the
+    // absence of one: the emoji no longer commits anybody to anything.
+    expect(orgService.sendCheer).not.toHaveBeenCalled();
+  });
+
+  // HIS THREE ITEMS, IN HIS OWN ORDER — the emoji, the words, and a button
+  // reading the WORD Send. He ruled out a send ICON in the same breath, and
+  // asked for a button rather than bare text, so the visible label is asserted
+  // here and not only the accessible name.
+  it('shows the emoji, the words it will send, and a Send button', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Strong streak'));
+    const send = await sendButton();
+    // **A BUTTON READING THE WORD, which is what he asked for twice** — once
+    // ruling out a send ICON, once ruling out bare text. `tagName` and
+    // `textContent` are the two halves of that and neither alone is it.
+    expect(send.tagName).toBe('BUTTON');
+    expect(send.textContent).toBe('Send');
+    // **ALL THREE IN ONE BOX, asserted through the panel and not through the
+    // screen.** Both emoji and both sentences exist elsewhere on this row —
+    // on the four choice buttons — so a screen-wide `getByText` is ambiguous
+    // at best and, at worst, satisfied by the button the panel was opened FROM
+    // while the panel itself is empty.
+    const panel = send.parentElement;
+    expect(panel.textContent).toContain('🏆');
+    expect(panel.textContent).toContain('Strong streak.');
+    // The other line is NOT in it, so the panel is showing the chosen one
+    // rather than all four.
+    expect(panel.textContent).not.toContain('Great week');
+  });
+
+  it('closes on Escape, and nothing is sent', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await sendButton()).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
+    expect(orgService.sendCheer).not.toHaveBeenCalled();
+    // AND THE EMOJI COME BACK, so a dismiss is not a dead end — :28976's
+    // positive control for an absence assertion.
+    expect(await cheerButton('Great week')).toBeTruthy();
+  });
+
+  it('closes on a click somewhere else, and nothing is sent', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await sendButton()).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
+    expect(orgService.sendCheer).not.toHaveBeenCalled();
+  });
+
+  it('closes when the same emoji is pressed again, and nothing is sent', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await sendButton()).toBeTruthy();
+    fireEvent.click(await cheerButton('Great week'));
+    await waitFor(() => expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull());
+    expect(orgService.sendCheer).not.toHaveBeenCalled();
+  });
+
+  // **THE MIS-TAP ITSELF, WHICH IS WHAT KD WAS LOOKING AT.** Pressing 🔥 when
+  // you meant 💪 must cost one more tap and never a sent cheer — so the second
+  // emoji SWAPS the panel rather than closing it, and Send then sends the
+  // SECOND line. A panel that remembered the first choice would look corrected
+  // and send the wrong words, with no error anywhere.
+  it('swaps to a different emoji, and Send then sends that one', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    fireEvent.click(await cheerButton('Strong streak'));
+    expect(screen.getByText('Strong streak.')).toBeTruthy();
+    expect(screen.queryByText('Great week — keep it going.')).toBeNull();
+    fireEvent.click(await sendButton());
+    await waitFor(() => expect(orgService.sendCheer).toHaveBeenCalledTimes(1));
+    expect(orgService.sendCheer).toHaveBeenCalledWith(GYM_ID, 'r1', 'strong_streak');
+    expect(orgService.sendCheer).not.toHaveBeenCalledWith(GYM_ID, 'r1', 'keep_going');
+  });
+
+  // **ONE PANEL AT A TIME, ACROSS THE WHOLE LIST.** Two open panels would let an
+  // owner leave one armed on a member they had moved on from, which is the stray
+  // finger this card exists to stop, one row further down.
+  it('closes one member\'s panel when another member\'s is opened', async () => {
+    drawOverview();
+    fireEvent.click(await cheerButton('Great week'));
+    expect(await sendButton()).toBeTruthy();
+    fireEvent.click(await screen.findByLabelText('Cheer Asha Roy: Great week — keep it going.'));
+    expect(await screen.findByLabelText(/^Send to Asha Roy: /)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull();
+    expect(orgService.sendCheer).not.toHaveBeenCalled();
+  });
+
+  it('is gone once the cheer has actually been sent', async () => {
+    drawOverview();
+    await pressCheer('Great week');
+    expect(await screen.findByText('Cheered just now.')).toBeTruthy();
+    expect(screen.queryByLabelText(/^Send to Priya Nair: /)).toBeNull();
   });
 });
 

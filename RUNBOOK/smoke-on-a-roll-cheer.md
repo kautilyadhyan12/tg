@@ -1,4 +1,4 @@
-# SMOKE — "On a roll", and the one tap that cheers a member
+# SMOKE — "On a roll", and the cheer you confirm before it goes
 
 **What this checks:** the short list of members who keep turning up, on your
 gym's home screen, and the button beside each name that sends them a line of
@@ -138,19 +138,42 @@ rather than saying "0" or "1".
 beside a three-week streak reads as though the run had just broken.
 ❌ Only one row, or the two rows the other way round, is a failure.
 
-### 6 · Four things you can send
+### 6 · Four things you can send, and nothing sends yet
 
 ✅ On the right of each row, four emoji: **💪 🔥 👏 🏆**.
-✅ Hover over one. A tooltip shows the exact sentence it will send — for 💪,
-*"Great week — keep it going."*
+✅ Click **💪** on the **user** row — the top one. **Nothing is sent.** A small
+panel opens just beside the emoji, holding three things: **💪**, the words
+*"Great week — keep it going."*, and an orange button reading **Send**.
+✅ The panel sits over the row below it. The list does not jump or move down.
 
-**You are meant to be able to read what you are about to send before you send
-it.** If hovering shows nothing, that is a failure.
+**This is the whole point of the step.** Until **Send** is pressed, nothing has
+happened and nothing can be undone.
 
-### 7 · One tap sends it
+❌ A cheer going out on the emoji alone is a failure.
+❌ A big box in the middle of the screen is a failure — it is meant to be a small
+panel beside the emoji.
 
-✅ Click **💪** on the **user** row — the top one. The four emoji on **that row
-only** are replaced by a
+### 6b · Getting out of it, four ways
+
+Do these one at a time, on the **user** row. **After each one, the four emoji
+must be back and no cheer sent.**
+
+✅ Open the panel with **💪**, then press **Escape**. It closes.
+✅ Open it again, then click on an empty part of the page. It closes.
+✅ Open it again, then click **💪** a second time. It closes.
+✅ Open it with **💪**, then click **🏆**. It does **not** close — it swaps, and
+now reads *"Strong streak."* beside 🏆.
+
+**The last one is the one that matters if your finger slips**: correcting a
+mis-tap costs one more tap and never a sent cheer.
+
+❌ If any of the first three leaves the panel open, or if the fourth closes it
+instead of swapping, that is a failure.
+
+### 7 · Send sends it
+
+✅ With the panel open on **💪** on the **user** row, press **Send**. The panel
+closes and the four emoji on **that row only** are replaced by a
 grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again in
 7 days."* **Both are a pass.** The first is the moment before the server answers;
 the second means it has already answered. Step 8 is where the date is checked.
