@@ -2746,13 +2746,16 @@ export async function sendOrgCheer(
       // **THE SENTENCE SAYS WHAT HAPPENED, NOT WHO DID IT.** The cap is per
       // GYM — the query filters on `gym_id` and `user_id` and nothing else — so
       // "You've already cheered" is FALSE for the second staffer on the desk,
-      // who is told they did something a colleague did. "This week" was wrong
-      // too: the window is a ROLLING seven days, not a calendar week.
-      throw new OrgsError(
-        409,
-        "cheer_already_sent",
-        "This member has already been cheered in the last 7 days.",
-      );
+      // who is told they did something a colleague did.
+      //
+      // **"today" IS THE GYM'S DAY, and it is now literally true** (Kd's
+      // :35762, one per member per gym-day). Under the old rolling seven this
+      // sentence had to name a span — "in the last 7 days" — and an earlier
+      // draft saying "this week" was wrong because a rolling window is not a
+      // calendar one. **The rule moved to the calendar, so the plainest word is
+      // also the accurate one**, which is the rare direction for this kind of
+      // change.
+      throw new OrgsError(409, "cheer_already_sent", "This member has already been cheered today.");
     case "sent":
       return sendGymCheerResponseSchema.parse({
         cheer: { preset: outcome.preset, sentAt: outcome.sentAt.toISOString() },

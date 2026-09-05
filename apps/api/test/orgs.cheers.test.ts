@@ -1,7 +1,9 @@
 // "ON A ROLL" AND THE CHEER — routes + repo against REAL Postgres (R9.2).
 // DATABASE_URL-gated. Kd's rulings: :29961 ruling 4 (an emoji plus a ready-made
-// line, ONE TAP, one per member per week, no free-text box) and his 2026-09-04
-// answer at this card's gate, *"both weeks and days run"*.
+// line, ONE TAP, no free-text box) and his 2026-09-04 answer at this card's
+// gate, *"both weeks and days run"*. **THE CAP IS ONE PER MEMBER PER GYM-DAY
+// since :35762** — his own reversal of the "one per week" half, made at the
+// screen; Part 3 §4.1's `1/member/7d` is the AT-RISK NUDGE and is untouched.
 //
 // THE SEVEN THINGS THIS FILE EXISTS TO PIN, because most are guarantees rather
 // than features and would pass silently if they broke:
@@ -22,8 +24,14 @@
 //
 //   3. **THE CAP HAS TWO DIRECTIONS AND BOTH ARE DRIVEN.** A guard whose only
 //      tested failure is "it did not fire" is satisfied by a door that is simply
-//      shut (:7104's PG1), so a cheer at seven days and one minute must SUCCEED
-//      beside the one at two days that is refused.
+//      shut (:7104's PG1), so a cheer on the NEXT gym-day must SUCCEED beside
+//      the second one the same day that is refused.
+//
+//   3a. **AND THE DAY IS THE GYM'S DAY, PROVEN IN A ZONE WHERE THAT DIFFERS
+//      FROM UTC's** — chosen at run time, because in any fixed zone the two
+//      agree for most of the day and the mutant would live or die by the clock
+//      (:13746). This is trap #8 and the one defect this cap can carry while
+//      looking correct in every test written from the server's own timezone.
 //
 //   4. **TENANCY ON A FIXTURE OF TWO GYMS AND TWO MEMBERSHIPS.** :28221 §3b is
 //      this repo's recorded scar: with one membership a missing `gym_id`
@@ -307,30 +315,78 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
   const rollFor = (overview: Overview, userId: string): Regular | undefined =>
     overview.onARoll.find((r) => r.userId === userId);
 
-  /** WHEN THE BUTTON SHOULD COME BACK, worked out from the STORED `created_at`
-   *  and the test's OWN arithmetic.
+  /** WHAT `cheerableAt` DECOMPOSES INTO IN THE GYM'S OWN ZONE — its wall-clock
+   *  time, and how many of the gym's days ahead of today it falls.
    *
-   *  Deliberately not `created_at + interval '7 days'` in SQL: that would be the
-   *  query under test re-derived, and a changed offset would move both sides
-   *  together. Adding the seven days in JavaScript is what makes the interval
-   *  itself observable — this subquery is the ONLY channel telling a screen when
-   *  the button reopens, since the 409 deliberately omits the instant. */
-  const sevenDaysAfterNewestCheer = async (gymId: string, userId: string): Promise<number> => {
-    const rows = await sql<{ created_at: Date }[]>`
-      SELECT created_at FROM gym_cheers
-      WHERE gym_id = ${gymId} AND user_id = ${userId}
-      ORDER BY created_at DESC LIMIT 1`;
-    const at = rows[0]?.created_at;
-    if (at === undefined) throw new Error("no cheer to measure from");
-    return at.getTime() + 7 * 24 * 60 * 60 * 1000;
+   *  **THE ORACLE IS DELIBERATELY THE INVERSE OF THE CODE, NOT A COPY OF IT.**
+   *  `getGymRegulars` builds the instant by ADDING a day to the gym's date and
+   *  pushing it back through the zone; this pulls the answer back OUT through
+   *  the zone and asks two questions of the result. **Re-running the code's own
+   *  expression would move both sides together on any change** — the trap the
+   *  seven-day helper this replaces was written to avoid, kept word for word in
+   *  a new shape.
+   *
+   *  **AND IT IS WHAT CATCHES A UTC ANSWER, with no dependence on when the
+   *  suite runs.** Midnight UTC read in Kolkata is `05:30:00`, in Kiritimati
+   *  `14:00:00` — never `00:00:00`. So a `cheerable_at` computed without the
+   *  gym's zone fails the time half whatever the hour. */
+  const cheerableParts = async (
+    gymId: string,
+    instant: string,
+  ): Promise<{ localTime: string; daysAhead: number }> => {
+    const rows = await sql<{ local_time: string; days_ahead: number }[]>`
+      SELECT to_char(${instant}::timestamptz AT TIME ZONE g.timezone, 'HH24:MI:SS') AS local_time,
+             ((${instant}::timestamptz AT TIME ZONE g.timezone)::date
+               - (now() AT TIME ZONE g.timezone)::date)::int AS days_ahead
+      FROM gyms g WHERE g.id = ${gymId}`;
+    const row = rows[0];
+    if (row === undefined) throw new Error("no such gym");
+    return { localTime: row.local_time, daysAhead: row.days_ahead };
   };
 
-  /** Backdate the newest cheer this gym sent this member, so the seven-day
-   *  boundary can be stood on from both sides without waiting a week. */
-  const ageCheer = async (gymId: string, userId: string, interval: string) => {
+  /** Move every cheer this gym sent this member onto a chosen GYM-day, at
+   *  midday local so no fixture ever stands on a boundary by accident.
+   *
+   *  **GYM-DAYS AND NOT `now() - interval`**, for `visit`'s own recorded reason:
+   *  an offset in hours agrees with a server-zone implementation and disagrees
+   *  with a correct one for exactly the hours the two differ, which would put
+   *  :26812 §2(a)'s defect into the ORACLE where no mutant can reach it. */
+  const moveCheerToGymDay = async (gymId: string, userId: string, daysAgo: number) => {
     await sql`
-      UPDATE gym_cheers SET created_at = now() - ${interval}::interval
+      UPDATE gym_cheers SET created_at = (
+        SELECT (((now() AT TIME ZONE g.timezone)::date - ${daysAgo}::int)::timestamp
+                 + interval '12 hours') AT TIME ZONE g.timezone
+        FROM gyms g WHERE g.id = ${gymId})
       WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+  };
+
+  /** A TIMEZONE IN WHICH TODAY IS NOT UTC'S TODAY — chosen at run time, and
+   *  guaranteed to exist at every hour of every day.
+   *
+   *  **THIS IS THE FIXTURE THAT MAKES A UTC-BUCKETED GUARD DIE, and picking a
+   *  fixed zone could not do it.** The disagreement between a gym's date and
+   *  UTC's is real for only part of the day in any one zone, so a hardcoded
+   *  `Asia/Kolkata` would make the mutant survive for nineteen hours out of
+   *  twenty-four and the suite would pass or fail by the clock (:13746 — a
+   *  number from one run is a coin toss).
+   *
+   *  **WHY TWO ZONES ARE ENOUGH, and it is arithmetic rather than luck.**
+   *  Kiritimati is UTC+14 and Midway UTC−11: at UTC hour `h`, Kiritimati's date
+   *  runs ahead whenever `h ≥ 10`, and Midway's runs behind whenever `h < 11`.
+   *  The two conditions overlap and together cover all 24 hours, so **at least
+   *  one of them always differs.** The assertion below states that rather than
+   *  trusting it. */
+  const zoneOffsetFromUtcToday = async (): Promise<string> => {
+    const rows = await sql<{ zone: string }[]>`
+      SELECT z AS zone
+      FROM unnest(ARRAY['Pacific/Kiritimati', 'Pacific/Midway']) AS z
+      WHERE (now() AT TIME ZONE z)::date <> (now() AT TIME ZONE 'UTC')::date
+      LIMIT 1`;
+    const zone = rows[0]?.zone;
+    if (zone === undefined) {
+      throw new Error("no zone disagrees with UTC today, which the arithmetic says cannot happen");
+    }
+    return zone;
   };
 
   beforeAll(async () => {
@@ -664,7 +720,7 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
   );
 
   it(
-    "refuses a second cheer inside seven days and allows one just outside",
+    "refuses a second cheer on the same gym-day and allows one the next day",
     async () => {
       const owner = await makeUser("c2-owner");
       const org = await makeOrg(owner.cookies, "Cheer Gym Two");
@@ -674,63 +730,147 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
 
       expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
 
-      // TWO DAYS LATER — refused, and the list says when it opens again.
-      await ageCheer(org.org.id, member.userId, "2 days");
+      // THE SAME DAY — refused, and the list says when it opens again. Kd's
+      // :35762, replacing his own rolling seven days at :29961 ruling 4.
       const tooSoon = await cheer(org.org.id, member.userId, owner.cookies);
       expect(tooSoon.statusCode).toBe(409);
       expect((JSON.parse(tooSoon.body) as { error: string }).error).toBe("cheer_already_sent");
+      // THE SENTENCE IS THE SERVER'S AND THE CONSOLE ECHOES IT, so it is
+      // asserted here rather than left to the screen (:20587 — one rule, and
+      // every copy of it moves together).
+      expect((JSON.parse(tooSoon.body) as { message: string }).message).toBe(
+        "This member has already been cheered today.",
+      );
 
       // **NOT `?.cheerableAt).not.toBeNull()`, WHICH IS WHAT THIS WAS.** When
       // the member is absent from the list `rollFor` returns `undefined`, and
       // `expect(undefined).not.toBeNull()` PASSES — so that assertion could not
       // fail on a missing row, a wrong instant, or another gym's cheer. The row
-      // is asserted first, then the instant itself, against the stored
-      // `created_at` rather than against a clock (T3 round 1, rule 4).
+      // is asserted first, then the instant itself (T3 round 1, rule 4).
       const blocked = await readOverview(org.org.id, owner.cookies);
       const blockedRow = rollFor(blocked, member.userId);
       expect(blockedRow, "a blocked member is still on the list").toBeDefined();
-      expect(Date.parse(blockedRow?.cheerableAt ?? "")).toBe(
-        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
-      );
 
-      // SEVEN DAYS AND A MINUTE — allowed. **The other direction, without which
-      // a gate that simply never opens passes the test above** (:7104's PG1).
-      await ageCheer(org.org.id, member.userId, "7 days 1 minute");
+      // **THE INSTANT IS THE GYM'S NEXT MIDNIGHT — BOTH HALVES, BECAUSE THEY
+      // FAIL SEPARATELY.** A UTC answer lands on the right DAY at the wrong
+      // TIME (05:30 in Kolkata), and an off-by-one lands at the right time on
+      // the wrong day; asserting only one of the two accepts the other.
+      const parts = await cheerableParts(org.org.id, blockedRow?.cheerableAt ?? "");
+      expect(parts.localTime, "midnight in the gym's own zone, not UTC's").toBe("00:00:00");
+      expect(parts.daysAhead, "the gym's TOMORROW").toBe(1);
+
+      // THE NEXT DAY — allowed. **The other direction, without which a gate
+      // that simply never opens passes the test above** (:7104's PG1).
+      await moveCheerToGymDay(org.org.id, member.userId, 1);
       expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
 
-      // **NOW BOTH ROWS ARE PUT INSIDE THE WINDOW, so `ORDER BY created_at
-      // DESC` finally decides something.** The comment here used to claim the
-      // step above proved `cheerableAt` tracks the NEWEST cheer; it could not —
-      // while the cap holds, at most one row is ever inside seven days, so the
-      // ordering was unobservable and the clause could have been deleted.
+      // **AND YESTERDAY'S CHEER DOES NOT MOVE THE ANSWER.** Two rows exist now,
+      // one on each of two gym-days, and only today's may decide the instant —
+      // the predicate that keeps the old rolling window from creeping back in
+      // through a wider comparison.
       const ids = await sql<{ id: string }[]>`
         SELECT id FROM gym_cheers
         WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}
         ORDER BY created_at ASC`;
       expect(ids, "two cheers have been sent by now").toHaveLength(2);
-      await sql`UPDATE gym_cheers SET created_at = now() - interval '6 days'
-                WHERE id = ${ids[0]?.id ?? ""}`;
-      await sql`UPDATE gym_cheers SET created_at = now() - interval '1 day'
-                WHERE id = ${ids[1]?.id ?? ""}`;
 
       const open = await readOverview(org.org.id, owner.cookies);
       const openRow = rollFor(open, member.userId);
-      expect(openRow, "still on the list with two cheers in the window").toBeDefined();
-      // Six days out (newest, one day old), never one day out (oldest, six).
-      expect(Date.parse(openRow?.cheerableAt ?? "")).toBe(
-        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
-      );
+      expect(openRow, "still on the list with two cheers on the clock").toBeDefined();
+      const openParts = await cheerableParts(org.org.id, openRow?.cheerableAt ?? "");
+      expect(openParts.localTime).toBe("00:00:00");
+      expect(openParts.daysAhead).toBe(1);
 
       // AND IT IS THIS GYM'S ANSWER. A cheer from a DIFFERENT gym must not move
       // it — the subquery's `c.gym_id` predicate, which nothing else drives.
+      // **AND IT IS THIS GYM'S ANSWER — MEASURED ON A MEMBER GYM A HAS NOT
+      // CHEERED, WHICH IS THE ONLY WAY TO SEE IT NOW.**
+      //
+      // **O276 SURVIVED THE OBVIOUS VERSION OF THIS AND THE REASON IS THE RULE
+      // CHANGE ITSELF.** Under the old rolling window the subquery RETURNED the
+      // matched row's own `created_at + 7 days`, so another gym's cheer moved
+      // the instant and any member would do. It now returns the same midnight
+      // whichever row matched — so on a member gym A HAS cheered today, the
+      // predicate makes no difference to the value and the mutant is invisible.
+      // The predicate's whole remaining job is to keep gym A's button LIVE for
+      // somebody only gym B has cheered, so that is what is asserted (:7104's
+      // PG1 — a guard needs the arm where it must NOT fire).
       const orgB = await makeOrg(owner.cookies, "Cheer Gym Two-B");
-      await joinAsMember(member.cookies, orgB, owner.cookies);
-      for (const daysAgo of [0, 7]) await visit(orgB.org.id, member.userId, daysAgo);
-      expect((await cheer(orgB.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
-      const afterB = rollFor(await readOverview(org.org.id, owner.cookies), member.userId);
-      expect(Date.parse(afterB?.cheerableAt ?? "")).toBe(
-        await sevenDaysAfterNewestCheer(org.org.id, member.userId),
-      );
+      const shared = await makeUser("c2-shared");
+      await joinAsMember(shared.cookies, org, owner.cookies);
+      await joinAsMember(shared.cookies, orgB, owner.cookies);
+      for (const daysAgo of [0, 7]) {
+        await visit(org.org.id, shared.userId, daysAgo);
+        await visit(orgB.org.id, shared.userId, daysAgo);
+      }
+
+      // Gym A has NOT cheered this member, so its button is live and its
+      // instant is null — asserted BEFORE gym B acts, so the change below is
+      // attributable to gym B and not to the fixture.
+      const beforeB = rollFor(await readOverview(org.org.id, owner.cookies), shared.userId);
+      expect(beforeB, "the shared member is on gym A's list").toBeDefined();
+      expect(beforeB?.cheerableAt, "gym A has not cheered them, so nothing blocks it").toBeNull();
+
+      expect((await cheer(orgB.org.id, shared.userId, owner.cookies)).statusCode).toBe(201);
+
+      // **STILL NULL.** Gym B's cheer must not grey gym A's button, nor name a
+      // date gym A never earned.
+      const afterB = rollFor(await readOverview(org.org.id, owner.cookies), shared.userId);
+      expect(afterB, "still on gym A's list after gym B cheered them").toBeDefined();
+      expect(afterB?.cheerableAt, "another gym's cheer must not block this one").toBeNull();
+
+      // AND GYM B'S OWN ANSWER DID CHANGE, so the null above is a real refusal
+      // to be affected rather than a reader that never reports anything.
+      const atB = rollFor(await readOverview(orgB.org.id, owner.cookies), shared.userId);
+      expect(atB?.cheerableAt, "gym B, which did cheer, is blocked").not.toBeNull();
+      const bParts = await cheerableParts(orgB.org.id, atB?.cheerableAt ?? "");
+      expect(bParts.localTime).toBe("00:00:00");
+      expect(bParts.daysAhead).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // **THE DAY IS THE GYM'S DAY AND NOT THE SERVER'S**, which is trap #8 in this
+  // playbook and the one defect this cap can carry without ever looking wrong.
+  //
+  // **THE GYM IS BUILT IN A ZONE WHOSE TODAY IS NOT UTC'S TODAY, CHOSEN AT RUN
+  // TIME** — see `zoneOffsetFromUtcToday`. A cheer sent *now* is therefore
+  // stamped with one date in the gym's calendar and a DIFFERENT one in UTC, so
+  // a guard that buckets either side in UTC stops seeing it and lets a second
+  // cheer through. In `Asia/Kolkata` that gap is real for five and a half hours
+  // a day and the mutant would survive the other nineteen.
+  it(
+    "counts the gym's day and not the server's, at every hour of the day",
+    async () => {
+      const zone = await zoneOffsetFromUtcToday();
+      const differsRows = await sql<{ differs: boolean }[]>`
+        SELECT ((now() AT TIME ZONE ${zone})::date <> (now() AT TIME ZONE 'UTC')::date) AS differs`;
+      expect(
+        differsRows[0]?.differs,
+        `${zone} must disagree with UTC's date for this fixture to bite`,
+      ).toBe(true);
+
+      const owner = await makeUser("c2tz-owner");
+      const org = await makeOrg(owner.cookies, "Cheer Gym Zone", zone);
+      const member = await makeUser("c2tz-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      for (const daysAgo of [0, 7]) await visit(org.org.id, member.userId, daysAgo);
+
+      expect((await cheer(org.org.id, member.userId, owner.cookies)).statusCode).toBe(201);
+
+      // THE SECOND ONE IS REFUSED **because the gym says it is still the same
+      // day**, though UTC has already turned the page or not yet reached it.
+      const again = await cheer(org.org.id, member.userId, owner.cookies);
+      expect(again.statusCode, "a UTC-bucketed guard lets this through").toBe(409);
+
+      // AND THE REOPENING INSTANT IS MIDNIGHT WHERE THE GYM IS. At UTC+14 a UTC
+      // midnight reads 14:00 local, so this assertion cannot be satisfied by an
+      // answer computed in the wrong zone.
+      const row = rollFor(await readOverview(org.org.id, owner.cookies), member.userId);
+      expect(row, "the blocked member is still listed").toBeDefined();
+      const parts = await cheerableParts(org.org.id, row?.cheerableAt ?? "");
+      expect(parts.localTime).toBe("00:00:00");
+      expect(parts.daysAhead).toBe(1);
     },
     TEST_TIMEOUT_MS,
   );

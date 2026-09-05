@@ -35818,3 +35818,125 @@ required-field hazard is not in play.
 **NOTHING IS BUILT. No plan has been approved and no file under `src` was
 touched by this commit** (`:26777` — an approval covers what was on screen when
 it was given, and what he approved here is the RULE).
+
+## 2026-09-05 — THE CHEER'S CAP BECOMES ONE PER MEMBER PER GYM-DAY: built, and the crashed sweep left the SOURCE mutated TWICE
+
+**Read before changing a rolling window into a calendar one, before writing a
+mutant whose SELECT value does not depend on the row it matched, before running
+`mutate-orgs.mjs` with a `DATABASE_URL` you typed from memory, and before
+trusting a mutation harness that CRASHED to have restored what it edited.**
+
+Builds Kd's ruling at `:35762`. Web + api + shared; **no migration** — the cap
+stayed a check-then-act under `lockOrgRow` for the reason written into
+`sendGymCheer`'s docblock (a calendar day IS expressible as a UNIQUE, unlike the
+rolling seven, and building it is a migration a rule change did not authorise).
+
+### 1 · WHAT MOVED, AND THE ONE PLACE THE WORDING GOT *EASIER*
+
+Two SQL sites: the guard inside `sendGymCheer`, and the `cheerable_at` the
+overview serves. Both now compare the gym's calendar date, taken through
+`AT TIME ZONE`, on **both** sides. The 409 says *"already been cheered today."*
+and the console's short form is *"Cheered today."*
+
+**`cheerAgainText` NEEDED NO CHANGE AND THAT IS WORTH KNOWING**: it already
+answered *"later today"* / *"tomorrow"* / *"in N days"* off a calendar
+comparison, because `joinClock`'s day rule was ported into it four review rounds
+ago. **The multi-day arm is now unreachable from a live server and was KEPT** —
+a bundle newer than its api is handed the OLD seven-day instant, and `:31222`
+and `:12660` are this repo's two recorded costs of that window.
+
+### 2 · THE MUTANT THAT SURVIVED, AND WHY IT IS THE RULE CHANGE'S OWN SHADOW
+
+**O276 — the `gym_id` predicate on `cheerable_at` — came back ALIVE**, against a
+test that had covered it for two rounds.
+
+**Nothing about the test got worse; the SUBQUERY did.** Under the rolling window
+it returned the matched row's own `created_at + 7 days`, so another gym's cheer
+MOVED the instant and any member could observe it. It now returns the same
+midnight whichever row matched — **so on a member this gym has already cheered
+today, the predicate makes no difference to the value at all.** Its only
+remaining job is to keep THIS gym's button live for somebody only ANOTHER gym
+cheered, and that is now what the test drives: a shared member, asserted null
+before and after gym B acts, with gym B's own answer asserted non-null so the
+null is a refusal to be affected rather than a reader that reports nothing
+(`:7104`'s PG1).
+
+**STANDING: when a value stops depending on the row a predicate selects, every
+mutant aimed at that predicate silently weakens.** Changing what a query RETURNS
+can retire an observer without touching it.
+
+### 3 · THE HARNESS CRASHED AND LEFT THE SOURCE MUTATED — TWICE, IN ONE SESSION
+
+`mutate-orgs.mjs` died on `writeFileSync` of `repo.ts` with `UNKNOWN` (errno
+-4094) mid-sweep, **and both times `repo.ts` was left holding a mutant** —
+O278's the first time (`complimentary = false` gone from the send door), O276's
+the second (the `gym_id` predicate gone). **Both were caught by reading the
+file, not by the harness, which cannot report a restore it crashed before
+performing.** `:15770` is the recorded class; this is its worst form, because the
+mutation sits in `src` rather than in a tool.
+
+**IT WAS NOT THE DEV SERVERS.** They were stopped and it recurred, so the
+suspicion recorded first is withdrawn rather than left standing.
+
+**THE WORKING ROUTE, and it is what the figures below were taken with: ONE
+MUTANT PER INVOCATION, with a sha256 comparison against a copy taken before the
+sweep after EVERY one.** Ten invocations, ten clean restores, zero hand repairs
+needed. Slower and completely auditable.
+
+### 4 · TWO INSTRUMENT TRAPS, BOTH ALREADY IN THIS FILE, BOTH WALKED INTO
+
+**(a) A BACKTICK IN A COMMENT INSIDE A `sql` TEMPLATE ENDS THE TEMPLATE** —
+`:30094` §3b and `:31098`, now a third time, in the very comment explaining the
+new query. **`tsc` caught it; reading did not.** The comment is now backtick-free
+and says so.
+
+**(b) THE HARNESS'S OWN `DATABASE_URL`.** Four aborts were spent on
+*"control … no test tally"*, which reads as a broken filter and was a **wrong
+connection string I typed from memory** — `postgres:postgres@…` where the repo's
+is `aihg:aihg@…` (`test-local.mjs:69`), plus `127.0.0.1` for `:30867`'s `::1`
+trap. The suite's `beforeAll` failed, every test skipped, and no tally appeared.
+**The harness's message names the filter, so it points away from the cause;
+check the database line it prints FIRST.**
+
+### 5 · MUTANT IDS ARE CHOSEN FROM THE MAXIMUM, NOT FROM THE LAST ROW
+
+`:30094`'s trap, avoided by measuring: the file's last row is O279 and its
+maximum is also 279, but that was CHECKED rather than assumed. New: **O280** (the
+guard buckets in UTC), **O281** (the reopening instant in UTC), **O282** (the
+rolling seven days restored). Re-aimed because the rule change moved their
+anchors: **O266** (now the calendar widening rather than 7→30), **O267**, **O276**,
+**O277**, **O279**. An anchor a fix moved ABORTS the sweep rather than lying, which
+is `:13336` working.
+
+**O280's fixture is the interesting one.** A gym's day and UTC's differ for only
+part of any day, so a hardcoded zone would let a UTC-bucketed guard survive most
+of the time — `:13746`'s coin toss. The test therefore **picks its zone at run
+time** from `Pacific/Kiritimati` (+14) and `Pacific/Midway` (−11): at UTC hour
+`h`, Kiritimati's date differs when `h ≥ 10` and Midway's when `h < 11`, so **at
+least one always differs**, and the test asserts that rather than trusting it.
+
+### Round log
+
+**PROVE, all LOCAL.** `api` **796/796 across 51 files, exit 0** ·
+`orgs.cheers` **19/19** · `web` **1835/1835 across 61 files** · `shared`
+**52/52** · `tsc --noEmit` exit 0 on api and shared · `eslint --max-warnings=0`
+exit 0 on five api files and five web files · `node --check` on the harness.
+
+**SWEEP, ten mutants, ONE PER INVOCATION: O266, O267, O274, O276, O277, O278,
+O279, O280, O281, O282 — 10 RED, 0 ALIVE, 0 never ran**, every control GREEN and
+tallied first, **every restore verified byte-exact by sha256 against copies taken
+before the sweep** (`repo.ts` `abdadad6…9611c7e1`, `service.ts`
+`ee0789ed…b0701de8`).
+
+**THE FULL api SUITE FLAKED TWICE AND NEITHER WAS THIS CARD.** One run failed 21
+tests (`workouts.sync` answering 401 where 404 was expected), one failed 3
+(`catalog.seed`'s exact global counts — the documented case), and two runs of the
+same bytes were 796/796. **HEAD was measured at 795/795 before any of it**, which
+is what makes the attribution honest rather than assumed. The 401 symptom is NEW
+to that `OWED.md` line and is recorded on it; a scoped run is unaffected, which is
+what the audit above rests on (`:13746`).
+
+**NO SMOKE HAS RUN ON THIS CHANGE AND T3 IS UNRUN.** `smoke-on-a-roll-cheer.md`
+steps 6, 7, 8 and 9 are rewritten for the new wording; **step 9 now says in as
+many words that the half nobody can smoke — the button returning TOMORROW — is
+proven by the server's tests moving the clock rather than by waiting a day.**

@@ -720,8 +720,11 @@ export type RemoveOrgCodeResponse = z.infer<typeof removeOrgCodeResponseSchema>;
  *  comes to gym reguraly and maintains a continous streak the gym can send
  *  inpiring things like emojy short message etc"*.
  *
- *  **RULED: an emoji plus a ready-made line, ONE TAP, one per member per week,
- *  NO FREE-TEXT BOX.** He was shown the "let the owner type" arm with its full
+ *  **RULED: an emoji plus a ready-made line, ONE TAP, ~~one per member per
+ *  week~~ ONE PER MEMBER PER GYM-DAY, NO FREE-TEXT BOX.** (**The cap is Kd's own
+ *  reversal at :35762**, made at the screen — *"after chering gym can sheer
+ *  after 7 days men what is even this"*. The ONE TAP and no-free-text halves
+ *  ruled here are untouched by it, as is the confirm step at :35422.) He was shown the "let the owner type" arm with its full
  *  cost — a length cap, a rate limit, a report path for the member, an operator
  *  view of what was sent — and took the presets. It is the second time he has
  *  chosen that shape; the first is his own PACT design, *"no free text ever,

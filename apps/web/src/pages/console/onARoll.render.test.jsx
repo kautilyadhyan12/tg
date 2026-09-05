@@ -247,7 +247,15 @@ describe('the one tap', () => {
   // The second read carries the real `cheerableAt`, which is the ONLY channel
   // that instant travels on (the 409 omits it — `:34240` §6).
   it('draws the reopening date the re-read brought back, in place of "just now"', async () => {
-    const reopensAt = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    // **THE GYM'S NEXT MIDNIGHT, which is what the server now sends** — Kd's
+    // one-per-gym-day cap (:35762) replaced the rolling seven days this fixture
+    // used to carry. Built by rolling the clock to the start of tomorrow rather
+    // than adding 24 hours, so the fixture cannot drift into "later today" on a
+    // run that starts near midnight, and so it means a CALENDAR day like the
+    // code it drives.
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const reopensAt = midnight.toISOString();
     orgService.getOverview
       .mockResolvedValueOnce(withRoll(ROLL))
       .mockResolvedValue(
@@ -256,7 +264,7 @@ describe('the one tap', () => {
     drawOverview();
     await screen.findByText('Priya Nair');
     await pressCheer('Great week');
-    expect(await screen.findByText('Cheered — you can again in 7 days.')).toBeTruthy();
+    expect(await screen.findByText('Cheered — you can again tomorrow.')).toBeTruthy();
     expect(screen.queryByText('Cheered just now.')).toBeNull();
   });
 
@@ -312,13 +320,13 @@ describe('the one tap', () => {
         status: 409,
         data: {
           error: 'cheer_already_sent',
-          message: 'This member has already been cheered in the last 7 days.',
+          message: 'This member has already been cheered today.',
         },
       },
     });
     drawOverview();
     await pressCheer('Great week');
-    expect(await screen.findByText('Cheered in the last 7 days.')).toBeTruthy();
+    expect(await screen.findByText('Cheered today.')).toBeTruthy();
     expect(screen.queryByLabelText(/^Cheer Priya Nair/)).toBeNull();
     expect(screen.queryByText(/just now/)).toBeNull();
     // **AND ONCE, NOT TWICE** (T3 round 1 L-3). This used to draw the server's
@@ -327,7 +335,7 @@ describe('the one tap', () => {
     // assertion above is this one's positive control (:28976): the fact is
     // still on screen, in the grey the other three refusals use.
     expect(
-      screen.queryByText('This member has already been cheered in the last 7 days.'),
+      screen.queryByText('This member has already been cheered today.'),
     ).toBeNull();
   });
 });
@@ -574,6 +582,12 @@ describe('the button an owner may not press', () => {
   // **THE DEAD BUTTON SAYS WHEN IT COMES BACK**, off the server's own instant —
   // the 409 deliberately omits it, so `cheerableAt` is the only channel there
   // is (`:34240` §6).
+  //
+  // **THE FOUR-DAY INSTANT IS DELIBERATE AND IS NOT THE LIVE RULE.** Since
+  // :35762 a current server can only ever send the gym's next midnight, so this
+  // fixture is a bundle newer than its api — the deploy window this repo has
+  // been bitten in twice (:31222, :12660). It must render what it is given, not
+  // what it expects; the case above holds the live shape.
   it('names the day it reopens when the server says the window is shut', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-05T12:00:00.000Z'));

@@ -148,8 +148,9 @@ beside a three-week streak reads as though the run had just broken.
 > observed the guarantee — by accident, because a leftover cheer had blocked the
 > top row and Kd moved down one. **The accident is now the instruction.**
 >
-> If `tm` has been cheered in the last seven days the emoji will not be there.
-> Cheer any row that is **not the first**, and read `tm` below as that row's name.
+> If `tm` has already been cheered TODAY the emoji will not be there (the cap is
+> one per member per day since `:35762`). Cheer any row that is **not the
+> first**, and read `tm` below as that row's name.
 
 ✅ On the right of each row, four emoji: **💪 🔥 👏 🏆**.
 ✅ Click **💪** on the **tm** row — **the second one, for the reason above**.
@@ -192,9 +193,10 @@ instead of swapping, that is a failure.
 
 ✅ With the panel open on **💪** on the **tm** row, press **Send**. The panel
 closes and the four emoji on **that row only** are replaced by a
-grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again in
-7 days."* **Both are a pass.** The first is the moment before the server answers;
-the second means it has already answered. Step 8 is where the date is checked.
+grey line — **either** *"Cheered just now."* **or** *"Cheered — you can again
+tomorrow."* **Both are a pass.** The first is the moment before the server
+answers; the second means it has already answered. Step 8 is where the day is
+checked.
 ✅ The other rows still have their four emoji.
 
 ❌ If every row goes quiet, the wrong thing was sent to the wrong person.
@@ -202,8 +204,14 @@ the second means it has already answered. Step 8 is where the date is checked.
 ### 8 · The date appears on its own, and survives a reload
 
 ✅ **Without touching anything**, within a second or two that same row reads
-**"Cheered — you can again in 7 days."** Seven, because the cheer you have just
-sent reopens a week from the moment you sent it. You did not reload to see it.
+**"Cheered — you can again tomorrow."** TOMORROW, because Kd reversed his own
+seven-day wait on 2026-09-05 (DECISIONS `:35762`) — the button now comes back at
+your gym's own midnight, so a gym can say something each time somebody turns up.
+You did not reload to see it.
+
+**If you run this late at night it may read "later today" instead, and that is
+also a pass** — it means midnight is less than a calendar day away. Anything
+naming a NUMBER of days is a failure: that is the old rule still on the screen.
 ✅ Now reload the page (**Ctrl+R**). It still says the same thing.
 
 **This is the check that matters most in Part B**, and it is TWO checks. The
@@ -218,10 +226,16 @@ though a reload would fix it. That was the defect T3 round 1 found (DECISIONS
 the screen had already fetched never reached the screen. **This step used to
 tell you to press Ctrl+R here — it was written around the bug.**
 
-### 9 · A second cheer is refused
+### 9 · A second cheer is refused today, and only today
 
 ✅ Try to cheer the **same person** again — the emoji should not be there to
 click.
+
+**That refusal lasts until your gym’s midnight and no longer.** The cap is one
+cheer per member per day (`:35762`), so tomorrow the four emoji are back for
+that member — which is the whole point of the change and is the half no browser
+step here can show you without waiting a day. It is proven instead by the
+server's own tests, which move the clock rather than wait for it.
 
 ---
 

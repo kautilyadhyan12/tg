@@ -3163,10 +3163,10 @@ const MUTANTS = [
     id: 'O266',
     target: 'repo',
     suite: CHEERS_SUITE,
-    why: "THE CAP STRETCHES FROM SEVEN DAYS TO THIRTY. Kd ruled one per member per week and Part 3 §4.1 specifies rate-limit 1/member/7d for the same button, so this makes the product refuse something he ruled ALLOWED - the failure direction a test that only proves the refusal cannot see (:7104 PG1). The cheer at seven days and one minute is the observer",
-    expect: "allows one just outside",
-    from: "        AND created_at > now() - interval '7 days'",
-    to: "        AND created_at > now() - interval '30 days'",
+    why: "THE CAP STRETCHES, KEEPING THE CALENDAR SHAPE SO IT STILL READS CORRECTLY. Yesterday counts as today, so a member cheered on Monday is refused on Tuesday while every sentence on the screen and in the 409 still says today - the widening Kd ruled OUT at :35762, in the form a later chat would actually write it. RE-AIMED 2026-09-05: it used to stretch a rolling seven days to thirty, and that line no longer exists (:13336). It is NOT O282, which restores the rolling window outright; this one keeps the calendar comparison and moves only its edge, which is the change that survives a reading",
+    expect: "refuses a second cheer on the same gym-day",
+    from: '        AND (c.created_at AT TIME ZONE g.timezone)::date\n          = (now() AT TIME ZONE g.timezone)::date',
+    to: '        AND (c.created_at AT TIME ZONE g.timezone)::date\n          >= (now() AT TIME ZONE g.timezone)::date - 1',
   },
   {
     id: 'O267',
@@ -3174,8 +3174,12 @@ const MUTANTS = [
     suite: CHEERS_SUITE,
     why: "THE CAP STOPS ASKING WHICH GYM, so one gym cheering a member spends every OTHER gym allowance for that person. A member of two gyms gets one message a week between them and the second gym owner is told they have already done it, having never pressed anything. Sibling of O261 on the WRITE side - the same missing predicate, a different query, and a guard covering one of two readers is not a guard (:28452 §1)",
     expect: "puts one gym's cheer on that gym's card",
-    from: "      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n        AND created_at > now() - interval '7 days'",
-    to: "      WHERE user_id = ${input.userId}\n        AND created_at > now() - interval '7 days'",
+    // RE-AIMED 2026-09-05: the guard this points at became a gym-day
+    // comparison (:35762) and the old line no longer exists, so the anchor
+    // aborted the sweep rather than lying (:13336). The GUARANTEE is
+    // untouched -- one gym's cheer must not decide another gym's answer.
+    from: "      WHERE c.gym_id = ${input.gymId} AND c.user_id = ${input.userId}\n        AND (c.created_at AT TIME ZONE g.timezone)::date",
+    to: "      WHERE c.user_id = ${input.userId}\n        AND (c.created_at AT TIME ZONE g.timezone)::date",
   },
   {
     id: 'O268',
@@ -3270,18 +3274,22 @@ const MUTANTS = [
     target: 'repo',
     suite: CHEERS_SUITE,
     why: "THE REOPENING DATE STOPS ASKING WHICH GYM, so one gym cheering a member greys the button on ANOTHER gym's panel and names a date that gym never earned. It is O261/O267's missing predicate in the third of the three places it has to be written, and it was the one nothing watched: the 409 deliberately omits the instant, so this subquery is the ONLY channel telling a screen when the button comes back (T3 round 1, no-observer 2)",
-    expect: "refuses a second cheer inside seven days",
-    from: '             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id\n               AND c.created_at > now()',
-    to: '             WHERE c.user_id = ws.user_id\n               AND c.created_at > now()',
+    // RE-AIMED 2026-09-05 (:35762 moved the cap to a gym-day and rewrote this
+    // subquery). The GUARANTEE is unchanged and so is the `why` above; only the
+    // line it points at moved (:13336 - a mutant whose anchor a fix moved
+    // aborts the sweep rather than lying, and re-aiming is the fix).
+    expect: "refuses a second cheer on the same gym-day",
+    from: '             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id\n               AND (c.created_at AT TIME ZONE ${gym.timezone})::date',
+    to: '             WHERE c.user_id = ws.user_id\n               AND (c.created_at AT TIME ZONE ${gym.timezone})::date',
   },
   {
     id: 'O277',
     target: 'repo',
     suite: CHEERS_SUITE,
-    why: "THE DATE ON THE BUTTON STOPS BEING THE DATE THE SERVER ENFORCES. The panel says come back in thirty days while sendGymCheer allows one after seven, so an owner is told a date that is false in the direction that costs them the feature - :5807 on a screen an owner makes decisions from. The two figures are written in two places and only one of them refuses anything, which is what makes this worth a row of its own",
-    expect: "refuses a second cheer inside seven days",
-    from: "    (SELECT c.created_at + interval '7 days'",
-    to: "    (SELECT c.created_at + interval '30 days'",
+    why: "THE DATE ON THE BUTTON STOPS BEING THE DATE THE SERVER ENFORCES. The panel says come back in a WEEK while sendGymCheer allows one TOMORROW, so an owner is told a date that is false in the direction that costs them the feature - :5807 on a screen an owner makes decisions from, and it is exactly the seven days Kd threw out at :35762 creeping back onto the screen he threw them out of. The two figures are written in two places and only one of them refuses anything. RE-AIMED 2026-09-05 when the cap became a gym-day; the guarantee is the same one",
+    expect: "refuses a second cheer on the same gym-day",
+    from: "           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})",
+    to: "           (SELECT ((${gym.today}::date + 7)::timestamp AT TIME ZONE ${gym.timezone})",
   },
   {
     id: 'O278',
@@ -3298,8 +3306,36 @@ const MUTANTS = [
     suite: CHEERS_SUITE,
     why: "THE REFUSAL GOES BACK TO ACCUSING THE READER. The cap is per GYM - the lookup filters gym_id and user_id and nothing else - so You've already cheered this member this week is FALSE for the second staffer on the desk, who is told they did something a colleague did. It is :5807 exactly: a sentence a user can see that is not true, and it shipped in the card (T3 round 1, C/H-4). The window is a ROLLING seven days too, never a calendar week",
     expect: "tells a second staffer what happened",
-    from: '        "This member has already been cheered in the last 7 days.",',
-    to: '        "You\'ve already cheered this member this week.",',
+    from: '      throw new OrgsError(409, "cheer_already_sent", "This member has already been cheered today.");',
+    to: '      throw new OrgsError(409, "cheer_already_sent", "You\'ve already cheered this member today.");',
+  },
+  // -- KD'S ONE-PER-GYM-DAY CAP (2026-09-05, :35762) ------------------------
+  {
+    id: 'O280',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE CAP COUNTS THE SERVER'S DAY INSTEAD OF THE GYM'S, which is trap #8 and the one way this rule can be wrong while every test written from the server's own timezone passes. With the cheer side bucketed in UTC, a gym in Kolkata rolls its cap over at 05:30 local, so a member cheered at 02:00 can be cheered again at 03:00 - the same gym-day, twice, with nothing on any screen saying so. Its observer is a fixture whose gym sits in a zone whose date DIFFERS from UTC's, chosen at RUN TIME because in any fixed zone the two agree for most of the day and this mutant would otherwise live or die by the clock (:13746 - a number from one run is a coin toss)",
+    expect: "counts the gym's day and not the server's",
+    from: '        AND (c.created_at AT TIME ZONE g.timezone)::date\n          = (now() AT TIME ZONE g.timezone)::date',
+    to: '        AND c.created_at::date\n          = (now() AT TIME ZONE g.timezone)::date',
+  },
+  {
+    id: 'O281',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE BUTTON COMES BACK AT MIDNIGHT UTC RATHER THAN AT THE GYM'S MIDNIGHT, so a Kolkata owner is told the cheer reopens at 05:30 tomorrow morning and a Kiritimati owner at 14:00 - a wrong TIME on a right DAY, which is why the test asserts the wall-clock reading and the day offset SEPARATELY and why asserting only the day would accept this whole. What it does NOT cover, stated so nobody reads it as more: the guard inside sendGymCheer is a different expression with its own row (O280); this one moves only what the panel PROMISES",
+    expect: "refuses a second cheer on the same gym-day",
+    from: "           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})",
+    to: "           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE 'UTC')",
+  },
+  {
+    id: 'O282',
+    target: 'repo',
+    suite: CHEERS_SUITE,
+    why: "THE ROLLING SEVEN DAYS COMES BACK - the exact rule Kd threw out at :35762 after seeing it on his own screen - restored inside the guard while every sentence around it still says today. A member cheered on Monday could not be cheered again until the following Monday, which IS the complaint that produced the ruling. Its observer is the NEXT-DAY arm of the cap test, and without that second direction a gate that simply never opens passes every refusal assertion in the file (:7104's PG1)",
+    expect: "refuses a second cheer on the same gym-day",
+    from: '        AND (c.created_at AT TIME ZONE g.timezone)::date\n          = (now() AT TIME ZONE g.timezone)::date',
+    to: "        AND c.created_at > now() - interval '7 days'",
   },
 ];
 

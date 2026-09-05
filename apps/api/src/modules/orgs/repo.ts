@@ -4778,8 +4778,12 @@ export async function getGymRegulars(
   sql: SqlOrTx,
   input: { gymId: string; limit?: number | undefined },
 ): Promise<GymRegularRow[] | null> {
-  const gymRows = await sql<{ today: string }[]>`
-    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today
+  // **THE TIMEZONE IS READ AS WELL AS THE DAY, and `cheerable_at` is why.**
+  // Kd's cap is one per member per GYM-DAY (:35762), so the instant the button
+  // reopens is the gym's next midnight — which cannot be derived from `today`
+  // alone without knowing the zone that produced it.
+  const gymRows = await sql<{ today: string; timezone: string }[]>`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
     FROM gyms g WHERE g.id = ${input.gymId}`;
   const gym = gymRows[0];
   if (gym === undefined) return null;
@@ -4881,11 +4885,30 @@ export async function getGymRegulars(
            -- WHEN THIS GYM MAY CHEER THEM AGAIN — the server's answer to the
            -- server's own rule, so two open consoles cannot disagree. NULL means
            -- the window is open now.
-           (SELECT c.created_at + interval '7 days'
+           --
+           -- **ONE PER MEMBER PER GYM-DAY (Kd, :35762), NOT A ROLLING WINDOW.**
+           -- NO BACKTICKS IN THIS COMMENT: it lives inside a sql template
+           -- literal, where one would END the template (:30094 3b, :31098 --
+           -- walked into a third time writing this very line, and caught by
+           -- tsc rather than by reading).
+           -- The two directions of AT TIME ZONE are BOTH here and they are not
+           -- the same operator: on a timestamptz it reads a wall clock OUT
+           -- (giving the gym's calendar date), on a timestamp it puts one back
+           -- IN (giving the instant of the gym's next midnight). Dropping
+           -- either one leaves a query that still runs and answers in UTC -- a
+           -- gym in Kolkata would reopen its buttons at 05:30 (O281 here, O280
+           -- on the guard; the ids were checked against the file's MAXIMUM and
+           -- not against its last row, which is :30094's recorded trap).
+           --
+           -- **NO ORDER BY ANY MORE, AND THAT IS THE RULE CHANGE VISIBLE IN
+           -- ONE LINE.** Under a rolling window the NEWEST cheer decided the
+           -- answer; under a calendar day every cheer sent today gives the same
+           -- midnight, so "which one" stopped being a question.
+           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})
               FROM gym_cheers c
              WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id
-               AND c.created_at > now() - interval '7 days'
-             ORDER BY c.created_at DESC LIMIT 1) AS cheerable_at
+               AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date
+             LIMIT 1) AS cheerable_at
     FROM week_streak ws
     JOIN users u ON u.id = ws.user_id
     LEFT JOIN day_streak ds ON ds.user_id = ws.user_id
@@ -4924,13 +4947,27 @@ export type SendCheerOutcome =
 
 /** ONE TAP — Kd's :29961 ruling 4.
  *
- *  **THE CAP IS CHECKED HERE, UNDER THE GYM LOCK, AND NOT BY A CONSTRAINT.**
- *  Kd's *"one per member per week"* and Part 3 §4.1's `rate-limit 1/member/7d`
- *  are both a ROLLING seven days, which no UNIQUE or CHECK can express (the
- *  migration says so at length, including the `EXCLUDE USING gist` route that
- *  would and the extension it would cost). So this is a check-then-act, and it
- *  is safe for the reason the seat claim is: `lockOrgRow` serialises it, so two
- *  members of staff pressing at once cannot both pass the check.
+ *  **THE CAP IS ONE PER MEMBER PER GYM-DAY — Kd, :35762, REVERSING HIS OWN
+ *  *"one per member per week"* at :29961 ruling 4** after seeing it on screen:
+ *  *"after chering gym can sheer after 7 days men what is even this"*. **Part 3
+ *  §4.1's `rate-limit 1/member/7d` describes the AT-RISK NUDGE, a different
+ *  feature, and is NOT loosened by this.**
+ *
+ *  **IT IS STILL CHECKED HERE UNDER THE GYM LOCK RATHER THAN BY A CONSTRAINT,
+ *  BUT THE REASON HAS CHANGED AND THE OLD ONE MUST NOT BE QUOTED.** A ROLLING
+ *  seven days was inexpressible as a UNIQUE (the migration says so at length,
+ *  including the `EXCLUDE USING gist` route that would and the extension it
+ *  would cost). **A calendar day is not inexpressible** — a stored gym-day
+ *  column plus `UNIQUE (gym_id, user_id, day)` would carry it, which is exactly
+ *  what `gym_attendance` does (:27992 §1, *"the ruling lives in a constraint
+ *  rather than a comment"*). **That was NOT built, deliberately: it is a
+ *  migration, a backfill and a second writer of the gym's day, against a lock
+ *  that already exists and is already proven (O274).** R1.1 — the ruling was a
+ *  rule change, not a schema change. **If this cap is ever contended in earnest,
+ *  the constraint is the upgrade and this comment is where to start.**
+ *
+ *  The check-then-act is safe for the reason the seat claim is: `lockOrgRow`
+ *  serialises it, so two members of staff pressing at once cannot both pass.
  *
  *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
  *  staff sit at one desk, and the button is on the screen they all land on.
@@ -4963,14 +5000,29 @@ export async function sendGymCheer(
         AND removed_at IS NULL AND complimentary = false`;
     if (member.length === 0) return { kind: "not_found" };
 
-    // THE ROLLING WINDOW, READ INSIDE THE LOCK. `>` and not `>=`: a cheer sent
-    // exactly seven days ago has served its week, and the boundary is the one
-    // direction a test can only see with a fixture standing on it.
+    // THE GYM'S OWN DAY, READ INSIDE THE LOCK — Kd's :35762, one cheer per
+    // member per day, superseding his own rolling seven of :29961 ruling 4.
+    //
+    // **THE ZONE COMES OFF THE `gyms` ROW IN THIS SAME QUERY, and that is not
+    // tidiness.** Both sides of the comparison have to be bucketed by the SAME
+    // zone or the boundary moves between them; passing a zone in from JavaScript
+    // gives a second copy that can drift from the one `getGymRegulars` uses, and
+    // the two answers appear on one screen. The row is already locked above, so
+    // reading it again here is consistent by construction.
+    //
+    // **THIS IS A CALENDAR DAY AND NOT 24 HOURS, WHICH IS THE WHOLE RULING.** A
+    // member cheered at 9am cannot be cheered again that evening; one cheered at
+    // 11pm can be cheered at 12:01am. Kd was shown that second consequence
+    // before he ruled — the alternative was a gym unable to greet somebody
+    // standing in front of it (:35762 §2). **`now()` is the transaction's
+    // clock**, so a send at 23:59:59.9 and its guard cannot straddle midnight.
     const recent = await tx<{ one: number }[]>`
       SELECT 1 AS one
-      FROM gym_cheers
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        AND created_at > now() - interval '7 days'
+      FROM gym_cheers c
+      JOIN gyms g ON g.id = c.gym_id
+      WHERE c.gym_id = ${input.gymId} AND c.user_id = ${input.userId}
+        AND (c.created_at AT TIME ZONE g.timezone)::date
+          = (now() AT TIME ZONE g.timezone)::date
       LIMIT 1`;
     if (recent.length > 0) return { kind: "too_soon" };
 
@@ -4989,7 +5041,7 @@ export async function sendGymCheer(
     // here" several hundred times a day, and `markGymAttendance`'s own docblock
     // spells out the distinction: *"every other writer in this module is a
     // console action behind a privilege"*. A cheer is one of those, and Kd's
-    // own cap of one per member per seven days is what disposes of the volume
+    // own cap — one per member per gym-day (:35762) — is what disposes of the volume
     // half of that reasoning. It is also the only record of WHICH staffer sent
     // it — the member is deliberately never told (§2.4).
     await insertAudit(tx, {

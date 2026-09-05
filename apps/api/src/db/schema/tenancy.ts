@@ -319,12 +319,20 @@ export const gymAttendance = pgTable(
  *  NUMBER: "4 weeks!" is true when sent and false the week after, which is
  *  :7298's class of sentence outliving its condition.
  *
- *  **NOTHING HERE ENFORCES "ONE PER MEMBER PER WEEK", DELIBERATELY.** Kd's cap
- *  and Part 3 §4.1's `rate-limit 1/member/7d` are both a ROLLING seven days,
- *  which no UNIQUE can express; `sendGymCheer` checks it inside the transaction
- *  under `lockOrgRow`, and a mutant is what holds it. A calendar-week UNIQUE
- *  would be expressible and would enforce a DIFFERENT rule while looking like
- *  this one — a Sunday cheer and a Monday cheer, one day apart, both allowed.
+ *  **NOTHING HERE ENFORCES THE CAP, AND SINCE :35762 THAT IS A CHOICE RATHER
+ *  THAN A NECESSITY — do not quote the old reason.** ~~Kd's cap and Part 3
+ *  §4.1's `rate-limit 1/member/7d` are both a ROLLING seven days, which no
+ *  UNIQUE can express.~~ **Kd reversed his own cap to ONE PER MEMBER PER
+ *  GYM-DAY** (:35762; §4.1's figure is the AT-RISK NUDGE and is untouched), and
+ *  **a calendar day IS expressible** — a stored gym-day column plus
+ *  `UNIQUE (gym_id, user_id, day)`, which is precisely what `gym_attendance`
+ *  carries one table down (:27992 §1). **It was not built: that is a migration,
+ *  a backfill and a second writer of the gym's day, against a lock that already
+ *  exists and is proven (R1.1 — a rule change is not a schema change).**
+ *  `sendGymCheer` checks it inside the transaction under `lockOrgRow`, and
+ *  mutants are what hold it. **The trap the old note named still stands and is
+ *  now closer, not further away: a UNIQUE on a day computed in the WRONG ZONE
+ *  would look like this rule and enforce a different one.**
  *
  *  **`ON DELETE RESTRICT` throughout** (R4.3's default). It joins
  *  `USER_LINKED_NOT_PURGED_TABLES` in the same commit, and the automated FK walk

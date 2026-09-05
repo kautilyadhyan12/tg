@@ -146,7 +146,12 @@ export function canCheer(privileges) {
  *  it take the NUMBER and write their own sentence, because a console banner and
  *  a join request do not share a vocabulary. `nextNudgeText` is not reusable
  *  here for a concrete reason rather than a stylistic one: it tops out at *"in a
- *  couple of days"*, which is false for a window that is seven days wide.
+ *  couple of days"*, which was false for the seven-day window this replaced.
+ *  **Since Kd's :35762 the cap is ONE PER GYM-DAY, so the only answers this can
+ *  now give are "later today" and "tomorrow"** — the `in ${days} days` arm below
+ *  is unreachable from a live server and is KEPT anyway: it is what a bundle
+ *  older than the rule, or a server not yet deployed, would need to render, and
+ *  deleting it would make a stale pair draw nothing rather than the truth.
  *
  *  **A DAY WORD COMPARES CALENDAR DAYS** (joinClock's standing rule, four review
  *  rounds' worth). "You can again tomorrow" is a claim about the calendar on the
@@ -178,7 +183,7 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
 /** THE BUTTON, IN ONE OF FOUR STATES — and the ORDER IS THE SERVER'S ORDER.
  *
  *  `sendOrgCheer` checks the privilege first, then the gym's plan, and only
- *  then the seven-day window (the 409 is thrown last, inside the transaction).
+ *  then the day's window (the 409 is thrown last, inside the transaction).
  *  **A screen that asked in a different order would tell somebody a reason the
  *  server would not have given them** — and the privilege-before-membership
  *  ordering is itself an information boundary (:23711 §2), so it is not a detail
@@ -190,7 +195,7 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *  - `read-only` — the gym has no live plan. **The server's own sentence**,
  *                  verbatim from `READ_ONLY_NOTE`, so the screen and the door
  *                  cannot come to say different things about one refusal.
- *  - `sent`      — cheered inside seven days. `cheerableAt` is the server's
+ *  - `sent`      — cheered already today. `cheerableAt` is the server's
  *                  answer and the screen does not work it out: a page that
  *                  computed this from a cheer it had just sent would be right
  *                  until reload and wrong in a second browser.
@@ -201,7 +206,7 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *
  *  - `'sent'`    — this tap created the cheer. *"Cheered just now."*
  *  - `'already'` — the server answered 409: somebody had cheered this member
- *                  inside the seven days and this screen was stale. **It must
+ *                  today and this screen was stale. **It must
  *                  NOT say "just now"** — the cap is per GYM, so it may well
  *                  have been a colleague, days ago. `:34443` §4 is the recorded
  *                  cost of a refusal sentence that assumed who did it.
@@ -250,14 +255,23 @@ export function cheerState(regular, options = {}) {
     return {
       kind: 'sent',
       disabled: true,
-      text: again === '' ? 'Cheered in the last 7 days.' : `Cheered — you can again ${again}.`,
+      // **"today" IS THE GYM'S DAY AND NOT THE READER'S, and the unreadable arm
+      // is the one place this screen says it without the server's help.** Kd's
+      // cap is one per member per gym-day (:35762), so the true sentence for a
+      // `cheerableAt` this bundle could not parse is that a cheer has gone
+      // today — never a span, which is what the rolling seven made it say.
+      text: again === '' ? 'Cheered today.' : `Cheered — you can again ${again}.`,
     };
   }
   if (outcome === 'sent') {
     return { kind: 'sent', disabled: true, text: 'Cheered just now.' };
   }
   if (outcome === 'already') {
-    return { kind: 'sent', disabled: true, text: 'Cheered in the last 7 days.' };
+    // **THE SERVER'S OWN 409, IN THE SERVER'S OWN TERMS.** It says *"This member
+    // has already been cheered today."*, and this is the console's short form of
+    // exactly that fact. It must still not say WHO (`:34443` §4): the cap is per
+    // GYM, so it may well have been the colleague at the next desk.
+    return { kind: 'sent', disabled: true, text: 'Cheered today.' };
   }
   return { kind: 'live', disabled: false, text: null };
 }

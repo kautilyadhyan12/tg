@@ -445,13 +445,14 @@ export function registerOrgRoutes(
    *
    *  **201 AND NOT 200, and it is NOT idempotent** — unlike the attendance mark
    *  one route above, which answers 200 because a second tap in the same session
-   *  means the same visit. A second cheer inside seven days is a REFUSAL (409),
-   *  not a repeat of the first, because Kd's cap is the feature rather than a
-   *  guard around it.
+   *  means the same visit. A second cheer on the same gym-day is a REFUSAL
+   *  (409), not a repeat of the first, because Kd's cap is the feature rather
+   *  than a guard around it. (**One per gym-DAY since :35762**, his own reversal
+   *  of the rolling seven days at :29961 ruling 4.)
    *
    *  **A BUCKET OF ITS OWN, ON `orgs_nudge`'s RECORDED REASONING** — the PRODUCT
-   *  rule (one per member per week) lives in the database where a restart cannot
-   *  drop it, and this is the REQUEST floor on top. The two are different jobs:
+   *  rule (one per member per gym-day) lives in the database where a restart
+   *  cannot drop it, and this is the REQUEST floor on top. The two are different jobs:
    *  without the floor, a staffer whose real allowance is one can hammer a
    *  refusal loop that still costs `lockOrgRow` and a query per attempt, which
    *  is the same shape that limiter was written for.

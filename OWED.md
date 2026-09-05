@@ -2664,6 +2664,20 @@ then; none may be hidden or reduced to close the gap.
       it recurs, the thing to check first is whether the register path exhausts
       the connection pool under four workers, which would make it a DIFFERENT
       defect from the seed race and not part of this line.
+      **IT RECURRED 2026-09-05 (DECISIONS `:35822`), IN THE SAME FILE AND WITH A
+      LOUDER SYMPTOM: `workouts.sync.test.ts` failed TWENTY-ONE tests, answering
+      401 where 404 was expected** — an authenticated request whose user the
+      server no longer knew, which is the same *"auth fell over in this one
+      file"* shape as the 500 above and NOT a global-count assertion. **It did
+      not reproduce: two runs of the identical bytes were 796/796, and a third
+      failed only `catalog.seed`'s three counts.** What makes the attribution
+      solid rather than assumed is that **HEAD was measured at 795/795 first**;
+      the change under test touched only the cheer's SQL, which `workouts.sync`
+      never calls. **So the register-path hypothesis above gains a second data
+      point and stays the thing to check first** — 401 rather than 500 fits a
+      user row vanishing under a concurrent `seed()` at least as well as a pool
+      exhaustion, and both are testable by running that file alone against a
+      database nothing else is writing.
 - [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
       **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
       line said was needed. `durationSeconds` (the on-screen workout timer) and
@@ -8014,7 +8028,19 @@ file and is stated so nobody reads these as lower priority than they are.
       — clicking away, Escape, and choosing a different emoji all have to close
       it (`:14840`: a control whose Cancel is untested).
 - [ ] 🟡 **THE CHEER CAP BECOMES ONE PER MEMBER PER DAY — KD RULED IT 2026-09-05
-      (DECISIONS `:35762`), AND IT IS NOT BUILT.** ~~❓ he questioned it and had
+      (DECISIONS `:35762`).**
+      **⏳ BUILT 2026-09-05 (DECISIONS `:35822`) — THIS LINE DOES NOT TICK YET:
+      NO SMOKE HAS RUN AND T3 IS UNRUN.** Both SQL sites now compare the gym's
+      calendar date through `AT TIME ZONE` on both sides; the 409 says *"already
+      been cheered today."* and the row says *"Cheered today."* / *"you can again
+      tomorrow."* **No migration** — the cap stays a check-then-act under
+      `lockOrgRow`, with the reason (and the UNIQUE that a calendar day WOULD
+      now allow) written into `sendGymCheer`'s docblock. **`cheerAgainText`
+      needed no change** and its multi-day arm is KEPT for an api older than the
+      bundle (`:31222`, `:12660`). `api` 796/796 · `web` 1835/1835 · `shared`
+      52/52 · **10 mutants RED, 0 alive**, one per invocation with sha256
+      restore checks after each — the harness CRASHED twice mid-sweep and left
+      `repo.ts` MUTATED both times (`:15770`, detail at `:35822` §3). ~~❓ he questioned it and had
       not said what replaces it~~ — **ANSWERED: he took the recommendation, one
       per member per DAY, cost accepted (a daily member can collect seven a week
       and the four lines repeat).**

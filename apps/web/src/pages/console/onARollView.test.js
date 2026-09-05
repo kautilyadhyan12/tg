@@ -186,7 +186,32 @@ describe('the button, in one of four states', () => {
     expect(cheerState(regular(), CAN)).toEqual({ kind: 'live', disabled: false, text: null });
   });
 
-  it('is dead and SAYS SO once a cheer has gone out inside seven days', () => {
+  // **THE SENTENCE A REAL OWNER NOW READS, under Kd's one-per-gym-day cap
+  // (:35762).** The server sends the gym's next midnight, so the live server's
+  // only two answers are this and *"later today"* — and this case is what would
+  // go red if the day word were ever computed from floored elapsed hours
+  // instead of `joinClock`'s calendar comparison. Built from a real local
+  // midnight rather than "+1 day" for exactly that reason.
+  it('says TOMORROW after a cheer, which is the whole of the new cap on screen', () => {
+    const late = new Date(2026, 8, 5, 21, 30).getTime();
+    const nextMidnight = new Date(2026, 8, 6, 0, 0).getTime();
+    const state = cheerState(regular({ cheerableAt: new Date(nextMidnight).toISOString() }), {
+      ...CAN,
+      now: late,
+    });
+    expect(state.kind).toBe('sent');
+    expect(state.disabled).toBe(true);
+    expect(state.text).toBe('Cheered — you can again tomorrow.');
+    // NOT "in 0 days", and not "later today": two and a half hours away is
+    // TOMORROW because the calendar says so.
+    expect(state.text).not.toMatch(/today|days/);
+  });
+
+  // **THE MULTI-DAY ARM IS KEPT AND STILL TESTED THOUGH A LIVE SERVER CANNOT
+  // PRODUCE IT.** A bundle newer than the api — the deploy window this repo has
+  // been bitten in twice (:31222, :12660) — is handed the OLD seven-day instant,
+  // and it must render it rather than draw nothing.
+  it('still renders a multi-day instant from a server older than the rule', () => {
     const state = cheerState(regular({ cheerableAt: new Date(NOW + 2 * DAY).toISOString() }), CAN);
     expect(state.kind).toBe('sent');
     expect(state.disabled).toBe(true);
@@ -196,7 +221,11 @@ describe('the button, in one of four states', () => {
   it('still says it was cheered when it cannot say when', () => {
     const state = cheerState(regular({ cheerableAt: 'rubbish' }), CAN);
     expect(state.disabled).toBe(true);
-    expect(state.text).toBe('Cheered in the last 7 days.');
+    expect(state.text).toBe('Cheered today.');
+    // AND IT NAMES NO SPAN. The cap is one per gym-DAY (:35762), so a sentence
+    // reaching for "7 days" here would be the old rule surviving in the one arm
+    // that writes its own words instead of the server's.
+    expect(state.text).not.toMatch(/\d/);
   });
 
   it('covers the tap that has landed before the refreshed payload arrives', () => {
@@ -206,14 +235,14 @@ describe('the button, in one of four states', () => {
   });
 
   // **THE TWO OUTCOMES ARE TWO DIFFERENT TRUE SENTENCES AND THIS IS THE CASE
-  // THAT KEEPS THEM APART.** A 409 means somebody cheered this member inside
-  // the seven days — the cap is per GYM, so it may have been a colleague, days
-  // ago. Saying "just now" there is :34443 §4 exactly: a refusal that tells the
+  // THAT KEEPS THEM APART.** A 409 means somebody cheered this member TODAY —
+  // the cap is per GYM (:35762), so it may have been the colleague at the next
+  // desk. Saying "just now" there is :34443 §4 exactly: a refusal that tells the
   // reader they did something a colleague did.
   it('does not say "just now" about a cheer somebody else already sent', () => {
     const state = cheerState(regular(), { ...CAN, outcome: 'already' });
     expect(state.disabled).toBe(true);
-    expect(state.text).toBe('Cheered in the last 7 days.');
+    expect(state.text).toBe('Cheered today.');
     expect(state.text).not.toMatch(/just now/);
   });
 

@@ -475,7 +475,7 @@ export const orgService = {
    *  (R10.2). There is no Idempotency-Key here and nothing in this file adds a
    *  network-failure retry — but a replayed send cannot produce a second cheer:
    *  the write takes the gym row's lock and refuses anything inside the rolling
-   *  seven days with a 409. `authApi`'s one 401 replay is therefore safe, and a
+   *  the same gym-day with a 409 (:35762). `authApi`'s one 401 replay is therefore safe, and a
    *  dropped connection leaves the owner to press again, which is a person doing
    *  it.
    *
@@ -483,7 +483,7 @@ export const orgService = {
    *  them**: 404 for somebody who is not a live member of this gym (one sentence
    *  for "no such person" and "not yours" — R3.2), 403 without `members.read`,
    *  409 `gym_not_on_plan` for a gym with no live plan, and 409
-   *  `cheer_already_sent` inside the seven days. **The 409 deliberately does NOT
+   *  `cheer_already_sent` for the rest of that gym-day. **The 409 deliberately does NOT
    *  carry the instant the window reopens** — `cheerableAt` on the overview
    *  payload does, which is what a stale page needs re-read anyway
    *  (`:34240` §6, and `:34666` §1 is the day a struck claim about that survived

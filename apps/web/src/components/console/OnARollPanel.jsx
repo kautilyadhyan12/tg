@@ -37,7 +37,8 @@ import {
 // **THE RULING HE DID NOT CHANGE IS THE ONE THAT SHAPES THIS: still four
 // choices, still no typing.** What the panel adds is the moment between the
 // choice and the send — and it is not politeness. **The cheer is CAPPED and
-// IRREVERSIBLE**: one stray finger spends that member's whole seven-day window,
+// IRREVERSIBLE**: one stray finger spends that member's whole day (:35762; it
+// was a seven-day window when this was written),
 // tells the wrong person the gym noticed them, and there is no undo anywhere in
 // the product. `:34809` §2 is the recorded shape of that damage (C220, ALIVE on
 // its first run, sending to the wrong member with no error on screen).
@@ -205,8 +206,8 @@ export default function OnARollPanel({
       await orgService.sendCheer(gymId, userId, preset);
     } catch (err) {
       // **A 409 `cheer_already_sent` IS A FACT, NOT A FAILED ATTEMPT.** The
-      // server has just told us this member HAS been cheered inside the seven
-      // days; this page was simply stale. Leaving four live buttons under that
+      // server has just told us this member HAS been cheered TODAY (:35762);
+      // this page was simply stale. Leaving four live buttons under that
       // sentence would be a control the console knows will be refused again —
       // :12518 C/H-2's shape — so the row takes the state the server described.
       //
@@ -220,8 +221,8 @@ export default function OnARollPanel({
         outcome: already ? 'already' : null,
         // **AND A 409 IS DRAWN ONCE.** T3 round 1 L-3: this used to set the
         // error text as well, so the row said the fact twice — *"Cheered in
-        // the last 7 days."* in grey beside *"This member has already been
-        // cheered in the last 7 days."* in red. Both sentences were true, so
+        // today."* in grey beside *"This member has already been
+        // cheered today."* in red. Both sentences were true, so
         // it stayed Low, but the red one contradicts the comment three lines
         // above it: the failure channel is what this arm exists NOT to use.
         //

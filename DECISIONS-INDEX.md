@@ -14,8 +14,16 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,750 lines, MEASURED 2026-09-05 and not estimated**
-(1,256 + 1,405 + 89). **THE FORTY-THIRD IS A KD RULING, AND IT COSTS WHAT A
+**ALWAYS-READ TOTAL: 2,755 lines, MEASURED 2026-09-05 and not estimated**
+(1,261 + 1,405 + 89). **THE FORTY-FOURTH IS A WHOLE BUILD ACROSS THREE PACKAGES
+— two SQL sites, six copies of a sentence, three new mutants, five re-aimed —
+AND IT COST FIVE LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
+AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
+**It is the same +5 the ruling that authorised it cost +30, taken an hour
+apart** — the clearest single-session illustration of the split this file has:
+what a chat must READ is the decision, what it must be POINTED at is the work.
+Taken with this header's own prescribed command against the bytes being
+committed. **THE FORTY-THIRD IS A KD RULING, AND IT COSTS WHAT A
 RULING COSTS: +30 — 20 in §1, 6 in §2, 4 trigger phrases.** Compare the +4
 immediately below it, a whole smoke pass whose record went to §1B. **The two
 taken within an hour of each other, on the same feature, are the split working
@@ -1767,6 +1775,31 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:35822** — 2026-09-05 — **THE CHEER'S CAP BECOMES ONE PER MEMBER PER GYM-DAY:
+  built, and the crashed sweep left the SOURCE mutated TWICE.** **Read before
+  changing a rolling window into a calendar one, before writing a mutant whose
+  SELECT value does not depend on the row it matched, before running
+  `mutate-orgs.mjs` with a `DATABASE_URL` typed from memory, and before trusting
+  a mutation harness that CRASHED to have restored what it edited.** Builds
+  `:35762`. Two SQL sites compare the gym's date through `AT TIME ZONE` on BOTH
+  sides; **no migration** (a calendar day WOULD now permit a UNIQUE, unlike the
+  rolling seven — the reason it was not built is in `sendGymCheer`'s docblock).
+  **`cheerAgainText` needed NO change** — it already answered *tomorrow* off a
+  calendar comparison — and its multi-day arm is KEPT for an older api
+  (`:31222`). **O276 CAME BACK ALIVE and the rule change is why: the subquery now
+  returns the same midnight whichever row matched, so on a member this gym has
+  cheered the predicate cannot alter the value.** Standing: **when a value stops
+  depending on the row a predicate selects, every mutant aimed at that predicate
+  silently weakens.** Re-driven on a member only ANOTHER gym cheered.
+  **THE HARNESS DIED ON `writeFileSync` TWICE AND LEFT `repo.ts` HOLDING A
+  MUTANT BOTH TIMES** (O278, then O276) — caught by reading the file, not by the
+  harness; NOT the dev servers, which were stopped and it recurred. The working
+  route is ONE MUTANT PER INVOCATION with a sha256 check after each.
+  Also: **a backtick in a comment inside a `sql` template ended the template a
+  THIRD time** (`:30094` §3b), caught by `tsc`; and four aborts reading
+  *"control … no test tally"* were a **wrong database URL**, not a broken filter.
+  `api` 796/796 · `web` 1835/1835 · `shared` 52/52 · **10 RED, 0 ALIVE**.
+  **Smoke unrun, T3 unrun.**
 - **:35692** — 2026-09-05 — **THE CONFIRM STEP'S SMOKE PASSES ALL THREE PARTS AT
   KD'S BROWSER AND THE 🟡 LINE TICKS — and the run was STRONGER than the sheet,
   because a blocked row pushed him down one.** **Read before writing a smoke step
