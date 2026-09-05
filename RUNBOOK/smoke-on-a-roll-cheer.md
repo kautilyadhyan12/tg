@@ -153,10 +153,16 @@ happened and nothing can be undone.
 ❌ A big box in the middle of the screen is a failure — it is meant to be a small
 panel beside the emoji.
 
-### 6b · Getting out of it, four ways
+### 6b · Getting out of it — three ways, plus the swap
 
-Do these one at a time, on the **user** row. **After each one, the four emoji
-must be back and no cheer sent.**
+Do these one at a time, on the **user** row. **After the first three the four
+emoji must be back and no cheer sent. The fourth is not a way out** — it leaves
+a panel open, on the other emoji, and that is the pass.
+
+**Send is the fourth way out and is step 7**, so it is not repeated here. This
+heading said *"four ways"* until T3 round 2, which counted the swap into a total
+it does not belong in — the same miscount corrected in the code and in `OWED.md`
+that day.
 
 ✅ Open the panel with **💪**, then press **Escape**. It closes.
 ✅ Open it again, then click on an empty part of the page. It closes.
