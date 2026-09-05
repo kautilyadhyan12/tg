@@ -8013,8 +8013,26 @@ file and is stated so nobody reads these as lower priority than they are.
       **IT NEEDS A DISMISS PATH, which he did not name and a chat must not skip**
       — clicking away, Escape, and choosing a different emoji all have to close
       it (`:14840`: a control whose Cancel is untested).
-- [ ] ❓ **KD QUESTIONED THE SEVEN-DAY CHEER COOLDOWN — HIS OWN RULING — AND HAS
-      NOT SAID WHAT SHOULD REPLACE IT, 2026-09-05** (DECISIONS `:35317`). His
+- [ ] 🟡 **THE CHEER CAP BECOMES ONE PER MEMBER PER DAY — KD RULED IT 2026-09-05
+      (DECISIONS `:35762`), AND IT IS NOT BUILT.** ~~❓ he questioned it and had
+      not said what replaces it~~ — **ANSWERED: he took the recommendation, one
+      per member per DAY, cost accepted (a daily member can collect seven a week
+      and the four lines repeat).**
+      **THE BUILD'S ONE TRAP, and it is why "change 7 to 1" is wrong: both cap
+      sites are ROLLING** — `now() - interval '7 days'` at
+      `apps/api/src/modules/orgs/repo.ts:4887` and `:4973`, measured — **so the
+      literal edit gives a rolling 24 hours**, and a member cheered 9am Monday
+      who arrives 7am Tuesday could not be greeted until after they left.
+      **A DAY MEANS THE GYM'S DAY** (the chat's call at the gate, `:35762` §2),
+      matching the day an attendance is already stamped with (`:27992`); its own
+      cost is that 11pm and 12:01am are two cheers 62 minutes apart.
+      **ALSO CHANGES:** the 409's sentence at `service.ts:2754`, which names
+      seven days · `cheerAgainText` in `onARollView.js:166` and the suites
+      asserting *"you can again in 7 days"* · `RUNBOOK/smoke-on-a-roll-cheer.md`
+      steps 8 and 9. **`packages/shared` needs NO change** — `cheerableAt` is
+      already `z.string().nullable()`. **UNTOUCHED: the four presets, no free
+      text, the confirm step.** Original question below.
+      (DECISIONS `:35317`). His
       words: *"after chering gym can sheer after 7 days men what is even this"*.
       **THE CAP IS `:29961` RULING 4, HIS OWN** — *"capped one per member per
       week"* — and Part 3 §4.1 specifies the same `rate-limit 1/member/7d` for

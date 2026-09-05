@@ -35758,3 +35758,63 @@ preconditions were checked against the database first rather than assumed
 (`:15927`, `:20222`): seeded visits intact at 7 and 3, `user` and `tm` live and
 non-complimentary, Smoke Test Gym genuinely with nobody on a run, 21 migrations
 applied. No code changed in this commit — the sheet, `OWED.md` and the record.
+
+## 2026-09-05 — KD REVERSES HIS OWN SEVEN-DAY CHEER CAP TO ONE PER MEMBER PER DAY, and the chat's call at the gate is that "a day" means the GYM's day
+
+**Read before touching `gym_cheers`' cap or its `cheerableAt`, before quoting
+`:29961` ruling 4's "one per member per week", before quoting Part 3 §4.1's
+`1/member/7d` as binding this feature, and before reading a rolling window in
+this repo as a calendar one.**
+
+Closes the ❓ opened at `:35317` — *"after chering gym can sheer after 7 days men
+what is even this"* — which he raised at his own browser and did not replace.
+Two readings were put to him with what each costs; **he took the one that
+changes the rule, not the wording.**
+
+### 1 · THE RULING
+
+**ONE CHEER PER MEMBER PER DAY.** **SUPERSEDES `:29961` RULING 4's *"capped one
+per member per week"*, which is his own.** He was shown the cost before choosing
+and it stands on the record: **a member who comes every day can collect seven
+cheers a week, and the four preset lines will repeat.**
+
+**UNTOUCHED, and a later chat must not fold them in:** the four presets, **NO
+free text** (`:29961` ruling 4's other half, which agrees with his PACT ruling at
+`:18128`), and the confirm step (`:35422`). **Part 3 §4.1's `rate-limit
+1/member/7d` describes the AT-RISK NUDGE, a different feature, and is not
+loosened by this.**
+
+### 2 · THE CHAT'S CALL AT THE GATE, WITH ITS COST — "A DAY" IS THE GYM'S DAY
+
+He said *"per day"* and did not say whose day, so this is stated rather than
+assumed (`:27992`'s habit — a call made FOR him is written down with its cost, at
+the gate, and twice on that card it produced a one-line ruling).
+
+**BOTH CURRENT CAP SITES ARE ROLLING, NOT CALENDAR** — `now() - interval '7
+days'` at `repo.ts:4887` and `:4973`, measured — **so "change 7 to 1" would give
+a rolling 24 hours, and that is the wrong build.** A member cheered at 9am Monday
+who comes in at 7am Tuesday could not be cheered until after they had gone home.
+**The gym's calendar day is what makes "one per visit" true**, because an
+attendance is already stamped with the gym's day (`:27992`) and `:29961` ruling 2
+already counts a workout for a gym on the same GYM-day. The overview query
+already computes the gym's `today`.
+
+**THE COST OF THE GYM-DAY ARM, stated not hidden: a cheer at 11pm and another at
+12:01am are two cheers 62 minutes apart.** That is the honest price of a boundary
+a person can predict, and it is smaller than the price of the rolling arm, which
+is a gym unable to greet somebody standing in front of it.
+
+### 3 · WHAT IT TOUCHES, MEASURED RATHER THAN ESTIMATED
+
+`repo.ts:4884-4887` (the `cheerable_at` the overview serves) · `repo.ts:4973`
+(the guard read inside the org lock) · `service.ts:2754` (the 409's sentence,
+which names seven days) · `onARollView.js:166`'s `cheerAgainText` and the
+sentence it builds · the render and pure suites that assert *"you can again in 7
+days"* · `RUNBOOK/smoke-on-a-roll-cheer.md` steps 8 and 9. **`packages/shared`
+needs NO change** — `cheerableAt` is already `z.string().nullable()`
+(`orgs.ts:2295`), so the wire contract is unaffected and `:31222`'s
+required-field hazard is not in play.
+
+**NOTHING IS BUILT. No plan has been approved and no file under `src` was
+touched by this commit** (`:26777` — an approval covers what was on screen when
+it was given, and what he approved here is the RULE).

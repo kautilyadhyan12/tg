@@ -14,8 +14,17 @@
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
 3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
 
-**ALWAYS-READ TOTAL: 2,720 lines, MEASURED 2026-09-05 and not estimated**
-(1,252 + 1,385 + 83). **THE FORTY-SECOND IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+**ALWAYS-READ TOTAL: 2,750 lines, MEASURED 2026-09-05 and not estimated**
+(1,256 + 1,405 + 89). **THE FORTY-THIRD IS A KD RULING, AND IT COSTS WHAT A
+RULING COSTS: +30 — 20 in §1, 6 in §2, 4 trigger phrases.** Compare the +4
+immediately below it, a whole smoke pass whose record went to §1B. **The two
+taken within an hour of each other, on the same feature, are the split working
+in both directions** — a card record is a pointer, a ruling is read — and §2 grew
+because the ruling CLOSED an open question in the same commit, which is `:16702`'s
+lesson costing six lines rather than a re-opened decision. **20 is BELOW the
+going rate a ruling has cost all week** (45, 39, 34, 40 on 2026-09-01). Taken
+with this header's own prescribed command against the bytes being committed.
+**THE FORTY-SECOND IS A SMOKE PASS THAT TICKS A 🟡 LINE —
 AND IT COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,385
 AND 83.** Its record is a CARD record and went to §1B, where `:24813` sends it.
 **The finding it carries cost nothing extra to make findable, which is the trade
@@ -1696,6 +1705,26 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   Kd's four remain unbuilt**, each with an `OWED.md` line — and the calendar's
   carries the finding that it cannot be built on today's server, the member's
   attendance history taking a cursor and no date window.
+- **:35762** — 2026-09-05 — **KD REVERSES HIS OWN SEVEN-DAY CHEER CAP TO ONE PER
+  MEMBER PER DAY, and the chat's call at the gate is that "a day" means the
+  GYM's day.** **Read before touching `gym_cheers`' cap or its `cheerableAt`,
+  before quoting `:29961` ruling 4's "one per member per week", before quoting
+  Part 3 §4.1's `1/member/7d` as binding this feature, and before reading a
+  rolling window in this repo as a calendar one.** Closes the ❓ at `:35317`,
+  raised at his own browser — *"after chering gym can sheer after 7 days men what
+  is even this"*. Two readings were put to him with their costs and **he took the
+  one that changes the RULE, not the wording**; the cost he accepted is on the
+  record — **seven cheers a week for a daily member, and the four lines repeat.**
+  **UNTOUCHED: the four presets, NO free text, and the confirm step**; Part 3
+  §4.1's `1/member/7d` is the AT-RISK NUDGE and is not loosened.
+  **THE CALL THAT MATTERS FOR THE BUILD: both cap sites are ROLLING** (`now() -
+  interval '7 days'`, `repo.ts:4887` and `:4973`, measured) **so "change 7 to 1"
+  yields a rolling 24 hours and is the WRONG build** — a member cheered 9am
+  Monday who arrives 7am Tuesday could not be greeted until after they left. The
+  gym's calendar day is what makes *one per visit* true, attendance already being
+  stamped with it (`:27992`, `:29961` ruling 2). Its own cost, stated: **11pm and
+  12:01am are two cheers 62 minutes apart.** `packages/shared` needs NO change.
+  **NOTHING IS BUILT — the plan gate is unpassed** (`:26777`).
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
@@ -5710,14 +5739,20 @@ findable from §1B by construction and never needs to sit in §1 at all.**
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
-- **:35317** — 2026-09-05 — **OPEN: THE SEVEN-DAY CHEER COOLDOWN.** Kd
+- ~~**:35317** — 2026-09-05 — **OPEN: THE SEVEN-DAY CHEER COOLDOWN.** Kd
   questioned his own `:29961` ruling 4 at the screen — *"after chering gym can
   sheer after 7 days men what is even this"* — and did NOT say what replaces it.
   **A chat may not pick the number (R0.2).** Two readings that build
   differently: the WAIT is too long, or the ROW should stop announcing the rule.
   Recommendation on its `OWED.md` line (one per member per DAY, with its cost);
-  he has not chosen. **Check before touching `gym_cheers`' cap, the cheer's
-  copy, or Part 3 §4.1's `1/member/7d` nudge limit.**
+  he has not chosen.~~ **CLOSED THE SAME DAY by Kd at `:35762` — ONE PER MEMBER
+  PER DAY**, the recommendation taken, the cost accepted on the record. **The
+  RULE is settled and the BUILD is not: nothing is built and the plan gate is
+  unpassed**, so its `OWED.md` line is now a 🟡 build item rather than a ❓.
+  Struck rather than deleted, and closed in the same commit as the ruling —
+  `:16702` is the recorded cost of leaving an index line reading OPEN after its
+  original closed. **Check before touching `gym_cheers`' cap, the cheer's copy,
+  or Part 3 §4.1's `1/member/7d` nudge limit — and read `:35762`, not this.**
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section
   every session**; it is the only forward-looking part of the file.
