@@ -36559,8 +36559,18 @@ written**. No `src` file, no migration and no test is touched by this entry.
 
 **Read before building the at-risk list or its nudge, before storing anything in
 `gym_cheers`, before quoting `:36503` §2's *"same store"*, before copying
-migration `0021`'s "no UNIQUE can express this cap" paragraph, and before writing
-an empty state for a list whose inputs did not exist six weeks ago.**
+migration `0021`'s "no UNIQUE can express this cap" paragraph, and before reading
+this entry's §3 as true.**
+
+⚠️ **§3 IS FALSE AND IS STRUCK BY `:36694` §1, ruled the same day and before
+anything was built. Its §§1–2 and 4–5 stand.** The trigger clause above used to
+read *"before writing an empty state for a list whose inputs did not exist six
+weeks ago"* — **a trigger phrase that ASSERTED the error it was meant to guard**,
+which is why it was replaced rather than struck in place: a struck clause in a
+`Read before …` sentence still gets harvested verbatim into
+`DECISIONS-TRIGGERS.md`, where it would go on teaching the false figure to every
+chat that reads §1. **The body below is struck in place as usual; only the
+harvested sentence is rewritten, and this paragraph is the record of that.**
 
 `CARD-gym-overview-people.md` gains a SLICE 2 section (`S2.1`–`S2.7`) for the
 panel Kd chose at `:36503`. **Nothing is built.** No `src` file, no migration, no
@@ -36607,14 +36617,21 @@ nudge. Read `sendGymCheer`'s docblock, not the migration's.
 *"reading a rolling window in this repo as a calendar one"* — is this defect in
 the other direction, and it cost a Critical/High.
 
-### 3 · THE LIST WILL BE EMPTY AT EVERY GYM FOR ABOUT SIX WEEKS, AND THE SPEC'S OWN EMPTY STATE IS A LIE ON TODAY'S DATA
+### 3 · ~~THE LIST WILL BE EMPTY AT EVERY GYM FOR ABOUT SIX WEEKS~~ — **THIS HEADING IS FALSE. STRUCK THE SAME DAY BY `:36694` §1, BEFORE ANYTHING WAS BUILT. The empty state below survives on a DIFFERENT reason; the arithmetic does not.**
 
-The spec's definition (`03-part3-org-console.md:195-197`, with `:26469` §1.3's
+~~The spec's definition (`03-part3-org-console.md:195-197`, with `:26469` §1.3's
 substitution of visits for workouts) needs a member **quiet for 14 gym-days**
 who **visited in the 30 gym-days before that** — so its deepest input is **44
 days of attendance history**. `gym_attendance` has existed since **2026-09-02**
 (`0019`, `c5de542`), i.e. **five days**. Nobody can qualify, at any gym, for
-about six more weeks.
+about six more weeks.~~
+
+**— A WINDOW THAT REACHES BACK 44 DAYS DOES NOT NEED 44 DAYS OF DATA; IT NEEDS
+ONE VISIT SOMEWHERE INSIDE IT.** The first name can appear **2026-09-10** under
+Kd's seven-day ruling, 2026-09-17 under the spec's fourteen — a week, not six.
+**The DEPTH of a window was read as the HISTORY it requires**, and that is the
+part worth keeping. Full correction, and the reason the empty state stays, at
+`:36694` §1.
 
 **So `03-part3-org-console.md:280`'s empty state — *"Nobody's slipping —
 nice."* — is a claim this product cannot make yet**, and printing it would be
@@ -36673,3 +36690,125 @@ rather than fixed** (R1.1): `service.ts`'s `getOrgOverview` docblock and
 (`getAttendanceDay`) landed at `:30733`. The argument they make — do not add
 another — is unaffected and gets stronger, which is why this card repeats it
 with the true number instead of quoting theirs.
+
+## 2026-09-07 — KD RULES THE QUIET WINDOW AT ONE WEEK, AND HIS QUESTION ABOUT MESSAGES PILING UP CAUGHT AN ARITHMETIC ERROR IN THE CARD HE WAS ANSWERING
+
+**Read before building the at-risk list, before writing an empty state for a
+window that reaches further back than this product has data, before drawing more
+than one gym message on a member's card, and before quoting `:36558` §3's *"empty
+at every gym for about six weeks"* — it is WRONG and this entry corrects it.**
+
+Kd answered the `:36558` gate with two rulings, one blanket agreement and one
+question. **The question is worth more than either ruling**, which is the third
+time on this feature that the thing he asked beat the thing he was asked.
+
+### 1 · CORRECTION TO `:36558` §3, AND THE ERROR IS THE REUSABLE PART
+
+`:36558` §3, `OWED.md`, this file's index line, `HANDOFF.md` and the message that
+put the card to Kd all said the list would be **empty at every gym for about six
+weeks**, because *"its deepest input is 44 days of attendance history"*. **That
+is false, and it was false before Kd changed anything.**
+
+**A WINDOW THAT REACHES BACK 44 DAYS DOES NOT NEED 44 DAYS OF DATA — IT NEEDS ONE
+VISIT SOMEWHERE INSIDE IT.** The definition asks for a visit in the window
+`[today-44, today-15]` and none since. Attendance has been recorded since
+2026-09-02, so under the SPEC's fourteen days the first qualifier was possible
+from **2026-09-17**, and under Kd's seven from **2026-09-10** — a week away, not
+six.
+
+**THE CONFUSION HAS A NAME AND IT WILL RECUR: the DEPTH of a window was read as
+the AMOUNT OF HISTORY it requires.** It is the same shape as `:30243`'s trigger
+(a fixture whose rows all land in the current week cannot see a boundary) turned
+inside out — here a window nothing had populated was assumed to be unsatisfiable.
+**Nothing in the suite could have caught it; it was prose about arithmetic**, and
+it was found only because answering an unrelated question meant working the dates
+again.
+
+**WHAT SURVIVES THE CORRECTION, and it is why the empty state stays:** while a
+gym has less than about five weeks of recorded visits, an empty list still cannot
+be read as *"nobody is slipping"* — **anybody who drifted away BEFORE recording
+began is invisible to us**. So Part 3 §4.1's own *"Nobody's slipping — nice."*
+is still a claim this product cannot make yet (`:5807`), and the four empty
+states told apart still ship. **The REASON changed, not the requirement**, and
+that boundary is now a SERVER field rather than something a screen infers from an
+empty list (`:27992` §3's shape).
+
+### 2 · RULING 1 — THE QUIET WINDOW IS SEVEN DAYS, NOT THE SPEC'S FOURTEEN
+
+*"i think if a user does not come for 1 week gyms can send the messages"*,
+overruling `S2.6.2` item 2, which had recommended keeping
+`03-part3-org-console.md:197`'s number. **`SLIPPING_AWAY_QUIET_DAYS = 7`**, and
+it is a KNOWING DEVIATION from the spec with his name on it (R0.3).
+
+**IT DOES NOT MOVE THE OTHER 14 IN THE SAME DEFINITION.** *"Joined > 14 days
+ago"* answers a different question — do not judge anybody inside their first
+fortnight — and he ruled the SILENCE window. **A chat that changes both because
+they were once the same number is inventing a ruling** (R0.2), which is
+`:35762`'s shape one feature over: two caps that agreed by coincidence and then
+stopped.
+
+**THE COST IS LARGER THAN THE ONE THE RECOMMENDATION NAMED AND HE HAS NOT BEEN
+SHOWN IT**: a member who trains every ten days is normal at many gyms and will
+appear on this list. **What bounds it:** the list prompts an owner, nothing sends
+itself, and the nudge's cap is one a week — so the worst case is one warm message
+to somebody training fortnightly. Recorded here rather than made a second gate.
+
+### 3 · HIS QUESTION — DO MESSAGES PILE UP? NO, AND THE ANSWER WAS MEASURED RATHER THAN REMEMBERED
+
+*"suppose gym send a message and if next day another message is send what will
+happen to the previous messages will messages piled up and cover the whole
+screen?"*
+
+**EXACTLY ONE MESSAGE HAS EVER DRAWN ON A GYM'S CARD, AND IT IS THE NEWEST.** The
+lateral serving it is `ORDER BY c.created_at DESC LIMIT 1` (`repo.ts:513-519`),
+the contract holds ONE nullable object (`latestCheer`), and `cheerNote` renders a
+single line (`gymMembershipView.js:212-217`). **Tomorrow's message replaces
+today's.** The rows are all kept, and `audit_log` records who sent each, so the
+history exists for the gym and for an operator without becoming a feed a member
+has to clear.
+
+**SO NOTHING IS BROKEN — BUT IT WAS AN ACCIDENT OF HOW SLICE 1 HAPPENED TO WORK,
+NOT A WRITTEN RULE, AND SLICE 2 IS EXACTLY WHERE IT WOULD BREAK.** Adding
+`latestNudge` beside `latestCheer` on screen turns one line into two, and that is
+the obvious way to build it. **It is now a build rule with a test** (`S2.4b.7`):
+one field is chosen, the newer of the two, and a cheer and a nudge never stack.
+
+### 4 · WHAT HIS QUESTION FOUND ON THE SHIPPED SCREEN, AND IT IS UNRULED
+
+**A cheer draws FOR EVER.** `cheerAge` counts up with no ceiling
+(`gymMembershipView.js:188-198`), so a gym that cheered once in January still
+shows that line in July reading *"212 days ago"*. **It is TRUE, so it is not
+`:5807` and it did not block slice 1** — it is an old compliment nobody cleared.
+
+**RECOMMENDED, HIS TO REFUSE: a message stops drawing after seven days** — the
+longest gap a gym can leave between two messages once the nudge exists, so a
+message is on screen exactly as long as it could still be the latest thing that
+gym said. **Cost: a member who opens the app fortnightly may never see a message
+sent for them.** **It changes behaviour slice 1 SHIPPED**, which is why it is the
+one call in the card he has not covered — *"other things i agree with you"* was
+said before this call existed, and `:26777` is the rule that an approval covers
+what was on screen when it was given.
+
+**It rides in slice 2 rather than becoming its own card because it is the same
+component, the same field and the same edit** (`S2.4b.7`–`8`) — a separate card
+for one constant on a line this slice is already rewriting would be process for
+its own sake.
+
+### Round log
+
+Documents only. `CARD-gym-overview-people.md` gains ruling 1 throughout
+(`S2.1`–`S2.2`, `S2.4a.2`, `S2.4a.6`, `S2.4b.4`, `S2.6.2`, `S2.6.3`, `S2.7`), the
+one-message rule (`S2.4b.7`) and the expiry call (`S2.4b.8`); `S2.1` limit 2 and
+`S2.6.2` item 2 are STRUCK IN PLACE rather than rewritten, with the correction
+beside them (`:20587` — a figure moves in all of its copies, and a struck one
+still teaches).
+
+**Four documents carried the false six-weeks claim and all four are corrected in
+this commit** — this file, `DECISIONS-INDEX.md`, `OWED.md` and `HANDOFF.md`.
+`:20587` is the recorded cost of correcting a figure in fewer than all of its
+copies, and `:34992`/`:36144` are the recorded cost of trusting a review's COUNT
+of those copies, so they were grepped rather than remembered.
+
+Measured this session, not recalled: the three-line lateral and its `LIMIT 1` ·
+`cheerNote` and `cheerAge`'s missing ceiling · the date arithmetic in §1, worked
+from `0019`'s commit date (`c5de542`, 2026-09-02).

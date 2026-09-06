@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,287 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,291 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -15,8 +15,18 @@
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,781 lines, MEASURED 2026-09-07 and not estimated**
-(1,287 + 1,405 + 89). **THE FIFTIETH IS A CARD DOCUMENT WRITTEN AND UNAPPROVED —
+**ALWAYS-READ TOTAL: 2,785 lines, MEASURED 2026-09-07 and not estimated**
+(1,291 + 1,405 + 89). **THE FIFTY-FIRST IS A KD RULING PLUS A CORRECTION OF THE
+ENTRY IT ANSWERED — AND IT COST FOUR LINES, every one a trigger phrase, §1 AND §2
+UNMOVED AT 1,405 AND 89.** A ruling has cost 20–45 all month; this one cost four,
+**because what BINDS is one constant and one screen rule, while the reasoning
+behind them is a card record** — the split working on the cheapest possible
+input. **One of the four is a phrase that ATTACKS an always-read line already in
+the file** — *"quoting `:36558` §3's 'empty at every gym for about six weeks'"* —
+which is the first time a trigger has been written to disarm a false figure
+rather than to guard a build step, and it is why the false phrase now survives in
+exactly one place, pointing at its own correction. **THE FIFTIETH IS A CARD
+DOCUMENT WRITTEN AND UNAPPROVED —
 AND IT COST FIVE LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
 AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
 **Its cheapest phrase is the one that stops a rebuild: *"before storing anything
@@ -1825,13 +1835,40 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:36694** — 2026-09-07 — **KD RULES THE QUIET WINDOW AT ONE WEEK, AND HIS
+  QUESTION ABOUT MESSAGES PILING UP CAUGHT AN ARITHMETIC ERROR IN THE CARD HE WAS
+  ANSWERING.** **Read before building the at-risk list, before writing an empty
+  state for a window that reaches further back than this product has data, before
+  drawing more than one gym message on a member's card, and before quoting
+  `:36558` §3's *"empty at every gym for about six weeks"* — it is WRONG and this
+  entry corrects it.** **§1 · THE CORRECTION AND ITS REUSABLE SHAPE: a window
+  that REACHES BACK 44 days does not NEED 44 days of data — it needs one visit
+  somewhere inside it.** Attendance has been recorded since 2026-09-02, so the
+  first name appears 2026-09-10 under Kd's seven days (2026-09-17 under the
+  spec's fourteen), not in mid-October. **The DEPTH of a window was read as the
+  HISTORY it requires**; nothing in the suite could catch it, being prose about
+  arithmetic. **The empty state survives with a different reason** — anybody who
+  drifted away before recording began is invisible, so *"Nobody's slipping"* is
+  still unsayable — **and that boundary is now a SERVER field.** **§2 · RULING 1:
+  the quiet window is SEVEN days, not the spec's fourteen** (*"if a user does not
+  come for 1 week"*), overruling the card's recommendation; **it does NOT move
+  the "joined > 14 days ago" clause, and changing both because they once agreed
+  is inventing a ruling** (`:35762`'s shape one feature over). **§3 · HIS
+  QUESTION, ANSWERED FROM THE CODE: nothing piles up** — one cheer is served per
+  gym row (`ORDER BY created_at DESC LIMIT 1`), one object is held, one line is
+  drawn, and tomorrow's replaces today's while every row stays in the table and
+  in `audit_log`. **It was an accident of slice 1 rather than a rule, and slice 2
+  is where it breaks**, so it is now a rule with a test. **§4 · UNRULED, FOUND BY
+  THAT QUESTION: a cheer draws FOR EVER** (`cheerAge` has no ceiling — *"212 days
+  ago"*), TRUE and so never a blocker; **recommended, his to refuse: seven days.**
 - **:36558** — 2026-09-07 — **SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN AND
   UNAPPROVED — and the "one mechanism, same store" argument that bought this card
   does not survive reading the three queries it rests on.** **Read before
   building the at-risk list or its nudge, before storing anything in
   `gym_cheers`, before quoting `:36503` §2's *"same store"*, before copying
   migration `0021`'s "no UNIQUE can express this cap" paragraph, and before
-  writing an empty state for a list whose inputs did not exist six weeks ago.**
+  reading this entry's §3 as true.** ⚠️ **§3 IS FALSE AND IS STRUCK BY `:36694`
+  §1 — read that first; §§1–2 and 4–5 stand.**
   `CARD-gym-overview-people.md` gains `S2.1`–`S2.7`; **nothing is built**
   (`:26777`). **All three readers of `gym_cheers` filter on `gym_id` and
   `user_id` and nothing else** (`repo.ts:513-519`, `:4907-4911`, `:5019-5026`),
@@ -1841,9 +1878,11 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   table**; what survives of "one mechanism" is the SHAPE. **`0021`'s
   rolling-window paragraph is dead for the cheer and TRUE for the nudge**, whose
   cap is Part 3 §4.1's rolling `1/member/7d` — the two caps differ in NUMBER and
-  in SHAPE. **The list is empty at every gym for ~6 weeks** (its deepest input is
-  44 days of history; `gym_attendance` began 2026-09-02), so the spec's *"Nobody's
-  slipping — nice."* is a claim we cannot make and the card ships four empty
+  in SHAPE. ~~**The list is empty at every gym for ~6 weeks** (its deepest input
+  is 44 days of history)~~ **— STRUCK BY `:36694` §1 the same day: a window that
+  REACHES BACK 44 days needs one visit inside it, not 44 days of data, so the
+  first name appears 2026-09-10.** The spec's *"Nobody's slipping — nice."* is
+  still unsayable for a different reason, and the card still ships four empty
   states told apart. **The word "nudge" already means an APPLICANT nudging a
   gym.** One question to Kd (the four lines) and six calls with their costs.
 - **:36503** — 2026-09-06 — **KD PICKS *"SLIPPING AWAY"* AS THE NEXT SLICE OF THE

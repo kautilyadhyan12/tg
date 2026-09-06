@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: **KD ANSWERED THE SLICE-2 GATE (DECISIONS `:36694`) — TWO RULINGS, ONE
+      BLANKET AGREEMENT, AND A QUESTION THAT FOUND MORE THAN EITHER RULING.**
+      **STILL NOTHING IS BUILT** — no `src` file, no migration, no test.
+
+      **WHAT IS SETTLED:** the panel (`:36503`) · **the four nudge lines**
+      (`S2.6.1`) · **the quiet window is SEVEN days, not the spec's fourteen** —
+      *"i think if a user does not come for 1 week gyms can send the messages"*,
+      overruling this card's own recommendation · and *"other things i agree with
+      you"*, covering `S2.6.2` items 1 and 3–5 as they stood.
+
+      **WHAT IS STILL HIS, and both are NEW since he answered:** the **file list,
+      the migration SQL (`S2.4a.1`) and the test list (`S2.4a.6`)**, which no
+      message has yet put in front of him — and **`S2.6.2` item 7, a message
+      expiring after seven days**, which changes behaviour slice 1 already
+      SHIPPED. **A blanket agreement given before a call existed does not cover
+      it** (`:26777`).
+
+      **FOUR THINGS THE BUILD CHAT MUST NOT LOSE.**
+  1. **THE SEVEN DOES NOT MOVE THE OTHER 14 IN THE SAME DEFINITION.** *"Joined >
+     14 days ago"* answers a different question and he did not rule on it.
+     **Changing both because they were once the same number is inventing a
+     ruling** (R0.2) — `:35762`'s shape one feature over, where two caps agreed
+     by coincidence and then stopped.
+  2. **A NUDGE MUST NOT BE STORED IN `gym_cheers`** — see finding 1 in the block
+     below, which is unchanged and still binds.
+  3. **NOTHING PILES UP ON A MEMBER'S CARD AND NOTHING MAY START TO.** Kd asked;
+     measured in the shipped code: one cheer per gym row (`ORDER BY created_at
+     DESC LIMIT 1`, `repo.ts:513-519`), ONE object in the contract, one line
+     rendered (`gymMembershipView.js:212-217`) — tomorrow's replaces today's,
+     every row kept in the table and in `audit_log`. **That was an ACCIDENT of
+     slice 1, not a rule, and slice 2 is where it breaks**: drawing
+     `latestNudge` beside `latestCheer` is the obvious build and is wrong. Now a
+     rule with a test (`S2.4b.7`).
+  4. **A CHEER DRAWS FOR EVER TODAY** — `cheerAge` has no ceiling
+     (`gymMembershipView.js:188-198`), so a January cheer still reads *"212 days
+     ago"* in July. TRUE, so never `:5807` and never a blocker. The seven-day
+     expiry is the recommendation waiting on him.
+
+      **AND THE CORRECTION THAT MATTERS MOST, because four documents carried it:**
+      `:36558` §3's *"empty at every gym for about six weeks"* is **FALSE and
+      struck** (`:36694` §1). **A window that REACHES BACK 44 days does not NEED
+      44 days of data — it needs one visit somewhere inside it**, so the first
+      name appears **2026-09-10**, not mid-October. **The DEPTH of a window was
+      read as the HISTORY it requires.** The empty state survives on a different
+      reason: anybody who drifted away BEFORE recording began is invisible to us,
+      so *"Nobody's slipping"* is still unsayable — and that boundary is now a
+      SERVER field, never inferred by a screen from an empty list.
+
+PROVE: **Documents only — no `src` file, no test, no migration changed.** Guards
+       on the bytes committed are in the commit message. Every figure quoted was
+       measured this session (`:36694`'s round log lists them); the false one was
+       found by re-working the dates to answer Kd, not by any test.
+
+OPEN:  **The file list, the migration SQL, the test list, and the message-expiry
+       call.** `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT
+       (`:24559`) — not mine, not committed. **No dev server and no container was
+       started this session** (nothing here needed a database). A stale listener
+       on `:3000` is a recorded trap (`:31222`) — kill the old one by pid rather
+       than restarting around it.
+```
+
+```
 TASK: **SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN — `CARD-gym-overview-people.md`
       §§`S2.1`–`S2.7`, committed `335f1ba`, recorded at DECISIONS `:36558`.**
       **NOTHING IS BUILT AND THE GATE IS NOT PASSED** (`:26777`) — no `src` file,
@@ -26,13 +88,13 @@ TASK: **SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN — `CARD-gym-overview-peopl
      (`:35762`); the nudge's is Part 3 §4.1's ROLLING `1/member/7d`. **The two
      caps differ in NUMBER and in SHAPE** — copying that comment across imports
      an explanation of the wrong feature. Read `sendGymCheer`'s docblock.
-  3. **THE LIST IS EMPTY AT EVERY GYM UNTIL ~MID-OCTOBER 2026.** Its deepest
-     input is 44 days of attendance history; `gym_attendance` has existed since
-     2026-09-02 (`0019`, `c5de542`). **So Part 3 §4.1's own empty state —
-     *"Nobody's slipping — nice."* — is a claim this product cannot make**
-     (`:5807`), and the card ships four empty states told apart. **The smoke
-     cannot be populated by clicking**; Kd already ruled the remedy (`:35240`,
-     on `tools/seed-on-a-roll-visits.ts`'s pattern).
+  3. ~~**THE LIST IS EMPTY AT EVERY GYM UNTIL ~MID-OCTOBER 2026.** Its deepest
+     input is 44 days of attendance history~~ **— FALSE, STRUCK THE SAME DAY BY
+     `:36694` §1: a window that REACHES BACK 44 days needs ONE visit inside it,
+     not 44 days of data, so the first name appears 2026-09-10.** The empty state
+     survives on a different reason and **the smoke still cannot be populated by
+     clicking**; Kd already ruled the remedy (`:35240`, on
+     `tools/seed-on-a-roll-visits.ts`'s pattern). See the block ABOVE.
 
       **AND A LOW WRITTEN DOWN RATHER THAN FIXED (R1.1): `Overview.jsx:164-176`
       issues FIVE reads, not the four that `service.ts`'s `getOrgOverview`

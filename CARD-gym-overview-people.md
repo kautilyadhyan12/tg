@@ -590,13 +590,20 @@ same place the cheer already lands.
    phone app can actually tap somebody on the shoulder. **It is still worth
    building now** — the LIST is the half that works today: it tells an owner who
    to ring, which is what a gym actually does about a member going quiet.
-2. **The list will be EMPTY at every gym for about six more weeks, and the
-   screen has to say why rather than say "nobody is slipping".** To be on this
-   list somebody must have been coming and then gone quiet for a fortnight — and
-   this app only started recording who comes to a gym on **2026-09-02**. There
-   is not enough history yet for anyone to qualify. A screen printing *"Nobody's
-   slipping — nice."* on that evidence would be telling an owner something we do
-   not know.
+2. ~~**The list will be EMPTY at every gym for about six more weeks**~~
+   **— WRONG, AND CORRECTED 2026-09-07 BEFORE ANYTHING WAS BUILT (`:36694` §1).
+   The first name can appear about a WEEK after this ships.** The claim confused
+   *how far the window reaches back* (37 days) with *how much history it needs to
+   contain something* — a window reaching back 37 days is satisfied by ONE visit
+   somewhere inside it, and visits have been recorded since **2026-09-02**. Under
+   Kd's seven-day silence rule, somebody who came on 2 September and has not
+   returned qualifies from **10 September 2026**.
+   **What the limit really is, and it survives the correction:** while a gym has
+   less than about five weeks of recorded visits, an empty list still cannot be
+   read as *"nobody is slipping"* — anybody who drifted away BEFORE we started
+   recording is invisible to us. So the screen says **"still collecting"** with
+   the date recording began, and only says *"Nobody's slipping — nice."* once
+   there is enough history behind it to mean anything.
 3. **The member is never told they were flagged.** They see a warm line; they
    never see a list called "slipping away". The words on screen are the gym's,
    and they are yours to change (S2.6).
@@ -611,6 +618,8 @@ same place the cheer already lands.
 | Ruling | What it binds here |
 |---|---|
 | `:36503` | **Kd chose this panel**, on the argument that the cheer already built the engine. §3 of that entry names the three things this card must not assume — all three are S2.5 risks below. |
+| **`:36694` ruling 1** | **THE QUIET WINDOW IS SEVEN DAYS, not the spec's fourteen** — *"if a user does not come for 1 week gyms can send the messages"*, overruling this card's own recommendation to keep the spec's number. It does NOT move the "joined > 14 days ago" clause, which is a different question he did not rule on. |
+| **`:36694` §2** | **NOTHING PILES UP ON THE MEMBER'S CARD: exactly ONE message draws, the newest, and a nudge and a cheer never stack.** Kd ASKED this; the answer was measured in the shipped code, and this card turns it from an accident of how slice 1 happened to work into a written build rule (S2.4b.7). **Not a ruling — a fact plus a call.** |
 | `:26469` §1.3 | **"At risk" is measured in VISITS, never in workouts.** The gym is never shown what a member did away from it. |
 | `:29961` ruling 3 | Numbers first, people lists second. This is the second slice of the lists half. |
 | `:29961` §4 | **In this product "send" means "write something a screen will show."** No mailer, no SMTP, no push. S2.1 limit 1. |
@@ -754,7 +763,8 @@ never a comment.
 
 #### S2.4a.2 The "slipping away" query — `repo.getGymSlippingAway(sql, gymId, limit)`
 
-**THE DEFINITION IS THE SPEC'S, WITH ONE SUBSTITUTION KD RULED.**
+**THE DEFINITION IS THE SPEC'S, WITH TWO SUBSTITUTIONS — AND BOTH ARE KD'S OWN
+RULINGS RATHER THAN THIS CARD'S.**
 `03-part3-org-console.md:195-197` reads: *"current member · joined > 14 days ago
 · had ≥ 1 workout in their first 21 days or in the prior 30-day window · **0
 workouts in the last 14 days**. Sorted by lifetime workouts desc (save the most
@@ -763,18 +773,27 @@ gym`** (`:26469` §1.3), and every window is counted in **gym-days**
 (`gyms.timezone`), the unit `gym_attendance.day`, the Overview chart and the
 regulars query already share.
 
+**AND THE QUIET WINDOW IS SEVEN DAYS, NOT THE SPEC'S FOURTEEN — KD RULED IT
+2026-09-07, OVERRULING THIS CARD'S OWN RECOMMENDATION** (`S2.6.2` item 2, which
+had recommended keeping the spec's number): *"i think if a user does not come for
+1 week gyms can send the messages"*. **`SLIPPING_AWAY_QUIET_DAYS = 7`.**
+
 So a row is listed when all four hold:
 
 - a **live, non-complimentary** member of this gym — the same population
   `getGymRegulars` and `month.visitors` use, so no panel on this screen can name
   somebody the others do not;
 - **joined more than 14 gym-days ago** (`gym_members.joined_at`, bucketed in the
-  gym's zone);
+  gym's zone). **This 14 is NOT the one Kd moved and stays the spec's** — it does
+  a different job (do not judge anybody inside their first fortnight) and he
+  ruled the SILENCE window, not the membership one. **A chat that changes both
+  because they used to be the same number is inventing a ruling** (R0.2), which
+  is `:35762`'s recorded shape one feature over;
 - **at least one visit at this gym** either in their first 21 days of membership
   **or** in the 30 gym-days before the quiet window — the "was engaged" arm,
   which is what keeps somebody who joined and never once turned up off a list
   headed *"slipping away"*;
-- **zero visits at this gym in the last 14 gym-days.**
+- **zero visits at this gym in the last 7 gym-days.**
 
 Ordered by **lifetime visits at this gym desc** (the spec's *"save the most
 invested first"*), then `last_visit_day` desc, then display name, then user id —
@@ -905,7 +924,9 @@ preset and the time, never who pressed the button.
 - **Each of the four definition clauses, in BOTH directions**, because a guard
   whose only tested failure is "it did not fire" is satisfied by a door that is
   simply shut (`:7104`'s PG1):
-  - a member quiet 15 gym-days IS listed; quiet 13 is NOT;
+  - a member quiet 8 gym-days IS listed; quiet 6 is NOT (`:36694` ruling 1's
+    seven, and **the pair is what proves the constant is read at all** — a
+    single-sided test passes on a door that is simply shut);
   - a member who joined 10 days ago is NOT listed, however quiet;
   - a member who has **never** visited is NOT listed (the "was engaged" arm) —
     and a member whose only visits were in their first 21 days IS;
@@ -980,18 +1001,25 @@ the ordering's first key.
    recorded Critical/High** — it printed the wrong word for anybody whose clock
    was not the server's. On this panel the shortest true phrase is *"2 weeks
    ago"*; nothing here may say "today".
-4. **Empty states, told apart** (`:8267`/`:8343`), and this is the one the
-   screen will actually be in for weeks:
-   - **not enough history** — attendance has been recorded at this gym for fewer
-     than 44 gym-days, so the definition's windows cannot be satisfied: *"Still
-     collecting — we've only been recording visits here since {date}."* This is
-     `:30867`'s ruling in its own shape (a chart is not drawn until there is a
-     week to compare against);
+4. **Empty states, told apart** (`:8267`/`:8343`), and the first is the one the
+   screen will actually be in at first:
+   - **not enough history** — this gym has fewer than
+     `SLIPPING_AWAY_QUIET_DAYS + 30` gym-days of recorded visits, so an empty
+     list cannot mean what it appears to: *"Still collecting — we've only been
+     recording visits here since {date}."* **The reason is NOT that the query
+     cannot return a row** — it can, about a week in (`:36694` §1 corrects this
+     card's own first draft) — **it is that anybody who drifted away BEFORE
+     recording began is invisible to us**, so "nobody is slipping" would be a
+     claim about a period we have no data for. `:30867`'s ruling in its own
+     shape (a chart is not drawn until there is a week to compare against);
    - **enough history, nobody quiet** — the spec's *"Nobody's slipping — nice."*;
    - **the gym has no members** — draws nothing at all;
    - **the read failed** — a retry chip, never an empty list.
-   **The first two must not share a sentence.** Printing *"Nobody's slipping"* on
-   five days of data is a claim we cannot make (`:5807`).
+   **The first two must not share a sentence** (`:5807`). **And the boundary
+   between them is the server's, sent as a field** — the screen must not derive
+   "has this gym enough history" from the rows it was handed, which is
+   `:27992` §3 in its own shape: a client reasoning about what it did not
+   receive.
 5. **The confirm step, exactly as the cheer has it** (`:35422`): the button opens
    a small panel holding the words and a **Send**; the nudge goes only when Send
    is pressed. **This is not optional polish** — Kd ruled it for the cheer after
@@ -999,14 +1027,41 @@ the ordering's first key.
    means one component's behaviour rather than two.
 6. **The presets carry NO NUMBERS and NO DATES** (S2.4a.1). The "last came"
    figure is drawn live beside the name, never baked into the message.
-7. **Member side**: the nudge on the My Gyms gym card, beside where the cheer
-   already lands. **Not on the dashboard** (`:33091`). Where both a cheer and a
-   nudge exist, the **newer** one draws — one line, not two, because two
-   messages from one gym on one card is a feed nobody designed.
-8. **The recency dot on the My Gyms nav item already exists** (slice 1,
-   `:34809`). It gains the nudge as a second source and does not gain a second
-   dot.
-9. **Smoke sheet**: `RUNBOOK/smoke-slipping-away.md`, with
+7. **Member side — and this is the answer to Kd's own question, written as a
+   build rule rather than left as an accident** (`:36694` §2). *"suppose gym send
+   a message and if next day another message is send what will happen to the
+   previous messages will messages piled up and cover the whole screen?"*
+   **EXACTLY ONE MESSAGE EVER DRAWS ON A GYM'S CARD: the newest.**
+   - **Nothing piles up today and nothing may start to.** Measured in the
+     shipped code: the server sends ONE cheer per gym row — the lateral is
+     `ORDER BY c.created_at DESC LIMIT 1` (`repo.ts:513-519`) — the contract
+     holds a single nullable object (`latestCheer`), and `cheerNote` renders one
+     line. **Tomorrow's message REPLACES today's on screen.**
+   - **The old ones are not lost, they are just not a feed.** Every row stays in
+     the table, and `audit_log` records who sent each — so the history exists for
+     an operator and for the gym's own record, and no screen turns it into a
+     scroll a member has to clear.
+   - **A cheer and a nudge never stack**: one field is read per gym card, the
+     newer of the two, so slice 2 cannot turn one line into two. **This is the
+     rule a later chat is most likely to break**, by adding `latestNudge` beside
+     `latestCheer` on screen instead of choosing between them.
+8. **A MESSAGE STOPS DRAWING AFTER SEVEN DAYS — a call for Kd with its cost, and
+   it FIXES something slice 1 shipped.** Today `cheerNote` draws the newest cheer
+   **for ever**, ageing (`cheerAge` counts up with no ceiling, `:188-198`), so a
+   gym that cheered once in January still shows that line in July saying *"212
+   days ago"*. That is TRUE, so it is not `:5807` and it did not block slice 1 —
+   it is simply an old compliment nobody cleared. **Seven days because it is the
+   longest gap a gym can leave between two messages** (the nudge's cap), so a
+   message is on screen exactly as long as it could still be the latest thing
+   that gym said. **Cost:** a member who opens the app fortnightly may never see
+   a message that was sent for them. **Reverse it** by changing one constant, or
+   drop it and the line stays for ever as it does now.
+9. **The recency dot on the My Gyms nav item already exists** (slice 1,
+   `:34809`) — a rolling 24 hours, mirroring the cheer's cap. It gains the nudge
+   as a second source and **does not gain a second dot**. **Its window is NOT
+   re-opened here**: the nudge's cap is a week and the cheer's is a day, and a
+   dot that lit for a week would be lit almost permanently at a gym using both.
+10. **Smoke sheet**: `RUNBOOK/smoke-slipping-away.md`, with
    `apps/api/tools/seed-slipping-away-visits.ts` writing the history the
    definition needs — **Kd has already ruled that this is allowed** (`:35240`),
    and `seed-on-a-roll-visits.ts` is the pattern: insert only,
@@ -1084,10 +1139,18 @@ call at the gate produced a Kd ruling in one line — **once reversing it
    **Cost:** one more table, one more field on `/v1/orgs/mine`. **Reverse it**
    and every one of the three `gym_cheers` readers learns a `kind` filter, where
    forgetting one silently blocks a cheer. S2.4a.1 has the measurements.
-2. **The quiet window is the spec's 14 days, counted in visits.** **Cost:** at a
-   gym whose members come fortnightly, a normal member appears on the list.
-   **Reverse it** by changing one constant — it is `SLIPPING_AWAY_QUIET_DAYS` in
-   `@app/shared` and nothing else reads it.
+2. ~~**The quiet window is the spec's 14 days, counted in visits.** **Cost:** at
+   a gym whose members come fortnightly, a normal member appears on the list.~~
+   **— OVERRULED BY KD, 2026-09-07 (`:36694` ruling 1): SEVEN DAYS.** *"i think
+   if a user does not come for 1 week gyms can send the messages"*.
+   `SLIPPING_AWAY_QUIET_DAYS = 7`. **The cost the recommendation named is now
+   LARGER and he was not shown it before ruling, so it is written here rather
+   than buried:** a member who trains every ten days is a normal member at many
+   gyms and will appear on this list. **What bounds it:** the list is a prompt to
+   an owner and not an accusation, nothing is sent automatically, and the nudge's
+   own cap is one a week — so the worst case is one warm message to somebody
+   training fortnightly. **He may want to know this; it does not need a second
+   gate.**
 3. **The nudge is gated on `members.read`, not a tenth privilege** — the same
    call slice 1 made for the cheer, and Part 3 §2.2 grants the nudge to exactly
    the three roles that hold it. **Cost:** an owner cannot stop one staffer
@@ -1097,15 +1160,28 @@ call at the gate produced a Kd ruling in one line — **once reversing it
    indexed query per console load. **Reverse it** when a real gym's load exists.
 5. **The panel draws on the console Overview, beside "On a roll"** —
    `03-part3-org-console.md:278`'s own placement.
-6. **Where a member has both a cheer and a nudge, the newer one draws**
-   (S2.4b.7).
+6. **Where a member has both a cheer and a nudge, the newer one draws, and only
+   one line ever draws** (S2.4b.7) — Kd asked the question, this is the rule.
+7. **A message stops drawing after seven days** (S2.4b.8). **This one changes
+   slice 1's shipped behaviour**, where a cheer draws for ever, so it is the one
+   call in this list that is not confined to new code. **Reverse it** and the
+   line stays for ever as it does today.
+8. **The "not enough history" boundary is a SERVER field**, not something the
+   screen infers from an empty list (S2.4b.4).
 
 ### S2.6.3 SPEC GAP / DEVIATION
 
-**One knowing deviation, and it is Kd's own ruling rather than this card's:**
-the at-risk definition counts **visits at this gym** where
-`03-part3-org-console.md:195-197` counts **workouts anywhere** (`:26469` §1.3,
-R0.3). Every other number on this screen — 14 days, 21 days, 30 days, top 5,
+**Two knowing deviations, and BOTH are Kd's own rulings rather than this card's:**
+
+1. the at-risk definition counts **visits at this gym** where
+   `03-part3-org-console.md:195-197` counts **workouts anywhere** (`:26469`
+   §1.3, R0.3);
+2. **the quiet window is SEVEN days where `:197` says fourteen** (`:36694`
+   ruling 1). **This card recommended keeping the spec's number and was
+   overruled** — which is why it is a deviation with a name on it rather than a
+   drift.
+
+Every other number on this screen — joined > 14 days, 21 days, 30 days, top 5,
 capped at 20, `1/member/7d` — **is quoted from the spec, not chosen here** (V2).
 
 **No SPEC GAP.**
@@ -1114,9 +1190,19 @@ capped at 20, `1/member/7d` — **is quoted from the spec, not chosen here** (V2
 
 ## S2.7 · THE GATE
 
-**NOT PASSED.** Kd has chosen the panel (`:36503`). He has **not** seen or
-approved this file list, the migration SQL (S2.4a.1), the test list (S2.4a.6),
-the four lines (S2.6.1) or the six calls (S2.6.2).
+**NOT PASSED, AND WHAT REMAINS IS NARROWER AFTER 2026-09-07** (`:36694`).
+
+**GIVEN:** the panel (`:36503`) · **the four lines** (S2.6.1) · **the seven-day
+quiet window**, his own ruling against this card's recommendation · and *"other
+things i agree with you"*, which covers the six calls as they stood that day
+(S2.6.2 items 1 and 3–5).
+
+**STILL HIS, and both are NEW since he answered:** the **file list, the migration
+SQL (S2.4a.1) and the test list (S2.4a.6)**, which no message has put in front of
+him — and **S2.6.2 item 7, a message expiring after seven days**, which is the
+one call that changes behaviour slice 1 already shipped. **A blanket "I agree"
+given before a call existed does not cover it** (`:26777`: an approval covers
+what was on screen when it was given).
 
 **Nothing is built. No `src` file, no migration, no test, no `packages/shared`
 change exists for this slice**, and `:26777` is the recorded cost of treating a

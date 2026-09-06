@@ -7904,17 +7904,46 @@ file and is stated so nobody reads these as lower priority than they are.
       (2) **Migration `0021`'s "no UNIQUE can express a rolling window" paragraph
       is DEAD for the cheer (`:35762` made its cap a calendar day) and TRUE for
       the nudge** — the two caps differ in SHAPE as well as in number.
-      (3) **THE LIST IS EMPTY AT EVERY GYM UNTIL ABOUT MID-OCTOBER 2026.** Its
-      deepest input is 44 days of attendance history and `gym_attendance` has
-      existed since 2026-09-02, so **Part 3 §4.1's own empty state — *"Nobody's
-      slipping — nice."* — is a claim this product cannot make yet** (`:5807`);
-      the card ships four empty states told apart, the first being *"still
-      collecting"*. **The smoke therefore cannot be populated by clicking and
-      Kd has already ruled the remedy** — history written straight into the
-      database (`:35240`), on `tools/seed-on-a-roll-visits.ts`'s pattern.
-      **OPEN FOR KD AT THE GATE: the four lines the nudge sends** (words a gym
-      sends a member, so his — slice 1's cheer lines went to him the same way),
-      plus six calls each carrying its cost and reversible in one line.
+      (3) ~~**THE LIST IS EMPTY AT EVERY GYM UNTIL ABOUT MID-OCTOBER 2026.** Its
+      deepest input is 44 days of attendance history~~ **— FALSE, CORRECTED
+      2026-09-07 (DECISIONS `:36694` §1) BEFORE ANYTHING WAS BUILT. A window that
+      REACHES BACK 44 days does not NEED 44 days of data — it needs one visit
+      somewhere inside it.** Visits have been recorded since 2026-09-02, so the
+      first name can appear from **2026-09-10** under Kd's seven-day rule (from
+      2026-09-17 under the spec's fourteen). **The requirement it was arguing for
+      survives, with a different reason: while a gym has under ~5 weeks of
+      recorded visits, an empty list still cannot mean *"nobody is slipping"*,
+      because anybody who drifted away BEFORE recording began is invisible to
+      us** (`:5807`). Four empty states told apart, and that boundary is a SERVER
+      field rather than something a screen infers from an empty list. **The smoke
+      still cannot be populated by clicking, and Kd has already ruled the
+      remedy** — history written straight into the database (`:35240`), on
+      `tools/seed-on-a-roll-visits.ts`'s pattern.
+      **⚖️ KD ANSWERED THE GATE 2026-09-07 (DECISIONS `:36694`) — TWO RULINGS,
+      ONE AGREEMENT, ONE QUESTION THAT FOUND MORE THAN EITHER RULING.**
+      **(a) THE QUIET WINDOW IS SEVEN DAYS, NOT THE SPEC'S FOURTEEN** — *"i think
+      if a user does not come for 1 week gyms can send the messages"*, overruling
+      the card's own recommendation. A knowing deviation with his name on it
+      (R0.3). **It does NOT move the *"joined > 14 days ago"* clause**, which
+      answers a different question and which he did not rule on — changing both
+      because they were once the same number is inventing a ruling (R0.2).
+      **(b) THE FOUR LINES THE NUDGE SENDS ARE APPROVED**, and *"other things i
+      agree with you"* covers the card's other calls as they stood that day.
+      **(c) HIS QUESTION — DO MESSAGES PILE UP ON THE MEMBER'S CARD? NO.**
+      Measured in the shipped code: one cheer is served per gym row (`ORDER BY
+      created_at DESC LIMIT 1`), the contract holds ONE object, and one line is
+      rendered — tomorrow's message REPLACES today's, and every row is kept in
+      the table and in `audit_log`. **But that was an accident of how slice 1
+      happened to work rather than a written rule, and slice 2 is exactly where
+      it breaks** (drawing `latestNudge` beside `latestCheer` is the obvious
+      build); it is now a rule with a test.
+      **STILL HIS AND NOT YET ANSWERED: the file list, the migration SQL and the
+      test list** — no message has put those in front of him — **and one new call:
+      a message stops drawing after seven days.** Today a cheer draws FOR EVER,
+      ageing (*"212 days ago"*), which is TRUE and so never blocked slice 1;
+      the fix rides in slice 2 because it is the same component and the same
+      edit. **It changes behaviour slice 1 SHIPPED, so his blanket agreement —
+      given before the call existed — does not cover it** (`:26777`).
       **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
