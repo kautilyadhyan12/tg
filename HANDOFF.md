@@ -52,10 +52,22 @@ PROVE: guards on these bytes — harnesses **26** · index **314 pointers resolv
 OPEN:  **The cheer packet is closed.** `CLAUDE.md`'s pre-existing uncommitted
        edit is STILL OUT (`:24559`) — not mine, not committed. **The api and web
        dev servers are STILL RUNNING** from this smoke; the local Postgres and
-       Redis containers are up. Kd's two remaining `:35317` changes are still
-       his to answer (the word *"running"* reading as the sport). After that the
-       people-lists card owes three panels — *when they come* · *slipping away* ·
-       *this week's roster* — and `:26385` §5 has the wider gym-stage list.
+       Redis containers are up.
+       ~~Kd's two remaining `:35317` changes are still his to answer (the word
+       *"running"* reading as the sport).~~ **FALSE, AND IT WAS FALSE IN THE TWO
+       BLOCKS BELOW TOO — I INHERITED IT AND CARRIED IT FORWARD TWICE WITHOUT
+       CHECKING (V4).** All THREE `:35317` items are closed: **(a) the word — DONE
+       2026-09-05, Kd chose *"in a row"*, `OWED.md:7951` is TICKED · (b) the
+       confirm step — BUILT `:35422`, smoked `:35692` · (c) the seven-day cap —
+       RULED `:35762` and finished tonight.** **Nothing from that session is
+       waiting on him.** The next thing is a CHOICE, not an answer he owes.
+       **NEXT CARD, and the rulings that decide it:** `:26385` — the gym stage is
+       finished feature by feature and **continuity of thread beats severity**, so
+       it is the next SLICE of `CARD-gym-overview-people.md`, not the biggest 🔴
+       in the file. Owed there: *when they come* · *slipping away* · *this week's
+       roster* · §5.1's activation checklist. **Kd picks the panel** — he chose
+       "on a roll" from the four at `:34240`. `:26385` §5 has the wider
+       gym-stage list for after the card.
 ```
 
 ```
