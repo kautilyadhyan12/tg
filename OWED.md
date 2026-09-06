@@ -7888,8 +7888,33 @@ file and is stated so nobody reads these as lower priority than they are.
       3 §4.1's `1/member/7d` and is **NOT** the cheer's gym-day cap (`:35762` §1
       — the two agreeing was a coincidence and it is over) · "at risk" is
       measured in VISITS and never in workouts (`:26469` §1.3) · every count
-      comes from the SERVER (`:27992` §3, `:29250`). **Nothing is built and no
-      plan is approved** (`:26777` — he chose the PANEL, not a file list).
+      comes from the SERVER (`:27992` §3, `:29250`).
+      **📄 THE SLICE-2 CARD IS WRITTEN 2026-09-07 (DECISIONS `:36558`) —
+      `CARD-gym-overview-people.md` §§`S2.1`–`S2.7`. IT IS UNAPPROVED AND
+      NOTHING IS BUILT** (`:26777` — he chose the PANEL, not a file list, a
+      migration or a test list). **Three of its findings bind whoever builds it,
+      and two of them contradict what this line said an hour earlier.**
+      (1) **"Adds a query and a preset" IS NOT FREE: a nudge stored in
+      `gym_cheers` breaks three things**, because all three readers of that table
+      filter on `gym_id` and `user_id` and nothing else — it would block the
+      day's cheer, draw the cheer button dead, and land on the member's My Gyms
+      card AS the latest cheer through a preset code the bundle may not know,
+      which is the open fifth-preset line below. **The card specifies a separate
+      `gym_nudges` table and touches `gym_cheers` not at all.**
+      (2) **Migration `0021`'s "no UNIQUE can express a rolling window" paragraph
+      is DEAD for the cheer (`:35762` made its cap a calendar day) and TRUE for
+      the nudge** — the two caps differ in SHAPE as well as in number.
+      (3) **THE LIST IS EMPTY AT EVERY GYM UNTIL ABOUT MID-OCTOBER 2026.** Its
+      deepest input is 44 days of attendance history and `gym_attendance` has
+      existed since 2026-09-02, so **Part 3 §4.1's own empty state — *"Nobody's
+      slipping — nice."* — is a claim this product cannot make yet** (`:5807`);
+      the card ships four empty states told apart, the first being *"still
+      collecting"*. **The smoke therefore cannot be populated by clicking and
+      Kd has already ruled the remedy** — history written straight into the
+      database (`:35240`), on `tools/seed-on-a-roll-visits.ts`'s pattern.
+      **OPEN FOR KD AT THE GATE: the four lines the nudge sends** (words a gym
+      sends a member, so his — slice 1's cheer lines went to him the same way),
+      plus six calls each carrying its cost and reversible in one line.
       **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing

@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,282 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,287 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -15,8 +15,15 @@
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,776 lines, MEASURED 2026-09-06 and not estimated**
-(1,282 + 1,405 + 89). **THE FORTY-NINTH IS KD CHOOSING THE NEXT CARD — AND IT
+**ALWAYS-READ TOTAL: 2,781 lines, MEASURED 2026-09-07 and not estimated**
+(1,287 + 1,405 + 89). **THE FIFTIETH IS A CARD DOCUMENT WRITTEN AND UNAPPROVED —
+AND IT COST FIVE LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
+AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
+**Its cheapest phrase is the one that stops a rebuild: *"before storing anything
+in `gym_cheers`"*** — one line, and it carries the measurement that a nudge row
+in that table breaks three shipped surfaces. Taken with this header's own
+prescribed command against the bytes being committed, never by adding a delta.
+**THE FORTY-NINTH IS KD CHOOSING THE NEXT CARD — AND IT
 COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405 AND 89.**
 Its record is a CARD record and went to §1B, where `:24813` sends it, **even
 though it carries a decision** — because what BINDS future work is `:26385`, which
@@ -1818,6 +1825,27 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:36558** — 2026-09-07 — **SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN AND
+  UNAPPROVED — and the "one mechanism, same store" argument that bought this card
+  does not survive reading the three queries it rests on.** **Read before
+  building the at-risk list or its nudge, before storing anything in
+  `gym_cheers`, before quoting `:36503` §2's *"same store"*, before copying
+  migration `0021`'s "no UNIQUE can express this cap" paragraph, and before
+  writing an empty state for a list whose inputs did not exist six weeks ago.**
+  `CARD-gym-overview-people.md` gains `S2.1`–`S2.7`; **nothing is built**
+  (`:26777`). **All three readers of `gym_cheers` filter on `gym_id` and
+  `user_id` and nothing else** (`repo.ts:513-519`, `:4907-4911`, `:5019-5026`),
+  so a nudge row in that table would block the day's cheer, draw the cheer button
+  dead, and land on My Gyms AS the latest cheer through a code the bundle may not
+  know — `OWED.md`'s open fifth-preset line. Hence a **separate `gym_nudges`
+  table**; what survives of "one mechanism" is the SHAPE. **`0021`'s
+  rolling-window paragraph is dead for the cheer and TRUE for the nudge**, whose
+  cap is Part 3 §4.1's rolling `1/member/7d` — the two caps differ in NUMBER and
+  in SHAPE. **The list is empty at every gym for ~6 weeks** (its deepest input is
+  44 days of history; `gym_attendance` began 2026-09-02), so the spec's *"Nobody's
+  slipping — nice."* is a claim we cannot make and the card ships four empty
+  states told apart. **The word "nudge" already means an APPLICANT nudging a
+  gym.** One question to Kd (the four lines) and six calls with their costs.
 - **:36503** — 2026-09-06 — **KD PICKS *"SLIPPING AWAY"* AS THE NEXT SLICE OF THE
   PEOPLE-LISTS CARD — the at-risk list, which finally gives the nudge its home.**
   **Read before proposing a next card, before building the at-risk list, before

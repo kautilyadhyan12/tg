@@ -1,8 +1,20 @@
-# CARD — "On a roll", and the gym's one-tap cheer
+# CARD — the gym's PEOPLE LISTS, taken one slice at a time
 
-**STATUS: BOTH HALVES BUILT — server 2026-09-04 (`DECISIONS.md:34240`), web
-2026-09-05 (`:34809`). The web half's SMOKE and T3 are both UNRUN, so the
-`OWED.md` line does not tick.** See §7.
+~~# CARD — "On a roll", and the gym's one-tap cheer~~ **— the old title named
+slice 1 only, and this file holds more than one slice by design. The FILENAME is
+unchanged, because `OWED.md`'s people-lists line tracks it by name.**
+
+| Slice | What | State |
+|---|---|---|
+| **1** | "On a roll" + the one-tap cheer (§§1–7) | **CLOSED** — built, T3 zero Critical/High, CI green, smoked (`:36144`, `:36363`, `:36392`) |
+| **2** | **"Slipping away" + the "we miss you" nudge** (§§S2.1–S2.7) | **WRITTEN, UNAPPROVED — nothing is built** |
+| 3–5 | When they come · this week's roster · §5.1's activation checklist | not written |
+
+**STATUS OF SLICE 1: BOTH HALVES BUILT — server 2026-09-04 (`DECISIONS.md:34240`), web
+2026-09-05 (`:34809`).** ~~The web half's SMOKE and T3 are both UNRUN, so the
+`OWED.md` line does not tick.~~ **— BOTH DISCHARGED: T3 rounds ran (`:34992`,
+`:35153`), the confirm step and the gym-day cap followed, and the 🟡 line TICKED
+on 2026-09-06 (`:36392`).** See §7.
 
 ~~**WRITTEN, UNAPPROVED.** Kd chose this feature over the three other
 people-list panels on 2026-09-04. **That choice is a FEATURE-SHAPE approval and
@@ -535,7 +547,577 @@ five calls.~~ **— PASSED IN TWO PARTS, AND BOTH HALVES ARE NOW BUILT.**
 - **§4b, the web half** — Kd approved the plan, the four preset lines and the
   nav dot on 2026-09-05; shipped the same day (`:34809`).
 
-**WHAT IS STILL OPEN: the smoke and T3 on the web half.** `OWED.md`'s cheer line
-carries both, and the reason the smoke is only partly runnable — the list needs
-a two-consecutive-week visit history that no screen in this product can create.
-`:26777` remains the recorded cost of building at a gate that was never passed.
+~~**WHAT IS STILL OPEN: the smoke and T3 on the web half.**~~ **— NOTHING IS.
+Both ran, the cap changed under Kd's own reversal (`:35762`), that packet was
+reviewed and smoked too, and the 🟡 line ticks (`:36392`).** The reason the smoke
+was only partly runnable is worth carrying into slice 2 unchanged — the list
+needed a visit history no screen in this product can create, and **Kd ruled that
+such history may be written straight into the database** (`:35240`,
+`tools/seed-on-a-roll-visits.ts`). `:26777` remains the recorded cost of building
+at a gate that was never passed.
+
+---
+---
+
+# SLICE 2 — "SLIPPING AWAY": the members who have stopped coming, and the one tap that says so
+
+**WRITTEN 2026-09-07. UNAPPROVED. NOTHING IS BUILT.** Kd chose this panel from
+the same four on 2026-09-06 (`DECISIONS.md:36503`) — *"ok your recommendation"*.
+**That choice is a FEATURE-SHAPE approval and is NOT a code gate** (`:26777`: an
+approval covers what was on screen when it was given, and what was on screen was
+a panel, not a file list, a migration or a test list).
+
+## S2.1 · IN PLAIN WORDS (this part is for Kd)
+
+A gym owner opens their console and sees, under the numbers and beside **On a
+roll**, a second short list: **the members who used to come and have stopped** —
+"Rahul · last came 3 weeks ago · 18 visits".
+
+Beside each name is one button. Pressing it sends that member **an emoji and a
+short ready-made line** — "👋 We miss you at Iron House." No typing, no box to
+fill in, exactly like the cheer. **One per member per week** — a different limit
+from the cheer's one-per-day, and deliberately so: this one is a "come back",
+and a weekly "come back" is a nudge while a daily one is nagging.
+
+The member sees it on their **My Gyms** screen, on the card for that gym — the
+same place the cheer already lands.
+
+**Four honest limits, said now rather than found later:**
+
+1. **The person who stopped coming is the person least likely to open the app.**
+   The message is stored and waits on a screen; nothing in this product can push
+   a notification yet. So this feature does its best work at stage 6 when the
+   phone app can actually tap somebody on the shoulder. **It is still worth
+   building now** — the LIST is the half that works today: it tells an owner who
+   to ring, which is what a gym actually does about a member going quiet.
+2. **The list will be EMPTY at every gym for about six more weeks, and the
+   screen has to say why rather than say "nobody is slipping".** To be on this
+   list somebody must have been coming and then gone quiet for a fortnight — and
+   this app only started recording who comes to a gym on **2026-09-02**. There
+   is not enough history yet for anyone to qualify. A screen printing *"Nobody's
+   slipping — nice."* on that evidence would be telling an owner something we do
+   not know.
+3. **The member is never told they were flagged.** They see a warm line; they
+   never see a list called "slipping away". The words on screen are the gym's,
+   and they are yours to change (S2.6).
+4. **Only visits to that gym count.** Somebody training every day at home, and
+   never at the gym, is on this list — and that is correct, because the gym is
+   never shown what a member did away from it (`:26469`).
+
+---
+
+## S2.2 · THE RULINGS THIS IMPLEMENTS, so the build cannot drift from them
+
+| Ruling | What it binds here |
+|---|---|
+| `:36503` | **Kd chose this panel**, on the argument that the cheer already built the engine. §3 of that entry names the three things this card must not assume — all three are S2.5 risks below. |
+| `:26469` §1.3 | **"At risk" is measured in VISITS, never in workouts.** The gym is never shown what a member did away from it. |
+| `:29961` ruling 3 | Numbers first, people lists second. This is the second slice of the lists half. |
+| `:29961` §4 | **In this product "send" means "write something a screen will show."** No mailer, no SMTP, no push. S2.1 limit 1. |
+| **`:35762` §1** | **The nudge's cap is Part 3 §4.1's `1/member/7d` and is NOT the cheer's gym-day cap** — that line *"describes the AT-RISK NUDGE, a different feature"* and is **"not loosened by"** the cheer's. The two numbers agreeing until 2026-09-05 was a coincidence. |
+| `:27992` §3 | The owner's screen **must not pile up**: counts come from the SERVER, the list is a preview, never infinite. |
+| `:27992` §2 | **No dues, arrears or payment concept.** "Slipping away" asks one question — has this live member stopped coming — and never whether they have paid. |
+| `:23711` | The nudge is a write door, so `requireWritablePrivilege` refuses a lapsed gym and an archived gym through gates that already exist. No new refusal vocabulary. |
+| `:18128`, `:29961` ruling 4 | **No free text ever, only one-tap lines.** Third time Kd has chosen that shape. |
+| `:28822`, `:33091` | The member's gym surface is **My Gyms**. Not the dashboard. |
+| `:8267` / `:8343` / `:30867` | An empty list is not the same sentence as "nobody is slipping", and a screen without enough history says *"still collecting"* rather than drawing a conclusion. |
+| `:35240` | The smoke's visit history **may be written straight into the database** — Kd's own ruling, and `tools/seed-on-a-roll-visits.ts` is the precedent. |
+
+**THE SPEC ALREADY SPECIFIES THIS SCREEN, WHICH IS WHY ALMOST NO NUMBER HERE IS
+A CHAT'S.** `03-part3-org-console.md:278-281` gives the row, the button, the
+copy, the cap and the empty state; `:195-197` gives the definition; `:207` gives
+the endpoint shape `POST /members/:uid/nudge`; `:98`'s matrix grants *Send "we
+miss you" nudge* to **all three roles**; `:123` renames the list *"Inactive
+clients"* for a clinic. **What is NOT the spec's is the substitution of VISITS
+for WORKOUTS, and that is `:26469` §1.3 — a Kd ruling, not a chat's edit.**
+
+---
+
+## S2.3 · SCOPE
+
+### S2.3.1 What this slice builds
+
+| # | Thing | Where |
+|---|---|---|
+| 1 | Migration `0022_gym_nudges` | `apps/api/drizzle` (+ its `_journal.json` entry, in the same commit) |
+| 2 | The "slipping away" query, off `gym_attendance` at this gym only | `modules/orgs/repo.ts` |
+| 3 | `slippingAway` on the existing `GET /v1/orgs/:gymId/overview` payload | `modules/orgs/{service,repo}.ts` |
+| 4 | `POST /v1/orgs/:gymId/members/:userId/nudge` — the **seventeenth** write door | `modules/orgs/{routes,service,repo,schemas}.ts` |
+| 5 | `latestNudge` on each gym row of `GET /v1/orgs/mine` | `modules/orgs/repo.ts` |
+| 6 | The contracts, once | `packages/shared/src/orgs.ts` |
+| 7 | A "Slipping away" panel with its nudge button | `components/console/SlippingAwayPanel.jsx` + `pages/console/slippingAwayView.js` |
+| 8 | The nudge on the member's My Gyms gym card | `pages/MyGyms.jsx` + `gymMembershipView.js` |
+| 9 | Smoke sheet + its fixture tool | `RUNBOOK/smoke-slipping-away.md` + `apps/api/tools/seed-slipping-away-visits.ts` |
+
+### S2.3.2 What this slice does NOT build, each with its home
+
+- **When they come · this week's roster · the activation checklist** — slices
+  3–5 of this file. `OWED.md`'s people-lists line, amended not ticked.
+- **Any push, email or notification.** S2.1 limit 1. No new `OWED.md` line — the
+  "no email is ever sent" line already carries it (`:19016` §3.2).
+- **The fifth-cheer-preset fix.** `OWED.md` carries it; this card does not touch
+  `gym_cheers`, `GYM_CHEER_PRESETS` or `gymCheerSchema` (R1.1). S2.4a.1 is why
+  that matters more than it looks.
+- **A read-state** ("seen"/"unseen"). Same call as slice 1: recency, no second
+  table.
+- **A tenth privilege.** S2.6.2 — a call, with its cost, reversible in one line.
+- **The member's email on this payload.** `:31098` ruled email visible to the
+  gym, and the Members roster already draws it; a second copy on a second
+  payload is R1.1's drive-by and `:31098` is *"a ruling about EMAIL and not a
+  licence"*.
+- **Clinic vocabulary** (*"Inactive clients"*, §2.3). The vocabulary system is
+  unbuilt across the whole console; this panel does not start it alone.
+
+---
+
+## S2.4 · THE BUILD PLAN
+
+### S2.4a · SERVER HALF (one chat)
+
+#### S2.4a.1 Migration `0022_gym_nudges` — T5: Kd reviews this SQL BEFORE anything else is written
+
+**THE CALL THAT SHAPES THE WHOLE CARD: A SEPARATE TABLE, NOT A FIFTH PRESET ON
+`gym_cheers`.** `:36503` §2 and §2 above both say the two features are *"one
+mechanism … same store, same cap"* — **and the "same cap" half of that sentence
+was already struck by `:35762`.** The "same store" half was written under the
+same dead premise, so it is re-examined here rather than inherited (`:7298`'s
+class: a sentence that outlives the condition that raised it). **What survives is
+the part that was always true — same SHAPE: store-and-show, one tap, a preset
+CHECK, a cap under `lockOrgRow`, an audit row.**
+
+**MEASURED THIS SESSION, AND IT IS THREE BREAKAGES AND NOT AN OPINION.** Every
+one of the three readers of `gym_cheers` filters on `gym_id` and `user_id` and
+**nothing else** — `repo.ts:513-519` (the `latestCheer` lateral), `:4907-4911`
+(`cheerable_at`), `:5019-5026` (the cap's own check). So a nudge row stored in
+that table would:
+
+1. **block that day's cheer**, because the cap check counts rows and not kinds;
+2. **draw the cheer button dead**, because `cheerableAt` is set by any row;
+3. **arrive on the member's My Gyms card AS THE LATEST CHEER**, through a preset
+   code the bundle may not know — and `orgsApi.js` treats a contract mismatch as
+   a **HARD failure**, so the member's whole gym list would draw nothing. That is
+   `OWED.md`'s open *"a fifth cheer preset would blank every member's gym list"*
+   line, walked into deliberately.
+
+Adding a `kind` column instead would mean teaching all three of those readers a
+filter, where forgetting one is silent. **Cost of the separate table, stated:
+one more table and one more field on `/v1/orgs/mine`.** Reversible in one line
+if Kd prefers the shared store, at the price of that filter in three places.
+
+Hand-written, like `0017`–`0021`. **`drizzle-kit generate` cannot be used in
+this repo** (`OWED.md`'s snapshot-debt line), and a hand-written migration needs
+a hand-written `drizzle/meta/_journal.json` entry — **without one,
+`drizzle-kit migrate` prints "migrations applied successfully" and applies
+NOTHING** (`:28221` §6). After applying, the objects are read back out of
+`pg_catalog` (`:20222`), never trusted from drizzle's green line.
+
+```sql
+CREATE TABLE gym_nudges (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  gym_id            uuid NOT NULL REFERENCES gyms(id) ON DELETE RESTRICT,
+  user_id           uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  sent_by_user_id   uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  preset            text NOT NULL,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT gym_nudges_preset_check CHECK (preset IN (
+    'miss_you', 'door_open', 'start_again', 'checking_in'
+  ))
+);
+
+CREATE INDEX gym_nudges_gym_user_created_idx
+  ON gym_nudges (gym_id, user_id, created_at DESC);
+CREATE INDEX gym_nudges_user_created_idx
+  ON gym_nudges (user_id, created_at DESC);
+```
+
+**`preset` is an enum in a CHECK, not free text** — `:29961` ruling 4 and
+`:18128` living in the database rather than in a comment (`:27992` §1's shape).
+**The column stores the KEY and never the sentence**: the words live in the web
+bundle, so changing the copy is a deploy and not a data migration, and a stored
+English string would freeze the wording of every nudge ever sent.
+
+**AND NO PRESET MAY EVER CONTAIN A NUMBER OR A DATE** — "3 weeks away!" is true
+the minute it is sent and false the week after (`:7298`).
+
+**`ON DELETE RESTRICT` per R4.3**, and `privacy/tables.ts` gains this table **in
+the same commit** — it is user-linked (`:34443`'s trigger, and `:28452`'s).
+
+**NO UNIQUE ENFORCES THE CAP, AND HERE THAT IS FORCED RATHER THAN CHOSEN.** The
+nudge's cap is Part 3 §4.1's **`rate-limit 1/member/7d`**, which is a ROLLING
+seven days, and **no UNIQUE or CHECK in Postgres can express a rolling window** —
+which is exactly the reasoning migration `0021` wrote and which `:35762` then
+made obsolete *for the cheer only*, by turning that cap into a calendar day. **So
+the reasoning `0021` carries is dead there and alive here, and a chat must not
+copy `0021`'s current comment across.** The rule is a check inside the
+transaction under `lockOrgRow(gymId)`, and its guard is a test plus a mutant,
+never a comment.
+
+#### S2.4a.2 The "slipping away" query — `repo.getGymSlippingAway(sql, gymId, limit)`
+
+**THE DEFINITION IS THE SPEC'S, WITH ONE SUBSTITUTION KD RULED.**
+`03-part3-org-console.md:195-197` reads: *"current member · joined > 14 days ago
+· had ≥ 1 workout in their first 21 days or in the prior 30-day window · **0
+workouts in the last 14 days**. Sorted by lifetime workouts desc (save the most
+invested first), capped at 20."* **Every `workout` becomes a `visit at this
+gym`** (`:26469` §1.3), and every window is counted in **gym-days**
+(`gyms.timezone`), the unit `gym_attendance.day`, the Overview chart and the
+regulars query already share.
+
+So a row is listed when all four hold:
+
+- a **live, non-complimentary** member of this gym — the same population
+  `getGymRegulars` and `month.visitors` use, so no panel on this screen can name
+  somebody the others do not;
+- **joined more than 14 gym-days ago** (`gym_members.joined_at`, bucketed in the
+  gym's zone);
+- **at least one visit at this gym** either in their first 21 days of membership
+  **or** in the 30 gym-days before the quiet window — the "was engaged" arm,
+  which is what keeps somebody who joined and never once turned up off a list
+  headed *"slipping away"*;
+- **zero visits at this gym in the last 14 gym-days.**
+
+Ordered by **lifetime visits at this gym desc** (the spec's *"save the most
+invested first"*), then `last_visit_day` desc, then display name, then user id —
+four keys because the first three can tie and an unstable order makes a list
+that reshuffles on every reload. Capped at **`SLIPPING_AWAY_LIMIT = 20`** (the
+spec's own number, `:280`), previewed at **5** on screen (`:278`'s *"top 5"*).
+
+Each row carries: `userId` · `displayName` · `lastVisitDay` (a gym-date string,
+**never a rendered phrase** — see S2.4b.3) · `visits` (lifetime, at this gym) ·
+`nudgeableAt` (the instant this gym may nudge them again, or `null`).
+
+**FOUR THINGS THIS QUERY MUST NOT DO, and each of them is the obvious shortcut:**
+
+- **It must never read `org_member_stats`.** That view counts workouts ANYWHERE,
+  has sat unread since `0001_init`, and `:29961` §6.1 names it as the trap for
+  exactly these panels. It is `:26469` §1.3's one forbidden thing with a
+  convenient name.
+- **It must never import from `gamification/`.** `getStreakDays` and
+  `getActivityDays` union workouts across every gym, and `replayActivityDays`
+  spends Part 7 §3.2 **freezes** — wrong twice over, in two directions, exactly
+  as slice 1 recorded (§5 risk 1).
+- **It must not count workouts at all**, including `workouts` rows stamped with
+  this gym. `:26469` ruling 3 rejected showing both counts.
+- **`nudgeableAt` is the SERVER's answer**, on `now() - interval '7 days'`, and a
+  screen never computes it. Two consoles open at one desk must agree.
+
+**THE COMMENT THAT TRAVELS WITH IT:** `lastVisitDay` is *the last visit at THIS
+gym*, and a member's own app may legitimately show more recent training
+elsewhere. The two figures are answers to different questions, and the
+divergence is written where the query is, not only here (`:27900` §4's shape,
+which slice 1 used for the same class).
+
+#### S2.4a.3 `slippingAway` on the existing overview payload — NOT a sixth read
+
+`Overview.jsx` issues **five** reads in one `Promise.allSettled` (measured
+this session: `getCodes`, `getMembers`, `getApplications`, `getOverview`,
+`getAttendanceDay` — `Overview.jsx:164-176`). `:30399`'s trigger warns before
+adding a fourth; a sixth is not added. `slippingAway` rides on
+`GET /v1/orgs/:gymId/overview`, which is already gated on `attendance.read` and
+is already the attendance-derived payload — the same argument `onARoll` made and
+the same one the service file already carries in prose.
+
+**`orgOverviewSchema` is `.strict()`, so this is a shared-contract change and
+takes `.default([])`** — `:31222` is the recorded cost of a required field on a
+response `orgsApi.js` treats as a hard failure.
+
+**Part 3 §3.2 says the at-risk query is *"computed on page load, cached 1 h"*.
+No cache is built** — a chat's call, stated: `org_live_counters` is already
+unbuilt for the same reason on the tiles beside it (`OWED.md`), the query is one
+indexed pass over `gym_attendance`, and **a cache is a performance answer to a
+load nobody has measured** while a stale list is a number that is wrong on screen
+(`:5807`). Revisit when a real gym's load exists.
+
+#### S2.4a.4 `POST /v1/orgs/:gymId/members/:userId/nudge` — the seventeenth write door
+
+Measured this session, not recalled: `orgs.routes.test.ts:6153` pins
+`CONSOLE_WRITE_COUNT = 16`. **That constant is raised to 17 WITH its list entry
+in the same edit, never ahead of it** (`:26812` §3).
+
+Inside one transaction, in this order:
+
+1. `requireWritablePrivilege(deps, gymId, userId, "members.read")` — privilege
+   first, so a stranger keeps the 404 and a staffer without the tick keeps the
+   403; only a caller who would otherwise be allowed reaches the 409
+   `gym_not_on_plan` (`:23711` §2).
+2. `lockOrgRow(gymId)`.
+3. **The recipient is a LIVE, non-complimentary member of THIS gym** — the one
+   condition, exactly as the cheer asks it (`:27992` §2: no dues check, ever).
+   Otherwise 404, never a sentence distinguishing "no such person" from "not your
+   member" (R3.2).
+4. **The rolling-seven-day check, under the lock**: a `gym_nudges` row for this
+   gym and member with `created_at > now() - interval '7 days'` → typed **409
+   `nudge_already_sent`**. **The error carries a status, a code and a sentence
+   and nothing else** — `OrgsError` is shared across this whole module and
+   widening it for one path is R1.1's drive-by, the shape T3 round 1 already struck
+   off the cheer (`:34443` L-3). **The instant reaches the screen on
+   `nudgeableAt` in the overview payload**, which a stale page needs re-read
+   anyway.
+5. **Insert, and write `org.member_nudged` to `audit_log`** — Part 3 §3.3's
+   *"every mutating call writes `audit_log`"*. **Do not cite `:28221` §7 as an
+   exemption**: that exempts a MEMBER tapping "I'm here" hundreds of times a day,
+   and reading it the other way was a Critical/High on slice 1 (`:34443` C/H-3).
+   A nudge is a console action behind a privilege, capped at one per member per
+   week, and the log is the only record of WHICH staffer sent it — the member is
+   deliberately never told (§2.4).
+
+**Rate limit:** its own `createDualRateLimit` bucket, per-account and per-IP. It
+must NOT share the attendance bucket (600/hour), which `:28649` L-5 sized for a
+whole gym tapping in at once.
+
+**NAMING, AND IT IS A REAL COLLISION RATHER THAN A STYLE NOTE.** This module
+already has a "nudge": `nudgeApplication` / `gym_join_applications.member_nudged_at`,
+where an **applicant** nudges a **gym** about a pending request (`repo.ts:1113`,
+`:1974`, and `packages/shared/src/orgs.ts:1261`). **The two point in opposite
+directions and share one word.** Every new symbol in this card is therefore
+`…GymNudge` / `gym_nudges` / `org.member_nudged`, and none of them is named
+`nudge` alone. A test that greps for "nudge" will match both features; a test
+that asserts one must name it.
+
+#### S2.4a.5 `latestNudge` on `GET /v1/orgs/mine`
+
+One field on the gym row: `{ preset, sentAt }` or null, read off a lateral on the
+existing query — **not a second round trip and not a second endpoint**, exactly
+as `latestCheer` is.
+
+**`.default(null)` in the shared contract, and this is the fourth time the
+reason is written down**: `orgsApi.js` treats a contract mismatch as a HARD
+failure, so a required field destroys the whole gym card during any
+web-newer-than-api window (`:12660`, then `:31222`, which added one four hours
+after citing `:12660`, then slice 1).
+
+**AND ITS `preset` IS NOT A `z.enum`, WHICH IS THIS CARD DECLINING TO INHERIT AN
+OPEN DEFECT.** `gymCheerSchema.preset` is an enum, and `OWED.md` carries the
+consequence: an api that adds a fifth preset blanks the member's whole My Gyms
+screen and the console's gym list. **This contract ships loose from day one** —
+the field parses as a string, and the client renders only codes it has words for
+and draws nothing for one it does not, which is what `cheerLine` already does
+correctly. That is `:16101`'s standing rule applied at birth: **a response bound
+is loosened toward what a NEWER server might say, never tightened to today's
+behaviour.** **The cheer's own line is NOT fixed here** (R1.1) and keeps its
+`OWED.md` entry.
+
+**A plain member is told nothing about staff** (§2.4) — the field carries the
+preset and the time, never who pressed the button.
+
+#### S2.4a.6 Server tests (named before the code — Part I §7a)
+
+- **Each of the four definition clauses, in BOTH directions**, because a guard
+  whose only tested failure is "it did not fire" is satisfied by a door that is
+  simply shut (`:7104`'s PG1):
+  - a member quiet 15 gym-days IS listed; quiet 13 is NOT;
+  - a member who joined 10 days ago is NOT listed, however quiet;
+  - a member who has **never** visited is NOT listed (the "was engaged" arm) —
+    and a member whose only visits were in their first 21 days IS;
+  - a member who visited **yesterday** is NOT listed.
+- **The boundary fixture must not be all-current-week** (`:30243`'s trigger) and
+  must not be all-UTC: at least one gym in a non-UTC zone, because every window
+  here is a gym-day (`:26812`'s trigger).
+- **The ordering**, on a fixture where "most lifetime visits" and "quiet
+  longest" give DIFFERENT orders — one where they agree cannot see the sort key
+  being read from the wrong column.
+- **Cross-tenant**: gym B's owner nudging gym A's member is 404 — **and** a
+  scoping case, because a 404 test and a scoping test are different tests
+  (`:28221` §3a). **Two gyms and two memberships in every fixture**, or a missing
+  `gym_id` predicate leaks nothing and the mutant cannot die (`:28221` §3b).
+- **Gym B's visits must not rescue a member from gym A's list**, which is the
+  tenancy failure in its most plausible direction.
+- **The query reads no workouts**: a member with daily `workouts` rows and no
+  visits still appears. This is the test that stops a later chat
+  "simplifying" the query onto `org_member_stats`.
+- **The rolling cap, in a PAIR** — the write door's refusal AND the reader's
+  `nudgeableAt` — because a rule enforced in one place and reported from another
+  takes mutants in pairs (`:35944` §3, the C/H that slice 1 shipped without).
+  A second nudge at 6 days is 409; at 7 days + 1 minute it is 201. The suite
+  MOVES the stored row rather than waiting.
+- **The cheer and the nudge do not interfere**: a nudge sent today leaves the
+  same member cheerable today, and vice versa. This is S2.4a.1's whole argument,
+  asserted rather than reasoned.
+- **A lapsed gym is refused; an archived gym is refused; a live gym is not** —
+  the third arm is what stops the gate being a door that is simply shut.
+- **Write-door count**: `CONSOLE_WRITE_COUNT` 16 → 17, list and count moved
+  together.
+- **The DDL CHECK guard**: `db.migration.test.ts` reads `gym_nudges_preset_check`
+  back out of `pg_get_constraintdef` and asserts it equals the shared preset
+  list — the shape `:28107` uses for `ORG_PRIVILEGES`.
+- **`privacy/tables.ts` covers `gym_nudges`**, asserted by the existing guard.
+
+#### S2.4a.7 Mutants
+
+Numbered from the **true maximum id in use**, computed rather than taken from the
+file's last row (`:30094`'s duplicate-id trap). **Measured this session:
+`mutate-orgs.mjs` max is `O283`; `mutate-console.mjs` max is `C230`.**
+
+Every row sits in `:5857` rule 4a's always-mutated columns — ownership, numbers a
+user sees, anything that writes. Database mutants are in scope because this card
+changes server behaviour, and the sweep points at the LOCAL Postgres
+(`:13659`). Wording and layout are deliberately not mutated.
+
+Aimed at: the gym predicate in the slipping-away query · the gym predicate in
+the cap check · **the cap's reader (`nudgeableAt`) as a sibling of the cap's
+guard** · the quiet-window comparison direction · the joined-more-than-14-days
+clause · the "was engaged" arm · the live/non-complimentary condition · the
+privilege-then-lock order · the `.default([])` · `latestNudge`'s user predicate ·
+the ordering's first key.
+
+### S2.4b · WEB HALF (a separate chat, after S2.4a's T3)
+
+1. **`slippingAwayView.js`** — pure, tested without a browser: which state the
+   panel is in, the preview cut, the "last came" sentence, whether the button is
+   live. `SlippingAwayPanel.jsx` is markup. This is the split
+   `overviewView.js` / `onARollView.js` already use on this screen.
+2. **THE BUTTON'S FOUR STATES, which slice 1 had to discover mid-build**
+   (`:34809` §3): live · **"Nudged — you can again in N days"** when the server
+   has said when · greyed with a true sentence on a read-only (lapsed) gym
+   (`:24141` — every dead button is greyed with a sentence saying why) · **and
+   greyed for a role that can SEE the list but not nudge**, because the overview
+   read is gated on `attendance.read` while the write is gated on `members.read`,
+   so a staffer can legitimately see this panel and be refused every button on
+   it (`:12518` C/H-2's class).
+3. **`lastVisitDay` IS RENDERED, NEVER STORED AS A PHRASE, AND THE PHRASE IS THE
+   TRAP.** *"Last came 3 weeks ago"* is computed at draw time from the gym's own
+   date, and **a sentence containing "today" or "yesterday" is `:13432`'s
+   recorded Critical/High** — it printed the wrong word for anybody whose clock
+   was not the server's. On this panel the shortest true phrase is *"2 weeks
+   ago"*; nothing here may say "today".
+4. **Empty states, told apart** (`:8267`/`:8343`), and this is the one the
+   screen will actually be in for weeks:
+   - **not enough history** — attendance has been recorded at this gym for fewer
+     than 44 gym-days, so the definition's windows cannot be satisfied: *"Still
+     collecting — we've only been recording visits here since {date}."* This is
+     `:30867`'s ruling in its own shape (a chart is not drawn until there is a
+     week to compare against);
+   - **enough history, nobody quiet** — the spec's *"Nobody's slipping — nice."*;
+   - **the gym has no members** — draws nothing at all;
+   - **the read failed** — a retry chip, never an empty list.
+   **The first two must not share a sentence.** Printing *"Nobody's slipping"* on
+   five days of data is a claim we cannot make (`:5807`).
+5. **The confirm step, exactly as the cheer has it** (`:35422`): the button opens
+   a small panel holding the words and a **Send**; the nudge goes only when Send
+   is pressed. **This is not optional polish** — Kd ruled it for the cheer after
+   seeing an irreversible one-tap control on screen, and the same shape here
+   means one component's behaviour rather than two.
+6. **The presets carry NO NUMBERS and NO DATES** (S2.4a.1). The "last came"
+   figure is drawn live beside the name, never baked into the message.
+7. **Member side**: the nudge on the My Gyms gym card, beside where the cheer
+   already lands. **Not on the dashboard** (`:33091`). Where both a cheer and a
+   nudge exist, the **newer** one draws — one line, not two, because two
+   messages from one gym on one card is a feed nobody designed.
+8. **The recency dot on the My Gyms nav item already exists** (slice 1,
+   `:34809`). It gains the nudge as a second source and does not gain a second
+   dot.
+9. **Smoke sheet**: `RUNBOOK/smoke-slipping-away.md`, with
+   `apps/api/tools/seed-slipping-away-visits.ts` writing the history the
+   definition needs — **Kd has already ruled that this is allowed** (`:35240`),
+   and `seed-on-a-roll-visits.ts` is the pattern: insert only,
+   `ON CONFLICT DO NOTHING`, every value one the app itself could have written
+   so `gym_attendance_slot_key_agrees_check` holds. **The sheet states in its
+   setup section that the list cannot be populated by clicking**, rather than
+   carrying a step that cannot pass (`:29870`, `:26012`).
+
+---
+
+## S2.5 · RISKS AND TRAPS, named before the build rather than found after
+
+1. **`org_member_stats` counts workouts ANYWHERE** and has sat unread since
+   `0001_init`. `:29961` §6.1 and `:36503` §3(b) both name it as the trap for
+   exactly this screen — it is the one forbidden thing (`:26469` §1.3) wearing
+   the most convenient name in the schema.
+2. **THE CHEER'S CAP IS NOT THIS CAP.** One per member per **gym-day** (calendar,
+   `:35762`) against one per member per **7 days** (rolling, Part 3 §4.1). **They
+   differ in NUMBER and in SHAPE**, and a chat "unifying" them breaks both.
+   `:35762`'s own trigger — *"reading a rolling window in this repo as a calendar
+   one"* — is this defect in the other direction, and it cost a Critical/High.
+3. **Migration `0021`'s comment about why a UNIQUE cannot express the cap is DEAD
+   THERE AND ALIVE HERE.** Copying its current text across imports a paragraph
+   explaining why the *cheer's* calendar day is not a constraint. Read
+   `sendGymCheer`'s docblock, not the migration's.
+4. **A screen that counts what it downloaded is right on six rows and wrong on
+   four hundred** (`:27992` §3, `:29250`). This payload carries no total by
+   design; the preview cut is a client concern and must never be presented as a
+   count.
+5. **A one-gym, one-membership fixture cannot see a missing tenancy predicate**
+   (`:28221` §3b), and a fixture whose visits all land in the current week cannot
+   see the window boundary (`:30243`).
+6. **A test asserting the nudge button ARRIVES enabled passes under a button
+   that can never be pressed.** `:31295` is that defect shipped twice, and
+   `:35511` is the confirm step's own version of it — the guard that let **Send**
+   be pressed at all was held by nothing while twenty-five tests stayed green.
+   **For a two-state control, assert the state it is NOT in when you find it.**
+7. **"Slipping away" and "On a roll" can list the same person only if one of
+   them is wrong.** Their populations are disjoint by construction (a live
+   two-week streak against fourteen quiet days), so a fixture proving that is
+   cheap and a screen showing it is a defect anybody can see (`:5807`).
+8. **The word "nudge" already means something else in this module** (S2.4a.4).
+9. **A nudge is a write from a console that may be read-only.** Without
+   `requireWritablePrivilege` a lapsed gym keeps nudging — the screen-deep rule
+   wearing a server's clothes that `:23711` §1 refused.
+
+---
+
+## S2.6 · WHAT GOES TO KD AT THIS GATE
+
+### S2.6.1 THE ONE QUESTION — the four lines the nudge sends
+
+**These are words a gym sends a member, so they are his** — the same reason
+slice 1's four cheer lines went to him rather than being a chat's call (§6.2.3,
+approved 2026-09-05). Recommended, no numbers and no dates in any of them:
+
+| Code | Line |
+|---|---|
+| `miss_you` | 👋 *We miss you — hope to see you soon.* |
+| `door_open` | 🚪 *The door's always open when you're ready.* |
+| `start_again` | 🌱 *Starting again is easier than you think.* |
+| `checking_in` | 💬 *Just checking in — how's it going?* |
+
+The spec's own suggestion is *"Your gym misses you 💪— {org}"*
+(`03-part3-org-console.md:280`), which the first line follows without the
+duplicated gym name (the card it lands on already says which gym it is).
+
+### S2.6.2 CALLS MADE FOR HIM, each with its cost, each reversible in one line
+
+Written down because this card's own history says so twice: flagging a chat's
+call at the gate produced a Kd ruling in one line — **once reversing it
+(`:27992` §1) and once ratifying it (`:28055` §1)**.
+
+1. **A separate `gym_nudges` table, not a fifth preset on `gym_cheers`.**
+   **Cost:** one more table, one more field on `/v1/orgs/mine`. **Reverse it**
+   and every one of the three `gym_cheers` readers learns a `kind` filter, where
+   forgetting one silently blocks a cheer. S2.4a.1 has the measurements.
+2. **The quiet window is the spec's 14 days, counted in visits.** **Cost:** at a
+   gym whose members come fortnightly, a normal member appears on the list.
+   **Reverse it** by changing one constant — it is `SLIPPING_AWAY_QUIET_DAYS` in
+   `@app/shared` and nothing else reads it.
+3. **The nudge is gated on `members.read`, not a tenth privilege** — the same
+   call slice 1 made for the cheer, and Part 3 §2.2 grants the nudge to exactly
+   the three roles that hold it. **Cost:** an owner cannot stop one staffer
+   nudging without also taking their roster away. **Reverse it** and it is a
+   migration, not a list edit (`:28107`).
+4. **No 1-hour cache** (S2.4a.3), against Part 3 §3.2's letter. **Cost:** one
+   indexed query per console load. **Reverse it** when a real gym's load exists.
+5. **The panel draws on the console Overview, beside "On a roll"** —
+   `03-part3-org-console.md:278`'s own placement.
+6. **Where a member has both a cheer and a nudge, the newer one draws**
+   (S2.4b.7).
+
+### S2.6.3 SPEC GAP / DEVIATION
+
+**One knowing deviation, and it is Kd's own ruling rather than this card's:**
+the at-risk definition counts **visits at this gym** where
+`03-part3-org-console.md:195-197` counts **workouts anywhere** (`:26469` §1.3,
+R0.3). Every other number on this screen — 14 days, 21 days, 30 days, top 5,
+capped at 20, `1/member/7d` — **is quoted from the spec, not chosen here** (V2).
+
+**No SPEC GAP.**
+
+---
+
+## S2.7 · THE GATE
+
+**NOT PASSED.** Kd has chosen the panel (`:36503`). He has **not** seen or
+approved this file list, the migration SQL (S2.4a.1), the test list (S2.4a.6),
+the four lines (S2.6.1) or the six calls (S2.6.2).
+
+**Nothing is built. No `src` file, no migration, no test, no `packages/shared`
+change exists for this slice**, and `:26777` is the recorded cost of treating a
+feature-shape approval as a code gate.

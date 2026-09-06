@@ -36554,3 +36554,122 @@ downloads a page and counts it is right on six rows and wrong on four hundred.
 approved here is **which panel**, not a file list, a migration or a test list.
 The card document is written one slice at a time and **slice 2 has not been
 written**. No `src` file, no migration and no test is touched by this entry.
+
+## 2026-09-07 — SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN AND UNAPPROVED — and the "one mechanism, same store" argument that bought this card does not survive reading the three queries it rests on
+
+**Read before building the at-risk list or its nudge, before storing anything in
+`gym_cheers`, before quoting `:36503` §2's *"same store"*, before copying
+migration `0021`'s "no UNIQUE can express this cap" paragraph, and before writing
+an empty state for a list whose inputs did not exist six weeks ago.**
+
+`CARD-gym-overview-people.md` gains a SLICE 2 section (`S2.1`–`S2.7`) for the
+panel Kd chose at `:36503`. **Nothing is built.** No `src` file, no migration, no
+test, no `packages/shared` change — `:26777`, an approval covers what was on
+screen when it was given, and what was on screen was a panel.
+
+### 1 · THE ARGUMENT THAT BOUGHT THE CARD IS HALF FALSE, AND THE MEASUREMENT IS THE PART TO KEEP
+
+`:36503` §2 and the card's own §2 say the cheer and the nudge are *"ONE
+MECHANISM pointed opposite ways — same store, same cap, same one tap"*. **The
+"same cap" half was already struck by `:35762`** the day before Kd was asked.
+The **"same store"** half was written under that same dead premise and was
+inherited rather than re-checked — `:7298`'s class, a sentence outliving the
+condition that raised it.
+
+**MEASURED, AND IT IS THREE BREAKAGES RATHER THAN AN OPINION: all three readers
+of `gym_cheers` filter on `gym_id` and `user_id` and NOTHING ELSE** —
+`repo.ts:513-519` (the `latestCheer` lateral), `:4907-4911` (`cheerable_at`),
+`:5019-5026` (the cap's own check). A nudge row in that table would **block that
+day's cheer**, **draw the cheer button dead**, and **arrive on the member's My
+Gyms card as the LATEST CHEER** through a preset code the bundle may not know —
+which is `OWED.md`'s open *"a fifth cheer preset would blank every member's gym
+list"* line, walked into deliberately.
+
+So the card specifies a **separate `gym_nudges` table** and touches
+`gym_cheers`, `GYM_CHEER_PRESETS` and `gymCheerSchema` not at all (R1.1). **What
+survives of "one mechanism" is the SHAPE, and that is genuinely most of the
+work**: store-and-show, one tap, a preset CHECK, a cap under `lockOrgRow`, an
+audit row, a `.default(null)` field on `/v1/orgs/mine`, a panel riding the
+overview payload. The card records this as a call with its cost and one line to
+reverse it (`S2.6.2` item 1) — the habit `:27992` §1 and `:28055` §1 both earned.
+
+### 2 · THE `0021` PARAGRAPH IS DEAD THERE AND ALIVE HERE, WHICH IS THE EASIEST MISTAKE ON THIS CARD
+
+Migration `0021` argues at length that **no UNIQUE or CHECK can express a ROLLING
+window**. `:35762` made that obsolete *for the cheer only*, by turning its cap
+into a calendar gym-day. **The nudge's cap is Part 3 §4.1's `1/member/7d`, which
+IS rolling**, so the paragraph is true again — for a different table. **A chat
+that copies `0021`'s CURRENT comment across imports an explanation of why the
+cheer's calendar day is not a constraint**, which explains nothing about the
+nudge. Read `sendGymCheer`'s docblock, not the migration's.
+
+**The two caps differ in NUMBER and in SHAPE.** `:35762`'s own trigger —
+*"reading a rolling window in this repo as a calendar one"* — is this defect in
+the other direction, and it cost a Critical/High.
+
+### 3 · THE LIST WILL BE EMPTY AT EVERY GYM FOR ABOUT SIX WEEKS, AND THE SPEC'S OWN EMPTY STATE IS A LIE ON TODAY'S DATA
+
+The spec's definition (`03-part3-org-console.md:195-197`, with `:26469` §1.3's
+substitution of visits for workouts) needs a member **quiet for 14 gym-days**
+who **visited in the 30 gym-days before that** — so its deepest input is **44
+days of attendance history**. `gym_attendance` has existed since **2026-09-02**
+(`0019`, `c5de542`), i.e. **five days**. Nobody can qualify, at any gym, for
+about six more weeks.
+
+**So `03-part3-org-console.md:280`'s empty state — *"Nobody's slipping —
+nice."* — is a claim this product cannot make yet**, and printing it would be
+`:5807` on the owner's home screen. The card specifies **four empty states told
+apart** (`S2.4b.4`), the first being *"still collecting"* with the date recording
+began — which is `:30867`'s ruling in its own shape (the 8-week chart is not
+drawn until there is a week to compare against) and `:8267`/`:8343`'s class.
+
+**It also decides the smoke before the smoke is written: the list cannot be
+populated by clicking, at all, this year.** Kd has already ruled the remedy —
+smoke history may be written straight into the database (`:35240`) — and
+`tools/seed-on-a-roll-visits.ts` is the pattern.
+
+### 4 · THE WORD "NUDGE" IS ALREADY TAKEN IN THIS MODULE, POINTING THE OTHER WAY
+
+`nudgeApplication` / `gym_join_applications.member_nudged_at` is an **applicant**
+nudging a **gym** about a pending request (`repo.ts:1113`, `:1974`;
+`packages/shared/src/orgs.ts:1261`). The new feature is a **gym** nudging a
+**member**. Every new symbol is therefore `…GymNudge` / `gym_nudges` /
+`org.member_nudged`, and **a test that greps for "nudge" matches both features**.
+
+### 5 · WHAT GOES TO KD, AND IT IS ONE QUESTION AND SIX CALLS
+
+**The question is the four lines the nudge sends** (`S2.6.1`) — words a gym sends
+a member, so his, exactly as slice 1's four cheer lines were (`:34809`, approved
+2026-09-05). **The six calls are listed with their costs and each is reversible
+in one line** (`S2.6.2`): the separate table · the spec's 14-day quiet window ·
+`members.read` rather than a tenth privilege · no 1-hour cache against Part 3
+§3.2's letter · the panel's placement · which message draws when a member has
+both.
+
+**Every other number on the screen is QUOTED, not chosen** (V2): 14 days, 21
+days, 30 days, top 5, capped at 20, `1/member/7d`. **The one knowing deviation is
+Kd's own ruling and not this card's** — visits rather than workouts (`:26469`
+§1.3, R0.3). **No SPEC GAP.**
+
+### Round log
+
+Documents only: `CARD-gym-overview-people.md` (slice-2 section added, H1 and
+status block corrected — slice 1's "smoke and T3 UNRUN" sentences were stale
+since `:36392`), this entry, its `DECISIONS-INDEX.md` §1B line, `OWED.md`'s
+people-lists line, and the regenerated `DECISIONS-TRIGGERS.md`.
+
+Measured this session rather than recalled, and each is cited where it is used in
+the card: the three `gym_cheers` readers and their predicates ·
+`CONSOLE_WRITE_COUNT = 16` (`orgs.routes.test.ts:6153`) · `Overview.jsx:164-176`
+issuing FIVE reads, not the four its own comment and two docblocks still say ·
+`mutate-orgs.mjs` max `O283` and `mutate-console.mjs` max `C230`, computed from
+the maximum and not the last row (`:30094`) · `ORG_PRIVILEGES` at nine ·
+`REGULARS_LOOKBACK_DAYS = 400` · `gym_members.joined_at` (`tenancy.ts:420`) ·
+`0019`'s commit date.
+
+**The five-reads figure is a Low nobody need act on today and it is written down
+rather than fixed** (R1.1): `service.ts`'s `getOrgOverview` docblock and
+`orgOverviewSchema`'s `onARoll` comment both say *"four reads"*, and the fifth
+(`getAttendanceDay`) landed at `:30733`. The argument they make — do not add
+another — is unaffected and gets stronger, which is why this card repeats it
+with the true number instead of quoting theirs.
