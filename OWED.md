@@ -7962,6 +7962,26 @@ file and is stated so nobody reads these as lower priority than they are.
       whether a message exists.
       **BUILD ORDER, the card's own split: server half → T3 in a FRESH chat →
       web half** (Part I §7b, §7c).
+      **⚙️ THE SERVER HALF IS BUILT, 2026-09-07 (DECISIONS `:36907`), AND THIS
+      LINE DOES NOT TICK.** Shipped: migration `0022_gym_nudges` with its journal
+      entry, read back out of `pg_catalog` after applying · `POST
+      /v1/orgs/:gymId/members/:userId/nudge`, the **SEVENTEENTH** write door
+      (`CONSOLE_WRITE_COUNT` 16 → 17, raised WITH its list entry) · the rolling
+      seven-day cap under `lockOrgRow`, because no constraint can express a
+      rolling window · `slippingAway`, `slippingAwayHasHistory` and
+      `slippingAwaySince` on the existing overview payload, all defaulted ·
+      `latestNudge` on `/v1/orgs/mine`, `.default(null)` · `gym_nudges` joins
+      `privacy/tables.ts` in the same commit.
+      **WHAT IS OWED AND IS WHY IT DOES NOT TICK: THE WEB HALF, T3, AND THE
+      SMOKE.** No screen exists, so no owner can press anything and no member can
+      see a nudge — `CARD-gym-overview-people.md` §S2.4b is the card. **The
+      message expiry Kd approved (`:36816` §3) rides in that half**, and so does
+      the rule that only ONE message ever draws on a gym's card.
+      **AND THE SMOKE WILL NEED ITS OWN FIXTURE TOOL**
+      (`tools/seed-slipping-away-visits.ts`): the list cannot be populated by
+      clicking, because it needs a membership older than a fortnight and a visit
+      history no screen can create. Kd has already ruled that route open
+      (`:35240`).
       **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing

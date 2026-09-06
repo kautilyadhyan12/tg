@@ -36903,3 +36903,127 @@ justifies treating the constant as volatile in the code.
 The three-sevens table is written into the card as well as here, at
 `S2.4a.2`, because a table that only exists in the decision record is one the
 person editing the constant does not read.
+
+## 2026-09-07 — "SLIPPING AWAY", THE SERVER HALF: a gym can see who has stopped coming and ask them back — and FIVE of thirteen mutants survived their first run, every one of them a fixture sitting beside a boundary instead of on it
+
+**Read before writing a boundary fixture for any window in this repo, before
+adding a write door whose code is copied from a neighbouring one, before
+asserting that a message field is merely NON-NULL, and before trusting a
+sequential test to say anything about a lock.**
+
+Builds `CARD-gym-overview-people.md` §S2.4a at the gate Kd opened (`:36816`).
+**T3 is UNRUN and no smoke has run, so `OWED.md`'s people-lists line does not
+tick.** The web half is a separate chat after the review (Part I §7b, §7c).
+
+### 1 · THE AUDIT IS THE PART WORTH KEEPING: FIVE SURVIVORS, FOUR SHAPES, ONE CAUSE
+
+**Thirteen mutants, five ALIVE on the first run, and not one was a false
+alarm.** Four of the five share a cause worth naming as a class: **a fixture
+placed a comfortable distance from a boundary cannot see that boundary move.**
+
+**O285 — the quiet window widened by a day and nothing saw it.** The listed
+member's last visit sat at `QUIET + 1`, so they were listed under the true rule
+AND under a rule one day wider. **The fixture had to sit ON the boundary** —
+last visit at exactly `SLIPPING_AWAY_QUIET_DAYS`, the newest day that still
+counts as silent — and then a widened window drops them.
+
+**O287 and O288 — the cap widened from seven days to eight, twice, and both
+survived.** The "just outside" fixture used a whole EIGHT days, which is outside
+a seven-day window and outside an eight-day one alike. **The fixture now lands at
+7.5 days: between the rule and the mutation.** These two are the GUARD and its
+READER, mutated as a pair on `:35944` C/H-2's standing lesson, and it is worth
+noting the pair was already there — the *pairing* was right and the *placement*
+was wrong, which is a different defect from the one that lesson names.
+
+**O295 — the nudge's lateral read `gym_cheers` and survived**, because the test
+asserted only that `latestNudge` was NOT NULL, and a member holding both a cheer
+and a nudge has something to return either way. **It now asserts the PRESET**,
+and the two vocabularies are disjoint by construction, so either field read from
+the wrong table fails.
+
+**O286 — the lock came out and every sequential test still passed.** Deleting
+`lockOrgRow` changes nothing one caller at a time can observe: the check-then-act
+still reads and still refuses. **A race needs two clients in flight**, so the
+suite gained a concurrency case going through the repo directly — two `inject`
+calls share one pool and serialise, which is why the route cannot express this.
+
+**After the fixes: 13 RED, 0 alive, 0 never ran**, control GREEN and tallied
+first, restore verified byte-exact by sha256 after every mutant.
+
+### 2 · THE HARNESS ABORTED TWICE BEFORE WRITING A BYTE, AND THE FIX WENT IN THE SOURCE
+
+`O268` and `O275` anchor on lines this feature duplicated **verbatim** — the
+membership predicate and the `insertAudit` call, both copied from `sendGymCheer`
+because they do the same job. Each anchor then matched TWICE and the whole-table
+pre-check refused to run (`:15770`'s guard, `:5199`'s class).
+
+**THE FIX IS TO MAKE THE SOURCE UNIQUE, NEVER TO RE-AIM THE OLD MUTANT AT
+WHICHEVER LINE COMES FIRST** (`:27204` §6) — a trailing `-- the nudge's own,
+O289` inside the SQL and a `// the nudge's own, O296` on the audit call, each
+explaining in place why it is load-bearing. **Single-line anchors rather than
+two-line ones**, because a two-line anchor is `:17676`'s 99-strong CRLF hazard.
+
+**THE GENERAL FORM, since this will recur every time a feature is built by
+copying its sibling: a copied line inherits the original's MUTANTS as well as its
+behaviour.** The abort is the cheap outcome; the expensive one is a mutant
+silently landing on the wrong function.
+
+### 3 · A DEFECT I CAUSED, AND I FOUND IT BY CHECKING RATHER THAN ASSUMING
+
+Adding the nudge to `consoleWrites` made `orgs.routes.test.ts` **pass all 165
+tests and then fail its teardown on a 23503** — `gym_nudges` rows with no cascade
+blocking the gym DELETE. That left a gym behind, which turned a DIFFERENT suite
+red (`db.migration`'s *"no gym holds a mode it was not given by a person"*).
+
+**The first instinct was that the stray gym was residue from an earlier aborted
+run, and that would have been wrong.** It was checked instead: the offending row
+was named `Renamed` and owned by an `orgs-t-` user, i.e. the routes suite's own
+fixture — so the cleanup was failing, not merely unlucky. **A cross-suite red
+whose cause looks like residue is the case where checking is cheapest and
+assuming is worst**, because the wrong diagnosis leaves the real defect in place
+and the symptom comes back on somebody else's card.
+
+**That suite already deleted `gym_cheers` for exactly this reason and said so in
+a comment predicting this recurrence.** The two tables are now handled by one
+loop, so the next writer to join that list does not need to notice a third copy.
+
+### 4 · WHAT SHIPPED, AND THE TWO CONTRACT DECISIONS
+
+Migration `0022_gym_nudges` with its journal entry in the same commit (`:28221`
+§6), read back out of `pg_catalog` after applying rather than trusted from
+drizzle's green line (`:20222`): the table, its four-preset CHECK, three
+`ON DELETE RESTRICT` foreign keys, both indexes, 22 migrations applied. The
+seventeenth write door. `slippingAway`, `slippingAwayHasHistory` and
+`slippingAwaySince` on the existing overview payload. `latestNudge` on
+`/v1/orgs/mine`. `gym_nudges` joins `privacy/tables.ts` in the same commit.
+
+**(a) THE RESPONSE CONTRACT SHIPS LOOSE FROM BIRTH.** `gymNudgeSchema.preset` is
+a plain string where `gymCheerSchema.preset` is a `z.enum` — because `OWED.md`
+records what that enum costs: an api that adds a fifth preset blanks the member's
+whole `My gyms` screen AND the console's gym list, since `orgsApi.js` treats a
+contract mismatch as a hard failure. `:16101` is the standing rule — **a response
+bound is loosened toward what a NEWER server might say, never tightened to
+today's behaviour** — and the client already behaves correctly for a code it has
+no words for. **The cheer's own line is NOT fixed here** (R1.1) and keeps its
+`OWED.md` entry.
+
+**(b) THE FIRST-21-DAYS ARM OF THE SPEC'S DEFINITION IS DELIBERATELY NOT BUILT,
+which is a NARROWING and is declared** (R0.3). Part 3 §4.1 offers two ways to
+have been engaged; at Kd's three-day silence the first-21-days arm would qualify
+somebody who came once in their opening fortnight and never again, **for years**,
+since membership has no upper age here. That is *"never started"*, not *"slipping
+away"*, and the two need different words from an owner.
+
+### Round log
+
+**PROVE, all LOCAL (`127.0.0.1:5433`):** api `tsc` exit 0 · `eslint` clean on
+`src test tools` · shared `tsc` 0, lint clean, **52/52** · **web 1835/1835**
+(`packages/shared` changed, so the web suite is not optional — `:28395`) ·
+`orgs.nudges` **20/20** · the five suites this card touches **223/223** in one
+invocation. Root guards: harnesses **26** · index **318 pointers resolve (317 on
+a heading, 1 deliberate mid-entry), 1465 headings** · triggers **1116 from 287 of
+425** · smoke-folds OK.
+
+**NOT DONE and not smuggled into "done":** the web half (§S2.4b), the message
+expiry Kd approved at `:36816` §3, the smoke sheet and its fixture tool. T3 is
+UNRUN.

@@ -1,6 +1,69 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: **"SLIPPING AWAY" — THE SERVER HALF IS BUILT (`cf394fa`, DECISIONS
+      `:36907`). THE NEXT STEP IS T3 IN A FRESH CHAT**, then the web half in a
+      third (Part I §7b's one-migration ceiling, §7c's the-reviewer-is-not-the-
+      author). **`OWED.md`'s people-lists line does NOT tick** — T3 unrun, no
+      smoke, no screen.
+
+      **SHIPPED:** migration `0022_gym_nudges` + its journal entry, read back out
+      of `pg_catalog` after applying (`:20222`) · `POST
+      /v1/orgs/:gymId/members/:userId/nudge`, the **SEVENTEENTH** write door
+      (`CONSOLE_WRITE_COUNT` 16 → 17, raised WITH its list entry) · the rolling
+      seven-day cap under `lockOrgRow` · `slippingAway` +
+      `slippingAwayHasHistory` + `slippingAwaySince` on the overview payload ·
+      `latestNudge` on `/v1/orgs/mine` · `gym_nudges` in `privacy/tables.ts`.
+
+      **FOUR THINGS THE REVIEWER AND THE WEB CHAT MUST NOT LOSE.**
+  1. **THE FOUR NUMBERS ARE FOUR NUMBERS.** Quiet window **3 gym-days** (Kd,
+     `:36816`, moved 14 → 7 → 3 in one day) · membership floor **14 gym-days**
+     (spec, NOT moved) · engagement **30 gym-days** (spec, NOT moved) · the
+     nudge's cap **7 days ROLLING** (Part 3 §4.1, NOT moved). **Folding any two
+     together reverses a Kd ruling or breaks a spec limit in one edit** — and
+     `:35762` is the recorded cost of two of them having agreed by coincidence.
+     No test names a literal; every fixture is `CONSTANT ± 1`.
+  2. **`0021`'s "no UNIQUE can express this cap" PARAGRAPH IS DEAD THERE AND
+     ALIVE HERE.** The cheer's cap became a CALENDAR gym-day (`:35762`); this one
+     is rolling. The two docblocks disagree on purpose — read `sendGymNudge`'s,
+     not the migration's.
+  3. **A COPIED LINE INHERITS THE ORIGINAL'S MUTANTS.** `O268` and `O275` anchor
+     on lines this feature copied verbatim from `sendGymCheer`; both aborted the
+     harness before a byte was written. The fix is the trailing markers in
+     `repo.ts` (`-- the nudge's own, O289`, `// the nudge's own, O296`) — **do
+     not "tidy" them away**, they are what keeps four mutants aimed at the right
+     functions.
+  4. **ONE MESSAGE EVER DRAWS ON A MEMBER'S GYM CARD** (Kd's own question,
+     `:36694` §3). `latestCheer` and `latestNudge` both ride the wire; the client
+     picks the NEWER. **Drawing them side by side is the obvious way to build the
+     web half and is the thing that would break it.**
+
+      **STILL OWED ON THIS CARD:** the web half (§S2.4b) · **the message expiry
+      Kd approved** (`:36816` §3 — a message stops drawing after seven days, and
+      that seven is the CAP's, not the quiet window's) · the smoke sheet and
+      `tools/seed-slipping-away-visits.ts`, because the list cannot be populated
+      by clicking and Kd has already ruled that route open (`:35240`).
+
+PROVE: **All LOCAL (`127.0.0.1:5433`).** api `tsc` exit 0 · `eslint` clean on
+       `src test tools` · shared `tsc` 0, lint clean, **52/52** · **web
+       1835/1835** (`packages/shared` changed — `:28395`) · `orgs.nudges`
+       **20/20** · the five suites this card touches **223/223** in one
+       invocation. **AUDIT: 13 mutants, 13 RED, 0 alive, 0 never ran** — control
+       GREEN and tallied first, restore sha256-verified after every mutant, run
+       unpiped. **FIVE of the thirteen were ALIVE on their first run and every
+       one was a real hole** (`:36907` §1). Root guards: harnesses **26** · index
+       **319 pointers resolve (318 on a heading, 1 deliberate mid-entry), 1471
+       headings** · triggers **1120 from 288 of 426** · smoke-folds OK.
+       Always-read **2,793 = 1,299 + 1,405 + 89**, §1 and §2 UNMOVED.
+
+OPEN:  **T3 on the server half** — the review prompt went over with this block.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) — not
+       mine, not committed. **The local Postgres and Redis containers are UP; no
+       dev server was started this session.** The local database has migration
+       `0022` applied and its test residue cleaned.
+```
+
+```
 TASK: **KD ANSWERED THE SLICE-2 GATE (DECISIONS `:36694`) — TWO RULINGS, ONE
       BLANKET AGREEMENT, AND A QUESTION THAT FOUND MORE THAN EITHER RULING.**
       **STILL NOTHING IS BUILT** — no `src` file, no migration, no test.
