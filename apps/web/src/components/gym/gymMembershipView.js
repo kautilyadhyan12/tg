@@ -240,12 +240,35 @@ export function cheerNote(latestCheer, now = Date.now()) {
  *  dot going dark at a foreign midnight while that card still says "2 hours ago"
  *  would be the two disagreeing about one fact.
  *
- *  **WHAT THE ROLLING WINDOW BUYS IS EXACT AND WORTH STATING: the gym's next
- *  midnight is never more than 24 hours away, so the dot is always still lit for
- *  the whole of the gym-day its cheer belongs to, and never lit for more than a
- *  day.** It can therefore outlive the cap by up to a day and can never fall
- *  short of it — the safe direction, since the cost is a dot a member has
- *  already read and the alternative is a cheer that never announced itself.
+ *  **WHAT THE ROLLING WINDOW BUYS: on an ordinary day the gym's next midnight is
+ *  at most 24 hours away, so the dot stays lit for the whole of the gym-day its
+ *  cheer belongs to and is never lit for more than a day.** It can therefore
+ *  outlive the cap by up to a day — the safe direction, since the cost is a dot a
+ *  member has already read and the alternative is a cheer that never announced
+ *  itself.
+ *
+ *  ~~**and can never fall short of it**~~ **— STRUCK 2026-09-06, T3 round 2 L-7:
+ *  a clock-change day is not 24 hours.** Where a zone puts its clocks BACK the
+ *  gym-day is 25 hours long, so a cheer early in it loses the dot up to an hour
+ *  before that day ends. `joinClock.js`'s `waitingForLabel` carries the same
+ *  class MEASURED in the other direction — `America/New_York`, 7 Mar 23:59 to
+ *  9 Mar 00:01 is 23h02m across a spring-forward — and it is why the floor there
+ *  is load-bearing. **Not fixed, because fixing it means giving the dot the gym's
+ *  zone, which is the one thing the paragraph above rules out**: the card beside
+ *  it says *"2 hours ago"* in the member's own zone and the two must not
+ *  disagree. An hour twice a year at the tail of an already-read dot is the
+ *  cheaper side of that trade, and it is now written down rather than claimed
+ *  away.
+ *
+ *  **WHAT THE CUT FROM SEVEN DAYS TO ONE COSTS, and it is a chat's call carrying
+ *  its own price** (:27992's habit): the dot is RECENCY, not read-state, so a
+ *  member who opens `My gyms` twice a week now misses most of the cheers they are
+ *  sent — where a seven-day dot would still have been waiting, a one-day dot has
+ *  gone dark. **The cheer itself is not lost**: it stays on the gym's card as
+ *  *"3 days ago"* with its words, and the dot only ever decided whether the nav
+ *  item nudged them to look. Mirroring the cap is what keeps the dot honest — Kd
+ *  ruled one cheer per gym-day, so a dot lasting a week would announce as new a
+ *  message six newer ones could have replaced.
  *
  *  Named here rather than typed at the call site, so moving it is one edit
  *  (:20587). */

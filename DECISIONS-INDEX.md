@@ -4,18 +4,30 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,267 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,272 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,385 lines** (~680 at the split; 797 on
-   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01).
-3. **§2 below — OPEN. 83 lines.** The only forward-looking part of this file.
+2. **§1 below — STANDING RULES. 1,405 lines** (~680 at the split; 797 on
+   2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01; **1,385 was carried here for four measurements after §1 had already reached 1,405** — corrected 2026-09-06).
+3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
+   (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,761 lines, MEASURED 2026-09-05 and not estimated**
-(1,267 + 1,405 + 89). **THE FORTY-FIFTH IS A T3 ROUND THAT DOES NOT SHIP ITS
+**ALWAYS-READ TOTAL: 2,766 lines, MEASURED 2026-09-06 and not estimated**
+(1,272 + 1,405 + 89). **THE FORTY-SIXTH IS A T3 ROUND THAT SHIPS ITS PACKET —
+zero Critical/High, eight Low all fixed — AND IT COST FIVE LINES, every one a
+trigger phrase, §1 AND §2 UNMOVED AT 1,405 AND 89.** Its record is a ROUND record
+and went to §1B, where `:24813` sends it. **AND THAT ROUND'S OWN L-2 WAS THIS
+HEADER LYING ABOUT ITSELF FOR THE FIFTH RECORDED TIME:** items 2 and 3 read
+**1,385** and **83** while the total line beside them already used **1,405** and
+**89** — the two halves of one header disagreeing, which is `:32783` §3's
+compound-figure defect arriving in the place `:32783` §4 had already corrected
+once. **Both corrected in that round with the command this paragraph prescribes**,
+and §1/§2 had not in fact moved at all: the wrong figures were carried forward
+through four measurements by chats adding a delta to the line above rather than
+re-running the command. **THE FORTY-FIFTH IS A T3 ROUND THAT DOES NOT SHIP ITS
 PACKET — two Critical/High and five Low, all fixed, plus two new mutants and one
 resurrected — AND IT COST SIX LINES, every one a trigger phrase, §1 AND §2
 UNMOVED AT 1,405 AND 89.** Its record is a ROUND record and went to §1B, where
@@ -1787,6 +1799,40 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:36144** — 2026-09-06 — **THE CHEER'S GYM-DAY CAP, T3 ROUND 2 (diff-only):
+  ZERO Critical/High, THE PACKET SHIPS — and six of the eight Low are a document
+  or a record still teaching the cap Kd threw out.** **Read before porting a fix
+  to one harness and leaving its twin, before quoting a guard's figure into a
+  record without quoting the whole clause, before writing "both rows now do"
+  about a pair you changed one of, before promising a smoke tester that a screen
+  changes on its own, and before taking a review's count of a stale figure's
+  copies as the number of copies.** Round 2 on `229756f`; escape hatch NOT armed
+  (`:35153` and `:35593` zero, `:35944` two, this round zero). **`mutate-orgs.mjs`
+  has carried `eolOf`/`withEolOf` since 2026-08-19 and `mutate-console.mjs` got
+  the RULE instead** — *"every anchor must be ONE line"*, four times — **which is
+  why C228 was dead the day after it was written**; ported, and proven both ways
+  (pre-fix 0 hits, post-fix 1, then C228 run RED on a temporarily two-line anchor
+  and restored sha256-identical). Measured: **25 of 247 rows carry a multi-line
+  anchor, 10 of 34 targets are CRLF, zero overlap TODAY.** `:35944`'s round log
+  quoted **311/1419** where the guard prints **312 pointers resolve (311 on a
+  heading, 1 deliberate mid-entry), 1426 headings**, while `HANDOFF.md` and the
+  commit message had it right — `:32783` §3 in the entry that cites `:32783`, and
+  that file's header was wrong the same way for the FIFTH time (1,385/83 against
+  its own total's 1,405/89). **"Both rows now do" was true of one row**: O283
+  names O266, O266 named only O282. **The smoke sheet promised the four emoji
+  "come back on their own" at 08:30** — nothing on that screen has a clock, and if
+  it did, `cheerState` falls through to *"Cheered just now."*, the step's own
+  failure. **The card document taught the old cap in TEN sites, not the review's
+  five** — including the section headed *for Kd* and §6.3's claim that the cap
+  *"is the spec's own `1/member/7d`"*, a dead number wearing a spec citation for
+  the second time on this card. **§4a.1's reasoning REVERSED: "no UNIQUE can
+  express it" was true of a rolling window and is false of a calendar day.** Plus
+  the dot's docblock stating an invariant a 25-hour fall-back day breaks
+  (`joinClock.js` measured the same class in the other direction), and the
+  seven-to-one cut shipping with no cost written down (`:27992`). **The
+  `OWED.md` line does not tick: CI has never seen this packet** (`origin` 11
+  commits behind, newest run predates all four cheer commits — `:25008`) and the
+  browser smoke is unrun.
 - **:35944** — 2026-09-05 — **THE CHEER'S GYM-DAY CAP, T3 ROUND 1: TWO
   Critical/High, THE PACKET DOES NOT SHIP — a "new cheer" dot that still meant a
   WEEK, and a day predicate whose WIDTH nothing in nineteen tests could see.**

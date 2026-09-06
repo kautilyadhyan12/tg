@@ -278,7 +278,10 @@ describe('the button, in one of four states', () => {
   });
 
   // The plan outranks the window for the same reason: a lapsed gym's tap is
-  // refused before the seven-day check is ever reached.
+  // refused before the gym-day check is ever reached. (It said "the seven-day
+  // check" until 2026-09-06 — there is no such check since :35762 cut the cap to
+  // one per member per gym-day, and the fixture below is one DAY ahead, not
+  // seven.)
   it('names the plan before the window when both would refuse', () => {
     const state = cheerState(regular({ cheerableAt: new Date(NOW + DAY).toISOString() }), {
       ...CAN,

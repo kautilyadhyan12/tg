@@ -27,7 +27,12 @@ the members who keep turning up** — "Priya · 5 weeks running · 3 days in a r
 
 Beside each name is one button. Pressing it sends that member **an emoji and a
 short ready-made line** — "💪 Great week — keep it going." No typing, no box to
-fill in. **One per member per week**, so it stays a compliment rather than spam.
+fill in. ~~**One per member per week**~~ **ONE PER MEMBER PER DAY — Kd reversed
+his own cap on 2026-09-05 at his browser (`:35762`), and "a day" means the GYM's
+day.** Still one tap and still no typing, so it stays a compliment rather than
+spam; what changed is that a gym can now say something each time somebody turns
+up. **Every "7 days" left in this document below is the OLD rule and is struck
+where it appears** (`:20587` — a figure moves in all of its copies or none).
 
 The member sees it on their **My Gyms** screen, on the card for that gym.
 
@@ -46,7 +51,8 @@ The member sees it on their **My Gyms** screen, on the card for that gym.
 
 | Ruling | What it binds here |
 |---|---|
-| `:29961` ruling 4 | An emoji + a ready-made line, **one tap**, capped **one per member per week**, **no free-text box**. His own addition, and he chose it against a "let the owner type" arm whose costs were stated. |
+| `:29961` ruling 4 | An emoji + a ready-made line, **one tap**, ~~capped **one per member per week**~~, **no free-text box**. His own addition, and he chose it against a "let the owner type" arm whose costs were stated. |
+| **`:35762`** | **SUPERSEDES the cap above — ONE PER MEMBER PER GYM-DAY**, his own reversal of his own ruling, taken at the screen. The one tap, the four presets and the no-free-text half of `:29961` ruling 4 are UNTOUCHED and a later chat must not fold them in. |
 | `:29961` §4 / `:30055` | **In this product "send" means "write something a screen will show."** No mailer, no SMTP, no notifications table. |
 | `:29961` ruling 3 | Numbers first, people lists second. This is the lists half, sliced. |
 | `:26469` §1.3 | **The gym is NEVER shown what a member did away from it.** "On a roll" is computed from `gym_attendance` at THIS gym only — never from the member's own streak, which unions workouts anywhere. |
@@ -58,8 +64,12 @@ The member sees it on their **My Gyms** screen, on the card for that gym.
 
 **AND THE SPEC ALREADY HAD HALF OF THIS, which is worth more than it sounds.**
 `03-part3-org-console.md:280` specifies the at-risk list's one-tap nudge with
-**`rate-limit 1/member/7d`** — Kd's "one per member per week" is the spec's own
-number, arrived at independently, not a figure a chat picked (R0.2). `:207`
+**`rate-limit 1/member/7d`** — ~~Kd's "one per member per week" is the spec's own
+number, arrived at independently, not a figure a chat picked (R0.2).~~ **STRUCK
+2026-09-06: `:35762` §1 rules that this spec line describes the AT-RISK NUDGE, a
+DIFFERENT feature, and is "not loosened by" the cheer's cap. The two numbers
+agreeing was a coincidence and it is over — the cheer is one per member per
+gym-day and the nudge's `1/member/7d` is untouched.** `:207`
 names the endpoint shape `POST /members/:uid/nudge`. §2.2's matrix (`:98`) grants
 *Send "we miss you" nudge* to **all three roles**.
 
@@ -148,14 +158,25 @@ writer that accepts a typed string gets 23514, loudly.
 **`ON DELETE RESTRICT` per R4.3**, and the DPDP privacy list gains this table in
 the same commit — it is user-linked (`:28452`'s trigger).
 
-**NO UNIQUE ENFORCES THE CAP, AND THAT IS STATED RATHER THAN HIDDEN.** Kd's rule
-and the spec's are both **rolling seven days**, which no UNIQUE or CHECK can
-express. `:27992`'s "put the ruling in a constraint" applies where a constraint
-CAN say it; here it cannot, so the rule is a check inside the transaction under
+**NO UNIQUE ENFORCES THE CAP, AND THAT IS STATED RATHER THAN HIDDEN.** ~~Kd's
+rule and the spec's are both **rolling seven days**, which no UNIQUE or CHECK can
+express.~~ **THE REASON CHANGED AND THE OUTCOME DID NOT, which is why this is
+struck rather than rewritten: since `:35762` the cap IS a calendar gym-day, and a
+calendar day CAN be expressed as a UNIQUE — so the check-then-act below is now a
+deliberate choice rather than the only option. `:35822` kept it and wrote the
+reason into `sendGymCheer`'s own docblock: a rule change does not authorise a
+migration.** `:27992`'s "put the ruling in a constraint" applies where a constraint
+CAN say it; ~~here it cannot~~ **here it CAN since the cap became a calendar
+gym-day, and the check-then-act stays anyway**, so the rule is a check inside the
+transaction under
 `lockOrgRow(gymId)` — the repo's existing seat-claim pattern — and its guard is a
-test plus a mutant, not a comment. **The alternative considered and rejected: a
+test plus a mutant, not a comment. ~~**The alternative considered and rejected: a
 calendar-week UNIQUE, which is expressible but lets a Sunday cheer and a Monday
-cheer both stand one day apart, breaking the rule it appears to enforce.**
+cheer both stand one day apart, breaking the rule it appears to enforce.**~~
+**— that alternative died with the rolling window it was weighed against. The
+live question is now a `UNIQUE (gym_id, user_id, gym_day)`, which WOULD say the
+rule exactly; it is not built because a migration needs its own gate and Kd
+approved a cap change, not a schema change (`:26777`, `:35822`).**
 
 #### 4a.2 The "on a roll" query — `repo.getGymRegulars(sql, gymId, limit)`
 
@@ -236,7 +257,10 @@ Inside one transaction, in this order:
 3. **The recipient is a LIVE, non-complimentary member of THIS gym** — the one
    condition, exactly as attendance asks it (`:27992` §2: no dues check, ever).
    Otherwise 404, never a sentence naming whether the person exists.
-4. **The rolling-7-day check**, under the lock. Already cheered inside 7 days →
+4. ~~**The rolling-7-day check**, under the lock. Already cheered inside 7 days~~
+   **THE GYM-DAY CHECK, under the lock (`:35762`, built at `:35822`): both sides
+   of the comparison go through `AT TIME ZONE`, and a member already cheered on
+   the gym's calendar TODAY** →
    typed **409 `cheer_already_sent`**, ~~carrying the instant the next one
    becomes available so the screen states it rather than guessing.~~
    **— STRUCK by T3 round 1's Low-3, and round 2 found this copy still
@@ -253,8 +277,9 @@ Inside one transaction, in this order:
    records what STAFF did, and several hundred member taps a day would bury
    it"* — and `markGymAttendance`'s own docblock draws the line explicitly:
    *"every other writer in this module is a console action behind a privilege"*.
-   A cheer IS one of those, and Kd's cap of one per member per 7 days disposes
-   of "high-volume". **So it writes `org.member_cheered`**, per
+   A cheer IS one of those, and Kd's cap — ~~one per member per 7 days~~ **one
+   per member per gym-day since `:35762`** — disposes of "high-volume" at either
+   number: the ceiling is one row per member per day, not per tap. **So it writes `org.member_cheered`**, per
    `03-part3-org-console.md:214` — *"every mutating call writes `audit_log`"* —
    which no `DEVIATION PROPOSAL` had ever been raised against.
 
@@ -278,9 +303,14 @@ preset and the time, never who pressed the button.
 
 #### 4a.6 Server tests (named before the code — Part I §7a)
 
-- **The cap**: a second cheer inside 7 days is 409; one at 7 days + 1 minute is
-  201. Both directions, because a guard whose only tested failure is "it did not
-  fire" is satisfied by a door that is simply shut (`:7104`'s PG1).
+- **The cap**: ~~a second cheer inside 7 days is 409; one at 7 days + 1 minute is
+  201.~~ **A second cheer on the same GYM-DAY is 409; one the next gym-day is 201**
+  (`:35762`; the suite moves the stored cheer with `moveCheerToGymDay` rather than
+  waiting). Both directions, because a guard whose only tested failure is "it did
+  not fire" is satisfied by a door that is simply shut (`:7104`'s PG1) — **and the
+  READER needs the same pair, which is what T3 round 1 C/H-2 found missing
+  (`:35944` §3: a rule enforced in one place and reported from another takes
+  mutants in pairs).**
 - **Cross-tenant**: gym B's owner cheering gym A's member is 404 — **and** a
   scoping case, because a 404 test and a scoping test are different tests and a
   route can refuse the stranger while leaking into the owner (`:28221` §3a).
@@ -358,8 +388,10 @@ than made quietly (R0.3):**
    members draws nothing (§4.1's own edge). **No sentence may claim "ever"** —
    the payload sees a bounded window, which is the exact defect `:30399` §4
    declined to ship.
-3. **The button's three states**: live · "Cheered this week" with the day it
-   frees up · and greyed with a true sentence on a read-only (lapsed) gym
+3. **The button's three states**: live · ~~"Cheered this week" with the day it
+   frees up~~ **"Cheered today." — or "Cheered — you can again tomorrow." when
+   the server has said when (`:35762`, `:35822`)** · and greyed with a true
+   sentence on a read-only (lapsed) gym
    (`:24141` — every dead button is greyed with a sentence saying why, never
    silently inert).
    **AND IT LIVES ON THIS PANEL ONLY — NEVER ON THE MEMBERS ROSTER** (T3 round
@@ -462,8 +494,11 @@ rebuild to discover later.
    DDL CHECK widen, backfill, role templates, a tick box and two "newest"
    fixtures (`:28107`'s standing rule: adding a privilege is a migration in this
    repo, not a list edit).
-2. **Rolling 7 days, checked under the gym lock** — not a calendar-week UNIQUE.
-   §4a.1 carries the reasoning and what it costs.
+2. ~~**Rolling 7 days, checked under the gym lock** — not a calendar-week
+   UNIQUE.~~ **THE GYM'S CALENDAR DAY, checked under the gym lock** (`:35762`
+   ruled the cap, `:35822` built it). §4a.1 carries the reasoning and what it
+   costs — including that a calendar day COULD now be a UNIQUE and deliberately
+   is not.
 3. **The presets, in the gym's voice, no numbers in any of them** (§4b.4):
    💪 *Great week — keep it going.* · 🔥 *You're on a roll.* ·
    👏 *Nice consistency — we see you.* · 🏆 *Strong streak.*
@@ -474,7 +509,13 @@ rebuild to discover later.
 
 ### 6.3 SPEC GAP / DEVIATION
 
-**None.** The cap is the spec's own `1/member/7d` (`03-part3:280`); the endpoint
+**None.** ~~The cap is the spec's own `1/member/7d` (`03-part3:280`);~~ **STRUCK
+2026-09-06 — the cap is KD'S OWN RULING at `:35762`, one per member per gym-day,
+and `:35762` §1 rules that the spec's `1/member/7d` governs the AT-RISK NUDGE
+rather than this button. That is not a deviation: the spec line was never this
+feature's authority, and the sentence above claiming it was is what made the old
+number look spec-backed** (`:35944` C/H-1 — a stale figure wearing a spec
+citation). The endpoint
 follows the spec's `POST /members/:uid/nudge` shape (`:207`); §2.2's matrix
 grants all three roles. **The at-risk LIST the spec attaches this button to is
 not built here** and keeps its `OWED.md` line — this card builds the same button

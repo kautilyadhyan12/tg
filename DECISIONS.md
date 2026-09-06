@@ -36114,7 +36114,12 @@ apart either. Now three hours and two days (`:20712`).
 **52/52** · the six scoped cheer suites **270/270** · `tsc --noEmit` exit 0 on
 `api` and `@app/shared` · `eslint --max-warnings=0` exit 0 on seven web files, one
 api file and one shared file · `node --check` on both harnesses. Four ROOT guards
-green (harnesses **26** · index **311 pointers, 1419 headings** · triggers up to
+green (harnesses **26** · index ~~**311 pointers, 1419 headings**~~ **312 pointers
+resolve (311 on a heading, 1 deliberate mid-entry), 1426 headings — CORRECTED
+2026-09-06 by round 2's L-2, re-measured on these same bytes.** The struck figure
+quoted the SUB-total as the total and was seven short on headings, which is
+`:32783` §3's *"a record quotes the WHOLE clause"* arriving again, in the entry
+that cites `:32783` for the header two paragraphs later · triggers up to
 date · smoke-folds OK) — re-run after this entry and its index line landed.
 
 **AUDIT — a stated SUBSET, ONE MUTANT PER INVOCATION with a sha256 comparison
@@ -36135,3 +36140,222 @@ that line), the full 273- and 247-mutant sweeps, and `gitleaks` in either scope.
 ship this round (`:5348` rule 1), **a diff-only round 2 is owed**, and the browser
 smoke is still unrun — which section 5's fix is a prerequisite for, since it
 changes what step 8 tells the tester to accept.
+
+## 2026-09-06 — THE CHEER'S GYM-DAY CAP, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and six of the eight Low are a document or a record still teaching the cap Kd threw out
+
+**Read before porting a fix to one harness and leaving its twin, before quoting a
+guard's figure into a record without quoting the whole clause, before writing
+"both rows now do" about a pair you changed one of, before promising a smoke
+tester that a screen changes on its own, and before taking a review's count of a
+stale figure's copies as the number of copies.**
+
+Round 2 on `229756f` (`:35944`), diff-only (`:5348` rule 2), covering only that
+round's fixes and the surfaces they touch. **ZERO Critical/High, so the packet
+SHIPS** (rule 1). **Eight Low, all fixed here and logged in `BACKLOG.md`**; none
+bought another round. Kd approved the list before a byte was written — *"fix men
+and please properly"*. **The escape hatch is NOT armed**: `:35153` and `:35593`
+found zero, `:35944` found two, this round finds none, so there is no two-round
+streak.
+
+**Every finding was reproduced against the code before it was acted on** (V4,
+`:23928`, `:24559`) — and one came back BIGGER than the review reported it.
+
+### 1 · THE CRLF CLASS HAD BEEN FIXED IN ONE HARNESS AND WRITTEN AS A RULE IN THE OTHER
+
+`mutate-orgs.mjs` has carried `eolOf`/`withEolOf` since 2026-08-19, and its own
+comment says why in as many words: *"porting the fix rather than re-learning it is
+the point of `:5348` rule 5"*. **`mutate-console.mjs` got the RULE instead of the
+FIX** — *"every anchor aimed at this file must be ONE line"*, written into it in
+four places, plus C53 learning it twice and ending *"THE CRLF NOTE ON `layout` IS
+NOT ABOUT THAT FILE. It is about any file git has touched on this machine — which
+is every file, eventually."*
+
+**That is a rule a human has to remember on every new row, and `:35944` §4 is what
+it costs: C228 was written on 2026-09-05 and was dead on 2026-09-06**, matching
+nothing and aborting the whole console sweep.
+
+**MEASURED ON THE BYTES THIS LANDED WITH, because "is it live?" is the question
+that decides severity: 25 of 247 rows carry a multi-line anchor · 10 of 34 targets
+are CRLF on disk · ZERO overlap today.** That is exactly the state
+`OnARollPanel.jsx` was in before git rewrote it — so the hazard is one
+`core.autocrlf` checkout away, not absent. **Low because the failure mode is an
+ABORT and never a false green** (`:5199`).
+
+**PROVEN BY REVERSAL AND THEN END TO END, not by reading the port.** A genuine
+two-line anchor against the real CRLF file: **pre-fix `split(from)` gave 0 hits,
+the abort; post-fix through `withEolOf` gave exactly 1.** Then the wiring: C228 was
+temporarily given that two-line anchor and the harness ran it to **RED** rather
+than aborting, restored by replacing the string and verified **sha256-identical**
+(`:32783`'s method — never `git checkout --`).
+
+**THE ONE-LINE NOTES ARE KEPT.** A one-line anchor is still the safer habit; this
+makes a two-line one survivable rather than recommended.
+
+### 2 · A GUARD PRINTS A COMPOUND FIGURE AND THE RECORD TOOK HALF OF IT — `:32783` §3, IN THE ENTRY THAT CITES `:32783`
+
+`check-decisions-index` prints `312 pointers resolve (311 on a heading, 1
+deliberate mid-entry), 1426 headings`. **`:35944`'s round log recorded *"311
+pointers, 1419 headings"*** — the sub-total quoted as the total AND seven short on
+headings — **while `HANDOFF.md` and the commit message both carried 312/1426**, so
+the file a chat must CITE (V2) was the only one that was wrong.
+
+`:32783` §3 wrote this rule after two records quoted different halves of one line:
+*"when a guard prints a compound figure, a record quotes the WHOLE clause"*. The
+same entry's §4 corrected `DECISIONS-INDEX.md`'s header for the third recorded
+time — **and that header was wrong again here**, items 2 and 3 reading 1,385 and
+83 against its own total line's 1,405 and 89. Fifth recorded recurrence.
+**Corrected with the command the header itself names**, never by adding a delta
+(`:24813`).
+
+### 3 · A PAIR WHOSE HALVES POINT AT EACH OTHER — AND ONLY ONE DID
+
+`:35944` §3's standing rule, written one day earlier: *"when one rule is enforced
+in one place and reported from another, a mutant on the enforcement is not a
+mutant on the report. Write them in pairs, and name the sibling in each `why` so a
+later chat can see which half is missing."* It closed **"Both rows now do."**
+
+**O283 names O266. O266 named O282 as a contrast and never named O283.** The
+GUARD-side row — the one a chat reading `sendGymCheer` reaches first — was the
+half with no pointer to its sibling, which is the exact navigation the rule
+exists to provide. Fixed in the row, so the record's claim is now true rather than
+struck.
+
+### 4 · THE SHEET DESCRIBED A BEHAVIOUR NOBODY HAD OPERATED — `:31295` ARRIVING THROUGH A FIX
+
+Step 8, rewritten by `:35944` §5, gained: *"at about 8:30 in the morning the gym's
+midnight passes and the four emoji come back on their own."*
+
+**Nothing on that screen has a clock.** No interval and no poll in `Overview.jsx`
+or `OnARollPanel.jsx` (grepped), and `Overview.jsx`'s own comment says *"nothing
+here may poll"*. **And if something did re-render, the sentence is still wrong**:
+`cheerState` asks `cheerAgainText` FIRST, gets null once the instant has passed,
+and falls through to `outcome === 'sent'` and *"Cheered just now."* — which the
+same step marks with a red cross thirty lines further down. **A tester still on
+the page at that hour was promised a pass and would be shown the step's own
+failure.**
+
+`:31295`'s trigger is *"describing a control's behaviour in a comment without
+operating it"*, and a smoke sheet is that with a person on the other end. **The
+rest of `:35944` §5's rewrite was checked and is correct** — the Part B gym is
+`America/Mendoza`, so *"later today"* for 00:00 to 08:30 Kd's time and *"tomorrow"*
+otherwise is right.
+
+### 5 · THE CARD DOCUMENT WAS STILL TEACHING THE OLD CAP, IN TEN PLACES
+
+`CARD-gym-overview-people.md` is what a later chat builds this file's remaining
+three panels from. **The review mapped five sites; a grep found ten** (`:33799`,
+`:34992` §4 — a review's count of a figure's copies is a hypothesis, and so is the
+round's own).
+
+The two that matter most: **the section headed *IN PLAIN WORDS (this part is for
+Kd)*** carried *"One per member per week"*, and **§6.3 SPEC GAP / DEVIATION**
+claimed the cap *"is the spec's own `1/member/7d`"* — **the line `:35762` §1
+separates from this feature in as many words. That is a dead number wearing a spec
+citation for the SECOND time on this card**; `:35944` C/H-1 was the first, in
+`packages/shared`.
+
+**§4a.1's REASONING was reversed, not merely renumbered, and that is the part to
+carry:** *"no UNIQUE or CHECK can express it"* was true of a rolling seven days
+and is **false of a calendar day**. So the check-then-act under `lockOrgRow` is
+now a deliberate choice rather than the only option, and `sendGymCheer`'s docblock
+already said so (`:35822`). **Fixing that paragraph left it contradicting itself
+two lines on** — *"here it cannot"* — which is `:35593` §1's shape (a heading made
+false by its own paragraph) and was caught inside the same edit rather than
+shipped.
+
+All ten struck in place with the superseding ruling cited, never rewritten away
+(`:20587` — the wrong claim is the lesson).
+
+### 6 · AN INVARIANT STATED ABSOLUTELY, AND A CHAT'S CALL WITH NO COST WRITTEN DOWN
+
+Both in `CHEER_FRESH_DAYS`' docblock, both `:35944` C/H-1's own fix.
+
+**L-7 — *"the gym's next midnight is never more than 24 hours away"*, so the dot
+*"can never fall short"* of the gym-day.** A fall-back day is **25 hours**, and a
+rolling 24 falls short of it by up to an hour. **This repo had already MEASURED
+the same class in the other direction**: `joinClock.js`'s `waitingForLabel` keeps
+its floor because `America/New_York`, 7 Mar 23:59 to 9 Mar 00:01, is 23h02m across
+a spring-forward. `:7974`'s trigger is *"writing a comment that asserts an
+invariant"*.
+
+**STRUCK RATHER THAN FIXED, and the reason is in the paragraph above it:** making
+the dot exact means giving it the GYM's zone, and the docblock rules that out
+because the card beside it says *"2 hours ago"* in the MEMBER's zone and the two
+must not disagree about one fact. An hour twice a year at the tail of an
+already-read dot is the cheaper side of that trade — **named, not claimed away.**
+
+**L-8 — the same docblock priced the rolling-vs-calendar rounding and never the
+seven-to-one change itself.** On the file's own account *"the dot is the whole of
+the arrival"*, so **a member who opens `My gyms` twice a week now misses most of
+the cheers they are sent**, where a seven-day dot would still have been waiting.
+`:27992`'s habit is that a call a chat makes gets written down WITH ITS COST.
+Written down with its two bounds: the cheer itself survives on the gym's card with
+its words, and a dot outlasting the cap would announce as new a message six newer
+ones could have replaced.
+
+### Round log
+
+**FIXED: 8 Low, 0 Critical/High.** L-1 the CRLF port · L-2 the guard figures in
+`:35944` and in `DECISIONS-INDEX.md`'s header · L-3 O266's missing sibling · L-4
+the sheet's self-refreshing emoji · L-5 ten stale cap sites in
+`CARD-gym-overview-people.md` · L-6 *"the seven-day check"* in
+`onARollView.test.js` · L-7 the 24-hour invariant · L-8 the dot's uncosted cut.
+
+**NO RULE-3 REGRESSION TEST FOR SEVEN OF THE EIGHT, AND THAT IS THE ROUND:** they
+are prose, a document and a tool's `why`. **Nothing under `src` behaves
+differently** — the only `src` edit is a comment. **L-1 is the exception and it
+carries the strongest evidence in the round**, measured in both directions above.
+
+**PROVE, on the fixed bytes.** `web` **1835/1835 across 61 files** — unchanged,
+and that is correct: no case was added. `api` `tsc --noEmit` **exit 0** and `api`
+lint (`eslint src test tools`) **exit 0** — **run because a file under `apps/api`
+changed, which is `:35386`'s whole lesson**, even though it is only a tool.
+`eslint --max-warnings=0` **exit 0** on the three touched web files; `node --check`
+on **both** harnesses. **`apps/api`'s eslint config ignores `tools` mjs files** —
+pre-existing and deliberate, and `check-harnesses` is what covers them.
+
+**Four ROOT guards green: harnesses 26 scripts parse · index 313 pointers resolve
+(312 on a heading, 1 deliberate mid-entry), 1434 headings · triggers up to date at
+1093 from 281 of 419 · smoke-folds OK** — **re-run after this entry and its index
+line landed**, and quoted as the WHOLE clause per section 2 above. **The figures
+in section 2 are the pre-landing ones deliberately**: they are the correction to
+`:35944`, measured on `:35944`'s own bytes. **Always-read re-measured with the
+header's own command: 2,766 = 1,272 + 1,405 + 89, §1 and §2 UNMOVED** — the
+index line for this round cost five trigger phrases and nothing else.
+
+**AUDIT — a stated SUBSET of 247: `MUTATE_ONLY=C177,C224,C225,C226,C227,C229,C230`
+— 7 mutants, 7 RED, 0 ALIVE, 0 never ran**, seven controls GREEN and tallied
+first, restores sha256-verified after every mutant, **run unpiped with its exit
+code read — `HARNESS EXIT CODE: 0`** (`:10726` §2). **The subset deliberately
+spans BOTH line-ending kinds** — `onarollpanel` is CRLF on disk, `membershipview`
+and `attendanceview` are LF — because the edit changed the mechanism every mutant
+goes through, and a port that only worked on one kind would look identical on a
+CRLF-only run. **And the whole-table anchor pre-check walked all 247 rows through
+`withEolOf` without aborting**, which is the broadest evidence available that no
+existing anchor was disturbed.
+
+**No database mutants and no `apps/api` suite: no server behaviour changed**
+(`:5857` rule 4a). The diff touches `apps/web/src` (one comment), `apps/web/tools`,
+`apps/api/tools`, two documents and the record.
+
+**`gitleaks detect` RAN AND IS CLEAN — 543 commits, 24.71 MB, `no leaks found`,
+exit 0.** Every round on this packet has declared it NOT RUN; **it is on this
+machine** at `~/AppData/Local/Microsoft/WinGet/Packages/Gitleaks.Gitleaks_…`, and
+three minutes is cheaper than carrying it forward as an open declaration again.
+
+**NOT RUN AND NOT CLAIMED:** the full `api` suite (the pre-existing seed-count
+flake and the 401 symptom on `:35822`'s `OWED.md` line) and the full 247- and
+273-mutant sweeps.
+
+**THE `OWED.md` LINE STILL DOES NOT TICK, AND THE REASON IS NO LONGER THE
+REVIEW.** Zero Critical/High ends the review (`:5348` rule 1 — a Low buys no
+round), so **the remaining gates are CI and Kd's browser**:
+`RUNBOOK/smoke-on-a-roll-cheer.md` is unrun, and **CI has never seen this packet**
+— `origin/web-repoint` is at `9ed374d`, 11 commits behind, and the newest branch
+run (`33957586907`, success, 2026-09-05T09:17Z) predates all four cheer-cap
+commits. `:25008` is the recorded cost of writing a PROVE without looking at what
+CI said, so it is named here as a gate rather than assumed green.
+
+**ONE THING OUT OF SCOPE, REPORTED NOT TOUCHED** (R1.1): `BACKLOG.md`'s `:35944`
+block is filed under a three-hash heading where every sibling block uses two, so
+it does not appear in a heading grep of that file.

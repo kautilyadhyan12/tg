@@ -4194,3 +4194,95 @@ the round grepped for the number rather than trusting the review's map.
 twice:** `C228` was found DEAD — a two-line anchor in a CRLF-on-disk file — and it
 **aborted the whole console sweep**, so it is an instrument fault fixed in this
 round, at `:35944` §4. Nothing about it is outstanding.
+
+## 2026-09-06 — the cheer's gym-day cap, T3 ROUND 2, DIFF-ONLY (DECISIONS :36144)
+
+Reviews `229756f` (`:35944`), diff-only (`:5348` rule 2). **ZERO Critical/High ⇒
+the packet SHIPS** (rule 1). **EIGHT Low, all fixed in this round** (`:5307` —
+everything found is fixed whatever its severity, and a Low buys no round). Escape
+hatch NOT armed: `:35153` and `:35593` found zero, `:35944` found two, this round
+finds none. Kd approved the whole list before any file changed — *"fix men and
+please properly"*.
+
+**SIX OF THE EIGHT ARE A RECORD OR A DOCUMENT DISAGREEING WITH THE CODE**, which
+is what a cap change leaves behind, and the round grepped for each rather than
+trusting the review's map (`:33799`, `:34992` §4) — **which is how L-5 came back
+TEN sites against the review's five.**
+
+- [x] **L-1 · THE CRLF CLASS WAS FIXED AS A CASE, NOT AS A CLASS.**
+      `mutate-orgs.mjs` has carried `eolOf`/`withEolOf` since 2026-08-19 —
+      :4267's class fix, whose own comment says *"porting the fix rather than
+      re-learning it is the point of `:5348` rule 5"*. `mutate-console.mjs` had
+      the RULE written into it four times (*"every anchor aimed at this file must
+      be ONE line"*) and not the FIX, which is why `C228` was dead the day after
+      it was written (`:35944` §4). Measured on today's bytes: **25 of 247 rows
+      carry a multi-line anchor and 10 of 34 targets are CRLF on disk, with zero
+      overlap TODAY** — the state `OnARollPanel.jsx` was in before git rewrote
+      it, so this is one `core.autocrlf` checkout from live. Ported to both the
+      pre-check and the apply site. **Low because it ABORTS rather than
+      false-greens** (`:5199`).
+- [x] **L-2 · THE ROUND LOG'S GUARD FIGURES WERE WRONG, IN THE ONE FILE A CHAT
+      MUST CITE.** `:35944` said *"index 311 pointers, 1419 headings"*; the guard
+      prints **312 pointers resolve (311 on a heading, 1 deliberate mid-entry),
+      1426 headings** — the SUB-total quoted as the total, seven short on
+      headings, and both `HANDOFF.md` and the commit message had it right, so the
+      record was the odd one out. `:32783` §3's *"a record quotes the WHOLE
+      clause"*, recurring in the entry that cites `:32783` two paragraphs later.
+      **`DECISIONS-INDEX.md`'s own header was wrong the same way** — items 2 and
+      3 read 1,385 and 83 against its own total's 1,405 and 89; corrected with
+      the command the header itself prescribes (`:24813`), fifth recorded time
+      that header has misreported itself.
+- [x] **L-3 · "BOTH ROWS NOW DO" WAS TRUE OF ONE ROW.** `:35944` §3's standing
+      rule is that a rule enforced in one place and reported from another takes
+      mutants in PAIRS, *"and name the sibling in each `why`"*. **O283 names
+      O266; O266 named O282 as a contrast and never named O283.** So the half of
+      the pair a later chat is most likely to read first was the half with no
+      pointer. O266's `why` now names it and says which side each guards.
+- [x] **L-4 · THE SHEET DESCRIBED BEHAVIOUR NOBODY OPERATED** (`:31295`, whose
+      trigger is exactly this). Step 8 promised that at about 08:30 *"the gym's
+      midnight passes and the four emoji come back on their own"*. **Nothing on
+      that screen has a clock** — no interval, no poll, grepped in `Overview.jsx`
+      and `OnARollPanel.jsx` — and if something did, `cheerState` asks
+      `cheerAgainText` FIRST, gets null once the instant has passed, and falls to
+      `outcome === 'sent'` → *"Cheered just now."*, which the same step marks ❌
+      thirty lines down. A tester lingering across that hour was promised a pass
+      and shown the step's own failure. Replaced with what is actually true: the
+      screen does not change by itself, so read the sentence in front of you.
+- [x] **L-5 · THE CARD DOCUMENT STILL TAUGHT THE CAP KD THREW OUT — TEN SITES,
+      NOT THE REVIEW'S FIVE.** `CARD-gym-overview-people.md` is what a later chat
+      builds the remaining panels from, and it carried *"one per member per
+      week"* in the section headed **IN PLAIN WORDS (this part is for Kd)**, in
+      the rulings table, in the server-test list (*"a second cheer inside 7 days
+      is 409"*), in the button's three states (*"Cheered this week"*), twice in
+      the schema reasoning, and in **§6.3 SPEC GAP / DEVIATION**, which claimed
+      the cap *"is the spec's own `1/member/7d`"* — the line `:35762` §1
+      separates from this feature in as many words, so a dead number was wearing
+      a spec citation for the second time on this card (`:35944` C/H-1 was the
+      first). All ten struck in place with the superseding ruling cited
+      (`:20587` — the wrong claim is the lesson). **§4a.1's reasoning was
+      REVERSED, not just renumbered**: *"no UNIQUE can express it"* was true of a
+      rolling window and is false of a calendar day, so the check-then-act is now
+      a deliberate choice — and the paragraph contradicted itself two lines on
+      (*"here it cannot"*), which is `:35593` §1's own shape and was fixed in the
+      same edit rather than shipped.
+- [x] **L-6 · A TEST COMMENT NAMING A CHECK THAT NO LONGER EXISTS.**
+      `onARollView.test.js` explained the ordering by *"the seven-day check"*.
+      There is no seven-day check, and the fixture beneath it is one DAY ahead.
+- [x] **L-7 · AN INVARIANT STATED ABSOLUTELY THAT A CLOCK CHANGE BREAKS**
+      (`:7974`'s trigger — a comment that asserts an invariant). The dot's
+      docblock said the gym's next midnight *"is never more than 24 hours away"*,
+      so the dot *"can never fall short"* of the gym-day. **A fall-back day is 25
+      hours**, and the rolling 24 falls short by up to an hour. `joinClock.js`
+      already carries this class MEASURED in the other direction —
+      `America/New_York`, 7 Mar 23:59 to 9 Mar 00:01 is 23h02m — which is why its
+      floor is load-bearing. **Struck, not fixed**: fixing it means giving the
+      dot the gym's zone, which the paragraph above it rules out for a stated
+      reason, so the trade is named instead of claimed away.
+- [x] **L-8 · A CHAT'S CALL WITHOUT ITS COST** (`:27992`'s habit). The same
+      docblock priced the rolling-vs-calendar rounding and never the 7→1 change
+      itself — and on the file's own account *"the dot is the whole of the
+      arrival"*, so a member who opens `My gyms` twice a week now misses most of
+      their dots where a seven-day dot would still have been waiting. Written
+      down, with the two things that bound it: the cheer itself is still on the
+      gym's card with its words, and a dot outlasting the cap would announce as
+      new a message six newer ones could have replaced.

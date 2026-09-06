@@ -1,6 +1,87 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CHEER'S GYM-DAY CAP — **T3 ROUND 2 RUN AND FIXED: ZERO Critical/High,
+      so the packet SHIPS** (`:5348` rule 1). DECISIONS `:36144`. Eight Low, all
+      fixed, logged in `BACKLOG.md`. Kd approved the fix round against the listed
+      findings before a file was touched — *"fix men and please properly"*.
+      The review is OVER; a Low buys no round.
+
+      **START HERE — WHAT IS OWED, IN ORDER. NEITHER IS A REVIEW.**
+      1. **PUSH AND READ CI.** `origin/web-repoint` was 11 commits behind when
+         this round ran and its newest run (`33957586907`, success,
+         2026-09-05T09:17Z) predates all four cheer-cap commits — **CI has never
+         seen this packet.** `:25008`: never write "pushed" as if it were
+         "green"; read the run's verdict and report it.
+      2. **THE BROWSER SMOKE** — `RUNBOOK/smoke-on-a-roll-cheer.md`. Round 2's
+         L-4 rewrote step 8 AGAIN, so the sheet was not safe to hand him before
+         now. `OWED.md`'s cheer-cap line ticks on that pass, not on this round.
+
+      **THREE THINGS THAT OUTLIVE THIS ROUND.**
+  1. **A FIX PORTED TO ONE HARNESS AND WRITTEN AS A RULE IN ITS TWIN IS NOT A
+     CLASS FIX.** `mutate-orgs.mjs` has had `eolOf`/`withEolOf` since
+     2026-08-19; `mutate-console.mjs` had the RULE — *"every anchor aimed at
+     this file must be ONE line"*, in four places — **which is why C228 was dead
+     the day after it was written** (`:35944` §4). Ported and proven both ways:
+     pre-fix 0 hits on a real CRLF file, post-fix 1, then C228 run RED on a
+     temporarily two-line anchor and restored sha256-identical. **Measured: 25
+     of 247 rows carry a multi-line anchor, 10 of 34 targets are CRLF, ZERO
+     overlap today** — one `core.autocrlf` checkout from live, not absent.
+  2. **A REVIEW'S COUNT OF A STALE FIGURE'S COPIES IS A HYPOTHESIS, INCLUDING
+     WHEN THE REVIEW IS RIGHT ABOUT EVERYTHING ELSE.** It mapped five stale
+     "one per week" sites in `CARD-gym-overview-people.md`; **a grep found ten**,
+     including the section headed *IN PLAIN WORDS (this part is for Kd)* and
+     §6.3's claim that the cap *"is the spec's own `1/member/7d`"* — a dead
+     number wearing a spec citation for the SECOND time on this card.
+     `:33799`, `:34992` §4, `:20587`.
+  3. **A RECORD THAT QUOTES HALF A COMPOUND FIGURE MAKES TWO TRUE FILES
+     DISAGREE.** `:35944` logged *"311 pointers, 1419 headings"* where the guard
+     prints *"312 pointers resolve (311 on a heading, 1 deliberate mid-entry),
+     1426 headings"*, while `HANDOFF.md` and the commit message had it right —
+     so the file a chat must CITE was the odd one out (`:32783` §3, in the entry
+     that cites `:32783`). **`DECISIONS-INDEX.md`'s header was wrong the same
+     way for the FIFTH time** — its items 2 and 3 read 1,385 and 83 against its
+     own total's 1,405 and 89. Both corrected with the header's own command.
+
+PROVE: `web` **1835/1835 across 61 files** (unchanged — no case added, correctly)
+       · `api` `tsc --noEmit` **exit 0** and `api` lint (`eslint src test tools`)
+       **exit 0**, run because a file under `apps/api` changed even though it is
+       only a tool (`:35386`) · `eslint --max-warnings=0` exit 0 on three web
+       files · `node --check` on BOTH harnesses. Four ROOT guards green
+       (harnesses **26** · index **313 pointers resolve (312 on a heading, 1
+       deliberate mid-entry), 1434 headings** · triggers **1093 from 281 of 419**
+       · smoke-folds OK), re-run after the entry and its index line landed.
+       Always-read re-measured with the header's own command: **2,766 = 1,272 +
+       1,405 + 89**, §1 and §2 UNMOVED.
+       **AUDIT — a stated SUBSET of 247: `MUTATE_ONLY=C177,C224,C225,C226,C227,
+       C229,C230` — 7 mutants, 7 RED, 0 ALIVE, 0 never ran**, seven controls
+       GREEN and tallied first, restores sha256-verified after each, **run
+       unpiped with its exit code read — `HARNESS EXIT CODE: 0`**. **The subset
+       spans BOTH line-ending kinds on purpose** (`onarollpanel` CRLF;
+       `membershipview`, `attendanceview` LF), because the edit changed the
+       mechanism every mutant goes through. **The whole-table pre-check walked
+       all 247 anchors through `withEolOf` without aborting.**
+       **No database mutants, no `apps/api` suite — no server behaviour changed**
+       (`:5857` rule 4a); the only `src` edit is a comment.
+       **`gitleaks detect` RAN AND IS CLEAN** — 543 commits, 24.71 MB,
+       `no leaks found`, exit 0. Every earlier round on this packet declared it
+       NOT RUN; it IS on this machine (WinGet), and three minutes beats carrying
+       the declaration forward again.
+       NOT RUN, NOT CLAIMED: the full `api` suite (the seed-count flake and the
+       401 symptom on `:35822`'s OWED line) and the full 247/273-mutant sweeps.
+
+OPEN:  **Push, read CI, then the smoke.** `CLAUDE.md`'s pre-existing uncommitted
+       edit is STILL OUT (`:24559`) — not mine, not committed. The api and web
+       dev servers are STOPPED; the local Postgres and Redis containers are UP.
+       Kd's two remaining `:35317` changes are still his to answer (the word
+       *"running"* reading as the sport; nothing else). After that, the
+       people-lists card still owes three panels — *when they come* · *slipping
+       away* · *this week's roster* — and `:26385` §5 has the wider gym-stage
+       list. **Reported not touched (R1.1): `BACKLOG.md`'s `:35944` block is
+       filed under a three-hash heading where every sibling uses two.**
+```
+
+```
 TASK: THE CHEER'S GYM-DAY CAP — **T3 ROUND 1 RUN AND FIXED: TWO Critical/High,
       so the packet does NOT ship this round** (`:5348` rule 1). DECISIONS
       `:35944`. Five Low fixed too, logged in `BACKLOG.md`. Kd approved the fix

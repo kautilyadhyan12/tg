@@ -213,8 +213,13 @@ You did not reload to see it.
 today" instead, and that is also a pass.** This gym keeps its clock in Argentina
 — 8½ hours behind you, measured 2026-09-05 — and the screen asks whether the
 gym's midnight lands on today's date **where you are sitting**. In those hours it
-does. At every other hour of the day it says **tomorrow**, and at about 8:30 in
-the morning the gym's midnight passes and the four emoji come back on their own.
+does. At every other hour of the day it says **tomorrow**.
+
+**Nothing on this screen changes by itself when that midnight passes** — it has
+no clock of its own and never refreshes on a timer. Whatever it says when you get
+there is what it will say until you reload. So do not wait for the emoji to come
+back; if you are still on the page hours later, treat only the sentence in front
+of you as the result.
 
 **Do not read that as "late at night".** A gym keeping the same clock as you
 would say **tomorrow** at every hour, 11pm included — the sentence turns on the

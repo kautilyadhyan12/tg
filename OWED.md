@@ -8033,8 +8033,19 @@ file and is stated so nobody reads these as lower priority than they are.
       NO SMOKE HAS RUN.**
       **T3 ROUND 1 RAN 2026-09-05 (DECISIONS `:35944`): TWO Critical/High, so the
       packet does NOT ship this round** (`:5348` rule 1) — both fixed, both were
-      guarantees with no observer, and **a diff-only round 2 is owed before this
-      line can tick even if the smoke passes.** (1) The member's *"new cheer"*
+      guarantees with no observer, and ~~**a diff-only round 2 is owed before this
+      line can tick even if the smoke passes.**~~
+      **ROUND 2 RAN 2026-09-06 (DECISIONS `:36144`): ZERO Critical/High — THE
+      PACKET SHIPS** (`:5348` rule 1) and the review is over. Eight Low, all fixed,
+      logged in `BACKLOG.md`; escape hatch not armed. **TWO GATES REMAIN AND
+      NEITHER IS A REVIEW: (1) CI HAS NEVER SEEN THIS PACKET** —
+      `origin/web-repoint` is 11 commits behind and its newest run
+      (`33957586907`, success, 2026-09-05T09:17Z) predates all four cheer-cap
+      commits, so "pushed" is not "green" (`:25008`); **(2) the browser smoke**,
+      `RUNBOOK/smoke-on-a-roll-cheer.md`, still unrun. Round 2's L-4 rewrote step
+      8 again — it had promised the four emoji come back on their own at 08:30,
+      which nothing on that screen can do — **so the sheet was not safe to hand
+      Kd before now.** (1) The member's *"new cheer"*
       dot was still on a SEVEN-day window, so a member cheered on Monday carried
       it until Sunday and a daily member never saw it go dark. (2) The reader's
       day predicate had no observer at all: widened to include yesterday, all 19

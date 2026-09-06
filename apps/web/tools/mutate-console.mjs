@@ -3026,6 +3026,30 @@ const abort = (msg) => {
   process.exit(2);
 };
 
+/** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never
+ *  normalised — ported from `apps/api/tools/mutate-orgs.mjs` 2026-09-06, where
+ *  :4267's class fix has lived since 2026-08-19.
+ *
+ *  **THIS HARNESS HAD THE RULE WRITTEN DOWN FOUR TIMES AND NOT THE FIX**, which
+ *  is why C228 was dead the day after it was written (:35944 §4): every note here
+ *  says *"every anchor aimed at this file must be ONE line"*, and a rule a human
+ *  has to remember on each new row is the thing :5348 rule 5 says to replace with
+ *  a check. Measured on the bytes this landed with: **25 of 247 rows carry a
+ *  multi-line anchor and 10 of 34 targets are CRLF on disk** — zero overlap
+ *  TODAY, which is exactly the state `OnARollPanel.jsx` was in before git
+ *  rewrote it, so the hazard is one `core.autocrlf` checkout away rather than
+ *  absent.
+ *
+ *  Converting the ANCHOR rather than the FILE is deliberate: normalising the
+ *  file rewrites every line ending in it, so the mutated tree would differ from
+ *  the original everywhere instead of only at the mutation — and a mutant is
+ *  only evidence about the one line it changed. The one-line notes on `layout`,
+ *  `planmodal` and C53 are KEPT: a one-line anchor is still the safer habit, and
+ *  this makes a two-line one survivable rather than recommended. */
+const eolOf = (text) => (text.includes('\r\n') ? '\r\n' : '\n');
+const withEolOf = (snippet, text) =>
+  snippet.replace(/\r\n/g, '\n').replace(/\n/g, eolOf(text));
+
 // A REPEATED ID IS AN ABORT, PORTED FROM `apps/api/tools/mutate-orgs.mjs`
 // 2026-09-03 (:30094 section 3a, where it cost a real run). That harness shipped
 // a duplicate id because rows were numbered from the ids at the END of the file
@@ -3090,7 +3114,7 @@ const originals = new Map(
  *  ambiguous aborts the run, which is the point. */
 for (const m of MUTANTS) {
   const original = originals.get(m.target);
-  const hits = original.text.split(m.from).length - 1;
+  const hits = original.text.split(withEolOf(m.from, original.text)).length - 1;
   if (hits === 0) {
     abort(
       `${m.id}: its anchor matches nothing in '${m.target}'. Nothing has been written yet. ` +
@@ -3199,7 +3223,10 @@ const results = [];
 for (const m of SELECTED) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
-  const mutated = original.text.replace(m.from, m.to);
+  const mutated = original.text.replace(
+    withEolOf(m.from, original.text),
+    withEolOf(m.to, original.text),
+  );
   if (mutated === original.text) {
     abort(`${m.id}: its anchor matched nothing at apply time. Re-anchor it against the current file.`);
   }
