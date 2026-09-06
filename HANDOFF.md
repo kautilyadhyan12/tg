@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: **SLICE 2 OF THE PEOPLE-LISTS CARD IS WRITTEN — `CARD-gym-overview-people.md`
+      §§`S2.1`–`S2.7`, committed `335f1ba`, recorded at DECISIONS `:36558`.**
+      **NOTHING IS BUILT AND THE GATE IS NOT PASSED** (`:26777`) — no `src` file,
+      no migration, no test, no `packages/shared` change exists for this slice.
+
+      **WAITING ON KD: the four lines the nudge sends (`S2.6.1`) plus the six
+      calls with their costs (`S2.6.2`).** The lines are words a gym sends a
+      member, so they are his exactly as slice 1's four cheer lines were.
+
+      **THREE FINDINGS THE BUILD CHAT MUST NOT LOSE — two of them contradict the
+      argument that bought this card.**
+  1. **A NUDGE MUST NOT BE STORED IN `gym_cheers`.** `:36503` §2's *"same store"*
+     was written when the two caps were identical, and `:35762` struck the "same
+     cap" half a day earlier. **Measured: all three readers of `gym_cheers`
+     filter on `gym_id` and `user_id` and NOTHING ELSE** (`repo.ts:513-519`,
+     `:4907-4911`, `:5019-5026`), so a nudge row there blocks that day's cheer,
+     draws the cheer button dead, and lands on My Gyms **as the latest cheer**
+     through a code the bundle may not know — `OWED.md`'s open fifth-preset line.
+     The card specifies a separate `gym_nudges` table. What survives of "one
+     mechanism" is the SHAPE, which is still most of the work.
+  2. **MIGRATION `0021`'s "no UNIQUE can express this cap" PARAGRAPH IS DEAD
+     THERE AND ALIVE HERE.** The cheer's cap became a calendar gym-day
+     (`:35762`); the nudge's is Part 3 §4.1's ROLLING `1/member/7d`. **The two
+     caps differ in NUMBER and in SHAPE** — copying that comment across imports
+     an explanation of the wrong feature. Read `sendGymCheer`'s docblock.
+  3. **THE LIST IS EMPTY AT EVERY GYM UNTIL ~MID-OCTOBER 2026.** Its deepest
+     input is 44 days of attendance history; `gym_attendance` has existed since
+     2026-09-02 (`0019`, `c5de542`). **So Part 3 §4.1's own empty state —
+     *"Nobody's slipping — nice."* — is a claim this product cannot make**
+     (`:5807`), and the card ships four empty states told apart. **The smoke
+     cannot be populated by clicking**; Kd already ruled the remedy (`:35240`,
+     on `tools/seed-on-a-roll-visits.ts`'s pattern).
+
+      **AND A LOW WRITTEN DOWN RATHER THAN FIXED (R1.1): `Overview.jsx:164-176`
+      issues FIVE reads, not the four that `service.ts`'s `getOrgOverview`
+      docblock and `orgOverviewSchema`'s `onARoll` comment both still say** —
+      `getAttendanceDay` landed at `:30733`. Their argument (do not add another)
+      only gets stronger, so the card repeats it with the true number.
+
+PROVE: **Documents only — no `src` file, no test, no migration changed.** Guards
+       on the bytes committed: harnesses **26** · index **316 pointers resolve
+       (315 on a heading, 1 deliberate mid-entry), 1453 headings** · triggers
+       **1108 from 285 of 423** · smoke-folds OK. Always-read **2,781 = 1,287 +
+       1,405 + 89**, §1 and §2 UNMOVED. Every figure quoted in the card was
+       measured this session and is cited where it is used (`:36558`'s round log
+       lists them).
+
+OPEN:  **Kd's gate on slice 2** — `S2.6.1`'s four lines and `S2.6.2`'s six calls.
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) — not
+       mine, not committed. **The api and web dev servers are NOT running** this
+       session; the local Postgres and Redis containers were not started either
+       (nothing here needed a database). A stale listener on `:3000` is a
+       recorded trap (`:31222`) — kill the old one by pid rather than restarting
+       around it.
+```
+
+```
 TASK: **NEXT CARD — "SLIPPING AWAY", slice 2 of `CARD-gym-overview-people.md`.**
       **KD CHOSE IT 2026-09-06 (DECISIONS `:36503`); the choice is MADE and must
       not be put to him again.** The cheer packet before it is CLOSED — built
