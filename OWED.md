@@ -7921,12 +7921,20 @@ file and is stated so nobody reads these as lower priority than they are.
       `tools/seed-on-a-roll-visits.ts`'s pattern.
       **⚖️ KD ANSWERED THE GATE 2026-09-07 (DECISIONS `:36694`) — TWO RULINGS,
       ONE AGREEMENT, ONE QUESTION THAT FOUND MORE THAN EITHER RULING.**
-      **(a) THE QUIET WINDOW IS SEVEN DAYS, NOT THE SPEC'S FOURTEEN** — *"i think
-      if a user does not come for 1 week gyms can send the messages"*, overruling
-      the card's own recommendation. A knowing deviation with his name on it
-      (R0.3). **It does NOT move the *"joined > 14 days ago"* clause**, which
-      answers a different question and which he did not rule on — changing both
-      because they were once the same number is inventing a ruling (R0.2).
+      **(a) THE QUIET WINDOW IS ~~SEVEN~~ THREE DAYS, NOT THE SPEC'S FOURTEEN**
+      — ~~*"i think if a user does not come for 1 week gyms can send the
+      messages"*~~ **SUPERSEDED THE SAME DAY (DECISIONS `:36816`): *"if a user
+      does not come to gym for say 3 continous day then gym can send not 7"*.
+      `SLIPPING_AWAY_QUIET_DAYS = 3`, the SECOND overrule of this number in one
+      day (14 → 7 → 3), so the constant is treated as VOLATILE — every fixture is
+      written `SLIPPING_AWAY_QUIET_DAYS ± 1`, never as a literal.** A knowing
+      deviation with his name on it (R0.3). **It does NOT move the *"joined > 14
+      days ago"* clause, the nudge's `1/member/7d` CAP, or the message expiry** —
+      **THREE SEVENS EXIST IN THIS FEATURE AND ONLY THE WINDOW MOVED**
+      (`:36816` §2, `:35762`'s trap arriving a second time on one card); changing
+      the others because they were once the same number is inventing a ruling
+      (R0.2). **Cost recorded and not yet shown to him: at three days a
+      TWICE-A-WEEK member is on this list permanently.**
       **(b) THE FOUR LINES THE NUDGE SENDS ARE APPROVED**, and *"other things i
       agree with you"* covers the card's other calls as they stood that day.
       **(c) HIS QUESTION — DO MESSAGES PILE UP ON THE MEMBER'S CARD? NO.**
@@ -7937,13 +7945,23 @@ file and is stated so nobody reads these as lower priority than they are.
       happened to work rather than a written rule, and slice 2 is exactly where
       it breaks** (drawing `latestNudge` beside `latestCheer` is the obvious
       build); it is now a rule with a test.
-      **STILL HIS AND NOT YET ANSWERED: the file list, the migration SQL and the
-      test list** — no message has put those in front of him — **and one new call:
-      a message stops drawing after seven days.** Today a cheer draws FOR EVER,
-      ageing (*"212 days ago"*), which is TRUE and so never blocked slice 1;
-      the fix rides in slice 2 because it is the same component and the same
-      edit. **It changes behaviour slice 1 SHIPPED, so his blanket agreement —
-      given before the call existed — does not cover it** (`:26777`).
+      ~~**STILL HIS AND NOT YET ANSWERED: the file list, the migration SQL and
+      the test list … and one new call: a message stops drawing after seven
+      days.**~~ **— ALL ANSWERED THE SAME DAY (DECISIONS `:36816`): *"yes i agree
+      and do the things planned … now start building"*. THE `:26777` GATE IS
+      OPEN**, on this card's plan **as stated** — a build that departs from
+      `S2.3.1`'s file list, `S2.4a.1`'s SQL or `S2.4a.6`'s tests is not covered
+      and goes back to him — **and the migration SQL still reaches him before any
+      database does** (R4.4).
+      **THE MESSAGE EXPIRY IS APPROVED and fixes something slice 1 shipped:** a
+      cheer draws FOR EVER today, ageing (*"212 days ago"*), which is TRUE and so
+      never blocked anything, which is why it sat until Kd asked. **Seven days,
+      and that seven is the CAP's and not the quiet window's** — it rides in the
+      WEB half (`S2.4b.8`), because `cheerAge` already computes the age and a
+      server-side cut would let the member's card and the console disagree about
+      whether a message exists.
+      **BUILD ORDER, the card's own split: server half → T3 in a FRESH chat →
+      web half** (Part I §7b, §7c).
       **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing

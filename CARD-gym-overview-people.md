@@ -7,7 +7,7 @@ unchanged, because `OWED.md`'s people-lists line tracks it by name.**
 | Slice | What | State |
 |---|---|---|
 | **1** | "On a roll" + the one-tap cheer (§§1–7) | **CLOSED** — built, T3 zero Critical/High, CI green, smoked (`:36144`, `:36363`, `:36392`) |
-| **2** | **"Slipping away" + the "we miss you" nudge** (§§S2.1–S2.7) | **WRITTEN, UNAPPROVED — nothing is built** |
+| **2** | **"Slipping away" + the "we miss you" nudge** (§§S2.1–S2.7) | **APPROVED 2026-09-07 (`:36816`) — server half BUILDING** |
 | 3–5 | When they come · this week's roster · §5.1's activation checklist | not written |
 
 **STATUS OF SLICE 1: BOTH HALVES BUILT — server 2026-09-04 (`DECISIONS.md:34240`), web
@@ -592,12 +592,12 @@ same place the cheer already lands.
    to ring, which is what a gym actually does about a member going quiet.
 2. ~~**The list will be EMPTY at every gym for about six more weeks**~~
    **— WRONG, AND CORRECTED 2026-09-07 BEFORE ANYTHING WAS BUILT (`:36694` §1).
-   The first name can appear about a WEEK after this ships.** The claim confused
-   *how far the window reaches back* (37 days) with *how much history it needs to
-   contain something* — a window reaching back 37 days is satisfied by ONE visit
-   somewhere inside it, and visits have been recorded since **2026-09-02**. Under
-   Kd's seven-day silence rule, somebody who came on 2 September and has not
-   returned qualifies from **10 September 2026**.
+   The first name can appear within DAYS of this shipping.** The claim confused
+   *how far the window reaches back* with *how much history it needs to contain
+   something* — a window reaching back a month is satisfied by ONE visit somewhere
+   inside it, and visits have been recorded since **2026-09-02**. Under Kd's
+   three-day silence rule (`:36816`), somebody who came on 2 September and has
+   not returned already qualifies.
    **What the limit really is, and it survives the correction:** while a gym has
    less than about five weeks of recorded visits, an empty list still cannot be
    read as *"nobody is slipping"* — anybody who drifted away BEFORE we started
@@ -618,7 +618,10 @@ same place the cheer already lands.
 | Ruling | What it binds here |
 |---|---|
 | `:36503` | **Kd chose this panel**, on the argument that the cheer already built the engine. §3 of that entry names the three things this card must not assume — all three are S2.5 risks below. |
-| **`:36694` ruling 1** | **THE QUIET WINDOW IS SEVEN DAYS, not the spec's fourteen** — *"if a user does not come for 1 week gyms can send the messages"*, overruling this card's own recommendation to keep the spec's number. It does NOT move the "joined > 14 days ago" clause, which is a different question he did not rule on. |
+| ~~`:36694` ruling 1 — SEVEN DAYS~~ | **SUPERSEDED THE SAME DAY by `:36816`.** |
+| **`:36816`** | **THE QUIET WINDOW IS THREE DAYS** — *"if a user does not come to gym for say 3 continous day then gym can send not 7"*. **It does NOT move the "joined > 14 days ago" clause, the nudge's `1/member/7d` CAP, or the message expiry** — see the three-sevens table in `S2.4a.2`. |
+| **`:36816`** | **THE MESSAGE EXPIRY IS APPROVED** — *"yes i agree"*. A message stops drawing after seven days, which FIXES slice 1's cheer drawing for ever (`S2.4b.8`). |
+| **`:36816`** | **THE BUILD IS AUTHORISED** — *"now start building"*, the `:26777` gate PASSED. Server half first, per this card's own split. |
 | **`:36694` §2** | **NOTHING PILES UP ON THE MEMBER'S CARD: exactly ONE message draws, the newest, and a nudge and a cheer never stack.** Kd ASKED this; the answer was measured in the shipped code, and this card turns it from an accident of how slice 1 happened to work into a written build rule (S2.4b.7). **Not a ruling — a fact plus a call.** |
 | `:26469` §1.3 | **"At risk" is measured in VISITS, never in workouts.** The gym is never shown what a member did away from it. |
 | `:29961` ruling 3 | Numbers first, people lists second. This is the second slice of the lists half. |
@@ -773,10 +776,26 @@ gym`** (`:26469` §1.3), and every window is counted in **gym-days**
 (`gyms.timezone`), the unit `gym_attendance.day`, the Overview chart and the
 regulars query already share.
 
-**AND THE QUIET WINDOW IS SEVEN DAYS, NOT THE SPEC'S FOURTEEN — KD RULED IT
-2026-09-07, OVERRULING THIS CARD'S OWN RECOMMENDATION** (`S2.6.2` item 2, which
-had recommended keeping the spec's number): *"i think if a user does not come for
-1 week gyms can send the messages"*. **`SLIPPING_AWAY_QUIET_DAYS = 7`.**
+**AND THE QUIET WINDOW IS ~~FOURTEEN~~ ~~SEVEN~~ THREE DAYS — KD RULED IT TWICE
+ON 2026-09-07, EACH TIME AGAINST THIS CARD'S STANDING NUMBER**: first *"i think
+if a user does not come for 1 week gyms can send the messages"* (`:36694` ruling
+1, seven), then *"if a user does not come to gym for say 3 continous day then gym
+can send not 7"* (`:36816`, three — *"a little change of plan"*).
+**`SLIPPING_AWAY_QUIET_DAYS = 3`.**
+
+⚠️ **THERE ARE THREE SEVENS IN THIS FEATURE AND ONLY ONE OF THEM MOVED. THIS IS
+THE `:35762` TRAP EXACTLY, ARRIVING FOR THE SECOND TIME ON THE SAME CARD.**
+
+| The number | What it governs | Where it comes from | Moved? |
+|---|---|---|---|
+| ~~7~~ → **3 days** | **the QUIET WINDOW** — how long silence lasts before a member is listed | **Kd, `:36816`** | **YES** |
+| **7 days, rolling** | **the NUDGE'S CAP** — how often a gym may message one member | Part 3 §4.1 `rate-limit 1/member/7d` | **NO** |
+| **7 days** | **the MESSAGE EXPIRY** — how long a message stays on the member's card | derived from the CAP (`S2.4b.8`), approved `:36816` | **NO** |
+
+**The expiry survives the ruling because it was never tied to the quiet window —
+it is tied to the CAP**, being the longest a message can still be the latest
+thing a gym has said. **A chat that "tidies" these three into one constant
+reverses a Kd ruling and breaks a spec limit in one edit.**
 
 So a row is listed when all four hold:
 
@@ -793,7 +812,19 @@ So a row is listed when all four hold:
   **or** in the 30 gym-days before the quiet window — the "was engaged" arm,
   which is what keeps somebody who joined and never once turned up off a list
   headed *"slipping away"*;
-- **zero visits at this gym in the last 7 gym-days.**
+- **zero visits at this gym in the last 3 gym-days** (`:36816`).
+
+**THE COST OF THREE, MEASURED AGAINST REAL TRAINING PATTERNS AND WRITTEN DOWN
+BECAUSE KD WAS NOT SHOWN IT BEFORE HE RULED:** a member who trains **twice a
+week** — Tuesday and Saturday, say — has a three-day gap (Wed·Thu·Fri) every
+single week, **so a perfectly normal member lands on a list headed "slipping
+away" permanently.** A three-times-a-week member (Mon·Wed·Fri) never does. **What
+bounds it:** nothing sends itself, the list is a prompt to an owner, and the
+nudge's own cap is one message a week. **It is ONE CONSTANT to change** and the
+tests are written as a PAIR around it, so moving it is one line and two fixture
+numbers. **Raised to him in one line at the build, not made a second gate** — he
+ruled twice on this number already and re-asking is the protocol failure `:16702`
+and `:19256` both paid for.
 
 Ordered by **lifetime visits at this gym desc** (the spec's *"save the most
 invested first"*), then `last_visit_day` desc, then display name, then user id —
@@ -924,9 +955,12 @@ preset and the time, never who pressed the button.
 - **Each of the four definition clauses, in BOTH directions**, because a guard
   whose only tested failure is "it did not fire" is satisfied by a door that is
   simply shut (`:7104`'s PG1):
-  - a member quiet 8 gym-days IS listed; quiet 6 is NOT (`:36694` ruling 1's
-    seven, and **the pair is what proves the constant is read at all** — a
-    single-sided test passes on a door that is simply shut);
+  - a member quiet 4 gym-days IS listed; quiet 2 is NOT (`:36816`'s three, and
+    **the pair is what proves the constant is read at all** — a single-sided
+    test passes on a door that is simply shut). **Both fixtures are written in
+    terms of `SLIPPING_AWAY_QUIET_DAYS ± 1` and never as literal 4 and 2**, so
+    the next time Kd moves this number the tests move with it — he has moved it
+    twice in one day;
   - a member who joined 10 days ago is NOT listed, however quiet;
   - a member who has **never** visited is NOT listed (the "was engaged" arm) —
     and a member whose only visits were in their first 21 days IS;
@@ -1045,8 +1079,11 @@ the ordering's first key.
      newer of the two, so slice 2 cannot turn one line into two. **This is the
      rule a later chat is most likely to break**, by adding `latestNudge` beside
      `latestCheer` on screen instead of choosing between them.
-8. **A MESSAGE STOPS DRAWING AFTER SEVEN DAYS — a call for Kd with its cost, and
-   it FIXES something slice 1 shipped.** Today `cheerNote` draws the newest cheer
+8. **A MESSAGE STOPS DRAWING AFTER SEVEN DAYS — ~~a call for Kd~~ APPROVED BY KD
+   2026-09-07 (`:36816`, *"yes i agree"*), and it FIXES something slice 1
+   shipped.** **The seven here is the CAP's seven and NOT the quiet window's**,
+   which he moved to three in the same message — see the three-sevens table in
+   `S2.4a.2`. Today `cheerNote` draws the newest cheer
    **for ever**, ageing (`cheerAge` counts up with no ceiling, `:188-198`), so a
    gym that cheered once in January still shows that line in July saying *"212
    days ago"*. That is TRUE, so it is not `:5807` and it did not block slice 1 —
@@ -1139,18 +1176,20 @@ call at the gate produced a Kd ruling in one line — **once reversing it
    **Cost:** one more table, one more field on `/v1/orgs/mine`. **Reverse it**
    and every one of the three `gym_cheers` readers learns a `kind` filter, where
    forgetting one silently blocks a cheer. S2.4a.1 has the measurements.
-2. ~~**The quiet window is the spec's 14 days, counted in visits.** **Cost:** at
-   a gym whose members come fortnightly, a normal member appears on the list.~~
-   **— OVERRULED BY KD, 2026-09-07 (`:36694` ruling 1): SEVEN DAYS.** *"i think
-   if a user does not come for 1 week gyms can send the messages"*.
-   `SLIPPING_AWAY_QUIET_DAYS = 7`. **The cost the recommendation named is now
-   LARGER and he was not shown it before ruling, so it is written here rather
-   than buried:** a member who trains every ten days is a normal member at many
-   gyms and will appear on this list. **What bounds it:** the list is a prompt to
-   an owner and not an accusation, nothing is sent automatically, and the nudge's
-   own cap is one a week — so the worst case is one warm message to somebody
-   training fortnightly. **He may want to know this; it does not need a second
-   gate.**
+2. ~~**The quiet window is the spec's 14 days, counted in visits.**~~
+   ~~**— OVERRULED: SEVEN DAYS** (`:36694` ruling 1).~~ **— OVERRULED AGAIN THE
+   SAME DAY: THREE DAYS** (`:36816`) — *"if a user does not come to gym for say 3
+   continous day then gym can send not 7"*. **`SLIPPING_AWAY_QUIET_DAYS = 3`.**
+   **BOTH STRIKES ARE KEPT BECAUSE THE PATTERN IS THE POINT: this card
+   recommended a number, was overruled, re-recommended nothing, and was overruled
+   again within hours — so the constant is treated as VOLATILE in the code and in
+   the tests** (`S2.4a.2`, `S2.4a.6`: fixtures are written as
+   `SLIPPING_AWAY_QUIET_DAYS ± 1`, never as literals). **The cost grew each time
+   and he has not been shown the latest one before ruling** — at three days a
+   TWICE-A-WEEK member is on the list permanently (`S2.4a.2` works the days out).
+   **Raised in one line at the build; not a second gate** (`:16702`, `:19256` —
+   re-asking a question he has answered twice is the protocol failure, not
+   diligence).
 3. **The nudge is gated on `members.read`, not a tenth privilege** — the same
    call slice 1 made for the cheer, and Part 3 §2.2 grants the nudge to exactly
    the three roles that hold it. **Cost:** an owner cannot stop one staffer
@@ -1176,10 +1215,10 @@ call at the gate produced a Kd ruling in one line — **once reversing it
 1. the at-risk definition counts **visits at this gym** where
    `03-part3-org-console.md:195-197` counts **workouts anywhere** (`:26469`
    §1.3, R0.3);
-2. **the quiet window is SEVEN days where `:197` says fourteen** (`:36694`
-   ruling 1). **This card recommended keeping the spec's number and was
-   overruled** — which is why it is a deviation with a name on it rather than a
-   drift.
+2. ~~**the quiet window is SEVEN days where `:197` says fourteen**~~ **— THREE
+   days** (`:36816`, superseding `:36694` ruling 1 the same day). **This card
+   recommended the spec's number and was overruled TWICE** — which is why it is a
+   deviation with a name on it rather than a drift.
 
 Every other number on this screen — joined > 14 days, 21 days, 30 days, top 5,
 capped at 20, `1/member/7d` — **is quoted from the spec, not chosen here** (V2).
@@ -1190,19 +1229,26 @@ capped at 20, `1/member/7d` — **is quoted from the spec, not chosen here** (V2
 
 ## S2.7 · THE GATE
 
-**NOT PASSED, AND WHAT REMAINS IS NARROWER AFTER 2026-09-07** (`:36694`).
+**PASSED 2026-09-07** (`:36816`) — *"yes i agree and do the things planned … now
+start building"*.
 
-**GIVEN:** the panel (`:36503`) · **the four lines** (S2.6.1) · **the seven-day
-quiet window**, his own ruling against this card's recommendation · and *"other
-things i agree with you"*, which covers the six calls as they stood that day
-(S2.6.2 items 1 and 3–5).
+**GIVEN:** the panel (`:36503`) · the four lines (`S2.6.1`) · **the quiet window
+at THREE days**, his own ruling, twice against this card's number · **the
+message expiry** (`S2.4b.8`), the one call outstanding when he answered · and
+*"do the things planned"*, which covers the file list, the migration and the test
+list as this document states them.
 
-**STILL HIS, and both are NEW since he answered:** the **file list, the migration
-SQL (S2.4a.1) and the test list (S2.4a.6)**, which no message has put in front of
-him — and **S2.6.2 item 7, a message expiring after seven days**, which is the
-one call that changes behaviour slice 1 already shipped. **A blanket "I agree"
-given before a call existed does not cover it** (`:26777`: an approval covers
-what was on screen when it was given).
+**WHAT THE APPROVAL DOES NOT STRETCH TO, because `:26777` is about exactly this:
+it covers THIS DOCUMENT'S plan.** A build that departs from `S2.3.1`'s file list,
+`S2.4a.1`'s SQL or `S2.4a.6`'s tests is not covered by it and goes back to him.
+**The migration SQL is put in front of him before it is applied to any
+database** — R4.4's "reviewed as SQL by Kd", the sequencing slice 1 followed for
+`0021`.
+
+**BUILD ORDER, and it is this card's own split rather than a chat's preference:**
+**`S2.4a` the server half in one chat, then its T3, then `S2.4b` the web half in
+a separate chat** (Part I §7b's ceiling: one migration per chat; §7c: the
+reviewer must not be the author).
 
 **Nothing is built. No `src` file, no migration, no test, no `packages/shared`
 change exists for this slice**, and `:26777` is the recorded cost of treating a

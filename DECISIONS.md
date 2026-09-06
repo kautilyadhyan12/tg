@@ -36812,3 +36812,94 @@ of those copies, so they were grepped rather than remembered.
 Measured this session, not recalled: the three-line lateral and its `LIMIT 1` ·
 `cheerNote` and `cheerAge`'s missing ceiling · the date arithmetic in §1, worked
 from `0019`'s commit date (`c5de542`, 2026-09-02).
+
+## 2026-09-07 — KD MOVES THE QUIET WINDOW A SECOND TIME IN ONE DAY — THREE DAYS, NOT SEVEN — APPROVES THE MESSAGE EXPIRY, AND OPENS THE BUILD GATE
+
+**Read before touching `SLIPPING_AWAY_QUIET_DAYS`, before "tidying" the three
+different SEVENS in this feature into one constant, before writing a fixture that
+names a literal number of quiet days, and before quoting `:36694` ruling 1's
+seven — it lasted about an hour.**
+
+*"yes i agree and do the things planned but this thing should be kept if a user
+does not come to gym for say 3 continous day then gym can send not 7 week a
+little change of plan · now start building"*.
+
+### 1 · THE RULING: THREE DAYS, AND IT IS THE SECOND OVERRULE OF THIS NUMBER IN ONE DAY
+
+**`SLIPPING_AWAY_QUIET_DAYS = 3`**, superseding `:36694` ruling 1's seven, which
+had itself superseded `03-part3-org-console.md:197`'s fourteen. **The card
+recommended fourteen, was overruled to seven, and was overruled to three before a
+line of it was written.**
+
+**THE CONSTANT IS THEREFORE TREATED AS VOLATILE, WHICH IS A BUILD DECISION AND NOT
+A COMPLAINT.** Every fixture is written as `SLIPPING_AWAY_QUIET_DAYS ± 1` and
+never as a literal 4 and 2, so the next move costs one line instead of a hunt
+through a suite. **`:20587`'s rule — a figure moves in all of its copies or
+none — is cheapest to obey when there is only one copy.**
+
+**THE COST HE HAS NOT BEEN SHOWN, worked out and recorded rather than buried: at
+three days a TWICE-A-WEEK MEMBER IS ON THIS LIST PERMANENTLY.** Tuesday and
+Saturday leaves Wednesday, Thursday and Friday empty, every week, for ever. A
+Monday/Wednesday/Friday member never qualifies. **What bounds it:** nothing sends
+itself, the list is a prompt to an owner, and the nudge's cap is one message a
+week — so the worst case is one warm line to somebody training twice a week.
+**Raised to him in ONE LINE at the build and NOT made a second gate**: he has
+ruled this number twice in a day, and re-asking is `:16702`/`:19256`'s recorded
+protocol failure rather than diligence.
+
+### 2 · THERE ARE THREE SEVENS IN THIS FEATURE AND ONLY ONE OF THEM MOVED — `:35762`'s TRAP, SECOND TIME ON THIS CARD
+
+| The number | What it governs | Source | Moved? |
+|---|---|---|---|
+| ~~7~~ → **3 days** | the QUIET WINDOW — how long silence lasts before a member is listed | **Kd, this entry** | **YES** |
+| **7 days, rolling** | the NUDGE'S CAP — how often a gym may message one member | Part 3 §4.1 `rate-limit 1/member/7d` | **NO** |
+| **7 days** | the MESSAGE EXPIRY — how long a message stays on the member's card | derived from the CAP, approved in this entry | **NO** |
+
+**THE EXPIRY SURVIVES THE RULING BECAUSE IT WAS NEVER TIED TO THE QUIET WINDOW —
+IT IS TIED TO THE CAP**, being the longest a message can still be the latest
+thing a gym has said. **Had it been derived from the window, this ruling would
+silently have changed it too**, which is exactly how `:35762` found the cheer's
+cap and the spec's nudge limit agreeing by coincidence and then diverging.
+**A chat that folds these three into one constant reverses a Kd ruling AND breaks
+a spec limit in a single edit.**
+
+### 3 · APPROVED: THE MESSAGE EXPIRY, WHICH FIXES SOMETHING SLICE 1 SHIPPED
+
+*"yes i agree"* answers the one call left open at `:36694` §4. **A message stops
+drawing on the member's gym card after seven days.** Today `cheerAge` counts up
+with no ceiling, so a January cheer still reads *"212 days ago"* in July — TRUE,
+therefore never `:5807` and never a blocker, and therefore the kind of thing that
+sits unfixed for ever unless somebody asks. **Kd asked.**
+
+**It is a WEB change and rides in the web half** (`S2.4b.8`), not the server's:
+`cheerAge` already computes the age, and doing it server-side would let the
+member's card and the console disagree about whether a message exists at all.
+
+### 4 · THE GATE IS OPEN, AND WHAT IT COVERS IS THIS DOCUMENT
+
+*"do the things planned … now start building"* passes `:26777`'s gate on
+`CARD-gym-overview-people.md` §§`S2.1`–`S2.7` — the file list, the migration and
+the test list **as this document states them**. **A build that departs from them
+is not covered and goes back to him.**
+
+**THE MIGRATION SQL STILL GOES IN FRONT OF HIM BEFORE IT IS APPLIED TO ANY
+DATABASE** (R4.4, and the sequencing slice 1 followed for `0021`). Writing the
+file is not applying it; the ordering that protects him is that no database sees
+it first.
+
+**BUILD ORDER IS THE CARD'S OWN SPLIT, not a chat's preference:** the server half
+in one chat, then T3 in a FRESH chat, then the web half in a third (Part I §7b's
+one-migration ceiling, §7c's the-reviewer-is-not-the-author).
+
+### Round log
+
+Documents only in this commit; the build follows. `CARD-gym-overview-people.md`
+updated at every copy of the moved number (`S2.1` limit 2, `S2.2`'s ruling table,
+`S2.4a.2`, `S2.4a.6`, `S2.4b.8`, `S2.6.2` item 2, `S2.6.3`, `S2.7`) plus the
+status table at the top; **both overrules are struck in place and kept**, because
+the pattern — recommended, overruled, overruled again within hours — is what
+justifies treating the constant as volatile in the code.
+
+The three-sevens table is written into the card as well as here, at
+`S2.4a.2`, because a table that only exists in the decision record is one the
+person editing the constant does not read.
