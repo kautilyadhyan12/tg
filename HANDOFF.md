@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: **NEXT CARD — "SLIPPING AWAY", slice 2 of `CARD-gym-overview-people.md`.**
+      **KD CHOSE IT 2026-09-06 (DECISIONS `:36503`); the choice is MADE and must
+      not be put to him again.** The cheer packet before it is CLOSED — built
+      `:35822`, T3 round 1 `:35944`, round 2 SHIPS `:36144`, CI green `:36363`,
+      SMOKE PASSED `:36392`, `OWED.md` line TICKED.
+
+      **START HERE. NOTHING IS BUILT AND NO PLAN IS APPROVED** (`:26777` — he
+      chose the PANEL, not a file list, a migration or a test list). The first
+      deliverable is **slice 2 of the card document**, for his gate — not code.
+
+      **THREE THINGS THE CARD MUST NOT ASSUME. Each reverses a ruling if it is
+      got wrong.**
+  1. **THE NUDGE'S CAP IS `1/member/7d` AND IS *NOT* THE CHEER'S.** `:35762` §1
+     rules Part 3 §4.1's rate limit describes the AT-RISK NUDGE, *"a different
+     feature"*, **"not loosened by"** the cheer's gym-day cap. The two numbers
+     agreeing was a coincidence and it ended on 2026-09-05. **Reusing
+     `sendGymCheer`'s cap for the nudge reverses a six-day-old ruling.**
+  2. **"AT RISK" IS MEASURED IN VISITS, NEVER IN WORKOUTS.** `:26469` §1.3 forbids
+     showing a gym what a member did away from it. **`org_member_stats` — the
+     view, unread since `0001_init` — counts workouts ANYWHERE**, and it is the
+     obvious thing to reach for on exactly this screen. The spec's own at-risk
+     definition is workouts-anywhere and is already redefined onto VISITS on
+     `OWED.md`'s people-lists line.
+  3. **EVERY COUNT COMES FROM THE SERVER** (`:27992` §3, `:29250`) — a screen
+     that downloads a page and counts it is right on six rows and wrong on four
+     hundred.
+
+      **WHAT MAKES THIS SLICE CHEAP, and it is the argument Kd accepted:** the
+      card's own §2 — **the cheer and the at-risk nudge are ONE MECHANISM pointed
+      opposite ways**, same store, same one tap, different sentence and different
+      list — so it *"adds a query and a preset, not a subsystem"*. The store, the
+      cap pattern, the confirm panel and its four ways out were all built and
+      reviewed to zero Critical/High this week (`:34240`, `:34809`, `:35422`,
+      `:36144`).
+
+      **WHY THIS CARD AND NOT ANOTHER, so it is not re-litigated:** `:26385` —
+      the gym stage is finished feature by feature and **continuity of thread
+      beats severity ranking**, so the next card is the next SLICE of this file,
+      never the biggest 🔴 in `OWED.md`. That entry's §4 is the recorded cost of
+      getting it wrong. `:26385` §5 has the wider gym-stage list for afterwards.
+
+PROVE: **This session's last commits changed no `src` file.** Guards on the bytes
+       committed — harnesses **26** · index **315 pointers resolve (314 on a
+       heading, 1 deliberate mid-entry), 1446 headings** · triggers **1103 from
+       284 of 422** · smoke-folds OK. Always-read **2,776 = 1,282 + 1,405 + 89**,
+       §1 and §2 UNMOVED. The packet's own PROVE and audit are at `:36144` and
+       `:36392`; CI green on `edd09c3` and every commit since.
+
+OPEN:  **Nothing is waiting on Kd.** All three `:35317` items are closed — the
+       word (*"in a row"*, `OWED.md:7951` ticked), the confirm step (`:35422`,
+       smoked `:35692`) and the cap (`:35762`, finished tonight). **An earlier
+       handoff said two were still his to answer; that was false and is struck
+       in the block below** (V4 — I inherited it and carried it twice).
+       `CLAUDE.md`'s pre-existing uncommitted edit is STILL OUT (`:24559`) — not
+       mine, not committed. **The api and web dev servers were STOPPED at the end
+       of this session**; the local Postgres and Redis containers are UP.
+       A stale listener on `:3000` is a recorded trap (`:31222`) — if a server
+       will not bind, kill the old one by pid rather than restarting around it.
+```
+
+```
 TASK: THE CHEER'S GYM-DAY CAP — **DONE. SMOKE PASSED AND `OWED.md`'S 🟡 LINE
       TICKS** (DECISIONS `:36392`). All three gates discharged: reviewed
       (`:36144`, zero Critical/High), CI green on the reviewed commit

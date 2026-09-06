@@ -7879,7 +7879,18 @@ file and is stated so nobody reads these as lower priority than they are.
       what :29961 ruling 3 already refused once, and keeping the name this line
       already tracks is what stops the filename drifting). **Slice 1 is "on a
       roll" + the cheer; the other three panels and the checklist are untouched
-      and still owed here.** **THE TRAP THAT
+      and still owed here.**
+      **⏭️ SLICE 2 IS *SLIPPING AWAY* — KD CHOSE IT 2026-09-06 (DECISIONS
+      `:36503`)**, from the same four, on the argument that the cheer already
+      built the nudge's engine. **Slice 1 is fully CLOSED** — built, reviewed to
+      zero Critical/High, CI green, smoked (`:36144`, `:36363`, `:36392`).
+      **THREE THINGS THE SLICE-2 CARD MUST NOT ASSUME:** the nudge's cap is Part
+      3 §4.1's `1/member/7d` and is **NOT** the cheer's gym-day cap (`:35762` §1
+      — the two agreeing was a coincidence and it is over) · "at risk" is
+      measured in VISITS and never in workouts (`:26469` §1.3) · every count
+      comes from the SERVER (`:27992` §3, `:29250`). **Nothing is built and no
+      plan is approved** (`:26777` — he chose the PANEL, not a file list).
+      **THE TRAP THAT
       MUST TRAVEL WITH THIS LINE: `org_member_stats` (the view, unread since
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
       a gym — it is the obvious thing to reach for on exactly these screens.

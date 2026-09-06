@@ -36499,3 +36499,58 @@ Critical/High), CI green on the reviewed commit (`:36363`), smoked (this entry).
 **Nothing about how a streak is EARNED is covered by any of them**: the ten visits
 behind the list were written into the database under `:35240`, never walked in
 through `markAttendance`.
+
+## 2026-09-06 — KD PICKS *"SLIPPING AWAY"* AS THE NEXT SLICE OF THE PEOPLE-LISTS CARD — the at-risk list, which finally gives the nudge its home
+
+**Read before proposing a next card, before building the at-risk list, before
+treating the nudge as a new subsystem, and before asking Kd which people-list
+panel comes next — he has answered.**
+
+Asked what was next with the cheer packet closed, the choice was put to him as
+four panels with a recommendation; he answered **"ok your recommendation"** —
+**slipping away**, the members who have stopped coming.
+
+### 1 · WHY THIS IS THE NEXT CARD AT ALL, WHICH IS A RULING AND NOT A PREFERENCE
+
+`:26385` decides it twice over: **the gym stage is finished feature by feature**,
+and **continuity of thread beats severity ranking** — so the next card is the
+next SLICE of `CARD-gym-overview-people.md`, never the biggest 🔴 in `OWED.md`.
+That entry's §4 is the recorded cost of getting this wrong: a chat quoted the
+continuity rule and broke it in the same message by reaching for the admin panel.
+**Kd picking the panel is also precedent, not courtesy** — he chose "on a roll"
+from the same four at `:34240`.
+
+### 2 · WHAT MAKES IT THE CHEAP ONE, AND IT WAS THE ARGUMENT HE ACCEPTED
+
+`CARD-gym-overview-people.md` §2 already states it: **the cheer and the spec's
+at-risk nudge are ONE MECHANISM pointed opposite ways** — same store, same cap,
+same one tap, different sentence and different list — so *"building the cheer
+builds the nudge's engine, and the at-risk panel later adds a query and a preset,
+not a subsystem."* Everything that machinery needs was built, reviewed to zero
+Critical/High, CI-checked and smoked over the last two days (`:34240`, `:34809`,
+`:35422`, `:36144`, `:36392`).
+
+### 3 · THE THREE THINGS THE CARD MUST NOT ASSUME, WRITTEN DOWN NOW
+
+**(a) THE NUDGE'S CAP IS `1/member/7d` AND IS *NOT* THE CHEER'S.** `:35762` §1
+rules that Part 3 §4.1's rate limit *"describes the AT-RISK NUDGE, a different
+feature, and is not loosened by"* the cheer's gym-day cap. **The two numbers
+agreeing was a coincidence and it is over.** A chat that reuses `sendGymCheer`'s
+cap for the nudge reverses a ruling made six days ago.
+
+**(b) "AT RISK" IS MEASURED IN VISITS, NEVER IN WORKOUTS.** `:26469` §1.3 forbids
+showing a gym what a member did away from it, and `OWED.md`'s own people-lists
+line carries the trap: **`org_member_stats` — the view, unread since
+`0001_init` — counts workouts ANYWHERE**, and it is the obvious thing to reach
+for on exactly this screen. The spec's at-risk definition is workouts-anywhere
+and is **already redefined onto visits** on that line.
+
+**(c) EVERY COUNT COMES FROM THE SERVER** (`:27992` §3, `:29250`) — a screen that
+downloads a page and counts it is right on six rows and wrong on four hundred.
+
+### 4 · NOTHING IS BUILT AND NO PLAN IS APPROVED
+
+`:26777` — an approval covers what was on screen when it was given, and what he
+approved here is **which panel**, not a file list, a migration or a test list.
+The card document is written one slice at a time and **slice 2 has not been
+written**. No `src` file, no migration and no test is touched by this entry.

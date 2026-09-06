@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,278 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,282 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -15,8 +15,16 @@
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,772 lines, MEASURED 2026-09-06 and not estimated**
-(1,278 + 1,405 + 89). **THE FORTY-EIGHTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+**ALWAYS-READ TOTAL: 2,776 lines, MEASURED 2026-09-06 and not estimated**
+(1,282 + 1,405 + 89). **THE FORTY-NINTH IS KD CHOOSING THE NEXT CARD — AND IT
+COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405 AND 89.**
+Its record is a CARD record and went to §1B, where `:24813` sends it, **even
+though it carries a decision** — because what BINDS future work is `:26385`, which
+already sits in §1; this entry only records which panel he picked under it.
+**One of its four phrases is worth the whole cost on its own** — *"before asking
+Kd which people-list panel comes next — he has answered"* — which is the phrase
+that stops a fresh chat re-opening a settled choice, the failure `:16702` and
+`:19256` both paid for. **THE FORTY-EIGHTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
 AND IT COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
 AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
 **The gate was discharged by Kd's declaration and the entry says so in its own
@@ -1810,6 +1818,26 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:36503** — 2026-09-06 — **KD PICKS *"SLIPPING AWAY"* AS THE NEXT SLICE OF THE
+  PEOPLE-LISTS CARD — the at-risk list, which finally gives the nudge its home.**
+  **Read before proposing a next card, before building the at-risk list, before
+  treating the nudge as a new subsystem, and before asking Kd which people-list
+  panel comes next — he has answered.** Four panels were put to him with a
+  recommendation and he took it: *"ok your recommendation"*. **Why it is the next
+  card at all is a RULING, not a preference** — `:26385` finishes the gym stage
+  feature by feature and puts continuity of thread above severity, so it is the
+  next SLICE of `CARD-gym-overview-people.md` and never the biggest 🔴; **Kd
+  picking the panel is `:34240`'s precedent.** **Why it is the cheap one:** the
+  card's own §2 says the cheer and the at-risk nudge are ONE MECHANISM pointed
+  opposite ways, so this *"adds a query and a preset, not a subsystem"*. **THREE
+  THINGS THE CARD MUST NOT ASSUME: (a) the nudge's cap is Part 3 §4.1's
+  `1/member/7d` and is NOT the cheer's gym-day cap** (`:35762` §1 — the two
+  agreeing was a coincidence, and reusing `sendGymCheer`'s cap reverses a ruling)
+  · **(b) "at risk" is measured in VISITS, never workouts** (`:26469` §1.3, and
+  `org_member_stats` — unread since `0001_init` — counts workouts ANYWHERE and is
+  the obvious thing to reach for here) · **(c) every count comes from the SERVER**
+  (`:27992` §3). **Nothing is built and no plan is approved** (`:26777` — he chose
+  the PANEL, not a file list).
 - **:36392** — 2026-09-06 — **THE CHEER'S GYM-DAY CAP: SMOKE PASSED AND THE 🟡
   LINE TICKS — the last gate is Kd's declaration, and the database corroborates
   the half a declaration cannot.** **Read before quoting this pass as covering the
