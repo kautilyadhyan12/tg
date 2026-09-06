@@ -187,6 +187,21 @@ const ATTENDANCE_SUITE = 'test/orgs.attendance.test.ts';
  *  screen :30624 already caught arranging true numbers into a false sentence). */
 const CHEERS_SUITE = 'test/orgs.cheers.test.ts';
 
+/** THE AT-RISK LIST AND ITS NUDGE — Part 3 §4.1, the panel Kd chose at :36503.
+ *
+ *  It needs its own fixtures for the cheers suite's reason and one more: every
+ *  guarantee here turns on attendance spread across WEEKS that no route can
+ *  create, AND on memberships older than a fortnight, which the join door quite
+ *  correctly stamps with now(). Both are inserted directly.
+ *
+ *  It sits in :5857 rule 4a's expensive columns twice over: OWNERSHIP (whose
+ *  visits count, whose message lands on whose card, who may press the button)
+ *  and NUMBERS A USER SEES — and here the "number" is a JUDGEMENT. A row on this
+ *  panel says a gym believes somebody is drifting away, so a window read one day
+ *  wide puts a name on a list it does not belong on, which is :5807 aimed at a
+ *  person rather than at a figure. */
+const NUDGES_SUITE = 'test/orgs.nudges.test.ts';
+
 /** The gamification module is not `modules/orgs`, and one row aims there
  *  deliberately: Kd ruled on 2026-09-01 that going to the gym keeps a STREAK
  *  alive and did NOT rule that it pays XP (:27900 §3), and until that card the
@@ -3345,6 +3360,134 @@ const MUTANTS = [
     expect: "refuses a second cheer on the same gym-day",
     from: '               AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date',
     to: '               AND (c.created_at AT TIME ZONE ${gym.timezone})::date >= ${gym.today}::date - 1',
+  },
+
+  // ── THE AT-RISK LIST AND ITS NUDGE (Part 3 §4.1; Kd's panel, :36503) ──────
+  //
+  // NUMBERED FROM THE TRUE MAXIMUM IN USE (O283), computed rather than taken
+  // from the file's last row — :30094's recorded duplicate-id trap.
+  {
+    id: 'O284',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE GYM PREDICATE LEAVES THE QUIET TEST AND THE PANEL UNDER-REPORTS SILENTLY. Without it, a visit at ANY gym answers 'has this person been here lately', so a member who trains daily at gym B never appears on gym A's list however long they have been absent from it — the failure direction nobody notices, because a list that is too SHORT looks like good news. It is also :26469 §1.3's forbidden thing arriving sideways: gym A's screen would be shaped by what a member did somewhere else. Its observer is the two-gyms-two-memberships fixture, which is the only shape where a missing tenancy predicate can die at all (:28221 §3b)",
+    expect: 'refuses a stranger',
+    from: "        WHERE a.gym_id = ${input.gymId} AND a.user_id = e.user_id\n          AND a.day > b.quiet_from AND a.day <= b.today",
+    to: "        WHERE a.user_id = e.user_id\n          AND a.day > b.quiet_from AND a.day <= b.today",
+  },
+  {
+    id: 'O285',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE QUIET WINDOW WIDENS BY A DAY AND A MEMBER WHO CAME YESTERDAY IS CALLED SLIPPING AWAY. Kd moved this number TWICE in one day (14 -> 7 -> 3, :36694 then :36816), which is precisely why it needs an observer rather than a comment: the next move must break a test, not pass quietly. Its observer is the boundary PAIR - one member quiet QUIET+1 who is listed beside one quiet QUIET-1 who is not - and the pair is what stops this passing on a door that is simply shut (:7104's PG1)",
+    expect: 'lists a member one day past the quiet window',
+    from: '             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int AS quiet_from,',
+    to: '             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int - 1 AS quiet_from,',
+  },
+  {
+    id: 'O286',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE LOCK BEHIND THE NUDGE CAP GOES AND THE CHECK-THEN-ACT BECOMES A RACE. Two staff at one desk press at the same moment, both read no recent row, and the member gets two messages inside a cap that says one - Part 3 §4.1's rate limit enforced by nothing. This is the sibling of O274 on the cheer, and it is the mutant :35511 recorded as the class: the guard that lets a control work at all is the one held by nothing while twenty-five tests stay green. The anchor names its own subject because 'await lockOrgRow(tx, input.gymId);' appears a dozen times in this file (:27204 §6)",
+    expect: 'two staff pressing at the same moment',
+    from: '    await lockOrgRow(tx, input.gymId); // the only guarantee behind the nudge cap, O286',
+    to: '    // lock removed by O286',
+  },
+  {
+    id: 'O287',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE CAP'S GUARD WIDENS FROM SEVEN DAYS TO EIGHT AND A GYM IS REFUSED A MESSAGE IT IS ENTITLED TO SEND. It is the quiet half of a rate limit going wrong: nothing is written, nobody is spammed, and an owner simply finds the button dead a day longer than the rule says - which no test asserting only that the SECOND send is refused could ever see. Its observer is the far side of the boundary pair, the send at CAP+1 days that must SUCCEED",
+    expect: 'allows one just outside it',
+    from: "        AND n.created_at > now() - interval '7 days'\n      LIMIT 1",
+    to: "        AND n.created_at > now() - interval '8 days'\n      LIMIT 1",
+  },
+  {
+    id: 'O288',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE READER'S WINDOW WIDENS WHILE THE GUARD'S STAYS PUT, so the panel greys a button the server would honour and prints a date the gym never earned. This is the GUARD/READER PAIR :35944 C/H-2 found missing on the cheer - a rule enforced in one place and reported from another takes mutants in pairs - and it is the direction with no user-visible write to leave a trace. Its observer is the reader half of the same boundary test: after the row is moved to CAP+1 days, nudgeableAt must be NULL",
+    expect: 'allows one just outside it',
+    from: "               AND n.created_at > now() - interval '7 days') AS nudgeable_at",
+    to: "               AND n.created_at > now() - interval '8 days') AS nudgeable_at",
+  },
+  {
+    id: 'O289',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE COMPLIMENTARY EXCLUSION GOES FROM THE WRITE DOOR AND THE DOOR STOPS AGREEING WITH THE PANEL. A comped member can never be drawn on this list (the mem CTE excludes them) and would still be nudgeable by a hand-made request - the exact gap sendGymCheer shipped and a review caught. Its observer is the positive-control test that flips a listed member to complimentary and asserts BOTH that the panel drops them and that the door answers 404",
+    expect: 'will not nudge a complimentary member',
+    // A SINGLE UNIQUE LINE, and the uniqueness lives in the SOURCE rather than
+    // in a longer anchor here. This predicate is textually identical to
+    // `sendGymCheer`'s, which O268 anchors on — writing this function made that
+    // anchor match twice and the pre-check aborted before a byte was written
+    // (:15770). The trailing `-- the nudge's own, O289` in `repo.ts` is what
+    // separates them; a two-line anchor would have been :17676's CRLF hazard.
+    from: "        AND removed_at IS NULL AND complimentary = false -- the nudge's own, O289",
+    to: "        AND removed_at IS NULL -- the nudge's own, O289",
+  },
+  {
+    id: 'O290',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE MEMBERSHIP-AGE FLOOR GOES AND A MEMBER IS JUDGED IN THEIR FIRST FORTNIGHT. Part 3 §4.1's 'joined > 14 days ago' is the clause Kd did NOT move when he moved the quiet window (:36816), and this is the mutant that makes the two numbers independent in fact and not only in a comment - collapsing them is the tidy-up the card names as its likeliest reversal. Its observer is the too-new member who is otherwise identical to one who IS listed",
+    expect: 'membership is younger than the floor',
+    from: '        AND (m.joined_at AT TIME ZONE ${gym.timezone})::date\n              <= b.today - ${SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS}::int',
+    to: '        AND (m.joined_at AT TIME ZONE ${gym.timezone})::date <= b.today',
+  },
+  {
+    id: 'O291',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE 'WAS ENGAGED' ARM STOPS BOUNDING THE FAR SIDE, so somebody who joined, came once, and vanished YEARS ago is called 'slipping away' for ever. They are not slipping - they never started, and the two need different words from an owner. This is the arm the card deliberately narrowed from the spec's two (R0.3), so it is the one a later chat is most likely to loosen back. Its observer is the member whose only visit is one day beyond the engagement window",
+    expect: 'older than the engagement window',
+    from: '        AND a.day > b.engaged_from AND a.day <= b.quiet_from',
+    to: '        AND a.day <= b.quiet_from',
+  },
+  {
+    id: 'O292',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE LIST'S VISIT COUNT LOSES ITS GYM PREDICATE AND PRINTS A NUMBER FROM ANOTHER GYM. Nobody's NAME changes, so every absence and presence assertion in the suite still passes - it is a wrong number beside a right list, which is :5807 in the form :30624 already caught on this exact screen. It is also :26469 §1.3 leaking as a figure rather than as a row. Its observer is the two-gym fixture asserting the count is ONE where the member has three visits at the other gym",
+    expect: 'never leaks between two gyms',
+    from: '           (SELECT count(*) FROM gym_attendance v\n             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS visits,',
+    to: '           (SELECT count(*) FROM gym_attendance v\n             WHERE v.user_id = q.user_id) AS visits,',
+  },
+  {
+    id: 'O293',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE HISTORY FLOOR INVERTS AND A BRAND-NEW GYM IS TOLD 'Nobody's slipping - nice.' That sentence is Part 3 §4.1's own copy and it is a claim about a period this product has no data for: anybody who drifted away before recording began is invisible to us. The card's first draft got the arithmetic behind this backwards in the other direction (:36694 §1), which is why the flag is asserted from BOTH sides. Its observer is the one-day-short case, where hasHistory must still be false",
+    expect: 'nobody has been watched long enough',
+    from: '      SLIPPING_AWAY_MIN_HISTORY_DAYS;',
+    to: '      0;',
+  },
+  {
+    id: 'O294',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE ORDER FLIPS AND THE LEAST INVESTED MEMBER IS PUT FIRST. Part 3 §4.1 is explicit - 'sorted by lifetime workouts desc (save the most invested first)' - and the panel previews only five of twenty, so a reversed sort does not merely reorder the list, it DECIDES WHO AN OWNER EVER SEES. Its observer is the fixture where 'most visits' and 'quiet longest' deliberately disagree, because one where they agree cannot see the key being read from the wrong column",
+    expect: 'most invested member first',
+    from: '    ORDER BY (SELECT count(*) FROM gym_attendance v\n               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,',
+    to: '    ORDER BY (SELECT count(*) FROM gym_attendance v\n               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) ASC,',
+  },
+  {
+    id: 'O295',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE NUDGE'S LATERAL READS THE CHEER'S TABLE, which is the shared-store build this card measured and rejected (0022 §1) arriving through the back door. A member's My Gyms card would show a compliment where a come-back was sent, through a preset code the bundle may not know - and orgsApi.js treats a contract mismatch as a HARD failure, so the whole gym list draws nothing. Its observer is the test that sends BOTH to one member and asserts each field is non-null separately",
+    expect: 'a cheer does not block a nudge',
+    from: '      SELECT n.preset, n.created_at\n      FROM gym_nudges n\n      WHERE n.gym_id = g.id AND n.user_id = ${userId}',
+    to: '      SELECT n.preset, n.created_at\n      FROM gym_cheers n\n      WHERE n.gym_id = g.id AND n.user_id = ${userId}',
+  },
+  {
+    id: 'O296',
+    target: 'repo',
+    suite: NUDGES_SUITE,
+    why: "THE ONLY RECORD OF WHO SENT IT GOES - O275's sibling on the seventeenth write door. Part 3 §3.3 is 'every mutating call writes audit_log', and the member is deliberately never told which staffer nudged them (§2.4), so this row is the only place that answers it. It matters MORE here than on the cheer: a nudge records that a gym judged somebody to be drifting away, so the log is the only trace of who made that call about whom. Deleting the row leaves a door that works perfectly and remembers nothing. Its anchor is unique because the SOURCE carries a marker - the call is textually identical to sendGymCheer's and made O275's anchor match twice (:15770)",
+    expect: 'writes an audit row naming the staffer',
+    from: '    await insertAudit(tx, { // the nudge\'s own, O296',
+    to: '    if (false) await insertAudit(tx, { // the nudge\'s own, O296',
   },
 ];
 

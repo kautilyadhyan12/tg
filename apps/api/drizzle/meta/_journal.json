@@ -148,6 +148,13 @@
       "when": 1788220800004,
       "tag": "0021_gym_cheers",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788220800005,
+      "tag": "0022_gym_nudges",
+      "breakpoints": true
     }
   ]
 }

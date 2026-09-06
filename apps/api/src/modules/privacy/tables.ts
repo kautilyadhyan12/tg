@@ -177,7 +177,8 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // list Kd is asked to RULE on has to be complete, or the ruling is partial:
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
-//   gym_join_applications · gym_attendance · gym_cheers · gym_closures ·
+//   gym_join_applications · gym_attendance · gym_cheers · gym_nudges ·
+//   gym_closures ·
 //   api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
 //   subscriptions.owner_id · exercise_definitions.published_by
 //
@@ -223,6 +224,23 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // Same footing as the three above, same open question, RULE IT WITH THEM. Its
 // Day-0 half is NOT handled, like `gym_attendance`'s: nothing closes or cancels
 // a cheer the way a membership and an application are closed.
+//
+// `gym_nudges` JOINED THIS LIST 2026-09-07, ON THE DAY THE TABLE WAS CREATED AND
+// BY THE CARD THAT CREATED IT — the SECOND time that has happened, and the
+// difference from `gym_cheers` is worth one sentence because it is the whole
+// reason the list keeps growing by surprise: `gym_cheers` was a NEW SHAPE and
+// this is a COPY of it, so the temptation is to assume a copy inherits its
+// original's paperwork. It does not. It carries the same TWO links to `users` —
+// the member nudged and the staff member who pressed the button — and
+// `sent_by_user_id` is again the one a name-and-purpose scan slides past.
+//
+// AND IT IS MORE SENSITIVE THAN ITS SIBLING, WHICH IS NOT OBVIOUS FROM THE
+// SCHEMA: a cheer records that somebody was doing WELL, a nudge records that a
+// gym judged them to be DRIFTING AWAY. The rows are identical in shape and
+// carry opposite inferences about a person, so an erasure that treated them as
+// one kind of thing would be reasoning about the wrong one.
+// Same footing as the four above, same open question, RULE IT WITH THEM. Its
+// Day-0 half is NOT handled, like `gym_attendance`'s and `gym_cheers`'.
 //
 // THE LAST TWO WERE MISSED at first review and added after T3 F4. The
 // enumeration method is why, and it is worth stating so the next person
@@ -273,6 +291,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_join_applications",
   "gym_attendance",
   "gym_cheers",
+  "gym_nudges",
   "gym_closures",
   "api_cost_events",
   "usage_daily",

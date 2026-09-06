@@ -144,9 +144,22 @@ d("orgs routes (real Postgres)", () => {
     // write one. **That failure is the FK working**, not a defect: nothing in
     // this product hard-deletes a gym, and the only path that does is this
     // teardown.
-    await sql`DELETE FROM gym_cheers WHERE gym_id IN (${mine})`;
-    await sql`DELETE FROM gym_cheers WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
-    await sql`DELETE FROM gym_cheers WHERE sent_by_user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+    //
+    // **AND `gym_nudges` IS HERE FOR THE SECOND RECURRENCE OF THAT EXACT CLASS,
+    // ONE TABLE OVER AND THREE DAYS LATER (2026-09-07).** The nudge joined
+    // `consoleWrites` below, its positive control wrote a row, and this teardown
+    // failed on a 23503 with all 165 tests GREEN — a suite that passes and then
+    // cannot clean up, which then leaves a gym behind that turns a DIFFERENT
+    // suite red (`db.migration`'s "no gym holds a mode it was not given by a
+    // person"). **The paragraph above had already written down what would
+    // happen and it happened anyway**, which is why the two tables are now
+    // handled by one loop: the next writer to join that list should not need to
+    // notice a third copy.
+    for (const t of ["gym_cheers", "gym_nudges"] as const) {
+      await sql`DELETE FROM ${sql(t)} WHERE gym_id IN (${mine})`;
+      await sql`DELETE FROM ${sql(t)} WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+      await sql`DELETE FROM ${sql(t)} WHERE sent_by_user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+    }
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
@@ -6149,8 +6162,16 @@ d("orgs routes (real Postgres)", () => {
    *  **15 → 16 on 2026-09-04**: the cheer (:29961 ruling 4). :26812's own
    *  trigger reads *"before adding a sixteenth write door to the orgs module"*,
    *  so this door was expected here before it was written — and the line below
-   *  went in with the number, not after it. */
-  const CONSOLE_WRITE_COUNT = 16;
+   *  went in with the number, not after it.
+   *
+   *  **16 → 17 on 2026-09-07**: the at-risk nudge (Part 3 §4.1; Kd chose the
+   *  panel at :36503). Same discipline, and the same trigger caught it a second
+   *  time — the number and its line moved in one edit. **Note which "nudge" this
+   *  is**: `POST /members/:userId/nudge` is a GYM nudging a MEMBER, while
+   *  `POST /applications/:id/nudge` above is an APPLICANT nudging a GYM. Two
+   *  features, opposite directions, one word — a list entry that greps for the
+   *  word matches both. */
+  const CONSOLE_WRITE_COUNT = 17;
 
   /** EVERY WRITE THE CONSOLE HAS, as `{ name, run }`. Written out rather than
    *  derived, for the reason the "every route requires authentication" test at the
@@ -6193,6 +6214,12 @@ d("orgs routes (real Postgres)", () => {
       // on its members, encouragement included — no new refusal vocabulary, the
       // same 409 every door above answers with.
       { name: "POST /members/:userId/cheer", run: () => post(`/v1/orgs/${id}/members/${g.member.userId}/cheer`, { preset: "keep_going" }, { cookies }) },
+      // THE AT-RISK NUDGE (Part 3 §4.1). A gym that has stopped paying stops
+      // acting on its members, and asking somebody to come back is acting on
+      // them — same 409, no new refusal vocabulary. **This is the GYM nudging a
+      // MEMBER, not the applicant nudging the gym**; both live in this module
+      // and share a word.
+      { name: "POST /members/:userId/nudge", run: () => post(`/v1/orgs/${id}/members/${g.member.userId}/nudge`, { preset: "miss_you" }, { cookies }) },
     ];
   };
 

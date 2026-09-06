@@ -368,6 +368,77 @@ export const gymCheers = pgTable(
   ],
 );
 
+/** A GYM ASKING A MEMBER WHO HAS STOPPED COMING TO COME BACK — the "slipping
+ *  away" list's one-tap nudge (Part 3 §4.1; Kd chose the panel at :36503 and
+ *  ruled its numbers at :36694 and :36816).
+ *
+ *  **IT IS A SECOND TABLE AND NOT A FIFTH `gym_cheers` PRESET, AND THE REASON IS
+ *  MEASURED RATHER THAN STYLISTIC.** :36503 §2 bought this card on *"same store,
+ *  same cap"* — the cap half was already struck by :35762, and the store half was
+ *  inherited from the same dead premise. **All three readers of `gym_cheers`
+ *  filter on `gym_id` and `user_id` and nothing else**, so a nudge row in that
+ *  table would block that day's cheer, draw the cheer button dead, and reach the
+ *  member's My Gyms card AS the latest cheer through a preset code the bundle may
+ *  not know — which `orgsApi.js` treats as a HARD failure, blanking the whole gym
+ *  list (`OWED.md`'s open fifth-preset line). Teaching three readers a `kind`
+ *  filter is a change where forgetting one is silent. `0022_gym_nudges.sql` §1
+ *  carries the measurement; Kd approved it as a call with its cost.
+ *
+ *  **`preset` IS A KEY, NEVER A SENTENCE** — `gym_cheers`' argument one table up,
+ *  unchanged: the CHECK is what makes Kd's *"no free text ever"* (:18128,
+ *  :29961 ruling 4) survive this file's author, the words live in the web bundle
+ *  so copy is a deploy rather than a data migration, and **no preset may carry a
+ *  NUMBER or a DATE** (:7298 — *"3 weeks away!"* is true when sent and false the
+ *  week after).
+ *
+ *  **NOTHING HERE ENFORCES THE CAP, AND HERE THAT IS FORCED RATHER THAN CHOSEN —
+ *  WHICH IS THE OPPOSITE OF `gym_cheers` ABOVE, AND THE EASIEST MISTAKE ON THIS
+ *  FEATURE.** The nudge's cap is Part 3 §4.1's `rate-limit 1/member/7d`, a
+ *  ROLLING seven days, and no UNIQUE or CHECK can express a rolling window. The
+ *  cheer's cap USED to be rolling and stopped being (:35762 made it a calendar
+ *  gym-day, which a stored day column plus a UNIQUE *could* express) — so the
+ *  paragraph that is dead one table up is alive here. Read this one, not that one.
+ *
+ *  **THERE ARE THREE SEVENS IN THIS FEATURE AND ONLY ONE NUMBER MOVED**
+ *  (:36816 §2, :35762's coincidence trap arriving a second time on one card):
+ *  the quiet WINDOW is Kd's three days, this CAP is the spec's rolling seven, and
+ *  the message EXPIRY is seven because it is derived from THIS cap. Folding them
+ *  into one constant reverses a Kd ruling and breaks a spec limit in one edit.
+ *
+ *  **`ON DELETE RESTRICT` throughout** (R4.3's default). It joins
+ *  `USER_LINKED_NOT_PURGED_TABLES` in the same commit, and the automated FK walk
+ *  in `privacy/tables.ts` is what makes that a requirement rather than a
+ *  courtesy — two earlier tables had to be noticed by a person instead. */
+export const gymNudges = pgTable(
+  "gym_nudges",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** Stored separately from `user_id` from day one, exactly as `gym_cheers`
+     *  and `gym_attendance.marked_by_user_id` are (:27900 §5): the member never
+     *  sees it (§2.4), and it is what makes "who has been nudging" answerable
+     *  later without rewriting history. */
+    sentByUserId: uuid("sent_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    preset: text("preset").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check(
+      "gym_nudges_preset_check",
+      sql`${t.preset} IN ('miss_you','door_open','start_again','checking_in')`,
+    ),
+    index("gym_nudges_gym_user_created_idx").on(t.gymId, t.userId, t.createdAt.desc()),
+    index("gym_nudges_user_created_idx").on(t.userId, t.createdAt.desc()),
+  ],
+);
+
 export const gymCodes = pgTable("gym_codes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   gymId: uuid("gym_id")

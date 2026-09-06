@@ -23,11 +23,17 @@ import {
   gymCheerPresetSchema,
   gymClockFormatSchema,
   gymHoursModeSchema,
+  gymNudgePresetSchema,
   ON_A_ROLL_LIMIT,
   ON_A_ROLL_MIN_SPAN_DAYS,
   ON_A_ROLL_MIN_WEEKS,
   OVERVIEW_MONTH_DAYS,
   OVERVIEW_WEEKS,
+  SLIPPING_AWAY_ENGAGED_DAYS,
+  SLIPPING_AWAY_LIMIT,
+  SLIPPING_AWAY_MIN_HISTORY_DAYS,
+  SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS,
+  SLIPPING_AWAY_QUIET_DAYS,
   orgApplicationStatusSchema,
   orgRoleSchema,
   orgStatusSchema,
@@ -41,6 +47,7 @@ import type {
   GymCheerPreset,
   GymClockFormat,
   GymHoursMode,
+  GymNudgePreset,
   OrgApplicationStatus,
   OrgRole,
   OrgStatus,
@@ -124,6 +131,22 @@ export interface MyOrgRow extends OrgRow {
    *  §2.4's mirror, a member learns their gym cheered them and not who was on
    *  the desk. */
   latestCheer: { preset: string; sentAt: Date } | null;
+  /** THE NEWEST *"we miss you"* THIS GYM HAS SENT THE CALLER, or null — Part 3
+   *  §4.1's nudge reaching the member, and the whole of its delivery.
+   *
+   *  **IT IS FOR A PLAIN MEMBER, LIKE `latestCheer` AND UNLIKE THE FIELDS ABOVE
+   *  IT**, and the service does not null it for a non-staff caller: it is a
+   *  message addressed TO them.
+   *
+   *  **IT CARRIES THE PRESET AND THE INSTANT, NEVER THE SENDER, AND NEVER THE
+   *  FACT THAT A LIST EXISTS.** §2.4's mirror, one step further than the cheer
+   *  needs it: a member learns their gym is thinking of them, not that their gym
+   *  has a screen headed *"slipping away"* with their name on it.
+   *
+   *  **ONE OF THESE TWO FIELDS REACHES THE SCREEN, NEVER BOTH** — Kd's own
+   *  question (:36694 §3): exactly one line draws on a gym's card, the newer.
+   *  They are two fields here because the SENDER'S side needs them apart. */
+  latestNudge: { preset: string; sentAt: Date } | null;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -413,6 +436,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       owner_trial_used: boolean;
       cheer_preset: string | null;
       cheer_sent_at: Date | null;
+      nudge_preset: string | null;
+      nudge_sent_at: Date | null;
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
@@ -488,7 +513,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
                AND ts.trial_ends_at IS NOT NULL
            ) AS owner_trial_used,
            ch.preset AS cheer_preset,
-           ch.created_at AS cheer_sent_at
+           ch.created_at AS cheer_sent_at,
+           nd.preset AS nudge_preset,
+           nd.created_at AS nudge_sent_at
     FROM gyms g
     LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
     LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
@@ -517,6 +544,34 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       ORDER BY c.created_at DESC
       LIMIT 1
     ) ch ON true
+    -- THE NEWEST "we miss you" THIS GYM HAS SENT THE CALLER (Part 3 section 4.1;
+    -- Kd chose the panel at :36503).
+    --
+    -- A SECOND LATERAL AND NOT A UNION WITH THE ONE ABOVE, WHICH LOOKS LIKE THE
+    -- TIDIER BUILD AND IS THE WRONG ONE. The two carry different preset
+    -- vocabularies, different caps and different audit actions, and the member's
+    -- card is the only place they ever meet -- so merging them here would make
+    -- this query the one component in the system unable to tell a compliment
+    -- from a come-back, to save one scan of an index that leads with user_id.
+    --
+    -- **AND ONLY ONE OF THEM MAY REACH THE SCREEN: the newer.** Kd asked what
+    -- happens when a second message arrives -- "will messages piled up and cover
+    -- the whole screen?" (:36694 section 3) -- and the answer is that exactly one
+    -- line draws. Both fields ride the wire; the CHOICE is the client's, and it
+    -- is a build rule with a test rather than an accident of how slice 1
+    -- happened to work.
+    --
+    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY, exactly as the
+    -- cheer's do: dropping user_id hands somebody another member's message,
+    -- dropping gym_id puts one gym's message on another gym's card. Neither is
+    -- visible on a fixture with one gym or one member (:28221 section 3b).
+    LEFT JOIN LATERAL (
+      SELECT n.preset, n.created_at
+      FROM gym_nudges n
+      WHERE n.gym_id = g.id AND n.user_id = ${userId}
+      ORDER BY n.created_at DESC
+      LIMIT 1
+    ) nd ON true
     -- §4.1's live set, the same three statuses seatCapFor, startGymTrial and
     -- getCandidates treat as granting — so past_due still counts during v1
     -- §10's grace. subs_one_live_uq already permits only one such row per gym;
@@ -569,6 +624,13 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       r.cheer_preset === null || r.cheer_sent_at === null
         ? null
         : { preset: r.cheer_preset, sentAt: r.cheer_sent_at },
+    // BOTH HALVES OR NEITHER, for the reason above it — and written as its own
+    // expression rather than folded in with the cheer's, because the two
+    // laterals succeed and fail independently and a shared guard would tie them.
+    latestNudge:
+      r.nudge_preset === null || r.nudge_sent_at === null
+        ? null
+        : { preset: r.nudge_preset, sentAt: r.nudge_sent_at },
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
@@ -4934,6 +4996,374 @@ export async function getGymRegulars(
     visits: Number(r.visits),
     cheerableAt: r.cheerable_at,
   }));
+}
+
+export interface GymSlippingAwayRow {
+  userId: string;
+  displayName: string;
+  lastVisitDay: string;
+  visits: number;
+  nudgeableAt: Date | null;
+}
+
+export interface GymSlippingAwayResult {
+  rows: GymSlippingAwayRow[];
+  /** Whether an EMPTY `rows` may be read as *"nobody is slipping"*. See
+   *  `SLIPPING_AWAY_MIN_HISTORY_DAYS`. */
+  hasHistory: boolean;
+  /** The gym's own date of its first ever recorded visit, or null. */
+  since: string | null;
+}
+
+/** THE MEMBERS WHO HAVE STOPPED COMING — Part 3 §4.1's at-risk list, which Kd
+ *  chose as this card's panel (:36503) and whose window he ruled twice in one day
+ *  (:36694 ruling 1, then :36816).
+ *
+ *  **THE DEFINITION IS THE SPEC'S WITH TWO SUBSTITUTIONS, BOTH KD'S OWN
+ *  RULINGS.** `03-part3-org-console.md:195-197` reads *"current member · joined >
+ *  14 days ago · had ≥ 1 workout in their first 21 days or in the prior 30-day
+ *  window · 0 workouts in the last 14 days. Sorted by lifetime workouts desc,
+ *  capped at 20."* Every `workout` becomes a VISIT AT THIS GYM (:26469 §1.3), and
+ *  the quiet window's fourteen becomes THREE (:36816).
+ *
+ *  **THE FIRST-21-DAYS ARM IS DELIBERATELY NOT BUILT AND THAT IS A NARROWING,
+ *  NOT AN OVERSIGHT.** The spec offers two ways to have been engaged: a visit in
+ *  the first 21 days of membership, OR one in the prior 30-day window. At the
+ *  spec's own fourteen-day silence those two describe roughly the same recent
+ *  person; at Kd's three, the first-21-days arm would qualify somebody who came
+ *  once in their opening fortnight and never again — **for years** — because
+ *  membership has no upper age here. That is not *"slipping away"*, it is
+ *  *"never started"*, and the two need different words from an owner. **The
+ *  30-day arm alone is the narrower and safer reading**, and narrowing a spec
+ *  clause is recorded rather than done quietly (R0.3).
+ *
+ *  ⚠️ **THREE WINDOWS, THREE DIFFERENT NUMBERS, AND ONLY ONE OF THEM MOVED**
+ *  (:36816 §2 — :35762's coincidence trap, second time on this card): the QUIET
+ *  window is Kd's `SLIPPING_AWAY_QUIET_DAYS` = 3 · the NUDGE'S CAP is Part 3
+ *  §4.1's rolling seven days, read below as `nudgeable_at` · the MESSAGE EXPIRY
+ *  is seven because it is derived from the CAP, and lives on the web.
+ *  **`SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS` is a FOURTH number that used to equal
+ *  the quiet window and no longer does.** Folding any two together reverses a
+ *  ruling or breaks a spec limit.
+ *
+ *  **IT MUST NEVER READ `org_member_stats` AND MUST NEVER IMPORT FROM
+ *  `gamification/`** — the view counts workouts ANYWHERE and has sat unread since
+ *  `0001_init` (:29961 §6.1, :36503 §3b), and `getStreakDays` unions every gym
+ *  and spends freezes. Both are the obvious thing to reach for on this screen and
+ *  both are :26469 §1.3's one forbidden thing.
+ *
+ *  **THE POPULATION IS THE ROSTER'S**, exactly as `getGymRegulars`' is: live,
+ *  non-complimentary members, so no panel on this screen can name somebody the
+ *  Members screen does not list, and the two panels cannot disagree about who
+ *  counts.
+ *
+ *  **AND THE TWO PANELS ARE DISJOINT BY CONSTRUCTION**, which is worth stating
+ *  because a person appearing on both would be visible to any owner: "on a roll"
+ *  requires a visit in the last day or two, this requires none for three. A
+ *  fixture asserts it rather than the arithmetic being trusted. */
+export async function getGymSlippingAway(
+  sql: SqlOrTx,
+  input: { gymId: string; limit?: number | undefined },
+): Promise<GymSlippingAwayResult | null> {
+  // THE GYM'S OWN DATE AND ZONE, READ TOGETHER — `nudgeable_at` needs the zone
+  // for the same reason `cheerable_at` does, and every window below is counted
+  // in gym-days rather than instants (trap #8).
+  const gymRows = await sql<{ today: string; timezone: string }[]>`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER — `getGymRegulars`' bound, for
+  // its recorded reason: `Math.min` alone hands `LIMIT -3` to Postgres, and
+  // `Math.max(1, Math.min(...))` still hands it `LIMIT 2.5` and `LIMIT NaN`.
+  // **This bound is the ONLY parser this value ever meets**, no route passing a
+  // limit at all, so it has to be total rather than merely floored.
+  const asked = Math.trunc(input.limit ?? SLIPPING_AWAY_LIMIT);
+  const limit = Number.isFinite(asked)
+    ? Math.max(1, Math.min(asked, SLIPPING_AWAY_LIMIT))
+    : SLIPPING_AWAY_LIMIT;
+
+  // HOW LONG THIS GYM HAS BEEN RECORDING, ANSWERED SEPARATELY FROM THE LIST.
+  //
+  // **IT IS A DIFFERENT QUESTION FROM "who is slipping" AND CANNOT BE DERIVED
+  // FROM THE ANSWER TO THAT ONE** — an empty list means "nobody is slipping" or
+  // "we have not been watching long enough", and the rows cannot tell them
+  // apart (:27992 section 3's rule in its least obvious form). The card's own
+  // first draft got the arithmetic behind this wrong in the other direction
+  // (:36694 section 1): a window that REACHES BACK a month needs one visit
+  // inside it, not a month of data.
+  //
+  // MIN over the whole table for this gym, which is an index-only scan on
+  // gym_attendance_gym_day_idx and is not bounded by the lookback below --
+  // deliberately, because the question is when recording BEGAN.
+  const historyRows = await sql<{ since: string | null }[]>`
+    SELECT min(a.day)::text AS since
+    FROM gym_attendance a WHERE a.gym_id = ${input.gymId}`;
+  const since = historyRows[0]?.since ?? null;
+  const hasHistory =
+    since !== null &&
+    // Counted in the gym's own days, both sides, so a gym eleven hours away
+    // does not flip this sentence at the wrong hour.
+    (Date.parse(`${gym.today}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000 >=
+      SLIPPING_AWAY_MIN_HISTORY_DAYS;
+
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      last_visit_day: string;
+      // int8 (`count(*)`) reaches JS as a STRING; `count(*)::int` would arrive
+      // as a number. `getGymRegulars` records the day that difference was
+      // invisible because three fields were all typed `string` and wrapped in
+      // `Number()`, and lint is what caught it.
+      visits: string;
+      nudgeable_at: Date | null;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int AS quiet_from,
+             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int
+               - ${SLIPPING_AWAY_ENGAGED_DAYS}::int AS engaged_from
+    ),
+    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S -- getGymRegulars' own
+    -- CTE, and the two must agree or one panel names somebody the other and the
+    -- Members screen do not. joined_at is bucketed in the GYM'S zone because
+    -- "joined more than N days ago" is a question about the gym's calendar.
+    mem AS (
+      SELECT m.user_id
+      FROM gym_members m CROSS JOIN b
+      WHERE m.gym_id = ${input.gymId}
+        AND m.removed_at IS NULL
+        AND m.complimentary = false
+        AND (m.joined_at AT TIME ZONE ${gym.timezone})::date
+              <= b.today - ${SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS}::int
+    ),
+    -- WAS ENGAGED: at least one visit in the 30 gym-days BEFORE the quiet
+    -- window. Both bounds are closed on the quiet side and open on the far
+    -- side, so a visit exactly quiet_from days ago counts as engagement and NOT
+    -- as breaking the silence -- one day cannot do both jobs.
+    engaged AS (
+      SELECT DISTINCT a.user_id
+      FROM gym_attendance a JOIN mem ON mem.user_id = a.user_id CROSS JOIN b
+      WHERE a.gym_id = ${input.gymId}
+        AND a.day > b.engaged_from AND a.day <= b.quiet_from
+    ),
+    -- HAS GONE QUIET: no visit at all inside the window. NOT EXISTS rather than
+    -- a LEFT JOIN with a NULL test, because the join would have to be
+    -- de-duplicated first and a missed DISTINCT there is silent.
+    quiet AS (
+      SELECT e.user_id
+      FROM engaged e CROSS JOIN b
+      WHERE NOT EXISTS (
+        SELECT 1 FROM gym_attendance a
+        WHERE a.gym_id = ${input.gymId} AND a.user_id = e.user_id
+          AND a.day > b.quiet_from AND a.day <= b.today
+      )
+    )
+    SELECT q.user_id,
+           u.display_name,
+           -- LIFETIME, both of these, and NOT bounded by the windows above --
+           -- Part 3 section 4.1's "sorted by lifetime workouts desc (save the
+           -- most invested first)" under :26469's substitution. It is a
+           -- DIFFERENT span from orgRegularSchema's visits, which covers its
+           -- streak's own stretch so that two figures on one row describe one
+           -- period (:30624). Two fields named visits meaning different spans is
+           -- exactly that defect waiting to happen, and the screen says which.
+           (SELECT max(v.day)::text FROM gym_attendance v
+             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS last_visit_day,
+           (SELECT count(*) FROM gym_attendance v
+             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS visits,
+           -- WHEN THIS GYM MAY NUDGE THEM AGAIN -- the server's answer to the
+           -- server's own rule, so two open consoles cannot disagree. NULL means
+           -- the window is open now.
+           --
+           -- **PART 3 SECTION 4.1's ROLLING SEVEN DAYS, WHICH IS NEITHER THE
+           -- CHEER'S CALENDAR GYM-DAY NOR KD'S THREE-DAY QUIET WINDOW.**
+           -- :35762 section 1 rules that the spec's rate-limit describes THIS
+           -- feature and is not loosened by the cheer's cap; :36816 moved the
+           -- quiet window and left this one alone. Three numbers, one edit away
+           -- from being wrongly unified.
+           --
+           -- NO BACKTICKS IN THIS COMMENT: it lives inside a sql template
+           -- literal, where one would END the template (:30094 3b, :31098 --
+           -- walked into a third time on the sibling of this very query).
+           --
+           -- The interval is added to the ROW'S OWN created_at rather than
+           -- computed from now(), so the answer is the instant the window
+           -- actually reopens and not a duration a screen must add to something.
+           (SELECT max(n.created_at) + interval '7 days'
+              FROM gym_nudges n
+             WHERE n.gym_id = ${input.gymId} AND n.user_id = q.user_id
+               AND n.created_at > now() - interval '7 days') AS nudgeable_at
+    FROM quiet q
+    JOIN users u ON u.id = q.user_id
+    -- FOUR KEYS, because the first three can tie and an unstable ORDER BY makes
+    -- a list that reshuffles on every reload. user_id last is the tiebreak that
+    -- cannot tie.
+    ORDER BY (SELECT count(*) FROM gym_attendance v
+               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
+             (SELECT max(v.day) FROM gym_attendance v
+               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
+             u.display_name ASC, q.user_id ASC
+    LIMIT ${limit}`;
+
+  return {
+    rows: rows.map((r) => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      lastVisitDay: r.last_visit_day,
+      // int8 arrives as a string; this Number() is real work, unlike the two
+      // that lint deleted from getGymRegulars.
+      visits: Number(r.visits),
+      nudgeableAt: r.nudgeable_at,
+    })),
+    hasHistory,
+    since,
+  };
+}
+
+export type SendNudgeOutcome =
+  | { kind: "sent"; preset: GymNudgePreset; sentAt: Date }
+  | { kind: "not_found" }
+  /** NO `nudgeableAt` HERE, deliberately — `sendGymCheer`'s sibling made the
+   *  same mistake and T3 round 1 struck it (L-3). The 409 carries a status, a
+   *  code and a sentence; the instant reaches a screen on the overview payload,
+   *  which a stale page needs re-read anyway. */
+  | { kind: "too_soon" };
+
+/** A GYM ASKS SOMEBODY TO COME BACK — Part 3 §4.1's one-tap nudge, and the
+ *  SEVENTEENTH write door in this module.
+ *
+ *  **THE CAP IS PART 3 §4.1's `rate-limit 1/member/7d` AND IT IS ROLLING, WHICH
+ *  IS WHY NO CONSTRAINT ENFORCES IT.** No UNIQUE or CHECK in Postgres can express
+ *  a rolling window. **DO NOT COPY `sendGymCheer`'s CURRENT REASONING ACROSS AND
+ *  DO NOT COPY THIS ONE BACK**: the cheer's cap USED to be rolling and stopped
+ *  being when Kd made it a calendar gym-day (:35762), which a stored day column
+ *  plus a UNIQUE *could* express — so the paragraph that is dead there is alive
+ *  here, and the two docblocks disagree on purpose.
+ *
+ *  **THE CHECK-THEN-ACT IS SAFE FOR THE SEAT CLAIM'S REASON**: `lockOrgRow`
+ *  serialises it, so two members of staff pressing at once cannot both pass.
+ *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
+ *  staff sit at one desk, and the button is on the screen they all land on.
+ *
+ *  **THE RECIPIENT MUST BE A LIVE, NON-COMPLIMENTARY MEMBER OF THIS GYM AND THAT
+ *  IS THE WHOLE CONDITION** (:27992 §2 — the app never asks whether a member has
+ *  paid the gym; `members.remove` is the gym's remedy for anyone else). A
+ *  stranger's uuid answers `not_found` rather than a sentence distinguishing "no
+ *  such person" from "not your member" (R3.2).
+ *
+ *  **IT DOES NOT CHECK THAT THE MEMBER IS ACTUALLY ON THE LIST, AND THAT IS A
+ *  DECISION.** The list is a view over a query that moves with the clock: a
+ *  member listed when the console was drawn can have walked in before the button
+ *  was pressed. Refusing on that would produce *"that person isn't slipping
+ *  away"* for somebody the owner is looking at — a race reported as a mistake.
+ *  The cap is what stops the door being abused, and it is the same shape
+ *  `sendGymCheer` uses for the same reason.
+ *
+ *  **IT WRITES NOTHING INTO `gym_cheers` AND NOTHING HERE IS READ BY THE CHEER'S
+ *  CAP** — the two tables are separate precisely so that a nudge cannot block a
+ *  cheer or arrive on the member's card wearing a cheer's clothes
+ *  (`0022_gym_nudges.sql` §1). */
+export async function sendGymNudge(
+  sql: Sql,
+  input: { gymId: string; userId: string; sentByUserId: string; preset: GymNudgePreset },
+): Promise<SendNudgeOutcome> {
+  return await sql.begin(async (tx) => {
+    // The trailing note is not decoration, and :21157 and `sendGymCheer` both
+    // wrote one for the same reason: `await lockOrgRow(tx, input.gymId);`
+    // appears a dozen times in this file, so a mutant aimed at THIS lock needs
+    // the line to name its own subject (:27204 §6 — an anchor is lengthened to
+    // reach something unique to its subject, never to include its
+    // neighbourhood).
+    await lockOrgRow(tx, input.gymId); // the only guarantee behind the nudge cap, O286
+
+    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
+    // door and the panel disagree: a comped member can never be drawn on the
+    // panel (the `mem` CTE excludes them) and could still be nudged by a
+    // hand-made request. `sendGymCheer` shipped that exact gap and a review
+    // found it.
+    //
+    // THE TRAILING SQL COMMENT IS LOAD-BEARING AND IS NOT DECORATION — the lock
+    // line above carries one for the same reason (:21157, :27204 §6). This
+    // predicate is textually IDENTICAL to `sendGymCheer`'s, and O268 anchors on
+    // that exact line: adding this function made its anchor match TWICE, and the
+    // harness's whole-table pre-check ABORTED before a byte was written
+    // (:15770's guard doing its job, :5199's class). **The fix is to make the
+    // SOURCE unique, never to re-aim the old mutant at whichever line comes
+    // first** — and a single unique line beats a two-line anchor, which is
+    // :17676's 99-strong CRLF hazard.
+    const member = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM gym_members
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND removed_at IS NULL AND complimentary = false -- the nudge's own, O289
+    `;
+    if (member.length === 0) return { kind: "not_found" };
+
+    // A ROLLING SEVEN DAYS, READ INSIDE THE LOCK — Part 3 §4.1's
+    // `rate-limit 1/member/7d`, quoted and not chosen (V2).
+    //
+    // **NO ZONE IS READ HERE AND THAT IS THE DIFFERENCE FROM `sendGymCheer`,
+    // WHICH JOINS `gyms` FOR ITS TIMEZONE.** A rolling window is a duration and
+    // has no calendar in it, so bucketing by a zone would be work that changes
+    // nothing — and copying that join across would invite the next reader to
+    // think this cap has a midnight. It does not: seven days after 11pm Tuesday
+    // is 11pm the following Tuesday, in every zone at once.
+    //
+    // **`now()` IS THE TRANSACTION'S CLOCK**, so a send and its guard cannot
+    // straddle the boundary.
+    const recent = await tx<{ one: number }[]>`
+      SELECT 1 AS one
+      FROM gym_nudges n
+      WHERE n.gym_id = ${input.gymId} AND n.user_id = ${input.userId}
+        AND n.created_at > now() - interval '7 days'
+      LIMIT 1`;
+    if (recent.length > 0) return { kind: "too_soon" };
+
+    const inserted = await tx<{ preset: string; created_at: Date }[]>`
+      INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset)
+      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
+      RETURNING preset, created_at`;
+    const row = inserted[0];
+    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
+    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
+    if (row === undefined) throw new Error("nudge vanished inside its own transaction");
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
+    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — and the
+    // exemption a chat reaches for here (`:28221` §7) says the OPPOSITE, which
+    // was a Critical/High on this feature's sibling (:34443 C/H-3). That
+    // exemption is about a MEMBER tapping "I'm here" several hundred times a
+    // day; `markGymAttendance`'s own docblock draws the line: *"every other
+    // writer in this module is a console action behind a privilege"*.
+    //
+    // It is also the only record of WHICH staffer sent it — the member is
+    // deliberately never told (§2.4), and here that matters more than it does
+    // for a cheer: they are never told the list exists either.
+    //
+    // THE TRAILING MARKER IS LOAD-BEARING, for the membership predicate's
+    // reason two blocks up: this call is textually identical to
+    // `sendGymCheer`'s, O275 anchors on its first two lines, and writing this
+    // function made that anchor match twice — the pre-check aborted before a
+    // byte was written (:15770). **The SOURCE is what is made unique, never the
+    // old mutant re-aimed at whichever line comes first.**
+    await insertAudit(tx, { // the nudge's own, O296
+      actorUserId: input.sentByUserId,
+      gymId: input.gymId,
+      action: "org.member_nudged",
+      targetType: "user",
+      targetId: input.userId,
+      meta: { preset: input.preset },
+    });
+
+    return {
+      kind: "sent",
+      preset: gymNudgePresetSchema.parse(row.preset),
+      sentAt: row.created_at,
+    };
+  });
 }
 
 export type SendCheerOutcome =

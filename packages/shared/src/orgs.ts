@@ -783,6 +783,80 @@ export type SendGymCheerRequest = z.infer<typeof sendGymCheerRequestSchema>;
 export const sendGymCheerResponseSchema = z.object({ cheer: gymCheerSchema });
 export type SendGymCheerResponse = z.infer<typeof sendGymCheerResponseSchema>;
 
+/** THE FOUR LINES A GYM SENDS SOMEBODY WHO HAS STOPPED COMING — Kd approved
+ *  them 2026-09-07 (:36816), the same way he approved the cheer's four, because
+ *  they are words a gym says to a member and so are his and not a chat's.
+ *
+ *  **THE ARRAY AND THE `gym_nudges_preset_check` CHECK MOVE IN ONE COMMIT** —
+ *  :28107's standing rule, restated one table over: adding a fifth name in
+ *  TypeScript alone compiles, passes every unit test, and 23514s in Postgres the
+ *  first time somebody presses it. `db.migration.test.ts` reads the constraint
+ *  back out of `pg_get_constraintdef` and compares it to this list.
+ *
+ *  **NO PRESET MAY EVER CONTAIN A NUMBER OR A DATE** — :7298's class, and it
+ *  bites harder here than on a cheer: *"3 weeks away!"* is stored once and read
+ *  after they come back. The "last came" figure is drawn live beside the name.
+ *
+ *  **AND NO LINE MAY SCOLD.** These are read by somebody the gym has quietly
+ *  classified as drifting, who is never told that a list exists — so the words
+ *  have to be true of a person who simply had a busy fortnight. */
+export const GYM_NUDGE_PRESETS = [
+  "miss_you",
+  "door_open",
+  "start_again",
+  "checking_in",
+] as const;
+export const gymNudgePresetSchema = z.enum(GYM_NUDGE_PRESETS);
+export type GymNudgePreset = z.infer<typeof gymNudgePresetSchema>;
+
+/** ONE NUDGE, as the member's own screen receives it.
+ *
+ *  **`preset` IS A LOOSE STRING HERE AND AN ENUM ON THE REQUEST, WHICH IS
+ *  DELIBERATE AND IS THIS CARD DECLINING TO INHERIT AN OPEN DEFECT.**
+ *  `gymCheerSchema.preset` is a `z.enum`, and `OWED.md` carries what that costs:
+ *  an api that adds a FIFTH preset and sends it to an older bundle does not lose
+ *  one line — `orgsApi.js` treats the contract mismatch as a HARD failure and
+ *  the member's whole `My gyms` screen, plus the console's gym list, draws
+ *  nothing at all. :16101 is the standing rule pointing the other way — **a
+ *  response bound is loosened toward what a NEWER server might say, never
+ *  tightened to today's behaviour** — so this one ships loose from birth.
+ *
+ *  **THE CLIENT IS ALREADY CORRECT ABOUT THIS AND ONLY THE CONTRACT WAS WRONG:**
+ *  `cheerLine` returns null for a code it has no words for and the card draws
+ *  nothing, which is the right behaviour for an unknown fifth preset. What was
+ *  missing was the contract admitting the value so that code could run.
+ *  **The cheer's own line is NOT fixed here** (R1.1 — a different card) and keeps
+ *  its `OWED.md` entry; this is one feature refusing to add a sixth reader to it.
+ *
+ *  **`sentAt` IS AN INSTANT AND NOT A GYM-DAY**, for `gymCheerSchema`'s reason:
+ *  a visit belongs to the gym's calendar because the gym counts it, and a message
+ *  is read by the MEMBER wherever they are, so *"2 hours ago"* is the only
+ *  rendering true for both of them. */
+export const gymNudgeSchema = z
+  .object({
+    preset: z.string().min(1).max(64),
+    sentAt: z.string(),
+  })
+  .strict();
+export type GymNudge = z.infer<typeof gymNudgeSchema>;
+
+/** WHAT A GYM SENDS. **The body carries only which of the four lines** — the
+ *  gym, the member and the sender all come from the URL and the session, because
+ *  every one of them grants something (R3.1). `.strict()` turns that from a claim
+ *  into a refusal.
+ *
+ *  **THE REQUEST IS AN ENUM WHILE THE RESPONSE ABOVE IS NOT, AND THAT ASYMMETRY
+ *  IS THE POINT.** Input is narrowed to exactly what this server accepts (parse,
+ *  don't validate — R2.3); output is widened to what a newer server might one day
+ *  say (:16101). They are opposite directions and the same rule. */
+export const sendGymNudgeRequestSchema = z
+  .object({ preset: gymNudgePresetSchema })
+  .strict();
+export type SendGymNudgeRequest = z.infer<typeof sendGymNudgeRequestSchema>;
+
+export const sendGymNudgeResponseSchema = z.object({ nudge: gymNudgeSchema });
+export type SendGymNudgeResponse = z.infer<typeof sendGymNudgeResponseSchema>;
+
 /** One row of "my orgs". A single row carries BOTH relationships because the
  *  default owner IS a member (Part 3 §4.0 step 6) — two lists would show the
  *  same gym twice and invite a screen that double-counts it. */
@@ -972,6 +1046,34 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  field four hours after citing :12660 and killed the Attendance screen in
    *  Kd's own browser. */
   latestCheer: gymCheerSchema.nullable().default(null),
+  /** THE NEWEST *"we miss you"* THIS GYM HAS SENT THE CALLER, or null.
+   *
+   *  **IT SITS BESIDE `latestCheer` ON THE WIRE AND MUST NOT SIT BESIDE IT ON
+   *  THE SCREEN — Kd asked this question directly and it is now a build rule**
+   *  (:36694 §3, :36816). His words: *"suppose gym send a message and if next day
+   *  another message is send what will happen to the previous messages will
+   *  messages piled up and cover the whole screen?"* **Exactly ONE message ever
+   *  draws on a gym's card: the newer of these two fields.** Nothing piles up
+   *  today — one row is served per gym, one object is held, one line is
+   *  rendered — and **drawing this field beside `latestCheer` is the obvious way
+   *  to build the member's half and is the thing that would break it.**
+   *
+   *  Two fields rather than one merged "latest message" because the SENDER'S
+   *  side needs them apart: the cap, the audit action and the preset vocabulary
+   *  are per-feature, and a merged field would make the member's card the only
+   *  place in the system that cannot tell a compliment from a come-back.
+   *
+   *  **`.default(null)` IS LOAD-BEARING AND IS THE FOURTH TIME THAT SENTENCE HAS
+   *  BEEN WRITTEN IN THIS FILE** (:12660, :31222, `latestCheer` above, here).
+   *  `orgsApi.js` treats a contract mismatch as a HARD failure, so a REQUIRED
+   *  field destroys the member's whole gym card during any window where the web
+   *  bundle is newer than the api.
+   *
+   *  **IT CARRIES THE PRESET AND THE TIME, NEVER WHO PRESSED THE BUTTON**
+   *  (§2.4's mirror) — and here that matters more than it does for a cheer: the
+   *  member is never told that a list called "slipping away" exists, let alone
+   *  which member of staff put them on it. */
+  latestNudge: gymNudgeSchema.nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });
@@ -2272,6 +2374,144 @@ export const ON_A_ROLL_MIN_SPAN_DAYS = (ON_A_ROLL_MIN_WEEKS - 1) * 7;
  *  "5 weeks running · 11 visits" has to describe ONE stretch of time or it is
  *  :30624's defect — two true figures arranged into a false sentence, which is
  *  this exact screen's recorded failure from one card earlier. */
+/** HOW LONG SILENCE LASTS BEFORE A GYM IS SHOWN A MEMBER'S NAME.
+ *
+ *  **KD RULED THIS TWICE IN ONE DAY AND THE SECOND ANSWER IS THE LIVE ONE: THREE
+ *  GYM-DAYS** (:36816, *"if a user does not come to gym for say 3 continous day
+ *  then gym can send not 7"*), superseding his own seven of a few hours earlier
+ *  (:36694 ruling 1), which had itself superseded Part 3 §4.1's fourteen. **The
+ *  card recommended fourteen and lost twice.**
+ *
+ *  **SO THE CONSTANT IS TREATED AS VOLATILE, WHICH IS A BUILD DECISION AND NOT A
+ *  COMPLAINT: no test may name a literal number of quiet days.** Fixtures are
+ *  written `SLIPPING_AWAY_QUIET_DAYS ± 1`, so the next move costs one line rather
+ *  than a hunt through a suite — :20587's *"a figure moves in all of its copies or
+ *  none"* is cheapest to obey when there is only one copy.
+ *
+ *  **THE COST, WORKED OUT AND RECORDED BECAUSE KD WAS NOT SHOWN IT BEFORE HE
+ *  RULED: a TWICE-A-WEEK member is on this list permanently.** Tuesday and
+ *  Saturday leaves Wednesday, Thursday and Friday empty every week, for ever;
+ *  a Monday/Wednesday/Friday member never qualifies. What bounds it is that
+ *  nothing sends itself — the list is a prompt to an owner, and the nudge's own
+ *  cap is one message a week.
+ *
+ *  ⚠️ **THIS THREE IS NOT THE NUDGE'S SEVEN AND NOT THE MESSAGE EXPIRY'S SEVEN.**
+ *  There are three separate windows in this feature and only this one moved
+ *  (:36816 §2, which is :35762's coincidence trap arriving a second time on one
+ *  card): the QUIET WINDOW is Kd's three days, the CAP is Part 3 §4.1's rolling
+ *  `1/member/7d`, and the EXPIRY is seven because it is derived from the CAP.
+ *  **Folding them into one constant reverses a Kd ruling and breaks a spec limit
+ *  in a single edit.** */
+export const SLIPPING_AWAY_QUIET_DAYS = 3;
+
+/** THE "WAS ENGAGED" WINDOW — Part 3 §4.1's *"had ≥ 1 workout … in the prior
+ *  30-day window"*, quoted rather than chosen (V2), with `:26469` §1.3's
+ *  substitution of VISITS for workouts.
+ *
+ *  **IT IS WHAT KEEPS SOMEBODY WHO JOINED AND NEVER ONCE TURNED UP OFF A LIST
+ *  HEADED "SLIPPING AWAY".** They are not slipping away; they never arrived, and
+ *  that is a different conversation an owner has. */
+export const SLIPPING_AWAY_ENGAGED_DAYS = 30;
+
+/** HOW LONG SOMEBODY MUST HAVE BEEN A MEMBER BEFORE THIS LIST WILL NAME THEM —
+ *  Part 3 §4.1's *"joined > 14 days ago"*, quoted (V2).
+ *
+ *  **KD DID NOT MOVE THIS ONE AND IT MUST NOT FOLLOW THE ONE HE DID.** It used
+ *  to equal the quiet window because the spec set both to fourteen; that was a
+ *  coincidence and it ended at :36694. This answers *"is it too early to judge
+ *  this person"*; the quiet window answers *"how long is a worrying silence"*.
+ *  Changing this because the other changed is inventing a ruling (R0.2). */
+export const SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS = 14;
+
+/** HOW MANY NAMES THE SERVER WILL EVER SEND — Part 3 §4.1's *"capped at 20"*,
+ *  quoted (V2). The screen previews five (§4.1's *"top 5"*).
+ *
+ *  **THE LIST CARRIES NO TOTAL, deliberately and for `ON_A_ROLL_LIMIT`'s exact
+ *  reason** (:27992 §3): there is nothing on this payload a screen could add up
+ *  into *"N members are slipping away"*, because that figure would be the page's
+ *  length wearing a total's clothes. If a gym ever needs the count, it is a
+ *  server field and not a `rows.length`. */
+export const SLIPPING_AWAY_LIMIT = 20;
+
+/** HOW MUCH RECORDED HISTORY A GYM NEEDS BEFORE AN EMPTY LIST MEANS ANYTHING.
+ *
+ *  **THIS IS NOT "WHEN CAN THE QUERY RETURN A ROW" — THAT CONFUSION IS RECORDED
+ *  AND WAS CORRECTED BEFORE ANYTHING WAS BUILT** (:36694 §1). The card claimed
+ *  the list would be empty at every gym for six weeks because the window reaches
+ *  back `QUIET + ENGAGED` days. **A window that REACHES BACK that far does not
+ *  NEED that much data; it needs one visit somewhere inside it**, so the first
+ *  name can appear within days of this shipping.
+ *
+ *  **WHAT IT REALLY BOUNDS IS THE SENTENCE, NOT THE QUERY.** Until a gym has this
+ *  much history, anybody who drifted away BEFORE recording began is invisible to
+ *  us — so Part 3 §4.1's own empty state, *"Nobody's slipping — nice."*, is a
+ *  claim about a period we have no data for, which is :5807 on the owner's home
+ *  screen. Below this, the screen says *"still collecting"* with the date
+ *  recording began; above it, the spec's sentence is honest.
+ *
+ *  **THE SERVER DECIDES THIS AND SENDS THE ANSWER** — a screen that inferred it
+ *  from an empty list would be reasoning about what it did NOT receive, which is
+ *  :27992 §3's rule in its least obvious form. */
+export const SLIPPING_AWAY_MIN_HISTORY_DAYS =
+  SLIPPING_AWAY_QUIET_DAYS + SLIPPING_AWAY_ENGAGED_DAYS;
+
+/** ONE MEMBER WHO HAS STOPPED COMING — Part 3 §4.1's at-risk row, with `:26469`
+ *  §1.3's substitution of VISITS for workouts and Kd's own quiet window.
+ *
+ *  **EVERY FIGURE IS COUNTED FROM `gym_attendance` AT THIS GYM AND NOWHERE
+ *  ELSE.** :26469 §1.3 is his ruling that a gym is never shown what a member did
+ *  away from it, and `org_member_stats` — the view, unread since `0001_init` —
+ *  counts workouts ANYWHERE and is the obvious thing to reach for on exactly this
+ *  screen (:29961 §6.1, :36503 §3b). It is the one forbidden thing with a
+ *  convenient name.
+ *
+ *  **SO A MEMBER TRAINING EVERY DAY AT HOME IS ON THIS LIST, AND THAT IS
+ *  CORRECT.** The question is "has this person stopped coming HERE", not "has
+ *  this person stopped training", and a gym is not entitled to the second. */
+export const orgSlippingAwaySchema = z
+  .object({
+    userId: z.string().uuid(),
+    displayName: z.string(),
+    /** THE GYM'S OWN DATE OF THE LAST VISIT, `YYYY-MM-DD`, **never a rendered
+     *  phrase**. *"Last came 3 weeks ago"* is computed at draw time from the
+     *  gym's today, because a phrase baked here is :7298's class — and because a
+     *  sentence containing "today" or "yesterday" printed the wrong word for
+     *  anybody whose clock was not the server's, which is :13432's recorded
+     *  Critical/High.
+     *
+     *  **NOT NULLABLE: a row cannot reach this list without a visit.** The "was
+     *  engaged" clause requires one, which is what keeps somebody who joined and
+     *  never turned up off a list headed "slipping away" — so a null here would
+     *  mean the query had stopped enforcing that clause. */
+    lastVisitDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    /** LIFETIME VISITS AT THIS GYM — Part 3 §4.1's *"lifetime workouts"* under
+     *  :26469's substitution, and the spec's own sort key (*"save the most
+     *  invested first"*).
+     *
+     *  **LIFETIME AND NOT WINDOWED, WHICH IS THE OPPOSITE OF `orgRegularSchema`'s
+     *  `visits` ONE SCHEMA UP, AND BOTH ARE RIGHT.** A regular's count covers
+     *  the streak's own span so that "5 weeks running · 11 visits" describes one
+     *  stretch of time (:30624). Here the number answers *"how much is this
+     *  person worth ringing"*, which is everything they ever did. Two fields
+     *  named `visits` on one screen meaning different spans is a :30624 waiting
+     *  to happen, and the screen must say which it is. */
+    visits: z.number().int().min(1),
+    /** WHEN THIS GYM MAY NUDGE THEM AGAIN, or null if it may now — **the
+     *  server's answer, because it is the server's rule**, exactly as
+     *  `cheerableAt` is one schema up. A screen that worked this out from a
+     *  message it had just sent would be right until the page reloaded and wrong
+     *  for anybody looking at a second browser.
+     *
+     *  **THE CAP IS PART 3 §4.1's ROLLING `1/member/7d` AND IS NOT THE CHEER'S
+     *  GYM-DAY CAP** — :35762 §1 says in as many words that the spec's figure
+     *  describes THIS feature and is *"not loosened by"* the cheer's. The two
+     *  agreed by coincidence until 2026-09-05. **It is also not the quiet window
+     *  Kd moved to three** (:36816 §2). */
+    nudgeableAt: z.string().nullable(),
+  })
+  .strict();
+export type OrgSlippingAway = z.infer<typeof orgSlippingAwaySchema>;
+
 export const orgRegularSchema = z
   .object({
     userId: z.string().uuid(),
@@ -2396,6 +2636,62 @@ export const orgOverviewSchema = z
      *  four hours after the entry warning about it was cited. R4.4's
      *  expand-then-contract, applied to a response. */
     onARoll: z.array(orgRegularSchema).max(ON_A_ROLL_LIMIT).default([]),
+    /** THE MEMBERS WHO HAVE STOPPED COMING, most invested first.
+     *
+     *  **IT RIDES ON THIS PAYLOAD FOR `onARoll`'s REASON, ONE STEP FURTHER ON.**
+     *  `Overview.jsx` already issues FIVE reads in one `Promise.allSettled`
+     *  (measured — `getCodes`, `getMembers`, `getApplications`, `getOverview`,
+     *  `getAttendanceDay`; the fifth landed at :30733, and both docblocks that
+     *  say "four" predate it). :30399's trigger warns before adding a fourth, so
+     *  a sixth is not added. This question is attendance-derived and this route is
+     *  already gated on `attendance.read`.
+     *
+     *  **`.default([])` BECAUSE THIS SCHEMA IS `.strict()` AND SHARED** — an api
+     *  older than the bundle sends no such key, which without the default is a
+     *  contract mismatch, which `orgsApi.js` treats as a HARD failure, blanking
+     *  the console's whole home screen (:31222, in Kd's own browser). R4.4's
+     *  expand-then-contract applied to a response. */
+    slippingAway: z.array(orgSlippingAwaySchema).max(SLIPPING_AWAY_LIMIT).default([]),
+    /** WHETHER THIS GYM HAS ENOUGH RECORDED HISTORY FOR AN EMPTY
+     *  `slippingAway` TO MEAN *"nobody is slipping"*.
+     *
+     *  **THE SERVER ANSWERS IT BECAUSE A SCREEN CANNOT.** An empty list has two
+     *  completely different meanings — *"we have looked and everybody is
+     *  coming"* and *"we have not been watching long enough to know"* — and the
+     *  rows themselves cannot tell them apart. A client that guessed from
+     *  `length === 0` would be reasoning about what it did NOT receive, which is
+     *  :27992 §3's rule in its least obvious form.
+     *
+     *  **`false` MEANS THE SCREEN MUST NOT PRINT PART 3 §4.1's "Nobody's
+     *  slipping — nice."** Anybody who drifted away before this gym's recording
+     *  began is invisible to us, so that sentence would be a claim about a
+     *  period we have no data for — :5807 on the owner's home screen, and the
+     *  :8267/:8343 empty-state class caught before shipping rather than after.
+     *
+     *  **`.default(true)` AND NOT `false`, WHICH IS THE SAFE DIRECTION HERE AND
+     *  IS WORTH ONE SENTENCE BECAUSE IT LOOKS BACKWARDS.** An older api that
+     *  omits this key is one that also omits `slippingAway`, so the list is empty
+     *  and the panel draws its "nobody is slipping" state — which is exactly what
+     *  that server's own console showed. Defaulting to `false` would make an old
+     *  api render a *"still collecting"* sentence naming a date it never sent. */
+    slippingAwayHasHistory: z.boolean().default(true),
+    /** THE GYM'S OWN DATE OF ITS FIRST EVER RECORDED VISIT, or null if it has
+     *  none — what the *"still collecting"* sentence names.
+     *
+     *  **NULL AND `slippingAwayHasHistory: false` IS A REAL STATE AND NOT AN
+     *  ERROR: a gym where nobody has ever marked themselves in.** The sentence
+     *  has to work without a date, so the screen owns two wordings and not one
+     *  with a hole in it — :8267's *"an empty page is not the same sentence as a
+     *  zero"*, applied to a date.
+     *
+     *  **IT IS THE GYM'S DATE AND NOT AN INSTANT** (trap #8): the sentence is
+     *  read by the owner, about their own gym's records, and `today` beside it on
+     *  this payload is already the gym's. */
+    slippingAwaySince: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .default(null),
   })
   .strict();
 export type OrgOverview = z.infer<typeof orgOverviewSchema>;

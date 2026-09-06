@@ -25,6 +25,7 @@ import {
   setGymHoursRequestSchema,
   memberParamsSchema,
   sendGymCheerRequestSchema,
+  sendGymNudgeRequestSchema,
   myApplicationParamsSchema,
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
@@ -488,6 +489,69 @@ export function registerOrgRoutes(
         body,
       );
       return reply.status(201).send(cheer);
+    },
+  );
+
+  /** ONE TAP — a gym asking a member who has stopped coming to come back
+   *  (Part 3 §4.1's *"we miss you"* nudge; Kd chose the panel at :36503).
+   *
+   *  **THE BODY CARRIES ONLY WHICH OF THE FOUR LINES**, for the cheer route's
+   *  reason one block up: the gym and the member come from the URL and the
+   *  SENDER from the session, because every one of them grants something (R3.1)
+   *  and a client that could name its own sender could put a message in another
+   *  staffer's mouth. `.strict()` plus an enum makes a typed sentence a 400
+   *  rather than a row.
+   *
+   *  **201 AND NOT 200, AND IT IS NOT IDEMPOTENT.** A second nudge inside seven
+   *  days is a REFUSAL (409), not a repeat of the first — the cap is the feature
+   *  rather than a guard around it, which is the same reasoning the cheer route
+   *  states and the opposite of the attendance mark's 200.
+   *
+   *  **A BUCKET OF ITS OWN, AND IT MUST NOT SHARE THE CHEER'S.** They are
+   *  different populations pressing at different rates: an owner works down a
+   *  panel of regulars in one sitting, and a slipping-away list is worked through
+   *  once a week. Sharing a bucket would let a busy morning of cheering starve
+   *  the other button, which is the shape :28649 L-5 named when it refused to put
+   *  this class of write on the attendance reads' 600/hour.
+   *
+   *  Its numbers are the cheer's, deliberately, because the argument for them is
+   *  identical: **60/hour per account** is far above an owner nudging a whole
+   *  capped list of twenty in one sitting and far below a refusal loop worth
+   *  running; **3,000 per IP** is the attendance reads' figure, because **a
+   *  gym's whole staff sit behind one address, so the IP dimension cannot do the
+   *  per-account job here** (:28649). */
+  // NAMED `memberNudgeLimit` AND NOT `nudgeLimit`, BECAUSE THAT NAME IS TAKEN BY
+  // THE OTHER NUDGE — an APPLICANT nudging a GYM about a pending request
+  // (`orgs_nudge`, further down this file). **The two point in opposite
+  // directions and share one word**, which this card recorded as a trap before
+  // it was written and then walked into anyway: `const nudgeLimit` here was a
+  // redeclaration and `tsc` caught it. A test that greps for "nudge" matches
+  // both features; a test that asserts one must name it.
+  const memberNudgeLimit = createDualRateLimit({
+    name: "orgs_member_nudge",
+    max: 60,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/members/:userId/nudge",
+    { preHandler: [app.authenticate, memberNudgeLimit] },
+    async (req, reply) => {
+      const params = parseOr400(memberParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(sendGymNudgeRequestSchema, req.body ?? {}, req, reply);
+      if (body === null) return;
+      const nudge = await service.sendOrgNudge(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+        body,
+      );
+      return reply.status(201).send(nudge);
     },
   );
 

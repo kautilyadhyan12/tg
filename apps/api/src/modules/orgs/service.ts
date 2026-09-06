@@ -40,6 +40,7 @@ import {
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
   sendGymCheerResponseSchema,
+  sendGymNudgeResponseSchema,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from "./schemas.js";
@@ -56,6 +57,8 @@ import type {
   OrgOverviewResponse,
   SendGymCheerRequest,
   SendGymCheerResponse,
+  SendGymNudgeRequest,
+  SendGymNudgeResponse,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -486,6 +489,15 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
         r.latestCheer === null
           ? null
           : { preset: r.latestCheer.preset, sentAt: r.latestCheer.sentAt.toISOString() },
+      // SAME REASONING, SAME NON-GATE — a message addressed to the reader, not a
+      // fact about the gym. It is on the wire beside the cheer and **only one of
+      // the two may reach the screen** (Kd's own question, :36694 §3): the
+      // client picks the newer, and drawing both is the way the member's half
+      // gets built wrong.
+      latestNudge:
+        r.latestNudge === null
+          ? null
+          : { preset: r.latestNudge.preset, sentAt: r.latestNudge.sentAt.toISOString() },
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
       };
@@ -2649,6 +2661,28 @@ export async function getOrgOverview(
    *  them away over a race nobody can produce would turn a whole screen off. */
   const regulars = (await repo.getGymRegulars(deps.sql, { gymId })) ?? [];
 
+  /** THE SLIPPING-AWAY LIST RIDES HERE FOR THE REGULARS' REASON, ONE STEP ON.
+   *
+   *  `Overview.jsx` issues FIVE reads in one `Promise.allSettled` — measured
+   *  2026-09-07, and the docblock above still says four because `getAttendanceDay`
+   *  landed at :30733 without either comment being re-read. **The argument is
+   *  unaffected and gets stronger**: a sixth outcome to reconcile on the screen
+   *  whose error handling is the subtlest thing on it. This question is
+   *  attendance-derived and this route is already gated on `attendance.read`.
+   *
+   *  **THE `null` FALLBACK IS THE SAME UNREACHABLE RACE**, handled the same way:
+   *  an empty list with `hasHistory: true` rather than a 404, because the numbers
+   *  above are already computed and discarding a whole screen over a gym that
+   *  vanished between two reads helps nobody. **`hasHistory: true` and not
+   *  `false` is the safe direction** — it draws "nobody is slipping" for a gym
+   *  that cannot exist, where `false` would draw a "still collecting" sentence
+   *  naming a date this branch has no way to know. */
+  const slipping = (await repo.getGymSlippingAway(deps.sql, { gymId })) ?? {
+    rows: [],
+    hasHistory: true,
+    since: null,
+  };
+
   /** **NULL AND NOT ZERO WHEN THERE ARE NO MEMBERS.** A gym nobody has joined
    *  has no adoption to state, and "0%" would tell an owner on their first day
    *  that their members are ignoring them. :8267's class — the difference
@@ -2680,6 +2714,15 @@ export async function getOrgOverview(
         visits: r.visits,
         cheerableAt: r.cheerableAt === null ? null : r.cheerableAt.toISOString(),
       })),
+      slippingAway: slipping.rows.map((r) => ({
+        userId: r.userId,
+        displayName: r.displayName,
+        lastVisitDay: r.lastVisitDay,
+        visits: r.visits,
+        nudgeableAt: r.nudgeableAt === null ? null : r.nudgeableAt.toISOString(),
+      })),
+      slippingAwayHasHistory: slipping.hasHistory,
+      slippingAwaySince: slipping.since,
     },
   });
 }
@@ -2759,6 +2802,90 @@ export async function sendOrgCheer(
     case "sent":
       return sendGymCheerResponseSchema.parse({
         cheer: { preset: outcome.preset, sentAt: outcome.sentAt.toISOString() },
+      });
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** A GYM ASKS SOMEBODY TO COME BACK — Part 3 §4.1's one-tap nudge, and the
+ *  SEVENTEENTH write door in this module.
+ *
+ *  **IT IS BEHIND `requireWritablePrivilege`, WHICH IS A DECISION AND NOT A
+ *  DEFAULT.** :22215 is Kd's ruling that a gym without a live plan gets nothing,
+ *  and :23711 built it as twelve doors that now number seventeen — so a lapsed
+ *  gym and an archived gym are refused here by gates that already existed, with
+ *  no new refusal vocabulary invented (:26812's phrasing). A nudge is a gym
+ *  acting on its members; a gym that has stopped paying stops acting.
+ *
+ *  **THE GATE IS `members.read` AND NOT A TENTH PRIVILEGE — the same call
+ *  `sendOrgCheer` made, and here it is not even a chat's call**: Part 3 §2.2
+ *  grants *Send "we miss you" nudge* to all three roles by name, which is exactly
+ *  the set holding `members.read`. **What it costs: an owner cannot stop one
+ *  staffer nudging without also taking away their roster.** Minting
+ *  `members.nudge` is a migration in this repo rather than a list edit
+ *  (:28107) — DDL CHECK, backfill, role templates, a tick box and two "newest"
+ *  fixtures. Reversible in one line if Kd wants it.
+ *
+ *  **THE PRIVILEGE IS CHECKED BEFORE THE MEMBERSHIP, and the order is an
+ *  information boundary** (:23711 §2): a stranger keeps `requirePrivilege`'s 404
+ *  and learns nothing about who belongs to this gym. Reversed, anybody holding
+ *  two uuids could probe a gym's roster. */
+export async function sendOrgNudge(
+  deps: OrgsDeps,
+  actorUserId: string,
+  gymId: string,
+  targetUserId: string,
+  input: SendGymNudgeRequest,
+): Promise<SendGymNudgeResponse> {
+  await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
+
+  const outcome = await repo.sendGymNudge(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    sentByUserId: actorUserId,
+    preset: input.preset,
+  });
+
+  switch (outcome.kind) {
+    case "not_found":
+      // ONE SENTENCE FOR "no such person" AND "not your member" (R3.2), and the
+      // same words `sendOrgCheer` uses — deliberately, because two doors that
+      // refuse the same condition differently tell an attacker which door they
+      // are at.
+      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+    case "too_soon":
+      // **THE INSTANT IS DELIBERATELY NOT ON THE ERROR**, for `sendOrgCheer`'s
+      // recorded reason: `OrgsError` carries a status, a code and a sentence,
+      // seventeen doors share it, and widening it for one rare path is R1.1's
+      // drive-by (:34443 L-3 struck exactly that from the cheer). `nudgeableAt`
+      // rides on the overview payload, so a refused send is answered by
+      // re-reading the list the button lives in — which a stale page needs
+      // anyway.
+      //
+      // **THIS IS ONLY REACHABLE FROM A STALE OR RACING SCREEN**, because the
+      // button is drawn dead whenever `nudgeableAt` is set (:24141 §3a).
+      //
+      // **THE SENTENCE SAYS WHAT HAPPENED, NOT WHO DID IT.** The cap is per
+      // GYM — the query filters on `gym_id` and `user_id` and nothing else — so
+      // "You've already nudged" would be FALSE for the second staffer on the
+      // desk, who would be told they did something a colleague did.
+      //
+      // **AND IT NAMES A SPAN RATHER THAN A DAY, WHICH IS THE OPPOSITE OF THE
+      // CHEER'S SENTENCE AND IS CORRECT FOR THE OPPOSITE REASON.** The cheer's
+      // cap became a CALENDAR gym-day (:35762), so "today" is literally true
+      // there. This cap is Part 3 §4.1's ROLLING seven days, so there is no
+      // "this week" to name — a message sent last Friday frees up next Friday,
+      // not on Monday. Saying "this week" here would be the error :35762's own
+      // trigger warns about, read in the other direction.
+      throw new OrgsError(
+        409,
+        "nudge_already_sent",
+        "This member has already been sent a message in the last 7 days.",
+      );
+    case "sent":
+      return sendGymNudgeResponseSchema.parse({
+        nudge: { preset: outcome.preset, sentAt: outcome.sentAt.toISOString() },
       });
     default:
       return assertNever(outcome);

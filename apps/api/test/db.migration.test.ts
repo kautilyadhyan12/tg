@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { GYM_CHEER_PRESETS, ORG_PRIVILEGES } from "@app/shared";
+import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -583,6 +583,34 @@ d("0001_init on a real database", () => {
     // detector that cannot see half its vocabulary.
     const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
     expect(inCheck).toEqual([...GYM_CHEER_PRESETS].sort());
+  });
+
+  /** `0022`'s PRESET CHECK, the same guard on the same day for the same reason —
+   *  Part 3 §4.1's nudge, whose four lines Kd approved at :36816.
+   *
+   *  **A COPY OF A GUARD IS NOT A GUARD FOR THE COPY**, which is why this is
+   *  written out rather than folded into the test above with a loop: the two
+   *  tables carry DIFFERENT vocabularies, and a parameterised version would pass
+   *  if both constraints named the same four strings. `gym_nudges` naming the
+   *  cheer's presets is precisely the mistake a copy-paste build makes.
+   *
+   *  **BOTH DIRECTIONS OF DRIFT FAIL FAR FROM THE EDIT**, exactly as above: a
+   *  fifth name in `GYM_NUDGE_PRESETS` without a migration 500s the button on an
+   *  unmapped 23514; a name dropped from the CHECK makes a line the screen still
+   *  offers unsendable, and nobody learns why. */
+  it("0022's preset CHECK lists exactly the nudge presets the code knows", async () => {
+    const [defRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_nudges'::regclass
+        AND conname = 'gym_nudges_preset_check'`;
+    const def = defRow?.def;
+    if (def === undefined) throw new Error("gym_nudges_preset_check is not on the table");
+
+    const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+    expect(inCheck).toEqual([...GYM_NUDGE_PRESETS].sort());
+    // AND THE TWO TABLES DO NOT SHARE A VOCABULARY — the assertion that makes
+    // the one above non-vacuous if a build ever copies the wrong array across.
+    expect(inCheck).not.toEqual([...GYM_CHEER_PRESETS].sort());
   });
 
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the
