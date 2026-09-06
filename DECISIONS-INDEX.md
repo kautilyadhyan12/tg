@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,274 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,278 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -15,8 +15,14 @@
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,768 lines, MEASURED 2026-09-06 and not estimated**
-(1,274 + 1,405 + 89). **THE FORTY-SEVENTH IS AN ADDENDUM RECORDING A GATE
+**ALWAYS-READ TOTAL: 2,772 lines, MEASURED 2026-09-06 and not estimated**
+(1,278 + 1,405 + 89). **THE FORTY-EIGHTH IS A SMOKE PASS THAT TICKS A 🟡 LINE —
+AND IT COST FOUR LINES, every one a trigger phrase, §1 AND §2 UNMOVED AT 1,405
+AND 89.** Its record is a CARD record and went to §1B, where `:24813` sends it.
+**The gate was discharged by Kd's declaration and the entry says so in its own
+title**, which is the whole reason its four phrases are worth their always-read
+cost: three of them stop a later chat quoting the tick as browser evidence for
+things nobody saw. **THE FORTY-SEVENTH IS AN ADDENDUM RECORDING A GATE
 DISCHARGED — CI green on the reviewed commit — AND IT COST TWO LINES, both
 trigger phrases, §1 AND §2 UNMOVED.** It sits inside the forty-sixth's index line
 where `:24813` sends a card record, and it is the cheapest kind of entry this
@@ -1804,6 +1810,34 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:36392** — 2026-09-06 — **THE CHEER'S GYM-DAY CAP: SMOKE PASSED AND THE 🟡
+  LINE TICKS — the last gate is Kd's declaration, and the database corroborates
+  the half a declaration cannot.** **Read before quoting this pass as covering the
+  member's side, before quoting it as covering the dot's EXPIRY, before asking Kd
+  to re-run a sheet he has ruled already run, and before writing "the smoke
+  passed" anywhere.** He asked for *"only relevent one … not the same tests over
+  and over"*, so the run handed to him was **six checks on the four surfaces the
+  cap change touches**, with the already-passed steps named as not re-run and
+  why. **The first check exists only because of the ruling: both members had been
+  cheered the day before and both rows had their four emoji BACK** — dead under
+  the rolling seven days, freed by the gym's midnight — **so the half nobody can
+  smoke by waiting was observable without waiting.** He reported *"all passed each
+  and everything"*, then ruled the follow-up out: *"these tests were performed
+  much before i dont want to do again"*. **The gate is therefore a DECLARATION**
+  (`:27415`, `:32498`, `:33265`, `:34048` are the precedent) **and what sits under
+  it is not nothing:** a real cheer written through the console at 23:29 his time,
+  **exactly ONE row for that member on the gym's day**, audit clean — measured,
+  not taken from the report (`:34147`). **NOT covered by the tick:** the member's
+  card and dot for the person cheered tonight — **the sheet named the second row
+  and the cheer landed on the FIRST**, which the database identified and the
+  report did not — and the dot's expiry, which needs a day-old cheer. **Pressing
+  row one retired the "reaches the row you pressed" check, so `C220` was run on
+  today's bytes and is RED** rather than citing the older human run. **A `tm` card
+  showing a dot would mean the dot is outliving its window; a `user` card is
+  consistent with everything** — question recorded, not resolved, no `OWED.md`
+  line (`:30733`'s shape). **And the sheet's step 11 was a FIFTH copy of the dead
+  seven-day figure**, found while handing it over, after three in code and ten in
+  the card document.
 - **:36144** — 2026-09-06 — **THE CHEER'S GYM-DAY CAP, T3 ROUND 2 (diff-only):
   ZERO Critical/High, THE PACKET SHIPS — and six of the eight Low are a document
   or a record still teaching the cap Kd threw out.** **Read before porting a fix

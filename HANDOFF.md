@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CHEER'S GYM-DAY CAP — **DONE. SMOKE PASSED AND `OWED.md`'S 🟡 LINE
+      TICKS** (DECISIONS `:36392`). All three gates discharged: reviewed
+      (`:36144`, zero Critical/High), CI green on the reviewed commit
+      (`:36363`), smoked.
+
+      **THE SMOKE'S LAST GATE IS KD'S DECLARATION, NOT AN OBSERVED RUN, AND A
+      LATER CHAT MUST NOT QUOTE THE TICK AS MORE.** He reported *"all passed
+      each and everything"*, then ruled the follow-up out — *"these tests were
+      performed much before i dont want to do again simple just write that it
+      passed"*. Precedent for discharge-by-declaration: `:27415`, `:32498`,
+      `:33265`, `:34048`.
+
+      **OBSERVED IN THE DATABASE (`:34147`), so this is not a bare word:** a
+      cheer written through the console at 23:29 IST, his account, `owner` gym,
+      **exactly ONE row for that member on the gym's day** — the cap holding
+      under a real press — and a clean `audit_log` with no duplicates.
+
+      **NOT OBSERVED. Do not cite the tick for these:** the member-side card and
+      dot for the person cheered tonight (**the sheet named the SECOND row and
+      the cheer landed on the FIRST** — the database found that, the report did
+      not; which account was opened at the end was asked and not answered), and
+      the dot's EXPIRY, which needs a day-old cheer no screen can age.
+
+      **THREE THINGS THAT OUTLIVE THIS.**
+  1. **A FIFTH COPY OF THE DEAD SEVEN-DAY FIGURE WAS IN THE SHEET** — step 11
+     said the dot *"stays for a week"* — found while handing it over, after
+     three in code (`:35944`) and ten in the card document (`:36144`). **Two
+     review rounds never opened step 11.** A count of copies is a hypothesis,
+     three times over on one packet.
+  2. **WHEN AN OPERATOR'S ROUTE RETIRES ONE OF A SHEET'S CHECKS, CLOSE IT WITH
+     THE MUTANT ON THE SAME BYTES.** Pressing row one cannot see code that
+     always cheers row one, so `C220` was run today and is **RED** — not a
+     sentence saying `:35692`'s older run covered it.
+  3. **THE CAP CHANGE WAS OBSERVABLE WITHOUT WAITING A DAY.** Both members had
+     been cheered the day before and **both rows had their four emoji back** —
+     dead under the rolling seven days, freed by the gym's midnight. The
+     database had already done the waiting.
+
+PROVE: guards on these bytes — harnesses **26** · index **314 pointers resolve
+       (313 on a heading, 1 deliberate mid-entry), 1441 headings** · triggers
+       **1099 from 283 of 421** · smoke-folds OK. Always-read **2,772 = 1,278 +
+       1,405 + 89**, §1 and §2 UNMOVED. **AUDIT: `MUTATE_ONLY=C220` — 1 of 247,
+       1 RED, 0 ALIVE, 0 never ran**, control GREEN and tallied first, restore
+       sha256-verified, run unpiped, `HARNESS EXIT CODE: 0`. Preconditions read
+       from the browser's database first (`:15927`, `:20222`): **21 migrations**,
+       both gyms' zones and clocks, every cheer row and its gym-day. Servers
+       answered — api `/health` **200**, web **200**. No code changed.
+
+OPEN:  **The cheer packet is closed.** `CLAUDE.md`'s pre-existing uncommitted
+       edit is STILL OUT (`:24559`) — not mine, not committed. **The api and web
+       dev servers are STILL RUNNING** from this smoke; the local Postgres and
+       Redis containers are up. Kd's two remaining `:35317` changes are still
+       his to answer (the word *"running"* reading as the sport). After that the
+       people-lists card owes three panels — *when they come* · *slipping away* ·
+       *this week's roster* — and `:26385` §5 has the wider gym-stage list.
+```
+
+```
 TASK: THE CHEER'S GYM-DAY CAP — **T3 ROUND 2 RUN AND FIXED: ZERO Critical/High,
       so the packet SHIPS** (`:5348` rule 1). DECISIONS `:36144`. Eight Low, all
       fixed, logged in `BACKLOG.md`. Kd approved the fix round against the listed

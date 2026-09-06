@@ -8027,8 +8027,23 @@ file and is stated so nobody reads these as lower priority than they are.
       **IT NEEDS A DISMISS PATH, which he did not name and a chat must not skip**
       — clicking away, Escape, and choosing a different emoji all have to close
       it (`:14840`: a control whose Cancel is untested).
-- [ ] 🟡 **THE CHEER CAP BECOMES ONE PER MEMBER PER DAY — KD RULED IT 2026-09-05
+- [x] 🟡 **THE CHEER CAP BECOMES ONE PER MEMBER PER DAY — KD RULED IT 2026-09-05
       (DECISIONS `:35762`).**
+      **✅ DONE 2026-09-06 — SMOKE PASSED, commit `56ca995` plus the tick commit;
+      all three gates discharged** (built `:35822` · T3 round 1 `:35944` · T3
+      round 2 SHIPS `:36144` · CI green on the reviewed commit `:36363` · smoke
+      `:36392`). **The smoke's LAST gate is Kd's declaration, not an observed
+      run** — he reported *"all passed each and everything"* and then ruled the
+      re-run out: *"these tests were performed much before i dont want to do
+      again … simple just write that it passed"*. **What IS observed and is in
+      the database: a real cheer went through the console at 23:29 IST, from his
+      account, on the `owner` gym — exactly ONE row for that member on the gym's
+      day, which is the cap holding — with a clean audit trail and no
+      duplicates.** **What NOBODY has observed and must not be quoted from this
+      tick:** the member-side card and dot for the person actually cheered
+      tonight (the sheet named `tm`, the cheer landed on `user`, and which
+      account was opened at the end was not answered), and the dot's EXPIRY,
+      which needs a day-old cheer and no screen can age one. Detail at `:36392`.
       **⏳ BUILT 2026-09-05 (DECISIONS `:35822`) — THIS LINE DOES NOT TICK YET:
       NO SMOKE HAS RUN.**
       **T3 ROUND 1 RAN 2026-09-05 (DECISIONS `:35944`): TWO Critical/High, so the

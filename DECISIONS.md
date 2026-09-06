@@ -36388,3 +36388,114 @@ passed on these bytes.
 
 **ONE GATE REMAINS: Kd's browser.** `RUNBOOK/smoke-on-a-roll-cheer.md` is unrun,
 and the `OWED.md` line ticks on that pass alone.
+
+## 2026-09-06 — THE CHEER'S GYM-DAY CAP: SMOKE PASSED AND THE 🟡 LINE TICKS — the last gate is Kd's declaration, and the database corroborates the half a declaration cannot
+
+**Read before quoting this pass as covering the member's side, before quoting it
+as covering the dot's EXPIRY, before asking Kd to re-run a sheet he has ruled
+already run, and before writing "the smoke passed" anywhere.**
+
+`RUNBOOK/smoke-on-a-roll-cheer.md`, on the bytes of `56ca995` (`:36144` shipped
+the packet, `:36363` is CI green on it). **`OWED.md`'s cheer-cap line TICKS.** Kd:
+*"all passed each and everything"*, then, when asked one follow-up question,
+*"these tests were performed much before i dont want to do again simple just
+write that it passed"*.
+
+### 1 · WHAT WAS ACTUALLY HANDED TO HIM, AND WHY IT WAS SIX CHECKS AND NOT THE SHEET
+
+He asked for *"only relevent one … not the same tests over and over"*. Parts A,
+B and C passed in full at his browser on 2026-09-05 (`:35692`), and **the cap
+change touches four surfaces, not the sheet**: the two SQL sites, the 409's
+sentence, `cheerAgainText`'s copy and `CHEER_FRESH_DAYS`. So the run he was given
+was **six checks covering exactly those**, with the empty-list screen, the fold,
+the absent members-roster control and the three ways out **named as NOT being
+re-run and why**.
+
+**THE FIRST CHECK IS THE ONE WORTH KEEPING, AND IT EXISTS ONLY BECAUSE OF THE
+RULING.** Both members had been cheered on 2026-09-05 and **both rows had their
+four emoji back** — under the rolling seven days they would still have been dead
+(14 and 32 hours later); under Kd's gym-day cap the gym's midnight freed them.
+**The half nobody can smoke by waiting was therefore observable without waiting**,
+because the database had already done the waiting. Measured before he was handed
+anything: `owner` gym is `America/Mendoza`, its clock read 14:41 while his read
+23:11, and both cheers sat on gym-day Sep 5.
+
+### 2 · THE DECLARATION IS THE GATE, AND WHAT SITS UNDER IT IS NOT NOTHING
+
+`:27415`, `:32498`, `:33265` and `:34048` are the recorded precedent: **Kd may
+discharge a smoke gate by declaration, and a chat records it as a declaration
+rather than as an observed run.** This one is stronger than a bare word, and the
+difference is worth stating because a later chat will need to know which parts
+rest on what:
+
+**OBSERVED, in the database, not taken from the report** (`:34147`): a cheer row
+written at **17:59:23Z — 23:29 his time**, actor his account, gym `owner`, preset
+`keep_going`; **exactly ONE row for that member on the gym's day**, which is the
+cap holding under a real press; `audit_log` carrying three `org.member_cheered`
+rows, one per cheer, no duplicates. **A human went through the console UI and the
+write path behaved.**
+
+**NOT OBSERVED, and the tick does not cover it:** the member-side card and dot for
+the person cheered tonight. **The sheet named `tm` — the SECOND row — and the
+cheer landed on `user`, the FIRST**, which the database identified and the report
+did not. Which account was opened for the last check was asked and not answered.
+
+### 3 · PRESSING THE FIRST ROW COST THIS RUN A GUARANTEE, AND IT WAS CLOSED BY MUTANT INSTEAD
+
+`:35692` §1 made the rule after the opposite accident: *"a smoke step that acts on
+the FIRST item of a list cannot see code that reaches for the first item"*, and
+its own run was saved by Kd using `tm` on his own initiative. **This time the
+instruction said the second row and the first was used**, so **this run cannot
+distinguish "the cheer reached the row I pressed" from "the cheer always goes to
+row one".**
+
+**Closed by measurement rather than by citing the older human run: `C220` — the
+mutant that sends every cheer to `onARoll[0]` — was run on today's bytes and is
+RED**, control GREEN and tallied first, restore sha256-verified. It had been
+ALIVE on its first outing (`:34809` §2), and it was NOT in this packet's round-2
+subset, so running it here is the difference between the guarantee being observed
+and being assumed.
+
+**STANDING: when an operator's route through a sheet retires one of its checks,
+the honest repair is the mutant for that check on the same bytes — not a sentence
+saying the older run covered it.**
+
+### 4 · WHAT A DAY-OLD CHEER WOULD HAVE SHOWN, AND WHY IT IS THE ONE QUESTION LEFT OPEN
+
+`tm`'s cheer is **27 hours old** and `CHEER_FRESH_DAYS` is now **1**, so on `tm`'s
+account the dot should be **GONE** and the card should read about a day rather
+than *"just now"*. **If the last check was performed on `tm` and passed as
+written, the dot is outliving its window** — which is `:35944` C/H-1's own defect
+returning one constant later. **It is equally consistent with the last check
+having been done on `user`, where every expectation holds.** The question was put
+once and ruled out of the run; **it is recorded here rather than resolved, and it
+is the first thing to look at if a member ever reports a dot that will not
+clear.** No `OWED.md` line: nothing is deferred and no defect is known — a
+question is open, exactly `:30733`'s shape.
+
+### Round log
+
+**The sheet was corrected before it was handed over, and the correction is a
+FIFTH copy of the dead figure.** Step 11 read *"It stays for a week and then
+goes"* — the seven-day dot, after `:35944` had already found three copies in code
+and `:36144` ten in the card document. **Neither review round looked at the
+sheet's step 11.** Fixed to a day, with the un-observable half named. `:20587`,
+`:33799`, `:34992` §4 — and the count of copies was wrong for the third time on
+this packet.
+
+**PRECONDITIONS READ FROM THE DATABASE THE BROWSER READS, never assumed**
+(`:15927`, `:20222`, `:35692` §2): **21 migrations applied** · both gyms' zones
+and clocks · every `gym_cheers` row and its gym-day · who was cheerable today ·
+`smoke-test-gym`'s attendance rows. Servers started for the run and both answered
+— api `/health` **200**, web **200**.
+
+**AUDIT: `MUTATE_ONLY=C220` — 1 of 247, 1 RED, 0 ALIVE, 0 never ran**, control
+GREEN and tallied first, restore sha256-verified, **run unpiped with its exit code
+read — `HARNESS EXIT CODE: 0`**. No code changed by this commit: the sheet's step
+11, `OWED.md`, `HANDOFF.md` and the record.
+
+**THE THREE GATES ARE NOW ALL DISCHARGED** — reviewed (`:36144`, zero
+Critical/High), CI green on the reviewed commit (`:36363`), smoked (this entry).
+**Nothing about how a streak is EARNED is covered by any of them**: the ten visits
+behind the list were written into the database under `:35240`, never walked in
+through `markAttendance`.

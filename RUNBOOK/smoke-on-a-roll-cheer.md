@@ -278,8 +278,16 @@ the button.
 emails or phone notifications yet, so a cheer waits on a screen — and without
 the dot a member who does not open My Gyms never learns it happened.
 
-✅ It stays for a week and then goes, whether or not they looked. That is a
-known limitation and not a fault.
+✅ It stays for **a day** and then goes, whether or not they looked — it is
+recency, not read-state. **You cannot check the "and then goes" half today**: it
+needs a cheer a day old, and nothing on any screen can age one. The server's own
+tests move the clock instead.
+
+**It said "a week" until 2026-09-06.** That was the cap before Kd cut it to one
+per member per day, and it is the FIFTH copy of that dead figure found on this
+packet — after three in the code and ten in the card document. Nothing on screen
+was wrong; this sheet was, and it would have told you to accept a dot that
+outlasted the rule it mirrors.
 
 ---
 
