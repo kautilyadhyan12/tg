@@ -36359,3 +36359,32 @@ CI said, so it is named here as a gate rather than assumed green.
 **ONE THING OUT OF SCOPE, REPORTED NOT TOUCHED** (R1.1): `BACKLOG.md`'s `:35944`
 block is filed under a three-hash heading where every sibling block uses two, so
 it does not appear in a heading grep of that file.
+
+### ADDENDUM, same session — CI RAN ON THIS PACKET FOR THE FIRST TIME AND IS GREEN
+
+**Read before writing "pushed" about anything, and before quoting this round as
+having only the smoke left.**
+
+The round log above names CI as an OPEN gate because `origin/web-repoint` was 11
+commits behind. **It is not open any more.** Pushed `0fda0a2`; run
+**`34048215956`** completed **success** on head **`0fda0a2`**, which is the exact
+commit reviewed — **all five jobs**: `gitleaks (full history)` ·
+`typecheck / lint / test` · `engine banned-token grep (R5.1)` ·
+`drizzle migrations on Neon branch` · `api tests on local Postgres`.
+
+**The verdict was READ, not assumed from the push succeeding** (`:25008`, whose
+own words are *"after any push, read the run's verdict and report it"*). **This is
+the first CI run to see any of the four cheer-cap commits**: the previous green
+one, `33957586907`, was 2026-09-05T09:17Z, before `4fcd26b`.
+
+**WHAT IT ADDS BEYOND THE LOCAL PROVE, and it is worth naming rather than
+treating as a formality:** CI runs `api tests on local Postgres` — the FULL api
+suite, which this round deliberately did not run and did not claim — and the
+Neon-branch migration job. **So the seed-count flake and the 401 symptom
+`:35822` put on that `OWED.md` line did not reproduce here.** One green run is
+not a claim about the suite (`:13746` — a number quoted from one run is a coin
+toss with a citation), but it is the configuration the merge gate uses and it
+passed on these bytes.
+
+**ONE GATE REMAINS: Kd's browser.** `RUNBOOK/smoke-on-a-roll-cheer.md` is unrun,
+and the `OWED.md` line ticks on that pass alone.

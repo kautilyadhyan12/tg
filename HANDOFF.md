@@ -8,12 +8,14 @@ TASK: THE CHEER'S GYM-DAY CAP — **T3 ROUND 2 RUN AND FIXED: ZERO Critical/High
       The review is OVER; a Low buys no round.
 
       **START HERE — WHAT IS OWED, IN ORDER. NEITHER IS A REVIEW.**
-      1. **PUSH AND READ CI.** `origin/web-repoint` was 11 commits behind when
-         this round ran and its newest run (`33957586907`, success,
-         2026-09-05T09:17Z) predates all four cheer-cap commits — **CI has never
-         seen this packet.** `:25008`: never write "pushed" as if it were
-         "green"; read the run's verdict and report it.
-      2. **THE BROWSER SMOKE** — `RUNBOOK/smoke-on-a-roll-cheer.md`. Round 2's
+      1. ~~PUSH AND READ CI~~ **DONE THE SAME SESSION — CI IS GREEN ON THE
+         REVIEWED COMMIT.** Pushed `0fda0a2`; run `34048215956` succeeded on
+         that exact head, **all five jobs**, including `api tests on local
+         Postgres` (the FULL api suite this round did not run) and the Neon
+         migration job. **First run ever to see a cheer-cap commit** — the
+         previous green one predates `4fcd26b`. Verdict READ, not inferred from
+         the push (`:25008`). DECISIONS `:36363`.
+      2. **THE BROWSER SMOKE — THE ONLY GATE LEFT** — `RUNBOOK/smoke-on-a-roll-cheer.md`. Round 2's
          L-4 rewrote step 8 AGAIN, so the sheet was not safe to hand him before
          now. `OWED.md`'s cheer-cap line ticks on that pass, not on this round.
 

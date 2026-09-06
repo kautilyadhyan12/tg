@@ -4,7 +4,7 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,272 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,274 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
@@ -15,8 +15,13 @@
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,766 lines, MEASURED 2026-09-06 and not estimated**
-(1,272 + 1,405 + 89). **THE FORTY-SIXTH IS A T3 ROUND THAT SHIPS ITS PACKET —
+**ALWAYS-READ TOTAL: 2,768 lines, MEASURED 2026-09-06 and not estimated**
+(1,274 + 1,405 + 89). **THE FORTY-SEVENTH IS AN ADDENDUM RECORDING A GATE
+DISCHARGED — CI green on the reviewed commit — AND IT COST TWO LINES, both
+trigger phrases, §1 AND §2 UNMOVED.** It sits inside the forty-sixth's index line
+where `:24813` sends a card record, and it is the cheapest kind of entry this
+record carries: a fact that turns an OPEN gate into a closed one, which is worth
+more to the next chat than any prose about the round. **THE FORTY-SIXTH IS A T3 ROUND THAT SHIPS ITS PACKET —
 zero Critical/High, eight Low all fixed — AND IT COST FIVE LINES, every one a
 trigger phrase, §1 AND §2 UNMOVED AT 1,405 AND 89.** Its record is a ROUND record
 and went to §1B, where `:24813` sends it. **AND THAT ROUND'S OWN L-2 WAS THIS
@@ -1830,9 +1835,18 @@ findable from §1B by construction and never needs to sit in §1 at all.**
   the dot's docblock stating an invariant a 25-hour fall-back day breaks
   (`joinClock.js` measured the same class in the other direction), and the
   seven-to-one cut shipping with no cost written down (`:27992`). **The
-  `OWED.md` line does not tick: CI has never seen this packet** (`origin` 11
-  commits behind, newest run predates all four cheer commits — `:25008`) and the
-  browser smoke is unrun.
+  `OWED.md` line does not tick.**
+  **ADDENDUM `:36363`, same session — CI RAN ON THIS PACKET FOR THE FIRST TIME
+  AND IS GREEN.** **Read before writing "pushed" about anything, and before
+  quoting this round as having only the smoke left.** Run `34048215956` succeeded
+  on head `0fda0a2`, the exact reviewed commit, **all five jobs** — including
+  `api tests on local Postgres`, the FULL api suite this round deliberately did
+  not run, and the Neon migration job. The previous green run predates `4fcd26b`,
+  so **no CI had seen any cheer-cap commit until now**; the verdict was READ, not
+  inferred from the push succeeding (`:25008`). One green run is not a claim
+  about the suite (`:13746`), but the seed-count flake and the 401 symptom on
+  `:35822`'s line did not reproduce in the configuration the merge gate uses.
+  **ONE GATE REMAINS: Kd's browser.**
 - **:35944** — 2026-09-05 — **THE CHEER'S GYM-DAY CAP, T3 ROUND 1: TWO
   Critical/High, THE PACKET DOES NOT SHIP — a "new cheer" dot that still meant a
   WEEK, and a day predicate whose WIDTH nothing in nineteen tests could see.**
