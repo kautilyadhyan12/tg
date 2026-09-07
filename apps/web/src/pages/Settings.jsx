@@ -448,37 +448,36 @@ function GymTab() {
 }
 
 // ── Account tab ───────────────────────────────────────────────────────────────
+// THERE IS NO PASSWORD (Kd, 2026-09-07): you sign in with an emailed code or
+// with Google, so the "Change Password" card is SWITCHED OFF — the server
+// routes stay, the screen no longer shows a form nobody can fill in. Deleting
+// the account is confirmed with a code emailed to the account's own address,
+// for the same reason.
 function AccountTab({ profile, onSaved }) {
   const { logout, updateUser } = useAuth();
   const { triggerTransition } = useTransition();
-  const [pwForm,         setPwForm]         = useState({ current: '', newPw: '', confirm: '' });
-  const [pwLoading,      setPwLoading]      = useState(false);
-  const [pwSaved,        setPwSaved]        = useState(false);
-  const [delConfirm,     setDelConfirm]     = useState('');
+  const [delCode,        setDelCode]        = useState('');
+  const [delCodeSent,    setDelCodeSent]    = useState(false);
   const [delLoading,     setDelLoading]     = useState(false);
   const [resetLoading,   setResetLoading]   = useState(false);
   const [showDeleteModal,setShowDeleteModal] = useState(false);
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    if (pwForm.newPw !== pwForm.confirm) { toast.error('New passwords do not match'); return; }
-    if (pwForm.newPw.length < 8)         { toast.error('Password must be at least 8 characters'); return; }
-    setPwLoading(true);
+  const openDeleteModal = () => {
+    setDelCode('');
+    setDelCodeSent(false);
+    setShowDeleteModal(true);
+  };
+
+  const handleSendDeleteCode = async () => {
+    setDelLoading(true);
     try {
-      // New API: cookie-authed POST /v1/auth/change-password → 200 { message }
-      // (throws on non-2xx via axios; no localStorage token, no data.success).
-      await authService.changePassword({
-        currentPassword: pwForm.current,
-        newPassword: pwForm.newPw,
-      });
-      toast.success('Password changed successfully');
-      setPwSaved(true);
-      setPwForm({ current: '', newPw: '', confirm: '' });
-      setTimeout(() => setPwSaved(false), 2000);
+      await authService.requestDeleteCode();
+      setDelCodeSent(true);
+      toast.success(`Code sent to ${profile.email}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to change password');
+      toast.error(err.response?.data?.message || 'We could not send the code. Please try again.');
     } finally {
-      setPwLoading(false);
+      setDelLoading(false);
     }
   };
 
@@ -505,23 +504,22 @@ function AccountTab({ profile, onSaved }) {
   };
 
   const handleDeleteAccount = async () => {
+    if (delCode.length !== 6) { toast.error('Type the 6 digits from the email.'); return; }
     setDelLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const res   = await fetch('http://localhost:3001/api/auth/account', {
-        method:  'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ password: delConfirm }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      toast.success('Account deleted');
+      // The NEW API: cookie-authed DELETE /v1/users/me with the emailed code.
+      // The server's message says what actually happens next (scheduled,
+      // and whether an undo email went out) — shown as it is, never reworded.
+      const res = await authService.deleteAccount(delCode);
+      toast.success(res.data?.message || 'Account scheduled for deletion.');
+      setShowDeleteModal(false);
       triggerTransition(() => logout());
     } catch (err) {
-      toast.error(err.message || 'Failed to delete account');
+      // A wrong code keeps the modal open so the person can try again.
+      toast.error(err.response?.data?.message || 'Failed to delete account');
+      setDelCode('');
     } finally {
       setDelLoading(false);
-      setShowDeleteModal(false);
     }
   };
 
@@ -533,7 +531,7 @@ function AccountTab({ profile, onSaved }) {
           {[
             { label: 'Name',         value: profile.fullName },
             { label: 'Email',        value: profile.email },
-            { label: 'Auth method',  value: 'Email & Password' },
+            { label: 'Sign-in',      value: 'Email code or Google' },
             { label: 'Member since', value: new Date(profile.createdAt || Date.now())
                 .toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
           ].map((r) => (
@@ -544,26 +542,6 @@ function AccountTab({ profile, onSaved }) {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="card-glass">
-        <h3 className="text-sm font-bold text-white mb-4">Change Password</h3>
-        <form onSubmit={handlePasswordChange} className="space-y-3">
-          {[
-            { key: 'current', label: 'Current Password',     type: 'password' },
-            { key: 'newPw',   label: 'New Password',         type: 'password' },
-            { key: 'confirm', label: 'Confirm New Password', type: 'password' },
-          ].map((f) => (
-            <Field key={f.key} label={f.label}>
-              <input type={f.type} value={pwForm[f.key]}
-                onChange={(e) => setPwForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                className="input-field" style={inputStyle} placeholder="••••••••" />
-            </Field>
-          ))}
-          <div className="flex justify-end pt-2">
-            <SaveBtn loading={pwLoading} saved={pwSaved} />
-          </div>
-        </form>
       </div>
 
       <div className="rounded-2xl p-4 space-y-3"
@@ -591,7 +569,7 @@ function AccountTab({ profile, onSaved }) {
               Permanently delete your account and all data
             </p>
           </div>
-          <button type="button" onClick={() => setShowDeleteModal(true)}
+          <button type="button" onClick={openDeleteModal}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
             style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
             <Trash2 className="w-4 h-4" />
@@ -621,35 +599,50 @@ function AccountTab({ profile, onSaved }) {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-white">Delete Account</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>This cannot be undone</p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>Confirmed with a code we email you</p>
                 </div>
               </div>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                All your workouts, nutrition logs, badges, and progress will be permanently deleted.
-                Enter your password to confirm.
+                Your workouts, nutrition logs, badges and progress will be deleted.
+                {delCodeSent
+                  ? ' Type the 6-digit code from the email to confirm.'
+                  : ` To confirm it is you, we will email a 6-digit code to ${profile.email}.`}
               </p>
-              <Field label="Your Password">
-                <input type="password" value={delConfirm}
-                  onChange={(e) => setDelConfirm(e.target.value)}
-                  placeholder="••••••••" className="input-field" style={inputStyle} />
-              </Field>
+              {delCodeSent && (
+                <Field label="6-digit code">
+                  <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                    value={delCode} autoComplete="one-time-code"
+                    onChange={(e) => setDelCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456" className="input-field" style={inputStyle} />
+                </Field>
+              )}
               <div className="flex gap-3 mt-5">
                 <button type="button" onClick={() => setShowDeleteModal(false)}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.70)' }}>
                   Cancel
                 </button>
-                <button type="button" onClick={handleDeleteAccount}
-                  disabled={delLoading || !delConfirm}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-                  style={{
-                    background: delConfirm ? 'rgba(239,68,68,0.80)' : 'rgba(239,68,68,0.20)',
-                    color:      delConfirm ? '#fff' : '#f87171',
-                    opacity:    delLoading ? 0.7 : 1,
-                  }}>
-                  {delLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  Delete Forever
-                </button>
+                {delCodeSent ? (
+                  <button type="button" onClick={handleDeleteAccount}
+                    disabled={delLoading || delCode.length !== 6}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{
+                      background: delCode.length === 6 ? 'rgba(239,68,68,0.80)' : 'rgba(239,68,68,0.20)',
+                      color:      delCode.length === 6 ? '#fff' : '#f87171',
+                      opacity:    delLoading ? 0.7 : 1,
+                    }}>
+                    {delLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Delete my account
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleSendDeleteCode}
+                    disabled={delLoading}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{ background: 'rgba(239,68,68,0.80)', color: '#fff', opacity: delLoading ? 0.7 : 1 }}>
+                    {delLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Email me a code
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>

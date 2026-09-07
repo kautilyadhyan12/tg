@@ -5,6 +5,12 @@ picks the next unticked item in the current stage unless Kd says otherwise.
 Tick an item when it is merged to main and Kd has clicked through it. If a
 feature is deferred, add it here in the same commit, never in prose elsewhere.
 
+One lettered line is one chat and one pull request. A chat that finds its line is
+still too big (it touches more than one of sign-in, money and other people's data,
+or a review would have to read more than about a thousand new lines) splits the
+line here first, then builds the first half. Item 1 below was four features in one
+line and drew a review of that size; that is why the lines are now small.
+
 The full previous list (304 open items, 2026-09-07) is kept at
 `archive/records/OWED.md` for detail; anything from it that matters before launch
 is here, the rest is under "After launch".
@@ -16,16 +22,29 @@ is here, the rest is under "After launch".
 
 ## Stage 1 — The member's core, web first
 
-1. [ ] **Sign-in by email code.** One "Get started" screen: Continue with Google · Continue with email (6-digit code). Signed in at once, straight to onboarding. No door at sign-up; sign-in doors relabelled "Train" and "Manage my gym, studio or clients". Password optional in Settings; forgot-password and the missing reset screen; verify-email step removed (a code proves the email). Needs the email service (Resend) — the one new dependency.
+1. [ ] **Sign-in by email code.** One "Get started" screen: Continue with Google · Continue with email (6-digit code). Signed in at once, straight to onboarding. Sign-in doors relabelled "Train" and "Manage my gym, studio or clients". No password at all (Kd, 2026-09-07 — the optional-password and reset-screen halves are struck); verify-email step gone (a code proves the email); deleting an account confirmed by an emailed code. Email through Resend (the service is the dependency; no new package). *Built 2026-09-07 on branch `sign-in-by-email-code`; awaiting review, merge and Kd's click-through.*
 2. [ ] **Organisation types** gym · studio · personal trainer at creation; a new owner from the "Manage" door lands on "create your organisation" with no personal onboarding.
-3. [ ] **Onboarding v2, server side.** The science (resting burn, daily activity + training days, pace → deficit or surplus, macros, finish date), the sanity rules (target direction, healthy-weight floor, over-a-year pace, calorie floor, under-18 and flagged-condition rules), the health screening and Safe mode flag, the consent log (time, version, wording), allergen tags on every food, contraindication tags on every exercise. Tests for every rule.
-4. [ ] **Onboarding v2, screens.** Twelve tap-only screens, saved as you go, gym code applied first, live plan numbers, disclaimers, the "Check first" choice, the plan screen with Adjust.
-5. [ ] **Goals and the Today screen.** Goal object (type, target, period day/week/month/year, app-set or user-set), starter goals from onboarding, editable and addable, progress from existing data, rings on a Today home.
-6. [ ] **Recommended workout and the weekly plan.** Per-person plan builder from the catalog (shape from days and level; exercises by goal, equipment, health; numbers by level and goal; push-up and plank checks set starting numbers; progression to the harder variant once mastered); swap, move, add; camera counting where the engine supports it, guided otherwise. Replaces the dead old-backend "Recommended for you" on the dashboard.
-7. [ ] **Meal suggestions and the run plan.** Suggestions from the food table by diet, allergens, cuisine, meals a day and calories left; a week's run schedule from the running answers (phone app; web says "in the app"). Under-18 and Safe-mode rules respected.
-8. [ ] **Dead web screens off the old backend.** Predictions, workout templates, profile photo (needs image storage), delete account (broken address), badges/challenges/leaderboard "coming soon" — each either moved to the new API or shown as "in the app", never left broken.
+3. **Onboarding v2, server side** (split 2026-09-08; the science first because every screen shows its number).
+   - 3a. [ ] **The plan maths and its sanity rules.** Resting burn, daily activity + training days, pace → deficit or surplus, macros, finish date; target direction, healthy-weight floor, over-a-year pace, the calorie floor; the under-18 and flagged-condition rules (no deficit). Pure functions, a test for every rule. Nothing on screen yet; the click-through says so.
+   - 3b. [ ] **Health screening, Safe mode and the consent log, server side.** Readiness answers stored; the "Check first" choice recorded and changeable; the Safe mode flag every plan route reads; the consent log (time, app version, wording) for sign-up, the health step and the plan screen. Tenancy test on every route.
+   - 3c. [ ] **Allergen tags on every food, contraindication tags on every exercise.** The catalog data, its migration, and the "contains …" line the meal routes will show.
+4. **Onboarding v2, screens** (split 2026-09-08 along the twelve screens in RULINGS; master is not live, so a half-built flow may land and the next half continues it).
+   - 4a. [ ] **Screens 1–7:** goal · about you · target · your day · your training (push-up and plank checks) · your week · equipment. Tap-only, saved as you go, the live plan number on every screen.
+   - 4b. [ ] **Screens 8–11:** health (readiness questions, "Check first", the disclaimer tap) · food · running · code, with the gym code applied first.
+   - 4c. [ ] **Screen 12, your plan:** live numbers, the disclaimer, Adjust, and the Safe mode version that shows no workout or run plan.
+5. **Goals and the Today screen** (split 2026-09-08).
+   - 5a. [ ] **Goals, server side.** The goal object (type, target, period day/week/month/year, app-set or user-set), the starter set from onboarding answers, progress from existing data. Routes with the stranger-gets-404 test.
+   - 5b. [ ] **The Today screen.** Rings from progress, the goal list, change, remove and add.
+6. **Recommended workout and the weekly plan** (split 2026-09-08).
+   - 6a. [ ] **The plan builder, server side.** Shape from days and level; exercises by goal, equipment and health limits; numbers by level and goal; push-up and plank checks set the starting numbers; progression to the harder variant once mastered; Safe mode builds no plan. Pure and tested.
+   - 6b. [ ] **The weekly plan screen.** The week, swap, move, add. Replaces the dead old-backend "Recommended for you" on the dashboard.
+   - 6c. [ ] **Doing a planned workout.** Camera counting where the engine supports the exercise, guided otherwise; a finished workout feeds progression.
+7. **Meal suggestions and the run plan** (split 2026-09-08).
+   - 7a. [ ] **Meal suggestions.** From the food table by diet, allergens, cuisine, meals a day and calories left; allergens shown on every suggestion; under-18 and Safe mode rules respected.
+   - 7b. [ ] **The run plan.** A week's run schedule from the running answers (phone app; web says "in the app"); none in Safe mode.
+8. [ ] **Dead web screens off the old backend**, one screen per chat. Predictions, workout templates, profile photo (needs image storage), badges/challenges/leaderboard "coming soon" — each either moved to the new API or shown as "in the app", never left broken. Delete account moved to the new API on 2026-09-07, with the undo page (`/restore-account`) built the same day after review.
 9. [ ] **Chat coach switched off** on the web (route and import), cost counter moved out of the coach service. Kd's ruling; still live and billing today.
-10. [ ] **Known defects on the way:** a network blip on page load logs you out · a dropped request logs you out instead of offering retry · sync upload has no timeout · the full API suite flakes because nine test files share one seeded database.
+10. [ ] **Known defects on the way**, one defect per chat, each starting with a failing test: a network blip on page load logs you out · a dropped request logs you out instead of offering retry · sync upload has no timeout · the full API suite flakes because nine test files share one seeded database.
 
 ## Stage 2 — The gym console, remaining
 

@@ -88,6 +88,18 @@ export const CASCADE_COLLECTED_TABLES = [
   "workout_sets",
 ] as const;
 
+/** Deleted by the person's EMAIL ADDRESS, not their id — tables with no
+ *  user_id and no foreign key to users, which the automated FK walk below
+ *  therefore cannot see. That blind spot is exactly how `sign_in_codes`
+ *  (2026-09-07) shipped without a purge statement and was caught by review
+ *  rather than by the suite: a code is sent to an address that may have no
+ *  account yet, so the table is keyed on the address. §5.2 nulls the address
+ *  at Day 14 precisely to remove it, so a row still holding it defeats the
+ *  erasure. The purge test seeds a row here per fixture user and asserts it
+ *  is gone; a table added here without a matching DELETE in repo.ts goes red
+ *  there. */
+export const ADDRESS_KEYED_PURGE_TABLES = ["sign_in_codes"] as const;
+
 /** Every table that must hold NO row for a purged user. The union above —
  *  and the list the purge test asserts against, so a table added to either
  *  half is covered on the day it is added rather than the day someone

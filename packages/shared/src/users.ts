@@ -2,7 +2,7 @@
 // Full profile view (v1 §6.1 users module); the minimal auth view stays in
 // auth.ts. All request bodies are .strict() (Part IV #5).
 import { z } from "zod";
-import { oneTimeTokenSchema } from "./auth.js";
+import { oneTimeTokenSchema, signInCodeSchema } from "./auth.js";
 
 /** Part 4 §3.1 users columns exposed to the owner. emailVerified is DERIVED
  *  from a consumed verify_email one-time token (DECISIONS 2026-07-11). */
@@ -49,6 +49,11 @@ export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
  *  account within the 14-day window. */
 export const restoreAccountRequestSchema = z.object({ token: oneTimeTokenSchema }).strict();
 export type RestoreAccountRequest = z.infer<typeof restoreAccountRequestSchema>;
+
+/** Deleting the account is confirmed with a 6-digit code emailed to the
+ *  account's own address (there is no password to ask for since 2026-09-07). */
+export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).strict();
+export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 
 // ── onboarding / fitness profile (onboarding-storage card) ──────────────────
 // v1 §6.1:442 puts onboarding data in the users module; Part 4 defines no

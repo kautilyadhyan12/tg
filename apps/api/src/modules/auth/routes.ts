@@ -17,6 +17,8 @@ import {
   loginRequestSchema,
   registerRequestSchema,
   resetPasswordRequestSchema,
+  sendCodeRequestSchema,
+  verifyCodeRequestSchema,
   verifyEmailRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
@@ -160,6 +162,69 @@ export function registerAuthRoutes(
     windowMs: HOUR_MS,
     identifier: () => null,
     redis: deps.redis,
+  });
+
+  // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
+  // The per-ADDRESS limits are in the database (two unused codes a day, five
+  // guesses a code). These Redis buckets are the wall against a client that VARIES
+  // the address, which the per-address rule cannot see: every send is an
+  // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
+  // down for real users. So the per-IP ceiling is the same order as the
+  // per-address one (a gym induction day is thirty people on one wi-fi, which
+  // twenty an hour still admits over the day), and on top of it sits ONE
+  // ceiling on sends a day across everyone — the outage-and-bill stop.
+  const codeSendLimit = createDualRateLimit({
+    name: "code_send",
+    max: 10,
+    ipMax: 20,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
+  const codeVerifyLimit = createDualRateLimit({
+    name: "code_verify",
+    max: 20,
+    ipMax: 40,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
+  const DAY_S = 24 * 60 * 60;
+  // The ceiling counts EMAILS, not requests: read here, stepped only after a
+  // send has resolved (below), so a refusal never spends one of the day's sends.
+  // Read-then-count can overshoot by the requests in flight together, nothing
+  // against a stop in the thousands. A missing key and a Redis outage both
+  // read as "none yet" and open; codeSendLimit runs first and has already
+  // logged the outage, so it is never a silent open.
+  const DAY_CEILING_KEY = "rl:code_send:all:day";
+  const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const sentToday = Number((await deps.redis.get(DAY_CEILING_KEY)) ?? "0");
+    if (sentToday >= deps.config.CODE_EMAILS_PER_DAY) {
+      await reply.status(429).send({
+        error: "code_ceiling",
+        message: "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
+        requestId: req.id,
+      });
+    }
+  };
+
+  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit, dailySendCeiling] }, async (req, reply) => {
+    const input = parseBody(sendCodeRequestSchema, req, reply);
+    if (input === null) return;
+    const rules = await service.requestSignInCode(authDeps, input.email);
+    // Only a send that resolved is counted against the day's ceiling.
+    await deps.redis.incrWithTtl(DAY_CEILING_KEY, DAY_S);
+    // One fixed body for known AND unknown addresses — asking never reveals
+    // whether an account exists.
+    return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
+  });
+
+  app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit] }, async (req, reply) => {
+    const input = parseBody(verifyCodeRequestSchema, req, reply);
+    if (input === null) return;
+    const { user, tokens, isNewAccount } = await service.signInWithCode(authDeps, input, requestMeta(req));
+    setSessionCookies(reply, deps.config, tokens);
+    return reply.status(200).send({ user, isNewAccount });
   });
 
   app.post("/v1/auth/register", { preHandler: [authLimit] }, async (req, reply) => {

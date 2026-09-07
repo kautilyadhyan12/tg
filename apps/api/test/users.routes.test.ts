@@ -36,15 +36,22 @@ function capturingAuthSender(): EmailSender & { verification: string[] } {
       return Promise.resolve();
     },
     sendPasswordResetEmail: () => Promise.resolve(),
+    sendSignInCodeEmail: () => Promise.resolve(),
   };
 }
 
-function capturingUsersSender(): UsersEmailSender & { restore: string[] } {
+function capturingUsersSender(): UsersEmailSender & { restore: string[]; codes: string[] } {
   const restore: string[] = [];
+  const codes: string[] = [];
   return {
     restore,
+    codes,
     sendAccountDeletionEmail: (_e, _n, raw) => {
       restore.push(raw);
+      return Promise.resolve();
+    },
+    sendAccountDeleteCodeEmail: (_e, code) => {
+      codes.push(code);
       return Promise.resolve();
     },
   };
@@ -83,6 +90,14 @@ d("users routes (real Postgres)", () => {
       cookies: opts.cookies ?? {},
       ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
     });
+
+  /** The two-step delete (2026-09-07): ask for the code, then prove it. */
+  const deleteMe = async (cookies: Record<string, string>) => {
+    const sent = await inject({ method: "POST", url: "/v1/users/me/delete-code", cookies });
+    expect(sent.statusCode).toBe(200);
+    const code = usersSender.codes[usersSender.codes.length - 1];
+    return await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code } });
+  };
 
   /** register + login; returns userId and the session cookies. */
   const makeUser = async (email: string, displayName = "P22 Fixture") => {
@@ -227,7 +242,7 @@ d("users routes (real Postgres)", () => {
       body: { displayName: "Alice Renamed" },
     });
     expect(patch.statusCode).toBe(200);
-    const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies: a.cookies });
+    const del = await deleteMe(a.cookies);
     expect(del.statusCode).toBe(200);
 
     expect(await snapshot()).toEqual(before); // B is byte-identical
@@ -247,7 +262,16 @@ d("users routes (real Postgres)", () => {
     await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${userId})`;
     await sql`INSERT INTO push_tokens (user_id, token, platform) VALUES (${userId}, 'p22u-push-token', 'android')`;
 
-    const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies });
+    // No code, or a wrong one, deletes nothing — the account stays active.
+    const bare = await inject({ method: "DELETE", url: "/v1/users/me", cookies });
+    expect(bare.statusCode).toBe(400);
+    await inject({ method: "POST", url: "/v1/users/me/delete-code", cookies });
+    const wrong = await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code: "000000" } });
+    expect(wrong.statusCode).toBe(400);
+    expect((await sql<{ status: string }[]>`SELECT status FROM users WHERE id = ${userId}`)[0]?.status).toBe("active");
+
+    const code = usersSender.codes[usersSender.codes.length - 1];
+    const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code } });
     expect(del.statusCode).toBe(200);
 
     const row = (await sql<{ status: string; deleted_at: Date | null }[]>`
@@ -280,7 +304,7 @@ d("users routes (real Postgres)", () => {
 
   it("restore: emailed token restores within the window; token is single-use; garbage 400s", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("p22u-restore@example.com");
-    await inject({ method: "DELETE", url: "/v1/users/me", cookies });
+    await deleteMe(cookies);
     const raw = usersSender.restore[usersSender.restore.length - 1];
     expect(raw).toBeTruthy();
 
@@ -307,7 +331,7 @@ d("users routes (real Postgres)", () => {
 
   it("restore REJECTS outside the 14-day window even with a live token (DB-side check)", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("p22u-latewindow@example.com");
-    await inject({ method: "DELETE", url: "/v1/users/me", cookies });
+    await deleteMe(cookies);
     const raw = usersSender.restore[usersSender.restore.length - 1];
     expect(raw).toBeTruthy();
     // Age the deletion past the window; the token itself is still unexpired —

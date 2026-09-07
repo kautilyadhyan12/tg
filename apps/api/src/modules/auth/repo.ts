@@ -119,10 +119,11 @@ export async function findUserIdByAuthIdentity(
   return rows[0]?.user_id ?? null;
 }
 
-/** Create an OAuth-only user: password_hash / hash_algo stay NULL (identity.ts:
- *  both nullable, "OAuth-only accounts"). null = email already taken (23505),
- *  so the service re-resolves and links instead. */
-export async function createOAuthUser(
+/** Create a user with NO password: password_hash / hash_algo stay NULL
+ *  (identity.ts: both nullable). Google sign-in and the email-code door both
+ *  create accounts this way. null = email already taken (23505), so the
+ *  service re-resolves instead. */
+export async function createPasswordlessUser(
   sql: Sql,
   input: { email: string; displayName: string },
 ): Promise<string | null> {
@@ -150,13 +151,13 @@ export async function linkAuthIdentity(
     ON CONFLICT (provider, subject) DO NOTHING`;
 }
 
-/** Marks an OAuth account's email verified by writing a CONSUMED verify_email
+/** Marks an account's email verified by writing a CONSUMED verify_email
  *  token — the exact shape isEmailVerified() derives from (DECISIONS
- *  2026-07-11: users has NO verified column). Google asserts the email, so this
- *  is the faithful port of the old `isEmailVerified: true` (passport.js:47,60)
- *  WITHOUT inventing a schema field (R0.2). token_hash is a random marker,
- *  never emailed and never consumable. */
-export async function recordVerifiedOAuthEmail(
+ *  2026-07-11: users has NO verified column). Google asserts the email, and a
+ *  proved sign-in code proves it too, so this is the faithful port of the old
+ *  `isEmailVerified: true` (passport.js:47,60) WITHOUT inventing a schema field
+ *  (R0.2). token_hash is a random marker, never emailed and never consumable. */
+export async function recordVerifiedEmail(
   sql: Sql,
   userId: string,
   markerHash: string,
@@ -300,6 +301,139 @@ export async function consumeOneTimeToken(
       AND used_at IS NULL AND expires_at > now()
     RETURNING user_id`;
   return rows[0]?.user_id ?? null;
+}
+
+// ── sign-in codes (migration 0023; Kd 2026-09-07) ───────────────────────────
+// Keyed on the ADDRESS: every read below carries `email` AND `purpose` in its
+// WHERE, so a code asked for by one address can never be found through another
+// (R3.2 in the shape this table has — the address is the tenant).
+
+export type CodePurpose = "sign_in" | "delete_account";
+
+export interface SignInCodeRow {
+  id: string;
+  codeHash: string;
+  attempts: number;
+  expiresAt: Date;
+  usedAt: Date | null;
+  createdAt: Date;
+}
+
+interface SignInCodeDbRow {
+  id: string;
+  code_hash: string;
+  attempts: number;
+  expires_at: Date;
+  used_at: Date | null;
+  created_at: Date;
+}
+
+const signInCodeColumns = (r: SignInCodeDbRow): SignInCodeRow => ({
+  id: r.id,
+  codeHash: r.code_hash,
+  attempts: r.attempts,
+  expiresAt: r.expires_at,
+  usedAt: r.used_at,
+  createdAt: r.created_at,
+});
+
+/** Issue a code, in ONE transaction under a per-address lock:
+ *    1. take an advisory lock on (address, purpose) — two requests for one
+ *       address arriving together serialise here, so both cannot read "one
+ *       code so far" and both issue (the day cap would otherwise be three);
+ *    2. prune every row older than `pruneBefore` (the table's privacy
+ *       guarantee — see the migration);
+ *    3. read EVERY code this address has had since `since` — live, dead or
+ *       used — and hand them to `check`, which THROWS to refuse (the
+ *       transaction rolls back and nothing was written). Two rules read the
+ *       list: the sixty-second gap looks at the newest row whatever its state,
+ *       and the day cap counts only the rows nobody proved (a code that signed
+ *       the person in is a sign-in, not a send to cap, Kd 2026-09-08). The
+ *       used rows must therefore stay in the list — filtering them out here
+ *       would let an address ask again the instant it signed in;
+ *    4. retire this address's live code of the same purpose (a resend
+ *       REPLACES, Kd's ruling) and insert the new one.
+ *  Returns the new row's id so a failed send can take it back. */
+export async function issueCode(
+  sql: Sql,
+  input: {
+    email: string;
+    purpose: CodePurpose;
+    codeHash: string;
+    expiresAt: Date;
+    pruneBefore: Date;
+    since: Date;
+    check: (recent: SignInCodeRow[]) => void;
+  },
+): Promise<string> {
+  return await sql.begin(async (tx) => {
+    // hashtext is int4; the lock takes a bigint, and the cast is implicit.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;
+    await tx`DELETE FROM sign_in_codes WHERE created_at < ${input.pruneBefore}`;
+    const recent = await tx<SignInCodeDbRow[]>`
+      SELECT id, code_hash, attempts, expires_at, used_at, created_at
+      FROM sign_in_codes
+      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}
+      ORDER BY created_at DESC`;
+    input.check(recent.map(signInCodeColumns));
+    await tx`
+      UPDATE sign_in_codes SET expires_at = now()
+      WHERE email = ${input.email} AND purpose = ${input.purpose}
+        AND used_at IS NULL AND expires_at > now()`;
+    const rows = await tx<{ id: string }[]>`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+      VALUES (${input.email}, ${input.purpose}, ${input.codeHash}, ${input.expiresAt})
+      RETURNING id`;
+    const id = rows[0]?.id;
+    if (id === undefined) throw new Error("sign-in code insert returned no row");
+    return id;
+  });
+}
+
+/** A code whose email never went out must not count against the day's two. */
+export async function deleteCode(sql: Sql, id: string): Promise<void> {
+  await sql`DELETE FROM sign_in_codes WHERE id = ${id}`;
+}
+
+/** The one code this address may still prove: unused and unexpired. */
+export async function findLiveCode(
+  sql: Sql,
+  email: string,
+  purpose: CodePurpose,
+): Promise<SignInCodeRow | null> {
+  const rows = await sql<SignInCodeDbRow[]>`
+    SELECT id, code_hash, attempts, expires_at, used_at, created_at
+    FROM sign_in_codes
+    WHERE email = ${email} AND purpose = ${purpose}
+      AND used_at IS NULL AND expires_at > now()
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return rows[0] === undefined ? null : signInCodeColumns(rows[0]);
+}
+
+/** One wrong guess, atomically: bump the count and, on the last allowed one,
+ *  kill the code in the same statement. Returns the new count. */
+export async function recordFailedAttempt(
+  sql: Sql,
+  id: string,
+  maxAttempts: number,
+): Promise<number> {
+  const rows = await sql<{ attempts: number }[]>`
+    UPDATE sign_in_codes
+    SET attempts = attempts + 1,
+        expires_at = CASE WHEN attempts + 1 >= ${maxAttempts} THEN now() ELSE expires_at END
+    WHERE id = ${id}
+    RETURNING attempts`;
+  return rows[0]?.attempts ?? maxAttempts;
+}
+
+/** Single use, one UPDATE — a code presented twice at once is consumed once. */
+export async function consumeCode(sql: Sql, id: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE sign_in_codes SET used_at = now()
+    WHERE id = ${id} AND used_at IS NULL AND expires_at > now()
+    RETURNING id`;
+  return rows.length > 0;
 }
 
 /** emailVerified is DERIVED from a consumed verify_email token — users has no

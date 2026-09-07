@@ -9,13 +9,18 @@ import sensible from "@fastify/sensible";
 import * as Sentry from "@sentry/node";
 import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
-import type { EmailSender } from "./modules/auth/email.js";
+import { createResendTransport } from "./email/resend.js";
+import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
 import { registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
-import type { UsersEmailSender } from "./modules/users/email.js";
+import {
+  createDevUsersEmailSender,
+  createResendUsersEmailSender,
+  type UsersEmailSender,
+} from "./modules/users/email.js";
 import { UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
@@ -158,6 +163,11 @@ export async function buildApp(
         error: err.code,
         message: err.message,
         requestId: req.id,
+        // A 429 from the code door carries the server's own countdown so the
+        // screen never invents one (AuthError.retryAfterSeconds).
+        ...(err instanceof AuthError && err.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: err.retryAfterSeconds }
+          : {}),
       });
       return;
     }
@@ -202,20 +212,32 @@ export async function buildApp(
     return { status: "ok" };
   });
 
+  // Email (Kd 2026-09-07): Resend when a key is configured — which production
+  // REQUIRES (config refinement) — otherwise the dev sender that prints the
+  // code in the log, which refuses to exist in production. Tests override.
+  const transport =
+    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+      ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
+      : null;
+  const emailSender =
+    overrides.emailSender ??
+    (transport !== null ? createResendEmailSender(transport, app.log) : createDevEmailSender(app.log, config));
+  const usersEmailSender =
+    overrides.usersEmailSender ??
+    (transport !== null
+      ? createResendUsersEmailSender(transport, app.log, config.WEB_ORIGIN)
+      : createDevUsersEmailSender(app.log, config));
+
   registerAuthenticate(app, { sql, config });
   registerAuthRoutes(app, {
     sql,
     config,
     redis,
     googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
-    ...(overrides.emailSender !== undefined ? { emailSender: overrides.emailSender } : {}),
+    emailSender,
   });
   registerWorkoutRoutes(app, { sql, redis });
-  registerUserRoutes(app, {
-    sql,
-    redis,
-    ...(overrides.usersEmailSender !== undefined ? { emailSender: overrides.usersEmailSender } : {}),
-  });
+  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender });
   // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });

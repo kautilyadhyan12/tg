@@ -50,6 +50,28 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  // Sign-in by email code (Kd 2026-09-07): codes go out through Resend. Both
+  // unset in dev/test = the DEV sender prints the code in the server log;
+  // REQUIRED in production (refinement below) — a production box with no way
+  // to send a code is a product nobody can sign in to. EMAIL_FROM is the
+  // sender line Resend expects, e.g. `AI Home Gym <hello@your-domain>`, on a
+  // domain verified in the Resend dashboard.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  // Checked for SHAPE at boot ("Name <box@domain>" or "box@domain"), so a
+  // malformed sender line fails the deploy rather than every code send.
+  EMAIL_FROM: z
+    .string()
+    .trim()
+    .max(254)
+    .regex(
+      /^(?:[^<>@\r\n]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/,
+      "EMAIL_FROM must look like `Name <box@domain>` or `box@domain`",
+    )
+    .optional(),
+  // The one ceiling on code emails a day across EVERYONE — the stop against
+  // a client that varies the address, which no per-address rule can see.
+  // Sized for launch (Resend Pro has no daily cap); raise it as users grow.
+  CODE_EMAILS_PER_DAY: z.coerce.number().int().positive().default(5000),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -59,6 +81,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
       path: ["REDIS_URL"],
       message: "REDIS_URL is required in production (quotas/entitlement cache)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.RESEND_API_KEY !== undefined, {
+      path: ["RESEND_API_KEY"],
+      message: "RESEND_API_KEY is required in production (sign-in codes are emailed)",
+    })
+    .refine((c) => c.RESEND_API_KEY === undefined || c.EMAIL_FROM !== undefined, {
+      path: ["EMAIL_FROM"],
+      message: "EMAIL_FROM is required when RESEND_API_KEY is set",
     })
     .safeParse(env);
   if (!parsed.success) {

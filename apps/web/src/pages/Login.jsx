@@ -1,22 +1,30 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { Eye, EyeOff, Dumbbell, ArrowRight, Zap } from 'lucide-react';
+import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { SIGN_IN_CODE_RULES } from '@app/shared';
 import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
 
-// Kd's two doors (DECISIONS 2026-08-18). Same email, same password, same
-// account — the choice decides only which screen you land on.
+// ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
+// act: type your email, type the 6-digit code we send, you are in — a new
+// address gets a new account on the spot. There is no password anywhere on
+// this screen, and no separate register page.
+//
+// Kd's two doors stay (DECISIONS 2026-08-18, relabelled 2026-09-07): the same
+// email, the same account; the choice decides only where you land. "Train"
+// goes to the member app (the questionnaire first, for a new person); "Manage"
+// goes to the console.
 const DOORS = [
-  { value: MEMBER_DOOR, label: "I'm a member" },
-  { value: GYM_DOOR,    label: 'I run a gym' },
+  { value: MEMBER_DOOR, label: 'Train' },
+  { value: GYM_DOOR,    label: 'Manage my gym, studio or clients' },
 ];
 
 // Google OAuth on the NEW API (v1 §6.1). A full-page navigation to
 // /v1/auth/google — it redirects to Google, and the callback sets the same
-// httpOnly cookies as password login (no token in the URL, none in JS).
+// httpOnly cookies as the code sign-in (no token in the URL, none in JS).
 const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/v1/auth/google`;
 // The callback sends failures back to /login?error=… — surfaced below.
 const GOOGLE_ERROR_MESSAGES = {
@@ -24,9 +32,28 @@ const GOOGLE_ERROR_MESSAGES = {
   google_not_configured: 'Google sign-in is currently unavailable.',
 };
 
+/** The server's message is written for people (it says how many tries are
+ *  left, or how long to wait); anything else gets one plain fallback. */
+const messageFrom = (err, fallback) => err?.response?.data?.message || fallback;
+
+/** The resend gap in words, from the same number the server enforces, so the
+ *  sentence can never say "a minute" while the countdown counts something else. */
+const gapWords = (seconds) =>
+  seconds === 60 ? 'a minute' : seconds % 60 === 0 ? `${seconds / 60} minutes` : `${seconds} seconds`;
+
+/** What a "too soon" refusal is allowed to claim: that a code was asked for
+ *  inside the gap. Not that it is still good — it may have signed somebody in
+ *  already. The countdown next to Resend says when asking again is allowed.
+ *  The header and the Resend toast are both built from these two pieces. */
+const TOO_SOON = {
+  when: `less than ${gapWords(SIGN_IN_CODE_RULES.resendAfterSeconds)} ago.`,
+  next: 'Type it below if you have it, or press Resend when the countdown ends.',
+};
+const TOO_SOON_WORDS = `You asked for a code ${TOO_SOON.when} ${TOO_SOON.next}`;
+
 export default function Login() {
-  const { login }  = useAuth();
-  const navigate   = useNavigate();
+  const { sendCode, verifyCode } = useAuth();
+  const navigate = useNavigate();
   const { triggerTransition } = useTransition();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -38,40 +65,138 @@ export default function Login() {
     setSearchParams({}, { replace: true }); // clear so a refresh won't re-toast
   }, [searchParams, setSearchParams]);
 
-  const [form,    setForm]    = useState({ email: '', password: '' });
-  const [show,    setShow]    = useState(false);
-  const [loading, setLoading] = useState(false);
   // Seeded from the stored door so the choice survives coming BACK here — a
   // failed Google attempt lands on /login?error=…, and re-drawing the member
   // door there would silently undo what the person picked a moment ago.
-  const [door,    setDoor]    = useState(() => readDoor() ?? MEMBER_DOOR);
-
+  const [door, setDoor] = useState(() => readDoor() ?? MEMBER_DOOR);
   const chooseDoor = (next) => {
     setDoor(next);
     // Written the moment it is PRESSED, not at submit. "Continue with Google"
     // leaves the site immediately, so a choice recorded only on submit would be
-    // lost for exactly the people who never press Sign In.
+    // lost for exactly the people who never press Continue.
     rememberDoor(next);
   };
 
-  const handleSubmit = async (e) => {
+  // Two steps: the address, then the code.
+  const [step,     setStep]     = useState('email');
+  const [email,    setEmail]    = useState('');
+  const [code,     setCode]     = useState('');
+  const [busy,     setBusy]     = useState(false);
+  const [problem,  setProblem]  = useState('');
+  // When a resend becomes possible — the SERVER's number, never one made up here.
+  const [resendAt, setResendAt] = useState(0);
+  const [now,      setNow]      = useState(() => Date.now());
+  // How the code step was reached: 'sent' (a code went out) or 'too-soon' (the
+  // server refused because one was asked for inside the gap). The header reads
+  // from this so it never says "we sent" when nothing was.
+  const [arrival,  setArrival]  = useState('sent');
+
+  useEffect(() => {
+    if (step !== 'code' || resendAt <= now) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [step, resendAt, now]);
+
+  const secondsToResend = Math.max(0, Math.ceil((resendAt - now) / 1000));
+
+  // Asks the server for a code. Says which of three things happened: the first
+  // two both advance to the code box, and the header says which it was:
+  //   'sent'     — a new code is on its way
+  //   'too-soon' — the server refused because a code was asked for inside
+  //                the gap, and the countdown now shows the server's own
+  //                number. That is ALL it means: the earlier code may still be
+  //                good, or it may already have signed somebody in (a laptop
+  //                sign-in, then the phone inside the gap). The server does not
+  //                say which — a "used" flag would tell a stranger the address
+  //                has an account (RULINGS 2026-09-07) — so the screen must
+  //                only ever claim the wait, never that a live code is waiting.
+  //   null       — refused for another reason; the words are on screen
+  const requestCode = async () => {
+    const address = email.trim();
+    if (!address) {
+      setProblem('Please type your email address.');
+      return null;
+    }
+    setBusy(true);
+    setProblem('');
+    try {
+      const res = await sendCode(address);
+      setResendAt(Date.now() + (res?.resendAfterSeconds ?? 0) * 1000);
+      setNow(Date.now());
+      setArrival('sent');
+      return 'sent';
+    } catch (err) {
+      if (err?.response?.data?.error === 'code_too_soon') {
+        setResendAt(Date.now() + (err.response.data.retryAfterSeconds ?? 0) * 1000);
+        setNow(Date.now());
+        setArrival('too-soon');
+        return 'too-soon';
+      }
+      setProblem(messageFrom(err, 'We could not send the code. Please try again.'));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    if (!form.email || !form.password) {
-      toast.error('Please fill in all fields');
+    // Sent or too soon, the code box is next. "Too soon" here is usually "Use
+    // a different email" then the same address inside the gap, with a good
+    // code in the inbox; stranding the person on the address step would make
+    // them wait the gap out and spend a code on a resend they never needed.
+    // The header says which of the two happened.
+    if ((await requestCode()) !== null) {
+      setCode('');
+      setStep('code');
+    }
+  };
+
+  const handleResend = async () => {
+    if (secondsToResend > 0 || busy) return;
+    // "New code sent." is said only when one WAS. A second tab on the same
+    // address can press Resend after its own countdown while the first tab's
+    // code is still inside the gap: the server refuses, the countdown takes
+    // the server's number, and the person is told only that — not that the
+    // code they have is good, because it may already have signed them in.
+    const result = await requestCode();
+    if (result === 'sent') {
+      setCode('');
+      toast.success('New code sent.');
+    } else if (result === 'too-soon') {
+      toast(TOO_SOON_WORDS);
+    }
+  };
+
+  const handleCodeSubmit = async (e) => {
+    e.preventDefault();
+    if (code.length !== 6) {
+      setProblem('Type the 6 digits from the email.');
       return;
     }
-    setLoading(true);
+    setBusy(true);
+    setProblem('');
     try {
-      const res = await login(form.email, form.password);
+      const res = await verifyCode(email.trim(), code);
+      // A proved code for a NEW address made the account on the spot — say so,
+      // because nothing else on the way in does.
+      if (res.isNewAccount) toast.success('Welcome! Your account is ready.');
       // The door comes from THIS component's state, not from storage: a browser
       // that refuses sessionStorage must still honour the button just pressed.
       const dest = landingRoute(res.user, door);
       triggerTransition(() => navigate(dest));
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Invalid credentials');
+      setProblem(messageFrom(err, 'That code did not work. Please try again.'));
+      setCode('');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
+  };
+
+  const changeEmail = () => {
+    setStep('email');
+    setCode('');
+    setProblem('');
   };
 
   return (
@@ -79,7 +204,7 @@ export default function Login() {
       className="min-h-screen flex"
       style={{ background: '#0A0908' }}
     >
-      {/* ── Left — Auth form ─────────────────────────────────────────────── */}
+      {/* ── Left — the door ──────────────────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center p-8 relative">
 
         {/* Ambient glow */}
@@ -125,23 +250,23 @@ export default function Login() {
               className="text-4xl font-bold tracking-tighter mb-2"
               style={{ color: 'rgba(255,255,255,0.95)' }}
             >
-              Welcome back.
+              Get started.
             </h1>
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
               {door === GYM_DOOR
-                ? 'Sign in to manage your gym'
-                : 'Sign in to continue your training'}
+                ? 'Sign in to manage your gym, studio or clients'
+                : 'Sign in or create your account — no password needed'}
             </p>
           </div>
 
           {/* ── The two doors ───────────────────────────────────────────────
-              ONE ACCOUNT. The email and password below are the same either
-              way; this only decides where you land. A gym owner is member #1
-              of their own gym (Part 3 §4.0 step 6), so making them separate
-              accounts would mean logging out to use their own app. */}
+              ONE ACCOUNT. The email below is the same either way; this only
+              decides where you land. A gym owner is member #1 of their own
+              gym (Part 3 §4.0 step 6), so separate accounts would mean
+              logging out to use their own app. */}
           <div
             role="group"
-            aria-label="How are you signing in?"
+            aria-label="What are you here for?"
             className="grid grid-cols-2 gap-2 mb-6"
           >
             {DOORS.map(({ value, label }) => {
@@ -152,7 +277,7 @@ export default function Login() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => chooseDoor(value)}
-                  className="py-3 rounded-2xl text-sm font-semibold transition-all duration-200"
+                  className="py-3 px-2 rounded-2xl text-sm font-semibold transition-all duration-200 leading-snug"
                   style={{
                     background: active ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
                     border:     active
@@ -167,99 +292,169 @@ export default function Login() {
             })}
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-
-            {/* Email */}
-            <div>
-              <label
-                className="block text-xs font-medium mb-2 uppercase tracking-wider"
-                style={{ color: 'rgba(255,255,255,0.35)' }}
-              >
-                Email
-              </label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="you@example.com"
-                className="input-field"
-                autoComplete="email"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
+          {step === 'email' ? (
+            /* ── Step 1: the address ─────────────────────────────────────── */
+            <form onSubmit={handleEmailSubmit} className="space-y-4" noValidate>
+              <div>
                 <label
-                  className="text-xs font-medium uppercase tracking-wider"
+                  htmlFor="get-started-email"
+                  className="block text-xs font-medium mb-2 uppercase tracking-wider"
                   style={{ color: 'rgba(255,255,255,0.35)' }}
                 >
-                  Password
+                  Email
                 </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs transition-colors duration-200"
-                  style={{ color: 'rgba(255,138,31,0.7)' }}
-                  onMouseEnter={(e) => e.target.style.color = '#FF8A1F'}
-                  onMouseLeave={(e) => e.target.style.color = 'rgba(255,138,31,0.7)'}
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
                 <input
-                  type={show ? 'text' : 'password'}
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="••••••••"
-                  className="input-field pr-12"
-                  autoComplete="current-password"
+                  id="get-started-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setProblem(''); }}
+                  placeholder="you@example.com"
+                  className="input-field"
+                  autoComplete="email"
+                  autoFocus
                 />
+              </div>
+
+              {problem && (
+                <p role="alert" className="text-sm" style={{ color: '#f87171' }}>{problem}</p>
+              )}
+
+              <motion.button
+                type="submit"
+                disabled={busy}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="w-full py-3.5 rounded-2xl font-semibold text-sm
+                           text-white flex items-center justify-center gap-2
+                           transition-all duration-200 mt-2"
+                style={{
+                  background: busy
+                    ? 'rgba(255,138,31,0.4)'
+                    : 'linear-gradient(135deg, #FF8A1F, #FFB347)',
+                  boxShadow: busy
+                    ? 'none'
+                    : '0 4px 20px rgba(255,138,31,0.35)',
+                }}
+              >
+                {busy ? (
+                  <div
+                    className="w-5 h-5 rounded-full border-2 border-white
+                               border-t-transparent animate-spin"
+                  />
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    Continue with email
+                  </>
+                )}
+              </motion.button>
+              <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                We&apos;ll email you a 6-digit code. No password needed.
+              </p>
+            </form>
+          ) : (
+            /* ── Step 2: the code ────────────────────────────────────────── */
+            <form onSubmit={handleCodeSubmit} className="space-y-4" noValidate>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                {arrival === 'sent' ? (
+                  <>
+                    We sent a 6-digit code to{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>.
+                  </>
+                ) : secondsToResend > 0 ? (
+                  <>
+                    You asked for a code for{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>{' '}
+                    {TOO_SOON.when} {TOO_SOON.next}
+                  </>
+                ) : (
+                  /* The countdown has run out, so "less than a minute ago" would
+                     now be false; the button's last tick re-renders this line. */
+                  <>
+                    Type the 6-digit code for{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>,
+                    or press Resend for a new one.
+                  </>
+                )}
+              </p>
+              <div>
+                <label
+                  htmlFor="get-started-code"
+                  className="block text-xs font-medium mb-2 uppercase tracking-wider"
+                  style={{ color: 'rgba(255,255,255,0.35)' }}
+                >
+                  6-digit code
+                </label>
+                <input
+                  id="get-started-code"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setProblem(''); }}
+                  placeholder="123456"
+                  className="input-field tracking-[0.4em] text-lg"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
+
+              {problem && (
+                <p role="alert" className="text-sm" style={{ color: '#f87171' }}>{problem}</p>
+              )}
+
+              <motion.button
+                type="submit"
+                disabled={busy}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="w-full py-3.5 rounded-2xl font-semibold text-sm
+                           text-white flex items-center justify-center gap-2
+                           transition-all duration-200 mt-2"
+                style={{
+                  background: busy
+                    ? 'rgba(255,138,31,0.4)'
+                    : 'linear-gradient(135deg, #FF8A1F, #FFB347)',
+                  boxShadow: busy
+                    ? 'none'
+                    : '0 4px 20px rgba(255,138,31,0.35)',
+                }}
+              >
+                {busy ? (
+                  <div
+                    className="w-5 h-5 rounded-full border-2 border-white
+                               border-t-transparent animate-spin"
+                  />
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </motion.button>
+
+              <div className="flex items-center justify-between text-xs">
                 <button
                   type="button"
-                  onClick={() => setShow((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 btn-icon w-7 h-7"
+                  onClick={handleResend}
+                  disabled={secondsToResend > 0 || busy}
+                  className="transition-colors duration-200"
+                  style={{ color: secondsToResend > 0 ? 'rgba(255,255,255,0.30)' : 'rgba(255,138,31,0.85)' }}
                 >
-                  {show
-                    ? <EyeOff className="w-4 h-4" />
-                    : <Eye    className="w-4 h-4" />
-                  }
+                  {secondsToResend > 0 ? `Resend code in ${secondsToResend}s` : 'Resend code'}
+                </button>
+                <button
+                  type="button"
+                  onClick={changeEmail}
+                  className="transition-colors duration-200"
+                  style={{ color: 'rgba(255,255,255,0.45)' }}
+                >
+                  Use a different email
                 </button>
               </div>
-            </div>
-
-            {/* Submit */}
-            <motion.button
-              type="submit"
-              disabled={loading}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              className="w-full py-3.5 rounded-2xl font-semibold text-sm
-                         text-white flex items-center justify-center gap-2
-                         transition-all duration-200 mt-2"
-              style={{
-                background: loading
-                  ? 'rgba(255,138,31,0.4)'
-                  : 'linear-gradient(135deg, #FF8A1F, #FFB347)',
-                boxShadow: loading
-                  ? 'none'
-                  : '0 4px 20px rgba(255,138,31,0.35)',
-              }}
-            >
-              {loading ? (
-                <div
-                  className="w-5 h-5 rounded-full border-2 border-white
-                             border-t-transparent animate-spin"
-                />
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </motion.button>
-          </form>
+            </form>
+          )}
 
           {/* Or divider */}
           <div className="flex items-center gap-3 my-5">
@@ -297,39 +492,12 @@ export default function Login() {
             Continue with Google
           </motion.button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              New here?
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-          </div>
-
-          {/* Register link */}
-          <Link to="/register">
-            <motion.div
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              className="w-full py-3.5 rounded-2xl font-semibold text-sm
-                         flex items-center justify-center gap-2
-                         transition-all duration-200 cursor-pointer"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border:     '1px solid rgba(255,255,255,0.07)',
-                color:      'rgba(255,255,255,0.65)',
-              }}
-            >
-              Create an account
-            </motion.div>
-          </Link>
-
           {/* Footer */}
           <p
             className="text-center text-xs mt-8"
             style={{ color: 'rgba(255,255,255,0.20)' }}
           >
-            By signing in you agree to our Terms & Privacy Policy
+            By continuing you agree to our Terms & Privacy Policy
           </p>
         </motion.div>
       </div>
@@ -386,34 +554,9 @@ export default function Login() {
               "Real-time form correction.<br />Every rep. Every set."
             </p>
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
-              YOLOv8 pose detection · Bidirectional LSTM · Voice coaching
+              Pose detection · Rep counting · Voice coaching
             </p>
           </div>
-        </div>
-
-        {/* Stats floating pills */}
-        <div className="absolute top-12 right-8 flex flex-col gap-3">
-          {[
-            { label: '17 joints tracked',  color: '#FF8A1F' },
-            { label: '< 50ms latency',     color: '#4ade80' },
-            { label: 'Voice corrections',  color: '#60a5fa' },
-          ].map(({ label, color }) => (
-            <motion.div
-              key={label}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0  }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-              className="px-4 py-2 rounded-full text-xs font-semibold"
-              style={{
-                background:    'rgba(10,9,8,0.75)',
-                backdropFilter:'blur(12px)',
-                border:        `1px solid ${color}30`,
-                color,
-              }}
-            >
-              {label}
-            </motion.div>
-          ))}
         </div>
       </div>
     </div>

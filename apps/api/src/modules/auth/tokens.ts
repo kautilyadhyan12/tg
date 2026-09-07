@@ -4,7 +4,7 @@
 //   · one-time/refresh tokens are opaque randoms stored only as SHA-256
 //     (authController.js:9-13 — "a database leak can no longer be turned
 //     into account takeovers").
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import type { AppConfig } from "../../config.js";
@@ -66,4 +66,28 @@ export function sha256Hex(raw: string): string {
 
 export function newFamilyId(): string {
   return randomUUID();
+}
+
+// ── sign-in codes (Kd 2026-09-07) ───────────────────────────────────────────
+
+/** Six decimal digits, leading zeros kept, from a CSPRNG — `randomInt` is
+ *  unbiased over the range, which `Math.random` and `% 1000000` are not. */
+export function mintSixDigitCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+/** The stored form of a code: an HMAC under a key DERIVED from the server
+ *  secret (domain-separated so the JWT key and this key are never the same
+ *  bytes), over purpose + address + code. A six-digit code is a million
+ *  possibilities, so an unkeyed hash would be brute-forced from a database leak
+ *  in seconds; the keyed one needs the secret. The address is inside the MAC so
+ *  a row can never be re-pointed at another address by editing one column. */
+export function signInCodeHash(
+  secret: string,
+  input: { purpose: string; email: string; code: string },
+): string {
+  const key = createHmac("sha256", secret).update("aihg-sign-in-code-key").digest();
+  return createHmac("sha256", key)
+    .update(`${input.purpose}\n${input.email}\n${input.code}`)
+    .digest("hex");
 }

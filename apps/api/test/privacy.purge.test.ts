@@ -22,6 +22,7 @@ import postgres from "postgres";
 import { purgeDueUsers, purgeUser } from "../src/modules/privacy/purge.js";
 import { lockDueUserForPurge, recordPurge } from "../src/modules/privacy/repo.js";
 import {
+  ADDRESS_KEYED_PURGE_TABLES,
   CASCADE_COLLECTED_TABLES,
   DIRECT_DELETE_TABLES,
   PII_TABLES,
@@ -68,6 +69,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   let exerciseId = "";
   let challengeId = "";
   const madeUsers: string[] = [];
+  const madeEmails: string[] = [];
 
   beforeAll(async () => {
     const ex = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = 'squat' LIMIT 1`;
@@ -91,6 +93,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       for (const t of DIRECT_DELETE_TABLES) {
         await sql`DELETE FROM ${sql(t)} WHERE user_id = ANY(${madeUsers})`;
       }
+      await sql`DELETE FROM sign_in_codes WHERE email = ANY(${madeEmails})`;
       await sql`DELETE FROM users WHERE id = ANY(${madeUsers})`;
     }
     if (challengeId !== "") await sql`DELETE FROM challenges WHERE id = ${challengeId}`;
@@ -111,7 +114,12 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       RETURNING id`;
     const userId = rows[0]?.id ?? "";
     madeUsers.push(userId);
+    madeEmails.push(email);
 
+    // Keyed on the ADDRESS, not the id, and with no foreign key — the table
+    // the FK walk below cannot see (tables.ts, ADDRESS_KEYED_PURGE_TABLES).
+    await sql`INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+              VALUES (${email}, 'sign_in', ${"h-" + userId}, now() + interval '10 minutes')`;
     await sql`INSERT INTO auth_identities (user_id, provider, subject)
               VALUES (${userId}, 'google', ${"sub-" + userId})`;
     await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, medical_conditions)
@@ -242,6 +250,32 @@ d("DPDP Day-14 purge (real Postgres)", () => {
 
     // Guard: the assertion above must cover the whole compliance list.
     expect(PII_TABLES.length).toBe(DIRECT_DELETE_TABLES.length + CASCADE_COLLECTED_TABLES.length);
+  });
+
+  it("removes the ADDRESS from every address-keyed table, before the tombstone nulls it", { timeout: 60_000 }, async () => {
+    // sign_in_codes holds the email with no user_id and no FK, so the id-keyed
+    // purge and the FK walk both miss it on their own, and §5.2's whole point
+    // at Day 14 is that the address is gone.
+    const email = uniqEmail("dpdp-addr");
+    const u = await makeUser(email, 20);
+    const bystanderEmail = uniqEmail("dpdp-addr-bystander");
+    const bystander = await makeUser(bystanderEmail, 1);
+
+    for (const t of ADDRESS_KEYED_PURGE_TABLES) {
+      const before = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(t)} WHERE email = ${email}`;
+      expect({ t, n: before[0]?.n }).toEqual({ t, n: 1 });
+    }
+
+    await run();
+
+    for (const t of ADDRESS_KEYED_PURGE_TABLES) {
+      const after = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(t)} WHERE email = ${email}`;
+      expect({ t, n: after[0]?.n }).toEqual({ t, n: 0 });
+      const kept = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(t)} WHERE email = ${bystanderEmail}`;
+      expect({ t, bystander: kept[0]?.n }).toEqual({ t, bystander: 1 });
+    }
+    expect((await directCounts(u.userId))["streaks"]).toBe(0);
+    expect((await directCounts(bystander.userId))["streaks"]).toBe(1);
   });
 
   it("anonymizes the users row to a tombstone and KEEPS it", { timeout: 60_000 }, async () => {

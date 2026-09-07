@@ -14,7 +14,9 @@ import { GYM_DOOR, MEMBER_DOOR } from './landingRoute';
 const read = (name) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), 'utf8');
 
 describe('Google login buttons point at the new API', () => {
-  for (const page of ['./Login.jsx', './Register.jsx']) {
+  // Register.jsx is no longer routed (the one Get started screen replaced it,
+  // 2026-09-07); the door that IS on screen is the one that must point right.
+  for (const page of ['./Login.jsx']) {
     it(`${page}: navigates to /v1/auth/google, not the old backend, ungated`, () => {
       const src = read(page);
       expect(src).toMatch(/\/v1\/auth\/google/);
