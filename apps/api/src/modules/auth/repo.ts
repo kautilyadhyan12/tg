@@ -337,26 +337,18 @@ const signInCodeColumns = (r: SignInCodeDbRow): SignInCodeRow => ({
   createdAt: r.created_at,
 });
 
-/** Every code this address asked for (this purpose) since `since`, newest
- *  first — used or not, live or dead: the daily cap counts SENDS. */
-export async function listCodesSince(
-  sql: Sql,
-  email: string,
-  purpose: CodePurpose,
-  since: Date,
-): Promise<SignInCodeRow[]> {
-  const rows = await sql<SignInCodeDbRow[]>`
-    SELECT id, code_hash, attempts, expires_at, used_at, created_at
-    FROM sign_in_codes
-    WHERE email = ${email} AND purpose = ${purpose} AND created_at >= ${since}
-    ORDER BY created_at DESC`;
-  return rows.map(signInCodeColumns);
-}
-
-/** Issue a code: in ONE transaction, prune every row older than `pruneBefore`
- *  (the table's privacy guarantee — see the migration), retire this address's
- *  live code of the same purpose (a resend REPLACES, Kd's ruling), and insert
- *  the new one. Returns the new row's id so a failed send can take it back. */
+/** Issue a code, in ONE transaction under a per-address lock:
+ *    1. take an advisory lock on (address, purpose) — two requests for one
+ *       address arriving together serialise here, so both cannot read "one
+ *       code so far" and both issue (the day cap would otherwise be three);
+ *    2. prune every row older than `pruneBefore` (the table's privacy
+ *       guarantee — see the migration);
+ *    3. read this address's codes since `since` (used or not, live or dead:
+ *       the daily cap counts SENDS) and hand them to `check`, which THROWS to
+ *       refuse — the transaction rolls back and nothing was written;
+ *    4. retire this address's live code of the same purpose (a resend
+ *       REPLACES, Kd's ruling) and insert the new one.
+ *  Returns the new row's id so a failed send can take it back. */
 export async function issueCode(
   sql: Sql,
   input: {
@@ -365,10 +357,20 @@ export async function issueCode(
     codeHash: string;
     expiresAt: Date;
     pruneBefore: Date;
+    since: Date;
+    check: (recent: SignInCodeRow[]) => void;
   },
 ): Promise<string> {
   return await sql.begin(async (tx) => {
+    // hashtext is int4; the lock takes a bigint, and the cast is implicit.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;
     await tx`DELETE FROM sign_in_codes WHERE created_at < ${input.pruneBefore}`;
+    const recent = await tx<SignInCodeDbRow[]>`
+      SELECT id, code_hash, attempts, expires_at, used_at, created_at
+      FROM sign_in_codes
+      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}
+      ORDER BY created_at DESC`;
+    input.check(recent.map(signInCodeColumns));
     await tx`
       UPDATE sign_in_codes SET expires_at = now()
       WHERE email = ${input.email} AND purpose = ${input.purpose}

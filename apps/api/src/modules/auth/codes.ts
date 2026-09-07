@@ -18,7 +18,7 @@ import { SIGN_IN_CODE_RULES } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import { AuthError } from "./errors.js";
 import * as repo from "./repo.js";
-import type { CodePurpose } from "./repo.js";
+import type { CodePurpose, SignInCodeRow } from "./repo.js";
 import { mintSixDigitCode, signInCodeHash } from "./tokens.js";
 
 export type { CodePurpose } from "./repo.js";
@@ -47,6 +47,7 @@ function tooManyToday(retryAfterMs: number): AuthError {
     429,
     "code_limit",
     `You have asked for too many codes today. Try again in about ${String(hours)} hour${hours === 1 ? "" : "s"}.`,
+    roundUpSeconds(retryAfterMs),
   );
 }
 
@@ -56,7 +57,25 @@ function tooSoon(retryAfterMs: number): AuthError {
     429,
     "code_too_soon",
     `Please wait ${String(seconds)} second${seconds === 1 ? "" : "s"} before asking for a new code.`,
+    seconds,
   );
+}
+
+/** The two send-side rules, decided over this address's recent codes. Runs
+ *  INSIDE the issue transaction, under the address's lock, so two requests
+ *  arriving together cannot both read "one so far" and both issue. */
+function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
+  if (recent.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {
+    const oldest = recent[recent.length - 1];
+    const retryAt = (oldest?.createdAt.getTime() ?? now) + DAY_MS;
+    throw tooManyToday(retryAt - now);
+  }
+  const latest = recent[0];
+  if (latest !== undefined) {
+    const gapMs = SIGN_IN_CODE_RULES.resendAfterSeconds * 1000;
+    const sinceLast = now - latest.createdAt.getTime();
+    if (sinceLast < gapMs) throw tooSoon(gapMs - sinceLast);
+  }
 }
 
 /** Ask for a code. Enforces the day cap and the resend gap, mints and stores
@@ -69,20 +88,6 @@ export async function requestCode(
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   const now = Date.now();
-  const recent = await repo.listCodesSince(deps.sql, input.email, input.purpose, new Date(now - DAY_MS));
-
-  if (recent.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {
-    const oldest = recent[recent.length - 1];
-    const retryAt = (oldest?.createdAt.getTime() ?? now) + DAY_MS;
-    throw tooManyToday(retryAt - now);
-  }
-  const latest = recent[0];
-  if (latest !== undefined) {
-    const gapMs = SIGN_IN_CODE_RULES.resendAfterSeconds * 1000;
-    const sinceLast = now - latest.createdAt.getTime();
-    if (sinceLast < gapMs) throw tooSoon(gapMs - sinceLast);
-  }
-
   const code = mintSixDigitCode();
   const id = await repo.issueCode(deps.sql, {
     email: input.email,
@@ -90,6 +95,10 @@ export async function requestCode(
     codeHash: signInCodeHash(deps.config.JWT_SECRET, { purpose: input.purpose, email: input.email, code }),
     expiresAt: new Date(now + SIGN_IN_CODE_RULES.ttlSeconds * 1000),
     pruneBefore: new Date(now - PRUNE_AFTER_MS),
+    since: new Date(now - DAY_MS),
+    check: (recent) => {
+      refuseIfOverRules(recent, now);
+    },
   });
 
   try {
@@ -125,6 +134,11 @@ export async function redeemCode(
 ): Promise<void> {
   const live = await repo.findLiveCode(deps.sql, input.email, input.purpose);
   if (live === null) throw invalidCode();
+  // DEFENCE IN DEPTH, not a guarantee: `recordFailedAttempt` expires the row in
+  // the same statement that counts the fifth guess, so `findLiveCode` never
+  // returns an exhausted code and this line is unreachable today. It stays so
+  // that a future writer who changes that statement cannot open the door by
+  // accident; no test can observe it, and none claims to.
   if (live.attempts >= SIGN_IN_CODE_RULES.maxAttempts) throw invalidCode();
 
   const expected = Buffer.from(live.codeHash, "hex");

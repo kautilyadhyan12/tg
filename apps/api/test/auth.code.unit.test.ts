@@ -2,10 +2,25 @@
 // network: the code's shape, the keyed hash, and the ONE HTTPS call — its
 // request shape, and that a failure never carries the key or the address.
 import { describe, expect, it, vi } from "vitest";
-import { createResendTransport, EmailTransportError } from "../src/email/resend.js";
-import { deleteAccountCodeEmail, signInCodeEmail } from "../src/email/templates.js";
+import type { FastifyBaseLogger } from "fastify";
+import { createResendTransport, EmailTransportError, type EmailMessage } from "../src/email/resend.js";
+import { accountDeletionEmail, deleteAccountCodeEmail, signInCodeEmail } from "../src/email/templates.js";
 import { mintSixDigitCode, signInCodeHash } from "../src/modules/auth/tokens.js";
+import { createLogOnlyEmailSender } from "../src/modules/auth/email.js";
+import { createLogOnlyUsersEmailSender, createResendUsersEmailSender } from "../src/modules/users/email.js";
+import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 import { loadConfig } from "../src/config.js";
+
+/** Structural stand-in for the pino logger — no `as` (R2.2). */
+const quietLog: Pick<FastifyBaseLogger, "info" | "warn" | "error"> = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+// The senders take the full FastifyBaseLogger type; the three methods above
+// are the only ones they call. Widened through `unknown` is the one cast this
+// file needs, and it is in a test, not in src.
+const log = quietLog as unknown as FastifyBaseLogger;
 
 describe("mintSixDigitCode", () => {
   it("is always exactly six digits, leading zeros kept", () => {
@@ -43,6 +58,19 @@ describe("config: email service", () => {
   });
   it("a key without a sender line is refused in every environment", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "development", RESEND_API_KEY: "re_x" })).toThrow(/EMAIL_FROM/);
+  });
+  it("a malformed sender line fails at BOOT, not on the first send", () => {
+    for (const bad of ["hello", "AI Home Gym", "AI Home Gym <hi>", "<hi@example.com", "hi@example"]) {
+      expect(() => loadConfig({ ...good, NODE_ENV: "development", RESEND_API_KEY: "re_x", EMAIL_FROM: bad }), bad).toThrow(/EMAIL_FROM/);
+    }
+    for (const ok of ["AI Home Gym <hi@example.com>", "hi@example.com", "Kd's Gym <no-reply@mail.example.co.in>"]) {
+      expect(loadConfig({ ...good, NODE_ENV: "development", RESEND_API_KEY: "re_x", EMAIL_FROM: ok }).EMAIL_FROM, ok).toBe(ok);
+    }
+  });
+  it("the daily code ceiling defaults, and is overridable", () => {
+    expect(loadConfig({ ...good, NODE_ENV: "development" }).CODE_EMAILS_PER_DAY).toBe(5000);
+    expect(loadConfig({ ...good, NODE_ENV: "development", CODE_EMAILS_PER_DAY: "12" }).CODE_EMAILS_PER_DAY).toBe(12);
+    expect(() => loadConfig({ ...good, NODE_ENV: "development", CODE_EMAILS_PER_DAY: "0" })).toThrow(/CODE_EMAILS_PER_DAY/);
   });
   it("dev boots with neither; production boots with both", () => {
     expect(loadConfig({ ...good, NODE_ENV: "development" }).RESEND_API_KEY).toBeUndefined();
@@ -127,5 +155,34 @@ describe("the code emails", () => {
     const m = deleteAccountCodeEmail("kd@example.com", "042917", 10);
     expect(m.subject).toMatch(/deletion/i);
     expect(m.text).toMatch(/delete your account/i);
+  });
+  it("the undo email carries exactly one link, to our restore page, and the real window", () => {
+    const m = accountDeletionEmail("kd@example.com", "Kd", "https://app.example/restore-account?token=abc", 14);
+    expect(m.text.match(/https?:\/\//g)).toHaveLength(1);
+    expect(m.text).toContain("https://app.example/restore-account?token=abc");
+    expect(m.html.match(/<a\s/g)).toHaveLength(1);
+    expect(m.subject).toContain("14 days");
+    expect(m.text).toContain("14 days");
+  });
+});
+
+describe("the senders never claim a delivery they did not make", () => {
+  it("the log-only senders REJECT every method whose caller reports a send", async () => {
+    await expect(createLogOnlyEmailSender(log).sendSignInCodeEmail("a@example.com", "123456")).rejects.toThrow(/NOT sent/);
+    const users = createLogOnlyUsersEmailSender(log);
+    await expect(users.sendAccountDeleteCodeEmail("a@example.com", "123456")).rejects.toThrow(/NOT sent/);
+    await expect(users.sendAccountDeletionEmail("a@example.com", "A", "tok")).rejects.toThrow(/NOT sent/);
+  });
+
+  it("the Resend users sender SENDS the undo email, with the restore link on the web origin", async () => {
+    // The review's High: production deletion had no undo. The link is built
+    // from WEB_ORIGIN and the page exists (apps/web /restore-account).
+    const sent: EmailMessage[] = [];
+    const sender = createResendUsersEmailSender({ send: (m) => { sent.push(m); return Promise.resolve(); } }, log, "https://app.example");
+    await sender.sendAccountDeletionEmail("kd@example.com", "Kd", "raw-token-value");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("kd@example.com");
+    expect(sent[0]?.text).toContain("https://app.example/restore-account?token=raw-token-value");
+    expect(sent[0]?.subject).toContain(`${String(DPDP_RETENTION_DAYS)} days`);
   });
 });

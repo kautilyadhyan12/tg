@@ -29,7 +29,7 @@ function redirectToLogin() {
   if (
     !p.startsWith('/login') && !p.startsWith('/register') &&
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
-    !p.startsWith('/forgot-password')
+    !p.startsWith('/forgot-password') && !p.startsWith('/restore-account')
   ) {
     window.location.href = '/login';
   }
@@ -101,6 +101,9 @@ export const authService = {
   // own address (there is no password to ask for).
   requestDeleteCode: ()               => authApi.post('/v1/users/me/delete-code'),
   deleteAccount:   (code)             => authApi.delete('/v1/users/me', { data: { code } }),
+  // The undo link in the deletion email lands on /restore-account with this
+  // token; no session exists (the account is deleted), so it is a bare call.
+  restoreAccount:  (token)            => authApi.post('/v1/users/me/restore', { token }),
   // Password sign-in is SWITCHED OFF on the screens (Kd 2026-09-07) — the
   // calls stay so nothing that still imports them breaks.
   register:        (data)             => authApi.post('/v1/auth/register', data),

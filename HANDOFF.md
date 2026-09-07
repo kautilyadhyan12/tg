@@ -17,12 +17,17 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Kd amended his ruling mid-plan (RULINGS 2026-09-07): no password at all; one resend; two codes a day.
 - Verified per package (the root `turbo` scripts cannot run on Kd's machine: turbo calls a global
   pnpm 11 that refuses the 9.15.4 pin — CI uses the pinned one): api/shared/config/engine tsc +
-  eslint green; `auth.code.test.ts` 13 + unit 11 green on local Postgres; touched suites (users,
+  eslint green; `auth.code.test.ts` 18 + unit 16 green on local Postgres; touched suites (users,
   orgs delete, auth, google, migration 0023) green; web 1824 green (`poseAssets.contract.test.js`
-  fails on clean master too — pre-existing, local encoding); `tools/mutate-auth.mjs` 14 mutants, 14 RED
+  fails on clean master too — pre-existing, local encoding); `tools/mutate-auth.mjs` 18 mutants, 17 RED + 1 alive by design
   (four survived the first sweep because a sibling check covered them; the tests were
   strengthened until each fell) — the table is in the PR.
-- Open: fresh-chat review; Kd's click-through; then merge. The deletion undo page is owed (ROADMAP 1.8).
+- Review round 1 (Opus, fresh chat) found 4 High + 6 Low; all fixed in the second commit on the
+  branch: too-soon keeps the live code on screen · per-IP send ceiling cut to 20/h and ONE
+  ceiling across everyone (`CODE_EMAILS_PER_DAY`, default 5000) · the Day-14 purge deletes the
+  address from `sign_in_codes` · the undo email is sent and its page `/restore-account` exists ·
+  a per-address lock closes the day-cap race · `EMAIL_FROM` shape-checked at boot. Mutants now 18.
+- Open: reviewer's re-check of the fixes; Kd's click-through; then merge.
 
 ## 2026-09-07 · The reset (Fable 5.1, this session)
 

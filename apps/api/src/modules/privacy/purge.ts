@@ -77,6 +77,9 @@ export async function purgeUser(
   const proceed = await repo.lockDueUserForPurge(tx, userId, cutoff);
   if (!proceed) return "skipped";
   await repo.deleteUserOwnedRows(tx, userId);
+  // Address-keyed rows go BEFORE the tombstone nulls the address they are
+  // found by (tables.ts, ADDRESS_KEYED_PURGE_TABLES).
+  await repo.deleteAddressKeyedRows(tx, userId);
   await repo.scrubLeaderboardEntries(tx, userId);
   await repo.anonymizeUser(tx, userId);
   return "purged";

@@ -57,7 +57,21 @@ const envSchema = z.object({
   // sender line Resend expects, e.g. `AI Home Gym <hello@your-domain>`, on a
   // domain verified in the Resend dashboard.
   RESEND_API_KEY: z.string().min(1).optional(),
-  EMAIL_FROM: z.string().trim().min(3).max(254).optional(),
+  // Checked for SHAPE at boot ("Name <box@domain>" or "box@domain"), so a
+  // malformed sender line fails the deploy rather than every code send.
+  EMAIL_FROM: z
+    .string()
+    .trim()
+    .max(254)
+    .regex(
+      /^(?:[^<>@\r\n]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/,
+      "EMAIL_FROM must look like `Name <box@domain>` or `box@domain`",
+    )
+    .optional(),
+  // The one ceiling on code emails a day across EVERYONE — the stop against
+  // a client that varies the address, which no per-address rule can see.
+  // Sized for launch (Resend Pro has no daily cap); raise it as users grow.
+  CODE_EMAILS_PER_DAY: z.coerce.number().int().positive().default(5000),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;

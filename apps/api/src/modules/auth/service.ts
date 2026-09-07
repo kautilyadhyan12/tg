@@ -243,7 +243,7 @@ export async function googleSignIn(
   if (byEmail !== null) {
     if (byEmail.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: byEmail.id, provider: "google", subject: identity.subject });
-    await ensureEmailVerified(deps,byEmail.id);
+    await ensureEmailVerified(deps, byEmail.id);
     return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta) };
   }
 
@@ -257,11 +257,11 @@ export async function googleSignIn(
     const raced = await repo.findUserByEmail(deps.sql, identity.email);
     if (raced === null || raced.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: raced.id, provider: "google", subject: identity.subject });
-    await ensureEmailVerified(deps,raced.id);
+    await ensureEmailVerified(deps, raced.id);
     return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta) };
   }
   await repo.linkAuthIdentity(deps.sql, { userId: newUserId, provider: "google", subject: identity.subject });
-  await ensureEmailVerified(deps,newUserId);
+  await ensureEmailVerified(deps, newUserId);
   const created = await repo.findUserById(deps.sql, newUserId);
   if (created === null) throw new Error("created Google user could not be re-read");
   return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta) };

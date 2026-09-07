@@ -93,6 +93,15 @@ export default function Login() {
       setNow(Date.now());
       return true;
     } catch (err) {
+      // "Too soon" means a code is ALREADY in the inbox and still good. The
+      // person is taken to the code box with the server's countdown rather
+      // than stranded on the address step — where waiting the gap out would
+      // spend the day's last code on a resend they never needed.
+      if (err?.response?.data?.error === 'code_too_soon') {
+        setResendAt(Date.now() + (err.response.data.retryAfterSeconds ?? 0) * 1000);
+        setNow(Date.now());
+        return true;
+      }
       setProblem(messageFrom(err, 'We could not send the code. Please try again.'));
       return false;
     } finally {
@@ -126,6 +135,9 @@ export default function Login() {
     setProblem('');
     try {
       const res = await verifyCode(email.trim(), code);
+      // A proved code for a NEW address made the account on the spot — say so,
+      // because nothing else on the way in does.
+      if (res.isNewAccount) toast.success('Welcome! Your account is ready.');
       // The door comes from THIS component's state, not from storage: a browser
       // that refuses sessionStorage must still honour the button just pressed.
       const dest = landingRoute(res.user, door);

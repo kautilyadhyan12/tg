@@ -34,12 +34,16 @@ import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const SUITE = 'test/auth.code.test.ts';
+/** The Day-14 purge has its own suite; the one row aimed at it says so. */
+const PURGE_SUITE = 'test/privacy.purge.test.ts';
 
 const TARGETS = {
   codes: { file: resolve(ROOT, 'apps/api/src/modules/auth/codes.ts') },
   repo: { file: resolve(ROOT, 'apps/api/src/modules/auth/repo.ts') },
   service: { file: resolve(ROOT, 'apps/api/src/modules/auth/service.ts') },
   users: { file: resolve(ROOT, 'apps/api/src/modules/users/service.ts') },
+  routes: { file: resolve(ROOT, 'apps/api/src/modules/auth/routes.ts') },
+  privacy: { file: resolve(ROOT, 'apps/api/src/modules/privacy/repo.ts') },
 };
 
 const MUTANTS = [
@@ -50,6 +54,46 @@ const MUTANTS = [
     expect: 'two codes a day',
     from: '  if (recent.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {',
     to: '  if (recent.length > SIGN_IN_CODE_RULES.maxCodesPerDay) {',
+  },
+  {
+    id: 'A15',
+    target: 'repo',
+    why: 'the per-address lock is gone, so two requests arriving together both read "none so far" and both issue',
+    expect: 'arriving together',
+    from: '    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;\n',
+    to: '',
+  },
+  {
+    id: 'A16',
+    target: 'routes',
+    why: 'the ceiling across everyone is gone — a client varying the address sends an unbounded number of emails on Kd\'s bill',
+    expect: 'ceiling across ALL addresses',
+    from: '    if (count > deps.config.CODE_EMAILS_PER_DAY) {',
+    to: '    if (false) {',
+  },
+  {
+    id: 'A17',
+    target: 'privacy',
+    why: "PRIVACY: the Day-14 erasure no longer removes the address from sign_in_codes, so a purged person's email outlives §5.2's tombstone",
+    expect: 'address-keyed table',
+    suite: PURGE_SUITE,
+    from: "  await tx`\n    DELETE FROM sign_in_codes\n    WHERE email = (SELECT email FROM users WHERE id = ${userId})`;",
+    to: '  await Promise.resolve();',
+  },
+  {
+    id: 'A18',
+    target: 'codes',
+    why: 'asking for a code no longer says the same thing for every address — a refusal carries a different body when the account exists',
+    expect: 'never reveals',
+    from: '    if (sinceLast < gapMs) throw tooSoon(gapMs - sinceLast);',
+    to: '    if (sinceLast < gapMs) throw new AuthError(429, "code_too_soon", "Please wait.", 1);',
+    // NOTE: this mutant is expected ALIVE-by-design and is kept for the record:
+    // the never-reveals test compares a known and an unknown address through
+    // the SAME code path, so a change that affects both equally cannot be seen
+    // by it. What the test guards against is a branch on findUserByEmail in
+    // the send path, which this harness cannot express as a text mutant
+    // without inventing one. Recorded, not hidden (:27659).
+    aliveByDesign: true,
   },
   {
     id: 'A2',
@@ -152,8 +196,8 @@ const MUTANTS = [
     target: 'repo',
     why: "the day's count never forgets: yesterday's codes count for ever, so an address is locked out after its second code of all time",
     expect: 'two codes a day',
-    from: '    WHERE email = ${email} AND purpose = ${purpose} AND created_at >= ${since}',
-    to: '    WHERE email = ${email} AND purpose = ${purpose}',
+    from: '      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}',
+    to: '      WHERE email = ${input.email} AND purpose = ${input.purpose}',
   },
 ];
 
@@ -199,10 +243,10 @@ const tallied = (out) => {
   return /Tests\s+(?:\d+ failed \| )?\d+ (?:passed|failed)/.test(clean) && !/No test files found/.test(clean);
 };
 
-const run = (nameFilter) => {
+const run = (nameFilter, suite = SUITE) => {
   try {
     const out = execSync(
-      `corepack pnpm --filter api exec vitest run ${SUITE} -t ${JSON.stringify(nameFilter)}`,
+      `corepack pnpm --filter api exec vitest run ${suite} -t ${JSON.stringify(nameFilter)}`,
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024, env: process.env },
     );
     return { out, failed: false, fault: null };
@@ -216,8 +260,10 @@ const run = (nameFilter) => {
 
 // ── control: every filter GREEN and tallied before a byte is mutated ───────
 console.log('control (unmutated) — every filter must be GREEN and must tally ...');
-for (const filter of [...new Set(SELECTED.map((m) => m.expect))]) {
-  const { out, failed, fault } = run(filter);
+const controls = new Map();
+for (const m of SELECTED) controls.set(`${m.suite ?? SUITE} :: ${m.expect}`, { suite: m.suite ?? SUITE, filter: m.expect });
+for (const { suite, filter } of controls.values()) {
+  const { out, failed, fault } = run(filter, suite);
   if (fault !== null) abort(`control for ${JSON.stringify(filter)}: the RUNNER failed — ${fault}`);
   if (!tallied(out)) abort(`control for ${JSON.stringify(filter)}: no test tally — the filter matches no test.`);
   if (failed) abort(`control for ${JSON.stringify(filter)}: RED before any mutation.`);
@@ -235,7 +281,7 @@ for (const m of SELECTED) {
   let verdict;
   let fault = null;
   try {
-    const r = run(m.expect);
+    const r = run(m.expect, m.suite ?? SUITE);
     fault = r.fault;
     verdict = r.fault !== null ? 'FAULT' : !tallied(r.out) ? 'NO-TALLY' : r.failed ? 'RED' : 'ALIVE';
   } finally {
@@ -243,13 +289,14 @@ for (const m of SELECTED) {
     if (sha(file) !== before) abort(`${m.id}: restore of ${file} is NOT byte-exact. Fix the tree by hand before anything else.`);
   }
   if (fault !== null) abort(`${m.id}: the RUNNER failed — ${fault}. (File restored.)`);
-  results.push({ id: m.id, verdict, why: m.why, expect: m.expect });
-  console.log(`${verdict.padEnd(8)} ${m.id}  ${m.why}`);
+  const label = verdict === 'ALIVE' && m.aliveByDesign === true ? 'ALIVE (by design, see the row)' : verdict;
+  results.push({ id: m.id, verdict: label, counted: !(m.aliveByDesign === true), why: m.why, expect: m.expect });
+  console.log(`${label.padEnd(8)} ${m.id}  ${m.why}`);
 }
 
 console.log('\n| id | verdict | expected to notice |');
 console.log('|---|---|---|');
 for (const r of results) console.log(`| ${r.id} | ${r.verdict} | ${r.expect} |`);
-const alive = results.filter((r) => r.verdict !== 'RED');
-console.log(`\n${results.length} mutants, ${results.length - alive.length} RED, ${alive.length} not RED. Every file restored (sha256-verified).`);
+const alive = results.filter((r) => r.counted && r.verdict !== 'RED');
+console.log(`\n${results.length} mutants, ${results.filter((r) => r.verdict === 'RED').length} RED, ${alive.length} not RED and not by design. Every file restored (sha256-verified).`);
 process.exit(alive.length === 0 ? 0 : 1);

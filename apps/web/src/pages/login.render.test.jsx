@@ -29,14 +29,15 @@ vi.mock('react-hot-toast', () => ({
   default: { error: vi.fn(), success: vi.fn() },
 }));
 
+const toast = (await import('react-hot-toast')).default;
 const Login = (await import('./Login')).default;
 const { PublicRoute } = await import('../components/common/ProtectedRoute');
 const { GYM_DOOR, MEMBER_DOOR, readDoor } = await import('./landingRoute');
 
 /** A refusal shaped the way axios hands it back — the server's words are the
  *  thing the screen must show. */
-const refusal = (status, error, message) =>
-  Object.assign(new Error(message), { response: { status, data: { error, message } } });
+const refusal = (status, error, message, extra = {}) =>
+  Object.assign(new Error(message), { response: { status, data: { error, message, ...extra } } });
 
 // Landing markers. Asserting on these rather than on a spied `useNavigate` means
 // the real router resolves the real path — a destination that does not exist as
@@ -163,6 +164,21 @@ describe('from the address to the code', () => {
     expect(screen.queryByText('6-digit code')).toBeNull();
   });
 
+  it('"too soon" means a code is already in the inbox: goes to the code box with the SERVER\'s countdown', async () => {
+    // The review's High: "Use a different email" then the same address inside
+    // the gap used to strand the person on the address step, while a live code
+    // sat in their inbox — and waiting the gap out spent the day's last code.
+    authState.sendCode = vi.fn().mockRejectedValue(
+      refusal(429, 'code_too_soon', 'Please wait 37 seconds before asking for a new code.', { retryAfterSeconds: 37 }),
+    );
+    drawLogin();
+    typeEmail();
+    fireEvent.click(screen.getByText('Continue with email'));
+    expect(await screen.findByText('6-digit code')).toBeTruthy();
+    expect(screen.getByText('Resend code in 37s')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('offers Resend at once when the server says so, and asks again on press', async () => {
     authState.sendCode = vi.fn().mockResolvedValue({ resendAfterSeconds: 0, expiresInSeconds: 600 });
     drawLogin();
@@ -222,13 +238,21 @@ describe('the door decides where a proved code ends up', () => {
     expect(await screen.findByText('MEMBER APP')).toBeTruthy();
   });
 
-  it('sends a brand-new Train sign-in to the questionnaire first', async () => {
+  it('sends a brand-new Train sign-in to the questionnaire first, and says the account is ready', async () => {
     // A new account has no profile, so the gate reads false — straight to
     // onboarding, as the ROADMAP says ("signed in at once, straight to onboarding").
     authState.verifyCode = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: false }, isNewAccount: true });
     drawLogin();
     await signIn();
     expect(await screen.findByText('SET UP YOUR PROFILE')).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/account is ready/i));
+  });
+
+  it('a returning sign-in is NOT greeted as a new account', async () => {
+    drawLogin();
+    await signIn();
+    expect(await screen.findByText('MEMBER APP')).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('takes a brand-new Manage sign-in straight to the console — the questionnaire waits', async () => {

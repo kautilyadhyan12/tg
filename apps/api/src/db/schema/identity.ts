@@ -96,7 +96,7 @@ export const signInCodes = pgTable(
   (t) => [
     check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account')`),
     check("sign_in_codes_attempts_check", sql`${t.attempts} >= 0`),
-    index("sign_in_codes_email_purpose_created_idx").on(t.email, t.purpose, t.createdAt),
+    index("sign_in_codes_email_purpose_created_idx").on(t.email, t.purpose, t.createdAt.desc()),
     index("sign_in_codes_created_idx").on(t.createdAt),
   ],
 );

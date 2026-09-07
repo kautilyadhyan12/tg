@@ -163,6 +163,11 @@ export async function buildApp(
         error: err.code,
         message: err.message,
         requestId: req.id,
+        // A 429 from the code door carries the server's own countdown so the
+        // screen never invents one (AuthError.retryAfterSeconds).
+        ...(err instanceof AuthError && err.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: err.retryAfterSeconds }
+          : {}),
       });
       return;
     }
@@ -220,7 +225,7 @@ export async function buildApp(
   const usersEmailSender =
     overrides.usersEmailSender ??
     (transport !== null
-      ? createResendUsersEmailSender(transport, app.log)
+      ? createResendUsersEmailSender(transport, app.log, config.WEB_ORIGIN)
       : createDevUsersEmailSender(app.log, config));
 
   registerAuthenticate(app, { sql, config });

@@ -165,14 +165,18 @@ export function registerAuthRoutes(
   });
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The real limits are in the database (two codes a day per address, five
-  // guesses a code); these Redis buckets are the outer wall against a flood.
-  // Per-IP ceilings are wide on purpose: a gym induction day is thirty people
-  // signing up from one wi-fi (the join door's own recorded case).
+  // The per-ADDRESS limits are in the database (two codes a day, five guesses
+  // a code). These Redis buckets are the wall against a client that VARIES
+  // the address, which the per-address rule cannot see: every send is an
+  // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
+  // down for real users. So the per-IP ceiling is the same order as the
+  // per-address one (a gym induction day is thirty people on one wi-fi, which
+  // twenty an hour still admits over the day), and on top of it sits ONE
+  // ceiling on sends a day across everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
     max: 10,
-    ipMax: 100,
+    ipMax: 20,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
@@ -180,13 +184,29 @@ export function registerAuthRoutes(
   const codeVerifyLimit = createDualRateLimit({
     name: "code_verify",
     max: 20,
-    ipMax: 200,
+    ipMax: 40,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
   });
+  const DAY_S = 24 * 60 * 60;
+  const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const count = await deps.redis.incrWithTtl("rl:code_send:all:day", DAY_S);
+    if (count === null) {
+      // Redis down → open, never silently (rateLimit.ts's own rule).
+      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_day" }, "daily code ceiling failing open");
+      return;
+    }
+    if (count > deps.config.CODE_EMAILS_PER_DAY) {
+      await reply.status(429).send({
+        error: "code_ceiling",
+        message: "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
+        requestId: req.id,
+      });
+    }
+  };
 
-  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit] }, async (req, reply) => {
+  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit, dailySendCeiling] }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await service.requestSignInCode(authDeps, input.email);

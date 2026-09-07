@@ -1,5 +1,10 @@
 // The auth module's email seam. Three implementations:
-//   · log-only   — event names only, never a token, code or address (R3.10)
+//   · log-only   — event names only, never a token, code or address (R3.10).
+//                  It delivers NOTHING: the sign-in code method REJECTS so the
+//                  API can never say "we emailed you" over a send that did not
+//                  happen. The two password-era methods resolve quietly — their
+//                  routes are switched off on every screen and no caller
+//                  reports their delivery to a person.
 //   · dev        — logs the CODE and the ADDRESS, and refuses to exist in
 //                  production. This is how the app is tested on a laptop with
 //                  no Resend key (Kd's plan, 2026-09-07).
@@ -34,8 +39,8 @@ export function createLogOnlyEmailSender(log: FastifyBaseLogger): EmailSender {
       return Promise.resolve();
     },
     sendSignInCodeEmail: () => {
-      log.info({ event: "email.sign_in_code.queued" }, "email queued (log-only sender)");
-      return Promise.resolve();
+      log.info({ event: "email.sign_in_code.not_sent" }, "log-only sender delivers nothing");
+      return Promise.reject(new Error("log-only email sender: the sign-in code was NOT sent"));
     },
   };
 }

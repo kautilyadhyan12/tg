@@ -10,7 +10,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { requestCode } from "../src/modules/auth/codes.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { AuthError } from "../src/modules/auth/errors.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
 
 const url = process.env["DATABASE_URL"];
@@ -288,6 +290,64 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await send(email)).statusCode).toBe(200);
   });
 
+  it("two requests for one address arriving together issue ONE code, not two", { timeout: 30_000 }, async () => {
+    // The review's idempotency gap: a read-then-write day cap lets two
+    // simultaneous sends both pass. The issue transaction takes a per-address
+    // lock, so the second sees the first's row and is refused as too soon.
+    //
+    // DRIVEN THROUGH THIS SUITE'S OWN FIVE-CONNECTION POOL, not through the
+    // app: `buildApp` opens ONE connection, so three injected requests
+    // serialise on it and would pass with the lock deleted (measured — mutant
+    // A15 stayed ALIVE through the HTTP version). Production runs more than
+    // one API process, which is exactly the case the lock exists for.
+    const email = "code-burst@example.com";
+    const deps = { sql, config: loadConfig(baseEnv), log: api().log };
+    const sent: string[] = [];
+    const attempt = () =>
+      requestCode(deps, { email, purpose: "sign_in" }, (to) => {
+        sent.push(to);
+        return Promise.resolve();
+      }).then(
+        () => "issued",
+        (err: unknown) => (err instanceof AuthError ? err.code : "other"),
+      );
+    const outcomes = await Promise.all([attempt(), attempt(), attempt()]);
+    expect(outcomes.sort()).toEqual(["code_too_soon", "code_too_soon", "issued"]);
+    expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = ${email}`).length).toBe(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("asking never reveals whether the address has an account: the two answers are identical", { timeout: 30_000 }, async () => {
+    const known = "code-known@example.com";
+    const unknown = "code-unknown@example.com";
+    await sql`INSERT INTO users (email, display_name) VALUES (${known}, 'Known Person')`;
+    const a = await send(known);
+    const b = await send(unknown);
+    expect(a.statusCode).toBe(b.statusCode);
+    const strip = (body: string): Record<string, unknown> => {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      return Object.fromEntries(Object.entries(parsed).filter(([k]) => k !== "requestId"));
+    };
+    expect(strip(a.body)).toEqual(strip(b.body));
+    // Refusals agree too — a "too soon" for one and a "sent" for the other
+    // would be the oracle by the back door.
+    const a2 = await send(known);
+    const b2 = await send(unknown);
+    expect(a2.statusCode).toBe(b2.statusCode);
+    expect(strip(a2.body)).toEqual(strip(b2.body));
+  });
+
+  it("a 'too soon' refusal carries the server's own countdown for the screen", { timeout: 30_000 }, async () => {
+    const email = "code-countdown@example.com";
+    await send(email);
+    const res = await send(email);
+    expect(res.statusCode).toBe(429);
+    const body = JSON.parse(res.body) as { error: string; retryAfterSeconds: number };
+    expect(body.error).toBe("code_too_soon");
+    expect(body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(body.retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
   it("a code sent to one address opens NO other account (the address is the tenant)", { timeout: 30_000 }, async () => {
     const alice = "code-alice@example.com";
     const mallory = "code-mallory@example.com";
@@ -343,6 +403,39 @@ d("sign-in by email code (real Postgres)", () => {
       VALUES (${stale}, 'sign_in', repeat('0', 64), now() - interval '3 days', now() - interval '3 days')`;
     await send("code-pruner@example.com");
     expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = ${stale}`).length).toBe(0);
+  });
+
+  // ── the one ceiling across everyone ─────────────────────────────────────
+
+  it("stops sending codes for the day once the ceiling across ALL addresses is hit", { timeout: 60_000 }, async () => {
+    // The review's High: a client that varies the address is invisible to the
+    // per-address cap, and every send is an email Kd pays for. Its own app,
+    // because the ceiling counts in Redis for the life of the instance.
+    const capped = await buildApp(loadConfig({ ...baseEnv, CODE_EMAILS_PER_DAY: "2" }), {
+      emailSender: sender,
+      usersEmailSender: usersSender,
+    });
+    try {
+      const hit = (email: string) =>
+        capped.inject({
+          method: "POST",
+          url: "/v1/auth/code/send",
+          remoteAddress: nextIp(),
+          headers: { "content-type": "application/json" },
+          payload: JSON.stringify({ email }),
+        });
+      expect((await hit("code-ceiling-1@example.com")).statusCode).toBe(200);
+      expect((await hit("code-ceiling-2@example.com")).statusCode).toBe(200);
+      const third = await hit("code-ceiling-3@example.com");
+      expect(third.statusCode).toBe(429);
+      expect((JSON.parse(third.body) as { error: string }).error).toBe("code_ceiling");
+      expect((JSON.parse(third.body) as { message: string }).message).toMatch(/paused for today/i);
+      // Refused BEFORE anything was minted or sent.
+      expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = 'code-ceiling-3@example.com'`).length).toBe(0);
+      expect(sender.sent.some((s) => s.email === "code-ceiling-3@example.com")).toBe(false);
+    } finally {
+      await capped.close();
+    }
   });
 
   // ── deleting an account is confirmed with its own code ────────────────────

@@ -225,7 +225,10 @@ export async function deleteAccount(
     { email: row.email, purpose: "delete_account", code },
   );
   const deleted = await repo.softDeleteUser(deps.sql, userId);
-  // Already deleted: idempotent no-op — and no second undo email.
+  // null = the row stopped being active between the profile read above and
+  // this write (a racing second tap): quiet success, no second undo email.
+  // A repeat DELETE from a deleted session never gets here — authenticate
+  // and the active-only profile read both 401 first.
   if (deleted === null) return { emailSent: false };
   await revokeAllSessions(deps.sql, userId);
   // Memberships just closed = an entitlement change → bust (§4.1/§10 seam).

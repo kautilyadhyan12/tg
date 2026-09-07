@@ -110,6 +110,20 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM user_fitness_profiles WHERE user_id = ${userId}`;
 }
 
+/** Rows keyed on the person's ADDRESS rather than their id — `sign_in_codes`
+ *  (migration 0023) has no user_id and no foreign key, because a code is sent
+ *  to an address that may have no account yet. §5.2 nulls `users.email` at
+ *  Day 14 precisely to remove the address, so anything still holding it must
+ *  go in the same transaction, and it must go BEFORE the tombstone, which is
+ *  the only place the address can still be read from. The list in tables.ts
+ *  (`ADDRESS_KEYED_PURGE_TABLES`) is the reviewable claim; this is the
+ *  statement that honours it. */
+export async function deleteAddressKeyedRows(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`
+    DELETE FROM sign_in_codes
+    WHERE email = (SELECT email FROM users WHERE id = ${userId})`;
+}
+
 /** §5.2: "anonymize `users` row to a tombstone (email→null, display_name→
  *  'Deleted user', weight→null; row kept so FKs from audit/invoices
  *  resolve)". The row is NOT deleted and `status` stays 'deleted'.

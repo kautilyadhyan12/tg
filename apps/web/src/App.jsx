@@ -10,6 +10,7 @@ import AppLayout from './components/common/AppLayout';
 // Pages
 import Login           from './pages/Login';
 import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
+import RestoreAccount  from './pages/RestoreAccount';
 import Onboarding      from './pages/Onboarding';
 import Dashboard       from './pages/Dashboard';
 import ExerciseLibrary from './pages/ExerciseLibrary';
@@ -70,6 +71,9 @@ export default function App() {
             } />
             <Route path="/register" element={<Navigate to="/login" replace />} />
             <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+            {/* The deletion email's undo link (Part 4 §5.2). Bare route: the
+                account is deleted, so there is no session to gate on. */}
+            <Route path="/restore-account" element={<RestoreAccount />} />
             {/* Google OAuth landing. Bare route (NOT PublicRoute): the callback
                 set the session cookies, so this page reads the restored session
                 and routes to onboarding/dashboard itself (web-repoint Google half). */}

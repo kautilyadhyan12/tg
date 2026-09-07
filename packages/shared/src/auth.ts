@@ -96,7 +96,8 @@ export const authSessionResponseSchema = z.object({ user: authUserSchema });
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
 
 /** A verified code signs you in AND creates the account if the address is new
- *  — the screen needs to know which, and nothing else does. */
+ *  — the Get started screen greets a new account differently ("your account
+ *  is ready") from a returning one, and nothing else reads it. */
 export const verifyCodeResponseSchema = z.object({
   user: authUserSchema,
   isNewAccount: z.boolean(),
