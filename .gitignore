@@ -37,18 +37,18 @@ out/
 .DS_Store
 
 # ML artifacts (too big for git — download/train on setup)
-backend-ml/model_artifacts/*.pt
-backend-ml/model_artifacts/*.pkl
-backend-ml/model_artifacts/*.bin
-backend-ml/model_artifacts/*.onnx
-backend-ml/model_artifacts/faiss_index/
-ml-training/*/data/
-ml-training/*/checkpoints/
-ml-training/*/wandb/
-ml-training/*/runs/
+archive/legacy/backend-ml/model_artifacts/*.pt
+archive/legacy/backend-ml/model_artifacts/*.pkl
+archive/legacy/backend-ml/model_artifacts/*.bin
+archive/legacy/backend-ml/model_artifacts/*.onnx
+archive/legacy/backend-ml/model_artifacts/faiss_index/
+archive/legacy/ml-training/*/data/
+archive/legacy/ml-training/*/checkpoints/
+archive/legacy/ml-training/*/wandb/
+archive/legacy/ml-training/*/runs/
 
 # Notebooks heavy output
-ml-training/*/notebooks/*.html
+archive/legacy/ml-training/*/notebooks/*.html
 
 # Coverage
 coverage/
@@ -62,10 +62,10 @@ htmlcov/
 .turbo/
 
 # P1.3 recording rig — raw videos, pose model, debug frame dumps stay out of git
-backend-ml/recordings/
-backend-ml/models/
-backend-ml/*.png
-backend-ml/*.mp4
+archive/legacy/backend-ml/recordings/
+archive/legacy/backend-ml/models/
+archive/legacy/backend-ml/*.png
+archive/legacy/backend-ml/*.mp4
 
 # The camera's bundled assets (~25 MB): MediaPipe's WebAssembly runtime and the
 # pose model. Fetched and sha256-verified by `apps/web/tools/fetch-pose-assets.mjs`,
@@ -100,3 +100,7 @@ NEXT-*
 # local reminders to the chat ("never do X"), not project law — CLAUDE.md is.
 # Kd's ruling 2026-08-26: ignored, never committed.
 .claude/hookify.*
+
+# The archived review prompts are small and kept; their .diff outputs are derived from git history and are not.
+!archive/records/t3/*.md
+archive/records/t3/*.diff
