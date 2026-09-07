@@ -31,8 +31,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   the daily ceiling now counts emails sent, not requests (checked in the preHandler, stepped
   after the send resolves) · Resend says "New code sent." only when one was. Each fix has a test
   that was run red on the old code first; A16 re-run RED against its new anchor.
-- Second re-check (2026-09-08): zero High, three Low, all fixed in the fourth commit (a too-soon
-  Resend now says "Your last code is still valid"; review history trimmed from comments). CI green.
+- Re-checks on 2026-09-08 (three more commits, zero High at any point): a used code still holds the
+  sixty-second gap; a too-soon refusal claims only the wait, never that a code was sent or is still
+  valid; the too-soon header gives way to a timeless line when the countdown ends, and its words are
+  built once with the gap read from `SIGN_IN_CODE_RULES` in `@app/shared`. Each header claim is
+  pinned by a test that was run red against the old behaviour. CI green on a2881e6.
 - Kd delegated work sizing to the chat; Stage 1 items 3–7 split into lettered one-chat lines in
   `ROADMAP.md` (RULINGS 2026-09-08). The next chat starts at item 2, then 3a.
 - Open: Kd's click-through; then merge.
