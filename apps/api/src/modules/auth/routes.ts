@@ -190,16 +190,12 @@ export function registerAuthRoutes(
     redis: deps.redis,
   });
   const DAY_S = 24 * 60 * 60;
-  // The ceiling counts EMAILS, not requests: the key is read here and stepped
-  // only after a send has resolved (below), so a bad address, a "too soon",
-  // an address that already used its two, or a mail server that is down never
-  // spends one of the day's sends. Otherwise a handful of IPs could shut the
-  // door for everyone without a single email going out — the opposite of
-  // what the ceiling is for. Read-then-count lets requests in flight together
-  // overshoot by their own number, which is nothing against a bill-and-outage
-  // stop in the thousands. A missing key and a Redis outage both read as
-  // "none yet" and both open: codeSendLimit, which runs first on this route,
-  // has already logged the outage, so it is never a silent open.
+  // The ceiling counts EMAILS, not requests: read here, stepped only after a
+  // send has resolved (below), so a refusal never spends one of the day's sends.
+  // Read-then-count can overshoot by the requests in flight together, nothing
+  // against a stop in the thousands. A missing key and a Redis outage both
+  // read as "none yet" and open; codeSendLimit runs first and has already
+  // logged the outage, so it is never a silent open.
   const DAY_CEILING_KEY = "rl:code_send:all:day";
   const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const sentToday = Number((await deps.redis.get(DAY_CEILING_KEY)) ?? "0");

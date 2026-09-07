@@ -430,9 +430,7 @@ d("sign-in by email code (real Postgres)", () => {
 
       // The ceiling counts EMAILS, not requests. Four refusals that send
       // nothing — a bad address, a "too soon", a mail server that is down —
-      // must leave both of the day's two sends still available. (Re-check
-      // High: counting in the preHandler let a handful of IPs shut the door
-      // for everyone without a single email going out.)
+      // must leave both of the day's two sends still available.
       expect((await hit("not-an-address")).statusCode).toBe(400);
       expect((await hit(one)).statusCode).toBe(200); // 1 of 2
       expect(errorOf(await hit(one))).toBe("code_too_soon");

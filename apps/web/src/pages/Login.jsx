@@ -129,10 +129,13 @@ export default function Login() {
     // "New code sent." is said only when one WAS. A second tab on the same
     // address can press Resend after its own countdown while the first tab's
     // code is still inside the gap: the server refuses, the countdown takes
-    // the server's number, and the words stay true.
-    if ((await requestCode()) === 'sent') {
+    // the server's number, and the person is told the code they have is good.
+    const result = await requestCode();
+    if (result === 'sent') {
       setCode('');
       toast.success('New code sent.');
+    } else if (result === 'already-live') {
+      toast.success('Your last code is still valid — check your inbox.');
     }
   };
 

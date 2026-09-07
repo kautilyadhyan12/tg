@@ -190,10 +190,10 @@ describe('from the address to the code', () => {
     expect(toast.success).toHaveBeenCalledWith('New code sent.');
   });
 
-  it('Resend refused as "too soon" does NOT say a new code was sent; the countdown takes the server\'s number', async () => {
-    // Re-check High: two tabs on the same address. This tab's countdown has
-    // ended, the other tab's code is still inside the gap, the server refuses
-    // — and the screen used to say "New code sent." when none was.
+  it('Resend refused as "too soon" says the last code is still valid, never that a new one was sent', async () => {
+    // Two tabs on the same address: this tab's countdown has ended, the other
+    // tab's code is still inside the gap, the server refuses, so no new code
+    // was sent — and the person is told the one they have is good.
     authState.sendCode = vi
       .fn()
       .mockResolvedValueOnce({ resendAfterSeconds: 0, expiresInSeconds: 600 })
@@ -204,7 +204,8 @@ describe('from the address to the code', () => {
     await askForCode();
     fireEvent.click(screen.getByText('Resend code'));
     expect(await screen.findByText('Resend code in 41s')).toBeTruthy();
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalledWith('New code sent.');
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/still valid/i));
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('6-digit code')).toBeTruthy();
   });
