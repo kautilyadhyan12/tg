@@ -1,6 +1,86 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: **KD REPLACES THE TWO PEOPLE-PANELS WITH ONE RANKED LEADERBOARD, AND
+      CORRECTS WHAT A CHAT HAD WRITTEN DOWN AS "A GOAL"** (`b9c4b77`, DECISIONS
+      `:37031`). **DOCUMENTS ONLY — no `src` file, no test, no migration.**
+      `CARD-gym-leaderboard.md` is WRITTEN AND UNAPPROVED; only its `§L0` is at
+      a gate and **Kd has not answered it** (`:26777`).
+
+      **FOUR RULINGS, and R15 is a CORRECTION OF A CHAT rather than a new
+      decision.** A goal is *"burning this much calories , eating healthy food ,
+      achiving to do exercises recommended by the app or set by myself"* — **NOT
+      "how many days I intend to attend"**, which was the planning chat's
+      narrowing of R11's five words into a different feature, with three unruled
+      numbers underneath it that it then asked Kd to ratify. **THE QUESTION WAS
+      WRONG, NOT THE NUMBERS.** R16: both a daily AND a weekly goal are measured.
+      R17/R18: hiding is opt-out, it **GREYS the row instead of removing it**,
+      and it **never blinds the gym**.
+
+      **FIVE THINGS THE NEXT CHAT MUST NOT LOSE.**
+  1. **`PLAN-gym-leaderboard.md` §4's SCORE FORMULA IS DEAD FROM THE GOAL TERM
+     DOWN**, and the file carries a superseded banner saying so. Its §3 fear,
+     its rejected-designs table, §§5–7, §9's build notes and §10 all SURVIVE.
+     **The three "numbers not yet ruled" are VOID — they were the parameters of
+     a narrowing, not open questions.**
+  2. **`user_fitness_profiles.exercise_frequency` IS THE OBVIOUS WRONG BUILD.**
+     Days per week, defaulting to 3 in the wizard, sitting right there — and it
+     is EXACTLY the reading R15 struck. A chat looking for "the member's goal"
+     finds it in one grep and it will look like a gift.
+  3. **TWO OF THE FOUR GOAL TYPES DO NOT EXIST ANYWHERE** — nothing recommends
+     exercises (grep-verified, zero hits) and there is no self-set programme.
+     The other two ARE buildable (`workouts.kcal_point`;
+     `/v1/nutrition/targets` + `meal_logs`). **Sequenced, not dropped**; own
+     `OWED.md` line.
+  4. **THE GOAL POINTS' GYM-ANCHORING IS RECOMMENDED AND NOT RULED.** His *"ok"*
+     arrived in the same sentence as R16, so it may not be read as ruling the
+     anchoring alone. **Ask again in ONE line at `L1`'s gate.**
+  5. **`WHERE NOT leaderboard_opt_out` SERVING BOTH AUDIENCES IS THE OBVIOUS
+     BUILD AND IT SILENTLY BLINDS THE GYM** (R18). One column, two readers, and
+     only one of them obeys it.
+
+      **`§L0`, THE SLICE AT THE GATE — and its finding was re-derived from the
+      code, not taken from the review.** `listOrgsForUser`'s newest-message
+      lateral (`repo.ts:568-574`) carries two CORRECT tenancy predicates and
+      **nothing observes either**; the only test reading `latestNudge` builds one
+      gym and one member, so deleting `user_id` hands one member another
+      member's message and the suite stays green. **Owed: one test on
+      `orgs.cheers.test.ts:934`'s pattern (two gyms, two members, three distinct
+      presets, VALUES asserted never merely non-null) plus `O297`/`O298`. NO
+      source change, NO migration.** **Class-checked and it is ONE case** — the
+      cheer's identical lateral IS protected. **The lesson is the other half of
+      `:36907`'s: A COPIED LINE DOES NOT INHERIT THE ORIGINAL'S TESTS** — copied
+      mutants collide loudly and abort, a missing test is silent.
+
+      **AND THE THING THAT MAY ALREADY BE LOST: the T3's own findings were never
+      written to the repo.** `C/H-1` and `C/H-3` survive only as one-line
+      descriptions in the plan; the **"three Lows in `BACKLOG.md`" are not in
+      `BACKLOG.md`** — its newest block is the My Gyms round of 2026-09-02.
+      **A review whose output lives only in a chat is a review that did not
+      happen for anybody but that chat.** Kd was asked to paste it if that chat
+      is still open. Own `OWED.md` line.
+
+PROVE: **Documents only — no `src` file, no test, no migration changed, so no
+       suite was run and none is claimed.** Root guards, all green on the bytes
+       committed: harnesses **26 parse** · index **320 pointers resolve (319 on a
+       heading, 1 deliberate mid-entry), 1480 headings** · triggers **up to date,
+       1132 from 289 of 427** · smoke-folds OK. Always-read **2,850 = 1,311 +
+       1,450 + 89**, taken with the header's own command, **§2 UNMOVED at 89**.
+       Every factual claim in `:37031` was produced by a command run that
+       session (V1); Strava's behaviour was **web-searched, not recalled**
+       (V5, `:19560`).
+
+OPEN:  **KD HAS NOT ANSWERED `§L0`'s GATE** — the file list, the "no migration",
+       the test and the risks went to him and he stopped for the day. **Do not
+       write the test until he answers** (`:26777`). Also open: whether the T3's
+       output can still be recovered. `CLAUDE.md`'s pre-existing uncommitted edit
+       is STILL OUT (`:24559`) — not mine, not committed; `PASTE-THIS-NEXT.md` is
+       Kd's own note to himself and is deliberately untracked. **No dev server,
+       no container and no database was touched this session.**
+```
+
+
+```
 TASK: **"SLIPPING AWAY" — THE SERVER HALF IS BUILT (`cf394fa`, DECISIONS
       `:36907`). THE NEXT STEP IS T3 IN A FRESH CHAT**, then the web half in a
       third (Part I §7b's one-migration ceiling, §7c's the-reviewer-is-not-the-
