@@ -27,7 +27,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   ceiling across everyone (`CODE_EMAILS_PER_DAY`, default 5000) · the Day-14 purge deletes the
   address from `sign_in_codes` · the undo email is sent and its page `/restore-account` exists ·
   a per-address lock closes the day-cap race · `EMAIL_FROM` shape-checked at boot. Mutants now 18.
-- Open: reviewer's re-check of the fixes; Kd's click-through; then merge.
+- Re-check closed all ten and found two the fixes had introduced, both fixed in the third commit:
+  the daily ceiling now counts emails sent, not requests (checked in the preHandler, stepped
+  after the send resolves) · Resend says "New code sent." only when one was. Each fix has a test
+  that was run red on the old code first; A16 re-run RED against its new anchor.
+- Open: reviewer's re-check of those two only; Kd's click-through; then merge.
 
 ## 2026-09-07 · The reset (Fable 5.1, this session)
 

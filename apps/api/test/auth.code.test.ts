@@ -424,11 +424,25 @@ d("sign-in by email code (real Postgres)", () => {
           headers: { "content-type": "application/json" },
           payload: JSON.stringify({ email }),
         });
-      expect((await hit("code-ceiling-1@example.com")).statusCode).toBe(200);
-      expect((await hit("code-ceiling-2@example.com")).statusCode).toBe(200);
+      const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
+      const one = "code-ceiling-1@example.com";
+      const two = "code-ceiling-2@example.com";
+
+      // The ceiling counts EMAILS, not requests. Four refusals that send
+      // nothing — a bad address, a "too soon", a mail server that is down —
+      // must leave both of the day's two sends still available. (Re-check
+      // High: counting in the preHandler let a handful of IPs shut the door
+      // for everyone without a single email going out.)
+      expect((await hit("not-an-address")).statusCode).toBe(400);
+      expect((await hit(one)).statusCode).toBe(200); // 1 of 2
+      expect(errorOf(await hit(one))).toBe("code_too_soon");
+      sender.failNext.on = true;
+      expect(errorOf(await hit(two))).toBe("code_send_failed");
+      expect((await hit(two)).statusCode).toBe(200); // 2 of 2 — the failed send took its row back
+
       const third = await hit("code-ceiling-3@example.com");
       expect(third.statusCode).toBe(429);
-      expect((JSON.parse(third.body) as { error: string }).error).toBe("code_ceiling");
+      expect(errorOf(third)).toBe("code_ceiling");
       expect((JSON.parse(third.body) as { message: string }).message).toMatch(/paused for today/i);
       // Refused BEFORE anything was minted or sent.
       expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = 'code-ceiling-3@example.com'`).length).toBe(0);

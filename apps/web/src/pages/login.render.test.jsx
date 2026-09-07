@@ -179,7 +179,7 @@ describe('from the address to the code', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('offers Resend at once when the server says so, and asks again on press', async () => {
+  it('offers Resend at once when the server says so, asks again on press, and says a new code was sent', async () => {
     authState.sendCode = vi.fn().mockResolvedValue({ resendAfterSeconds: 0, expiresInSeconds: 600 });
     drawLogin();
     await askForCode();
@@ -187,6 +187,26 @@ describe('from the address to the code', () => {
     expect(resend.hasAttribute('disabled')).toBe(false);
     fireEvent.click(resend);
     await waitFor(() => expect(authState.sendCode).toHaveBeenCalledTimes(2));
+    expect(toast.success).toHaveBeenCalledWith('New code sent.');
+  });
+
+  it('Resend refused as "too soon" does NOT say a new code was sent; the countdown takes the server\'s number', async () => {
+    // Re-check High: two tabs on the same address. This tab's countdown has
+    // ended, the other tab's code is still inside the gap, the server refuses
+    // — and the screen used to say "New code sent." when none was.
+    authState.sendCode = vi
+      .fn()
+      .mockResolvedValueOnce({ resendAfterSeconds: 0, expiresInSeconds: 600 })
+      .mockRejectedValueOnce(
+        refusal(429, 'code_too_soon', 'Please wait 41 seconds before asking for a new code.', { retryAfterSeconds: 41 }),
+      );
+    drawLogin();
+    await askForCode();
+    fireEvent.click(screen.getByText('Resend code'));
+    expect(await screen.findByText('Resend code in 41s')).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('6-digit code')).toBeTruthy();
   });
 
   it('"Use a different email" goes back to the address step', async () => {

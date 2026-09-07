@@ -68,7 +68,7 @@ const MUTANTS = [
     target: 'routes',
     why: 'the ceiling across everyone is gone — a client varying the address sends an unbounded number of emails on Kd\'s bill',
     expect: 'ceiling across ALL addresses',
-    from: '    if (count > deps.config.CODE_EMAILS_PER_DAY) {',
+    from: '    if (sentToday >= deps.config.CODE_EMAILS_PER_DAY) {',
     to: '    if (false) {',
   },
   {

@@ -79,11 +79,18 @@ export default function Login() {
 
   const secondsToResend = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
+  // Asks the server for a code. Says which of three things happened, because
+  // two of them look the same to the address step and different to Resend:
+  //   'sent'         — a new code is on its way
+  //   'already-live' — the server refused as "too soon": a code is ALREADY in
+  //                    the inbox and still good, and the countdown now shows
+  //                    the server's own number
+  //   null           — refused for another reason; the words are on screen
   const requestCode = async () => {
     const address = email.trim();
     if (!address) {
       setProblem('Please type your email address.');
-      return false;
+      return null;
     }
     setBusy(true);
     setProblem('');
@@ -91,19 +98,15 @@ export default function Login() {
       const res = await sendCode(address);
       setResendAt(Date.now() + (res?.resendAfterSeconds ?? 0) * 1000);
       setNow(Date.now());
-      return true;
+      return 'sent';
     } catch (err) {
-      // "Too soon" means a code is ALREADY in the inbox and still good. The
-      // person is taken to the code box with the server's countdown rather
-      // than stranded on the address step — where waiting the gap out would
-      // spend the day's last code on a resend they never needed.
       if (err?.response?.data?.error === 'code_too_soon') {
         setResendAt(Date.now() + (err.response.data.retryAfterSeconds ?? 0) * 1000);
         setNow(Date.now());
-        return true;
+        return 'already-live';
       }
       setProblem(messageFrom(err, 'We could not send the code. Please try again.'));
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
@@ -111,7 +114,11 @@ export default function Login() {
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    if (await requestCode()) {
+    // Either way there is a good code in the inbox, so the code box is next.
+    // "Too soon" here is "Use a different email" then the same address inside
+    // the gap; stranding the person on the address step would make them wait
+    // the gap out and spend the day's last code on a resend they never needed.
+    if ((await requestCode()) !== null) {
       setCode('');
       setStep('code');
     }
@@ -119,7 +126,11 @@ export default function Login() {
 
   const handleResend = async () => {
     if (secondsToResend > 0 || busy) return;
-    if (await requestCode()) {
+    // "New code sent." is said only when one WAS. A second tab on the same
+    // address can press Resend after its own countdown while the first tab's
+    // code is still inside the gap: the server refuses, the countdown takes
+    // the server's number, and the words stay true.
+    if ((await requestCode()) === 'sent') {
       setCode('');
       toast.success('New code sent.');
     }

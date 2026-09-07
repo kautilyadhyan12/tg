@@ -190,14 +190,20 @@ export function registerAuthRoutes(
     redis: deps.redis,
   });
   const DAY_S = 24 * 60 * 60;
+  // The ceiling counts EMAILS, not requests: the key is read here and stepped
+  // only after a send has resolved (below), so a bad address, a "too soon",
+  // an address that already used its two, or a mail server that is down never
+  // spends one of the day's sends. Otherwise a handful of IPs could shut the
+  // door for everyone without a single email going out — the opposite of
+  // what the ceiling is for. Read-then-count lets requests in flight together
+  // overshoot by their own number, which is nothing against a bill-and-outage
+  // stop in the thousands. A missing key and a Redis outage both read as
+  // "none yet" and both open: codeSendLimit, which runs first on this route,
+  // has already logged the outage, so it is never a silent open.
+  const DAY_CEILING_KEY = "rl:code_send:all:day";
   const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const count = await deps.redis.incrWithTtl("rl:code_send:all:day", DAY_S);
-    if (count === null) {
-      // Redis down → open, never silently (rateLimit.ts's own rule).
-      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_day" }, "daily code ceiling failing open");
-      return;
-    }
-    if (count > deps.config.CODE_EMAILS_PER_DAY) {
+    const sentToday = Number((await deps.redis.get(DAY_CEILING_KEY)) ?? "0");
+    if (sentToday >= deps.config.CODE_EMAILS_PER_DAY) {
       await reply.status(429).send({
         error: "code_ceiling",
         message: "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
@@ -210,6 +216,8 @@ export function registerAuthRoutes(
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await service.requestSignInCode(authDeps, input.email);
+    // Only a send that resolved is counted against the day's ceiling.
+    await deps.redis.incrWithTtl(DAY_CEILING_KEY, DAY_S);
     // One fixed body for known AND unknown addresses — asking never reveals
     // whether an account exists.
     return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
