@@ -12,7 +12,7 @@ is here, the rest is under "After launch".
 ## Stage 0 — Reset (2026-09-07)
 
 - [x] Archive the record files, old backends and smoke sheets; write `CLAUDE.md`, `RULINGS.md`, `ROADMAP.md`, `HANDOFF.md`.
-- [ ] Merge `web-repoint` into `master`; delete merged branches; every feature from now on is a short branch and a pull request.
+- [x] Merge `web-repoint` into `master` (fast-forward, 2026-09-07, CI green); 47 merged remote branches and 37 local ones deleted; `web-repoint` retired. Every feature from now on is a short branch off `master` and a pull request.
 
 ## Stage 1 — The member's core, web first
 

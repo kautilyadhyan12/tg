@@ -14,6 +14,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   and env files. Git history is intact (renames). Nothing deleted.
 - Rewrote `CLAUDE.md` (the rules), created `RULINGS.md`, `ROADMAP.md`, this file; root `lint`
   no longer runs the record-file guards.
-- Open: merge `web-repoint` into `master` and delete merged branches (Stage 0 item 2), then
-  Stage 1 item 1 (sign-in by email code) starts in a fresh chat with a ten-line plan to Kd.
+- `master` now holds everything (fast-forwarded from `web-repoint`, CI green on the PR run);
+  49 remote and 37 local merged branches deleted; `web-repoint` retired. Only `master` and
+  the stale local `workout-calendar-parked` remain (its work was redone on the main line).
+- Open: Stage 1 item 1 (sign-in by email code) starts in a fresh chat, on a new branch off
+  `master`, with a ten-line plan to Kd first. Kd wants Fable at high effort for it.
 - Not touched this session: any `src` file, any test, any migration, the database, the dev servers.
