@@ -162,3 +162,4 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - Never remove a feature, hide it, or shrink a screen without Kd's explicit ruling. Off is not deleted.
 - Write to Kd in plain English, short, one decision at a time; a hazard comes with its solutions and a recommendation. *"i need solution not acknowledgement"* [archive :11072]
 - Never quote a number that was not produced by a command run this session.
+- 2026-09-08 · Sizing the work is the chat's job, not Kd's: *"do what is best not because i am asking you to"*. One roadmap line is one chat and one pull request; a chat that finds its line too big splits it in `ROADMAP.md` before building. Stage 1 items 3–7 were split that day.

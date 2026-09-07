@@ -31,7 +31,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   the daily ceiling now counts emails sent, not requests (checked in the preHandler, stepped
   after the send resolves) · Resend says "New code sent." only when one was. Each fix has a test
   that was run red on the old code first; A16 re-run RED against its new anchor.
-- Open: reviewer's re-check of those two only; Kd's click-through; then merge.
+- Second re-check (2026-09-08): zero High, three Low, all fixed in the fourth commit (a too-soon
+  Resend now says "Your last code is still valid"; review history trimmed from comments). CI green.
+- Kd delegated work sizing to the chat; Stage 1 items 3–7 split into lettered one-chat lines in
+  `ROADMAP.md` (RULINGS 2026-09-08). The next chat starts at item 2, then 3a.
+- Open: Kd's click-through; then merge.
 
 ## 2026-09-07 · The reset (Fable 5.1, this session)
 
