@@ -1,8 +1,10 @@
 // SIGN-IN BY 6-DIGIT EMAIL CODE — the rules, in one place (Kd 2026-09-07):
 //   · a code lasts ten minutes and a resend REPLACES it
 //   · the resend is offered after sixty seconds
-//   · two codes per address per rolling day (the first and its one resend);
-//     after that the address waits until tomorrow
+//   · two UNUSED codes per address per rolling day (the first and its one
+//     resend); after that the address waits until tomorrow. A code that
+//     signed the person in does not count (Kd 2026-09-08): signing in twice
+//     in a day is normal, and the cap is against emails nobody proved
 //   · five wrong guesses kill the code
 //   · the stored value is an HMAC, never the code; single use; one UPDATE
 //   · asking for a code never says whether the address has an account, and

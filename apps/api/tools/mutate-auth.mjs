@@ -199,6 +199,14 @@ const MUTANTS = [
     from: '      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}',
     to: '      WHERE email = ${input.email} AND purpose = ${input.purpose}',
   },
+  {
+    id: 'A19',
+    target: 'repo',
+    why: "a code that signed the person in counts against the day again, so two sign-ins and a resend lock an address out (Kd's 2026-09-08 amendment gone)",
+    expect: 'does not count against the day',
+    from: '        AND used_at IS NULL\n      ORDER BY created_at DESC`;\n    input.check',
+    to: '      ORDER BY created_at DESC`;\n    input.check',
+  },
 ];
 
 const STRIP_ANSI = /\x1b\[[0-9;]*m/g;

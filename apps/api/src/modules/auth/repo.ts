@@ -343,9 +343,11 @@ const signInCodeColumns = (r: SignInCodeDbRow): SignInCodeRow => ({
  *       code so far" and both issue (the day cap would otherwise be three);
  *    2. prune every row older than `pruneBefore` (the table's privacy
  *       guarantee — see the migration);
- *    3. read this address's codes since `since` (used or not, live or dead:
- *       the daily cap counts SENDS) and hand them to `check`, which THROWS to
- *       refuse — the transaction rolls back and nothing was written;
+ *    3. read this address's UNUSED codes since `since` (live or dead: the
+ *       daily cap counts sends nobody proved — a code that signed the person
+ *       in is a sign-in, not a send to cap, Kd 2026-09-08) and hand them to
+ *       `check`, which THROWS to refuse — the transaction rolls back and
+ *       nothing was written;
  *    4. retire this address's live code of the same purpose (a resend
  *       REPLACES, Kd's ruling) and insert the new one.
  *  Returns the new row's id so a failed send can take it back. */
@@ -369,6 +371,7 @@ export async function issueCode(
       SELECT id, code_hash, attempts, expires_at, used_at, created_at
       FROM sign_in_codes
       WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}
+        AND used_at IS NULL
       ORDER BY created_at DESC`;
     input.check(recent.map(signInCodeColumns));
     await tx`

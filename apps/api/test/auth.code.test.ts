@@ -290,6 +290,22 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await send(email)).statusCode).toBe(200);
   });
 
+  it("a code that signed you in does not count against the day: sign in, then two more codes are still allowed", { timeout: 30_000 }, async () => {
+    // Kd's amendment of 2026-09-08 after the click-through locked him out: a
+    // morning sign-in plus an evening sign-in with one resend is a normal day.
+    const email = "code-daycap-used@example.com";
+    expect((await send(email)).statusCode).toBe(200);
+    expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200); // used
+    await ageCodes(email, "61 seconds");
+    expect((await send(email)).statusCode).toBe(200); // unused 1 of 2
+    await ageCodes(email, "61 seconds");
+    expect((await send(email)).statusCode).toBe(200); // unused 2 of 2
+    await ageCodes(email, "61 seconds");
+    const fourth = await send(email);
+    expect(fourth.statusCode).toBe(429);
+    expect((JSON.parse(fourth.body) as { error: string }).error).toBe("code_limit");
+  });
+
   it("two requests for one address arriving together issue ONE code, not two", { timeout: 30_000 }, async () => {
     // The review's idempotency gap: a read-then-write day cap lets two
     // simultaneous sends both pass. The issue transaction takes a per-address

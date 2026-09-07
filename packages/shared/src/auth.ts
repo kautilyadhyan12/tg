@@ -49,7 +49,8 @@ export const SIGN_IN_CODE_RULES = {
   ttlSeconds: 600,
   /** A resend is offered after sixty seconds. */
   resendAfterSeconds: 60,
-  /** Two codes per address per rolling day — the first and its one resend. */
+  /** Two UNUSED codes per address per rolling day — the first and its one
+   *  resend. A code that signed the person in does not count. */
   maxCodesPerDay: 2,
   /** Five wrong guesses kill the code. */
   maxAttempts: 5,
