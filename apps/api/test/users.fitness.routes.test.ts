@@ -12,6 +12,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import type { UsersEmailSender } from "../src/modules/users/email.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -31,6 +32,17 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 const silentAuthSender = (): EmailSender => ({
   sendVerificationEmail: () => Promise.resolve(),
   sendPasswordResetEmail: () => Promise.resolve(),
+  sendSignInCodeEmail: () => Promise.resolve(),
+});
+
+/** Deleting an account needs the emailed code (2026-09-07); this captures it. */
+const deleteCodes: string[] = [];
+const capturingUsersSender = (): UsersEmailSender => ({
+  sendAccountDeletionEmail: () => Promise.resolve(),
+  sendAccountDeleteCodeEmail: (_e, code) => {
+    deleteCodes.push(code);
+    return Promise.resolve();
+  },
 });
 
 let ipCounter = 0;
@@ -105,7 +117,10 @@ d("users fitness-profile routes (real Postgres)", () => {
   beforeAll(async () => {
     // ON DELETE CASCADE clears user_fitness_profiles with its user.
     await sql`DELETE FROM users WHERE email LIKE 'ofp-%@example.com'`;
-    app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender() });
+    app = await buildApp(loadConfig(baseEnv), {
+      emailSender: silentAuthSender(),
+      usersEmailSender: capturingUsersSender(),
+    });
   }, 60_000);
 
   afterAll(async () => {
@@ -324,7 +339,10 @@ d("users fitness-profile routes (real Postgres)", () => {
 
   it("a soft-deleted user cannot write a profile (active-only upsert, Part 4 §5.2)", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("ofp-deleted@example.com");
-    const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies });
+    const sent = await inject({ method: "POST", url: "/v1/users/me/delete-code", cookies });
+    expect(sent.statusCode).toBe(200);
+    const code = deleteCodes[deleteCodes.length - 1];
+    const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code } });
     expect(del.statusCode).toBe(200);
 
     const res = await inject({

@@ -8,8 +8,11 @@ import {
   consumeRestoreToken,
   isUserEmailVerified,
   issueRestoreToken,
+  redeemEmailCode,
+  requestEmailCode,
   revokeAllSessions,
 } from "../auth/service.js";
+import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import type { UsersEmailSender } from "./email.js";
@@ -80,6 +83,7 @@ export class UsersError extends Error {
 
 export interface UsersDeps {
   sql: Sql;
+  config: AppConfig;
   redis: RedisLike;
   emailSender: UsersEmailSender;
   log: FastifyBaseLogger;
@@ -181,14 +185,45 @@ export async function putFitnessProfile(
   return toFitnessProfile(row);
 }
 
-/** Part 4 §5.2 Day 0: soft-delete + close memberships + drop push tokens
- *  (repo, one tx), revoke every session (auth service), then the undo email.
- *  Idempotent: deleting an already-deleted account is a quiet success —
- *  DELETE must never be an oracle or a retry hazard (R3.5 spirit). */
+/** Deleting an account is confirmed with a code emailed to the account's own
+ *  address (there is no password to ask for — Kd 2026-09-07). The address
+ *  comes from the signed-in user's own row, never from the request, so a code
+ *  can only ever be sent to, and proved for, the account that is deleting. */
+export async function requestDeleteCode(
+  deps: UsersDeps,
+  userId: string,
+): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+  const row = await repo.getProfile(deps.sql, userId);
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  if (row.email === null) {
+    throw new UsersError(400, "no_email", "This account has no email address, so a code cannot be sent.");
+  }
+  return await requestEmailCode(
+    { sql: deps.sql, config: deps.config, log: deps.log },
+    { email: row.email, purpose: "delete_account" },
+    (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
+  );
+}
+
+/** Part 4 §5.2 Day 0: prove the deletion code, then soft-delete + close
+ *  memberships + drop push tokens (repo, one tx), revoke every session (auth
+ *  service), then the undo email. Idempotent past the code: deleting an
+ *  already-deleted account is a quiet success — DELETE must never be an
+ *  oracle or a retry hazard (R3.5 spirit). */
 export async function deleteAccount(
   deps: UsersDeps,
   userId: string,
+  code: string,
 ): Promise<{ emailSent: boolean }> {
+  const row = await repo.getProfile(deps.sql, userId);
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  if (row.email === null) {
+    throw new UsersError(400, "no_email", "This account has no email address, so a code cannot be checked.");
+  }
+  await redeemEmailCode(
+    { sql: deps.sql, config: deps.config, log: deps.log },
+    { email: row.email, purpose: "delete_account", code },
+  );
   const deleted = await repo.softDeleteUser(deps.sql, userId);
   // Already deleted: idempotent no-op — and no second undo email.
   if (deleted === null) return { emailSent: false };

@@ -8,10 +8,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import { createDualRateLimit } from "../auth/rateLimit.js";
+import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
 import {
+  deleteAccountRequestSchema,
   putFitnessProfileRequestSchema,
   restoreAccountRequestSchema,
   updateProfileRequestSchema,
@@ -34,10 +36,11 @@ function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyR
 
 export function registerUserRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; emailSender?: UsersEmailSender },
+  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender },
 ): void {
   const usersDeps: service.UsersDeps = {
     sql: deps.sql,
+    config: deps.config,
     redis: deps.redis,
     emailSender: deps.emailSender ?? createLogOnlyUsersEmailSender(app.log),
     log: app.log,
@@ -77,8 +80,18 @@ export function registerUserRoutes(
     return reply.status(200).send({ fitnessProfile });
   });
 
+  // Step 1 of deleting: a code goes to the account's own address. The day cap
+  // and resend gap are the sign-in code's (counted separately, by purpose).
+  app.post("/v1/users/me/delete-code", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const rules = await service.requestDeleteCode(usersDeps, authedUserId(req));
+    return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
+  });
+
+  // Step 2: the code in the body proves it is the account holder deleting.
   app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req));
+    const input = parseBody(deleteAccountRequestSchema, req, reply);
+    if (input === null) return;
+    const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
     // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
     // (OAuth-only accounts have no address; sender may also have failed).
     // The number is interpolated from src/retention.ts, never restated: if

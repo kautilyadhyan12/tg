@@ -11,11 +11,16 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
 import { DPDP_RETENTION_MS } from "../../retention.js";
+import * as codes from "./codes.js";
+import type { CodePurpose, CodeSender } from "./codes.js";
 import type { EmailSender } from "./email.js";
+import { AuthError } from "./errors.js";
 import * as repo from "./repo.js";
 import type { HashAlgo } from "./repo.js";
 import { mintOpaqueToken, newFamilyId, sha256Hex, signAccessToken } from "./tokens.js";
 import type { AuthUser } from "./schemas.js";
+
+export { AuthError } from "./errors.js";
 
 // argon2id parameters — OWASP minimum (memory 19456 KiB, iterations 2,
 // parallelism 1). `algorithm: 2` is Algorithm.Argon2id; the library exports it
@@ -72,19 +77,6 @@ export const DUMMY_HASH = argon2HashSync("timing-equalizer-not-a-real-password",
 // verification) and :211 (1 h reset).
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
-
-/** Typed auth failure: `code`+`statusCode` feed the central error mapper
- *  (R8.1); message is already client-safe. */
-export class AuthError extends Error {
-  readonly statusCode: number;
-  readonly code: string;
-  constructor(statusCode: number, code: string, message: string) {
-    super(message);
-    this.name = "AuthError";
-    this.statusCode = statusCode;
-    this.code = code;
-  }
-}
 
 // The uniform credentials failure (R3.7: never distinguish which part failed).
 const invalidCredentials = () => new AuthError(401, "invalid_credentials", "Invalid email or password");
@@ -220,12 +212,13 @@ function oauthDisplayName(name: string | null): string {
   return trimmed.length > 0 ? trimmed.slice(0, 100) : "New User";
 }
 
-/** Record email-verified once for an OAuth account (idempotent — skips if a
- *  verify_email marker already exists), using the derivation isEmailVerified()
- *  already reads (DECISIONS: no verified column). */
-async function ensureOAuthEmailVerified(deps: AuthDeps, userId: string): Promise<void> {
+/** Record email-verified once (idempotent — skips if a verify_email marker
+ *  already exists), using the derivation isEmailVerified() already reads
+ *  (DECISIONS: no verified column). Google asserts the address; a proved
+ *  sign-in code proves it. */
+async function ensureEmailVerified(deps: AuthDeps, userId: string): Promise<void> {
   if (await repo.isEmailVerified(deps.sql, userId)) return;
-  await repo.recordVerifiedOAuthEmail(deps.sql, userId, sha256Hex(mintOpaqueToken()));
+  await repo.recordVerifiedEmail(deps.sql, userId, sha256Hex(mintOpaqueToken()));
 }
 
 /** Google sign-in: log in the linked identity, else link Google to an existing
@@ -250,12 +243,12 @@ export async function googleSignIn(
   if (byEmail !== null) {
     if (byEmail.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: byEmail.id, provider: "google", subject: identity.subject });
-    await ensureOAuthEmailVerified(deps, byEmail.id);
+    await ensureEmailVerified(deps,byEmail.id);
     return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta) };
   }
 
   // 3. Brand-new OAuth-only user from the Google profile.
-  const newUserId = await repo.createOAuthUser(deps.sql, {
+  const newUserId = await repo.createPasswordlessUser(deps.sql, {
     email: identity.email,
     displayName: oauthDisplayName(identity.name),
   });
@@ -264,14 +257,99 @@ export async function googleSignIn(
     const raced = await repo.findUserByEmail(deps.sql, identity.email);
     if (raced === null || raced.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: raced.id, provider: "google", subject: identity.subject });
-    await ensureOAuthEmailVerified(deps, raced.id);
+    await ensureEmailVerified(deps,raced.id);
     return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta) };
   }
   await repo.linkAuthIdentity(deps.sql, { userId: newUserId, provider: "google", subject: identity.subject });
-  await ensureOAuthEmailVerified(deps, newUserId);
+  await ensureEmailVerified(deps,newUserId);
   const created = await repo.findUserById(deps.sql, newUserId);
   if (created === null) throw new Error("created Google user could not be re-read");
   return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta) };
+}
+
+// ── sign-in by email code (Kd 2026-09-07) ───────────────────────────────────
+
+/** The starting display name for an account made by proving an email: the
+ *  part before the @, the person's own data rather than an invented one
+ *  (RULINGS: no invented defaults). Onboarding v2's "about you" screen is
+ *  where they set the real one. Bounded like the OAuth fallback. */
+function displayNameFromEmail(email: string): string {
+  const local = email.split("@")[0]?.trim() ?? "";
+  return local.length > 0 ? local.slice(0, 100) : "New User";
+}
+
+const codeDeps = (deps: AuthDeps): codes.CodeDeps => ({ sql: deps.sql, config: deps.config, log: deps.log });
+
+/** Ask for a sign-in code. Same answer whether or not the address has an
+ *  account, and no account is created here. */
+export async function requestSignInCode(
+  deps: AuthDeps,
+  email: string,
+): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+  return await codes.requestCode(codeDeps(deps), { email, purpose: "sign_in" }, (to, code) =>
+    deps.emailSender.sendSignInCodeEmail(to, code),
+  );
+}
+
+/** A proved code signs the address in — and creates the account first if the
+ *  address is new. Returns a session exactly like password or Google login. */
+export async function signInWithCode(
+  deps: AuthDeps,
+  input: { email: string; code: string },
+  meta: RequestMeta,
+): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
+  await codes.redeemCode(codeDeps(deps), { email: input.email, purpose: "sign_in", code: input.code });
+
+  let user = await repo.findUserByEmail(deps.sql, input.email);
+  let isNewAccount = false;
+  if (user === null) {
+    const newUserId = await repo.createPasswordlessUser(deps.sql, {
+      email: input.email,
+      displayName: displayNameFromEmail(input.email),
+    });
+    if (newUserId === null) {
+      // Lost a concurrent create race on the email → the other one is ours.
+      user = await repo.findUserByEmail(deps.sql, input.email);
+    } else {
+      user = await repo.findUserById(deps.sql, newUserId);
+      isNewAccount = true;
+    }
+  }
+  if (user === null) throw new Error("code sign-in user could not be re-read");
+  if (user.status !== "active") {
+    // The person has just PROVED they hold the address, so telling them their
+    // own account is mid-deletion reveals nothing to a stranger.
+    throw new AuthError(
+      403,
+      "account_unavailable",
+      "This account is being deleted. Use the link in the email we sent you to restore it, then try again.",
+    );
+  }
+  await ensureEmailVerified(deps, user.id);
+  return {
+    user: await toAuthUser(deps.sql, user),
+    tokens: await issueSession(deps, user.id, meta),
+    isNewAccount,
+  };
+}
+
+// ── narrow code exports for the users module (R7.1) ─────────────────────────
+// Deleting an account is confirmed with a code of its own purpose. The users
+// module reaches the mechanism through these and never through the repo.
+
+export async function requestEmailCode(
+  deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
+  input: { email: string; purpose: CodePurpose },
+  send: CodeSender,
+): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+  return await codes.requestCode(deps, input, send);
+}
+
+export async function redeemEmailCode(
+  deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
+  input: { email: string; purpose: CodePurpose; code: string },
+): Promise<void> {
+  await codes.redeemCode(deps, input);
 }
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────

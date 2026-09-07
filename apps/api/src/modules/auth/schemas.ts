@@ -9,6 +9,8 @@ export {
   registerRequestSchema,
   registerResponseSchema,
   resetPasswordRequestSchema,
+  sendCodeRequestSchema,
+  verifyCodeRequestSchema,
   verifyEmailRequestSchema,
 } from "@app/shared";
 export type {
@@ -20,5 +22,7 @@ export type {
   RegisterRequest,
   RegisterResponse,
   ResetPasswordRequest,
+  SendCodeRequest,
+  VerifyCodeRequest,
   VerifyEmailRequest,
 } from "@app/shared";

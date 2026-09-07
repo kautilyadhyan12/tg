@@ -122,6 +122,29 @@ export function AuthProvider({ children }) {
     return { ...res.data, user };
   };
 
+  // ── Sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
+  // Step 1 sends the code; the server's reply carries the countdown the screen
+  // shows (resendAfterSeconds), so the screen never invents a number.
+  const sendCode = async (email) => {
+    const res = await authService.sendCode(email);
+    return res.data;
+  };
+
+  // Step 2: a proved code is a session exactly like login above — same
+  // adoptSession, same profile read for the onboarding gate, same timezone
+  // capture. A brand-new account has no profile row, so the gate reads false
+  // and the wizard is where it lands.
+  const verifyCode = async (email, code) => {
+    const res = await authService.verifyCode(email, code);
+    const authUser = res.data.user;
+    adoptSession(authUser);
+    const { onboardingCompleted, timezone } = await fetchProfileFacts();
+    const user = { ...authUser, onboardingCompleted };
+    setUser(user);
+    void syncTimezone(timezone);
+    return { ...res.data, user };
+  };
+
   // ── Register ──────────────────────────────────────────────────────────────
   // New API field is `displayName` (shared registerRequestSchema); the form
   // still collects `fullName`, so map it here.
@@ -177,6 +200,8 @@ export function AuthProvider({ children }) {
     // (the shared-browser queue hazard Card 2 closed). Change the user only via
     // login / updateUser, which route through adoptSession. (web-repoint Google half.)
     loading,
+    sendCode,
+    verifyCode,
     login,
     logout,
     register,

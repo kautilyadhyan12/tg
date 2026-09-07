@@ -41,7 +41,8 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-19 · The two doors are the ONLY way between the member app and the console; no crossing links inside. [archive :11616]
 - 2026-08-19 · Staff and coaches use the same one-account model; the owner invites them by email. [archive :11181]
 - 2026-08-20 · Phone OTP at sign-up: NO. *"phone otp cancel aswell"* [archive :12600]
-- 2026-09-07 · Sign-in by 6-digit email code is the main way in; Google second; Apple on the iPhone app; a password is optional, added in Settings. A code lasts 10 minutes and a resend replaces it; first resend after 60 seconds, second after 5 minutes, then three codes a day per address and the address waits until tomorrow.
+- 2026-09-07 · Sign-in by 6-digit email code is the main way in; Google second; Apple on the iPhone app. A code lasts 10 minutes and a resend replaces it. **AMENDED the same day** (was: optional password in Settings; resends at 60 s and 5 min; three codes a day): NO password anywhere — *"professional ones does not have passwords"*; ONE resend per code, after 60 seconds; at most two codes a day per address, then the address waits until tomorrow. Deleting an account is confirmed with a code emailed to the account's own address.
+- 2026-09-07 · Email goes out through Resend. Free plan while building and testing; Pro ($20 a month, from their pricing page that day) the day the first gym signs. Kd's account, key and verified domain; the app boots in production only with the key set.
 - 2026-09-07 · Organisation types: gym, studio, personal trainer. A trainer's clients join by code like members; opening hours are optional for a trainer. (2026-08-18: *"no clinic will be there only gyms and fitness centers"* — clinics stay out. [archive :10248])
 - 2026-09-07 · Age is asked as a plain number, not a birth year. The app is for 16 and over.
 

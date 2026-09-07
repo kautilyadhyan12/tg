@@ -77,6 +77,30 @@ export const oneTimeTokens = pgTable(
   ],
 );
 
+// Sign-in by 6-digit email code (Kd 2026-09-07; migration 0023). Keyed on the
+// ADDRESS, not a user: the account is created when the code is proved. The
+// stored value is an HMAC under a server secret, never the code. Rows are
+// pruned two days after creation on every send — see the migration.
+export const signInCodes = pgTable(
+  "sign_in_codes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: citext("email").notNull(),
+    purpose: text("purpose").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account')`),
+    check("sign_in_codes_attempts_check", sql`${t.attempts} >= 0`),
+    index("sign_in_codes_email_purpose_created_idx").on(t.email, t.purpose, t.createdAt),
+    index("sign_in_codes_created_idx").on(t.createdAt),
+  ],
+);
+
 export const refreshTokens = pgTable(
   "refresh_tokens", // rotation + reuse detection (v1 §6.1)
   {

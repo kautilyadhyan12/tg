@@ -613,6 +613,50 @@ d("0001_init on a real database", () => {
     expect(inCheck).not.toEqual([...GYM_CHEER_PRESETS].sort());
   });
 
+  /** `0023`'s SIGN-IN CODE TABLE, read back off the deployed catalogue like
+   *  `0017`'s and `0019`'s — never off the `.sql`. The purpose CHECK is what
+   *  keeps the sign-in door and the deletion confirmation two different keys
+   *  (a code for one must never open the other); the attempts CHECK is the
+   *  floor under "five wrong guesses". Both are proven by CAUSING them. */
+  it("0023's sign-in code constraints exist on the deployed database", async () => {
+    const rows = await sql<{ name: string; def: string }[]>`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'c'
+      ORDER BY conname`;
+    const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
+    expect([...byName.keys()].sort()).toEqual(["sign_in_codes_attempts_check", "sign_in_codes_purpose_check"]);
+    expect(byName.get("sign_in_codes_purpose_check")).toContain("'sign_in'");
+    expect(byName.get("sign_in_codes_purpose_check")).toContain("'delete_account'");
+    expect(byName.get("sign_in_codes_attempts_check")).toContain("attempts >= 0");
+
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+      VALUES ('zz-0023@example.com', 'reset_password', repeat('0', 64), now())`);
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, attempts)
+      VALUES ('zz-0023@example.com', 'sign_in', repeat('0', 64), now(), -1)`);
+    // Positive control, rolled back: a legitimate row is accepted.
+    let accepted = false;
+    try {
+      await sql.begin(async (tx) => {
+        await tx`
+          INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+          VALUES ('zz-0023@example.com', 'delete_account', repeat('0', 64), now())`;
+        accepted = true;
+        throw new Error("ROLLBACK");
+      });
+    } catch {
+      /* rolled back on purpose */
+    }
+    expect(accepted).toBe(true);
+    // No FK to users — by design (an address may have no account yet).
+    const fks = await sql`
+      SELECT 1 FROM pg_constraint WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'f'`;
+    expect(fks).toHaveLength(0);
+  });
+
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the
    *  gym-details card and shipping DEAD.
    *

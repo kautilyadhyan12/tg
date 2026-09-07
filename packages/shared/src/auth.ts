@@ -39,6 +39,39 @@ export const resetPasswordRequestSchema = z
   .strict();
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
 
+// ── sign-in by 6-digit email code (Kd ruling 2026-09-07, amended the same day:
+// one resend per code, at most two codes a day per address) ─────────────────
+
+/** The rules the SERVER enforces and the SCREEN describes — one home, so the
+ *  countdown a person watches and the refusal they get can never disagree. */
+export const SIGN_IN_CODE_RULES = {
+  /** A code is good for ten minutes. */
+  ttlSeconds: 600,
+  /** A resend is offered after sixty seconds. */
+  resendAfterSeconds: 60,
+  /** Two codes per address per rolling day — the first and its one resend. */
+  maxCodesPerDay: 2,
+  /** Five wrong guesses kill the code. */
+  maxAttempts: 5,
+} as const;
+
+export const signInCodeSchema = z.string().regex(/^\d{6}$/, "six digits");
+
+export const sendCodeRequestSchema = z.object({ email: authEmailSchema }).strict();
+export type SendCodeRequest = z.infer<typeof sendCodeRequestSchema>;
+
+export const sendCodeResponseSchema = z.object({
+  message: z.string(),
+  resendAfterSeconds: z.number().int().nonnegative(),
+  expiresInSeconds: z.number().int().positive(),
+});
+export type SendCodeResponse = z.infer<typeof sendCodeResponseSchema>;
+
+export const verifyCodeRequestSchema = z
+  .object({ email: authEmailSchema, code: signInCodeSchema })
+  .strict();
+export type VerifyCodeRequest = z.infer<typeof verifyCodeRequestSchema>;
+
 export const changePasswordRequestSchema = z
   .object({
     currentPassword: z.string().min(1).max(128),
@@ -61,6 +94,14 @@ export type AuthUser = z.infer<typeof authUserSchema>;
 
 export const authSessionResponseSchema = z.object({ user: authUserSchema });
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
+
+/** A verified code signs you in AND creates the account if the address is new
+ *  — the screen needs to know which, and nothing else does. */
+export const verifyCodeResponseSchema = z.object({
+  user: authUserSchema,
+  isNewAccount: z.boolean(),
+});
+export type VerifyCodeResponse = z.infer<typeof verifyCodeResponseSchema>;
 
 export const registerResponseSchema = z.object({
   userId: z.string().uuid(),

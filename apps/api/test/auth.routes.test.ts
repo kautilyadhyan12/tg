@@ -40,6 +40,7 @@ function capturingSender(): EmailSender & { verification: string[]; reset: strin
       reset.push(raw);
       return Promise.resolve();
     },
+    sendSignInCodeEmail: () => Promise.resolve(),
   };
 }
 

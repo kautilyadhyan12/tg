@@ -147,6 +147,7 @@ describe("login timing equalizer (authController.js:14-18 port)", () => {
   const emailSender: EmailSender = {
     sendVerificationEmail: () => Promise.resolve(),
     sendPasswordResetEmail: () => Promise.resolve(),
+    sendSignInCodeEmail: () => Promise.resolve(),
   };
 
   it("unknown email STILL runs one dummy verify, then the uniform 401", async () => {

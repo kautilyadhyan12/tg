@@ -17,6 +17,8 @@ import {
   loginRequestSchema,
   registerRequestSchema,
   resetPasswordRequestSchema,
+  sendCodeRequestSchema,
+  verifyCodeRequestSchema,
   verifyEmailRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
@@ -160,6 +162,45 @@ export function registerAuthRoutes(
     windowMs: HOUR_MS,
     identifier: () => null,
     redis: deps.redis,
+  });
+
+  // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
+  // The real limits are in the database (two codes a day per address, five
+  // guesses a code); these Redis buckets are the outer wall against a flood.
+  // Per-IP ceilings are wide on purpose: a gym induction day is thirty people
+  // signing up from one wi-fi (the join door's own recorded case).
+  const codeSendLimit = createDualRateLimit({
+    name: "code_send",
+    max: 10,
+    ipMax: 100,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
+  const codeVerifyLimit = createDualRateLimit({
+    name: "code_verify",
+    max: 20,
+    ipMax: 200,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
+
+  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit] }, async (req, reply) => {
+    const input = parseBody(sendCodeRequestSchema, req, reply);
+    if (input === null) return;
+    const rules = await service.requestSignInCode(authDeps, input.email);
+    // One fixed body for known AND unknown addresses — asking never reveals
+    // whether an account exists.
+    return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
+  });
+
+  app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit] }, async (req, reply) => {
+    const input = parseBody(verifyCodeRequestSchema, req, reply);
+    if (input === null) return;
+    const { user, tokens, isNewAccount } = await service.signInWithCode(authDeps, input, requestMeta(req));
+    setSessionCookies(reply, deps.config, tokens);
+    return reply.status(200).send({ user, isNewAccount });
   });
 
   app.post("/v1/auth/register", { preHandler: [authLimit] }, async (req, reply) => {

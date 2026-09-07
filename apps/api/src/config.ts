@@ -50,6 +50,14 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  // Sign-in by email code (Kd 2026-09-07): codes go out through Resend. Both
+  // unset in dev/test = the DEV sender prints the code in the server log;
+  // REQUIRED in production (refinement below) — a production box with no way
+  // to send a code is a product nobody can sign in to. EMAIL_FROM is the
+  // sender line Resend expects, e.g. `AI Home Gym <hello@your-domain>`, on a
+  // domain verified in the Resend dashboard.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().trim().min(3).max(254).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -59,6 +67,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
       path: ["REDIS_URL"],
       message: "REDIS_URL is required in production (quotas/entitlement cache)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.RESEND_API_KEY !== undefined, {
+      path: ["RESEND_API_KEY"],
+      message: "RESEND_API_KEY is required in production (sign-in codes are emailed)",
+    })
+    .refine((c) => c.RESEND_API_KEY === undefined || c.EMAIL_FROM !== undefined, {
+      path: ["EMAIL_FROM"],
+      message: "EMAIL_FROM is required when RESEND_API_KEY is set",
     })
     .safeParse(env);
   if (!parsed.success) {

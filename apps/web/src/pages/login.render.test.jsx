@@ -1,9 +1,12 @@
-// The login door, in a browser-shaped test.
+// The Get started screen, in a browser-shaped test (Kd 2026-09-07: sign-in
+// by 6-digit email code is the main way in; Google second; no password).
 //
-// The pure helpers next door prove the decision; these prove the SCREEN offers
-// it and that pressing a door actually changes where a real sign-in ends up.
-// Both are needed: a source assertion can be spelled around, and the decision
-// being right is worth nothing if the button is not wired to it.
+// The pure helpers next door prove the landing decision; these prove the
+// SCREEN offers the two doors, walks a person from address to code to the
+// right place, shows the server's words when a code is refused, and never
+// draws a password box. Both are needed: a source assertion can be spelled
+// around, and the decision being right is worth nothing if the button is not
+// wired to it.
 //
 // `PublicRoute` is exercised here too — it is the second place a signed-in
 // person gets sent somewhere, and it used to spell the destination itself.
@@ -11,9 +14,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-// One mutable auth state serves both subjects: `Login` reads `login`, and
-// `ProtectedRoute` (which imports the same module) reads `user`/`loading`.
-const authState = { user: null, loading: false, login: vi.fn() };
+// One mutable auth state serves both subjects: `Login` reads `sendCode` and
+// `verifyCode`; `ProtectedRoute` (same module) reads `user`/`loading`.
+const authState = { user: null, loading: false, sendCode: vi.fn(), verifyCode: vi.fn() };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => authState }));
 
 // The overlay's real 500 ms timer would make every assertion race a clock; the
@@ -29,6 +32,11 @@ vi.mock('react-hot-toast', () => ({
 const Login = (await import('./Login')).default;
 const { PublicRoute } = await import('../components/common/ProtectedRoute');
 const { GYM_DOOR, MEMBER_DOOR, readDoor } = await import('./landingRoute');
+
+/** A refusal shaped the way axios hands it back — the server's words are the
+ *  thing the screen must show. */
+const refusal = (status, error, message) =>
+  Object.assign(new Error(message), { response: { status, data: { error, message } } });
 
 // Landing markers. Asserting on these rather than on a spied `useNavigate` means
 // the real router resolves the real path — a destination that does not exist as
@@ -64,16 +72,26 @@ const drawPublicRoute = () =>
     </MemoryRouter>,
   );
 
+const TRAIN = 'Train';
+const MANAGE = 'Manage my gym, studio or clients';
 const pressDoor = (label) => fireEvent.click(screen.getByText(label));
 
-const signIn = () => {
-  fireEvent.change(document.querySelector('input[autocomplete="email"]'), {
-    target: { value: 'kd@example.com' },
-  });
-  fireEvent.change(document.querySelector('input[autocomplete="current-password"]'), {
-    target: { value: 'Passw0rd!' },
-  });
-  fireEvent.click(screen.getByText('Sign In'));
+const typeEmail = (value = 'kd@example.com') =>
+  fireEvent.change(document.querySelector('input[autocomplete="email"]'), { target: { value } });
+
+const askForCode = async (email) => {
+  typeEmail(email);
+  fireEvent.click(screen.getByText('Continue with email'));
+  await screen.findByText('6-digit code');
+};
+
+const typeCode = (value) =>
+  fireEvent.change(document.querySelector('input[autocomplete="one-time-code"]'), { target: { value } });
+
+const signIn = async () => {
+  await askForCode();
+  typeCode('123456');
+  fireEvent.click(screen.getByText('Continue'));
 };
 
 beforeEach(() => {
@@ -81,62 +99,145 @@ beforeEach(() => {
   window.sessionStorage.clear();
   authState.user = null;
   authState.loading = false;
-  authState.login = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: true } });
+  authState.sendCode = vi.fn().mockResolvedValue({ resendAfterSeconds: 60, expiresInSeconds: 600 });
+  authState.verifyCode = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: true }, isNewAccount: false });
 });
 
 afterEach(() => cleanup());
 
 // ── The door on screen ──────────────────────────────────────────────────────
 
-describe('the login page asks which door you came for', () => {
-  it('offers both doors, with the member one chosen by default', () => {
+describe('the Get started screen asks which door you came for', () => {
+  it('offers Train and Manage, with Train chosen by default', () => {
     drawLogin();
-    expect(screen.getByText("I'm a member").getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('I run a gym').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText(TRAIN).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(MANAGE).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('keeps ONE email and password box whichever door is pressed', () => {
-    // Two DOORS, one ACCOUNT: the door must not turn into a second sign-in form,
-    // because the same person is deliberately both a member and an owner.
+  it('keeps ONE email box whichever door is pressed, and NO password box at all', () => {
+    // Two DOORS, one ACCOUNT: the door must not turn into a second form. And
+    // the password is gone from this screen entirely (Kd 2026-09-07).
     drawLogin();
-    pressDoor('I run a gym');
+    pressDoor(MANAGE);
     expect(document.querySelectorAll('input[autocomplete="email"]').length).toBe(1);
-    expect(document.querySelectorAll('input[autocomplete="current-password"]').length).toBe(1);
+    expect(document.querySelectorAll('input[type="password"]').length).toBe(0);
+    expect(screen.queryByText(/forgot password/i)).toBeNull();
+    expect(screen.queryByText(/create an account/i)).toBeNull();
+  });
+
+  it('still offers Google as the second way in', () => {
+    drawLogin();
+    expect(screen.getByText('Continue with Google')).toBeTruthy();
   });
 });
 
-// ── Where a sign-in ends up ─────────────────────────────────────────────────
+// ── Address, then code ──────────────────────────────────────────────────────
 
-describe('the door decides where signing in ends up', () => {
-  it('takes the gym door to the console', async () => {
+describe('from the address to the code', () => {
+  it('asks the server for a code for the typed address and moves to the code step', async () => {
     drawLogin();
-    pressDoor('I run a gym');
-    signIn();
+    await askForCode('  Kd@Example.com ');
+    expect(authState.sendCode).toHaveBeenCalledWith('Kd@Example.com');
+    expect(screen.getByText(/we sent a 6-digit code to/i)).toBeTruthy();
+    expect(screen.getByText('Kd@Example.com')).toBeTruthy();
+    // The screen never invents the countdown — it shows the server's number.
+    expect(screen.getByText('Resend code in 60s')).toBeTruthy();
+    expect(screen.getByText('Resend code in 60s').hasAttribute('disabled')).toBe(true);
+  });
+
+  it('refuses to ask with an empty address', () => {
+    drawLogin();
+    fireEvent.click(screen.getByText('Continue with email'));
+    expect(authState.sendCode).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toMatch(/type your email/i);
+  });
+
+  it("shows the server's own words when a code cannot be sent, and stays on the address", async () => {
+    authState.sendCode = vi.fn().mockRejectedValue(
+      refusal(429, 'code_limit', 'You have asked for too many codes today. Try again in about 23 hours.'),
+    );
+    drawLogin();
+    typeEmail();
+    fireEvent.click(screen.getByText('Continue with email'));
+    expect((await screen.findByRole('alert')).textContent).toContain('too many codes today');
+    expect(screen.queryByText('6-digit code')).toBeNull();
+  });
+
+  it('offers Resend at once when the server says so, and asks again on press', async () => {
+    authState.sendCode = vi.fn().mockResolvedValue({ resendAfterSeconds: 0, expiresInSeconds: 600 });
+    drawLogin();
+    await askForCode();
+    const resend = screen.getByText('Resend code');
+    expect(resend.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(resend);
+    await waitFor(() => expect(authState.sendCode).toHaveBeenCalledTimes(2));
+  });
+
+  it('"Use a different email" goes back to the address step', async () => {
+    drawLogin();
+    await askForCode();
+    fireEvent.click(screen.getByText('Use a different email'));
+    expect(document.querySelector('input[autocomplete="email"]')).toBeTruthy();
+    expect(screen.queryByText('6-digit code')).toBeNull();
+  });
+
+  it('keeps only digits in the code box, six at most', async () => {
+    drawLogin();
+    await askForCode();
+    typeCode('12ab34-5678');
+    expect(document.querySelector('input[autocomplete="one-time-code"]').value).toBe('123456');
+  });
+
+  it("a refused code shows the server's words (the tries left) and stays on the code step", async () => {
+    authState.verifyCode = vi.fn().mockRejectedValue(
+      refusal(400, 'invalid_code', 'That code is not right. You have 4 tries left.'),
+    );
+    drawLogin();
+    await signIn();
+    expect((await screen.findByRole('alert')).textContent).toContain('4 tries left');
+    expect(screen.getByText('6-digit code')).toBeTruthy();
+    expect(screen.queryByText('MEMBER APP')).toBeNull();
+  });
+});
+
+// ── Where a proved code ends up ─────────────────────────────────────────────
+
+describe('the door decides where a proved code ends up', () => {
+  it('sends the typed address and code to the server', async () => {
+    drawLogin();
+    await signIn();
+    await waitFor(() => expect(authState.verifyCode).toHaveBeenCalledWith('kd@example.com', '123456'));
+  });
+
+  it('takes the Manage door to the console', async () => {
+    drawLogin();
+    pressDoor(MANAGE);
+    await signIn();
     expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
   });
 
-  it('takes the member door to the app', async () => {
+  it('takes the Train door to the app', async () => {
     drawLogin();
-    signIn();
+    await signIn();
     expect(await screen.findByText('MEMBER APP')).toBeTruthy();
   });
 
-  it('sends an unfinished MEMBER sign-in to the wizard first', async () => {
-    authState.login = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: false } });
+  it('sends a brand-new Train sign-in to the questionnaire first', async () => {
+    // A new account has no profile, so the gate reads false — straight to
+    // onboarding, as the ROADMAP says ("signed in at once, straight to onboarding").
+    authState.verifyCode = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: false }, isNewAccount: true });
     drawLogin();
-    signIn();
+    await signIn();
     expect(await screen.findByText('SET UP YOUR PROFILE')).toBeTruthy();
   });
 
-  it('takes an unfinished GYM sign-in straight to the console — the questionnaire waits', async () => {
-    // Kd amendment 2026-08-19, and the exact moment he hit it in his own smoke:
-    // he registered, pressed "I run a gym", and was handed five screens of
-    // fitness questions before his business tool. The wizard now waits until
-    // the owner crosses into the member app.
-    authState.login = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: false } });
+  it('takes a brand-new Manage sign-in straight to the console — the questionnaire waits', async () => {
+    // Kd amendment 2026-08-19: the wizard is the member app's gate, not the
+    // account's. A new owner gets their business screens first.
+    authState.verifyCode = vi.fn().mockResolvedValue({ user: { id: 'u1', onboardingCompleted: false }, isNewAccount: true });
     drawLogin();
-    pressDoor('I run a gym');
-    signIn();
+    pressDoor(MANAGE);
+    await signIn();
     expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
   });
 });
@@ -145,32 +246,31 @@ describe('the door decides where signing in ends up', () => {
 
 describe('the door survives leaving the page', () => {
   it('is remembered across a reload, so Continue with Google comes back to it', async () => {
-    // THE ASSERTION THIS TEST EXISTS FOR. Google sign-in leaves the site
-    // entirely, so a door held only in React state is gone by the time the
-    // person comes back — and the button would have promised the console and
-    // delivered the member app.
+    // Google sign-in leaves the site entirely, so a door held only in React
+    // state is gone by the time the person comes back — and the button would
+    // have promised the console and delivered the member app.
     drawLogin();
-    pressDoor('I run a gym');
+    pressDoor(MANAGE);
     expect(readDoor()).toBe(GYM_DOOR);
 
     cleanup();
     drawLogin();
     await waitFor(() =>
-      expect(screen.getByText('I run a gym').getAttribute('aria-pressed')).toBe('true'),
+      expect(screen.getByText(MANAGE).getAttribute('aria-pressed')).toBe('true'),
     );
   });
 
-  it('records the member door when it is pressed back', () => {
+  it('records the Train door when it is pressed back', () => {
     drawLogin();
-    pressDoor('I run a gym');
-    pressDoor("I'm a member");
+    pressDoor(MANAGE);
+    pressDoor(TRAIN);
     expect(readDoor()).toBe(MEMBER_DOOR);
   });
 });
 
 // ── Coming back already signed in ───────────────────────────────────────────
 
-describe('landing on the login page while already signed in', () => {
+describe('landing on the Get started page while already signed in', () => {
   it('follows the door rather than always the dashboard', async () => {
     authState.user = { id: 'u1', onboardingCompleted: true };
     window.sessionStorage.setItem('aihg_login_door', GYM_DOOR);

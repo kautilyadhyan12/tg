@@ -109,6 +109,9 @@ interface CreatedOrg {
   joinCode: { code: string; label: string };
 }
 
+/** Deleting an account needs the emailed code (2026-09-07); this captures it. */
+const deleteCodes: string[] = [];
+
 d("orgs routes (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
@@ -424,7 +427,15 @@ d("orgs routes (real Postgres)", () => {
                          seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month',
               1000, 0, 10, '{}'::jsonb, '{}'::jsonb)`;
-    app = await buildApp(loadConfig(baseEnv));
+    app = await buildApp(loadConfig(baseEnv), {
+      usersEmailSender: {
+        sendAccountDeletionEmail: () => Promise.resolve(),
+        sendAccountDeleteCodeEmail: (_e, code) => {
+          deleteCodes.push(code);
+          return Promise.resolve();
+        },
+      },
+    });
   }, 120_000);
 
   afterAll(async () => {
@@ -2038,11 +2049,20 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Delete");
     const applicationId = await applyWithCode(leaver.cookies, org.joinCode.code);
 
+    const sent = await api().inject({
+      method: "POST",
+      url: "/v1/users/me/delete-code",
+      remoteAddress: nextIp(),
+      cookies: leaver.cookies,
+    });
+    expect(sent.statusCode).toBe(200);
     const deleted = await api().inject({
       method: "DELETE",
       url: "/v1/users/me",
       remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
       cookies: leaver.cookies,
+      payload: JSON.stringify({ code: deleteCodes[deleteCodes.length - 1] }),
     });
     expect(deleted.statusCode).toBe(200);
 

@@ -15,7 +15,9 @@ const authApi = axios.create({
 function isAuthEndpoint(url) {
   return (
     typeof url === 'string' &&
-    (url.includes('/v1/auth/login') || url.includes('/v1/auth/refresh'))
+    (url.includes('/v1/auth/login') ||
+      url.includes('/v1/auth/refresh') ||
+      url.includes('/v1/auth/code/'))
   );
 }
 
@@ -90,6 +92,17 @@ authApi.interceptors.response.use(
 const LOGOUT_TIMEOUT_MS = 10_000;
 
 export const authService = {
+  // Sign-in by 6-digit email code — the main way in (Kd 2026-09-07). A proved
+  // code signs in AND creates the account if the address is new; the server
+  // sets the same httpOnly cookies as every other sign-in.
+  sendCode:        (email)            => authApi.post('/v1/auth/code/send', { email }),
+  verifyCode:      (email, code)      => authApi.post('/v1/auth/code/verify', { email, code }),
+  // Deleting the account is confirmed with a code emailed to the account's
+  // own address (there is no password to ask for).
+  requestDeleteCode: ()               => authApi.post('/v1/users/me/delete-code'),
+  deleteAccount:   (code)             => authApi.delete('/v1/users/me', { data: { code } }),
+  // Password sign-in is SWITCHED OFF on the screens (Kd 2026-09-07) — the
+  // calls stay so nothing that still imports them breaks.
   register:        (data)             => authApi.post('/v1/auth/register', data),
   login:           (data)             => authApi.post('/v1/auth/login', data),
   logout:          ()                 => authApi.post('/v1/auth/logout', null, { timeout: LOGOUT_TIMEOUT_MS }),

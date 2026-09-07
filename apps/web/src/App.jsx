@@ -9,9 +9,7 @@ import AppLayout from './components/common/AppLayout';
 
 // Pages
 import Login           from './pages/Login';
-import Register        from './pages/Register';
 import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
-import ForgotPassword  from './pages/ForgotPassword';
 import Onboarding      from './pages/Onboarding';
 import Dashboard       from './pages/Dashboard';
 import ExerciseLibrary from './pages/ExerciseLibrary';
@@ -63,15 +61,15 @@ export default function App() {
           <RunProvider>
           <Routes>
             {/* ── Public routes ─────────────────────────────────────────── */}
+            {/* ONE "Get started" screen (Kd 2026-09-07): email code or Google,
+                sign-up and sign-in together. The password-era pages
+                (Register, ForgotPassword) are SWITCHED OFF, not deleted — their
+                files stay, their addresses fold into the one door. */}
             <Route path="/login" element={
               <PublicRoute><Login /></PublicRoute>
             } />
-            <Route path="/register" element={
-              <PublicRoute><Register /></PublicRoute>
-            } />
-            <Route path="/forgot-password" element={
-              <PublicRoute><ForgotPassword /></PublicRoute>
-            } />
+            <Route path="/register" element={<Navigate to="/login" replace />} />
+            <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
             {/* Google OAuth landing. Bare route (NOT PublicRoute): the callback
                 set the session cookies, so this page reads the restored session
                 and routes to onboarding/dashboard itself (web-repoint Google half). */}
