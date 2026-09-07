@@ -7987,6 +7987,90 @@ file and is stated so nobody reads these as lower priority than they are.
       `0001_init`) counts workouts ANYWHERE**, which :26469 §1.3 forbids showing
       a gym — it is the obvious thing to reach for on exactly these screens.
       **And every count comes from the SERVER** (:27992 §3, :29250).
+      **🔀 THE DESIGN IS REPLACED, 2026-09-07 (DECISIONS `:37031`). THE TWO
+      PANELS BECOME ONE RANKED LEADERBOARD** — *"we can combine everything to a
+      single thing"* — after the T3 found that *"on a roll"* and *"slipping
+      away"* can name the SAME PERSON at the same time (`:5807`). **The panel
+      dies; the plumbing all survives**: `gym_nudges`, migration `0022`,
+      `sendGymNudge`, `getGymSlippingAway` and the write door are untouched, and
+      the categories become FILTERS on one list, which is what makes the
+      contradiction unreachable rather than excluded. **`CARD-gym-leaderboard.md`
+      is the card and it SUPERSEDES `CARD-gym-overview-people.md`
+      §§`S2.4a`–`S2.7` in part — do NOT build §S2.4b, it is the dead design.**
+      Four slices, each with its own gate: `L0` protect what is built · `L1` the
+      score + the gym's board · `L2` the member's board · `L3` message-to-everyone
+      and a bigger library. **Only `L0` is at a gate; nothing is approved and
+      nothing is built** (`:26777`).
+- [ ] 🔴 **A TENANCY GUARANTEE IN SHIPPED CODE HAS NOTHING HOLDING IT THERE —
+      the T3's `C/H-2` on `:36907`, and it is `CARD-gym-leaderboard.md` §L0.**
+      `listOrgsForUser`'s newest-message lateral (`modules/orgs/repo.ts:568-574`)
+      carries `n.gym_id = g.id AND n.user_id = ${userId}`. **Both predicates are
+      CORRECT today, so nothing leaks now — and NOTHING OBSERVES EITHER**, the
+      only test reading `latestNudge` building one gym and one member
+      (`orgs.nudges.test.ts:706`). Deleting `user_id` hands one member another
+      member's message and the suite stays green. `O295` mutates that lateral's
+      TABLE; **neither predicate has a mutant.** Owed: one test on
+      `orgs.cheers.test.ts:934`'s pattern (two gyms, two members, three distinct
+      presets, **values asserted and never merely non-null**) plus `O297`/`O298`.
+      **NO source change, NO migration** — the code is right, the protection is
+      missing. **Class-checked and it is one case**: the cheer's identical lateral
+      IS protected. **The lesson, and it is the other half of `:36907`'s: a
+      COPIED LINE DOES NOT INHERIT THE ORIGINAL'S TESTS** — copied mutants
+      collide loudly and abort, a missing test is silent.
+- [ ] 🔴 **THE T3'S OWN FINDINGS WERE NEVER WRITTEN TO THE REPO** (DECISIONS
+      `:37031` §7). `C/H-1` and `C/H-3` survive only as one-line descriptions in
+      `PLAN-gym-leaderboard.md` §8 — the plan says both DISSOLVE under the new
+      design, and §6.2 of the card shows why `C/H-1` does, but **`C/H-3` cannot be
+      verified against anything because nothing records what it said.** The
+      **"three Lows in `BACKLOG.md`" are not in `BACKLOG.md`** — its newest block
+      is the My Gyms round of 2026-09-02. **A review whose output lives only in a
+      chat is a review that did not happen for anybody but that chat.**
+      `PASTE-THIS-NEXT.md` handed the prompt over; nothing handed the answer back.
+      Closes if Kd still has the review's output; otherwise the two dissolved
+      findings close on the design change and the three Lows are lost.
+- [ ] 🟡 **TWO OF THE FOUR GOAL TYPES KD NAMED DO NOT EXIST ANYWHERE IN THIS
+      PRODUCT** (DECISIONS `:37031` §3, R15). *"exercises recommended by the
+      app"* — **nothing recommends exercises**, grep-verified across
+      `modules/exercises` and `modules/workouts`, zero hits. *"or set by
+      myself"* — **no programme or self-set-plan table exists.** The other two
+      ARE buildable today (`workouts.kcal_point`; `/v1/nutrition/targets` plus
+      `meal_logs`). **They are SEQUENCED, not dropped: they plug into the same
+      goal points later and the board is not redesigned when they arrive.**
+      **AND THERE IS NO "GOAL" OBJECT AT ALL** — the goal half of the score needs
+      a place for a member to set daily AND weekly goals (R16), which is
+      MEMBER-app work and not console work. **The trap that must travel with this
+      line: `user_fitness_profiles.exercise_frequency` (days per week, defaulting
+      to 3 in the wizard) is EXACTLY the reading R15 struck and is the obvious
+      wrong build.**
+- [ ] 🟡 **"HIDE ME FROM THE LEADERBOARD" HAS A COLUMN AND NO SCREEN**
+      (DECISIONS `:37031` §4, R17/R18). `users.leaderboard_opt_out` exists
+      `NOT NULL DEFAULT false` (`identity.ts:26`), is in the shared user schema,
+      is already writable through the users PATCH and is already in the DPDP
+      export — **nothing under `apps/web/src` reads or writes it** (grep). Owed:
+      the switch, in the MEMBER app. **Kd's design is a KNOWING DEVIATION from
+      Part 3 §4.4's *"opted-out members simply don't appear"*** (R0.3): the row
+      STAYS and greys, because a removed row leaves a gap that reads as *"that
+      person hid"*. **And the half a build would lose: R18 — the GYM always sees
+      the full row.** A single `WHERE NOT leaderboard_opt_out` serving both
+      audiences is the obvious build and it silently blinds the gym.
+- [ ] 🟡 **THE GOAL POINTS' GYM-ANCHORING IS RECOMMENDED AND NOT RULED**
+      (DECISIONS `:37031` §5). The recommendation put to Kd was *goal points only
+      for a goal hit on a day the member came in*, which keeps `:26469` §1.3 (a
+      gym is never shown what a member did elsewhere) and matches `:29961` ruling
+      2's same-gym-day precedent. **He answered *"ok"* and added R16 in the same
+      sentence, so that "ok" may not be read as ruling the anchoring alone.** Put
+      it to him in ONE line at `L1`'s gate (`:26777`). **Nor are the goal term's
+      numbers ruled** — what a daily goal is worth against a weekly one is his,
+      and a chat must not invent them (R0.2).
+- [ ] ⚪ **R7 REMOVES EVERY MESSAGE LIMIT, AND THAT IS SAFE ONLY WHILE NOTHING
+      NOTIFIES.** *"just dont need to keep any time contraint gym can send
+      message anytime"*, so `L3` deletes the rolling seven-day cap AND its
+      `nudgeableAt` reader **together, or the rule is enforced in one place and
+      reported from another** (`:35944`'s exact shape). **Nothing in this product
+      sends anything today** — *"send" means "write something a screen will
+      show"* (`:29961`). **The day push notifications ship, uncapped messaging
+      becomes ten buzzes in a member's pocket and a limit must return.** Kd was
+      told this and accepted it.
 - [x] 🟡 **A GYM CANNOT CHEER A MEMBER ON — Kd's own addition at the
       overview-numbers gate, 2026-09-02 (DECISIONS :29961 ruling 4), tracked
       NOWHERE before this line (grep-verified).** His words: *"if some mebers

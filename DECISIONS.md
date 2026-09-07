@@ -37027,3 +37027,197 @@ a heading, 1 deliberate mid-entry), 1465 headings** · triggers **1116 from 287 
 **NOT DONE and not smuggled into "done":** the web half (§S2.4b), the message
 expiry Kd approved at `:36816` §3, the smoke sheet and its fixture tool. T3 is
 UNRUN.
+
+## 2026-09-07 — KD REPLACES THE TWO PEOPLE-PANELS WITH ONE RANKED LEADERBOARD, AND CORRECTS THE THING A CHAT HAD WRITTEN DOWN AS "A GOAL"
+
+**Read before writing the gym leaderboard's score, before treating a member's
+weekly goal as an attendance target, before quoting `PLAN-gym-leaderboard.md`
+§4's score formula — its goal term is STRUCK by ruling R15 below, before
+repurposing `user_fitness_profiles.exercise_frequency` as a goal, before
+promising a goal type the app cannot check, before building any hide-me or
+opt-out control anywhere in this product, before REMOVING somebody from a
+leaderboard rather than greying them, before hiding anything from a GYM that a
+member hid from other members, before asking Kd whether the member board is
+opt-in or shows everyone — he has answered, before showing one member another
+member's email, before building the "on a roll" or "slipping away" PANELS —
+both are replaced, and before copying a neighbouring feature's SQL without
+copying its TEST.**
+
+**Nothing is built. `CARD-gym-leaderboard.md` is WRITTEN AND UNAPPROVED except
+its `§L0`, which is at a gate** (`:26777`).
+
+### 1 · WHY THE DESIGN CHANGED
+
+A T3 review of `:36907` found that *"On a roll"* and *"Slipping away"* can name
+**the same person at the same time** — the owner's home screen saying *"keeps
+turning up"* and *"has stopped coming"* about one member, which is `:5807`
+Critical/High. **Kd did not patch it. He replaced the design**: one combined
+ranked list, where the contradiction is impossible by CONSTRUCTION rather than
+excluded by a predicate. *"we can combine everything to a single thing"*.
+
+Eighteen rulings across two sessions. Fourteen are tabled at
+`CARD-gym-leaderboard.md` §1.1 and are not repeated here. The four made at this
+card's gate are below, and **the first of them corrects a chat**.
+
+### 2 · R15 — A GOAL IS NOT "HOW MANY DAYS I WILL COME", AND A CHAT HAD WRITTEN THAT DOWN AS IF IT WERE HIS
+
+His words: *"weekly goal is like burning this much calories , eating healthy
+food , achiving to do exercises recommended by the app or set by myself , etc"*.
+
+**What he had actually ruled the day before was R11 — *"also achiving goal
+should also count"* — five words.** The planning chat turned that into *"every
+member sets a weekly goal — how many days they intend to attend"*, built a whole
+scoring formula on it, and left three unruled numbers underneath (a minimum goal,
+a default goal, and whether logged sessions count) as though the only open
+questions were the numbers. **THE QUESTION WAS WRONG, NOT THE NUMBERS.**
+
+**This is `:19560`'s failure in a third form.** There a chat took Kd's musing FOR
+a ruling; at `:31008` a chat took its own answer for permission. Here a chat took
+five words and NARROWED them into a different feature, then asked him to ratify
+the narrowing's parameters. **All three are one defect: not reading the
+ATTRIBUTION of a statement.** The tell was available and was ignored — *"achiving
+goal"* names no unit, and **a chat that cannot say what UNIT a ruling is in has
+not understood the ruling.**
+
+**IT WAS CAUGHT ONLY BECAUSE THE QUESTION RESTATED ITS OWN PREMISE.** He read
+*"how many days a week I plan to come"* in the question's preamble and corrected
+it in one line; had the question asked only *"minimum 2 or 3?"* he would have
+answered the number and the wrong feature would have been built on his approval.
+**A question that states its premise back is the instrument** — `:28055` recorded
+the same mechanism producing a ruling in one line, twice on one card.
+
+**R16, in the same breath: BOTH cadences are measured** — *"ok will measure each
+day goal and weekly goal as well"*. A daily goal AND a weekly goal, not one or
+the other.
+
+### 3 · WHAT THE APP CAN ACTUALLY CHECK — measured before the ruling was recorded, not after
+
+| R15 goal type | Buildable today? | Evidence |
+|---|---|---|
+| Burn this many calories | **YES** | `workouts.kcal_point`, server-computed at sync (`db/schema/training.ts:36-37`) |
+| Eating healthily | **YES** | `GET /v1/nutrition/targets` (`modules/nutrition/routes.ts:182`) plus `meal_logs.kcal_point`/`protein_g`/`carbs_g`/`fat_g` (`db/schema/trust.ts:33-38`) |
+| Exercises the app RECOMMENDS | **NO — DOES NOT EXIST** | grep for `recommend` across `modules/exercises` and `modules/workouts`: zero hits |
+| Exercises the member SETS | **NO — DOES NOT EXIST** | no programme or self-set-plan table anywhere in the schema |
+
+**AND THERE IS NO "GOAL" OBJECT IN THIS PRODUCT AT ALL.** The only stored number
+of that shape is `user_fitness_profiles.exercise_frequency` — *days per week*,
+asked once in the onboarding wizard where it defaults to `3` (`identity.ts:132`,
+`Onboarding.jsx:183`). **It is EXACTLY the reading R15 struck, it is sitting
+right there, and it is the obvious wrong build** — a later chat looking for
+"the member's goal" finds it in one grep and it will look like a gift. Two of the
+four goal types therefore take `OWED.md` lines and plug into the same points
+later; **nothing is dropped, it is sequenced**, and the board is not redesigned
+when they arrive.
+
+### 4 · R17/R18 — HIDING IS OPT-OUT, IT GREYS THE ROW INSTEAD OF DELETING IT, AND IT NEVER BLINDS THE GYM
+
+His words: *"hide me should not be default but should have the option ( will
+only show the profile as gray not that user has decided to hide themself from
+leaderboard)"* and *"but gyms should still see details"*.
+
+**A KNOWING DEVIATION from Part 3 §4.4** (`03-part3-org-console.md:358-359`),
+which says *"opted-out members simply don't appear"* (R0.3). **His design is
+stronger than the spec's and stronger than the industry's, and the reason is the
+part to keep: a REMOVED row leaves a visible gap, and a gap in a ranked list can
+be read as "that person hid". A greyed row cannot be read at all.** The spec's
+version leaks the very fact the setting exists to protect.
+
+**He asked whether the feature is real** — *"is there really hide me like
+features in professional apps or we are making something useless"* — **and it was
+answered from Strava's own documentation rather than from model memory (V5, and
+`:19560`'s standing lesson is about this exact question).** Strava ships a *Show
+on leaderboards* switch in privacy settings, plus per-activity privacy that keeps
+an effort off public segment leaderboards. **It REMOVES the person; his design
+GREYS them.**
+
+**MEASURED, AND IT IS WHY THIS COSTS ALMOST NOTHING:
+`users.leaderboard_opt_out` ALREADY EXISTS** — `NOT NULL DEFAULT false`
+(`identity.ts:26`, carrying the comment `// Part 3 §4.4`), in the shared user
+schema (`packages/shared/src/users.ts:18,42`), already writable through the users
+PATCH (`modules/users/repo.ts:95`), already in the DPDP export
+(`privacy/exportRepo.ts:34`). **The default is already "everyone is on the
+board".** What is missing is a SCREEN: nothing under `apps/web/src` reads or
+writes it. Own `OWED.md` line.
+
+**R18 IS THE HALF A BUILD WOULD LOSE.** The gym's copy of the board is
+unaffected — full name, full detail — because the gym needs to see who is
+drifting, which is the entire feature this leaderboard replaces. **A single
+`WHERE NOT leaderboard_opt_out` serving both audiences is the obvious build and
+it silently blinds the gym.** One column, two readers, and only one of them
+obeys it.
+
+### 5 · WHAT WAS SETTLED WITHOUT A RULING, SO IT IS NOT ASKED AGAIN
+
+- **The member's email stays invisible to other members.** `:31098` ruled it
+  visible **to the gym** and says in terms that it is *"a ruling about EMAIL and
+  not a licence"*. Member-to-member is a new disclosure to a new audience; it is
+  not built and needs no ruling to stay unbuilt. Closes
+  `PLAN-gym-leaderboard.md` §11 item 3.
+- **The board shows everyone with an opt-out** — §11 item 2, which the plan
+  recorded as *"Asked, not answered"*. R17 answers it, and the spec and the
+  schema had both already answered it the same way; the question had been open
+  in a chat's notes while two instruments in the repo agreed on the answer.
+- **THE GOAL POINTS' GYM-ANCHORING IS RECOMMENDED, NOT RULED.** The
+  recommendation put to him was *goal points only for a goal hit on a day the
+  member came in* — which keeps `:26469` §1.3 (a gym is never shown what a member
+  did elsewhere) and matches `:29961` ruling 2's same-gym-day precedent. **He
+  answered "ok" and in the same sentence added R16, so that "ok" cannot honestly
+  be read as ruling on the anchoring alone.** Put it to him again in ONE line at
+  `L1`'s gate rather than building on a one-word approval (`:26777`).
+
+### 6 · THE FINDING IN THE SHIPPED CODE, RE-DERIVED FROM THE CODE AND NOT FROM THE REVIEW
+
+`listOrgsForUser`'s newest-message lateral (`modules/orgs/repo.ts:568-574`)
+carries two tenancy predicates. **Both are correct. NOTHING OBSERVES EITHER.**
+The only test reading `latestNudge` (`test/orgs.nudges.test.ts:706`) builds ONE
+gym and ONE member, so deleting `n.user_id` — which hands one member another
+member's message — leaves the suite green. `O295` mutates that lateral's TABLE;
+**neither predicate has a mutant.** `:35944`'s lesson in a new direction: a
+mutant for the read without its siblings for the read's SCOPE.
+
+**THE CLASS CHECK WAS RUN AND IT IS ONE CASE, NOT A PATTERN.** The cheer's
+identical lateral IS protected: `test/orgs.cheers.test.ts:934-978` builds two
+gyms and two members and asserts both predicates by name. Comparing every test
+title in both suites, that is the ONLY guarantee the cheer holds and the nudge
+does not — the nudge's own extra cases (windows, panel disjointness, ordering,
+empty state) have no cheer equivalent.
+
+**SO THE LESSON IS EXACT, AND IT IS THE OTHER HALF OF ONE THIS CARD ALREADY
+RECORDED. `:36907` warned that a COPIED LINE INHERITS THE ORIGINAL'S MUTANTS —
+two anchors matched twice and aborted the harness before a byte was written.
+This is the same copy seen from the other side: A COPIED LINE DOES NOT INHERIT
+THE ORIGINAL'S TESTS.** The mutants collide loudly and abort; the missing test is
+silent and the suite goes green. **When you copy a query, copy its test in the
+same edit — the harness will tell you about the mutants, and nothing at all will
+tell you about the test.**
+
+### 7 · THE REVIEW'S OWN FINDINGS WERE NEVER WRITTEN TO THE REPO
+
+`PLAN-gym-leaderboard.md` §8 describes `C/H-2` in full — §6 above, every word of
+it re-derived from the code this session. But **`C/H-1` and `C/H-3` exist only as
+one-line descriptions**, and **the "three Lows in `BACKLOG.md`" are not in
+`BACKLOG.md`** — its newest block is the My Gyms round of 2026-09-02 and there is
+no block for this round at all.
+
+**A review whose output lives only in a chat is a review that did not happen for
+anybody but that chat.** `PASTE-THIS-NEXT.md` handed the prompt over; nothing
+handed the answer back. Own `OWED.md` line — a deferral written into prose is how
+work gets silently lost, which is the whole reason `OWED.md` exists.
+
+### Round log
+
+**NO CODE. NO TEST. NO MIGRATION. NO `src` FILE.** Documents only:
+`CARD-gym-leaderboard.md` created, this entry, its index line in the same commit,
+the triggers rebuilt, `OWED.md` lines added.
+
+**Every factual claim above was produced by a command run this session** (V1):
+the four goal-type rows by grep and by reading `training.ts`, `trust.ts`,
+`nutrition/routes.ts` and `identity.ts`; the `leaderboard_opt_out` inventory by
+grep across `apps/api/src`, `apps/web/src` and `packages/shared/src`; the
+last-mutant id `O296` by counting `mutate-orgs.mjs`; the test-title comparison by
+grep over both suites; Strava's behaviour by web search, never recalled.
+
+**The plan's §11 asked three things of Kd and all three are now closed** — one
+ruled (R17/R18), one struck and replaced (R15/R16, which killed the numbers the
+plan wanted ratified), and one answered by a ruling already on the record (the
+email).

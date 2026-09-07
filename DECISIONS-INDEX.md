@@ -4,19 +4,33 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, **1,299 lines** (~630 at the
+1. **`DECISIONS-TRIGGERS.md`** — generated, **1,311 lines** (~630 at the
    2026-08-28 split; 853 on 2026-08-29; 895 → 901 → 905 → 910 → 913 → 916 → 921 → 924 → 927 → 929 on 2026-08-31; 934 → 939 → 944 → 949 → 953 → 956 → 961 → 975 → 978 → 980 → 984 → 990 earlier on 2026-09-01). §1 is
    *"before you do this, read that"*, harvested verbatim from the rulings' own
    `Read before …` sentences. §2 lists every ruling that declares no trigger, by
    pointer and title, so a blank search is visibly *"nothing declared itself"*
    and never *"nothing binds me"*.
-2. **§1 below — STANDING RULES. 1,405 lines** (~680 at the split; 797 on
+2. **§1 below — STANDING RULES. 1,450 lines** (~680 at the split; 797 on
    2026-08-29; 821 → 828 → 855 → 892 → 902 → 919 → 945 → 967 → 984 earlier on 2026-08-31; 997 → 1,042 → 1,081 → 1,113 earlier on 2026-09-01; **1,385 was carried here for four measurements after §1 had already reached 1,405** — corrected 2026-09-06).
 3. **§2 below — OPEN. 89 lines.** The only forward-looking part of this file.
    (**83 here, 89 in the total below, since 2026-09-05** — corrected 2026-09-06.)
 
-**ALWAYS-READ TOTAL: 2,793 lines, MEASURED 2026-09-07 and not estimated**
-(1,299 + 1,405 + 89). **THE FIFTY-THIRD IS A WHOLE SERVER HALF — a migration, a
+**ALWAYS-READ TOTAL: 2,850 lines, MEASURED 2026-09-07 and not estimated**
+(1,311 + 1,450 + 89). **THE FIFTY-FOURTH IS FOUR KD RULINGS IN ONE SESSION —
+AND IT COST FIFTY-SEVEN LINES, 45 in §1 and 12 triggers, §2 UNMOVED AT 89.**
+**That is the top of the range a ruling has cost all month** (20–45; 45, 39, 34,
+40 on 2026-09-01) **for four of them plus two instrument lessons, so the rate per
+ruling FELL while the total rose** — which is the number to quote, not the +57.
+**One of the four is a CORRECTION OF A CHAT rather than a new decision** (R15:
+five words of his had been narrowed into a different feature and the parameters
+of the narrowing put back to him for ratification), **and that is the most
+expensive kind of line this file carries, because the thing it must stop is a
+plausible reading of a real ruling.** Its cheapest phrase is the one that guards
+a grep: *"before repurposing `user_fitness_profiles.exercise_frequency` as a
+goal"* — one line, pointing at a column that already holds the struck answer and
+would look like a gift to the next chat that goes looking. Taken with this
+header's own prescribed command against the bytes being committed, never by
+adding a delta. **THE FIFTY-THIRD IS A WHOLE SERVER HALF — a migration, a
 new table, the seventeenth write door, three new response fields, twenty tests
 and thirteen mutants — AND IT COST FOUR LINES, every one a trigger phrase, §1 AND
 §2 UNMOVED AT 1,405 AND 89.** Its record is a CARD record and went to §1B, where
@@ -1811,6 +1825,51 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   stamped with it (`:27992`, `:29961` ruling 2). Its own cost, stated: **11pm and
   12:01am are two cheers 62 minutes apart.** `packages/shared` needs NO change.
   **NOTHING IS BUILT — the plan gate is unpassed** (`:26777`).
+- **:37031** — 2026-09-07 — **KD REPLACES THE TWO PEOPLE-PANELS WITH ONE RANKED
+  LEADERBOARD, AND CORRECTS THE THING A CHAT HAD WRITTEN DOWN AS "A GOAL".**
+  **Read before writing the gym leaderboard's score, before treating a member's
+  weekly goal as an attendance target, before repurposing
+  `user_fitness_profiles.exercise_frequency` as a goal, before promising a goal
+  type the app cannot check, before building any hide-me or opt-out control
+  anywhere in this product, before REMOVING somebody from a leaderboard rather
+  than greying them, before hiding anything from a GYM that a member hid from
+  other members, and before copying a neighbouring feature's SQL without copying
+  its TEST.**
+  **R15 STRIKES `PLAN-gym-leaderboard.md` §4's goal term**: a goal is *"burning
+  this much calories , eating healthy food , achiving to do exercises recommended
+  by the app or set by myself"* — **NOT "how many days I will come"**, which was
+  a chat's narrowing of R11's five words into a different feature, with three
+  unruled numbers underneath it. **THE QUESTION WAS WRONG, NOT THE NUMBERS**, and
+  it surfaced only because the question restated its own premise (`:28055`'s
+  mechanism). **R16: BOTH a daily and a weekly goal are measured.**
+  **MEASURED BEFORE RECORDING: two of the four goal types are buildable today**
+  (`workouts.kcal_point`; `/v1/nutrition/targets` + `meal_logs`) **and two DO NOT
+  EXIST AT ALL** — nothing in this product recommends exercises and there is no
+  self-set programme. **There is no "goal" object anywhere**, and the one number
+  of that shape — `exercise_frequency`, defaulting to 3 in the wizard — is
+  EXACTLY the struck reading, findable in one grep and the obvious wrong build.
+  **R17/R18 — HIDING IS OPT-OUT AND GREYS THE ROW INSTEAD OF DELETING IT, AND
+  NEVER BLINDS THE GYM.** A KNOWING DEVIATION from Part 3 §4.4's *"opted-out
+  members simply don't appear"* (R0.3) and **stronger than it**: a removed row
+  leaves a gap that reads as *"that person hid"*, a greyed row reads as nothing.
+  Kd asked whether the feature is real and **it was web-searched, not recalled**
+  (V5, `:19560`) — Strava ships the switch and REMOVES the person. **The column
+  already exists** (`identity.ts:26`, default false, writable, in the DPDP
+  export); only its SCREEN is missing. **`WHERE NOT leaderboard_opt_out` serving
+  both audiences is the obvious build and silently blinds the gym** (R18).
+  **§5 settles three things without a ruling** — the email stays invisible
+  member-to-member (`:31098` is *"about EMAIL and not a licence"*), the board
+  shows everyone, and **the goal points' gym-anchoring is RECOMMENDED and NOT
+  RULED**: his *"ok"* arrived in the same sentence as R16, so it may not be read
+  as ruling the anchoring — ask again in one line at `L1`'s gate.
+  **§6's lesson is the other half of `:36907`'s: A COPIED LINE DOES NOT INHERIT
+  THE ORIGINAL'S TESTS.** The nudge's lateral has two correct tenancy predicates
+  and nothing observing either; the cheer's identical lateral IS protected
+  (`orgs.cheers.test.ts:934`, two gyms, two members). **Copied mutants collide
+  loudly and abort; a missing test is silent.** **§7: the T3's own findings were
+  never written to the repo** — `C/H-1`/`C/H-3` survive as one-liners and the
+  "three Lows" are not in `BACKLOG.md` at all. `CARD-gym-leaderboard.md` is
+  WRITTEN AND UNAPPROVED; only its `§L0` is at a gate (`:26777`).
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
