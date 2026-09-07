@@ -192,22 +192,34 @@ describe('from the address to the code', () => {
     expect(screen.queryByText(/still valid/i)).toBeNull();
   });
 
-  it('after a "too soon" arrival, a Resend that really sends flips the header to "we sent"', async () => {
+  it('after a "too soon" arrival the header stops saying "a minute ago" once the countdown ends, and a Resend that really sends flips it to "we sent"', async () => {
+    // The smallest wait the server can hand out is one second (it never says
+    // zero), so the countdown is left to tick out for real: "less than a
+    // minute ago" must go with it, or the line is false for as long as the
+    // person leaves the tab open.
     authState.sendCode = vi
       .fn()
       .mockRejectedValueOnce(
-        refusal(429, 'code_too_soon', 'Please wait 1 second before asking for a new code.', { retryAfterSeconds: 0 }),
+        refusal(429, 'code_too_soon', 'Please wait 1 second before asking for a new code.', { retryAfterSeconds: 1 }),
       )
       .mockResolvedValueOnce({ resendAfterSeconds: 60, expiresInSeconds: 600 });
     drawLogin();
     typeEmail();
     fireEvent.click(screen.getByText('Continue with email'));
     expect(await screen.findByText(/less than a minute ago/i)).toBeTruthy();
-    fireEvent.click(screen.getByText('Resend code'));
-    expect(await screen.findByText(/we sent a 6-digit code to/i)).toBeTruthy();
+    expect(screen.getByText('Resend code in 1s').hasAttribute('disabled')).toBe(true);
+
+    const resend = await screen.findByText('Resend code', {}, { timeout: 4000 });
+    expect(resend.hasAttribute('disabled')).toBe(false);
     expect(screen.queryByText(/less than a minute ago/i)).toBeNull();
+    expect(screen.getByText(/type the 6-digit code for/i)).toBeTruthy();
+    expect(screen.getByText('kd@example.com')).toBeTruthy();
+
+    fireEvent.click(resend);
+    expect(await screen.findByText(/we sent a 6-digit code to/i)).toBeTruthy();
+    expect(screen.queryByText(/type the 6-digit code for/i)).toBeNull();
     expect(toast.success).toHaveBeenCalledWith('New code sent.');
-  });
+  }, 10_000);
 
   it('offers Resend at once when the server says so, asks again on press, and says a new code was sent', async () => {
     authState.sendCode = vi.fn().mockResolvedValue({ resendAfterSeconds: 0, expiresInSeconds: 600 });
@@ -242,6 +254,12 @@ describe('from the address to the code', () => {
     expect(notice).not.toMatch(/still valid|sent/i);
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('6-digit code')).toBeTruthy();
+    // The header flips from "we sent" to the same claim as the toast, and no
+    // more than that.
+    expect(screen.getByText(/you asked for a code for/i)).toBeTruthy();
+    expect(screen.getByText(/less than a minute ago/i)).toBeTruthy();
+    expect(screen.queryByText(/we sent/i)).toBeNull();
+    expect(screen.queryByText(/still valid/i)).toBeNull();
   });
 
   it('"Use a different email" goes back to the address step', async () => {

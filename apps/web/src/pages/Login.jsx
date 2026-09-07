@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { SIGN_IN_CODE_RULES } from '@app/shared';
 import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
 
 // ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
@@ -35,11 +36,20 @@ const GOOGLE_ERROR_MESSAGES = {
  *  left, or how long to wait); anything else gets one plain fallback. */
 const messageFrom = (err, fallback) => err?.response?.data?.message || fallback;
 
+/** The resend gap in words, from the same number the server enforces, so the
+ *  sentence can never say "a minute" while the countdown counts something else. */
+const gapWords = (seconds) =>
+  seconds === 60 ? 'a minute' : seconds % 60 === 0 ? `${seconds / 60} minutes` : `${seconds} seconds`;
+
 /** What a "too soon" refusal is allowed to claim: that a code was asked for
  *  inside the gap. Not that it is still good — it may have signed somebody in
- *  already. The countdown next to Resend says when asking again is allowed. */
-const TOO_SOON_WORDS =
-  'You asked for a code less than a minute ago. Type it below if you have it, or press Resend when the countdown ends.';
+ *  already. The countdown next to Resend says when asking again is allowed.
+ *  The header and the Resend toast are both built from these two pieces. */
+const TOO_SOON = {
+  when: `less than ${gapWords(SIGN_IN_CODE_RULES.resendAfterSeconds)} ago.`,
+  next: 'Type it below if you have it, or press Resend when the countdown ends.',
+};
+const TOO_SOON_WORDS = `You asked for a code ${TOO_SOON.when} ${TOO_SOON.next}`;
 
 export default function Login() {
   const { sendCode, verifyCode } = useAuth();
@@ -89,11 +99,11 @@ export default function Login() {
 
   const secondsToResend = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
-  // Asks the server for a code. Says which of three things happened, because
-  // two of them look the same to the address step and different to Resend:
+  // Asks the server for a code. Says which of three things happened: the first
+  // two both advance to the code box, and the header says which it was:
   //   'sent'     — a new code is on its way
-  //   'too-soon' — the server refused because a code was asked for less than
-  //                a minute ago, and the countdown now shows the server's own
+  //   'too-soon' — the server refused because a code was asked for inside
+  //                the gap, and the countdown now shows the server's own
   //                number. That is ALL it means: the earlier code may still be
   //                good, or it may already have signed somebody in (a laptop
   //                sign-in, then the phone inside the gap). The server does not
@@ -351,11 +361,19 @@ export default function Login() {
                     We sent a 6-digit code to{' '}
                     <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>.
                   </>
-                ) : (
+                ) : secondsToResend > 0 ? (
                   <>
                     You asked for a code for{' '}
                     <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>{' '}
-                    less than a minute ago. Type it below if you have it, or press Resend when the countdown ends.
+                    {TOO_SOON.when} {TOO_SOON.next}
+                  </>
+                ) : (
+                  /* The countdown has run out, so "less than a minute ago" would
+                     now be false; the button's last tick re-renders this line. */
+                  <>
+                    Type the 6-digit code for{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>,
+                    or press Resend for a new one.
                   </>
                 )}
               </p>
