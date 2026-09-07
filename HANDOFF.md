@@ -38,7 +38,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   pinned by a test that was run red against the old behaviour. CI green on a2881e6.
 - Kd delegated work sizing to the chat; Stage 1 items 3–7 split into lettered one-chat lines in
   `ROADMAP.md` (RULINGS 2026-09-08). The next chat starts at item 2, then 3a.
-- Open: Kd's click-through; then merge.
+- Merged to `master` 2026-09-08 on Kd's word (PR #51, CI green, branch deleted). Next: Stage 1 item 2.
 
 ## 2026-09-07 · The reset (Fable 5.1, this session)
 
