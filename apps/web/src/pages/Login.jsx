@@ -35,6 +35,12 @@ const GOOGLE_ERROR_MESSAGES = {
  *  left, or how long to wait); anything else gets one plain fallback. */
 const messageFrom = (err, fallback) => err?.response?.data?.message || fallback;
 
+/** What a "too soon" refusal is allowed to claim: that a code was asked for
+ *  inside the gap. Not that it is still good — it may have signed somebody in
+ *  already. The countdown next to Resend says when asking again is allowed. */
+const TOO_SOON_WORDS =
+  'You asked for a code less than a minute ago. Type it below if you have it, or press Resend when the countdown ends.';
+
 export default function Login() {
   const { sendCode, verifyCode } = useAuth();
   const navigate = useNavigate();
@@ -70,6 +76,10 @@ export default function Login() {
   // When a resend becomes possible — the SERVER's number, never one made up here.
   const [resendAt, setResendAt] = useState(0);
   const [now,      setNow]      = useState(() => Date.now());
+  // How the code step was reached: 'sent' (a code went out) or 'too-soon' (the
+  // server refused because one was asked for inside the gap). The header reads
+  // from this so it never says "we sent" when nothing was.
+  const [arrival,  setArrival]  = useState('sent');
 
   useEffect(() => {
     if (step !== 'code' || resendAt <= now) return undefined;
@@ -81,11 +91,16 @@ export default function Login() {
 
   // Asks the server for a code. Says which of three things happened, because
   // two of them look the same to the address step and different to Resend:
-  //   'sent'         — a new code is on its way
-  //   'already-live' — the server refused as "too soon": a code is ALREADY in
-  //                    the inbox and still good, and the countdown now shows
-  //                    the server's own number
-  //   null           — refused for another reason; the words are on screen
+  //   'sent'     — a new code is on its way
+  //   'too-soon' — the server refused because a code was asked for less than
+  //                a minute ago, and the countdown now shows the server's own
+  //                number. That is ALL it means: the earlier code may still be
+  //                good, or it may already have signed somebody in (a laptop
+  //                sign-in, then the phone inside the gap). The server does not
+  //                say which — a "used" flag would tell a stranger the address
+  //                has an account (RULINGS 2026-09-07) — so the screen must
+  //                only ever claim the wait, never that a live code is waiting.
+  //   null       — refused for another reason; the words are on screen
   const requestCode = async () => {
     const address = email.trim();
     if (!address) {
@@ -98,12 +113,14 @@ export default function Login() {
       const res = await sendCode(address);
       setResendAt(Date.now() + (res?.resendAfterSeconds ?? 0) * 1000);
       setNow(Date.now());
+      setArrival('sent');
       return 'sent';
     } catch (err) {
       if (err?.response?.data?.error === 'code_too_soon') {
         setResendAt(Date.now() + (err.response.data.retryAfterSeconds ?? 0) * 1000);
         setNow(Date.now());
-        return 'already-live';
+        setArrival('too-soon');
+        return 'too-soon';
       }
       setProblem(messageFrom(err, 'We could not send the code. Please try again.'));
       return null;
@@ -114,10 +131,11 @@ export default function Login() {
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    // Either way there is a good code in the inbox, so the code box is next.
-    // "Too soon" here is "Use a different email" then the same address inside
-    // the gap; stranding the person on the address step would make them wait
-    // the gap out and spend the day's last code on a resend they never needed.
+    // Sent or too soon, the code box is next. "Too soon" here is usually "Use
+    // a different email" then the same address inside the gap, with a good
+    // code in the inbox; stranding the person on the address step would make
+    // them wait the gap out and spend a code on a resend they never needed.
+    // The header says which of the two happened.
     if ((await requestCode()) !== null) {
       setCode('');
       setStep('code');
@@ -129,13 +147,14 @@ export default function Login() {
     // "New code sent." is said only when one WAS. A second tab on the same
     // address can press Resend after its own countdown while the first tab's
     // code is still inside the gap: the server refuses, the countdown takes
-    // the server's number, and the person is told the code they have is good.
+    // the server's number, and the person is told only that — not that the
+    // code they have is good, because it may already have signed them in.
     const result = await requestCode();
     if (result === 'sent') {
       setCode('');
       toast.success('New code sent.');
-    } else if (result === 'already-live') {
-      toast.success('Your last code is still valid — check your inbox.');
+    } else if (result === 'too-soon') {
+      toast(TOO_SOON_WORDS);
     }
   };
 
@@ -327,8 +346,18 @@ export default function Login() {
             /* ── Step 2: the code ────────────────────────────────────────── */
             <form onSubmit={handleCodeSubmit} className="space-y-4" noValidate>
               <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                We sent a 6-digit code to{' '}
-                <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>.
+                {arrival === 'sent' ? (
+                  <>
+                    We sent a 6-digit code to{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>.
+                  </>
+                ) : (
+                  <>
+                    You asked for a code for{' '}
+                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>{' '}
+                    less than a minute ago. Type it below if you have it, or press Resend when the countdown ends.
+                  </>
+                )}
               </p>
               <div>
                 <label

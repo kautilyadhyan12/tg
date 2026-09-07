@@ -307,10 +307,10 @@ d("sign-in by email code (real Postgres)", () => {
   });
 
   it("asking again immediately after signing in is still refused as too soon", { timeout: 30_000 }, async () => {
-    // The review's hole: excusing a used code from the DAY cap must not excuse
-    // it from the sixty-second GAP too. Without a used code in the gap's view,
-    // an address that could read its own inbox could sign in and ask again in
-    // a loop — measured at eight emails in 2.5 seconds against a cap of two.
+    // Excusing a used code from the DAY cap must not excuse it from the
+    // sixty-second GAP too. Without a used code in the gap's view, an address
+    // that could read its own inbox could sign in and ask again in a loop —
+    // measured at eight emails in 2.5 seconds against a cap of two.
     const email = "code-used-gap@example.com";
     expect((await send(email)).statusCode).toBe(200);
     expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200);
@@ -321,9 +321,9 @@ d("sign-in by email code (real Postgres)", () => {
   });
 
   it("two requests for one address arriving together issue ONE code, not two", { timeout: 30_000 }, async () => {
-    // The review's idempotency gap: a read-then-write day cap lets two
-    // simultaneous sends both pass. The issue transaction takes a per-address
-    // lock, so the second sees the first's row and is refused as too soon.
+    // A read-then-write day cap would let two simultaneous sends both pass.
+    // The issue transaction takes a per-address lock, so the second sees the
+    // first's row and is refused as too soon.
     //
     // DRIVEN THROUGH THIS SUITE'S OWN FIVE-CONNECTION POOL, not through the
     // app: `buildApp` opens ONE connection, so three injected requests
@@ -438,9 +438,9 @@ d("sign-in by email code (real Postgres)", () => {
   // ── the one ceiling across everyone ─────────────────────────────────────
 
   it("stops sending codes for the day once the ceiling across ALL addresses is hit", { timeout: 60_000 }, async () => {
-    // The review's High: a client that varies the address is invisible to the
-    // per-address cap, and every send is an email Kd pays for. Its own app,
-    // because the ceiling counts in Redis for the life of the instance.
+    // A client that varies the address is invisible to the per-address cap,
+    // and every send is an email Kd pays for. Its own app, because the
+    // ceiling counts in Redis for the life of the instance.
     const capped = await buildApp(loadConfig({ ...baseEnv, CODE_EMAILS_PER_DAY: "2" }), {
       emailSender: sender,
       usersEmailSender: usersSender,

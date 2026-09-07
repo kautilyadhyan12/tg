@@ -25,9 +25,14 @@ vi.mock('../context/TransitionContext', () => ({
   useTransition: () => ({ triggerTransition: (cb) => cb() }),
 }));
 
-vi.mock('react-hot-toast', () => ({
-  default: { error: vi.fn(), success: vi.fn() },
-}));
+// `toast(...)` itself is the neutral notice (a "too soon" is neither a success
+// nor an error), so the mock is callable as well as carrying the two flavours.
+vi.mock('react-hot-toast', () => {
+  const plain = vi.fn();
+  plain.error = vi.fn();
+  plain.success = vi.fn();
+  return { default: plain };
+});
 
 const toast = (await import('react-hot-toast')).default;
 const Login = (await import('./Login')).default;
@@ -164,10 +169,14 @@ describe('from the address to the code', () => {
     expect(screen.queryByText('6-digit code')).toBeNull();
   });
 
-  it('"too soon" means a code is already in the inbox: goes to the code box with the SERVER\'s countdown', async () => {
-    // The review's High: "Use a different email" then the same address inside
-    // the gap used to strand the person on the address step, while a live code
-    // sat in their inbox — and waiting the gap out spent the day's last code.
+  it('"too soon" goes to the code box with the SERVER\'s countdown, and claims only the wait — never that a code was sent', async () => {
+    // "Use a different email" then the same address inside the gap must not
+    // strand the person on the address step: usually a live code is in their
+    // inbox, and waiting the gap out would spend a code they never needed.
+    // But the server refuses the same way when the last code has ALREADY
+    // signed someone in (laptop, then phone inside the minute), and it cannot
+    // say which without revealing that the address has an account. So the
+    // header may say a code was asked for, and nothing more.
     authState.sendCode = vi.fn().mockRejectedValue(
       refusal(429, 'code_too_soon', 'Please wait 37 seconds before asking for a new code.', { retryAfterSeconds: 37 }),
     );
@@ -177,6 +186,27 @@ describe('from the address to the code', () => {
     expect(await screen.findByText('6-digit code')).toBeTruthy();
     expect(screen.getByText('Resend code in 37s')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(/less than a minute ago/i)).toBeTruthy();
+    expect(screen.getByText('kd@example.com')).toBeTruthy();
+    expect(screen.queryByText(/we sent/i)).toBeNull();
+    expect(screen.queryByText(/still valid/i)).toBeNull();
+  });
+
+  it('after a "too soon" arrival, a Resend that really sends flips the header to "we sent"', async () => {
+    authState.sendCode = vi
+      .fn()
+      .mockRejectedValueOnce(
+        refusal(429, 'code_too_soon', 'Please wait 1 second before asking for a new code.', { retryAfterSeconds: 0 }),
+      )
+      .mockResolvedValueOnce({ resendAfterSeconds: 60, expiresInSeconds: 600 });
+    drawLogin();
+    typeEmail();
+    fireEvent.click(screen.getByText('Continue with email'));
+    expect(await screen.findByText(/less than a minute ago/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Resend code'));
+    expect(await screen.findByText(/we sent a 6-digit code to/i)).toBeTruthy();
+    expect(screen.queryByText(/less than a minute ago/i)).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith('New code sent.');
   });
 
   it('offers Resend at once when the server says so, asks again on press, and says a new code was sent', async () => {
@@ -190,10 +220,11 @@ describe('from the address to the code', () => {
     expect(toast.success).toHaveBeenCalledWith('New code sent.');
   });
 
-  it('Resend refused as "too soon" says the last code is still valid, never that a new one was sent', async () => {
+  it('Resend refused as "too soon" says only that a code was asked for inside the minute — not "sent", not "still valid"', async () => {
     // Two tabs on the same address: this tab's countdown has ended, the other
-    // tab's code is still inside the gap, the server refuses, so no new code
-    // was sent — and the person is told the one they have is good.
+    // tab asked inside the gap, the server refuses, so no new code was sent.
+    // The other tab's code may be unused or may have signed them in already;
+    // the notice must not claim either.
     authState.sendCode = vi
       .fn()
       .mockResolvedValueOnce({ resendAfterSeconds: 0, expiresInSeconds: 600 })
@@ -204,8 +235,11 @@ describe('from the address to the code', () => {
     await askForCode();
     fireEvent.click(screen.getByText('Resend code'));
     expect(await screen.findByText('Resend code in 41s')).toBeTruthy();
-    expect(toast.success).not.toHaveBeenCalledWith('New code sent.');
-    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/still valid/i));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledTimes(1);
+    const [notice] = toast.mock.calls[0];
+    expect(notice).toMatch(/less than a minute ago/i);
+    expect(notice).not.toMatch(/still valid|sent/i);
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('6-digit code')).toBeTruthy();
   });

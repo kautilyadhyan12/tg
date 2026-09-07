@@ -253,9 +253,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   });
 
   it("removes the ADDRESS from every address-keyed table, before the tombstone nulls it", { timeout: 60_000 }, async () => {
-    // The review's High (2026-09-07): sign_in_codes holds the email with no
-    // user_id and no FK, so the id-keyed purge and the FK walk both missed it,
-    // and §5.2's whole point at Day 14 is that the address is gone.
+    // sign_in_codes holds the email with no user_id and no FK, so the id-keyed
+    // purge and the FK walk both miss it on their own, and §5.2's whole point
+    // at Day 14 is that the address is gone.
     const email = uniqEmail("dpdp-addr");
     const u = await makeUser(email, 20);
     const bystanderEmail = uniqEmail("dpdp-addr-bystander");

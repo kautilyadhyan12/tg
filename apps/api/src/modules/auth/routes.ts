@@ -165,8 +165,8 @@ export function registerAuthRoutes(
   });
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-ADDRESS limits are in the database (two codes a day, five guesses
-  // a code). These Redis buckets are the wall against a client that VARIES
+  // The per-ADDRESS limits are in the database (two unused codes a day, five
+  // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
   // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
   // down for real users. So the per-IP ceiling is the same order as the

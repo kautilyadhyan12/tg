@@ -175,8 +175,8 @@ describe("the senders never claim a delivery they did not make", () => {
   });
 
   it("the Resend users sender SENDS the undo email, with the restore link on the web origin", async () => {
-    // The review's High: production deletion had no undo. The link is built
-    // from WEB_ORIGIN and the page exists (apps/web /restore-account).
+    // A deletion with no undo email is a deletion with no undo. The link is
+    // built from WEB_ORIGIN and the page exists (apps/web /restore-account).
     const sent: EmailMessage[] = [];
     const sender = createResendUsersEmailSender({ send: (m) => { sent.push(m); return Promise.resolve(); } }, log, "https://app.example");
     await sender.sendAccountDeletionEmail("kd@example.com", "Kd", "raw-token-value");
