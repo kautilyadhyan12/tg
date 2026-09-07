@@ -306,6 +306,20 @@ d("sign-in by email code (real Postgres)", () => {
     expect((JSON.parse(fourth.body) as { error: string }).error).toBe("code_limit");
   });
 
+  it("asking again immediately after signing in is still refused as too soon", { timeout: 30_000 }, async () => {
+    // The review's hole: excusing a used code from the DAY cap must not excuse
+    // it from the sixty-second GAP too. Without a used code in the gap's view,
+    // an address that could read its own inbox could sign in and ask again in
+    // a loop — measured at eight emails in 2.5 seconds against a cap of two.
+    const email = "code-used-gap@example.com";
+    expect((await send(email)).statusCode).toBe(200);
+    expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200);
+    const straightAway = await send(email);
+    expect(straightAway.statusCode).toBe(429);
+    expect((JSON.parse(straightAway.body) as { error: string }).error).toBe("code_too_soon");
+    expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = ${email}`).length).toBe(1);
+  });
+
   it("two requests for one address arriving together issue ONE code, not two", { timeout: 30_000 }, async () => {
     // The review's idempotency gap: a read-then-write day cap lets two
     // simultaneous sends both pass. The issue transaction takes a per-address

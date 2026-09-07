@@ -63,12 +63,18 @@ function tooSoon(retryAfterMs: number): AuthError {
   );
 }
 
-/** The two send-side rules, decided over this address's recent codes. Runs
- *  INSIDE the issue transaction, under the address's lock, so two requests
- *  arriving together cannot both read "one so far" and both issue. */
+/** The two send-side rules, decided over this address's recent codes (newest
+ *  first, used ones included). Runs INSIDE the issue transaction, under the
+ *  address's lock, so two requests arriving together cannot both read "one so
+ *  far" and both issue.
+ *   · The day cap counts only codes nobody proved: a code that signed the
+ *     person in is a sign-in, not a send to cap (Kd 2026-09-08).
+ *   · The sixty-second gap is measured from the newest code of ANY state — a
+ *     sign-in does not open the door to an immediate resend. */
 function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
-  if (recent.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {
-    const oldest = recent[recent.length - 1];
+  const unproved = recent.filter((r) => r.usedAt === null);
+  if (unproved.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {
+    const oldest = unproved[unproved.length - 1];
     const retryAt = (oldest?.createdAt.getTime() ?? now) + DAY_MS;
     throw tooManyToday(retryAt - now);
   }

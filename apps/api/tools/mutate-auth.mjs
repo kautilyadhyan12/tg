@@ -52,8 +52,8 @@ const MUTANTS = [
     target: 'codes',
     why: "Kd's cap: the day allows THREE codes instead of two",
     expect: 'two codes a day',
-    from: '  if (recent.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {',
-    to: '  if (recent.length > SIGN_IN_CODE_RULES.maxCodesPerDay) {',
+    from: '  if (unproved.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {',
+    to: '  if (unproved.length > SIGN_IN_CODE_RULES.maxCodesPerDay) {',
   },
   {
     id: 'A15',
@@ -201,11 +201,19 @@ const MUTANTS = [
   },
   {
     id: 'A19',
-    target: 'repo',
+    target: 'codes',
     why: "a code that signed the person in counts against the day again, so two sign-ins and a resend lock an address out (Kd's 2026-09-08 amendment gone)",
-    expect: 'does not count against the day',
-    from: '        AND used_at IS NULL\n      ORDER BY created_at DESC`;\n    input.check',
-    to: '      ORDER BY created_at DESC`;\n    input.check',
+    expect: 'signed you in does not count',
+    from: '  const unproved = recent.filter((r) => r.usedAt === null);',
+    to: '  const unproved = recent;',
+  },
+  {
+    id: 'A20',
+    target: 'codes',
+    why: 'the sixty-second gap forgets a code once it has signed the person in — someone who can read the inbox signs in and asks again in a loop, past the day cap',
+    expect: 'immediately after signing in',
+    from: '  const latest = recent[0];',
+    to: '  const latest = unproved[0];',
   },
 ];
 
