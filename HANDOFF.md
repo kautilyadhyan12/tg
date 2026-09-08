@@ -41,6 +41,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   the no-clock test compares every field under two clocks; the gain-floor test asserts the flag; and
   a grid sweep over the schema's corners (every goal, both formulas, the age/height/weight rails,
   targets on both sides and past the horizon) checks every plan adds up and the contract accepts it.
+- Merged as PR #56 on 2026-09-09 (CI green; branch deleted). On the way, the attendance boundary
+  test was fixed to never sit on the gym's midnight (CI had run at 00:00 Kolkata and the test's
+  own premise failed before the code ran). Kd merged on the re-check's verdict: no Critical/High.
 - Open: 3b (health screening, Safe mode, consent log).
 
 ## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
