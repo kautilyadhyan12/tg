@@ -8,12 +8,23 @@ import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStat
 import { orgService, errorText } from '../../api/orgsApi';
 import { consoleOrgsSnapshot, refreshConsoleOrgs, subscribeConsoleOrgs } from './consoleOrgs';
 import { useConsoleSignOut } from './consoleSignOut';
-import { ORG_TYPE_CHOICES, countryOptions, detectTimezone, timezoneOptions } from './consoleView';
+import { useConsoleOrgs } from './useConsoleOrg';
+import {
+  ORG_TYPE_CHOICES,
+  countryOptions,
+  detectTimezone,
+  orgWords,
+  timezoneOptions,
+} from './consoleView';
 
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
 // behind them — and the reduction is stated rather than quietly performed.
 //
-// BUILT:   step 1 (name · city · org type · country · timezone) and step 4's
+// "Create your organisation" (Kd 2026-09-07): the type is gym, studio or
+// personal trainer, and the words on the screen follow it (`orgWords`). The
+// file keeps its name; the route is still `/console/new`.
+//
+// BUILT:   step 1 (org type · name · city · country · timezone) and step 4's
 //          code reveal, which is the same transaction server-side.
 // NOT BUILT, each with its own owed line: step 2 (size, seat tier, 7-day
 //          trial), step 3 (logo upload), step 5 (invite your team), and step
@@ -56,7 +67,7 @@ function SettingUpCover() {
       >
         <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'rgba(255,255,255,0.45)' }} />
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Setting up your gym…
+          Setting things up…
         </p>
       </div>
     </div>
@@ -129,7 +140,19 @@ export default function NewGym() {
       ? null
       : (snapshot.orgs ?? []).find((o) => o?.id === created.org.id) ?? null;
 
+  // DOES THIS PERSON RUN ANYTHING YET? A new owner from the "Manage" door is
+  // sent here by `ConsoleHome` because they run nothing (Kd 2026-09-07), and a
+  // Cancel link back to that screen would bounce them straight back here. So
+  // Cancel is offered only to somebody who has a list to return to; a first-time
+  // owner has the shell's Sign out. Unknown (store not read yet) counts as no
+  // list, the direction that cannot draw a link onto a loop.
+  // `useConsoleOrgs` reads the store ON MOUNT (a person can open `/console/new`
+  // directly, before the front door ever asked), so the answer arrives here too.
+  const mine = useConsoleOrgs();
+  const runsSomething = !mine.loading && mine.error === null && mine.orgs.length > 0;
+
   const { signingOut, signOut } = useConsoleSignOut();
+  const words = orgWords(orgType);
 
   const canSubmit = name.trim() !== '' && country !== '' && timezone.trim() !== '' && !submitting;
 
@@ -168,7 +191,7 @@ export default function NewGym() {
       // The server's own sentence, verbatim: "We're not open in that country
       // yet…" is authored for this reader and is more use than anything a
       // client-side rewrite would produce.
-      setError(errorText(err, "We couldn't create your gym. Please try again."));
+      setError(errorText(err, `We couldn't create your ${words.it}. Please try again.`));
     } finally {
       setSubmitting(false);
     }
@@ -218,7 +241,7 @@ export default function NewGym() {
             {created.org.name} is ready
           </h1>
           <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Your gym is set up in {created.org.currencyDisplay}.
+            Your {orgWords(created.org.orgType).it} is set up in {created.org.currencyDisplay}.
           </p>
         </div>
 
@@ -227,6 +250,7 @@ export default function NewGym() {
             be paused, expired or used up. Stated here rather than defaulted
             silently — these are facts about a brand-new row, not fallbacks. */}
         <JoinCodeCard
+          orgType={created.org.orgType}
           code={{
             code: created.joinCode.code,
             label: created.joinCode.label,
@@ -243,7 +267,7 @@ export default function NewGym() {
           className="rounded-xl px-4 py-3 text-sm font-semibold"
           style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' }}
         >
-          Go to your gym
+          Go to your console
         </button>
       </div>
     );
@@ -253,45 +277,21 @@ export default function NewGym() {
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8">
       <h1 className="text-2xl font-bold mb-1" style={{ color: '#fff' }}>
-        Create a gym
+        Create your organisation
       </h1>
       <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        You&apos;ll get a join code to hand to your members.
+        You&apos;ll get a join code to hand to your {words.people}.
       </p>
 
       <form onSubmit={submit} className="flex flex-col gap-5">
         <ConsoleCard className="flex flex-col gap-5">
-          <Field label="Gym name">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              placeholder="Iron House"
-              aria-label="Gym name"
-              className="w-full rounded-xl px-4 py-3 text-sm"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="City" hint="Optional">
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              maxLength={120}
-              placeholder="Austin"
-              aria-label="City"
-              className="w-full rounded-xl px-4 py-3 text-sm"
-              style={inputStyle}
-            />
-          </Field>
-
+          {/* THE TYPE COMES FIRST because every label below it follows the
+              answer — a trainer is not asked for a "gym name". */}
           <div>
             <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
               What is it?
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
               {ORG_TYPE_CHOICES.map((choice) => {
                 const active = orgType === choice.value;
                 return (
@@ -320,7 +320,33 @@ export default function NewGym() {
             </div>
           </div>
 
-          <Field label="Country" hint="This decides the currency your gym is billed in.">
+          <Field label={words.nameLabel}>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={120}
+              placeholder={words.placeholder}
+              aria-label={words.nameLabel}
+              className="w-full rounded-xl px-4 py-3 text-sm"
+              style={inputStyle}
+            />
+          </Field>
+
+          <Field label="City" hint="Optional">
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              maxLength={120}
+              placeholder="Austin"
+              aria-label="City"
+              className="w-full rounded-xl px-4 py-3 text-sm"
+              style={inputStyle}
+            />
+          </Field>
+
+          <Field label="Country" hint="This decides the currency you are billed in.">
             <Select
               value={country}
               onChange={setCountry}
@@ -331,7 +357,7 @@ export default function NewGym() {
             />
           </Field>
 
-          <Field label="Timezone" hint="Your gym's daily figures use this.">
+          <Field label="Timezone" hint="Your daily figures use this.">
             {zones.length > 0 ? (
               // A native select for ~400 options: the OS picker scrolls and
               // type-ahead searches, which the app's own dropdown does not, and
@@ -380,11 +406,13 @@ export default function NewGym() {
             }}
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {submitting ? 'Creating…' : 'Create gym'}
+            {submitting ? 'Creating…' : 'Create'}
           </button>
-          <Link to="/console" className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Cancel
-          </Link>
+          {runsSomething ? (
+            <Link to="/console" className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Cancel
+            </Link>
+          ) : null}
         </div>
       </form>
     </div>

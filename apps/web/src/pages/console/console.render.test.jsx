@@ -242,9 +242,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ── Your gyms ───────────────────────────────────────────────────────────────
+// ── Your organisations ───────────────────────────────────────────────────────────────
 
-describe('Your gyms', () => {
+describe('Your organisations', () => {
   it('lists the gyms the caller staffs and hides the ones they only belong to', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG, MEMBER_ONLY_ORG] } });
     drawHome();
@@ -254,20 +254,32 @@ describe('Your gyms', () => {
     expect(screen.queryByText('Their Gym')).toBeNull();
   });
 
-  it('says you run no gym only when the server actually said so', async () => {
+  it('sends a person who runs nothing straight to "Create your organisation" — only when the server said so', async () => {
+    // Kd 2026-09-07: a new owner from the "Manage" door lands on the create
+    // screen, not on an empty list.
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
-    drawHome();
-    expect(await screen.findByText(/don't run a gym yet/i)).toBeTruthy();
+    drawConsoleFrom('/console');
+    expect(await screen.findByText('Create your organisation')).toBeTruthy();
+    expect(screen.queryByText('Your organisations')).toBeNull();
+    // And a first-time owner has nothing to cancel back to: a Cancel link here
+    // would bounce them straight back to this screen.
+    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
-  it('NEVER says that when the read failed — it says what went wrong, with a way out', async () => {
+  it('offers Cancel on the create screen only to somebody who already runs something', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    drawConsoleFrom('/console/new');
+    expect(await screen.findByText('Cancel')).toBeTruthy();
+  });
+
+  it('NEVER redirects when the read failed — it says what went wrong, with a way out', async () => {
     orgService.getMine.mockRejectedValue(offline());
-    drawHome();
+    drawConsoleFrom('/console');
     expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
-    // THE ASSERTION THIS TEST EXISTS FOR: the empty state is a claim about the
-    // caller's gyms, and a failed read knows nothing about them.
-    expect(screen.queryByText(/don't run a gym yet/i)).toBeNull();
+    // THE ASSERTION THIS TEST EXISTS FOR: "you run nothing" is a claim about the
+    // caller's organisations, and a failed read knows nothing about them.
+    expect(screen.queryByText('Create your organisation')).toBeNull();
   });
 
   it('retries the read when asked', async () => {
@@ -302,11 +314,37 @@ describe('Create a gym', () => {
     expect(labels).toHaveLength(24);
   });
 
-  it('offers gym and studio, and does not offer clinic', () => {
+  it('offers gym, studio and personal trainer, and does not offer clinic', () => {
     drawNew();
     expect(screen.getByText('Gym')).toBeTruthy();
     expect(screen.getByText('Studio')).toBeTruthy();
+    expect(screen.getByText('Personal trainer')).toBeTruthy();
     expect(screen.queryByText('Clinic')).toBeNull();
+  });
+
+  it("uses a trainer's words once Personal trainer is picked, and sends that type up", async () => {
+    // Kd 2026-09-07: a trainer's CLIENTS join by code like members. The screen
+    // must not ask a trainer for a "gym name" or promise them "members".
+    drawNew();
+    expect(screen.getByText(/hand to your members/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Personal trainer'));
+    expect(screen.getByText(/hand to your clients/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Gym name')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: 'Coach Priya' } });
+    await chooseCountry('India');
+    orgService.createOrg.mockResolvedValue({
+      data: {
+        org: { ...ORG, name: 'Coach Priya', orgType: 'personal_trainer', currencyDisplay: 'INR' },
+        joinCode: { code: 'K7QM2X', label: 'Front Desk' },
+      },
+    });
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('personal_trainer');
+    // The code screen speaks to a trainer too.
+    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    expect(screen.getByText(/Give this code to your clients/i)).toBeTruthy();
+    expect(screen.queryByText(/your members/i)).toBeNull();
   });
 
   it('prefills the timezone with the device’s own zone', async () => {
@@ -329,7 +367,7 @@ describe('Create a gym', () => {
     expect(screen.queryByText('United States')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
 
     // And it submits once a country IS chosen — a fix that simply broke the
@@ -339,7 +377,7 @@ describe('Create a gym', () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
     expect(orgService.createOrg.mock.calls[0][0].country).toBe('IN');
   });
@@ -351,7 +389,7 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
 
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
     expect(screen.getByText(/set up in USD/)).toBeTruthy();
@@ -369,7 +407,7 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Sydney Iron' } });
     await chooseCountry('India');
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
     expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
   });
 
@@ -380,10 +418,10 @@ describe('Create a gym', () => {
     // that is not a click on that button (Enter in a text field), so it is
     // submitted DIRECTLY here as well as clicked.
     drawNew();
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
     expect(orgService.createOrg).not.toHaveBeenCalled();
 
-    const form = screen.getByText('Create gym').closest('form');
+    const form = screen.getByText('Create').closest('form');
     fireEvent.submit(form);
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
   });
@@ -1644,20 +1682,21 @@ describe('a gym you have just made', () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
-    fireEvent.click(screen.getByText('Create a gym'));
-    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    // A person who runs nothing is already ON the create screen (the front
+    // door sends them there).
+    fireEvent.change(await screen.findByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
   };
 
-  it('opens when its owner presses "Go to your gym", instead of saying it is not theirs', async () => {
+  it('opens when its owner presses "Go to your console", instead of saying it is not theirs', async () => {
     orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });
     drawConsoleFrom('/console');
-    expect(await screen.findByText(/don't run a gym yet/i)).toBeTruthy();
+    expect(await screen.findByText('Create your organisation')).toBeTruthy();
 
     await createIronHouse();
-    fireEvent.click(screen.getByText('Go to your gym'));
+    fireEvent.click(screen.getByText('Go to your console'));
 
     // Scoped to the hero card: the code also appears in the panel below, and an
     // unscoped query would pass on either.
@@ -1665,21 +1704,22 @@ describe('a gym you have just made', () => {
     expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
   });
 
-  it('is listed under "Your gyms" without a reload', async () => {
+  it('is listed under "Your organisations" without a reload', async () => {
     orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });
     drawConsoleFrom('/console');
-    expect(await screen.findByText(/don't run a gym yet/i)).toBeTruthy();
+    expect(await screen.findByText('Create your organisation')).toBeTruthy();
 
     await createIronHouse();
-    // Back to the front door — `ConsoleLayout`'s "Your gyms" link, expressed the
-    // way this file already expresses a navigation between console screens.
+    // Back to the front door — `ConsoleLayout`'s "Your organisations" link,
+    // expressed the way this file already expresses a navigation between
+    // console screens.
     cleanup();
     drawConsoleFrom('/console');
 
     expect(await screen.findByText('Iron House')).toBeTruthy();
-    // The sentence a FIRST-TIME owner was reading, seconds after making their
-    // first gym.
-    expect(screen.queryByText(/don't run a gym yet/i)).toBeNull();
+    // A FIRST-TIME owner, seconds after making their first gym, must not be
+    // bounced back to the create screen as if they still ran nothing.
+    expect(screen.queryByText('Create your organisation')).toBeNull();
   });
 });
 

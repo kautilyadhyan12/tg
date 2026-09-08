@@ -164,7 +164,7 @@ export default function ConsoleLayout({ children }) {
           {orgSlug ? (
             <Link to="/console" className={`${railBase} mt-2`} style={navStyle(false)}>
               <ChevronLeft className="w-4 h-4 flex-shrink-0" />
-              <span>Your gyms</span>
+              <span>Your organisations</span>
             </Link>
           ) : null}
         </nav>
@@ -288,7 +288,7 @@ export default function ConsoleLayout({ children }) {
             "Loading…" for one round trip instead of the previous gym's details;
             that is the screen telling the truth about what it knows. On the only
             journey the console currently draws, the screen already remounts
-            going past "Your gyms", so this key changes nothing a user sees.
+            going past "Your organisations", so this key changes nothing a user sees.
 
             THE `screen:` PREFIX IS LOAD-BEARING AND THE GUARD PROVED IT. Written
             first as `orgSlug ?? 'no-gym'`, this collided with the banner's own
@@ -310,7 +310,7 @@ export default function ConsoleLayout({ children }) {
           Settings reachable by typing an address, which is a prompt somebody
           walks around rather than one they cannot skip. It draws nothing on
           `/console` and `/console/new`, where there is no gym to be about —
-          which is also what makes "Your gyms" inside it a real exit rather than
+          which is also what makes "Your organisations" inside it a real exit rather than
           a way past.
 
           IT DECIDES NOTHING ITSELF: `planPromptFor` answers null for anybody
@@ -364,7 +364,7 @@ export default function ConsoleLayout({ children }) {
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
             <ChevronLeft className="w-5 h-5" />
-            <span>Your gyms</span>
+            <span>Your organisations</span>
           </Link>
         </nav>
       ) : null}

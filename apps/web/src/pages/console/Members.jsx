@@ -293,7 +293,7 @@ export default function Members() {
             We couldn&apos;t find a gym you run at this address.
           </p>
           <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
-            Your gyms
+            Your organisations
           </Link>
         </ConsoleCard>
       </div>

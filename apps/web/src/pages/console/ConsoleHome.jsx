@@ -1,39 +1,44 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Building2, Plus, ChevronRight } from 'lucide-react';
-import { roleLabel } from './consoleView';
+import { orgTypeLabel, roleLabel } from './consoleView';
 import { useConsoleOrgs } from './useConsoleOrg';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 
-// "Your gyms" — the console's front door.
+// "Your organisations" — the console's front door.
 //
-// Only gyms the caller is STAFF of are listed (`manageableOrgs`). A gym they
-// merely belong to answers 404 to every console read, so listing it would be a
-// door onto an error; the member-facing "gyms I belong to" view is a different
-// screen and is not built.
+// Only organisations the caller is STAFF of are listed (`manageableOrgs`). One
+// they merely belong to answers 404 to every console read, so listing it would
+// be a door onto an error; the member-facing "gyms I belong to" view is a
+// different screen and is not built.
 //
-// No auto-redirect when there is exactly one gym. It would save a tap and it
-// would also make "create a second gym" reachable only by typing a URL — the
-// list is the honest shape and the smoke will say whether the tap annoys.
+// No auto-redirect when there is exactly one. It would save a tap and it would
+// also make "create a second one" reachable only by typing a URL — the list is
+// the honest shape.
+//
+// A PERSON WHO RUNS NOTHING IS SENT STRAIGHT TO "CREATE YOUR ORGANISATION" (Kd
+// 2026-09-07: a new owner from the "Manage" door lands there). Only when the
+// server actually SAID they run nothing — a failed read must never reach that
+// redirect, because "you run nothing" is a claim, and at an owner of three gyms
+// whose connection blipped it is the empty-state defect this project has
+// already shipped once. That is why `error` is checked before `orgs.length`.
 
 export default function ConsoleHome() {
-  // The SAME kept answer every gym screen reads (`consoleOrgs.js`), so tapping
-  // into a gym from here asks the server nothing, and clicking back into the
-  // window re-checks this list too — a gym somebody took you off stops being
+  // The SAME kept answer every console screen reads (`consoleOrgs.js`), so
+  // tapping into one from here asks the server nothing, and clicking back into
+  // the window re-checks this list too — one somebody took you off stops being
   // listed without a reload.
-  //
-  // The three arms stay distinguishable, which is the load-bearing part: the
-  // empty arm below says "you don't run a gym yet", and that is a CLAIM. A
-  // failed read must never reach it — that sentence at an owner of three gyms
-  // whose connection blipped is the empty-state defect this project has already
-  // shipped once, which is why `error` is checked before `orgs.length`.
   const state = useConsoleOrgs();
   const retry = state.reload;
+
+  if (!state.loading && state.error === null && state.orgs.length === 0) {
+    return <Navigate to="/console/new" replace />;
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Your gyms
+          Your organisations
         </h1>
         <Link
           to="/console/new"
@@ -41,25 +46,14 @@ export default function ConsoleHome() {
           style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' }}
         >
           <Plus className="w-4 h-4" />
-          Create a gym
+          Create another
         </Link>
       </div>
 
-      {state.loading ? <ConsoleLoading label="Loading your gyms…" /> : null}
+      {state.loading ? <ConsoleLoading label="Loading your organisations…" /> : null}
 
       {!state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />
-      ) : null}
-
-      {!state.loading && state.error === null && state.orgs.length === 0 ? (
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            You don&apos;t run a gym yet.
-          </p>
-          <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Create one and you&apos;ll get a join code to hand to your members.
-          </p>
-        </ConsoleCard>
       ) : null}
 
       {!state.loading && state.error === null && state.orgs.length > 0 ? (
@@ -83,9 +77,11 @@ export default function ConsoleHome() {
                 </div>
                 {/* T3 L-6 named `Overview.jsx`; the same raw enum was printed
                     here too, so it is fixed as a class (:1239) rather than at
-                    the one site the review happened to open. */}
+                    the one site the review happened to open. The type is shown
+                    so a list of three reads "gym · studio · personal trainer"
+                    rather than three identical rows. */}
                 <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  {org.city ? `${org.city} · ` : ''}
+                  {orgTypeLabel(org.orgType)} · {org.city ? `${org.city} · ` : ''}
                   {roleLabel(org.staffRole)}
                 </div>
               </div>

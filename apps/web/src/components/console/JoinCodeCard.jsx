@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
-import { codeState } from '../../pages/console/consoleView';
+import { codeState, orgWords } from '../../pages/console/consoleView';
 import { ConsoleCard } from './ConsoleStates';
 
 // The join code, big enough to read across a front desk — Part 3 §4.0 step 4
@@ -22,9 +22,12 @@ import { ConsoleCard } from './ConsoleStates';
 // weakening them to `getAllByText` would have quietly dropped the claim that
 // this card shows the first LIVE code rather than merely the oldest.
 
-export default function JoinCodeCard({ code }) {
+/** `orgType` picks the invitation's words: a trainer hands the code to CLIENTS
+ *  (Kd 2026-09-07), a gym to members. Absent, the gym's words. */
+export default function JoinCodeCard({ code, orgType }) {
   const [copied, setCopied] = useState(false);
   const state = codeState(code);
+  const words = orgWords(orgType);
 
   const copy = async () => {
     try {
@@ -66,7 +69,7 @@ export default function JoinCodeCard({ code }) {
 
       {state.live ? (
         <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          Give this code to your members. They enter it in the app to join your gym.
+          Give this code to your {words.people}. They enter it in the app to join your {words.it}.
         </p>
       ) : (
         <p className="text-sm mt-4" style={{ color: '#ef4444' }}>

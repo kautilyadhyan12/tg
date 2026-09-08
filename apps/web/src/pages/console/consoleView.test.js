@@ -21,6 +21,7 @@ import {
   memberCountLabel,
   memberCountLine,
   orgTypeLabel,
+  orgWords,
   roleLabel,
   seatIsFree,
   timezoneOptions,
@@ -275,6 +276,7 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
   it('labels org types and roles', () => {
     expect(orgTypeLabel('gym')).toBe('Gym');
     expect(orgTypeLabel('studio')).toBe('Studio');
+    expect(orgTypeLabel('personal_trainer')).toBe('Personal trainer');
     expect(roleLabel('owner')).toBe('Owner');
     expect(roleLabel('manager')).toBe('Manager');
     expect(roleLabel('trainer')).toBe('Trainer');
@@ -414,10 +416,20 @@ describe('the mark that says a member asked again', () => {
 });
 
 describe('the org-type picker matches what the server will accept', () => {
-  it('offers gym and studio, and does not offer clinic', () => {
-    // Kd's 2026-08-18 ruling narrowed org creation to `gym|studio`. An option
-    // for `clinic` here would be a card the server refuses.
-    expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio']);
+  it('offers gym, studio and personal trainer, and does not offer clinic', () => {
+    // Kd's 2026-09-07 ruling: gym · studio · personal trainer. Clinics stayed
+    // out (2026-08-18); an option for one here would be a card the server refuses.
+    expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio', 'personal_trainer']);
+  });
+
+  it("uses a trainer's words — clients, not members — and the gym's for anything unknown", () => {
+    expect(orgWords('personal_trainer').people).toBe('clients');
+    expect(orgWords('personal_trainer').nameLabel).toBe('Your business name');
+    expect(orgWords('gym').people).toBe('members');
+    expect(orgWords('gym').nameLabel).toBe('Gym name');
+    expect(orgWords('studio').nameLabel).toBe('Studio name');
+    expect(orgWords('franchise')).toEqual(orgWords('gym'));
+    expect(orgWords(null)).toEqual(orgWords('gym'));
   });
 });
 

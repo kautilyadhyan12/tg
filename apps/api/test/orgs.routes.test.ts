@@ -1656,6 +1656,31 @@ d("orgs routes (real Postgres)", () => {
     expect(studio.org.orgType).toBe("studio");
   });
 
+  it("creates a personal trainer's organisation — Kd ruling 2026-09-07: gym · studio · personal trainer", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("pt-owner");
+    const pt = await makeOrg(cookies, "Orgs Test Personal Trainer", { orgType: "personal_trainer" });
+    expect(pt.org.orgType).toBe("personal_trainer");
+    // Stored as typed, through migration 0024's widened CHECK — read back from
+    // the row, not from the response, so a server that echoed the request and
+    // wrote something else would be caught.
+    const rows = await sql<{ org_type: string; hours_mode: string }[]>`
+      SELECT org_type, hours_mode FROM gyms WHERE id = ${pt.org.id}`;
+    expect(rows[0]?.org_type).toBe("personal_trainer");
+    // Opening hours are optional for a trainer: nothing is invented at creation.
+    expect(rows[0]?.hours_mode).toBe("unset");
+    // A trainer's clients join by code like members: the first code exists and
+    // the owner is client #1 of their own list, complimentary.
+    expect(pt.joinCode.code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/);
+    const mine = await get("/v1/orgs/mine", { cookies });
+    expect(mine.statusCode).toBe(200);
+    const listed = (JSON.parse(mine.body) as { orgs: { id: string; orgType: string }[] }).orgs
+      .find((o) => o.id === pt.org.id);
+    expect(listed?.orgType).toBe("personal_trainer");
+    // A stranger gets the standing 404 on the new organisation's console reads.
+    const stranger = await makeUser("pt-stranger");
+    expect((await get(`/v1/orgs/${pt.org.id}/members`, { cookies: stranger.cookies })).statusCode).toBe(404);
+  });
+
   it("a legacy clinic row still demands consent on join, and records it (Part 3 §2.4)", { timeout: 90_000 }, async () => {
     // The API can no longer CREATE a clinic, but the org type was never
     // deleted from the database and the consent gate must still protect a row

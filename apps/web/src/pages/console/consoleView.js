@@ -305,7 +305,12 @@ export function memberCountLine(page, viewerUserId = null) {
  *
  *  Unknown values fall back to the raw string rather than to a guess — a role
  *  this app does not know about is better shown as itself than relabelled. */
-const ORG_TYPE_WORDS = { gym: 'Gym', studio: 'Studio', clinic: 'Clinic' };
+const ORG_TYPE_WORDS = {
+  gym: 'Gym',
+  studio: 'Studio',
+  personal_trainer: 'Personal trainer',
+  clinic: 'Clinic',
+};
 const ROLE_WORDS = { owner: 'Owner', manager: 'Manager', trainer: 'Trainer' };
 
 export function orgTypeLabel(orgType) {
@@ -335,15 +340,39 @@ export function groupLabelText(member) {
   return typeof label === 'string' && label !== '' ? label : '—';
 }
 
-/** Part 3 §4.0 step 1's org-type picker. `clinic` is absent by Kd's ruling of
- *  2026-08-18 — *"no click will be there only gyms and fitness centers"* — and
- *  the create schema is narrowed to match, so an added option here would be
- *  refused by the server. `studio` stays: a PT or boutique studio is a fitness
- *  business, not a medical one. */
+/** Part 3 §4.0 step 1's org-type picker — Kd's ruling of 2026-09-07: gym,
+ *  studio, personal trainer. `clinic` is absent by his ruling of 2026-08-18 —
+ *  *"no click will be there only gyms and fitness centers"* — and the create
+ *  schema is narrowed to match, so an added option here would be refused by
+ *  the server. */
 export const ORG_TYPE_CHOICES = [
   { value: 'gym', label: 'Gym', hint: 'A gym or fitness centre with members' },
-  { value: 'studio', label: 'Studio', hint: 'A boutique or personal-training studio' },
+  { value: 'studio', label: 'Studio', hint: 'A boutique or class-based studio with members' },
+  {
+    value: 'personal_trainer',
+    label: 'Personal trainer',
+    hint: 'You train your own clients; they join with your code',
+  },
 ];
+
+/** THE WORDS THE CREATE SCREEN USES FOR EACH TYPE. A trainer has CLIENTS, not
+ *  members (Kd 2026-09-07: *"a trainer's clients join by code like members"*),
+ *  and no "gym name". An unknown type gets the gym's words rather than a blank
+ *  label — the same fall-back direction as `orgTypeLabel`. */
+const ORG_WORDS = {
+  gym: { nameLabel: 'Gym name', placeholder: 'Iron House', it: 'gym', people: 'members' },
+  studio: { nameLabel: 'Studio name', placeholder: 'Flow Studio', it: 'studio', people: 'members' },
+  personal_trainer: {
+    nameLabel: 'Your business name',
+    placeholder: 'Coach Priya',
+    it: 'business',
+    people: 'clients',
+  },
+};
+
+export function orgWords(orgType) {
+  return Object.hasOwn(ORG_WORDS, orgType ?? '') ? ORG_WORDS[orgType] : ORG_WORDS.gym;
+}
 
 /** THE CLOCK'S WORDS LIVE IN `utils/joinClock.js` and are re-exported here.
  *

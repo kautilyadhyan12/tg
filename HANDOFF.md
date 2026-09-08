@@ -4,6 +4,24 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-08 · Organisation types (Stage 1 item 2), branch `organisation-types`
+
+- Built: `personal_trainer` joins `gym` and `studio` as a creatable type (`createOrgTypeSchema` in
+  `@app/shared`); migration `0024` widens the `gyms_org_type_check` CHECK (clinic stays readable,
+  no data touched). Web: the create screen is "Create your organisation" with three type cards,
+  the type first, and words that follow it (`orgWords`: a trainer has clients and a business
+  name); `/console` sends a person who runs nothing straight to `/console/new` (only when the
+  server said so — a failed read still shows the error); Cancel on the create screen is offered
+  only to someone with a list to return to; the "Your gyms" links read "Your organisations"; the
+  join-code card takes `orgType` so it never promises a trainer "members" or "a gym".
+- Verified: shared + api tsc green; api eslint green; web eslint on touched files green; web
+  1835 passed (the pre-existing `poseAssets.contract.test.js` encoding failure remains);
+  `orgs.routes` + `db.migration` on local Postgres 167 passed (the new test was run RED before
+  `0024` was applied: 500 on the CHECK).
+- Opening hours needed no change: `hours_mode` starts `unset` for every type, so they are already
+  optional for a trainer. Console-wide vocabulary is split off as roadmap 2b.
+- Open: independent review round, Kd's click-through, then merge.
+
 ## 2026-09-07 · Sign-in by email code (Stage 1 item 1), branch `sign-in-by-email-code`
 
 - Built: `POST /v1/auth/code/send` and `/verify` (codes HMAC-stored in new table `sign_in_codes`,
