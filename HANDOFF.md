@@ -4,6 +4,23 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
+
+- Built: the contract `packages/shared/src/plan.ts` (answers so far in, `plan` or `missing` out,
+  never both) and the pure calculator `apps/api/src/modules/plan/maths.ts`: resting burn
+  (Mifflin-St Jeor, as the nutrition targets), daily burn from the day's factor plus the week's
+  training, pace → cut or surplus, macros (the targets' protein table, 25 % fat, 50 g carb floor),
+  finish date from a "today" the caller passes (no clock). Flags: target wrong direction ·
+  target below the healthy weight (BMI 18.5; the plan runs to the floor) · over a year (with the
+  gentlest pace that fits, or null) · calorie floor 1200 applied · no deficit (under 18,
+  pregnancy, heart, blood pressure, diabetes). Health unanswered = no condition rule yet.
+- Engineering choices: day factors are the no-exercise ones (1.2 / 1.3 / 1.45 / 1.6) because
+  training is added on top at 5 MET; paces 0.25 / 0.5 / 0.75 kg a week, the same table for a gain.
+- Verified: shared + api tsc and eslint exit 0; `test/plan.unit.test.ts` 36 passed; shared 59 passed.
+  `tools/plan-preview.ts` prints the numbers for one person (the click-through). No screen, no
+  route, no migration — 4a builds the route and screens on this contract.
+- Open: review round in a fresh chat; then 3b (health screening, Safe mode, consent log).
+
 ## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
 
 - Built: one word table in `@app/shared` (`orgWords.ts`) read by the API and by every screen —
