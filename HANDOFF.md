@@ -31,7 +31,17 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   unless all four answers are given. Safe mode's `safe_mode` reason noted on 3b.
 - Verified after the fixes: shared + api tsc and eslint exit 0; `plan.unit` 44 + `nutrition.unit` 28
   passed; shared 59 passed; `users.fitness.routes` 10 passed on local Postgres.
-- Open: the reviewer's re-check of the fixes; then 3b (health screening, Safe mode, consent log).
+- A live screen moved: the macro rings' protein gram now gives way to the 50 g carb floor, so a
+  very short, very heavy or very old profile (the reviewer measured about 0.5 % of a 912 912-profile
+  grid; largest change 242 g → 182 g) shows a smaller protein number than before. It was a bug — the
+  old number did not fit in the day's calories — not a ruling change.
+- Re-check (fresh chat): no Critical/High; three Lows and three test gaps, fixed in the third commit:
+  the flag docstring says when the plan holds the weight instead of running to the floor; resting
+  burn takes the `Gender` enum again (the nutrition targets narrow their string once, failing loud);
+  the no-clock test compares every field under two clocks; the gain-floor test asserts the flag; and
+  a grid sweep over the schema's corners (every goal, both formulas, the age/height/weight rails,
+  targets on both sides and past the horizon) checks every plan adds up and the contract accepts it.
+- Open: 3b (health screening, Safe mode, consent log).
 
 ## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
 

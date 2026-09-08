@@ -26,6 +26,7 @@ import {
   planInputsSchema,
   planResponseSchema,
   type DayActivity,
+  type Gender,
   type MissingPlanInput,
   type NoDeficitReason,
   type PlanAnswers,
@@ -96,9 +97,8 @@ export function addDays(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-/** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. The
- *  `gender` is a plain string so the nutrition targets can share this line. */
-export function restingBurn(input: { age: number; gender: string; heightCm: number; weightKg: number }): number {
+/** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. */
+export function restingBurn(input: { age: number; gender: Gender; heightCm: number; weightKg: number }): number {
   return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + (input.gender === "female" ? -161 : 5);
 }
 

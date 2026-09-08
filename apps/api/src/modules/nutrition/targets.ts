@@ -25,6 +25,7 @@
 // Through the module's own seam (./schemas.js), not straight from @app/shared —
 // R7.1, and the T3 round-1 fix was incomplete without it.
 import {
+  genderSchema,
   missingTargetInputSchema,
   nutritionTargetsResponseSchema,
   type MissingTargetInput,
@@ -159,8 +160,10 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
   // BMR, Mifflin-St Jeor (:126-129), the plan calculator's line: ONLY "female"
   // takes −161; male, other and prefer_not_to_say all take +5. Mifflin-St Jeor
   // defines two formulas, so inventing a third for the non-binary values would
-  // be re-deriving a constant.
-  const bmr = restingBurn({ age, gender, heightCm, weightKg });
+  // be re-deriving a constant. The profile row's gender is a plain string here
+  // (the column has a CHECK); it is narrowed once, and a value outside the enum
+  // fails loud rather than silently taking the +5 branch.
+  const bmr = restingBurn({ age, gender: genderSchema.parse(gender), heightCm, weightKg });
 
   const tdee = bmr * (ACTIVITY_BY_FREQUENCY[exerciseFrequency] ?? DEFAULT_ACTIVITY); // :143,:145
 

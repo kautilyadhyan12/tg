@@ -112,7 +112,10 @@ export type NoDeficitReason = z.infer<typeof noDeficitReasonSchema>;
 export const planFlagSchema = z.discriminatedUnion("code", [
   /** The target is on the wrong side of the current weight for the goal, or equal to it. */
   z.object({ code: z.literal("target_wrong_direction") }).strict(),
-  /** The target is below the lowest healthy weight for the height; the plan runs to that floor instead. */
+  /** The target is below the lowest healthy weight for the height. The plan runs to that
+   *  floor instead (`plannedTargetKg` is `floorKg`) unless the weight cannot move — the
+   *  person is already at or under the floor, a no-deficit rule applies, or
+   *  `target_out_of_reach` is listed too — in which case the plan holds the current weight. */
   z.object({ code: z.literal("target_below_healthy_weight"), floorKg: z.number() }).strict(),
   /** At this pace the target is more than a year away. `suggestedPace` is the gentlest
    *  pace that finishes within a year, or null when no pace does. */

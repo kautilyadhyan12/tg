@@ -1,6 +1,6 @@
 export {
   analyzeMealPhotoRequestSchema, bodyMeasurementInputSchema, confirmMealRequestSchema,
-  createMealRequestSchema, dishwareInputSchema, foodSearchQuerySchema, manualMealRequestSchema,
+  createMealRequestSchema, dishwareInputSchema, foodSearchQuerySchema, genderSchema, manualMealRequestSchema,
   missingTargetInputSchema, nutritionListQuerySchema, nutritionTargetsResponseSchema,
   nutritionTargetsSchema, patchBodyMeasurementSchema, patchDishwareSchema, patchMealRequestSchema,
   previewMealRequestSchema,

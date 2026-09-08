@@ -42,6 +42,52 @@ import {
 //   eat           = 2254 − 550                             = 1704
 //   days          = ⌈7 kg · 7700 / 550⌉                    = 98 → 2026-12-15
 //   protein 82·2 = 164 · fat 1704·0.25/9 = 47.33 → 47 · carbs (1704 − 656 − 426)/4 = 155.5 → 156
+/** The facts every plan must hold, whatever the body: the screen's numbers
+ *  subtract and add up, the floors hold, the date is re-derivable from what is
+ *  shown, an unmoved plan holds the current weight (and says why), and the
+ *  contract accepts it. Returns the broken facts, in words, so a sweep of
+ *  thousands of bodies costs no `expect` per fact. */
+function brokenFacts(body: PlanInputs): string[] {
+  const broken: string[] = [];
+  const check = (fact: string, holds: boolean) => { if (!holds) broken.push(fact); };
+  const r = resolvePlan(body);
+  check("nothing missing", r.missing.length === 0);
+  const plan = r.plan;
+  if (plan === null) return ["no plan"];
+  check("resolvePlan is computePlan", JSON.stringify(plan) === JSON.stringify(computePlan(body)));
+  check("change = eat − burn", plan.targetKcal - plan.dailyBurnKcal === plan.dailyChangeKcal);
+  check("calorie floor", plan.targetKcal >= CALORIE_FLOOR_KCAL);
+  check("grams make the calories", Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - plan.targetKcal) <= 9);
+  check("carb floor", plan.carbsG >= CARBS_FLOOR_G);
+  check("protein not negative", plan.proteinG >= 0);
+  check("date exactly when days", (plan.finishDate === null) === (plan.daysToTarget === null));
+  const codes = plan.flags.map((f) => f.code);
+  check("no flag twice", new Set(codes).size === codes.length);
+  if (plan.daysToTarget !== null) {
+    check("inside the horizon", plan.daysToTarget <= MAX_PLAN_DAYS);
+    check("days re-derivable", plan.daysToTarget === Math.ceil((Math.abs(plan.plannedTargetKg - body.weightKg) * KCAL_PER_KG) / Math.abs(plan.dailyChangeKcal)));
+    check("date = today + days", plan.finishDate === addDays(body.today, plan.daysToTarget));
+    check("a dated plan is not out of reach", !codes.includes("target_out_of_reach"));
+    check("a dated plan has a deficit allowed", !codes.includes("no_deficit"));
+    if (plan.daysToTarget > ONE_YEAR_DAYS) check("over a year is flagged", codes.includes("pace_over_a_year"));
+    const over = plan.flags.find((f) => f.code === "pace_over_a_year");
+    if (over?.suggestedPace) {
+      const faster = computePlan({ ...body, pace: over.suggestedPace }).daysToTarget;
+      check("the suggested pace finishes inside a year", faster !== null && faster <= ONE_YEAR_DAYS);
+    }
+  } else {
+    check("an unmoved plan holds the weight", plan.plannedTargetKg === body.weightKg);
+    check("an unmoved plan eats its burn unless floored", plan.dailyChangeKcal === 0 || codes.includes("calorie_floor_applied"));
+    check("an unmoved plan says why", body.goal === "maintain" || codes.some((c) => c !== "calorie_floor_applied" && c !== "pace_over_a_year"));
+  }
+  if (plan.dailyChangeKcal < 0) check("a cut is never under no_deficit", !codes.includes("no_deficit"));
+  return broken;
+}
+
+function expectSanePlan(body: PlanInputs): void {
+  expect(brokenFacts(body), JSON.stringify(body)).toEqual([]);
+}
+
 const sample: PlanInputs = {
   goal: "lose",
   age: 30,
@@ -109,11 +155,17 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
 
   describe("reads no clock", () => {
     afterEach(() => vi.useRealTimers());
-    it("the finish date follows the 'today' passed in, whatever the machine's clock says", () => {
+    it("every number follows the 'today' passed in, whatever the machine's clock says", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2031-06-01T12:00:00Z"));
-      expect(computePlan(sample).finishDate).toBe("2026-12-15");
+      const first = computePlan(sample);
+      expect(first.finishDate).toBe("2026-12-15");
       expect(computePlan({ ...sample, today: "2027-01-01" }).finishDate).toBe("2027-04-09");
+      // Same answers under a different clock: every field identical, so no field
+      // reads the clock (or anything else that varies between calls).
+      vi.setSystemTime(new Date("1999-02-03T04:05:06Z"));
+      expect(computePlan(sample)).toEqual(first);
+      expect(computePlan(sample)).toEqual(first);
     });
   });
 
@@ -131,24 +183,45 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       { ...sample, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" },
       { ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" },
     ];
-    for (const body of bodies) {
-      const plan = computePlan(body);
-      const label = JSON.stringify(body);
-      expect(plan.targetKcal - plan.dailyBurnKcal, label).toBe(plan.dailyChangeKcal);
-      expect(plan.targetKcal, label).toBeGreaterThanOrEqual(CALORIE_FLOOR_KCAL);
-      expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - plan.targetKcal), label).toBeLessThanOrEqual(9);
-      expect(plan.carbsG, label).toBeGreaterThanOrEqual(CARBS_FLOOR_G);
-      expect(plan.finishDate === null, label).toBe(plan.daysToTarget === null);
-      if (plan.daysToTarget !== null) {
-        expect(plan.daysToTarget, label).toBeLessThanOrEqual(MAX_PLAN_DAYS);
-        expect(plan.daysToTarget, label).toBe(Math.ceil((Math.abs(plan.plannedTargetKg - body.weightKg) * KCAL_PER_KG) / Math.abs(plan.dailyChangeKcal)));
-        expect(plan.finishDate, label).toBe(addDays(body.today, plan.daysToTarget));
-      } else {
-        expect(plan.plannedTargetKg, label).toBe(body.weightKg);
+    for (const body of bodies) expectSanePlan(body);
+  });
+
+  it("every corner of the schema yields a plan the contract accepts and the screen can add up", () => {
+    // Not hand-picked: a grid over the rails and the values that flip a rule
+    // (16/17/18 for the age rule, the 50 cm and 300 cm heights, the lightest and
+    // heaviest bodies, targets on both sides and far past the horizon, every
+    // pace, the extremes of the day and the week, an all-yes health screen).
+    const goals = ["lose", "gain", "maintain"] as const;
+    const genders = ["female", "male"] as const;
+    const ages = [16, 18, 120];
+    const heights = [50, 170, 300];
+    const weights = [0.01, 45, 150, 999.99];
+    const targetOf = (w: number) =>
+      [0.01, w * 0.5, w - 0.01, w, w + 0.01, w * 1.5, 999.99]
+        .map((t) => Math.min(999.99, Math.max(0.01, Math.round(t * 100) / 100)));
+    const paces = ["gentle", "brisk"] as const;
+    const days = ["sitting", "very_active"] as const;
+    const weeks = [{ trainingDays: 0, sessionMinutes: 0 }, { trainingDays: 7, sessionMinutes: 240 }];
+    const healths = [null, { pregnant: true, heart: true, bloodPressure: true, diabetes: true }];
+    let bodies = 0;
+    const unaccepted: PlanInputs[] = [];
+    const failures: { body: PlanInputs; broken: string[] }[] = [];
+    for (const goal of goals) for (const gender of genders) for (const age of ages) for (const heightCm of heights)
+      for (const weightKg of weights) for (const dayActivity of days) for (const week of weeks) for (const health of healths) {
+        const base = { goal, gender, age, heightCm, weightKg, dayActivity, ...week, health, today: "2026-09-08" };
+        const variants: PlanInputs[] = goal === "maintain"
+          ? [{ ...base, targetWeightKg: null, pace: null }]
+          : targetOf(weightKg).flatMap((targetWeightKg) => paces.map((pace) => ({ ...base, targetWeightKg, pace })));
+        for (const body of variants) {
+          if (!planInputsSchema.safeParse(body).success) unaccepted.push(body);
+          const broken = brokenFacts(body);
+          if (broken.length > 0) failures.push({ body, broken });
+          bodies += 1;
+        }
       }
-      // ...and the contract accepts every one of them.
-      expect(() => resolvePlan(body), label).not.toThrow();
-    }
+    expect(unaccepted).toEqual([]);
+    expect(failures.slice(0, 5)).toEqual([]);
+    expect(bodies).toBeGreaterThan(5_000);
   });
 
   it("dailyChangeKcal is the difference of the two rounded numbers, not a rounded raw difference", () => {
@@ -406,9 +479,14 @@ describe("plan maths — the sanity rules", () => {
     const keep = computePlan({ ...small, goal: "maintain", targetWeightKg: null, pace: null });
     expect(keep.targetKcal).toBe(1200);
     expect(keep.flags).toEqual([{ code: "calorie_floor_applied", floorKcal: 1200 }]);
+    // Burn 842 + a gentle surplus 275 = 1117, under the floor: the gain plan
+    // sits on 1200 and says so, and still moves the weight (faster than asked).
     const gain = computePlan({ ...small, goal: "gain", targetWeightKg: 40, pace: "gentle" });
-    expect(gain.targetKcal).toBeGreaterThanOrEqual(1200);
-    expect(gain.daysToTarget).not.toBeNull();
+    expect(gain.dailyBurnKcal).toBe(842);
+    expect(gain.targetKcal).toBe(1200);
+    expect(gain.dailyChangeKcal).toBe(358);
+    expect(gain.flags).toEqual([{ code: "calorie_floor_applied", floorKcal: 1200 }]);
+    expect(gain.daysToTarget).toBe(Math.ceil((5 * KCAL_PER_KG) / 358));
   });
 
   it("no calorie deficit under 18: calories stay at daily burn, the flag says why", () => {
