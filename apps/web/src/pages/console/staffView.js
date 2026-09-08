@@ -65,31 +65,30 @@ export function canManageStaff(privileges) {
  *  it has a route yet. A hint describing the matrix instead of the product
  *  would promise a gym owner powers they are about to go looking for.
  *
- *  **THE TRAINER HINT DEPENDS ON THE ORG TYPE, and that is T3's C/H-1.** It read
- *  "Can see your member list and your join code" for everybody, which is FALSE
- *  for a STUDIO: `listOrgMembers` refuses a trainer with 403
- *  `trainer_scope_unavailable` unless `orgType === 'gym'`, because §2.3 makes
- *  group scoping CORE for studios and nothing assigns a trainer to a group yet
- *  (`gym_staff` has no group column). Studio is offered in the create wizard, so
- *  this is reachable: a studio owner reads the sentence, appoints a trainer for
- *  exactly that, and the trainer opens Members and is turned away. **The rule
- *  above is what it broke — the hint named what the MATRIX grants rather than
- *  what this gym's trainer actually gets.**
+ *  **THE TRAINER HINT DEPENDS ON THE ORG TYPE.** "Can see your member list and
+ *  your join code" is FALSE for a STUDIO: `listOrgMembers` refuses a trainer
+ *  with 403 `trainer_scope_unavailable` unless `orgType` is `gym` or
+ *  `personal_trainer`, because §2.3 makes group scoping CORE for studios and
+ *  nothing assigns a trainer to a group yet (`gym_staff` has no group column).
+ *  Studio is offered in the create wizard, so this is reachable: a studio owner
+ *  reads the sentence, appoints a trainer for exactly that, and the trainer
+ *  opens Clients and is turned away. **The rule above is what that broke — a
+ *  hint naming what the MATRIX grants rather than what this org's trainer gets.**
  *
  *  A PERSONAL TRAINER's assistant gets the client list (there is one list and no
- *  group to scope it to), and the hint says "clients" because that is the word
- *  the rest of a trainer's console uses.
+ *  group to scope it to). The word for the people follows the type — a gym has
+ *  members, a studio and a trainer have clients — in the promise AND in the
+ *  refusal, so one screen never uses two words for the same people.
  *
  *  Taking the org type as an argument rather than reading it: this file is pure,
  *  and an unknown type is treated as NOT a gym — the refusing side — so a type
  *  added later cannot silently promise access it does not have. */
 export function staffRoleChoices(orgType) {
+  const people = orgType === 'gym' ? 'member' : 'client';
   const trainerHint =
-    orgType === 'gym'
-      ? 'Can see your member list and your join code.'
-      : orgType === 'personal_trainer'
-        ? 'Can see your client list and your join code.'
-        : "Can see your join code. They can't see your member list yet.";
+    orgType === 'gym' || orgType === 'personal_trainer'
+      ? `Can see your ${people} list and your join code.`
+      : `Can see your join code. They can't see your ${people} list yet.`;
   return [
     {
       value: 'manager',

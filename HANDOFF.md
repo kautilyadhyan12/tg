@@ -6,34 +6,16 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 
 ## 2026-09-08 · Organisation types (Stage 1 item 2), branch `organisation-types`
 
-- Built: `personal_trainer` joins `gym` and `studio` as a creatable type (`createOrgTypeSchema` in
-  `@app/shared`); migration `0024` widens the `gyms_org_type_check` CHECK (clinic stays readable,
-  no data touched). Web: the create screen is "Create your organisation" with three type cards,
-  the type first, and words that follow it (`orgWords`: a trainer has clients and a business
-  name); `/console` sends a person who runs nothing straight to `/console/new` (only when the
-  server said so — a failed read still shows the error); Cancel on the create screen is offered
-  only to someone with a list to return to; the "Your gyms" links read "Your organisations"; the
-  join-code card takes `orgType` so it never promises a trainer "members" or "a gym".
-- Verified: shared + api tsc green; api eslint green; web eslint on touched files green; web
-  1835 passed (the pre-existing `poseAssets.contract.test.js` encoding failure remains);
-  `orgs.routes` + `db.migration` on local Postgres 167 passed (the new test was run RED before
-  `0024` was applied: 500 on the CHECK).
-- Opening hours needed no change: `hours_mode` starts `unset` for every type, so they are already
-  optional for a trainer. Console-wide vocabulary is split off as roadmap 2b.
-- Kd clicked through all nine steps on the local servers: passed. He then ruled on trial abuse
-  (RULINGS 2026-09-08: no approval queue, four automatic layers, one device one trial); Stage 3
-  item 2 split into 2a–2e. Nothing built for it yet; it is Stage 3 work, before launch.
-- Review round 1 (fresh chat): 1 High + 5 Low + 3 weak tests, all fixed in the second commit:
-  a personal trainer's assistant (staff role `trainer`) now gets the client list instead of the
-  studio's 403 (test run red first: 403 → 200), and the staff-role hint promises exactly that ·
-  a studio's people are "clients" (Part 3 §2.2) · Overview's "has no join code" line takes the
-  org's word · the join screen says "gym, studio or trainer" and 2b now names the member-facing
-  screens · migration test asserts the deployed `gyms_org_type_check` equals `orgTypeSchema` ·
-  roadmap item 2 is a parent with 2a/2b. Verified: shared + api tsc, api eslint, web eslint on
-  touched files all exit 0; `orgs.routes` + `db.migration` 169 passed; web 1836 passed (same
-  pre-existing `poseAssets.contract.test.js` failure). Low-6 (a member who taps Manage by
-  mistake lands on the create screen with only Sign out as an exit) is raised to Kd, not changed.
-- Open: re-check of the fixes, then merge.
+- Built: `personal_trainer` joins `gym` and `studio` as a creatable type; migration `0024` widens
+  `gyms_org_type_check` (clinic stays readable). The create screen is "Create your organisation"
+  with three type cards and words that follow the type (a gym has members; a studio and a trainer
+  have clients); `/console` sends a person who runs nothing straight to `/console/new`; a personal
+  trainer's assistant (staff role `trainer`) gets the client list; a studio's trainer is told so in
+  the studio's word; the migration test asserts the deployed CHECK equals `orgTypeSchema`.
+- Verified: shared + api tsc, api eslint exit 0; `orgs.routes` + `db.migration` on local Postgres
+  169 passed; web 1836 passed (pre-existing `poseAssets.contract.test.js` encoding failure remains).
+- Kd clicked through all nine steps: passed. He ruled on trial abuse (RULINGS 2026-09-08); Stage 3
+  item 2 split into 2a–2e. Console-wide vocabulary is roadmap 2b. Open: merge.
 
 ## 2026-09-07 · Sign-in by email code (Stage 1 item 1), branch `sign-in-by-email-code`
 

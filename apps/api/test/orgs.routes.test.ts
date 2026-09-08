@@ -3058,9 +3058,8 @@ d("orgs routes (real Postgres)", () => {
   });
 
   it("gives a personal trainer's assistant the client list — there are no groups to scope to", { timeout: 30_000 }, async () => {
-    // Review round 1, High-1: `personal_trainer` fell into the studio branch by
-    // omission. A personal trainer has one list of clients and never a group,
-    // so §2.3's "wait for scoping" reason does not apply to them.
+    // A personal trainer has one list of clients and never a group, so §2.3's
+    // "wait for scoping" reason (the studio's 403) does not apply to them.
     const owner = await makeUser("pt-assist-owner");
     const assistant = await makeUser("pt-assist-trainer");
     const pt = await makeOrg(owner.cookies, "Orgs Test PT Assist", { orgType: "personal_trainer" });

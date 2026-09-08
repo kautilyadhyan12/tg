@@ -583,11 +583,11 @@ describe('adding somebody', () => {
    *  to the form — and every helper test would stay green while a studio owner
    *  read the gym sentence: S11's shape (a guarantee decided in one file and
    *  observed in none) in the fix written for a different finding. */
-  it('tells a STUDIO owner their trainer cannot see the member list', async () => {
+  it("tells a STUDIO owner their trainer cannot see the client list, in the studio's word", async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
     await openForm();
-    expect(screen.getByText(/can't see your member list/i)).toBeTruthy();
-    expect(screen.queryByText(/Can see your member list/i)).toBeNull();
+    expect(screen.getByText(/can't see your client list/i)).toBeTruthy();
+    expect(screen.queryByText(/Can see your (member|client) list/i)).toBeNull();
   });
 
   it('tells a GYM owner their trainer CAN see it — the same control, the other answer', async () => {

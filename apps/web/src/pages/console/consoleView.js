@@ -347,7 +347,7 @@ export function groupLabelText(member) {
  *  the server. */
 export const ORG_TYPE_CHOICES = [
   { value: 'gym', label: 'Gym', hint: 'A gym or fitness centre with members' },
-  { value: 'studio', label: 'Studio', hint: 'A boutique or class-based studio with members' },
+  { value: 'studio', label: 'Studio', hint: 'A boutique or class-based studio with clients' },
   {
     value: 'personal_trainer',
     label: 'Personal trainer',

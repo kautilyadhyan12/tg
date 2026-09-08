@@ -96,9 +96,10 @@ describe('the roles this screen hands out', () => {
   /** The denial is SAID rather than merely omitted. A studio owner appointing a
    *  trainer for the roster needs to learn it here, not from the trainer hitting
    *  a 403 later — :5807's shape from the side where the app stays silent. */
-  it('TELLS a studio owner the member list is not included', () => {
+  it('TELLS a studio owner the client list is not included, in the studio\'s word', () => {
     const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can't see your member list/i);
+    expect(trainer.hint).toMatch(/can't see your client list/i);
+    expect(trainer.hint).not.toMatch(/member/i);
   });
 
   it('DOES promise a GYM trainer the member list, which is the case §2.2 grants', () => {
@@ -106,9 +107,8 @@ describe('the roles this screen hands out', () => {
     expect(trainer.hint).toMatch(/can see your member list/i);
   });
 
-  /** The server gives a personal trainer's assistant the one client list
-   *  (review round 1, High-1), so the hint promises exactly that — in the
-   *  trainer's word. */
+  /** The server gives a personal trainer's assistant the one client list, so
+   *  the hint promises exactly that — in the trainer's word. */
   it("DOES promise a PERSONAL TRAINER's assistant the client list", () => {
     const trainer = staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer');
     expect(trainer.hint).toMatch(/can see your client list/i);
@@ -117,9 +117,11 @@ describe('the roles this screen hands out', () => {
 
   /** An unknown type takes the REFUSING side, so a type added later cannot
    *  silently promise access the server has not been taught to give. */
-  it('treats an unknown org type as NOT a gym', () => {
-    const trainer = staffRoleChoices(undefined).find((c) => c.value === 'trainer');
-    expect(trainer.hint).not.toMatch(/can see your member list/i);
+  it('treats an unknown org type as NOT a gym — the refusing sentence, said positively', () => {
+    for (const orgType of [undefined, 'clinic', 'something_new']) {
+      const trainer = staffRoleChoices(orgType).find((c) => c.value === 'trainer');
+      expect(trainer.hint).toMatch(/can't see your (member|client) list/i);
+    }
   });
 
   it('says the same thing about a MANAGER whatever the org type', () => {
