@@ -4,7 +4,7 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-08 · Organisation types (Stage 1 item 2), branch `organisation-types`
+## 2026-09-08 · Organisation types (Stage 1 item 2a), merged as PR #53
 
 - Built: `personal_trainer` joins `gym` and `studio` as a creatable type; migration `0024` widens
   `gyms_org_type_check` (clinic stays readable). The create screen is "Create your organisation"
@@ -15,7 +15,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: shared + api tsc, api eslint exit 0; `orgs.routes` + `db.migration` on local Postgres
   169 passed; web 1836 passed (pre-existing `poseAssets.contract.test.js` encoding failure remains).
 - Kd clicked through all nine steps: passed. He ruled on trial abuse (RULINGS 2026-09-08); Stage 3
-  item 2 split into 2a–2e. Console-wide vocabulary is roadmap 2b. Open: merge.
+  item 2 split into 2a–2e. Review re-check found four Lows, fixed; CI green; merged, branch deleted.
+  Next: roadmap Stage 1 item 2b (words by type on every other screen).
 
 ## 2026-09-07 · Sign-in by email code (Stage 1 item 1), branch `sign-in-by-email-code`
 
