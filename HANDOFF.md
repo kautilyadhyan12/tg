@@ -38,7 +38,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   gaps are closed: every new `orgType` parameter now has a literal-string observer at a
   studio (unit suites), plus My Gyms rendered at a studio with scheduled hours and the
   membership card's three rows at a studio. Web 1876 passed; api orgs suites 267 passed.
-- Open: the reviewer's re-check of the fixes, then merge. Next: roadmap Stage 1 item 3a.
+- Kd waived the re-check (zero Critical/High, six Lows all fixed, CI green): *"no extra review
+  needed"*. Merged to `master` 2026-09-08 (PR #55), branch deleted. Next: roadmap Stage 1 item 3a.
 
 ## 2026-09-08 · Organisation types (Stage 1 item 2a), merged as PR #53
 

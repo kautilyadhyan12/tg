@@ -29,7 +29,7 @@ is here, the rest is under "After launch".
      join door and My Gyms speak the organisation's own words — Clients / Coach for a
      studio and a personal trainer where a gym says Members / Trainer (spec Part 3 §2.2).
      One table in `@app/shared`, read by the API and by every screen, so the server's
-     refusals and the screen agree. *Built 2026-09-08.*
+     refusals and the screen agree. *Merged 2026-09-08 (PR #55).*
 
 3. **Onboarding v2, server side** (split 2026-09-08; the science first because every screen shows its number).
    - 3a. [ ] **The plan maths and its sanity rules.** Resting burn, daily activity + training days, pace → deficit or surplus, macros, finish date; target direction, healthy-weight floor, over-a-year pace, the calorie floor; the under-18 and flagged-condition rules (no deficit). Pure functions, a test for every rule. Nothing on screen yet; the click-through says so.
