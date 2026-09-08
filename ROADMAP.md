@@ -66,7 +66,12 @@ is here, the rest is under "After launch".
 ## Stage 3 — Money
 
 1. [ ] Paddle checkout for individuals and gyms; the subscription state machine; webhooks (raw body, dedupe, worker); invoices.
-2. [ ] Trials enforced: 7 days individual, 15 days organisation, one per owner account, one per device on the web, no card; the price book seeded as ruled; bands 3–5 USD and the INR book to Kd if he wants to revisit.
+2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
+   - 2a. [ ] Trial lengths 7 days individual and 15 days organisation (the button still says 30), one per owner account (built), no card; the price book seeded as ruled; bands 3–5 USD and the INR book to Kd if he wants to revisit.
+   - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.
+   - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
+   - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
+   - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist) and the second-trial code for a real owner of two gyms.
 3. [ ] Gym-collects-from-members (Stripe Connect) — after launch unless a gym asks.
 
 ## Stage 4 — Launch readiness

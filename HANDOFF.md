@@ -20,7 +20,10 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `0024` was applied: 500 on the CHECK).
 - Opening hours needed no change: `hours_mode` starts `unset` for every type, so they are already
   optional for a trainer. Console-wide vocabulary is split off as roadmap 2b.
-- Open: independent review round, Kd's click-through, then merge.
+- Kd clicked through all nine steps on the local servers: passed. He then ruled on trial abuse
+  (RULINGS 2026-09-08: no approval queue, four automatic layers, one device one trial); Stage 3
+  item 2 split into 2a–2e. Nothing built for it yet; it is Stage 3 work, before launch.
+- Open: independent review round, then merge.
 
 ## 2026-09-07 · Sign-in by email code (Stage 1 item 1), branch `sign-in-by-email-code`
 
