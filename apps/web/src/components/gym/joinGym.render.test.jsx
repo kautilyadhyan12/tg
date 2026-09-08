@@ -543,6 +543,33 @@ describe('the gym card on the dashboard', () => {
     expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
   });
 
+  /** ROADMAP 2b on the three rows themselves. `gymStatusRows` carries the
+   *  type onto every row (its own suite asserts the field), and this is where
+   *  the row is proven to READ it — remove `orgType` from the row and each of
+   *  these three sentences goes back to "member" and "the gym". */
+  it('speaks a studio’s words on the member, removed and refused rows', async () => {
+    const STUDIO = { ...ORG, id: 'st-1', name: 'Flow Studio', slug: 'flow-studio', orgType: 'studio' };
+    const GONE = { ...ORG, id: 'st-2', name: 'Old Studio', slug: 'old-studio', orgType: 'studio' };
+    const NO = { ...ORG, id: 'st-3', name: 'Strict Studio', slug: 'strict', orgType: 'studio' };
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, id: 'app-no', status: 'rejected', org: NO }] }),
+    );
+    orgService.getMine.mockReturnValue(
+      ok({
+        orgs: [{ ...STUDIO, staffRole: null, isMember: true, joinedAt: '2026-08-01T00:00:00.000Z' }],
+        formerOrgs: [{ ...GONE, removedAt: '2026-08-20T04:41:16.656Z' }],
+      }),
+    );
+    draw(<GymMembershipCard />);
+
+    expect(await screen.findByText(/you're a client of flow studio/i)).toBeTruthy();
+    expect(screen.getByText(/you're no longer a client of old studio/i)).toBeTruthy();
+    expect(screen.getByText(/strict studio didn't confirm your request/i)).toBeTruthy();
+    expect(screen.getByText(/check with the studio, then ask again/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/a member of/i);
+    expect(document.body.textContent).not.toMatch(/with the gym/i);
+  });
+
   it('TELLS a removed member they were removed, in words that are TRUE (Kd 2026-08-20)', async () => {
     orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
     orgService.getMine.mockReturnValue(

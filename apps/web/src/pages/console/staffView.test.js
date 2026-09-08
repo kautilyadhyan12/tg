@@ -271,6 +271,23 @@ describe('which boxes a row is offered', () => {
     expect(privilegeChoices('owner').map((c) => c.value)).toContain('staff.manage');
   });
 
+  /** ROADMAP 2b: the boxes are sentences an owner reads, so they take the org's
+   *  word. Three of the seven carry a word from the table; the gym's spelling
+   *  is pinned beside the studio's so a change to either arrives red. */
+  it('describes the ticks in the studio’s own words', () => {
+    const at = (type) =>
+      Object.fromEntries(privilegeChoices('manager', type).map((c) => [c.value, c]));
+    expect(at('studio')['members.read'].label).toBe('See the client list');
+    expect(at('studio')['members.read'].hint).toBe('Who has joined your studio, and when.');
+    expect(at('studio')['members.confirm'].label).toBe('Let people into the studio');
+    expect(at('studio')['members.remove'].label).toBe('Remove clients');
+    expect(at('studio')['members.remove'].hint).toBe('Take somebody out of your studio.');
+    expect(at('gym')['members.read'].label).toBe('See the member list');
+    expect(at('gym')['members.remove'].label).toBe('Remove members');
+    // The VALUES — what is saved — are identical whatever the words.
+    expect(Object.keys(at('studio'))).toEqual(Object.keys(at('gym')));
+  });
+
   it('offers everything else to a manager and a trainer alike — the ROW decides, not the role', () => {
     // The role picks the STARTING ticks; the boxes on offer are the same, or an
     // owner could never widen a trainer, which is the whole point of :11429
@@ -485,6 +502,13 @@ describe('the question asked before a role changes', () => {
   it('names the person and the role being handed out', () => {
     expect(roleChangeWarning(RITA, 'trainer')).toMatch(/Rita Sen/);
     expect(roleChangeWarning(RITA, 'trainer')).toMatch(/trainer/i);
+  });
+
+  it('calls the role a coach at a studio (roadmap 2b)', () => {
+    expect(roleChangeWarning(RITA, 'trainer', 'studio')).toBe(
+      'Make Rita Sen a coach? Their permissions become the defaults for the new role.',
+    );
+    expect(roleChangeWarning(RITA, 'trainer', 'gym')).toMatch(/a trainer\?/);
   });
 });
 

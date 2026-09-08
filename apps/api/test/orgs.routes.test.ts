@@ -1689,6 +1689,29 @@ d("orgs routes (real Postgres)", () => {
     );
   });
 
+  /** Review round 1, finding 3: a studio's owner confirming a client past the
+   *  cap read "Your plan covers 1 members". The number and the word both. */
+  it("counts a studio's seats in clients when the cap bites", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("cap-words-owner");
+    const first = await makeUser("cap-words-first");
+    const second = await makeUser("cap-words-second");
+    const studio = await makeOrg(owner.cookies, "Orgs Test Cap Studio", { orgType: "studio" });
+    await subscribeGym(studio.org.id, CAP1_PLAN);
+    await joinAsMember(first.cookies, studio, owner.cookies);
+    const waiting = await applyWithCode(second.cookies, studio.joinCode.code);
+    const full = await post(
+      `/v1/orgs/${studio.org.id}/applications/${waiting}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(full.statusCode).toBe(409);
+    const body = JSON.parse(full.body) as { error: string; message: string };
+    expect(body.error).toBe("seat_cap_reached");
+    expect(body.message).toBe(
+      "Your plan covers 1 clients and they are all taken. Add a seat, then confirm again — this person is still waiting.",
+    );
+  });
+
   /** THE CONSOLE'S OWN REFUSALS FOLLOW THE TYPE TOO (roadmap 2b).
    *
    *  A lapsed organisation's staff meet this sentence on every screen, and the
@@ -3127,7 +3150,11 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(200);
     const held = await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies });
     expect(held.statusCode).toBe(403);
-    expect((JSON.parse(held.body) as { error: string }).error).toBe("trainer_scope_unavailable");
+    const refusal = JSON.parse(held.body) as { error: string; message: string };
+    expect(refusal.error).toBe("trainer_scope_unavailable");
+    // ROADMAP 2b, review round 1 finding 4: this arm fires only where the role
+    // is NOT called Trainer, so the sentence says Coach at a studio.
+    expect(refusal.message).toBe("Coach access to this list isn't available yet.");
   });
 
   it("gives a personal trainer's assistant the client list — there are no groups to scope to", { timeout: 30_000 }, async () => {

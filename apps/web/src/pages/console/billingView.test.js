@@ -419,6 +419,40 @@ describe('the read-only sentences', () => {
   });
 });
 
+/** THE STUDIO'S WORDING IS PINNED TOO — round 1's finding 4: `notOnPlanMessage`'s
+ *  comment promises the banner and the 409 cannot disagree, and until this test
+ *  that was asserted for a gym only. The API side pins the same studio sentence
+ *  (`orgs.routes.test.ts`, "tells a studio its STUDIO needs a plan"); here is
+ *  the web side of that pair, as a literal so neither can vouch for itself. */
+describe('the read-only sentences at a studio', () => {
+  it('name the studio and its clients, and match the server word for word', () => {
+    expect(readOnlyNote('studio')).toBe('This studio needs a plan before anything here can be changed.');
+    expect(readOnlyQueueNote('studio')).toBe(
+      'Nobody can be let in until this studio is on a plan. The people waiting keep their place.',
+    );
+    expect(consoleReadOnlyBanner('studio')).toBe(
+      'This studio has no plan. Nothing here can be changed, and your clients get the free app only.',
+    );
+    // A personal trainer's console is their BUSINESS.
+    expect(readOnlyNote('personal_trainer')).toBe(
+      'This business needs a plan before anything here can be changed.',
+    );
+  });
+
+  it('reach the banner off the org row, with nothing else telling it the type', () => {
+    const b = bannerFor(gym({ consoleReadOnly: true, orgType: 'studio' }), NOW);
+    expect(b?.text).toBe(consoleReadOnlyBanner('studio'));
+    expect(b?.text).toMatch(/studio/);
+    expect(b?.text).not.toMatch(/gym/);
+  });
+
+  it('says a studio is full in its own word', () => {
+    expect(seatLineText({ used: 3, cap: 3, full: true, pressure: true }, 'studio')).toBe(
+      '3 of 3 places used — your studio is full, so nobody else can join yet.',
+    );
+  });
+});
+
 describe('bannerFor', () => {
   it('draws nothing for a gym on no plan whose caller was not told', () => {
     // `consoleReadOnly` absent is the older-api / plain-member shape, and the

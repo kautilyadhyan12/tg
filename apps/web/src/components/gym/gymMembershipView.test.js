@@ -6,6 +6,7 @@ import {
   gymStatusRows,
   hasFreshCheer,
   memberOrgs,
+  myOrgsWords,
   nudgeState,
 } from './gymMembershipView';
 
@@ -68,6 +69,35 @@ const appRow = (kind, o, extra = {}) => ({
 
 const IRON = org('gym-1', 'Iron House');
 const FORGE = org('gym-2', 'The Forge');
+
+describe('the words a list of memberships is headed with (roadmap 2b)', () => {
+  const of = (type, id = 'x') => ({ ...org(id, 'Any'), orgType: type, isMember: true });
+
+  it('uses the one word every membership shares', () => {
+    expect(myOrgsWords([of('studio')])).toEqual({
+      one: 'studio',
+      oneCap: 'Studio',
+      plural: 'studios',
+      pluralCap: 'Studios',
+    });
+    expect(myOrgsWords([of('personal_trainer')]).pluralCap).toBe('Trainers');
+    expect(myOrgsWords([of('gym'), of('gym', 'y')]).plural).toBe('gyms');
+  });
+
+  it('falls back to the neutral word when the list mixes types', () => {
+    expect(myOrgsWords([of('gym'), of('studio', 'y')])).toEqual({
+      one: 'organisation',
+      oneCap: 'Organisation',
+      plural: 'organisations',
+      pluralCap: 'Organisations',
+    });
+  });
+
+  it('speaks the gym’s words over nothing at all — the empty tab', () => {
+    expect(myOrgsWords([]).oneCap).toBe('Gym');
+    expect(myOrgsWords(null).pluralCap).toBe('Gyms');
+  });
+});
 
 describe('gymStatusRows', () => {
   it('says nothing when there is nothing to say', () => {

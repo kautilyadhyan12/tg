@@ -92,6 +92,18 @@ describe('what the screen says after a tap', () => {
     }
   });
 
+  it('speaks the type of the place after a tap — a trainer’s client joined a trainer', () => {
+    expect(markedSentence(visit({ hoursStatus: 'open_24h' }), { orgType: 'studio' })).toBe(
+      "You're marked in. Your studio is open 24 hours.",
+    );
+    expect(
+      markedSentence(visit({ hoursStatus: 'outside_hours' }), { orgType: 'personal_trainer' }),
+    ).toBe("You're marked in — that's outside your trainer's opening times.");
+    expect(markedSentence(visit({ hoursStatus: 'closed_day' }), { orgType: 'studio' })).toBe(
+      "You're marked in — your studio said it's closed today.",
+    );
+  });
+
   it('says the gym is open around the clock when it is', () => {
     expect(markedSentence(visit({ hoursStatus: 'open_24h' }))).toBe(
       "You're marked in. Your gym is open 24 hours.",
@@ -264,6 +276,27 @@ describe('whether the button may be pressed', () => {
   // is 05:28. This is the assertion the whole card exists for.
   it('refuses before the gym opens', () => {
     expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC)).toBe(gymShutNowMessage('gym'));
+  });
+
+  /** ROADMAP 2b, and this is the observer for the third argument: drop
+   *  `orgType` at the call site and a studio's client is back to reading "Your
+   *  gym isn't open right now". The sentences are asserted as LITERALS, not
+   *  through the helper, so the helper cannot vouch for itself. */
+  it('names the place in its own word when it refuses', () => {
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'studio')).toBe(
+      "Your studio isn't open right now, so attendance isn't open.",
+    );
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'personal_trainer')).toBe(
+      "Your trainer isn't open right now, so attendance isn't open.",
+    );
+    const closed = scheduled({ closures: [{ day: '2026-09-03' }] });
+    expect(attendanceShutReason(closed, THURSDAY_0528_UTC, 'studio')).toBe(
+      "Your studio is closed today, so attendance isn't open.",
+    );
+    // The gym's sentence is the one that must not move.
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'gym')).toBe(
+      "Your gym isn't open right now, so attendance isn't open.",
+    );
   });
 
   // THE STATE IT IS *NOT* IN WHEN YOU FIND IT (:31295's standing rule). A gate

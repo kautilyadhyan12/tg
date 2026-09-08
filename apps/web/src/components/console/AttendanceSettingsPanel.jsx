@@ -111,7 +111,7 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
       ) : null}
 
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        When this is on, a {words.person} opening your {words.it} in the app can tap
+        When this is on, a {words.person} opening your {words.itToMembers} in the app can tap
         &ldquo;I&apos;m here&rdquo; and you&apos;ll see them under Attendance.
       </p>
 

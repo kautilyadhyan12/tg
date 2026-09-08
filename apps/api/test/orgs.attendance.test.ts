@@ -949,7 +949,12 @@ d("gym attendance (real Postgres)", () => {
       await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${org.org.id}`;
       const archived = await mark(org.org.id, member.cookies);
       expect(archived.statusCode).toBe(409);
-      expect((JSON.parse(archived.body) as { error: string }).error).toBe("org_archived");
+      const refusal = JSON.parse(archived.body) as { error: string; message: string };
+      expect(refusal.error).toBe("org_archived");
+      // ROADMAP 2b, review round 1 finding 2: this is the MEMBER's door, so the
+      // sentence is the member's word — never the staff's "This business is
+      // archived." at a personal trainer's client. A gym reads "gym".
+      expect(refusal.message).toBe("This gym is no longer active.");
     },
     TEST_TIMEOUT_MS,
   );

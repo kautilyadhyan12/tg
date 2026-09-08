@@ -182,49 +182,49 @@ export function staffSeatsNote(orgType) {
 function privilegeCopy(orgType) {
   const words = orgWords(orgType);
   return [
-  {
-    value: 'members.read',
-    label: `See the ${words.person} list`,
-    hint: `Who has joined your ${words.it}, and when.`,
-  },
-  {
-    value: 'codes.invite',
-    label: 'Share the join code',
-    hint: 'See the code and hand it out to new people.',
-  },
-  {
-    // KD'S RULING 18's SECOND HALF, AND IT LIVES HERE AND NOWHERE ELSE
-    // (:28107): *"also stafs can see it too default permission owner can
-    // change it"*. Without a box, "the owner can change it" is a sentence
-    // with no control behind it — the gap `org.manage` and `billing.manage`
-    // are already in, which `OWED.md` carries.
-    //
-    // A READ, so it sits high in the least-powerful-first order: seeing who
-    // came in is a smaller thing than letting somebody into the gym.
-    value: 'attendance.read',
-    label: 'See who came in',
-    hint: 'The list of people who marked themselves in each day.',
-  },
-  {
-    value: 'members.confirm',
-    label: `Let people into the ${words.it}`,
-    hint: 'Say yes or no to people waiting to join.',
-  },
-  {
-    value: 'members.remove',
-    label: `Remove ${words.people}`,
-    hint: `Take somebody out of your ${words.it}.`,
-  },
-  {
-    value: 'codes.manage',
-    label: 'Change join codes',
-    hint: 'Make a new code, pause one, or give it an end date.',
-  },
-  {
-    value: 'staff.manage',
-    label: 'Manage staff',
-    hint: 'Add people, change what they can do, and take their keys back.',
-  },
+    {
+      value: 'members.read',
+      label: `See the ${words.person} list`,
+      hint: `Who has joined your ${words.it}, and when.`,
+    },
+    {
+      value: 'codes.invite',
+      label: 'Share the join code',
+      hint: 'See the code and hand it out to new people.',
+    },
+    {
+      // KD'S RULING 18's SECOND HALF, AND IT LIVES HERE AND NOWHERE ELSE
+      // (:28107): *"also stafs can see it too default permission owner can
+      // change it"*. Without a box, "the owner can change it" is a sentence
+      // with no control behind it — the gap `org.manage` and `billing.manage`
+      // are already in, which `OWED.md` carries.
+      //
+      // A READ, so it sits high in the least-powerful-first order: seeing who
+      // came in is a smaller thing than letting somebody into the gym.
+      value: 'attendance.read',
+      label: 'See who came in',
+      hint: 'The list of people who marked themselves in each day.',
+    },
+    {
+      value: 'members.confirm',
+      label: `Let people into the ${words.it}`,
+      hint: 'Say yes or no to people waiting to join.',
+    },
+    {
+      value: 'members.remove',
+      label: `Remove ${words.people}`,
+      hint: `Take somebody out of your ${words.it}.`,
+    },
+    {
+      value: 'codes.manage',
+      label: 'Change join codes',
+      hint: 'Make a new code, pause one, or give it an end date.',
+    },
+    {
+      value: 'staff.manage',
+      label: 'Manage staff',
+      hint: 'Add people, change what they can do, and take their keys back.',
+    },
   ];
 }
 

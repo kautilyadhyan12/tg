@@ -1195,7 +1195,9 @@ export async function listOrgMembers(
     throw new OrgsError(
       403,
       "trainer_scope_unavailable",
-      "Trainer access to this list isn't available yet.",
+      // This arm fires only where the role is NOT called Trainer — a studio's
+      // Coach, a clinic's Clinician — so the role word follows the type.
+      `${orgWords(org.orgType).coachCap} access to this list isn't available yet.`,
     );
   }
 
@@ -1581,7 +1583,7 @@ export async function confirmOrgApplication(
       throw new OrgsError(
         409,
         "seat_cap_reached",
-        `Your plan covers ${String(outcome.cap)} members and they are all taken. Add a seat, then confirm again — this person is still waiting.`,
+        `Your plan covers ${String(outcome.cap)} ${orgWords(org.orgType).people} and they are all taken. Add a seat, then confirm again — this person is still waiting.`,
       );
     case "rejected":
       // Not reachable from confirm; the union is shared with reject.
@@ -2492,7 +2494,15 @@ export async function markOrgAttendance(
     throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
   if (org.status === "archived") {
-    throw new OrgsError(409, "org_archived", archivedMessage(org.orgType));
+    // THE MEMBER'S WORD, not the staff's: this is the one archived refusal a
+    // member reaches, and a personal trainer's client joined a trainer, not a
+    // business. The same `itToMembers` the join door and the switched-off
+    // message on this path already use.
+    throw new OrgsError(
+      409,
+      "org_archived",
+      `This ${orgWords(org.orgType).itToMembers} is no longer active.`,
+    );
   }
 
   const outcome = await repo.markGymAttendance(deps.sql, {

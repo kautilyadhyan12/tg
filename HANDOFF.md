@@ -31,7 +31,14 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   neutral "My organisations", because no type's word is true of that list.
 - Kd clicked through on 2026-09-08 and passed it, skipping the steps whose ground was
   already covered by item 2a's smoke. PR #55, CI green on all five jobs.
-- Open: the independent review round, then merge. Next: roadmap Stage 1 item 3a.
+- Review round 1 (fresh chat): six Lows, zero High, security pass clean. All six fixed — the
+  console front door now says Coach; the member's archived refusal uses the member's word;
+  the seat-cap and trainer-scope refusals follow the type; the attendance switch names what
+  the member's app calls the place; `privilegeCopy` re-indented. The reviewer's seven test
+  gaps are closed: every new `orgType` parameter now has a literal-string observer at a
+  studio (unit suites), plus My Gyms rendered at a studio with scheduled hours and the
+  membership card's three rows at a studio. Web 1876 passed; api orgs suites 267 passed.
+- Open: the reviewer's re-check of the fixes, then merge. Next: roadmap Stage 1 item 3a.
 
 ## 2026-09-08 · Organisation types (Stage 1 item 2a), merged as PR #53
 

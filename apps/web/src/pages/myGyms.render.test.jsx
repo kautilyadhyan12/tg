@@ -1336,6 +1336,77 @@ describe('the cheer', () => {
   });
 });
 
+/** A STUDIO'S CLIENT, END TO END — roadmap 2b at the member's own screens.
+ *
+ *  Round 1 of the review found that every new `orgType` parameter on this
+ *  surface had no observer: drop it at the call site and the suite stayed
+ *  green while a studio's client read "Your gym isn't open right now". This
+ *  describe is that observer. It mounts the REAL sidebar and the REAL screen
+ *  off `/v1/orgs/mine`, with scheduled hours the client is outside of, so the
+ *  nav label, the Settings-bound tab word, the button's dead sentence and the
+ *  panel's own line are all read off one render. The gym is the control in the
+ *  suite above this one, unchanged. */
+describe('a studio’s client', () => {
+  const STUDIO = { ...GYM, name: 'Flow Studio', slug: 'flow-studio', orgType: 'studio' };
+  // 05:28 on Thursday, the studio opens at 07:00 — Kd's own moment, one card up.
+  const KDS_MOMENT = new Date('2026-09-03T05:28:00.000Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
+    vi.setSystemTime(KDS_MOMENT);
+    api.getMine.mockResolvedValue({ data: { orgs: [STUDIO], formerOrgs: [] } });
+    api.getHours.mockResolvedValue({
+      data: {
+        hours: {
+          mode: 'scheduled',
+          timezone: 'UTC',
+          clockFormat: '24h',
+          week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
+          closures: [],
+        },
+      },
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('sees My Studios in the nav, and never My Gyms', async () => {
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Studios')).toBeTruthy());
+    expect(screen.queryByText('My Gyms')).toBeNull();
+  });
+
+  it('is told the STUDIO is shut, and what the button is for, in the studio’s word', async () => {
+    drawScreen();
+    const button = () => screen.queryByRole('button', { name: /i'm here/i });
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+    // The dead button's sentence — `attendanceShutReason`'s third argument.
+    expect(
+      screen.getByText("Your studio isn't open right now, so attendance isn't open."),
+    ).toBeTruthy();
+    // The panel's own line about the button.
+    expect(screen.getByText('Pressing this marks your attendance at the studio.')).toBeTruthy();
+    // The heading over the list.
+    expect(screen.getByRole('heading', { name: 'My studios' })).toBeTruthy();
+    // And nowhere on the screen is the client told they are at a gym.
+    expect(document.body.textContent).not.toMatch(/your gym/i);
+  });
+
+  it('is told a TRAINER is shut when the place is a personal trainer', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...STUDIO, name: 'Coach Priya', orgType: 'personal_trainer' }], formerOrgs: [] },
+    });
+    drawScreen();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Your trainer isn't open right now, so attendance isn't open."),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByRole('heading', { name: 'My trainers' })).toBeTruthy();
+  });
+});
+
 describe('the dot on the nav item', () => {
   const withCheer = (sentAt) => ({
     data: { orgs: [{ ...GYM, latestCheer: { preset: 'on_a_roll', sentAt } }], formerOrgs: [] },
