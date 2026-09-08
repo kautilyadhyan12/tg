@@ -28,10 +28,10 @@ export default function JoinGym() {
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Join your gym
+          Join with a code
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Enter the code your gym gave you.
+          Enter the code your gym, studio or trainer gave you.
         </p>
       </div>
       {/* T3 r1 L-5: `key` is the fix, and it belongs here rather than in the

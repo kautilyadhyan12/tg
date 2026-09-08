@@ -1138,8 +1138,10 @@ export async function listOrgMembers(
   // trainer to a group yet — `gym_staff` has no group column — so an unscoped
   // list is the only thing buildable, and handing a clinic trainer every
   // caseload is the wrong direction to guess in. Gyms get the "all" the matrix
-  // already grants them; studios and clinics wait for the scoping card.
-  if (role === "trainer" && org.orgType !== "gym") {
+  // already grants them; a personal trainer's assistant gets the one client
+  // list, because a trainer has no groups to scope to and never will; studios
+  // and clinics wait for the scoping card.
+  if (role === "trainer" && org.orgType !== "gym" && org.orgType !== "personal_trainer") {
     throw new OrgsError(
       403,
       "trainer_scope_unavailable",

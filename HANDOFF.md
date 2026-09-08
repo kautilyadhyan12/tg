@@ -23,7 +23,17 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Kd clicked through all nine steps on the local servers: passed. He then ruled on trial abuse
   (RULINGS 2026-09-08: no approval queue, four automatic layers, one device one trial); Stage 3
   item 2 split into 2a–2e. Nothing built for it yet; it is Stage 3 work, before launch.
-- Open: independent review round, then merge.
+- Review round 1 (fresh chat): 1 High + 5 Low + 3 weak tests, all fixed in the second commit:
+  a personal trainer's assistant (staff role `trainer`) now gets the client list instead of the
+  studio's 403 (test run red first: 403 → 200), and the staff-role hint promises exactly that ·
+  a studio's people are "clients" (Part 3 §2.2) · Overview's "has no join code" line takes the
+  org's word · the join screen says "gym, studio or trainer" and 2b now names the member-facing
+  screens · migration test asserts the deployed `gyms_org_type_check` equals `orgTypeSchema` ·
+  roadmap item 2 is a parent with 2a/2b. Verified: shared + api tsc, api eslint, web eslint on
+  touched files all exit 0; `orgs.routes` + `db.migration` 169 passed; web 1836 passed (same
+  pre-existing `poseAssets.contract.test.js` failure). Low-6 (a member who taps Manage by
+  mistake lands on the create screen with only Sign out as an exit) is raised to Kd, not changed.
+- Open: re-check of the fixes, then merge.
 
 ## 2026-09-07 · Sign-in by email code (Stage 1 item 1), branch `sign-in-by-email-code`
 

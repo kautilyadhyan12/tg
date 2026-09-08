@@ -3057,6 +3057,22 @@ d("orgs routes (real Postgres)", () => {
     expect((JSON.parse(held.body) as { error: string }).error).toBe("trainer_scope_unavailable");
   });
 
+  it("gives a personal trainer's assistant the client list — there are no groups to scope to", { timeout: 30_000 }, async () => {
+    // Review round 1, High-1: `personal_trainer` fell into the studio branch by
+    // omission. A personal trainer has one list of clients and never a group,
+    // so §2.3's "wait for scoping" reason does not apply to them.
+    const owner = await makeUser("pt-assist-owner");
+    const assistant = await makeUser("pt-assist-trainer");
+    const pt = await makeOrg(owner.cookies, "Orgs Test PT Assist", { orgType: "personal_trainer" });
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${pt.org.id}, ${assistant.userId}, 'trainer')`;
+    const res = await get(`/v1/orgs/${pt.org.id}/members`, { cookies: assistant.cookies });
+    expect(res.statusCode).toBe(200);
+    // The owner is client #1 of their own list, so the page is never empty.
+    const page = JSON.parse(res.body) as { items: { userId: string }[] };
+    expect(page.items.map((i) => i.userId)).toContain(owner.userId);
+  });
+
   it("lists my orgs once each, carrying both relationships", { timeout: 30_000 }, async () => {
     const owner = await makeUser("mine-owner");
     const org = await makeOrg(owner.cookies, "Orgs Test Mine");

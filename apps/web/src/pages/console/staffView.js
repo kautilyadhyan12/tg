@@ -76,24 +76,27 @@ export function canManageStaff(privileges) {
  *  above is what it broke — the hint named what the MATRIX grants rather than
  *  what this gym's trainer actually gets.**
  *
+ *  A PERSONAL TRAINER's assistant gets the client list (there is one list and no
+ *  group to scope it to), and the hint says "clients" because that is the word
+ *  the rest of a trainer's console uses.
+ *
  *  Taking the org type as an argument rather than reading it: this file is pure,
  *  and an unknown type is treated as NOT a gym — the refusing side — so a type
  *  added later cannot silently promise access it does not have. */
 export function staffRoleChoices(orgType) {
+  const trainerHint =
+    orgType === 'gym'
+      ? 'Can see your member list and your join code.'
+      : orgType === 'personal_trainer'
+        ? 'Can see your client list and your join code.'
+        : "Can see your join code. They can't see your member list yet.";
   return [
     {
       value: 'manager',
       label: 'Manager',
       hint: 'Can confirm people joining, remove members, and manage your join codes.',
     },
-    {
-      value: 'trainer',
-      label: 'Trainer',
-      hint:
-        orgType === 'gym'
-          ? 'Can see your member list and your join code.'
-          : "Can see your join code. They can't see your member list yet.",
-    },
+    { value: 'trainer', label: 'Trainer', hint: trainerHint },
   ];
 }
 

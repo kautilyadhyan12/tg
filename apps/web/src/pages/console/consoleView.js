@@ -357,11 +357,13 @@ export const ORG_TYPE_CHOICES = [
 
 /** THE WORDS THE CREATE SCREEN USES FOR EACH TYPE. A trainer has CLIENTS, not
  *  members (Kd 2026-09-07: *"a trainer's clients join by code like members"*),
- *  and no "gym name". An unknown type gets the gym's words rather than a blank
- *  label — the same fall-back direction as `orgTypeLabel`. */
+ *  and no "gym name". A studio has clients too — Part 3 §2.2 puts it on the
+ *  Clients / Sessions / Coach side with the trainer. An unknown type gets the
+ *  gym's words rather than a blank label — the same fall-back direction as
+ *  `orgTypeLabel`. */
 const ORG_WORDS = {
   gym: { nameLabel: 'Gym name', placeholder: 'Iron House', it: 'gym', people: 'members' },
-  studio: { nameLabel: 'Studio name', placeholder: 'Flow Studio', it: 'studio', people: 'members' },
+  studio: { nameLabel: 'Studio name', placeholder: 'Flow Studio', it: 'studio', people: 'clients' },
   personal_trainer: {
     nameLabel: 'Your business name',
     placeholder: 'Coach Priya',

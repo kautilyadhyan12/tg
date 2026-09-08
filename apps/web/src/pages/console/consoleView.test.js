@@ -428,8 +428,14 @@ describe('the org-type picker matches what the server will accept', () => {
     expect(orgWords('gym').people).toBe('members');
     expect(orgWords('gym').nameLabel).toBe('Gym name');
     expect(orgWords('studio').nameLabel).toBe('Studio name');
-    expect(orgWords('franchise')).toEqual(orgWords('gym'));
-    expect(orgWords(null)).toEqual(orgWords('gym'));
+    // Part 3 §2.2: a studio is on the Clients side with the trainer.
+    expect(orgWords('studio').people).toBe('clients');
+    // The fallback is measured against the gym's LITERAL words, not against
+    // `orgWords('gym')` — an identity would satisfy that comparison.
+    expect(orgWords('franchise').nameLabel).toBe('Gym name');
+    expect(orgWords('franchise').people).toBe('members');
+    expect(orgWords(null).nameLabel).toBe('Gym name');
+    expect(orgWords(undefined).nameLabel).toBe('Gym name');
   });
 });
 

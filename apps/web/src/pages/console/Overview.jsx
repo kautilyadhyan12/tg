@@ -15,6 +15,7 @@ import {
   joinedCount,
   memberCountLine,
   orgTypeLabel,
+  orgWords,
   roleLabel,
   viewerPrivileges,
   waitingCountLabel,
@@ -427,7 +428,7 @@ export default function Overview() {
         ) : (
           <ConsoleCard>
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              This gym has no join code, so nobody can join it.
+              This {orgWords(org.orgType).it} has no join code, so nobody can join it.
             </p>
           </ConsoleCard>
         )

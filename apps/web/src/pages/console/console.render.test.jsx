@@ -261,15 +261,23 @@ describe('Your organisations', () => {
     drawConsoleFrom('/console');
     expect(await screen.findByText('Create your organisation')).toBeTruthy();
     expect(screen.queryByText('Your organisations')).toBeNull();
-    // And a first-time owner has nothing to cancel back to: a Cancel link here
-    // would bounce them straight back to this screen.
-    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
   it('offers Cancel on the create screen only to somebody who already runs something', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
     drawConsoleFrom('/console/new');
     expect(await screen.findByText('Cancel')).toBeTruthy();
+    // AND NOT to somebody with nothing to go back to — the half of "only" that
+    // a hard-coded `runsSomething = true` would fail. Drawn from `/console` so
+    // that the create screen appearing PROVES the list was read and found empty
+    // (the redirect fires only after the read); a `/console/new` draw would pass
+    // vacuously while still loading.
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    drawConsoleFrom('/console');
+    expect(await screen.findByText('Create your organisation')).toBeTruthy();
+    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
   it('NEVER redirects when the read failed — it says what went wrong, with a way out', async () => {

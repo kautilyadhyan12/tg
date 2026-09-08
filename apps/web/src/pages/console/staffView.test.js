@@ -106,6 +106,15 @@ describe('the roles this screen hands out', () => {
     expect(trainer.hint).toMatch(/can see your member list/i);
   });
 
+  /** The server gives a personal trainer's assistant the one client list
+   *  (review round 1, High-1), so the hint promises exactly that — in the
+   *  trainer's word. */
+  it("DOES promise a PERSONAL TRAINER's assistant the client list", () => {
+    const trainer = staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer');
+    expect(trainer.hint).toMatch(/can see your client list/i);
+    expect(trainer.hint).not.toMatch(/can't see/i);
+  });
+
   /** An unknown type takes the REFUSING side, so a type added later cannot
    *  silently promise access the server has not been taught to give. */
   it('treats an unknown org type as NOT a gym', () => {
