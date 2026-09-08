@@ -30,6 +30,7 @@
 // screen already has. The rows above answer "where do I stand with this gym";
 // a cheer is a message, and Kd ruled where messages live (:33091 — gym things
 // are on `My Gyms`, and the dashboard keeps only the greeting).
+import { orgWords } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 
 /** Rank of what we can say about a gym. Higher wins; the comparison is what
@@ -77,7 +78,7 @@ export function gymStatusRows({ applications, orgs, formerOrgs } = {}) {
     const id = org?.id;
     const name = org?.name;
     if (typeof id !== 'string' || typeof name !== 'string') continue;
-    offer({ kind: 'member', orgId: id, orgName: name });
+    offer({ kind: 'member', orgId: id, orgName: name, orgType: org?.orgType });
   }
 
   // KD RULING 2026-08-20: a removal must be SAID. Silence was the hole left
@@ -88,7 +89,7 @@ export function gymStatusRows({ applications, orgs, formerOrgs } = {}) {
     const id = org?.id;
     const name = org?.name;
     if (typeof id !== 'string' || typeof name !== 'string') continue;
-    offer({ kind: 'removed', orgId: id, orgName: name });
+    offer({ kind: 'removed', orgId: id, orgName: name, orgType: org?.orgType });
   }
 
   for (const app of Array.isArray(applications) ? applications : []) {
@@ -110,6 +111,12 @@ export function gymStatusRows({ applications, orgs, formerOrgs } = {}) {
       kind,
       orgId: id,
       orgName: name,
+      // THE WORD THIS ROW IS SPOKEN IN (roadmap 2b). It rides on the row
+      // beside the name for the same reason `orgCanConfirm` does: the card
+      // draws sentences about this org and must not have to look one up.
+      // Absent on a row whose org this bundle could not read, and `orgWords`
+      // answers with the gym's words for that — what every card said before.
+      orgType: app?.org?.orgType,
       applicationId: typeof app?.id === 'string' ? app.id : null,
       expiresAt: typeof app?.expiresAt === 'string' ? app.expiresAt : null,
       nudgedAt: typeof app?.nudgedAt === 'string' ? app.nudgedAt : null,
@@ -299,4 +306,42 @@ export function hasFreshCheer(orgs, now = Date.now()) {
     const age = now - at.getTime();
     return age >= 0 && age < cutoff;
   });
+}
+
+/** ONE WORD FOR THE PLACES SOMEBODY TRAINS — the heading over a list that can
+ *  hold more than one of them, and the Settings tab that leads to it.
+ *
+ *  **A member can belong to a gym AND a studio, and then no type's word is
+ *  true of the list.** So the rule is: every membership shares a word, or the
+ *  neutral one is used. It is the direction every other sentence in this card
+ *  takes — say what is true of what is actually there, never the commonest
+ *  guess.
+ *
+ *  **AN EMPTY OR UNREADABLE LIST GETS THE GYM'S WORDS, not the neutral ones,
+ *  and that is `orgWords`' own fallback rule rather than a second one.** These
+ *  are headings above a list nobody has joined yet, where every screen said
+ *  "gym" before this card and nothing has been learned that contradicts it.
+ *
+ *  Plural is the noun plus `s`, which is correct for gym, studio, trainer and
+ *  clinic — every word `orgWords` can return. A word needing anything else has
+ *  to be added here at the same time as it is added there. */
+export function myOrgsWords(orgs) {
+  const list = Array.isArray(orgs) ? orgs : [];
+  const words = list.map((org) => orgWords(org?.orgType));
+  const first = words[0];
+  if (first !== undefined && words.some((word) => word.itToMembers !== first.itToMembers)) {
+    return {
+      one: 'organisation',
+      oneCap: 'Organisation',
+      plural: 'organisations',
+      pluralCap: 'Organisations',
+    };
+  }
+  const one = first ?? orgWords(undefined);
+  return {
+    one: one.itToMembers,
+    oneCap: one.itToMembersCap,
+    plural: `${one.itToMembers}s`,
+    pluralCap: `${one.itToMembersCap}s`,
+  };
 }

@@ -6,7 +6,7 @@
 // does not know: a country the server would refuse, a timezone that is not the
 // user's own, a member count taken off one page of a cursor walk, or a join
 // code printed as usable when the join path will turn it away.
-import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES } from '@app/shared';
+import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES, orgWords } from '@app/shared';
 
 /** Region names from the browser's own database rather than a table typed here.
  *  A hand-written name table is a second place to be wrong about a country's
@@ -211,11 +211,12 @@ export function codeState(code, now = Date.now()) {
  *  With `nextCursor` set, the rows in hand are not the whole roster, so the
  *  length of `items` is not the member count — printing it as one would put a
  *  wrong number in front of a gym owner. A bound is the honest thing to say. */
-export function memberCountLabel(page) {
+export function memberCountLabel(page, orgType) {
   if (!page || !Array.isArray(page.items)) return null;
+  const words = orgWords(orgType);
   const n = page.items.length;
-  if (page.nextCursor != null) return `${n}+ members`;
-  return n === 1 ? '1 member' : `${n} members`;
+  if (page.nextCursor != null) return `${n}+ ${words.people}`;
+  return n === 1 ? `1 ${words.person}` : `${n} ${words.people}`;
 }
 
 /** "3 people waiting", from the SERVER'S exact count.
@@ -278,8 +279,8 @@ export function codeToShow(codes, now = Date.now()) {
  *  So the viewer is now PASSED IN and compared, and the claim is checked rather
  *  than deduced. An unknown viewer falls back to the plain count: "1 member" is
  *  true for everybody, and saying less is the only safe direction here. */
-export function memberCountLine(page, viewerUserId = null) {
-  const label = memberCountLabel(page);
+export function memberCountLine(page, viewerUserId = null, orgType = undefined) {
+  const label = memberCountLabel(page, orgType);
   if (label === null) return null;
   const items = Array.isArray(page?.items) ? page.items : [];
   // TRUNCATION GUARD, and it is here because REMOVING IT SHIPPED A DEFECT.
@@ -296,7 +297,7 @@ export function memberCountLine(page, viewerUserId = null) {
     only.complimentary === true &&
     typeof viewerUserId === 'string' &&
     only.userId === viewerUserId;
-  return isViewersOwnSeat ? '1 member (you)' : label;
+  return isViewersOwnSeat ? `1 ${orgWords(orgType).person} (you)` : label;
 }
 
 /** T3 L-6: the database's own words are not the screen's words. `org_type` and
@@ -311,13 +312,22 @@ const ORG_TYPE_WORDS = {
   personal_trainer: 'Personal trainer',
   clinic: 'Clinic',
 };
-const ROLE_WORDS = { owner: 'Owner', manager: 'Manager', trainer: 'Trainer' };
+const ROLE_WORDS = { owner: 'Owner', manager: 'Manager' };
 
 export function orgTypeLabel(orgType) {
   return Object.hasOwn(ORG_TYPE_WORDS, orgType ?? '') ? ORG_TYPE_WORDS[orgType] : (orgType ?? '');
 }
 
-export function roleLabel(role) {
+/** WHAT SOMEBODY'S JOB IS CALLED HERE — and the third role's name follows the
+ *  ORG TYPE (Part 3 §2.2: gym Trainer, studio Coach; roadmap 2b puts a personal
+ *  trainer's assistant on the studio's side, with the clients).
+ *
+ *  `owner` and `manager` are the same word everywhere, so only `trainer` is
+ *  looked up. **The org type is passed in and never guessed**: a missing one
+ *  yields the gym's word, which is what every console said before this card and
+ *  is right for the type that is not a variation of anything. */
+export function roleLabel(role, orgType) {
+  if (role === 'trainer') return orgWords(orgType).coachCap;
   return Object.hasOwn(ROLE_WORDS, role ?? '') ? ROLE_WORDS[role] : (role ?? '');
 }
 
@@ -355,26 +365,16 @@ export const ORG_TYPE_CHOICES = [
   },
 ];
 
-/** THE WORDS THE CREATE SCREEN USES FOR EACH TYPE. A trainer has CLIENTS, not
- *  members (Kd 2026-09-07: *"a trainer's clients join by code like members"*),
- *  and no "gym name". A studio has clients too — Part 3 §2.2 puts it on the
- *  Clients / Sessions / Coach side with the trainer. An unknown type gets the
- *  gym's words rather than a blank label — the same fall-back direction as
- *  `orgTypeLabel`. */
-const ORG_WORDS = {
-  gym: { nameLabel: 'Gym name', placeholder: 'Iron House', it: 'gym', people: 'members' },
-  studio: { nameLabel: 'Studio name', placeholder: 'Flow Studio', it: 'studio', people: 'clients' },
-  personal_trainer: {
-    nameLabel: 'Your business name',
-    placeholder: 'Coach Priya',
-    it: 'business',
-    people: 'clients',
-  },
-};
-
-export function orgWords(orgType) {
-  return Object.hasOwn(ORG_WORDS, orgType ?? '') ? ORG_WORDS[orgType] : ORG_WORDS.gym;
-}
+/** THE WORDS EVERY ORG-TYPE SENTENCE IS BUILT FROM — and they live in
+ *  `@app/shared`, not here.
+ *
+ *  They started in this file for the create screen alone (a trainer has
+ *  CLIENTS, not members — Kd 2026-09-07: *"a trainer's clients join by code
+ *  like members"*). Roadmap item 2b takes them to every other screen, and the
+ *  SERVER speaks too: the join door's refusals are the API's sentences, printed
+ *  verbatim by `JoinGymPanel`. Two tables would be two answers to "what is this
+ *  place called", so there is one, and this is a re-export of it. */
+export { orgWords };
 
 /** THE CLOCK'S WORDS LIVE IN `utils/joinClock.js` and are re-exported here.
  *

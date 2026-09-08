@@ -51,6 +51,10 @@ const appRow = (kind, o, extra = {}) => ({
   kind,
   orgId: o.id,
   orgName: o.name,
+  // The word the card speaks about this place (roadmap 2b). Exact, like every
+  // other field here: a row that stopped carrying it would print "member" at a
+  // studio's client and nothing else would notice.
+  orgType: o.orgType,
   applicationId: `app-${o.id}-${kind === 'waiting' ? 'pending' : 'rejected'}`,
   expiresAt: '2026-09-02T09:00:00.000Z',
   nudgedAt: null,
@@ -84,7 +88,7 @@ describe('gymStatusRows', () => {
     // waiting card would simply vanish and the app would never say they were
     // accepted.
     expect(gymStatusRows({ applications: [], orgs: [myOrg(IRON, true)] })).toEqual([
-      { kind: 'member', orgId: 'gym-1', orgName: 'Iron House' },
+      { kind: 'member', orgId: 'gym-1', orgName: 'Iron House', orgType: 'gym' },
     ]);
   });
 
@@ -96,7 +100,7 @@ describe('gymStatusRows', () => {
       applications: [application('rejected', IRON)],
       orgs: [myOrg(IRON, true)],
     });
-    expect(rows).toEqual([{ kind: 'member', orgId: 'gym-1', orgName: 'Iron House' }]);
+    expect(rows).toEqual([{ kind: 'member', orgId: 'gym-1', orgName: 'Iron House', orgType: 'gym' }]);
   });
 
   it('WAITING OUTRANKS A STALE REFUSAL for the same gym', () => {
@@ -179,7 +183,7 @@ describe('gymStatusRows', () => {
   // because precedence is where a true sentence turns back into a false one.
   it('SAYS a person was removed rather than saying nothing at all', () => {
     expect(gymStatusRows({ applications: [], orgs: [], formerOrgs: [IRON] })).toEqual([
-      { kind: 'removed', orgId: 'gym-1', orgName: 'Iron House' },
+      { kind: 'removed', orgId: 'gym-1', orgName: 'Iron House', orgType: 'gym' },
     ]);
   });
 
@@ -189,7 +193,7 @@ describe('gymStatusRows', () => {
     // contradiction if that ever regresses.
     expect(
       gymStatusRows({ applications: [], orgs: [myOrg(IRON, true)], formerOrgs: [IRON] }),
-    ).toEqual([{ kind: 'member', orgId: 'gym-1', orgName: 'Iron House' }]);
+    ).toEqual([{ kind: 'member', orgId: 'gym-1', orgName: 'Iron House', orgType: 'gym' }]);
   });
 
   it('ASKING AGAIN after a removal outranks the removal', () => {

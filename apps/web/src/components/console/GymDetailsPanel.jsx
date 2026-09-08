@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import Select from '../common/Select';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
@@ -11,7 +12,7 @@ import {
   sameGymDetails,
   timezoneChoices,
 } from '../../pages/console/gymDetailsView';
-import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { readOnlyNote } from '../../pages/console/billingView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { orgService, errorText } from '../../api/orgsApi';
 
@@ -59,6 +60,9 @@ function Field({ label, hint, children }) {
 
 export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
   const allowed = canManageOrg(privileges);
+  // The words this panel speaks (roadmap 2b) — a studio owner edits a
+  // studio's details, not a gym's.
+  const words = orgWords(org?.orgType);
 
   // `countryOptions` walks the shared supported list through `Intl` and depends
   // on nothing, so it is computed once.
@@ -171,7 +175,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
    *
    *  Derived, the sentence appears the moment the box is emptied and no click is
    *  needed to earn it. */
-  const problem = gymDetailsProblem(draft);
+  const problem = gymDetailsProblem(draft, org?.orgType);
   const canSave = patch !== null && problem === null && !saving && !readOnly;
   // A STRING, not "not null": the sentence below claims the country is missing,
   // and a missing FIELD (an api older than this build) is the same situation as
@@ -232,7 +236,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
       // control offering to redo the same request would be two buttons for one
       // act — and for the currency lock it would promise something that cannot
       // work however many times it is pressed.
-      setError(errorText(err, "We couldn't save your gym's details. Please try again."));
+      setError(errorText(err, `We couldn't save your ${words.it}'s details. Please try again.`));
     } finally {
       setSaving(false);
     }
@@ -246,8 +250,8 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
        which can only happen with the section open. `StaffPanel` is the opposite
        case and passes the flag. */
     <ConsoleSection
-      title="Gym details"
-      summary="Your gym's name, where it is, and the time zone its day ends on."
+      title={`${words.itCap} details`}
+      summary={`Your ${words.it}'s name, where it is, and the time zone its day ends on.`}
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         {/* ABOVE THE BOXES, NOT BESIDE THE BUTTON, so it is read BEFORE somebody
@@ -264,17 +268,17 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
             the request. */}
         {readOnly ? (
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {READ_ONLY_NOTE}
+            {readOnlyNote(org?.orgType)}
           </p>
         ) : null}
 
-        <Field label="Gym name">
+        <Field label={words.nameLabel}>
           <input
             type="text"
             value={draft.name}
             onChange={(e) => edit('name', e.target.value)}
             maxLength={120}
-            aria-label="Gym name"
+            aria-label={words.nameLabel}
             className="w-full rounded-xl px-4 py-3 text-sm"
             style={inputStyle}
           />
@@ -293,7 +297,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
           />
         </Field>
 
-        <Field label="Country" hint="This decides the currency your gym is billed in.">
+        <Field label="Country" hint={`This decides the currency your ${words.it} is billed in.`}>
           <Select
             value={draft.country}
             onChange={(value) => edit('country', value)}
@@ -306,8 +310,8 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
               decides money, the server derives it and every row has one, so it
               is correct even on a gym whose country was never stored. */}
           <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Your gym is billed in {org.currencyDisplay}. We work that out from your country — you
-            can&apos;t set it here.
+            Your {words.it} is billed in {org.currencyDisplay}. We work that out from your
+            country — you can&apos;t set it here.
           </p>
           {countryOnRecord ? null : (
             /* TRUE, AND NOT A DEFECT. Gyms created before the country column
@@ -316,13 +320,13 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
                empty box that reads as something failing to load — and the fix is
                one save away, which the sentence names. */
             <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              We don&apos;t have your country on record — this gym was set up before we started
-              keeping it. Choose it here and we&apos;ll remember it.
+              We don&apos;t have your country on record — this {words.it} was set up before we
+              started keeping it. Choose it here and we&apos;ll remember it.
             </p>
           )}
         </Field>
 
-        <Field label="Time zone" hint="Your gym's daily figures use this.">
+        <Field label="Time zone" hint={`Your ${words.it}'s daily figures use this.`}>
           {zones.length > 0 ? (
             // A native select for ~400 options: the OS picker scrolls and
             // type-ahead searches, which the app's own dropdown does not. The

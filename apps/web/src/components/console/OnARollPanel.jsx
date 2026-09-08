@@ -101,6 +101,7 @@ const IDLE = { busy: false, outcome: null, error: null };
 
 export default function OnARollPanel({
   gymId,
+  orgType,
   overview,
   privileges,
   readOnly = false,
@@ -269,6 +270,7 @@ export default function OnARollPanel({
                 privileges,
                 readOnly,
                 outcome: tap.outcome,
+                orgType,
               });
               /** THIS ROW'S OPEN PANEL, or `null`. **The member is compared as
                *  well as the preset**, so the one open panel draws on the row it

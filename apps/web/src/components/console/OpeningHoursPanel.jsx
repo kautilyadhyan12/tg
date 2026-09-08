@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { ChevronDown, Copy, Loader2, Plus, X } from 'lucide-react';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
 import {
@@ -20,7 +21,7 @@ import {
   splitClock,
 } from '../../pages/console/hoursView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
-import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { readOnlyNote } from '../../pages/console/billingView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { orgService, errorText } from '../../api/orgsApi';
 
@@ -183,6 +184,8 @@ function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
 export default function OpeningHoursPanel({ org, privileges, readOnly = false }) {
   const allowed = canManageOrg(privileges);
   const gymId = org?.id;
+  // The words this panel speaks (roadmap 2b).
+  const words = orgWords(org?.orgType);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -440,7 +443,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
       // (a gym typing last night's closure in at 1am is telling the truth late)
       // while the read is today-forward and capped at a year — so re-rendering
       // the reply and stopping there would look exactly like a silent failure.
-      setClosureNotice(closureAbsentReason(closureDay, today));
+      setClosureNotice(closureAbsentReason(closureDay, today, org?.orgType));
       setClosureDay('');
       setClosureNote('');
     } catch (err) {
@@ -470,7 +473,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
   return (
     <ConsoleSection
       title="When we're open"
-      summary={loading || loadError !== null ? 'Your opening times.' : hoursSummary(hours)}
+      summary={loading || loadError !== null ? 'Your opening times.' : hoursSummary(hours, org?.orgType)}
       /* FORCED OPEN ON A FAILED READ — `StaffPanel`'s rule and its reason. This
          panel fetches, so it has a failure that can arrive while the section is
          shut, and a heading that says nothing about it is a failure nobody
@@ -480,7 +483,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
       <div className="flex flex-col gap-5">
         {readOnly ? (
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {READ_ONLY_NOTE}
+            {readOnlyNote(org?.orgType)}
           </p>
         ) : null}
 
@@ -534,7 +537,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                   </label>
                 </div>
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  This is how times are shown to you and to your members.
+                  This is how times are shown to you and to your {words.people}.
                 </p>
               </fieldset>
 
@@ -547,11 +550,11 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                   are. */}
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  When is your gym open?
+                  When is your {words.it} open?
                 </legend>
                 {draft?.mode === 'unset' ? (
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    You haven&apos;t said yet. Until you do, your members aren&apos;t shown
+                    You haven&apos;t said yet. Until you do, your {words.people} aren&apos;t shown
                     anything about your opening times.
                   </p>
                 ) : null}

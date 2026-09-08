@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { orgWords } from '@app/shared';
 import { NavLink, Link, useParams } from 'react-router-dom';
 import { Building2, Users, Settings, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
@@ -114,10 +115,20 @@ export default function ConsoleLayout({ children }) {
   // nothing to navigate between, so the rail carries the brand and the way OUT
   // — sign out — and nothing else. (It said "the way back into the app" until
   // 2026-08-19; that is the link this packet removed.)
+  // THE NAV SPEAKS THE ORGANISATION'S OWN WORDS (roadmap 2b, Part 3 §2.2): a
+  // studio's owner taps Studio and Clients where a gym's taps Gym and Members.
+  // Before the org row lands `orgWords` answers with the gym's, which is what
+  // every console said before this card.
+  const words = orgWords(org?.orgType);
   const tabs = orgSlug
     ? [
-        { to: `/console/${orgSlug}`, end: true, icon: Building2, label: 'Gym' },
-        { to: `/console/${orgSlug}/members`, end: false, icon: Users, label: 'Members' },
+        { to: `/console/${orgSlug}`, end: true, icon: Building2, label: words.itCap },
+        {
+          to: `/console/${orgSlug}/members`,
+          end: false,
+          icon: Users,
+          label: words.peopleCap,
+        },
         // ATTENDANCE IS A SECTION OF ITS OWN — Kd's ruling 2026-09-01 (:28107):
         // *"it should not be in settings but in a section call attandance a new
         // option besides gym memebr settings etc"*. **Settings is where a gym
@@ -150,7 +161,7 @@ export default function ConsoleLayout({ children }) {
       >
         <div className="px-2 py-4">
           <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Gym console
+            {words.itCap} console
           </div>
         </div>
 
@@ -191,7 +202,7 @@ export default function ConsoleLayout({ children }) {
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
         >
           <span className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Gym console
+            {words.itCap} console
           </span>
           <button
             type="button"

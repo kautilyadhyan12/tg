@@ -24,7 +24,7 @@
 // owner in Austin looking at their own Assam gym would read the previous Monday
 // (:8156's trap, trap #8, and the defect `closureDateLabel` was hand-built to
 // avoid one card ago).
-import { OVERVIEW_MONTH_DAYS, OVERVIEW_WEEKS } from '@app/shared';
+import { OVERVIEW_MONTH_DAYS, OVERVIEW_WEEKS, orgWords } from '@app/shared';
 import { dayTotalsLine, peopleLabel, visitsLabel } from './attendanceView';
 import { MONTH_SHORT } from './hoursView';
 
@@ -180,14 +180,17 @@ export function weekComparison(week) {
  *  reads *"2 people came today"* beside *"1 member came this month"*. Saying
  *  "members" here and "people" above is what stops those two reading as a
  *  contradiction. */
-export function adoptionLine(month) {
+export function adoptionLine(month, orgType) {
   const pct = month?.adoptionPct;
   if (!Number.isInteger(pct)) return null;
+  const words = orgWords(orgType);
   const members = count(month?.members);
   const visitors = count(month?.visitors);
+  const population =
+    members === 1 ? `1 ${words.person}` : `${members} ${words.people}`;
   return {
     pct,
-    text: `${visitors} of ${members === 1 ? '1 member' : `${members} members`} came in the last ${OVERVIEW_MONTH_DAYS} days`,
+    text: `${visitors} of ${population} came in the last ${OVERVIEW_MONTH_DAYS} days`,
   };
 }
 
@@ -272,13 +275,13 @@ export function initials(displayName) {
  *  **It appears ONLY when the two actually disagree**, which is the difference
  *  between an explanation and noise: somebody has come recently, the gym HAS
  *  countable members, and none of them is who came. */
-export function crowdNote(tiles) {
+export function crowdNote(tiles, orgType) {
   const members = count(tiles?.month?.members);
   if (members === 0) return null;
   if (count(tiles?.month?.visitors) > 0) return null;
   const cameRecently = count(tiles?.today?.visitors) > 0 || count(tiles?.week?.visitors) > 0;
   if (!cameRecently) return null;
-  return 'Free seats — the owner’s, and anyone the gym isn’t charged for — are counted above but not in this share.';
+  return `Free seats — the owner’s, and anyone the ${orgWords(orgType).it} isn’t charged for — are counted above but not in this share.`;
 }
 
 /** IS THERE A TREND TO DRAW YET?

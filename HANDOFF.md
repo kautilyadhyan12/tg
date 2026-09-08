@@ -4,6 +4,33 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
+
+- Built: one word table in `@app/shared` (`orgWords.ts`) read by the API and by every screen —
+  a gym has members and a Trainer, a studio and a personal trainer have clients and a Coach.
+  A personal trainer's org has TWO nouns: their console says "business", their clients read
+  "trainer". About sixty sentences now follow it: the console shell (Studio console · Clients),
+  Overview, roster, Settings, staff, codes, hours, attendance, the plan prompt, and the member's
+  join door, My Gyms and attendance card.
+- Server: the join refusals name the place in its own word ("Ask the studio for a current one");
+  a code matching nothing says "any gym, studio or trainer"; the not-on-plan, archived, staff,
+  cheer and nudge messages follow the type. "Gym not found." became "Organisation not found." —
+  that 404 cannot know a type, and telling a stranger one would answer a question they were refused.
+- Verified: shared + api tsc and eslint exit 0; engine 213 passed; shared 59 passed; web 1857
+  passed (the pre-existing `poseAssets.contract.test.js` encoding failure is red on clean master
+  too — checked by stashing); api `orgs.routes` + `orgs.hours` + `orgs.attendance` 227 passed and
+  `orgs.cheers` + `orgs.nudges` green. The full api run showed 3 failures in `catalog.seed`, which
+  pass alone: the shared-database flake ROADMAP item 10 already carries (`zz_p22_hidden` is
+  `exercises.routes`'s fixture).
+- New tests: `packages/shared/test/orgWords.test.ts`, `apps/web/src/pages/console/orgWords.render.test.jsx`
+  (a studio and a trainer console, each with the gym asserted beside it as the control), plus
+  cases in the My Gyms, join-door, consoleView and staffView suites and two api route tests.
+- Judgement calls for Kd: the console has no "Workouts" label to swap for "Sessions" — its tiles
+  count VISITS by his own ruling, and the only "workout" words mean the member's own history, so
+  that third of §2.2's vocabulary row has no site today. A member in a gym AND a studio sees the
+  neutral "My organisations", because no type's word is true of that list.
+- Open: Kd's click-through, then the independent review round. Next: roadmap Stage 1 item 3a.
+
 ## 2026-09-08 · Organisation types (Stage 1 item 2a), merged as PR #53
 
 - Built: `personal_trainer` joins `gym` and `studio` as a creatable type; migration `0024` widens

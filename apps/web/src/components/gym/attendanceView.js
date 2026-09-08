@@ -31,6 +31,7 @@
 // could land in either: they cannot any more — the server refuses first — and
 // they survive for the visits recorded BEFORE the rule, and for gyms the rule
 // does not reach.
+import { orgWords } from '@app/shared';
 import { clockLabel, closureDateLabel, gymToday, isoWeekdayOfDay } from '../../pages/console/hoursView';
 
 /** Minutes since midnight ON THE GYM'S WALL, or null when the instant or the
@@ -96,20 +97,24 @@ export function sessionWindowLabel(session, clockFormat) {
  *
  *  **The `in_session` arm falls back to the plain sentence when the window is
  *  unreadable** rather than printing an empty pair of dashes. */
-export function markedSentence(visit, { alreadyMarked = false, clockFormat = '24h' } = {}) {
+export function markedSentence(
+  visit,
+  { alreadyMarked = false, clockFormat = '24h', orgType = undefined } = {},
+) {
   const opener = alreadyMarked === true ? "You're already marked in" : "You're marked in";
+  const it = orgWords(orgType).itToMembers;
   const status = visit?.hoursStatus;
 
   if (status === 'in_session') {
     const window = sessionWindowLabel(visit?.session, clockFormat);
     return window === '' ? `${opener}.` : `${opener} — the ${window} session.`;
   }
-  if (status === 'open_24h') return `${opener}. Your gym is open 24 hours.`;
+  if (status === 'open_24h') return `${opener}. Your ${it} is open 24 hours.`;
   if (status === 'outside_hours') {
-    return `${opener} — that's outside your gym's opening times.`;
+    return `${opener} — that's outside your ${it}'s opening times.`;
   }
   if (status === 'closed_day') {
-    return `${opener} — your gym said it's closed today.`;
+    return `${opener} — your ${it} said it's closed today.`;
   }
   // `hours_unset`, and anything a NEWER server sends that this bundle does not
   // know. Both get the sentence that claims nothing about opening hours: the
@@ -130,9 +135,18 @@ export function markedSentence(visit, { alreadyMarked = false, clockFormat = '24
  *  sentence here would be a SECOND spelling of one minute — the defect
  *  `clockLabel`'s own header names — and it would be the WRONG one, because the
  *  server always writes 24-hour while the member's card writes whichever clock
- *  the gym chose. */
-export const GYM_CLOSED_TODAY_MESSAGE = "Your gym is closed today, so attendance isn't open.";
-export const GYM_SHUT_NOW_MESSAGE = "Your gym isn't open right now, so attendance isn't open.";
+ *  the gym chose.
+ *
+ *  **THE NOUN FOLLOWS THE ORG TYPE and a gym's two sentences are unchanged to
+ *  the byte** (roadmap 2b). They are still the SERVER's own words —
+ *  `gymClosedMessage` in `apps/api/src/modules/orgs/service.ts` builds them
+ *  from the same table for the 409 this screen exists to pre-empt. */
+export function gymClosedTodayMessage(orgType) {
+  return `Your ${orgWords(orgType).itToMembers} is closed today, so attendance isn't open.`;
+}
+export function gymShutNowMessage(orgType) {
+  return `Your ${orgWords(orgType).itToMembers} isn't open right now, so attendance isn't open.`;
+}
 
 /** WHY "I'm here" CANNOT BE PRESSED — or null, meaning press away.
  *
@@ -174,7 +188,7 @@ export const GYM_SHUT_NOW_MESSAGE = "Your gym isn't open right now, so attendanc
  *  trap #8 for a control that blocks somebody. `visitMinutes` returns null for
  *  exactly that case, so passing its check is what makes the `gymToday` below it
  *  safe. */
-export function attendanceShutReason(hours, now = new Date()) {
+export function attendanceShutReason(hours, now = new Date(), orgType = undefined) {
   const mode = hours?.mode;
   if (mode !== 'open_24h' && mode !== 'scheduled') return null;
 
@@ -184,7 +198,7 @@ export function attendanceShutReason(hours, now = new Date()) {
   if (minute === null) return null;
 
   const today = gymToday(hours.timezone, at);
-  if ((hours.closures ?? []).some((c) => c?.day === today)) return GYM_CLOSED_TODAY_MESSAGE;
+  if ((hours.closures ?? []).some((c) => c?.day === today)) return gymClosedTodayMessage(orgType);
   if (mode === 'open_24h') return null;
 
   const weekday = isoWeekdayOfDay(today);
@@ -197,7 +211,7 @@ export function attendanceShutReason(hours, now = new Date()) {
       s.opensMinute <= minute &&
       minute < s.closesMinute,
   );
-  return inSession ? null : GYM_SHUT_NOW_MESSAGE;
+  return inSession ? null : gymShutNowMessage(orgType);
 }
 
 /** THE VISIT THE SERVER JUST CONFIRMED, PUT INTO THE LIST ALREADY ON SCREEN.

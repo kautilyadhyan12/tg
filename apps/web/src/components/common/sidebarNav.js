@@ -1,4 +1,5 @@
 import { Building2 } from 'lucide-react';
+import { myOrgsWords } from '../gym/gymMembershipView';
 
 /** MY GYMS — Kd's ruling of 2026-09-02: *"whenever a user joins a gym and gym
  *  approves them a new option will appear besides the other option in left
@@ -41,9 +42,18 @@ import { Building2 } from 'lucide-react';
  *  **IT RIDES ON THE ITEM AND NOT ON A SECOND LIST**, so the dot cannot outlive
  *  the item it belongs to: a member removed from their last gym loses both in
  *  the same expression. */
-export function navWithMyGyms(items, gymCount, { dot = false } = {}) {
-  if (!Array.isArray(items) || !Number.isInteger(gymCount) || gymCount <= 0) return items;
-  const myGyms = { to: '/my-gyms', icon: Building2, label: 'My Gyms', dot: dot === true };
+export function navWithMyGyms(items, gyms, { dot = false } = {}) {
+  // **IT TAKES THE LIST NOW AND NOT A COUNT**, because the label follows what
+  // is in it (roadmap 2b): a studio's client reads "My Studios". A non-array is
+  // the same answer an unreadable count was — no item at all.
+  const list = Array.isArray(gyms) ? gyms : [];
+  if (!Array.isArray(items) || list.length === 0) return items;
+  const myGyms = {
+    to: '/my-gyms',
+    icon: Building2,
+    label: `My ${myOrgsWords(list).pluralCap}`,
+    dot: dot === true,
+  };
   const at = items.findIndex((item) => item.to === '/settings');
   if (at < 0) return [...items, myGyms];
   return [...items.slice(0, at), myGyms, ...items.slice(at)];

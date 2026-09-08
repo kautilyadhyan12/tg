@@ -14,9 +14,9 @@
 //      and every one of them must produce no meter rather than "0 of 0".
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
-  CONSOLE_READ_ONLY_BANNER,
-  READ_ONLY_NOTE,
-  READ_ONLY_QUEUE_NOTE,
+  consoleReadOnlyBanner,
+  readOnlyNote,
+  readOnlyQueueNote,
   SEAT_PRESSURE_RATIO,
   TRIAL_URGENT_DAYS,
   bannerFor,
@@ -344,6 +344,13 @@ describe('consoleIsReadOnly', () => {
     expect(consoleIsReadOnly(gym({ subscription: null, consoleReadOnly: true }))).toBe(true);
   });
 });
+
+// THE THREE SENTENCES AS A GYM READS THEM. They are functions of the org type
+// since roadmap 2b, and every assertion below is about the GYM's wording — which
+// is the one that must not move, because it is the server's own (`notOnPlanMessage`).
+const READ_ONLY_NOTE = readOnlyNote('gym');
+const READ_ONLY_QUEUE_NOTE = readOnlyQueueNote('gym');
+const CONSOLE_READ_ONLY_BANNER = consoleReadOnlyBanner('gym');
 
 describe('the read-only sentences', () => {
   // THE WORDS ARE PINNED, and the reason is that all three are drawn at a gym

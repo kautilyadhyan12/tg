@@ -1067,8 +1067,15 @@ export type ApplyOutcome =
   | { kind: "already_pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
   | { kind: "already_member"; org: OrgRow; membership: MembershipRow }
   | { kind: "no_such_code" }
-  | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted" }
-  | { kind: "org_archived" }
+  // `orgType` RIDES ON BOTH REFUSALS SO THE SENTENCE CAN NAME THE PLACE (Kd's
+  // roadmap line 2b): *"Ask the studio for a current one"*. It is the org's own
+  // column, read in the same transaction two statements above, and it tells the
+  // holder of the code nothing they were not about to be told anyway — the
+  // pending arm returns the whole org summary. `no_such_code` has none by
+  // construction: no code, no org, and inventing one would be the wrong kind of
+  // guess.
+  | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted"; orgType: OrgType }
+  | { kind: "org_archived"; orgType: OrgType }
   | { kind: "consent_required" };
 
 /** :11385's ratified default: a pending application dies after 14 days if
@@ -1121,7 +1128,7 @@ export async function applyByCode(
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "no_such_code" };
     const org = toOrgRow(rawOrg);
-    if (org.status !== "active") return { kind: "org_archived" };
+    if (org.status !== "active") return { kind: "org_archived", orgType: org.orgType };
 
     const codeRows = await tx<
       {
@@ -1140,9 +1147,9 @@ export async function applyByCode(
       FROM gym_codes c WHERE c.id = ${found.id} AND c.gym_id = ${found.gym_id}`;
     const code = codeRows[0];
     if (code === undefined) return { kind: "no_such_code" };
-    if (code.paused) return { kind: "code_unusable", reason: "paused" };
+    if (code.paused) return { kind: "code_unusable", reason: "paused", orgType: org.orgType };
     if (code.expires_at !== null && code.expires_at.getTime() <= Date.now()) {
-      return { kind: "code_unusable", reason: "expired" };
+      return { kind: "code_unusable", reason: "expired", orgType: org.orgType };
     }
     // MEASURED AGAINST PEOPLE WHO ARE STILL IN, not against claims ever made
     // (Kd's smoke, 2026-08-21). A gym that limits a code to 20 means twenty
@@ -1150,7 +1157,7 @@ export async function applyByCode(
     // place with them and the code died one short, which no screen explained.
     // `toCodeRow`'s comment carries the definition and the list of sites.
     if (code.max_uses !== null && code.joined >= code.max_uses) {
-      return { kind: "code_unusable", reason: "exhausted" };
+      return { kind: "code_unusable", reason: "exhausted", orgType: org.orgType };
     }
 
     // Part 3 §2.4: joining a CLINIC code IS the consent record. The refusal

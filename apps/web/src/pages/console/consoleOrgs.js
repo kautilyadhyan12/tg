@@ -169,7 +169,7 @@ function load({ background }) {
       publish({
         status: 'failed',
         orgs: null,
-        error: errorText(err, "We couldn't load your gyms."),
+        error: errorText(err, "We couldn't load your organisations."),
         forUserId,
       });
     })

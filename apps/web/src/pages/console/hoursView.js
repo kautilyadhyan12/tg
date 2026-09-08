@@ -1,3 +1,5 @@
+import { orgWords } from '@app/shared';
+
 // OPENING HOURS — the rules, away from the screen (`gymDetailsView`'s shape).
 //
 // Kd's rulings: :26624 (sessions, many per day, or 24 hours), :26684 (no session
@@ -378,7 +380,7 @@ export function hoursProblem(draft, clockFormat) {
         return `${label} has a session starting at midnight at the end of the day. Start it earlier, or put it on the next day.`;
       }
       if (closes <= opens) {
-        return `${label} has a session that ends before it starts. A gym open past midnight needs two rows — one ending at 24:00 and one starting at 00:00 the next day.`;
+        return `${label} has a session that ends before it starts. Somewhere open past midnight needs two rows — one ending at 24:00 and one starting at 00:00 the next day.`;
       }
       parsed.push({ opens, closes });
     }
@@ -486,10 +488,10 @@ export const CLOSURE_HORIZON_DAYS = 366;
  *
  *  So the screen says what happened. Null means "it will be in the list", which
  *  is the ordinary case and needs no sentence. */
-export function closureAbsentReason(day, gymTodayDate) {
+export function closureAbsentReason(day, gymTodayDate, orgType) {
   if (typeof day !== 'string' || typeof gymTodayDate !== 'string') return null;
   if (day < gymTodayDate) {
-    return "That date has already passed at your gym, so it's saved but not shown below.";
+    return `That date has already passed at your ${orgWords(orgType).it}, so it's saved but not shown below.`;
   }
   if (day >= addDays(gymTodayDate, CLOSURE_HORIZON_DAYS)) {
     return "That date is more than a year away, so it's saved but not shown below until it's nearer.";
@@ -503,15 +505,16 @@ export function closureAbsentReason(day, gymTodayDate) {
  *  **A gym that has not answered is told it has not answered — never "Closed"**
  *  (:26736, :5807). The three modes produce three genuinely different
  *  sentences, which is what a reviewer should check first. */
-export function hoursSummary(hours) {
-  if (hours?.mode === 'open_24h') return "Your gym is open 24 hours.";
+export function hoursSummary(hours, orgType) {
+  const words = orgWords(orgType);
+  if (hours?.mode === 'open_24h') return `Your ${words.it} is open 24 hours.`;
   if (hours?.mode === 'scheduled') {
     const open = (hours.week ?? []).filter((d) => (d.sessions ?? []).length > 0).length;
-    if (open === 0) return 'Your gym is closed every day of the week.';
+    if (open === 0) return `Your ${words.it} is closed every day of the week.`;
     if (open === 7) return 'Your opening times are set for every day.';
     return `Your opening times are set for ${String(open)} ${open === 1 ? 'day' : 'days'} a week.`;
   }
-  return "You haven't said when your gym is open. Members aren't shown anything about opening times until you do.";
+  return `You haven't said when your ${words.it} is open. ${words.peopleCap} aren't shown anything about opening times until you do.`;
 }
 
 /** EXPORTED so the console spells a month in exactly ONE place. The Overview's

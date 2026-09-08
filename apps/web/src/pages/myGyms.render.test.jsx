@@ -289,7 +289,7 @@ describe('the screen', () => {
   it('tells somebody with no gym where joining happens', async () => {
     api.getMine.mockResolvedValue({ data: { orgs: [], formerOrgs: [] } });
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/not a member of a gym yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/haven't joined a gym, studio or trainer yet/i)).toBeTruthy());
     expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe('/settings');
   });
 
@@ -299,7 +299,47 @@ describe('the screen', () => {
     api.getMine.mockRejectedValue(new Error('offline'));
     drawScreen();
     await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy());
-    expect(screen.queryByText(/not a member of a gym yet/i)).toBeNull();
+    expect(screen.queryByText(/haven't joined a gym, studio or trainer yet/i)).toBeNull();
+  });
+
+  /** ROADMAP 2b: the member's own screens speak the type of the place they
+   *  joined. The heading is over a LIST, so it follows what is in it — and
+   *  the mixed case is the one that cannot be answered with any type's word. */
+  it('heads the list with the word of the places actually in it', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...GYM, orgType: 'studio' }], formerOrgs: [] },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My studios' })).toBeTruthy();
+  });
+
+  it('says My trainers for a personal trainer, and My gyms for a gym', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...GYM, orgType: 'personal_trainer' }], formerOrgs: [] },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My trainers' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, orgType: 'gym' }], formerOrgs: [] } });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My gyms' })).toBeTruthy();
+  });
+
+  it('uses the neutral word when the list holds two different types', async () => {
+    // "My gyms" over a studio, or "My studios" over a gym, is the app being
+    // wrong on screen about something the reader can see. Neither is used.
+    api.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          { ...GYM, orgType: 'gym' },
+          { ...GYM, id: 'g2', name: 'Flow Studio', slug: 'flow', orgType: 'studio' },
+        ],
+        formerOrgs: [],
+      },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My organisations' })).toBeTruthy();
   });
 });
 
@@ -1310,7 +1350,7 @@ describe('the dot on the nav item', () => {
   it('appears for a cheer inside the cap', async () => {
     api.getMine.mockResolvedValue(withCheer('2026-09-02T09:00:00.000Z'));
     drawSidebar();
-    await waitFor(() => expect(screen.getByLabelText('New from your gym')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('New message')).toBeTruthy());
   });
 
   // **THE POSITIVE CONTROL IS THE ITEM ITSELF.** A dot asserted absent on a
@@ -1327,13 +1367,13 @@ describe('the dot on the nav item', () => {
     api.getMine.mockResolvedValue(withCheer('2026-08-31T12:00:00.000Z'));
     drawSidebar();
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
-    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+    expect(screen.queryByLabelText('New message')).toBeNull();
   });
 
   it('is absent for a member nobody has cheered', async () => {
     api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null }], formerOrgs: [] } });
     drawSidebar();
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
-    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+    expect(screen.queryByLabelText('New message')).toBeNull();
   });
 });

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ROLE_PRIVILEGES } from '@app/shared';
 import {
   staffRoleChoices,
-  STAFF_SEATS_NOTE,
+  staffSeatsNote,
   canChangeStaff,
   canManageStaff,
   effectivePrivileges,
@@ -124,10 +124,35 @@ describe('the roles this screen hands out', () => {
     }
   });
 
-  it('says the same thing about a MANAGER whatever the org type', () => {
-    const a = staffRoleChoices('gym').find((c) => c.value === 'manager');
-    const b = staffRoleChoices('studio').find((c) => c.value === 'manager');
-    expect(a.hint).toBe(b.hint);
+  /** **THE MANAGER'S HINT FOLLOWS THE TYPE TOO, and this test used to assert
+   *  the opposite** — that the sentence was identical for every org type. It
+   *  was true and it was the defect roadmap 2b exists to fix: a studio's owner
+   *  read "remove members" about the people their own screen calls clients.
+   *
+   *  What is actually shared is the POWER the sentence describes, so the two
+   *  are compared with the noun taken out: the same promise, in each type's own
+   *  word. */
+  it("makes a MANAGER the same promise in each type's own word", () => {
+    const gym = staffRoleChoices('gym').find((c) => c.value === 'manager');
+    const studio = staffRoleChoices('studio').find((c) => c.value === 'manager');
+    expect(gym.hint).toBe('Can confirm people joining, remove members, and manage your join codes.');
+    expect(studio.hint).toBe('Can confirm people joining, remove clients, and manage your join codes.');
+    expect(gym.hint.replace('members', 'PEOPLE')).toBe(studio.hint.replace('clients', 'PEOPLE'));
+  });
+
+  it('calls the third role Trainer at a gym and Coach everywhere else', () => {
+    // Part 3 §2.2's vocabulary row, and Kd's roadmap line 2b puts a personal
+    // trainer's assistant on the studio's side with the clients.
+    expect(staffRoleChoices('gym').find((c) => c.value === 'trainer').label).toBe('Trainer');
+    expect(staffRoleChoices('studio').find((c) => c.value === 'trainer').label).toBe('Coach');
+    expect(
+      staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer').label,
+    ).toBe('Coach');
+    // An org type this build has never heard of takes the gym's word, like
+    // every other fallback in `orgWords`.
+    expect(staffRoleChoices('something_new').find((c) => c.value === 'trainer').label).toBe(
+      'Trainer',
+    );
   });
 });
 
@@ -196,7 +221,7 @@ describe('how many people run the gym', () => {
 
 describe('what the screen says becoming staff costs', () => {
   it('says staff do not use up a paid member seat', () => {
-    expect(STAFF_SEATS_NOTE).toMatch(/seat/i);
+    expect(staffSeatsNote('gym')).toMatch(/seat/i);
   });
 
   it('does NOT claim the number beside a join code moves — that stopped being true', () => {
@@ -209,8 +234,8 @@ describe('what the screen says becoming staff costs', () => {
     // Kd's ruling in `claimSeat`'s count instead, so an appointment now changes
     // no join-code number at all. Printing the promised sentence would put a
     // false statement on screen.
-    expect(STAFF_SEATS_NOTE).not.toMatch(/join code/i);
-    expect(STAFF_SEATS_NOTE).not.toMatch(/drop|fall|fewer|one less/i);
+    expect(staffSeatsNote('gym')).not.toMatch(/join code/i);
+    expect(staffSeatsNote('gym')).not.toMatch(/drop|fall|fewer|one less/i);
   });
 });
 

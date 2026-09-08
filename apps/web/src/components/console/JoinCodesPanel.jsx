@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Loader2, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed } from './ConsoleStates';
 import { codeState, formatJoinedAt } from '../../pages/console/consoleView';
@@ -14,7 +15,7 @@ import {
   todayInputValue,
   whyNotUsable,
 } from '../../pages/console/codesView';
-import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { readOnlyNote } from '../../pages/console/billingView';
 import { orgService, errorText } from '../../api/orgsApi';
 
 // MANAGING JOIN CODES — Part 3 §2.2's "Create / rotate / expire codes" row and
@@ -193,7 +194,17 @@ function RestrictionFields({ endDate, setEndDate, limit, setLimit, disabled, idP
  *  (C116). A handler guard here would make the button's guard unfalsifiable,
  *  which is the two-guards-neither-observable defect this same round is fixing
  *  in `billingView.test.js`. */
-function CodeRow({ code, busy, readOnly, onPause, onWake, onRotate, onSaveLimits, onRemove }) {
+function CodeRow({
+  code,
+  busy,
+  readOnly,
+  words,
+  onPause,
+  onWake,
+  onRotate,
+  onSaveLimits,
+  onRemove,
+}) {
   const [editing, setEditing] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -349,7 +360,7 @@ function CodeRow({ code, busy, readOnly, onPause, onWake, onRotate, onSaveLimits
         <div className="flex flex-col gap-2">
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
             Replace {code.code}? You get a new code to hand out, and this one stops working —
-            anyone holding it can no longer join. People who already joined stay members.
+            anyone holding it can no longer join. People who already joined stay {words.people}.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -382,7 +393,7 @@ function CodeRow({ code, busy, readOnly, onPause, onWake, onRotate, onSaveLimits
         <div className="flex flex-col gap-2">
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
             Take {code.code} off this list? It is already switched off, so nobody can join with it.
-            Everyone who joined with it stays a member, and their history is kept.
+            Everyone who joined with it stays a {words.person}, and their history is kept.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -477,7 +488,16 @@ function CodeRow({ code, busy, readOnly, onPause, onWake, onRotate, onSaveLimits
   );
 }
 
-export default function JoinCodesPanel({ gymId, codes, privileges, readOnly = false, onChanged }) {
+export default function JoinCodesPanel({
+  gymId,
+  codes,
+  orgType,
+  privileges,
+  readOnly = false,
+  onChanged,
+}) {
+  // The words this panel speaks (roadmap 2b).
+  const words = orgWords(orgType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -561,7 +581,7 @@ export default function JoinCodesPanel({ gymId, codes, privileges, readOnly = fa
           would explain are all the same buttons. */}
       {readOnly ? (
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {READ_ONLY_NOTE}
+          {readOnlyNote(orgType)}
         </p>
       ) : null}
 
@@ -572,6 +592,7 @@ export default function JoinCodesPanel({ gymId, codes, privileges, readOnly = fa
             code={code}
             busy={busy}
             readOnly={readOnly}
+            words={words}
             onPause={() => run(() => orgService.updateCode(gymId, code.code, { paused: true }))}
             onWake={() => run(() => orgService.updateCode(gymId, code.code, { paused: false }))}
             onRotate={() => run(() => orgService.rotateCode(gymId, code.code))}
@@ -637,7 +658,8 @@ export default function JoinCodesPanel({ gymId, codes, privileges, readOnly = fa
 
       {full === true ? (
         <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          This gym is holding the most codes it can. Switch one off and remove it to make room.
+          This {words.it} is holding the most codes it can. Switch one off and remove it to make
+          room.
         </p>
       ) : null}
     </ConsoleCard>

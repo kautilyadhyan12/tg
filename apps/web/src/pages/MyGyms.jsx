@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
+import { ORG_TYPES_PHRASE } from '@app/shared';
 import { Building2, Loader2 } from 'lucide-react';
 import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
-import { cheerNote } from '../components/gym/gymMembershipView';
+import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
 
 // MY GYMS — Kd's ruling of 2026-09-02, in his words: *"whenever a user joins a
 // gym and gym approves them a new option will appear besides the other option
@@ -52,15 +53,19 @@ function CheerNote({ latestCheer }) {
 
 export default function MyGyms() {
   const { loading, error, gyms, reload } = useMyGyms();
+  // THE HEADING FOLLOWS WHAT IS ACTUALLY IN THE LIST (roadmap 2b): a studio's
+  // client reads "My studios". Somebody in a gym AND a studio gets the neutral
+  // word, because no type's word is true of that list.
+  const words = myOrgsWords(gyms);
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          My gyms
+          My {words.plural}
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Your gym, when it&apos;s open, and telling it you&apos;re here.
+          Where you train, when it&apos;s open, and telling it you&apos;re here.
         </p>
       </div>
 
@@ -72,7 +77,7 @@ export default function MyGyms() {
       {loading ? (
         <div className="flex items-center gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
           <Loader2 className="w-4 h-4 animate-spin" />
-          Loading your gyms…
+          Loading…
         </div>
       ) : error !== null ? (
         <div
@@ -101,11 +106,11 @@ export default function MyGyms() {
           style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           <p className="text-sm" style={{ color: '#fff' }}>
-            You&apos;re not a member of a gym yet.
+            You haven&apos;t joined a {ORG_TYPES_PHRASE} yet.
           </p>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Your gym gives you a code. Enter it in Settings and this fills in once
-            they confirm you.
+            They give you a code. Enter it in Settings and this fills in once they
+            confirm you.
           </p>
           <Link
             to="/settings"

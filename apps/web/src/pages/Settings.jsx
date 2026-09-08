@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useMyGyms } from '../hooks/useMyGyms';
+import { myOrgsWords } from '../components/gym/gymMembershipView';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Dumbbell, Lock, Bell, Trash2, Camera,
@@ -23,13 +25,20 @@ import GymMembershipCard from '../components/gym/GymMembershipCard';
 // removed the `My Gym` sidebar entry on 2026-08-19 and ruled the login page's
 // two doors the only crossing between the member app and the console, in both
 // directions. A link to `/console` added here re-opens exactly that.
-const TABS = [
-  { id: 'profile',       label: 'Profile',       icon: User    },
-  { id: 'fitness',       label: 'Fitness',       icon: Dumbbell },
-  { id: 'gym',           label: 'Gym',           icon: Building2 },
-  { id: 'account',       label: 'Account',       icon: Shield  },
-  { id: 'notifications', label: 'Notifications', icon: Bell    },
-];
+/** THE TAB THAT HOLDS THE JOIN CODE IS NAMED AFTER WHAT THE PERSON HAS JOINED
+ *  (roadmap 2b): a studio's client taps Studio, a trainer's taps Trainer.
+ *  Somebody in two types at once, or in none yet, gets the word `myOrgsWords`
+ *  decides — which for an empty list is the gym's, exactly what this tab said
+ *  before. */
+function tabsFor(orgWord) {
+  return [
+    { id: 'profile',       label: 'Profile',       icon: User    },
+    { id: 'fitness',       label: 'Fitness',       icon: Dumbbell },
+    { id: 'gym',           label: orgWord,         icon: Building2 },
+    { id: 'account',       label: 'Account',       icon: Shield  },
+    { id: 'notifications', label: 'Notifications', icon: Bell    },
+  ];
+}
 
 const glowLabel = {
   color:      '#FF8A1F',
@@ -725,6 +734,10 @@ function NotificationsTab() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Settings() {
   const { logout } = useAuth();
+  // Reads the kept `/v1/orgs/mine` answer the sidebar has already fetched — a
+  // shared store, not a second request.
+  const { gyms } = useMyGyms();
+  const tabs = tabsFor(myOrgsWords(gyms).oneCap);
   const { triggerTransition } = useTransition();
   const [tab,     setTab]     = useState('profile');
   const [profile, setProfile] = useState(null);
@@ -911,7 +924,7 @@ export default function Settings() {
 
             {/* Sidebar tabs */}
             <div className="flex md:flex-col gap-2 md:w-48 flex-shrink-0">
-              {TABS.map((t) => {
+              {tabs.map((t) => {
                 const Icon   = t.icon;
                 const active = tab === t.id;
                 return (

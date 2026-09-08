@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import { ORG_TYPES_PHRASE } from '@app/shared';
 import JoinGymPanel from '../components/gym/JoinGymPanel';
 
 // `/org/join?code=…` — the address a gym's poster points at.
@@ -31,7 +32,7 @@ export default function JoinGym() {
           Join with a code
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Enter the code your gym, studio or trainer gave you.
+          Enter the code your {ORG_TYPES_PHRASE} gave you.
         </p>
       </div>
       {/* T3 r1 L-5: `key` is the fix, and it belongs here rather than in the

@@ -27,7 +27,7 @@
 import { ON_A_ROLL_LIMIT, ON_A_ROLL_MIN_WEEKS } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { visitsLabel } from './attendanceView';
-import { READ_ONLY_NOTE } from './billingView';
+import { readOnlyNote } from './billingView';
 
 /** A count off the wire, or 0 — `overviewView.js`'s helper and its reasoning:
  *  every caller has already established that the read SUCCEEDED, so this only
@@ -193,7 +193,7 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *                  refuses without explaining is the "greyed out with no reason"
  *                  defect this project has named before (:24141).
  *  - `read-only` — the gym has no live plan. **The server's own sentence**,
- *                  verbatim from `READ_ONLY_NOTE`, so the screen and the door
+ *                  verbatim from `readOnlyNote`, so the screen and the door
  *                  cannot come to say different things about one refusal.
  *  - `sent`      — cheered already today. `cheerableAt` is the server's
  *                  answer and the screen does not work it out: a page that
@@ -243,12 +243,18 @@ export function cheerAgainText(cheerableAt, now = Date.now()) {
  *  and stops, and the day arrives with the re-read — which it now actually
  *  does. */
 export function cheerState(regular, options = {}) {
-  const { privileges = [], readOnly = false, outcome = null, now = Date.now() } = options;
+  const {
+    privileges = [],
+    readOnly = false,
+    outcome = null,
+    orgType = undefined,
+    now = Date.now(),
+  } = options;
   if (!canCheer(privileges)) {
     return { kind: 'blocked', disabled: true, text: 'Your role cannot send this.' };
   }
   if (readOnly === true) {
-    return { kind: 'read-only', disabled: true, text: READ_ONLY_NOTE };
+    return { kind: 'read-only', disabled: true, text: readOnlyNote(orgType) };
   }
   const again = cheerAgainText(regular?.cheerableAt, now);
   if (again !== null) {

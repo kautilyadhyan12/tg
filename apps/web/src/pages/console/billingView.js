@@ -48,6 +48,7 @@
 // answers with the date its OLD trial ran out. A reader keying on "is this field
 // set" would put "Trial — 0 days left" on a gym that has been paying for a year.
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
+import { orgWords } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
 import { viewerPrivileges } from './consoleView';
@@ -97,7 +98,7 @@ export function consoleIsReadOnly(org) {
 
 /** WHAT A GREYED CONTROL SAYS, AND THE ONLY PLACE IT IS WRITTEN.
  *
- *  **It is the SERVER's own sentence, verbatim** — `GYM_NOT_ON_PLAN_MESSAGE` in
+ *  **It is the SERVER's own sentence, verbatim** — `notOnPlanMessage` in
  *  `apps/api/src/modules/orgs/service.ts`, the message its 409 carries — for the
  *  reason every refusal on this console prints the server's words: the screen
  *  and the door must not come to say different things about one refusal. Five
@@ -111,7 +112,9 @@ export function consoleIsReadOnly(org) {
  *  **It is true for EVERY staff role, which is what Kd's ruling required of it.**
  *  A trainer reading it cannot subscribe, so it does not tell them to; and it is
  *  not *"ask your gym's owner"*, because the reader may BE the owner. */
-export const READ_ONLY_NOTE = 'This gym needs a plan before anything here can be changed.';
+export function readOnlyNote(orgType) {
+  return `This ${orgWords(orgType).it} needs a plan before anything here can be changed.`;
+}
 
 /** THE WAITING QUEUE'S OWN SENTENCE, and it is a DIFFERENT fact from the note
  *  above — which is why it is not that one (:23928's Low-5).
@@ -137,8 +140,9 @@ export const READ_ONLY_NOTE = 'This gym needs a plan before anything here can be
  *  has already passed needs the PAYMENT card to survive the first sweep after
  *  the gym subscribes (`OWED.md`). "They keep their place" is true today;
  *  "we'll confirm them for you later" would be the same defect one card on. */
-export const READ_ONLY_QUEUE_NOTE =
-  'Nobody can be let in until this gym is on a plan. The people waiting keep their place.';
+export function readOnlyQueueNote(orgType) {
+  return `Nobody can be let in until this ${orgWords(orgType).it} is on a plan. The people waiting keep their place.`;
+}
 
 /** §4.2's *"Trial expired → grace"* row, in words true of BOTH ways a gym
  *  arrives here.
@@ -159,8 +163,10 @@ export const READ_ONLY_QUEUE_NOTE =
  *  The members clause is kept because it is the consequence an owner most needs
  *  and it is Kd's own ruling: a lapsed gym's members fall back to the FREE app
  *  and are **never locked out** (:22215 §3.4). */
-export const CONSOLE_READ_ONLY_BANNER =
-  'This gym has no plan. Nothing here can be changed, and your members get the free app only.';
+export function consoleReadOnlyBanner(orgType) {
+  const words = orgWords(orgType);
+  return `This ${words.it} has no plan. Nothing here can be changed, and your ${words.people} get the free app only.`;
+}
 
 /** Is this gym in its free trial RIGHT NOW?
  *
@@ -266,10 +272,10 @@ export function seatMeter(org) {
  *  had none; unifying the sentence is what makes one owner possible, and a
  *  meter that reads "42 of 300 places used." on the roster and in the banner
  *  is the same true sentence in both places. */
-export function seatLineText(meter) {
+export function seatLineText(meter, orgType) {
   if (meter === null || meter === undefined) return null;
   return meter.full
-    ? `${meter.used} of ${meter.cap} places used — your gym is full, so nobody else can join yet.`
+    ? `${meter.used} of ${meter.cap} places used — your ${orgWords(orgType).it} is full, so nobody else can join yet.`
     : `${meter.used} of ${meter.cap} places used.`;
 }
 
@@ -294,6 +300,9 @@ export function seatLineText(meter) {
 export function bannerFor(org, now = Date.now()) {
   const sub = org?.subscription;
   const meter = seatMeter(org);
+  // THE WORDS COME OFF THE ORG THIS BANNER IS ABOUT, so no caller has to know
+  // there is a vocabulary at all (roadmap 2b).
+  const words = orgWords(org?.orgType);
 
   // §4.2's "Trial expired → grace" row, FIRST — and the position is
   // explicitness rather than a tie-break, which is worth saying plainly because
@@ -309,7 +318,7 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'read_only',
       tone: 'danger',
-      text: CONSOLE_READ_ONLY_BANNER,
+      text: consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
       // away for a day costs the owner nothing. This one is about something the
@@ -329,7 +338,7 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'past_due',
       tone: 'warn',
-      text: "A payment for your gym didn't go through.",
+      text: `A payment for your ${words.it} didn't go through.`,
       dismissible: false,
     };
   }
@@ -355,8 +364,8 @@ export function bannerFor(org, now = Date.now()) {
       // the direction that costs a gym its members' trust.
       const text =
         days < 0
-          ? "Your trial is past its end date. Your members keep your gym's features while it is still running."
-          : `Trial ends ${date ?? 'soon'}. Your members keep your gym's features only while a plan is active.`;
+          ? `Your trial is past its end date. Your ${words.people} keep your ${words.it}'s features while it is still running.`
+          : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.`;
       return { key: 'trial_urgent', tone: 'warn', text, dismissible: false };
     }
   }
@@ -367,7 +376,7 @@ export function bannerFor(org, now = Date.now()) {
       tone: 'warn',
       // The sentence comes from `seatLineText` — the banner is one of its three
       // readers, not its author.
-      text: seatLineText(meter),
+      text: seatLineText(meter, org?.orgType),
       dismissible: false,
     };
   }
@@ -456,9 +465,10 @@ export function planPromptFor(org) {
  *  **A null cap is a WORD and never a zero** (:5807): `plans.seat_cap` is
  *  nullable and a capless tier is a real shape in the price book, so "0 members"
  *  would be a number nobody computed printed against a plan that limits nobody. */
-export function planSeatLabel(seatCap) {
-  if (!Number.isFinite(seatCap) || seatCap <= 0) return 'No member limit';
-  return `Up to ${seatCap} members`;
+export function planSeatLabel(seatCap, orgType) {
+  const words = orgWords(orgType);
+  if (!Number.isFinite(seatCap) || seatCap <= 0) return `No ${words.person} limit`;
+  return `Up to ${seatCap} ${words.people}`;
 }
 
 /** THE PRICE, AS THE SERVER WROTE IT, PLUS HOW OFTEN IT IS CHARGED.

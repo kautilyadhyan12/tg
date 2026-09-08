@@ -1,3 +1,4 @@
+import { orgWords } from '@app/shared';
 import { ConsoleCard } from './ConsoleStates';
 import {
   canManageBilling,
@@ -64,7 +65,7 @@ function SeatLine({ org }) {
   if (meter === null) return null;
   return (
     <div className="text-sm mt-1" style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}>
-      {seatLineText(meter)}
+      {seatLineText(meter, org?.orgType)}
     </div>
   );
 }
@@ -104,7 +105,8 @@ export default function TrialCard({ org }) {
           Plan
         </div>
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          We couldn&apos;t check this gym&apos;s plan just now. Reload the page in a moment.
+          We couldn&apos;t check this {orgWords(org?.orgType).it}&apos;s plan just now. Reload the
+          page in a moment.
         </p>
       </ConsoleCard>
     ) : null;

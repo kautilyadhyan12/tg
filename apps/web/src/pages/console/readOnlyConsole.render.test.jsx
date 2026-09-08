@@ -64,9 +64,14 @@ vi.mock('../../context/AuthContext', () => ({
 const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const { setCurrentUserId } = await import('../../utils/storage');
-const { CONSOLE_READ_ONLY_BANNER, READ_ONLY_NOTE, READ_ONLY_QUEUE_NOTE } = await import(
+const { consoleReadOnlyBanner, readOnlyNote, readOnlyQueueNote } = await import(
   './billingView'
 );
+// Every gym in this file is an ordinary `gym`, so the three sentences are its
+// wording — which is what these assertions have always been about.
+const CONSOLE_READ_ONLY_BANNER = consoleReadOnlyBanner('gym');
+const READ_ONLY_NOTE = readOnlyNote('gym');
+const READ_ONLY_QUEUE_NOTE = readOnlyQueueNote('gym');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const Overview = (await import('./Overview')).default;
 const Members = (await import('./Members')).default;

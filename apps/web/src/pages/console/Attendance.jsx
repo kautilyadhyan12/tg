@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { orgWords } from '@app/shared';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -270,7 +271,7 @@ export default function ConsoleAttendance() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your gym…" />
+        <ConsoleLoading label="Loading your organisation…" />
       </div>
     );
   }
@@ -288,7 +289,7 @@ export default function ConsoleAttendance() {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find that gym.
+            We couldn&apos;t find that organisation.
           </p>
         </ConsoleCard>
       </div>
@@ -312,6 +313,8 @@ export default function ConsoleAttendance() {
 function AttendanceDay({ org }) {
   const gymId = org.id;
   const timezone = org.timezone;
+  // The words this screen speaks (roadmap 2b).
+  const words = orgWords(org.orgType);
 
   // THE DAY STARTS AT THE GYM'S TODAY, NOT THE READER'S (trap #8). An owner in
   // one zone looking at a gym in another must open the gym's own day; `gymToday`
@@ -480,7 +483,7 @@ function AttendanceDay({ org }) {
           Attendance
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Who came in, by day. Times are your gym&apos;s own.
+          Who came in, by day. Times are your {words.it}&apos;s own.
         </p>
       </div>
 
@@ -653,6 +656,7 @@ function AttendanceDay({ org }) {
                  one of them is a problem (:8267/:8343). A FAILED read never
                  reaches here — it is drawn above. */
               <EmptyDay
+                words={words}
                 reason={emptyDayReason({
                   manualAttendanceEnabled: org.manualAttendanceEnabled,
                   totals: answer.totals,
@@ -734,12 +738,12 @@ function AttendanceDay({ org }) {
 
 /** THE EMPTY DAY, IN THREE SENTENCES. They look identical in the data and only
  *  one of them is a problem — the class this project has shipped once. */
-function EmptyDay({ reason }) {
+function EmptyDay({ reason, words }) {
   if (reason === 'switch-off') {
     return (
       <div className="mt-2">
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Nobody can mark themselves in — the button is switched off for your gym.
+          Nobody can mark themselves in — the button is switched off for your {words.it}.
         </p>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
           Turn it back on in Settings, under &ldquo;Marking attendance&rdquo;.
