@@ -6,9 +6,11 @@
 import { z } from "zod";
 import { instantSchema } from "./time.js";
 
-/** The DB vocabulary (Part 4 §3.2's CHECK), used to PARSE rows on the way out.
- *  It still contains `clinic` on purpose — see `createOrgTypeSchema`. */
-export const orgTypeSchema = z.enum(["gym", "studio", "clinic"]);
+/** The DB vocabulary (Part 4 §3.2's CHECK, widened by migration `0024`), used
+ *  to PARSE rows on the way out. It still contains `clinic` on purpose — see
+ *  `createOrgTypeSchema`. `personal_trainer` is Kd's ruling of 2026-09-07:
+ *  organisation types are gym, studio and personal trainer. */
+export const orgTypeSchema = z.enum(["gym", "studio", "personal_trainer", "clinic"]);
 export type OrgType = z.infer<typeof orgTypeSchema>;
 
 /** KD RULING 2026-08-18: *"no click will be there only gyms and fitness
@@ -30,8 +32,12 @@ export type OrgType = z.infer<typeof orgTypeSchema>;
  *
  *  `studio` stays: a boutique or personal-training studio is a fitness
  *  business, not a medical one, so it sits inside "gyms and fitness centres".
- *  That call was stated to Kd in one line and not overruled. */
-export const createOrgTypeSchema = z.enum(["gym", "studio"]);
+ *  That call was stated to Kd in one line and not overruled.
+ *
+ *  `personal_trainer` — Kd ruling 2026-09-07: a trainer's clients join by code
+ *  like members, and opening hours are optional for a trainer (they are optional
+ *  for everyone: `hours_mode` starts `unset`). */
+export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer"]);
 export type CreateOrgType = z.infer<typeof createOrgTypeSchema>;
 
 /** Part 3 §2.2. `admin` is deliberately absent — Kd's internal panel is a

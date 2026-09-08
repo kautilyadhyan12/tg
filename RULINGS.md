@@ -143,6 +143,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-24 · There is no "first 20 gyms free"; twenty gyms is a sales target. *"first 20 gyms free who even said that men"* [archive :16702]
 - 2026-08-20 · Per-seat pricing: NO. [archive :12600]
 - 2026-09-07 · Before the first real user: a limited company (not a sole proprietorship), product liability insurance, and lawyer-reviewed terms.
+- 2026-09-08 · Trial abuse: NO approval queue; every organisation starts the moment it is created. Four layers, built with Stage 3 item 2 before launch: (1) one person for trial counting across Gmail dots and `+tags`, throwaway email domains refused at the Manage door · (2) the trial belongs to the GYM, not the email: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one · (3) weaker clues (same city and similar name, same address, same laptop) never block; they go on a "have a look" list for Kd (an email until the admin panel), who may pause or remove · (4) a real owner of two gyms gets a second-trial code from Kd. Device rule: ONE DEVICE, ONE TRIAL, whatever the email (a browser mark on the web, the stores on the phone); NOT one device per account — the console on phone and web at once stays. *"i agree to all your recommendation"*
 
 ## Privacy and legal
 

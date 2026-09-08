@@ -120,7 +120,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
    *  Two lines do it. Focus moves INTO the dialog when it appears, and Tab
    *  cycles inside it. Nothing here can close the prompt — the trap has no
    *  escape of its own, which is the point: `Escape` still does nothing, and the
-   *  only ways out remain "Your gyms" and Sign out, both inside the trap.
+   *  only ways out remain "Your organisations" and Sign out, both inside the trap.
    *
    *  **`inert` on the shell was the other route and was NOT taken:** this
    *  component is mounted in two places (the console shell and the gym-created
@@ -210,7 +210,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       //
       // THE ANSWER GOES INTO THE SHARED STORE RATHER THAN INTO THIS COMPONENT,
       // and that is what closes the prompt honestly: held here, it would die
-      // with the component the moment the owner walked out through "Your gyms",
+      // with the component the moment the owner walked out through "Your organisations",
       // and a background re-read that failed would then put an unclosable
       // prompt back over a gym that IS trialling. The store keeps the fact for
       // every reader — this prompt and the Overview's plan card — until the
@@ -373,7 +373,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
         >
           <Link to="/console" className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Your gyms
+            Your organisations
           </Link>
           <button
             type="button"

@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES } from "@app/shared";
+import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, orgTypeSchema } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -655,6 +655,30 @@ d("0001_init on a real database", () => {
     const fks = await sql`
       SELECT 1 FROM pg_constraint WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'f'`;
     expect(fks).toHaveLength(0);
+  });
+
+  /** `0024`'s ORG TYPE CHECK LISTS EXACTLY THE TYPES `orgTypeSchema` KNOWS — the
+   *  guard `0021` and `0022` carry, for the same reason: a `.sql` file the
+   *  journal does not name is applied silently and reports success.
+   *
+   *  Both directions fail far from the edit. A type in the enum without a
+   *  migration 500s the create route on an unmapped 23514 (the route test
+   *  covers that). A type in the CHECK without the enum is the direction only
+   *  this test covers: a row written with it is refused on the way OUT at
+   *  `repo.ts`'s parse, which turns every `/v1/orgs/mine` read into a 500 for
+   *  everyone whose list contains that row. */
+  it("0024's org type CHECK lists exactly the types orgTypeSchema knows", async () => {
+    const [defRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gyms'::regclass AND conname = 'gyms_org_type_check'`;
+    const def = defRow?.def;
+    if (def === undefined) throw new Error("gyms_org_type_check is not on the table");
+
+    const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+    expect(inCheck).toEqual([...orgTypeSchema.options].sort());
+    // The read side keeps `clinic` for legacy rows even though the door refuses
+    // it — the assertion that keeps this test about the READ vocabulary.
+    expect(inCheck).toContain("clinic");
   });
 
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the

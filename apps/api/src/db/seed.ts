@@ -182,8 +182,9 @@ const GYM_BANDS: { band: number; seatCap: number; usd: number; inr: number }[] =
  *  unspecified, so `{}` stands (every reader takes defaults).
  *  memberEntitlements = what each member gets, per v1 §9.2.
  *  `orgTypes: null` = every org type, matching the spec's "all" column. Only
- *  `gym` and `studio` can be created today (clinics struck at the door,
- *  :10182), so naming types here would add a second place to keep in step. */
+ *  `gym`, `studio` and `personal_trainer` can be created today (clinics struck
+ *  at the door, :10182), so naming types here would add a second place to keep
+ *  in step. */
 const orgRows: PlanSeed[] = GYM_BANDS.flatMap(({ band, seatCap, usd, inr }) => [
   {
     code: `org_b${String(band)}_us_m`,

@@ -103,7 +103,10 @@ export const gyms = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    check("gyms_org_type_check", sql`${t.orgType} IN ('gym','studio','clinic')`),
+    check(
+      "gyms_org_type_check",
+      sql`${t.orgType} IN ('gym','studio','personal_trainer','clinic')`,
+    ),
     check("gyms_status_check", sql`${t.status} IN ('active','archived')`),
     check("gyms_country_check", sql`${t.country} IS NULL OR ${t.country} ~ '^[A-Z]{2}$'`),
     check("gyms_hours_mode_check", sql`${t.hoursMode} IN ('unset','open_24h','scheduled')`),

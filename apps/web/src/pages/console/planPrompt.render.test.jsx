@@ -262,7 +262,7 @@ describe('the forced trial prompt', () => {
     const last = reachable[reachable.length - 1];
     // The shell's own controls are in the document — this is the escape route
     // being closed, not an absence of anywhere to escape to.
-    expect(screen.getAllByRole('link', { name: 'Your gyms' }).length).toBeGreaterThan(1);
+    expect(screen.getAllByRole('link', { name: 'Your organisations' }).length).toBeGreaterThan(1);
 
     // Tab off the LAST control wraps to the FIRST instead of leaving for the rail.
     last.focus();
@@ -293,11 +293,11 @@ describe('the forced trial prompt', () => {
     renderConsole(Overview);
 
     // Scoped INSIDE the prompt on purpose: the shell's rail and its phone tab
-    // bar both carry a "Your gyms" link and a Sign out of their own, and they
+    // bar both carry a "Your organisations" link and a Sign out of their own, and they
     // are BEHIND this overlay — unreachable while it is up. An unscoped query
     // would pass on those and say nothing about the exits that can be pressed.
     const modal = await screen.findByTestId('plan-modal');
-    const out = within(modal).getByRole('link', { name: 'Your gyms' });
+    const out = within(modal).getByRole('link', { name: 'Your organisations' });
     expect(out.getAttribute('href')).toBe('/console');
     expect(within(modal).getByRole('button', { name: /sign out/i })).toBeTruthy();
   });
@@ -434,7 +434,7 @@ describe('the screen that says the gym is ready', () => {
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     fireEvent.click(screen.getByLabelText('Country'));
     fireEvent.click(await screen.findByText('United States'));
-    fireEvent.click(screen.getByText('Create gym'));
+    fireEvent.click(screen.getByText('Create'));
   };
 
   it('is COVERED by the prompt, so a gym on no plan is not handing out its code', async () => {
