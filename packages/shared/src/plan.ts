@@ -3,8 +3,12 @@
 // The twelve screens send their answers so far; the server answers with the plan
 // numbers or an honest list of what is still missing — never both, and never a
 // number built from a default (RULINGS 2026-07-15: unanswered is not "beginner").
+// So the number first exists once the eight core answers are in — after "your
+// week" (screen 6); screens 1–5 show what is still needed, in plain words. From
+// screen 6 on, every answer changes the number (RULINGS 2026-09-07).
 // The calculator itself lives in apps/api/src/modules/plan/maths.ts and is pure:
-// it reads no clock, so "today" is an input.
+// it reads no clock, so "today" is an input — the route (item 4a) derives it from
+// the device's time zone and the server clock, never from a body field.
 import { z } from "zod";
 import { genderSchema } from "./users.js";
 
@@ -44,25 +48,33 @@ export const calendarDaySchema = z
     return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
   }, "not a real calendar day");
 
+/** The day a plan starts on: a real day with room for the ten-year horizon to
+ *  stay inside four-digit years, so a finish date always fits `calendarDaySchema`. */
+export const planStartDaySchema = calendarDaySchema.refine(
+  (s) => s >= "2000-01-01" && s <= "9989-12-31",
+  "year out of range",
+);
+
 /** Everything the calculator can act on. Every field is required here; the
  *  answers-so-far shape below is the one the screens send. Bounds are the same
- *  rails the fitness profile already uses; age is 16 and over (RULINGS 2026-09-07). */
+ *  rails the fitness profile already uses (two decimals, as the columns store);
+ *  age is 16 and over (RULINGS 2026-09-07). */
 export const planInputsSchema = z
   .object({
     goal: planGoalSchema,
     age: z.number().int().min(16).max(120),
     gender: genderSchema,
-    heightCm: z.number().min(50).max(300),
-    weightKg: z.number().positive().lt(1000),
+    heightCm: z.number().min(50).max(300).multipleOf(0.01),
+    weightKg: z.number().positive().lt(1000).multipleOf(0.01),
     /** Ignored for "maintain": the target is the current weight. */
-    targetWeightKg: z.number().positive().lt(1000).nullable(),
+    targetWeightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable(),
     /** Ignored for "maintain". */
     pace: planPaceSchema.nullable(),
     dayActivity: dayActivitySchema,
     trainingDays: z.number().int().min(0).max(7),
     sessionMinutes: z.number().int().min(0).max(240),
     health: planHealthSchema.nullable(),
-    today: calendarDaySchema,
+    today: planStartDaySchema,
   })
   .strict();
 export type PlanInputs = z.infer<typeof planInputsSchema>;
@@ -71,7 +83,7 @@ export type PlanInputs = z.infer<typeof planInputsSchema>;
 export const planAnswersSchema = planInputsSchema
   .omit({ today: true })
   .partial()
-  .extend({ today: calendarDaySchema })
+  .extend({ today: planStartDaySchema })
   .strict();
 export type PlanAnswers = z.infer<typeof planAnswersSchema>;
 
@@ -105,10 +117,17 @@ export const planFlagSchema = z.discriminatedUnion("code", [
   /** At this pace the target is more than a year away. `suggestedPace` is the gentlest
    *  pace that finishes within a year, or null when no pace does. */
   z.object({ code: z.literal("pace_over_a_year"), suggestedPace: planPaceSchema.nullable() }).strict(),
-  /** The chosen pace would put calories below the floor; calories sit on the floor and the finish date moved out. */
+  /** Calories would have gone under the floor and sit on it instead. If the plan still
+   *  moves the weight it does so slower than the pace asked for (see `daysToTarget`);
+   *  if the floor left no cut at all, `target_out_of_reach` is listed as well. */
   z.object({ code: z.literal("calorie_floor_applied"), floorKcal: z.number().int() }).strict(),
   /** No calorie deficit, by rule: calories stay at daily burn. */
   z.object({ code: z.literal("no_deficit"), reasons: z.array(noDeficitReasonSchema).min(1) }).strict(),
+  /** The target cannot be reached at these calories, so the plan holds the current
+   *  weight: on a "lose" goal the calorie floor left no cut (daily burn is at or
+   *  under the floor); on a "gain" goal the target is more than ten years away at
+   *  the fastest pace. No finish date; `plannedTargetKg` is the current weight. */
+  z.object({ code: z.literal("target_out_of_reach") }).strict(),
 ]);
 export type PlanFlag = z.infer<typeof planFlagSchema>;
 
@@ -118,17 +137,22 @@ export const planNumbersSchema = z
     restingBurnKcal: z.number().int(),
     /** Resting burn × the day's factor + the week's training spread over seven days. */
     dailyBurnKcal: z.number().int(),
-    /** Calories to eat a day. */
+    /** Calories to eat a day; never under the floor. */
     targetKcal: z.number().int(),
-    /** targetKcal − dailyBurnKcal: negative on a cut, positive on a gain, 0 otherwise. */
+    /** Exactly targetKcal − dailyBurnKcal, so the two numbers on screen subtract to it.
+     *  Negative on a cut, positive on a gain or when the floor sits above the burn. */
     dailyChangeKcal: z.number().int(),
+    /** The three add up to targetKcal (to rounding); carbohydrates never under 50 g. */
     proteinG: z.number().int(),
     carbsG: z.number().int(),
     fatG: z.number().int(),
-    /** The weight the plan actually runs to (the current weight for "maintain";
-     *  the healthy-weight floor when the target sat below it). */
+    /** The weight the plan actually runs to (the current weight for "maintain" or
+     *  when the plan cannot move the weight; the healthy-weight floor, to one
+     *  decimal, when the target sat below it). */
     plannedTargetKg: z.number(),
-    /** Days until the planned target; null when the plan does not move the weight. */
+    /** Days until the planned target, re-derivable from the screen's numbers
+     *  (kg to move × 7 700 ÷ |dailyChangeKcal|, rounded up); null when the plan does
+     *  not move the weight. Never more than ten years. */
     daysToTarget: z.number().int().nullable(),
     finishDate: calendarDaySchema.nullable(),
     flags: z.array(planFlagSchema),

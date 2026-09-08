@@ -19,7 +19,19 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: shared + api tsc and eslint exit 0; `test/plan.unit.test.ts` 36 passed; shared 59 passed.
   `tools/plan-preview.ts` prints the numbers for one person (the click-through). No screen, no
   route, no migration — 4a builds the route and screens on this contract.
-- Open: review round in a fresh chat; then 3b (health screening, Safe mode, consent log).
+- Review round 1 (fresh chat): 4 High + 7 Low + 5 test gaps, all fixed in the second commit. A target
+  the calories cannot reach (the floor left no cut, or more than ten years away) is now the flag
+  `target_out_of_reach` with no date, instead of a crash or a finish date in the year 4417; the
+  screen's numbers subtract and add up exactly (change = eat − burn on whole kcal; the macro grams
+  make the calories, protein giving way to the 50 g carb floor for a heavy body); one rounded
+  healthy-weight floor; two-decimal rails and a bounded start day in the contract; the profile's
+  age rail is 16 (RULINGS 2026-09-07) on the server and the old web form; the nutrition targets
+  now read resting burn, the floor and the macro split from the plan calculator (the activity factor
+  and the cut still differ — moved to 4a in ROADMAP); the preview tool's health screen is unanswered
+  unless all four answers are given. Safe mode's `safe_mode` reason noted on 3b.
+- Verified after the fixes: shared + api tsc and eslint exit 0; `plan.unit` 44 + `nutrition.unit` 28
+  passed; shared 59 passed; `users.fitness.routes` 10 passed on local Postgres.
+- Open: the reviewer's re-check of the fixes; then 3b (health screening, Safe mode, consent log).
 
 ## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
 

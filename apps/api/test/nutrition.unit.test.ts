@@ -340,10 +340,16 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   });
 
   // carbs = (kcal − 4·protein − 9·fat)/4 goes NEGATIVE for a heavy, short,
-  // old profile; max(carbs_g, 50) (:174) is what stops it.
-  it("applies the 50 g carbohydrate floor (:174)", () => {
-    expect(calculateTargets({ age: 120, gender: "female", heightCm: 51, weightKg: 200, exerciseFrequency: 1, fitnessGoals: ["weight_loss"] }))
-      .toMatchObject({ kcal: 1469, proteinG: 400, carbsG: 50 });
+  // old profile. The split is the plan calculator's (plan/maths.ts macrosFor):
+  // carbs hold the 50 g floor and PROTEIN gives way, so the grams still add up
+  // to the calories — the old max(carbs, 50) alone handed out 400 g protein +
+  // 41 g fat + 50 g carbs = 2 169 kcal beside a 1 469 kcal target.
+  it("applies the 50 g carbohydrate floor and keeps the grams adding up to the calories", () => {
+    // bmr = 2000 + 318.75 − 600 − 161 = 1557.75; tdee ×1.2 = 1869.3; −400 = 1469.3;
+    // fat 40.8; protein = (1469.3 − 200 − 367.3)/4 = 225.5, not 400.
+    const t = calculateTargets({ age: 120, gender: "female", heightCm: 51, weightKg: 200, exerciseFrequency: 1, fitnessGoals: ["weight_loss"] });
+    expect(t).toEqual({ bmr: 1558, tdee: 1869, kcal: 1469, proteinG: 225, carbsG: 50, fatG: 41 });
+    expect(t.proteinG * 4 + t.carbsG * 4 + t.fatG * 9).toBe(1469);
   });
 
   it("selects the protein-per-kg constant per goal (:158-163)", () => {

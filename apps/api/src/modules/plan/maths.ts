@@ -5,11 +5,25 @@
 // answers in, same numbers out. An answer that is missing yields NO number and a
 // list of what is missing (RULINGS 2026-07-15) — never a default.
 //
-// The constants that already existed in the code are reused, not re-derived:
-// resting burn, the 1200 kcal floor, the protein grams per kilo, the 25 % fat
-// share and the 50 g carbohydrate floor all come from nutrition/targets.ts.
+// Where the numbers come from (each a published figure, not one of ours):
+//   resting burn   Mifflin-St Jeor (1990), the equation the Academy of Nutrition
+//                  and Dietetics' evidence analysis recommends; two formulas exist
+//                  (female / male), so "other" and "prefer not to say" take the male one.
+//   1 kg = 7 700 kcal   the Wishnofsky planning figure (3 500 kcal a pound). It is
+//                  known to run optimistic over long plans because burn falls as
+//                  weight falls (Hall, NIH), so every finish date is an estimate.
+//   paces          0.25 / 0.5 / 0.75 kg a week, inside the 0.5–1 kg a week the CDC and
+//                  the NHS call a safe rate of loss.
+//   the 1 200 floor, the protein table, the 25 % fat share and the 50 g carbohydrate
+//                  floor are the constants nutrition/targets.ts already used; that file
+//                  now reads them from here so the two calculators cannot drift.
+//   BMI 18.5       the WHO underweight line.
+// Engineering choices of this file, not textbook tables: the no-exercise day
+// factors (1.2 is the standard sedentary figure; 1.3 / 1.45 / 1.6 are ours, with
+// training added on top at 5 MET), and the ten-year horizon.
 import {
   missingPlanInputSchema,
+  planInputsSchema,
   planResponseSchema,
   type DayActivity,
   type MissingPlanInput,
@@ -26,7 +40,7 @@ import {
 /** One kilogram of body weight is about 7 700 kcal — the usual planning figure. */
 export const KCAL_PER_KG = 7700;
 
-/** The floor already in the code (nutrition/targets.ts:167). Calories never go below it. */
+/** Calories never go below this (RULINGS 2026-09-07: "the floor already in the code"). */
 export const CALORIE_FLOOR_KCAL = 1200;
 
 /** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07). */
@@ -37,6 +51,11 @@ export const HEALTHY_BMI_FLOOR = 18.5;
 
 /** A plan that takes longer than this is flagged. */
 export const ONE_YEAR_DAYS = 365;
+
+/** A target further away than this is out of reach: no finish date is given and
+ *  the plan holds the weight instead. Also keeps every finish date inside the
+ *  calendar the contract accepts. */
+export const MAX_PLAN_DAYS = 10 * ONE_YEAR_DAYS;
 
 /** How fast each pace moves the weight. The same table serves losing and gaining. */
 export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
@@ -59,14 +78,16 @@ export const DAY_FACTOR: Readonly<Record<DayActivity, number>> = {
 /** A training session burns MET × kg × hours; 5 is moderate calisthenics. */
 export const TRAINING_MET = 5;
 
-/** Grams of protein per kilo of body weight, by goal (nutrition/targets.ts:174). */
+/** Grams of protein per kilo of body weight, by goal. */
 export const PROTEIN_G_PER_KG: Readonly<Record<PlanGoal, number>> = {
   lose: 2.0,
   gain: 2.2,
   maintain: 1.6,
 };
-const FAT_SHARE = 0.25; // targets.ts:176
-const CARBS_FLOOR_G = 50; // targets.ts:184
+/** Fat's share of the calories. */
+export const FAT_SHARE = 0.25;
+/** Carbohydrates never drop below this; protein gives way first. */
+export const CARBS_FLOOR_G = 50;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -75,8 +96,9 @@ export function addDays(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-export function restingBurn(input: Pick<PlanInputs, "age" | "gender" | "heightCm" | "weightKg">): number {
-  // Mifflin-St Jeor, as nutrition/targets.ts:156: only "female" takes −161.
+/** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. The
+ *  `gender` is a plain string so the nutrition targets can share this line. */
+export function restingBurn(input: { age: number; gender: string; heightCm: number; weightKg: number }): number {
   return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + (input.gender === "female" ? -161 : 5);
 }
 
@@ -90,6 +112,25 @@ export function healthyWeightFloorKg(heightCm: number): number {
   return HEALTHY_BMI_FLOOR * m * m;
 }
 
+export interface Macros {
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+/** The macro split for a day's calories. Fat takes its share; protein asks for
+ *  its grams per kilo; carbohydrates take the rest but never less than the floor,
+ *  and when the floor bites it is protein that gives way — so the three always
+ *  add up to the calories (a heavy body at 2 g/kg would otherwise be handed more
+ *  protein and fat than the whole day holds). */
+export function macrosFor(kcal: number, weightKg: number, proteinPerKg: number): Macros {
+  const fatG = (kcal * FAT_SHARE) / 9;
+  const proteinCeilingG = (kcal - CARBS_FLOOR_G * 4 - fatG * 9) / 4;
+  const proteinG = Math.min(weightKg * proteinPerKg, proteinCeilingG);
+  const carbsG = (kcal - proteinG * 4 - fatG * 9) / 4;
+  return { proteinG: Math.round(proteinG), carbsG: Math.round(carbsG), fatG: Math.round(fatG) };
+}
+
 /** The reasons a cut is refused, in the order the flag lists them. */
 export function noDeficitReasons(input: Pick<PlanInputs, "age" | "health">): NoDeficitReason[] {
   const reasons: NoDeficitReason[] = [];
@@ -101,10 +142,10 @@ export function noDeficitReasons(input: Pick<PlanInputs, "age" | "health">): NoD
   return reasons;
 }
 
-/** Calories to eat for a daily change of `wanted` kcal against `burn`, never
- *  below the floor; `floored` says whether the floor changed the answer. */
+/** Calories to eat (whole kcal) for a daily change of `wanted` against a whole
+ *  `burn`, never below the floor; `floored` says whether the floor changed it. */
 function eatFor(burn: number, wanted: number): { targetKcal: number; floored: boolean } {
-  const raw = burn + wanted;
+  const raw = Math.round(burn + wanted);
   const targetKcal = Math.max(raw, CALORIE_FLOOR_KCAL);
   return { targetKcal, floored: targetKcal !== raw };
 }
@@ -115,17 +156,19 @@ function wantedDailyChange(goal: PlanGoal, pace: PlanPace): number {
   return goal === "gain" ? size : -size;
 }
 
-/** Whole days to move `kgToMove` at `dailyChange` kcal a day; null when the
- *  change does not point the way the goal needs (the floor can turn a cut into
- *  a surplus). */
+/** Whole days to move `kgToMove` at `dailyChange` kcal a day (the whole number the
+ *  screen shows, so the date can be re-derived from it). Null when the change does
+ *  not point the way the goal needs — the floor can turn a cut into nothing or into
+ *  a surplus — or when the target is beyond the horizon. */
 function daysFor(goal: PlanGoal, kgToMove: number, dailyChange: number): number | null {
   if (goal === "lose" ? dailyChange >= 0 : dailyChange <= 0) return null;
-  return Math.ceil((kgToMove * KCAL_PER_KG) / Math.abs(dailyChange));
+  const days = Math.ceil((kgToMove * KCAL_PER_KG) / Math.abs(dailyChange));
+  return days > MAX_PLAN_DAYS ? null : days;
 }
 
 export function computePlan(input: PlanInputs): PlanNumbers {
   const bmr = restingBurn(input);
-  const burn = dailyBurn(input);
+  const burn = Math.round(dailyBurn(input));
   const flags: PlanFlag[] = [];
 
   // Where the plan runs to. `null` means the weight is not moved.
@@ -134,11 +177,12 @@ export function computePlan(input: PlanInputs): PlanNumbers {
     if (input.targetWeightKg >= input.weightKg) {
       flags.push({ code: "target_wrong_direction" });
     } else {
-      const floor = healthyWeightFloorKg(input.heightCm);
-      if (input.targetWeightKg < floor) {
-        flags.push({ code: "target_below_healthy_weight", floorKg: Math.round(floor * 10) / 10 });
+      // One rounded floor, shown and used alike.
+      const floorKg = Math.round(healthyWeightFloorKg(input.heightCm) * 10) / 10;
+      if (input.targetWeightKg < floorKg) {
+        flags.push({ code: "target_below_healthy_weight", floorKg });
         // Already at or under the floor: nothing to lose.
-        plannedTarget = floor < input.weightKg ? floor : null;
+        plannedTarget = floorKg < input.weightKg ? floorKg : null;
       } else {
         plannedTarget = input.targetWeightKg;
       }
@@ -155,44 +199,49 @@ export function computePlan(input: PlanInputs): PlanNumbers {
     else plannedTarget = input.targetWeightKg;
   }
 
-  const wanted = plannedTarget !== null && input.pace !== null ? wantedDailyChange(input.goal, input.pace) : 0;
-  const { targetKcal, floored } = eatFor(burn, wanted);
-  if (floored) flags.push({ code: "calorie_floor_applied", floorKcal: CALORIE_FLOOR_KCAL });
-  const change = targetKcal - burn;
-
+  let eat = eatFor(burn, plannedTarget !== null && input.pace !== null ? wantedDailyChange(input.goal, input.pace) : 0);
   let days: number | null = null;
+  let outOfReach = false;
+  let kg = 0;
   if (plannedTarget !== null) {
-    const kg = Math.abs(plannedTarget - input.weightKg);
-    days = daysFor(input.goal, kg, change);
-    if (days !== null && days > ONE_YEAR_DAYS) {
-      const suggested = PACES.find((p) => {
-        const alt = daysFor(input.goal, kg, eatFor(burn, wantedDailyChange(input.goal, p)).targetKcal - burn);
-        return alt !== null && alt <= ONE_YEAR_DAYS;
-      });
-      flags.push({ code: "pace_over_a_year", suggestedPace: suggested ?? null });
+    kg = Math.abs(plannedTarget - input.weightKg);
+    days = daysFor(input.goal, kg, eat.targetKcal - burn);
+    if (days === null) {
+      // The floor left no cut (a "lose" plan), or the move is beyond the
+      // horizon: the plan holds the weight instead of promising a date.
+      outOfReach = true;
+      plannedTarget = null;
+      eat = eatFor(burn, 0);
     }
-    // The floor left no cut at all: the plan cannot move the weight.
-    if (days === null) plannedTarget = null;
   }
-
-  const proteinG = input.weightKg * PROTEIN_G_PER_KG[input.goal];
-  const fatG = (targetKcal * FAT_SHARE) / 9;
-  const carbsG = Math.max((targetKcal - proteinG * 4 - fatG * 9) / 4, CARBS_FLOOR_G);
+  if (eat.floored) flags.push({ code: "calorie_floor_applied", floorKcal: CALORIE_FLOOR_KCAL });
+  if (days !== null && days > ONE_YEAR_DAYS) {
+    const suggested = PACES.find((p) => {
+      const alt = daysFor(input.goal, kg, eatFor(burn, wantedDailyChange(input.goal, p)).targetKcal - burn);
+      return alt !== null && alt <= ONE_YEAR_DAYS;
+    });
+    flags.push({ code: "pace_over_a_year", suggestedPace: suggested ?? null });
+  }
+  if (outOfReach) flags.push({ code: "target_out_of_reach" });
 
   return {
     restingBurnKcal: Math.round(bmr),
-    dailyBurnKcal: Math.round(burn),
-    targetKcal: Math.round(targetKcal),
-    dailyChangeKcal: Math.round(change),
-    proteinG: Math.round(proteinG),
-    carbsG: Math.round(carbsG),
-    fatG: Math.round(fatG),
+    dailyBurnKcal: burn,
+    targetKcal: eat.targetKcal,
+    dailyChangeKcal: eat.targetKcal - burn,
+    ...macrosFor(eat.targetKcal, input.weightKg, PROTEIN_G_PER_KG[input.goal]),
     plannedTargetKg: plannedTarget ?? input.weightKg,
     daysToTarget: days,
     finishDate: days === null ? null : addDays(input.today, days),
     flags,
   };
 }
+
+/** Every calculator input that can be missing: everything but `today` (always
+ *  sent) and `health` (an unanswered health screen applies no condition rule yet). */
+export const CALCULATOR_INPUTS: readonly string[] = Object.keys(planInputsSchema.shape).filter(
+  (k) => k !== "today" && k !== "health",
+);
 
 /** Which answers are still needed. The target and pace are asked only once the
  *  goal is known to need them; "maintain" needs neither. */
@@ -234,8 +283,9 @@ function resolvePlanUnchecked(answers: PlanAnswers): PlanResponse {
     trainingDays === undefined ||
     sessionMinutes === undefined
   ) {
-    // Unreachable while missingPlanInputs covers every answer read here; this is
-    // the type bridge, and it fails loud rather than computing from an absence.
+    // Unreachable while missingPlanInputs covers every answer read here (the
+    // test pins missingPlanInputSchema to CALCULATOR_INPUTS); this is the type
+    // bridge, and it fails loud rather than computing from an absence.
     throw new Error("plan: missingPlanInputs does not cover every calculator input");
   }
   return {

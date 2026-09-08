@@ -31,6 +31,13 @@ import {
   type NutritionTargets,
   type NutritionTargetsResponse,
 } from "./schemas.js";
+// One formula, two callers: resting burn, the calorie floor and the macro split
+// are the plan calculator's (ROADMAP Stage 1 item 3a), so the number this route
+// shows and the onboarding plan number cannot drift on those lines. What still
+// differs is the activity factor and the size of the cut — this route reads the
+// old profile (days a week, a fixed −400 / +300); item 4a moves it onto the
+// stored plan answers so one daily-calories number exists.
+import { CALORIE_FLOOR_KCAL, macrosFor, restingBurn } from "../plan/maths.js";
 
 /** Days per week → activity multiplier (nutrition.py:140-141). The salvage's
  *  other map — the "1-2"/"3-4"/"5-6"/"daily" strings at :132-137 — is
@@ -149,11 +156,11 @@ export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
 export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
   const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals } = input;
 
-  // BMR, Mifflin-St Jeor (:126-129). ONLY "female" takes −161; male, other and
-  // prefer_not_to_say all fall to the salvage's `else` (+5). Mifflin-St Jeor
+  // BMR, Mifflin-St Jeor (:126-129), the plan calculator's line: ONLY "female"
+  // takes −161; male, other and prefer_not_to_say all take +5. Mifflin-St Jeor
   // defines two formulas, so inventing a third for the non-binary values would
-  // be re-deriving a constant — recorded in DECISIONS rather than guessed.
-  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + (gender === "female" ? -161 : 5);
+  // be re-deriving a constant.
+  const bmr = restingBurn({ age, gender, heightCm, weightKg });
 
   const tdee = bmr * (ACTIVITY_BY_FREQUENCY[exerciseFrequency] ?? DEFAULT_ACTIVITY); // :143,:145
 
@@ -164,25 +171,20 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
     : goals.has("muscle_gain")
       ? tdee + 300
       : tdee;
-  const kcal = Math.max(adjusted, 1200); // :155
+  const kcal = Math.max(adjusted, CALORIE_FLOOR_KCAL); // :155
 
   // Macro split (:158-167). NB the protein branch tests muscle_gain FIRST —
   // the OPPOSITE precedence to the kcal adjustment above. With both goals set
   // they disagree by design of the original: kcal cuts 400 while protein uses
-  // the bulking 2.2 g/kg. Ported as-is and pinned by a unit test; "tidying" it
-  // into consistency would change behaviour without a ruling (R5.4).
+  // the bulking 2.2 g/kg. Ported as-is and pinned by a unit test. The split
+  // itself is the plan calculator's, so the three grams always add up to kcal.
   const proteinPerKg = goals.has("muscle_gain") ? 2.2 : goals.has("weight_loss") ? 2.0 : 1.6;
-  const proteinG = weightKg * proteinPerKg;
-  const fatG = (kcal * 0.25) / 9;
-  const carbsG = (kcal - proteinG * 4 - fatG * 9) / 4;
 
   return {
     bmr: Math.round(bmr),
     tdee: Math.round(tdee),
     kcal: Math.round(kcal),
-    proteinG: Math.round(proteinG),
-    carbsG: Math.round(Math.max(carbsG, 50)), // :174
-    fatG: Math.round(fatG),
+    ...macrosFor(kcal, weightKg, proteinPerKg),
   };
 }
 

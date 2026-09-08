@@ -1,11 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { calendarDaySchema, planAnswersSchema, planInputsSchema, planResponseSchema, type PlanAnswers, type PlanInputs } from "@app/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  calendarDaySchema,
+  missingPlanInputSchema,
+  planAnswersSchema,
+  planInputsSchema,
+  planResponseSchema,
+  planStartDaySchema,
+  type PlanAnswers,
+  type PlanInputs,
+} from "@app/shared";
 import {
   ADULT_AGE,
+  CALCULATOR_INPUTS,
   CALORIE_FLOOR_KCAL,
+  CARBS_FLOOR_G,
   DAY_FACTOR,
+  FAT_SHARE,
   HEALTHY_BMI_FLOOR,
   KCAL_PER_KG,
+  MAX_PLAN_DAYS,
   ONE_YEAR_DAYS,
   PACE_KG_PER_WEEK,
   PROTEIN_G_PER_KG,
@@ -14,6 +27,7 @@ import {
   computePlan,
   dailyBurn,
   healthyWeightFloorKg,
+  macrosFor,
   missingPlanInputs,
   noDeficitReasons,
   resolvePlan,
@@ -23,11 +37,11 @@ import {
 // The worked example every golden below is hand-computed from:
 //   resting burn  = 10·82 + 6.25·175 − 5·30 + 5            = 1768.75
 //   training      = 5 MET · 82 kg · 0.75 h · 3 days / 7    = 131.7857…
-//   daily burn    = 1768.75 · 1.2 + 131.7857               = 2254.2857… → 2254
+//   daily burn    = 1768.75 · 1.2 + 131.7857               = 2254.2857… → 2254 (whole kcal from here on)
 //   steady cut    = 0.5 kg/wk · 7700 / 7                   = 550 a day
-//   eat           = 2254.2857 − 550                        = 1704.2857… → 1704
+//   eat           = 2254 − 550                             = 1704
 //   days          = ⌈7 kg · 7700 / 550⌉                    = 98 → 2026-12-15
-//   protein 82·2 = 164 · fat 1704.2857·0.25/9 = 47.34 → 47 · carbs (1704.2857 − 656 − 426.07)/4 = 155.55 → 156
+//   protein 82·2 = 164 · fat 1704·0.25/9 = 47.33 → 47 · carbs (1704 − 656 − 426)/4 = 155.5 → 156
 const sample: PlanInputs = {
   goal: "lose",
   age: 30,
@@ -50,7 +64,10 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(ADULT_AGE).toBe(18);
     expect(HEALTHY_BMI_FLOOR).toBe(18.5);
     expect(ONE_YEAR_DAYS).toBe(365);
+    expect(MAX_PLAN_DAYS).toBe(3650);
     expect(TRAINING_MET).toBe(5);
+    expect(FAT_SHARE).toBe(0.25);
+    expect(CARBS_FLOOR_G).toBe(50);
     expect(PACE_KG_PER_WEEK).toEqual({ gentle: 0.25, steady: 0.5, brisk: 0.75 });
     expect(DAY_FACTOR).toEqual({ sitting: 1.2, on_feet: 1.3, active: 1.45, very_active: 1.6 });
     expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // targets.ts:174
@@ -90,9 +107,57 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     });
   });
 
-  it("is a pure function of its inputs: same answers, same numbers", () => {
-    expect(computePlan(sample)).toEqual(computePlan({ ...sample }));
-    expect(computePlan({ ...sample, today: "2027-01-01" }).finishDate).toBe("2027-04-09");
+  describe("reads no clock", () => {
+    afterEach(() => vi.useRealTimers());
+    it("the finish date follows the 'today' passed in, whatever the machine's clock says", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2031-06-01T12:00:00Z"));
+      expect(computePlan(sample).finishDate).toBe("2026-12-15");
+      expect(computePlan({ ...sample, today: "2027-01-01" }).finishDate).toBe("2027-04-09");
+    });
+  });
+
+  it("the screen's numbers subtract and add up: change = eat − burn, and the grams make the calories", () => {
+    // Bodies far from and hard against the floor, every goal, the two the review used.
+    const bodies: PlanInputs[] = [
+      sample,
+      { ...sample, goal: "gain", weightKg: 70, targetWeightKg: 75 },
+      { ...sample, goal: "maintain", targetWeightKg: null, pace: null },
+      { ...sample, age: 17 },
+      { ...sample, gender: "female", age: 20, heightCm: 155, weightKg: 44.6, targetWeightKg: 40 },
+      { ...sample, gender: "female", age: 60, heightCm: 150, weightKg: 45, targetWeightKg: 42, pace: "gentle", trainingDays: 0 },
+      { ...sample, gender: "female", age: 60, heightCm: 140, weightKg: 58.61, targetWeightKg: 45, pace: "gentle", trainingDays: 0 },
+      { ...sample, gender: "female", age: 25, heightCm: 155, weightKg: 50, targetWeightKg: 45, trainingDays: 0, pace: "brisk" },
+      { ...sample, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" },
+      { ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" },
+    ];
+    for (const body of bodies) {
+      const plan = computePlan(body);
+      const label = JSON.stringify(body);
+      expect(plan.targetKcal - plan.dailyBurnKcal, label).toBe(plan.dailyChangeKcal);
+      expect(plan.targetKcal, label).toBeGreaterThanOrEqual(CALORIE_FLOOR_KCAL);
+      expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - plan.targetKcal), label).toBeLessThanOrEqual(9);
+      expect(plan.carbsG, label).toBeGreaterThanOrEqual(CARBS_FLOOR_G);
+      expect(plan.finishDate === null, label).toBe(plan.daysToTarget === null);
+      if (plan.daysToTarget !== null) {
+        expect(plan.daysToTarget, label).toBeLessThanOrEqual(MAX_PLAN_DAYS);
+        expect(plan.daysToTarget, label).toBe(Math.ceil((Math.abs(plan.plannedTargetKg - body.weightKg) * KCAL_PER_KG) / Math.abs(plan.dailyChangeKcal)));
+        expect(plan.finishDate, label).toBe(addDays(body.today, plan.daysToTarget));
+      } else {
+        expect(plan.plannedTargetKg, label).toBe(body.weightKg);
+      }
+      // ...and the contract accepts every one of them.
+      expect(() => resolvePlan(body), label).not.toThrow();
+    }
+  });
+
+  it("dailyChangeKcal is the difference of the two rounded numbers, not a rounded raw difference", () => {
+    // female 20 · 155 cm · 44.6 kg · no training: resting 1153.75, burn 1384.5 → 1385; eat 1200.
+    // The raw difference −184.5 rounds to −184 (the review's finding); the screen subtracts −185.
+    const plan = computePlan({ ...sample, gender: "female", age: 20, heightCm: 155, weightKg: 44.6, targetWeightKg: 40, trainingDays: 0 });
+    expect(plan.dailyBurnKcal).toBe(1385);
+    expect(plan.targetKcal).toBe(1200);
+    expect(plan.dailyChangeKcal).toBe(-185);
   });
 
   it("maintain: eat what you burn, no finish date, 1.6 g protein per kilo", () => {
@@ -116,10 +181,19 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(plan.flags).toEqual([]);
   });
 
-  it("carbohydrates never drop below 50 g even when protein and fat fill the calories", () => {
-    // 150 kg at 2 g/kg = 300 g protein = 1200 kcal alone.
-    const plan = computePlan({ ...sample, weightKg: 150, targetWeightKg: 140, dayActivity: "sitting", trainingDays: 0, pace: "brisk" });
-    expect(plan.carbsG).toBeGreaterThanOrEqual(50);
+  it("carbohydrates never drop below 50 g: protein gives way so the grams still make the calories", () => {
+    // female 80 · 140 cm · 150 kg · sitting · no training: resting 1814, burn 2176.8 → 2177;
+    // brisk −825 = 1352. 2 g/kg would be 300 g protein (1200 kcal) + 37.6 g fat (338) — more
+    // than the day holds. Fat keeps its share, carbs take the floor, protein takes the rest.
+    const plan = computePlan({ ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" });
+    expect(plan.targetKcal).toBe(1352);
+    expect(plan.fatG).toBe(Math.round((1352 * 0.25) / 9)); // 38
+    expect(plan.carbsG).toBe(50);
+    expect(plan.proteinG).toBe(Math.round((1352 - 200 - 1352 * 0.25) / 4)); // 204, not 300
+    // Three roundings can drift the sum by at most 2 + 2 + 4.5 kcal.
+    expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - 1352)).toBeLessThanOrEqual(9);
+    // A body the table fits keeps its full protein and carbs above the floor.
+    expect(macrosFor(1704, 82, 2)).toEqual({ proteinG: 164, carbsG: 156, fatG: 47 });
   });
 
   it("addDays walks the calendar, month ends and leap days included", () => {
@@ -157,12 +231,12 @@ describe("plan maths — the sanity rules", () => {
     expect(healthyWeightFloorKg(160)).toBeCloseTo(47.36, 6);
   });
 
-  it("a target below the healthy floor is named and the plan runs to the floor instead", () => {
+  it("a target below the healthy floor is named and the plan runs to the floor instead — the same rounded floor in both", () => {
     const plan = computePlan({ ...sample, targetWeightKg: 50 });
     expect(plan.flags).toEqual([{ code: "target_below_healthy_weight", floorKg: 56.7 }]);
-    expect(plan.plannedTargetKg).toBeCloseTo(56.65625, 6);
-    // 25.34375 kg at 550 a day.
-    expect(plan.daysToTarget).toBe(Math.ceil((25.34375 * 7700) / 550)); // 355
+    expect(plan.plannedTargetKg).toBe(56.7);
+    // 25.3 kg at 550 a day.
+    expect(plan.daysToTarget).toBe(Math.ceil((25.3 * 7700) / 550)); // 355
     expect(plan.dailyChangeKcal).toBe(-550);
   });
 
@@ -255,9 +329,76 @@ describe("plan maths — the sanity rules", () => {
     expect(plan.targetKcal).toBe(1200);
     expect(plan.dailyChangeKcal).toBe(1200 - 842);
     expect(plan.daysToTarget).toBeNull();
+    expect(plan.finishDate).toBeNull();
     expect(plan.plannedTargetKg).toBe(35);
-    expect(plan.flags).toContainEqual({ code: "calorie_floor_applied", floorKcal: 1200 });
-    expect(plan.flags).not.toContainEqual({ code: "pace_over_a_year", suggestedPace: null });
+    expect(plan.flags).toEqual([
+      { code: "target_below_healthy_weight", floorKg: 31.3 },
+      { code: "calorie_floor_applied", floorKcal: 1200 },
+      { code: "target_out_of_reach" },
+    ]);
+  });
+
+  it("the floor leaves a cut of exactly nothing: no date in the year 4417, the target is out of reach", () => {
+    // female 60 · 140 cm · 58.61 kg · sitting · no training: resting 1000.1, burn 1200.12 → 1200.
+    // gentle asks 275; the floor gives back 1200; the change is 0 and nothing moves.
+    const plan = computePlan({ ...sample, gender: "female", age: 60, heightCm: 140, weightKg: 58.61, targetWeightKg: 45, pace: "gentle", trainingDays: 0 });
+    expect(plan.dailyBurnKcal).toBe(1200);
+    expect(plan.targetKcal).toBe(1200);
+    expect(plan.dailyChangeKcal).toBe(0);
+    expect(plan.daysToTarget).toBeNull();
+    expect(plan.finishDate).toBeNull();
+    expect(plan.plannedTargetKg).toBe(58.61);
+    expect(plan.flags).toEqual([{ code: "target_out_of_reach" }]);
+  });
+
+  it("a 'lose' plan the floor turns into a surplus says so, instead of a cut flag beside a plus number", () => {
+    // female 60 · 150 cm · 45 kg → 42 (above the 41.6 floor) · sitting · no training: resting 926.5,
+    // burn 1111.8 → 1112; 1200 is 88 above it. The plan holds the weight and says why.
+    const plan = computePlan({ ...sample, gender: "female", age: 60, heightCm: 150, weightKg: 45, targetWeightKg: 42, pace: "gentle", trainingDays: 0 });
+    expect(plan.dailyBurnKcal).toBe(1112);
+    expect(plan.targetKcal).toBe(1200);
+    expect(plan.dailyChangeKcal).toBe(88);
+    expect(plan.daysToTarget).toBeNull();
+    expect(plan.plannedTargetKg).toBe(45);
+    expect(plan.flags).toEqual([
+      { code: "calorie_floor_applied", floorKcal: 1200 },
+      { code: "target_out_of_reach" },
+    ]);
+  });
+
+  it("a target more than ten years away is out of reach, and the calories then hold the weight", () => {
+    // male 30 · 175 cm · 60 kg gaining at brisk (825 a day): burn 1954.9 → 1955.
+    const kgOnTheHorizon = (MAX_PLAN_DAYS * 825) / KCAL_PER_KG - 0.01;
+    const just = computePlan({ ...sample, goal: "gain", weightKg: 60, targetWeightKg: 60 + kgOnTheHorizon, pace: "brisk" });
+    expect(just.daysToTarget).toBe(MAX_PLAN_DAYS);
+    expect(just.dailyChangeKcal).toBe(825);
+    expect(just.flags).toEqual([{ code: "pace_over_a_year", suggestedPace: null }]);
+    expect(just.finishDate).toBe(addDays("2026-09-08", MAX_PLAN_DAYS));
+
+    const beyond = computePlan({ ...sample, goal: "gain", weightKg: 60, targetWeightKg: 60 + kgOnTheHorizon + 0.02, pace: "brisk" });
+    expect(beyond.daysToTarget).toBeNull();
+    expect(beyond.finishDate).toBeNull();
+    expect(beyond.dailyChangeKcal).toBe(0);
+    expect(beyond.targetKcal).toBe(1955);
+    expect(beyond.plannedTargetKg).toBe(60);
+    expect(beyond.flags).toEqual([{ code: "target_out_of_reach" }]);
+  });
+
+  it("resolvePlan answers every body its schema accepts (the review's crash: a fraction of a kcal a day)", () => {
+    const answers = planAnswersSchema.parse({
+      goal: "lose", age: 60, gender: "female", heightCm: 140, weightKg: 58.61, targetWeightKg: 45,
+      pace: "gentle", dayActivity: "sitting", trainingDays: 0, sessionMinutes: 45, today: "2026-09-08",
+    });
+    const r = resolvePlan(answers);
+    expect(r.missing).toEqual([]);
+    expect(r.plan?.finishDate).toBeNull();
+    expect(r.plan?.flags).toEqual([{ code: "target_out_of_reach" }]);
+    // The latest day the contract accepts still yields a date the contract accepts.
+    const lateDay = "9989-12-31";
+    expect(resolvePlan({ ...sample, today: lateDay }).plan?.finishDate).toBe("9990-04-08");
+    const farthest = { ...sample, goal: "gain" as const, weightKg: 60, targetWeightKg: 60 + (MAX_PLAN_DAYS * 825) / KCAL_PER_KG - 0.01, pace: "brisk" as const, today: lateDay };
+    expect(resolvePlan(farthest).plan?.daysToTarget).toBe(MAX_PLAN_DAYS);
+    expect(resolvePlan(farthest).plan?.finishDate).toBe(addDays(lateDay, MAX_PLAN_DAYS));
   });
 
   it("calorie floor holds for maintain and gain too", () => {
@@ -375,6 +516,12 @@ describe("plan maths — missing answers", () => {
     expect(r.missing).toEqual([]);
     expect(r.plan?.dailyChangeKcal).toBe(0);
   });
+
+  it("the 'missing' list can name every calculator input, so a dropped key cannot become a 500", () => {
+    expect([...missingPlanInputSchema.options].sort()).toEqual([...CALCULATOR_INPUTS].sort());
+    expect(CALCULATOR_INPUTS).not.toContain("today");
+    expect(CALCULATOR_INPUTS).not.toContain("health");
+  });
 });
 
 describe("plan contract (@app/shared)", () => {
@@ -386,11 +533,24 @@ describe("plan contract (@app/shared)", () => {
     expect(calendarDaySchema.safeParse("2026-09-08T00:00:00Z").success).toBe(false);
   });
 
-  it("the app is for 16 and over; the rails match the profile's", () => {
+  it("a plan's start day leaves ten years of room inside four-digit years; a finish date is any real day", () => {
+    expect(planStartDaySchema.safeParse("1999-12-31").success).toBe(false);
+    expect(planStartDaySchema.safeParse("2000-01-01").success).toBe(true);
+    expect(planStartDaySchema.safeParse("9989-12-31").success).toBe(true);
+    expect(planStartDaySchema.safeParse("9990-01-01").success).toBe(false);
+    expect(calendarDaySchema.safeParse("9999-12-29").success).toBe(true);
+    expect(planAnswersSchema.safeParse({ today: "9990-01-01" }).success).toBe(false);
+  });
+
+  it("the app is for 16 and over; the rails match the profile's, two decimals included", () => {
     expect(planInputsSchema.safeParse({ ...sample, age: 15 }).success).toBe(false);
     expect(planInputsSchema.safeParse({ ...sample, age: 16 }).success).toBe(true);
     expect(planInputsSchema.safeParse({ ...sample, trainingDays: 8 }).success).toBe(false);
     expect(planInputsSchema.safeParse({ ...sample, extra: 1 }).success).toBe(false);
+    for (const key of ["heightCm", "weightKg", "targetWeightKg"] as const) {
+      expect(planInputsSchema.safeParse({ ...sample, [key]: 58.61 }).success, key).toBe(true);
+      expect(planInputsSchema.safeParse({ ...sample, [key]: 58.6001 }).success, key).toBe(false);
+    }
   });
 
   it("answers may be partial but today is required and unknown keys are refused", () => {

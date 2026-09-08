@@ -267,7 +267,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       { preferredWorkoutTime: "midnight" }, // outside the ported enum
       { fitnessGoals: ["weight_loss", "weight_loss"] }, // set rule: no duplicates
       { availableEquipment: ["barbell"] }, // outside the ported enum
-      { age: 12 }, // below the Kd-approved floor of 13
+      { age: 15 }, // below the floor of 16 (RULINGS 2026-09-07: the app is for 16 and over)
       { age: 121 }, // above the ceiling of 120
       { exerciseFrequency: 8 }, // > 7 days in a week
       { sessionDurationMin: 4 }, // below the 5-minute floor
