@@ -241,8 +241,8 @@ export default function Onboarding() {
           toast.error('Please fill in all required fields');
           return false;
         }
-        if (formData.age < 13 || formData.age > 100) {
-          toast.error('Please enter a valid age (13-100)');
+        if (formData.age < 16 || formData.age > 100) {
+          toast.error('Please enter a valid age (16-100)');
           return false;
         }
         return true;

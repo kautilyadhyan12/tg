@@ -4,6 +4,45 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
+
+- Built: the contract `packages/shared/src/plan.ts` (answers so far in, `plan` or `missing` out,
+  never both) and the pure calculator `apps/api/src/modules/plan/maths.ts`: resting burn
+  (Mifflin-St Jeor, as the nutrition targets), daily burn from the day's factor plus the week's
+  training, pace → cut or surplus, macros (the targets' protein table, 25 % fat, 50 g carb floor),
+  finish date from a "today" the caller passes (no clock). Flags: target wrong direction ·
+  target below the healthy weight (BMI 18.5; the plan runs to the floor) · over a year (with the
+  gentlest pace that fits, or null) · calorie floor 1200 applied · no deficit (under 18,
+  pregnancy, heart, blood pressure, diabetes). Health unanswered = no condition rule yet.
+- Engineering choices: day factors are the no-exercise ones (1.2 / 1.3 / 1.45 / 1.6) because
+  training is added on top at 5 MET; paces 0.25 / 0.5 / 0.75 kg a week, the same table for a gain.
+- Verified: shared + api tsc and eslint exit 0; `test/plan.unit.test.ts` 36 passed; shared 59 passed.
+  `tools/plan-preview.ts` prints the numbers for one person (the click-through). No screen, no
+  route, no migration — 4a builds the route and screens on this contract.
+- Review round 1 (fresh chat): 4 High + 7 Low + 5 test gaps, all fixed in the second commit. A target
+  the calories cannot reach (the floor left no cut, or more than ten years away) is now the flag
+  `target_out_of_reach` with no date, instead of a crash or a finish date in the year 4417; the
+  screen's numbers subtract and add up exactly (change = eat − burn on whole kcal; the macro grams
+  make the calories, protein giving way to the 50 g carb floor for a heavy body); one rounded
+  healthy-weight floor; two-decimal rails and a bounded start day in the contract; the profile's
+  age rail is 16 (RULINGS 2026-09-07) on the server and the old web form; the nutrition targets
+  now read resting burn, the floor and the macro split from the plan calculator (the activity factor
+  and the cut still differ — moved to 4a in ROADMAP); the preview tool's health screen is unanswered
+  unless all four answers are given. Safe mode's `safe_mode` reason noted on 3b.
+- Verified after the fixes: shared + api tsc and eslint exit 0; `plan.unit` 44 + `nutrition.unit` 28
+  passed; shared 59 passed; `users.fitness.routes` 10 passed on local Postgres.
+- A live screen moved: the macro rings' protein gram now gives way to the 50 g carb floor, so a
+  very short, very heavy or very old profile (the reviewer measured about 0.5 % of a 912 912-profile
+  grid; largest change 242 g → 182 g) shows a smaller protein number than before. It was a bug — the
+  old number did not fit in the day's calories — not a ruling change.
+- Re-check (fresh chat): no Critical/High; three Lows and three test gaps, fixed in the third commit:
+  the flag docstring says when the plan holds the weight instead of running to the floor; resting
+  burn takes the `Gender` enum again (the nutrition targets narrow their string once, failing loud);
+  the no-clock test compares every field under two clocks; the gain-floor test asserts the flag; and
+  a grid sweep over the schema's corners (every goal, both formulas, the age/height/weight rails,
+  targets on both sides and past the horizon) checks every plan adds up and the contract accepts it.
+- Open: 3b (health screening, Safe mode, consent log).
+
 ## 2026-09-08 · Words by type everywhere else (Stage 1 item 2b), branch `words-by-type`
 
 - Built: one word table in `@app/shared` (`orgWords.ts`) read by the API and by every screen —

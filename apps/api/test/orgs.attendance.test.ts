@@ -1125,9 +1125,23 @@ d("gym attendance (real Postgres)", () => {
       // is not the code's. Starting only when at least fifteen seconds of the
       // minute remain removes that: the two calls between here and the mark take
       // milliseconds. It is a real wait and it is bounded by one minute.
+      // The gym's zone is chosen so the boundary minute is INSIDE the day. At the
+      // gym's midnight `start` clamps to 0 and the premise below (0 > 0) fails
+      // before the code is even exercised — CI hit that at 18:30 UTC, which is
+      // 00:00 in Kolkata. When Kolkata is on its last or first minute the gym
+      // lives in Kathmandu instead, fifteen minutes later, whose day is well
+      // under way (00:14 / 00:15) — and whose own midnight is 23:45 Kolkata,
+      // where Kolkata is fine. The wait below can roll one minute forward,
+      // hence the last minute counts too.
+      const kolkata = await sql<{ m: number }[]>`
+        SELECT (EXTRACT(HOUR FROM (now() AT TIME ZONE 'Asia/Kolkata'))::int * 60
+                + EXTRACT(MINUTE FROM (now() AT TIME ZONE 'Asia/Kolkata'))::int) AS m`;
+      const kolkataMinute = kolkata[0]?.m ?? 0;
+      const timezone = kolkataMinute === 0 || kolkataMinute === 1439 ? "Asia/Kathmandu" : "Asia/Kolkata";
+
       const owner = await makeUser("bnd-owner");
       const member = await makeUser("bnd-member");
-      const org = await makeOrg(owner.cookies, "Boundary Gym");
+      const org = await makeOrg(owner.cookies, "Boundary Gym", timezone);
       await joinAsMember(member.cookies, org, owner.cookies);
 
       const secondsIn = async () => {

@@ -137,7 +137,7 @@ export type FitnessProfileResponse = z.infer<typeof fitnessProfileResponseSchema
  *  accidentally satisfy the gate. */
 export const putFitnessProfileRequestSchema = z
   .object({
-    age: z.number().int().min(13).max(120).nullable().optional(),
+    age: z.number().int().min(16).max(120).nullable().optional(), // the app is for 16 and over (RULINGS 2026-09-07)
     gender: genderSchema.nullable().optional(),
     heightCm: z.number().min(50).max(300).multipleOf(0.01).nullable().optional(),
     targetWeightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
