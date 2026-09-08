@@ -29,7 +29,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   count VISITS by his own ruling, and the only "workout" words mean the member's own history, so
   that third of §2.2's vocabulary row has no site today. A member in a gym AND a studio sees the
   neutral "My organisations", because no type's word is true of that list.
-- Open: Kd's click-through, then the independent review round. Next: roadmap Stage 1 item 3a.
+- Kd clicked through on 2026-09-08 and passed it, skipping the steps whose ground was
+  already covered by item 2a's smoke. PR #55, CI green on all five jobs.
+- Open: the independent review round, then merge. Next: roadmap Stage 1 item 3a.
 
 ## 2026-09-08 · Organisation types (Stage 1 item 2a), merged as PR #53
 
