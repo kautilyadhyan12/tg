@@ -156,6 +156,12 @@ export default function Overview() {
   const [day, setDay] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
+  // THE WORDS THIS SCREEN SPEAKS (roadmap 2b). Read off the org row the
+  // console already holds; before it arrives `orgWords` answers with the
+  // gym's words, and every sentence built from them is drawn only after the
+  // org is in hand — the loading and not-found states above name no type at
+  // all, because at that point there is none to name.
+  const words = orgWords(org?.orgType);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -182,7 +188,7 @@ export default function Overview() {
           ? { loading: false, error: null, retryable: true, list: codesOutcome.value.data?.codes ?? [] }
           : {
               loading: false,
-              error: errorText(codesOutcome.reason, "We couldn't load this gym's join code."),
+              error: errorText(codesOutcome.reason, `We couldn't load this ${words.it}'s join code.`),
               retryable: isRetryable(codesOutcome.reason),
               list: null,
             },
@@ -192,7 +198,7 @@ export default function Overview() {
           ? { loading: false, error: null, retryable: true, page: membersOutcome.value.data ?? null }
           : {
               loading: false,
-              error: errorText(membersOutcome.reason, "We couldn't load this gym's members."),
+              error: errorText(membersOutcome.reason, `We couldn't load this ${words.it}'s ${words.people}.`),
               retryable: isRetryable(membersOutcome.reason),
               page: null,
             },
@@ -212,7 +218,7 @@ export default function Overview() {
             }
           : {
               loading: false,
-              error: errorText(overviewOutcome.reason, "We couldn't load this gym's numbers."),
+              error: errorText(overviewOutcome.reason, `We couldn't load this ${words.it}'s numbers.`),
               retryable: isRetryable(overviewOutcome.reason),
               data: null,
             },
@@ -222,7 +228,10 @@ export default function Overview() {
     return () => {
       cancelled = true;
     };
-  }, [gymId, attempt]);
+  // `words` is in the list because the sentences below are built from it. It
+  // is referentially stable per org type (`orgWords` returns one frozen table
+  // per type), so it cannot cause a second round of reads for one gym.
+  }, [gymId, attempt, words]);
 
   const retry = () => {
     setCodes({ loading: true, error: null, retryable: true, list: null });
@@ -291,7 +300,7 @@ export default function Overview() {
   if (orgLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your gym…" />
+        <ConsoleLoading label="Loading your organisation…" />
       </div>
     );
   }
@@ -309,7 +318,7 @@ export default function Overview() {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find a gym you run at this address.
+            We couldn&apos;t find an organisation you run at this address.
           </p>
           <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
             Your organisations
@@ -322,7 +331,7 @@ export default function Overview() {
   const joined = joinedCount(members.page);
   // The viewer is PASSED, not assumed (round 2 Low-3): "(you)" is a claim about
   // who is reading, and this screen will one day be reachable by a manager.
-  const countLine = memberCountLine(members.page, user?.id ?? null);
+  const countLine = memberCountLine(members.page, user?.id ?? null, org.orgType);
   const shownCode = codeToShow(codes.list);
 
   return (
@@ -395,6 +404,8 @@ export default function Overview() {
              (`emptyDayReason`'s rule, one screen over). It rides on the org row
              this screen already holds — no read of its own. */
           manualAttendanceEnabled={org.manualAttendanceEnabled}
+          /* The words this panel and the cheer button speak (roadmap 2b). */
+          orgType={org.orgType}
           /* THE CHEER'S THREE FACTS, and each is a DIFFERENT question the panel
              cannot answer from the payload it draws.
 
@@ -448,6 +459,7 @@ export default function Overview() {
       {!codes.loading && codes.error === null ? (
         <JoinCodesPanel
           gymId={org.id}
+          orgType={org.orgType}
           codes={codes.list}
           privileges={viewerPrivileges(org)}
           // Part 3 §4.2's read-only console. The codes are still SHOWN and still
@@ -483,7 +495,7 @@ export default function Overview() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-semibold" style={{ color: '#fff' }}>
-              {countLine ?? 'Members'}
+              {countLine ?? words.peopleCap}
             </div>
             {/* `joined` counts people who are NOT the owner's own complimentary
                 seat, and is null when the page is truncated — in which case the
@@ -514,7 +526,7 @@ export default function Overview() {
         </div>
         <Fact label="Currency" value={org.currencyDisplay} />
         <Fact label="Timezone" value={org.timezone} />
-        <Fact label="Your role" value={roleLabel(org.staffRole)} />
+        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType)} />
       </ConsoleCard>
     </div>
   );

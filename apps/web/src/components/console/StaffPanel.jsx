@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Loader2, Plus, UserMinus } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import { formatJoinedAt, roleLabel } from '../../pages/console/consoleView';
 import {
-  STAFF_SEATS_NOTE,
+  staffSeatsNote,
   canChangeStaff,
   canManageStaff,
   effectivePrivileges,
@@ -16,7 +17,7 @@ import {
   unknownPrivileges,
   unknownPrivilegesNote,
 } from '../../pages/console/staffView';
-import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { readOnlyNote } from '../../pages/console/billingView';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 
 // WHO RUNS THIS GYM — Part 3 §4.7's Staff surface, on §3.1's Settings screen.
@@ -64,7 +65,19 @@ import { orgService, errorText, isRetryable } from '../../api/orgsApi';
  *  has been observed to see. **It stops being unreachable the day a second owner
  *  or delegated staff management ships, and both have live `OWED.md` lines** —
  *  the same reason `canManageStaff` was fixed before it started lying. */
-function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, readOnly, onAdd, onCancel, orgType }) {
+function AddStaffForm({
+  email,
+  setEmail,
+  role,
+  setRole,
+  fieldError,
+  busy,
+  readOnly,
+  onAdd,
+  onCancel,
+  orgType,
+}) {
+  const words = orgWords(orgType);
   const choices = staffRoleChoices(orgType);
   return (
     <div
@@ -124,8 +137,8 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, readOn
       </div>
 
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        They have to be a member of your gym already. If they haven&apos;t joined yet, send them your
-        join code first.
+        They have to be a {words.person} of your {words.it} already. If they haven&apos;t joined
+        yet, send them your join code first.
       </p>
 
       {fieldError !== null ? (
@@ -175,7 +188,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, readOn
  *  Both consequences are printed where the choice is made, because they are the
  *  two things an owner is actually deciding between — and the workouts clause is
  *  there because it is the fear the sentence has to answer. */
-function RemoveControl({ person, busy, readOnly, onRemove }) {
+function RemoveControl({ person, busy, readOnly, words, onRemove }) {
   // THREE STAGES, AND THE THIRD IS KD'S (2026-08-22, from his own smoke).
   //   null            — the Remove button
   //   'choosing'      — which of the two outcomes
@@ -224,7 +237,9 @@ function RemoveControl({ person, busy, readOnly, onRemove }) {
           style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
         >
           <span className="font-semibold block">Just take the keys</span>
-          <span style={{ color: 'rgba(255,255,255,0.5)' }}>They stay a member of your gym.</span>
+          <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+            They stay a {words.person} of your {words.it}.
+          </span>
         </button>
         <button
           type="button"
@@ -233,9 +248,9 @@ function RemoveControl({ person, busy, readOnly, onRemove }) {
           className="text-xs rounded-lg px-3 py-2 text-left sm:text-right disabled:opacity-40"
           style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
         >
-          <span className="font-semibold block">Remove from the gym too</span>
+          <span className="font-semibold block">Remove from the {words.it} too</span>
           <span style={{ color: 'rgba(239,68,68,0.75)' }}>
-            They lose your gym&apos;s features. They keep every workout they have done.
+            They lose your {words.it}&apos;s features. They keep every workout they have done.
           </span>
         </button>
         <button
@@ -259,8 +274,8 @@ function RemoveControl({ person, busy, readOnly, onRemove }) {
     <div className="flex flex-col gap-2 w-full sm:w-auto sm:items-end">
       <span className="text-xs sm:text-right" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {alsoRemoveFromGym
-          ? `Remove ${person.displayName} from your gym as well? They lose your gym's features. They keep every workout they have done.`
-          : `Take ${person.displayName}'s keys back? They stay a member of your gym.`}
+          ? `Remove ${person.displayName} from your ${words.it} as well? They lose your ${words.it}'s features. They keep every workout they have done.`
+          : `Take ${person.displayName}'s keys back? They stay a ${words.person} of your ${words.it}.`}
       </span>
       <div className="flex items-center gap-2 self-start sm:self-end">
         <button
@@ -334,7 +349,7 @@ function RemoveControl({ person, busy, readOnly, onRemove }) {
  *  for the other: `ownerRow` is permanent and explains itself (*"a gym has to
  *  keep somebody who can hand out the keys"*), while `readOnly` is the gym's
  *  temporary state and is explained once at the top of the panel. */
-function PrivilegesControl({ person, busy, readOnly, onSave }) {
+function PrivilegesControl({ person, busy, readOnly, orgType, onSave }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(null);
 
@@ -347,7 +362,7 @@ function PrivilegesControl({ person, busy, readOnly, onSave }) {
   // owner that another owner's row was their own.
   const ownerRow = person.role === 'owner';
   const isSelf = person.isYou === true;
-  const choices = privilegeChoices(person.role);
+  const choices = privilegeChoices(person.role, orgType);
   const extraNote = unknownPrivilegesNote(person);
   // T3 round 1 Low-3. The comment above says a manager row holding
   // `staff.manage` is "saved without it — silently narrowed", and it was not:
@@ -484,7 +499,7 @@ function PrivilegesControl({ person, busy, readOnly, onSave }) {
  *  The wording is fixed by T3 round 1's Low-6 and is not free to reword: "your
  *  changes will be lost" is only half true, because the defaults BECOME the set
  *  in both directions. `roleChangeWarning` owns the sentence. */
-function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
+function RoleChangeControl({ person, nextRole, busy, readOnly, orgType, onConfirm }) {
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -496,7 +511,7 @@ function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
         className="text-xs rounded-lg px-3 py-1.5 self-start disabled:opacity-40"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
-        Make {roleLabel(nextRole).toLowerCase()}
+        Make {roleLabel(nextRole, orgType).toLowerCase()}
       </button>
     );
   }
@@ -504,7 +519,7 @@ function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
   return (
     <div className="flex flex-col gap-2 w-full sm:w-auto sm:items-end">
       <span className="text-xs sm:text-right" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {roleChangeWarning(person, nextRole)}
+        {roleChangeWarning(person, nextRole, orgType)}
       </span>
       <div className="flex items-center gap-2 self-start sm:self-end">
         <button
@@ -517,7 +532,7 @@ function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
           className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
         >
-          Make {roleLabel(nextRole).toLowerCase()}
+          Make {roleLabel(nextRole, orgType).toLowerCase()}
         </button>
         <button
           type="button"
@@ -532,13 +547,26 @@ function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
   );
 }
 
-function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivileges }) {
+function StaffRow({
+  person,
+  busy,
+  readOnly,
+  orgType,
+  words,
+  onChangeRole,
+  onRemove,
+  onSavePrivileges,
+}) {
   const changeable = canChangeStaff(person);
   const nextRole = otherStaffRole(person.role);
   // Absent rather than an em dash: `users.email` is nullable by design (an
   // account created through Google carries none), and a dash where an address
   // belongs reads as a value that failed to load.
-  const meta = [person.email, roleLabel(person.role), `since ${formatJoinedAt(person.since)}`]
+  const meta = [
+    person.email,
+    roleLabel(person.role, orgType),
+    `since ${formatJoinedAt(person.since)}`,
+  ]
     .filter((part) => typeof part === 'string' && part !== '')
     .join(' · ');
 
@@ -571,10 +599,17 @@ function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivil
                 nextRole={nextRole}
                 busy={busy}
                 readOnly={readOnly}
+                orgType={orgType}
                 onConfirm={onChangeRole}
               />
             ) : null}
-            <RemoveControl person={person} busy={busy} readOnly={readOnly} onRemove={onRemove} />
+            <RemoveControl
+              person={person}
+              busy={busy}
+              readOnly={readOnly}
+              words={words}
+              onRemove={onRemove}
+            />
           </div>
         ) : (
           /* THE OWNER'S ROW GETS THE REASON, NOT TWO DEAD BUTTONS. Both mutations
@@ -587,7 +622,7 @@ function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivil
             className="text-xs flex-shrink-0 sm:text-right"
             style={{ color: 'rgba(255,255,255,0.35)' }}
           >
-            A gym can&apos;t be left with nobody in charge.
+            A {words.it} can&apos;t be left with nobody in charge.
           </span>
         )}
       </div>
@@ -600,6 +635,7 @@ function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivil
         person={person}
         busy={busy}
         readOnly={readOnly}
+        orgType={orgType}
         onSave={onSavePrivileges}
       />
     </div>
@@ -608,6 +644,8 @@ function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivil
 
 export default function StaffPanel({ gymId, privileges, orgType, readOnly = false }) {
   const allowed = canManageStaff(privileges);
+  // The words this panel speaks (roadmap 2b).
+  const words = orgWords(orgType);
 
   const [state, setState] = useState({ loading: true, error: null, staff: [] });
   const [attempt, setAttempt] = useState(0);
@@ -637,14 +675,14 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
         if (cancelled) return;
         setState({
           loading: false,
-          error: errorText(err, "We couldn't load who runs this gym."),
+          error: errorText(err, `We couldn't load who runs this ${words.it}.`),
           staff: [],
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [gymId, attempt, allowed]);
+  }, [gymId, attempt, allowed, words]);
 
   if (!allowed) return null;
 
@@ -762,9 +800,9 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
         // next step.
         setActionError({
           message:
-            `${person.displayName} no longer runs your gym, but they are still a member of it. ` +
-            `${errorText(err, "We couldn't remove them from the gym.")} ` +
-            'You can remove them on the Members screen.',
+            `${person.displayName} no longer runs your ${words.it}, but they are still a ${words.person} of it. ` +
+            `${errorText(err, `We couldn't remove them from the ${words.it}.`)} ` +
+            `You can remove them on the ${words.peopleCap} screen.`,
           retryable: false,
         });
       }
@@ -831,7 +869,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
     }
   };
 
-  const countLabel = staffCountLabel(state.staff);
+  const countLabel = staffCountLabel(state.staff, orgType);
 
   return (
     /* CLOSED BY DEFAULT (Kd, 2026-08-26) — and this panel is the one that NEEDS
@@ -853,11 +891,11 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
        empty case and now carries the mutant for it too. */
     <ConsoleSection
       title="Staff"
-      summary={`Who can help you run this gym. ${STAFF_SEATS_NOTE}`}
+      summary={`Who can help you run this ${words.it}. ${staffSeatsNote(orgType)}`}
       aside={countLabel}
       forceOpen={!state.loading && state.error !== null}
     >
-      {state.loading ? <ConsoleLoading label="Loading who runs this gym…" /> : null}
+      {state.loading ? <ConsoleLoading label={`Loading who runs this ${words.it}…`} /> : null}
 
       {!state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />
@@ -874,7 +912,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
 
       {readOnly ? (
         <p className="mb-3 text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {READ_ONLY_NOTE}
+          {readOnlyNote(orgType)}
         </p>
       ) : null}
 
@@ -886,6 +924,8 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
               person={person}
               busy={busyId === person.userId}
               readOnly={readOnly}
+              orgType={orgType}
+              words={words}
               onChangeRole={() => changeRole(person)}
               onRemove={(alsoRemoveFromGym) => removePerson(person, alsoRemoveFromGym)}
               onSavePrivileges={(privileges) => savePrivileges(person, privileges)}

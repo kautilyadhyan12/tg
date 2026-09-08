@@ -73,6 +73,7 @@ export default function OverviewNumbers({
   orgSlug,
   manualAttendanceEnabled,
   gymId,
+  orgType,
   privileges,
   readOnly = false,
   onCheered = () => {},
@@ -99,8 +100,8 @@ export default function OverviewNumbers({
 
   const { tiles, weeks } = overview;
   const comparison = weekComparison(tiles.week);
-  const adoption = adoptionLine(tiles.month);
-  const note = crowdNote(tiles);
+  const adoption = adoptionLine(tiles.month, orgType);
+  const note = crowdNote(tiles, orgType);
   const geometry = chartGeometry(weeks);
   const collecting = chartState(weeks) === 'collecting';
 
@@ -213,6 +214,7 @@ export default function OverviewNumbers({
       <OnARollPanel
         key={gymId}
         gymId={gymId}
+        orgType={orgType}
         overview={overview}
         privileges={privileges}
         readOnly={readOnly}

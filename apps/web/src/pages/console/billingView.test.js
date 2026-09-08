@@ -14,9 +14,9 @@
 //      and every one of them must produce no meter rather than "0 of 0".
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
-  CONSOLE_READ_ONLY_BANNER,
-  READ_ONLY_NOTE,
-  READ_ONLY_QUEUE_NOTE,
+  consoleReadOnlyBanner,
+  readOnlyNote,
+  readOnlyQueueNote,
   SEAT_PRESSURE_RATIO,
   TRIAL_URGENT_DAYS,
   bannerFor,
@@ -345,6 +345,13 @@ describe('consoleIsReadOnly', () => {
   });
 });
 
+// THE THREE SENTENCES AS A GYM READS THEM. They are functions of the org type
+// since roadmap 2b, and every assertion below is about the GYM's wording — which
+// is the one that must not move, because it is the server's own (`notOnPlanMessage`).
+const READ_ONLY_NOTE = readOnlyNote('gym');
+const READ_ONLY_QUEUE_NOTE = readOnlyQueueNote('gym');
+const CONSOLE_READ_ONLY_BANNER = consoleReadOnlyBanner('gym');
+
 describe('the read-only sentences', () => {
   // THE WORDS ARE PINNED, and the reason is that all three are drawn at a gym
   // owner and two of them are the SERVER's own. `READ_ONLY_NOTE` is verbatim
@@ -409,6 +416,40 @@ describe('the read-only sentences', () => {
     // and it is the screen-level version in `readOnlyConsole.render.test.jsx`
     // that catches a reassurance added anywhere ELSE on the panel.
     expect(READ_ONLY_QUEUE_NOTE).not.toMatch(/confirm|when you|once you|back on|reactivat/i);
+  });
+});
+
+/** THE STUDIO'S WORDING IS PINNED TOO — round 1's finding 4: `notOnPlanMessage`'s
+ *  comment promises the banner and the 409 cannot disagree, and until this test
+ *  that was asserted for a gym only. The API side pins the same studio sentence
+ *  (`orgs.routes.test.ts`, "tells a studio its STUDIO needs a plan"); here is
+ *  the web side of that pair, as a literal so neither can vouch for itself. */
+describe('the read-only sentences at a studio', () => {
+  it('name the studio and its clients, and match the server word for word', () => {
+    expect(readOnlyNote('studio')).toBe('This studio needs a plan before anything here can be changed.');
+    expect(readOnlyQueueNote('studio')).toBe(
+      'Nobody can be let in until this studio is on a plan. The people waiting keep their place.',
+    );
+    expect(consoleReadOnlyBanner('studio')).toBe(
+      'This studio has no plan. Nothing here can be changed, and your clients get the free app only.',
+    );
+    // A personal trainer's console is their BUSINESS.
+    expect(readOnlyNote('personal_trainer')).toBe(
+      'This business needs a plan before anything here can be changed.',
+    );
+  });
+
+  it('reach the banner off the org row, with nothing else telling it the type', () => {
+    const b = bannerFor(gym({ consoleReadOnly: true, orgType: 'studio' }), NOW);
+    expect(b?.text).toBe(consoleReadOnlyBanner('studio'));
+    expect(b?.text).toMatch(/studio/);
+    expect(b?.text).not.toMatch(/gym/);
+  });
+
+  it('says a studio is full in its own word', () => {
+    expect(seatLineText({ used: 3, cap: 3, full: true, pressure: true }, 'studio')).toBe(
+      '3 of 3 places used — your studio is full, so nobody else can join yet.',
+    );
   });
 });
 

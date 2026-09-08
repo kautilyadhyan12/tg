@@ -289,7 +289,7 @@ describe('the screen', () => {
   it('tells somebody with no gym where joining happens', async () => {
     api.getMine.mockResolvedValue({ data: { orgs: [], formerOrgs: [] } });
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/not a member of a gym yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/haven't joined a gym, studio or trainer yet/i)).toBeTruthy());
     expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe('/settings');
   });
 
@@ -299,7 +299,47 @@ describe('the screen', () => {
     api.getMine.mockRejectedValue(new Error('offline'));
     drawScreen();
     await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy());
-    expect(screen.queryByText(/not a member of a gym yet/i)).toBeNull();
+    expect(screen.queryByText(/haven't joined a gym, studio or trainer yet/i)).toBeNull();
+  });
+
+  /** ROADMAP 2b: the member's own screens speak the type of the place they
+   *  joined. The heading is over a LIST, so it follows what is in it — and
+   *  the mixed case is the one that cannot be answered with any type's word. */
+  it('heads the list with the word of the places actually in it', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...GYM, orgType: 'studio' }], formerOrgs: [] },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My studios' })).toBeTruthy();
+  });
+
+  it('says My trainers for a personal trainer, and My gyms for a gym', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...GYM, orgType: 'personal_trainer' }], formerOrgs: [] },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My trainers' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, orgType: 'gym' }], formerOrgs: [] } });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My gyms' })).toBeTruthy();
+  });
+
+  it('uses the neutral word when the list holds two different types', async () => {
+    // "My gyms" over a studio, or "My studios" over a gym, is the app being
+    // wrong on screen about something the reader can see. Neither is used.
+    api.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          { ...GYM, orgType: 'gym' },
+          { ...GYM, id: 'g2', name: 'Flow Studio', slug: 'flow', orgType: 'studio' },
+        ],
+        formerOrgs: [],
+      },
+    });
+    drawScreen();
+    expect(await screen.findByRole('heading', { name: 'My organisations' })).toBeTruthy();
   });
 });
 
@@ -1296,6 +1336,77 @@ describe('the cheer', () => {
   });
 });
 
+/** A STUDIO'S CLIENT, END TO END — roadmap 2b at the member's own screens.
+ *
+ *  Round 1 of the review found that every new `orgType` parameter on this
+ *  surface had no observer: drop it at the call site and the suite stayed
+ *  green while a studio's client read "Your gym isn't open right now". This
+ *  describe is that observer. It mounts the REAL sidebar and the REAL screen
+ *  off `/v1/orgs/mine`, with scheduled hours the client is outside of, so the
+ *  nav label, the Settings-bound tab word, the button's dead sentence and the
+ *  panel's own line are all read off one render. The gym is the control in the
+ *  suite above this one, unchanged. */
+describe('a studio’s client', () => {
+  const STUDIO = { ...GYM, name: 'Flow Studio', slug: 'flow-studio', orgType: 'studio' };
+  // 05:28 on Thursday, the studio opens at 07:00 — Kd's own moment, one card up.
+  const KDS_MOMENT = new Date('2026-09-03T05:28:00.000Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
+    vi.setSystemTime(KDS_MOMENT);
+    api.getMine.mockResolvedValue({ data: { orgs: [STUDIO], formerOrgs: [] } });
+    api.getHours.mockResolvedValue({
+      data: {
+        hours: {
+          mode: 'scheduled',
+          timezone: 'UTC',
+          clockFormat: '24h',
+          week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
+          closures: [],
+        },
+      },
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('sees My Studios in the nav, and never My Gyms', async () => {
+    drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Studios')).toBeTruthy());
+    expect(screen.queryByText('My Gyms')).toBeNull();
+  });
+
+  it('is told the STUDIO is shut, and what the button is for, in the studio’s word', async () => {
+    drawScreen();
+    const button = () => screen.queryByRole('button', { name: /i'm here/i });
+    await waitFor(() => expect(button()?.disabled).toBe(true));
+    // The dead button's sentence — `attendanceShutReason`'s third argument.
+    expect(
+      screen.getByText("Your studio isn't open right now, so attendance isn't open."),
+    ).toBeTruthy();
+    // The panel's own line about the button.
+    expect(screen.getByText('Pressing this marks your attendance at the studio.')).toBeTruthy();
+    // The heading over the list.
+    expect(screen.getByRole('heading', { name: 'My studios' })).toBeTruthy();
+    // And nowhere on the screen is the client told they are at a gym.
+    expect(document.body.textContent).not.toMatch(/your gym/i);
+  });
+
+  it('is told a TRAINER is shut when the place is a personal trainer', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...STUDIO, name: 'Coach Priya', orgType: 'personal_trainer' }], formerOrgs: [] },
+    });
+    drawScreen();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Your trainer isn't open right now, so attendance isn't open."),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByRole('heading', { name: 'My trainers' })).toBeTruthy();
+  });
+});
+
 describe('the dot on the nav item', () => {
   const withCheer = (sentAt) => ({
     data: { orgs: [{ ...GYM, latestCheer: { preset: 'on_a_roll', sentAt } }], formerOrgs: [] },
@@ -1310,7 +1421,7 @@ describe('the dot on the nav item', () => {
   it('appears for a cheer inside the cap', async () => {
     api.getMine.mockResolvedValue(withCheer('2026-09-02T09:00:00.000Z'));
     drawSidebar();
-    await waitFor(() => expect(screen.getByLabelText('New from your gym')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('New message')).toBeTruthy());
   });
 
   // **THE POSITIVE CONTROL IS THE ITEM ITSELF.** A dot asserted absent on a
@@ -1327,13 +1438,13 @@ describe('the dot on the nav item', () => {
     api.getMine.mockResolvedValue(withCheer('2026-08-31T12:00:00.000Z'));
     drawSidebar();
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
-    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+    expect(screen.queryByLabelText('New message')).toBeNull();
   });
 
   it('is absent for a member nobody has cheered', async () => {
     api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null }], formerOrgs: [] } });
     drawSidebar();
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
-    expect(screen.queryByLabelText('New from your gym')).toBeNull();
+    expect(screen.queryByLabelText('New message')).toBeNull();
   });
 });

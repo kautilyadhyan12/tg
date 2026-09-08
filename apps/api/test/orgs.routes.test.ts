@@ -1643,6 +1643,102 @@ d("orgs routes (real Postgres)", () => {
     }
   });
 
+  /** THE DOOR SPEAKS THE ORGANISATION'S OWN WORD — roadmap 2b, Part 3 §2.2.
+   *
+   *  These sentences are the SERVER's and `JoinGymPanel` prints them verbatim,
+   *  so this is the only place the vocabulary can be proven. **The assertions
+   *  are on the WORDS and not on the error code**, because the code was already
+   *  right and it is the wording that was telling a studio's client to go and
+   *  ask "the gym".
+   *
+   *  A gym's three sentences are asserted too, unchanged, so that making one
+   *  type's copy right at the cost of another's arrives red. */
+  it("names the organisation in its own word when it refuses a code", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("code-words-owner");
+    const studio = await makeOrg(owner.cookies, "Orgs Test Word Studio", { orgType: "studio" });
+    const trainer = await makeOrg(owner.cookies, "Orgs Test Word PT", {
+      orgType: "personal_trainer",
+    });
+    const gym = await makeOrg(owner.cookies, "Orgs Test Word Gym");
+
+    await sql`
+      INSERT INTO gym_codes (gym_id, code, label, paused) VALUES
+        (${studio.org.id}, 'STUDIP', 'Paused', true),
+        (${trainer.org.id}, 'TRAINP', 'Paused', true),
+        (${gym.org.id}, 'GYMPSD', 'Paused', true)`;
+
+    for (const [code, sentence] of [
+      ["STUDIP", "That code has been paused. Ask the studio for a current one."],
+      ["TRAINP", "That code has been paused. Ask the trainer for a current one."],
+      ["GYMPSD", "That code has been paused. Ask the gym for a current one."],
+    ] as const) {
+      const applicant = await makeUser(`code-words-${code.toLowerCase()}`);
+      const res = await post("/v1/orgs/join", { code }, { cookies: applicant.cookies });
+      expect(res.statusCode, code).toBe(409);
+      expect((JSON.parse(res.body) as { message: string }).message, code).toBe(sentence);
+    }
+
+    // A CODE THAT MATCHES NOTHING HAS NO TYPE TO NAME, so it names all three
+    // rather than guessing at one — and never "any gym", which was false for
+    // two thirds of the people who could be reading it.
+    const stranger = await makeUser("code-words-none");
+    const missing = await post("/v1/orgs/join", { code: "ZZZZZY" }, { cookies: stranger.cookies });
+    expect(missing.statusCode).toBe(404);
+    expect((JSON.parse(missing.body) as { message: string }).message).toBe(
+      "That code doesn't match any gym, studio or trainer.",
+    );
+  });
+
+  /** Review round 1, finding 3: a studio's owner confirming a client past the
+   *  cap read "Your plan covers 1 members". The number and the word both. */
+  it("counts a studio's seats in clients when the cap bites", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("cap-words-owner");
+    const first = await makeUser("cap-words-first");
+    const second = await makeUser("cap-words-second");
+    const studio = await makeOrg(owner.cookies, "Orgs Test Cap Studio", { orgType: "studio" });
+    await subscribeGym(studio.org.id, CAP1_PLAN);
+    await joinAsMember(first.cookies, studio, owner.cookies);
+    const waiting = await applyWithCode(second.cookies, studio.joinCode.code);
+    const full = await post(
+      `/v1/orgs/${studio.org.id}/applications/${waiting}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(full.statusCode).toBe(409);
+    const body = JSON.parse(full.body) as { error: string; message: string };
+    expect(body.error).toBe("seat_cap_reached");
+    expect(body.message).toBe(
+      "Your plan covers 1 clients and they are all taken. Add a seat, then confirm again — this person is still waiting.",
+    );
+  });
+
+  /** THE CONSOLE'S OWN REFUSALS FOLLOW THE TYPE TOO (roadmap 2b).
+   *
+   *  A lapsed organisation's staff meet this sentence on every screen, and the
+   *  web draws the same one from the same table (`readOnlyNote` in
+   *  `billingView.js`) — so a studio owner reading "This gym needs a plan" was
+   *  the most-seen wrong word in the product. The GYM's wording is asserted
+   *  beside it because it is the one that must not move. */
+  it("tells a studio its STUDIO needs a plan, and a gym its gym", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("plan-words-owner");
+    const studio = await makeOrg(owner.cookies, "Orgs Test Plan Studio", {
+      orgType: "studio",
+      plan: null,
+    });
+    const gym = await makeOrg(owner.cookies, "Orgs Test Plan Gym", { plan: null });
+
+    for (const [org, sentence] of [
+      [studio, "This studio needs a plan before anything here can be changed."],
+      [gym, "This gym needs a plan before anything here can be changed."],
+    ] as const) {
+      const res = await patch(`/v1/orgs/${org.org.id}`, { name: "Renamed" }, { cookies: owner.cookies });
+      expect(res.statusCode, org.org.orgType).toBe(409);
+      const body = JSON.parse(res.body) as { error: string; message: string };
+      expect(body.error).toBe("gym_not_on_plan");
+      expect(body.message, org.org.orgType).toBe(sentence);
+    }
+  });
+
   it("refuses to create a clinic — Kd ruling 2026-08-18, gyms and fitness centres only", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("no-clinic");
     const res = await post(
@@ -3054,7 +3150,11 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(200);
     const held = await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies });
     expect(held.statusCode).toBe(403);
-    expect((JSON.parse(held.body) as { error: string }).error).toBe("trainer_scope_unavailable");
+    const refusal = JSON.parse(held.body) as { error: string; message: string };
+    expect(refusal.error).toBe("trainer_scope_unavailable");
+    // ROADMAP 2b, review round 1 finding 4: this arm fires only where the role
+    // is NOT called Trainer, so the sentence says Coach at a studio.
+    expect(refusal.message).toBe("Coach access to this list isn't available yet.");
   });
 
   it("gives a personal trainer's assistant the client list — there are no groups to scope to", { timeout: 30_000 }, async () => {

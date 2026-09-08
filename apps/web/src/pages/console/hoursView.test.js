@@ -361,6 +361,12 @@ describe('a closure that saves and does not appear', () => {
     expect(closureAbsentReason('2026-08-31', '2026-09-01')).toContain('already passed');
   });
 
+  it('says so in the studio’s own word (roadmap 2b)', () => {
+    expect(closureAbsentReason('2026-08-31', '2026-09-01', 'studio')).toBe(
+      "That date has already passed at your studio, so it's saved but not shown below.",
+    );
+  });
+
   it('says so for a date beyond the year the server will show', () => {
     const beyond = addDays('2026-09-01', CLOSURE_HORIZON_DAYS);
     expect(closureAbsentReason(beyond, '2026-09-01')).toContain('more than a year');
@@ -608,6 +614,19 @@ describe('the sentences', () => {
     expect(open).toContain('24 hours');
     expect(shut).toContain('closed every day');
     expect(new Set([unset, open, shut]).size).toBe(3);
+  });
+
+  /** ROADMAP 2b: all three modes, at a studio, as literals. The `unset` sentence
+   *  carries TWO words from the table (the place and its people), so it is the
+   *  one that catches a half-applied change. */
+  it('speaks a studio’s words in all three modes', () => {
+    expect(hoursSummary({ mode: 'open_24h', week: [] }, 'studio')).toBe('Your studio is open 24 hours.');
+    expect(hoursSummary({ mode: 'scheduled', week: [] }, 'studio')).toBe(
+      'Your studio is closed every day of the week.',
+    );
+    expect(hoursSummary({ mode: 'unset', week: [] }, 'studio')).toBe(
+      "You haven't said when your studio is open. Clients aren't shown anything about opening times until you do.",
+    );
   });
 
   it('counts the days a scheduled gym is open', () => {

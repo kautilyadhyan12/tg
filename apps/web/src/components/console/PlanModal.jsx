@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
@@ -68,7 +69,7 @@ import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console
  *  computes neither: `priceLabel` is formatted server-side and is the only money
  *  field on the wire (there is no minor-unit integer to divide — R10.4), and the
  *  cap is the only human fact a plan row carries. */
-function PlanRow({ plan }) {
+function PlanRow({ plan, orgType }) {
   const price = planPriceText(plan);
   if (price === null) return null;
   return (
@@ -77,7 +78,7 @@ function PlanRow({ plan }) {
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {planSeatLabel(plan?.seatCap)}
+        {planSeatLabel(plan?.seatCap, orgType)}
       </span>
       <span className="font-semibold flex-shrink-0" style={{ color: '#fff' }}>
         {price}
@@ -88,6 +89,8 @@ function PlanRow({ plan }) {
 
 export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const titleId = useId();
+  // The words this prompt speaks (roadmap 2b).
+  const words = orgWords(org?.orgType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   /** THE SERVER SAID THE TRIAL IS ALREADY SPENT, so the prompt changes face.
@@ -186,7 +189,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         // stays null, and the arm below branches on the error first.
         setPlans({
           loading: false,
-          error: errorText(err, "We couldn't load your gym's plans."),
+          error: errorText(err, `We couldn't load your ${words.it}'s plans.`),
           retryable: isRetryable(err),
           list: null,
         });
@@ -194,7 +197,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
     return () => {
       cancelled = true;
     };
-  }, [showing, gymId, attempt]);
+  }, [showing, gymId, attempt, words]);
 
   if (showing === null) return null;
 
@@ -247,13 +250,16 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <h2 id={titleId} className="text-xl font-bold" style={{ color: '#fff' }}>
-          {showing === 'trial' ? "Start your gym's free trial" : "Choose your gym's plan"}
+          {showing === 'trial'
+            ? `Start your ${words.it}'s free trial`
+            : `Choose your ${words.it}'s plan`}
         </h2>
 
         {showing === 'trial' ? (
           <>
             <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Your members get nothing extra for being in your gym until it is on a plan.
+              Your {words.people} get nothing extra for being in your {words.it} until it is on a
+              plan.
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
               Your first 30 days are free. No card needed.
@@ -261,7 +267,8 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </>
         ) : (
           <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            You&apos;ve already used your one free trial, so this gym needs a plan to start.
+            You&apos;ve already used your one free trial, so this {words.it} needs a plan to
+            start.
           </p>
         )}
 
@@ -312,7 +319,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               plans.list.length > 0 ? (
                 <ul className="flex flex-col gap-2" data-testid="plan-list">
                   {plans.list.map((p) => (
-                    <PlanRow key={p.code} plan={p} />
+                    <PlanRow key={p.code} plan={p} orgType={org?.orgType} />
                   ))}
                 </ul>
               ) : (
@@ -332,7 +339,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                    arm already ends on, and it needs no server change (R1.1).
                    Bounded and currently empty on the shared branch. */
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  We don&apos;t have plans listed in your gym&apos;s currency yet.
+                  We don&apos;t have plans listed in your {words.it}&apos;s currency yet.
                 </p>
               )
             ) : null}
@@ -363,7 +370,8 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </button>
         ) : (
           <p className="text-sm mt-5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            There&apos;s no way to pay online yet. We&apos;ll be in touch about setting your gym up.
+            There&apos;s no way to pay online yet. We&apos;ll be in touch about setting your
+            {' '}{words.it} up.
           </p>
         )}
 

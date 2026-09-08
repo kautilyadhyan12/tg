@@ -10,7 +10,7 @@
 // substituted (:30399 §6).
 import { describe, expect, it } from 'vitest';
 import { ON_A_ROLL_MIN_WEEKS } from '@app/shared';
-import { READ_ONLY_NOTE } from './billingView';
+import { readOnlyNote } from './billingView';
 import {
   REGULARS_PREVIEW,
   canCheer,
@@ -40,6 +40,9 @@ const regular = (over = {}) => ({
 });
 
 const CAN = { privileges: ['members.read'], now: NOW };
+
+// The gym's wording of the console's read-only sentence — see `billingView`.
+const READ_ONLY_NOTE = readOnlyNote('gym');
 
 describe('is there a list to draw', () => {
   it('says nothing at all without a payload — the read arm above reports that', () => {

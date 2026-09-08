@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { READ_ONLY_NOTE } from '../../pages/console/billingView';
+import { readOnlyNote } from '../../pages/console/billingView';
 import { ConsoleSection } from './ConsoleStates';
 
 // MARKING ATTENDANCE — the owner's on/off switch, Kd's ruling (:26469 §1.4):
@@ -27,6 +28,8 @@ import { ConsoleSection } from './ConsoleStates';
 
 export default function AttendanceSettingsPanel({ org, readOnly }) {
   const gymId = org.id;
+  // The words this panel speaks (roadmap 2b).
+  const words = orgWords(org.orgType);
   // THE SERVER'S ANSWER IS THE TRUTH AND THIS IS THE PENDING ECHO OF IT. The
   // switch draws from the kept org row, so a failed save leaves it showing what
   // the gym actually has rather than what was attempted — the one thing a
@@ -83,7 +86,7 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
   return (
     <ConsoleSection
       title="Marking attendance"
-      summary={enabled ? 'Members can mark themselves in' : 'Switched off'}
+      summary={enabled ? `${words.peopleCap} can mark themselves in` : 'Switched off'}
     >
       {/* THE GREYED SWITCH IS EXPLAINED WHERE IT SITS, and this panel is the
           SIXTH to grey a control on a gym with no plan (:24141 §3(c), :24376).
@@ -103,12 +106,12 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
           beside the button"). */}
       {readOnly ? (
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {READ_ONLY_NOTE}
+          {readOnlyNote(org.orgType)}
         </p>
       ) : null}
 
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        When this is on, a member opening their gym in the app can tap
+        When this is on, a {words.person} opening your {words.itToMembers} in the app can tap
         &ldquo;I&apos;m here&rdquo; and you&apos;ll see them under Attendance.
       </p>
 
@@ -122,7 +125,7 @@ export default function AttendanceSettingsPanel({ org, readOnly }) {
         />
         <span className="min-w-0">
           <span className="text-sm block" style={{ color: '#fff' }}>
-            Let members mark themselves in
+            Let {words.people} mark themselves in
           </span>
           {/* SAYS WHAT SWITCHING IT OFF ACTUALLY COSTS, because today it is the
               only way in — a member cannot scan anything on the web, and staff

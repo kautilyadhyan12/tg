@@ -56,7 +56,8 @@ const { resetConsoleOrgs } = await import('./consoleOrgs');
 // THE SENTENCE ITSELF, never a copy of its words. :19960's rule — an assertion
 // typed out by hand goes green against a screen that says something else the
 // day the constant is reworded.
-const { READ_ONLY_NOTE } = await import('./billingView');
+const { readOnlyNote } = await import('./billingView');
+const READ_ONLY_NOTE = readOnlyNote('gym');
 const Settings = (await import('./Settings')).default;
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 // Imported to be mounted DIRECTLY, which is the only way one of its guarantees

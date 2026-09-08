@@ -1,4 +1,4 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES } from '@app/shared';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, orgWords } from '@app/shared';
 import { roleLabel } from './consoleView';
 
 // Pure view helpers for the console's Staff section — Part 3 §4.7 ("list,
@@ -84,18 +84,18 @@ export function canManageStaff(privileges) {
  *  and an unknown type is treated as NOT a gym — the refusing side — so a type
  *  added later cannot silently promise access it does not have. */
 export function staffRoleChoices(orgType) {
-  const people = orgType === 'gym' ? 'member' : 'client';
+  const words = orgWords(orgType);
   const trainerHint =
     orgType === 'gym' || orgType === 'personal_trainer'
-      ? `Can see your ${people} list and your join code.`
-      : `Can see your join code. They can't see your ${people} list yet.`;
+      ? `Can see your ${words.person} list and your join code.`
+      : `Can see your join code. They can't see your ${words.person} list yet.`;
   return [
     {
       value: 'manager',
       label: 'Manager',
-      hint: 'Can confirm people joining, remove members, and manage your join codes.',
+      hint: `Can confirm people joining, remove ${words.people}, and manage your join codes.`,
     },
-    { value: 'trainer', label: 'Trainer', hint: trainerHint },
+    { value: 'trainer', label: words.coachCap, hint: trainerHint },
   ];
 }
 
@@ -131,8 +131,9 @@ export function canChangeStaff(person) {
  *  A non-array is null rather than zero: "nobody runs this gym" is a claim, and
  *  it is never true (a gym always has its owner), so a reader that could not
  *  read the list has no business making it. */
-export function staffCountLabel(staff) {
+export function staffCountLabel(staff, orgType) {
   if (!Array.isArray(staff)) return null;
+  const it = orgWords(orgType).it;
   const n = staff.length;
   // AN EMPTY ARRAY IS THE SAME CLAIM AS AN UNREADABLE ONE (T3 Low). Only
   // non-arrays were guarded, so an empty list printed "0 people run this gym" —
@@ -140,7 +141,7 @@ export function staffCountLabel(staff) {
   // owner's own row is always in the list), and one empty array away, which is
   // the distance :5104 F5 says not to leave.
   if (n === 0) return null;
-  return n === 1 ? '1 person runs this gym' : `${n} people run this gym`;
+  return n === 1 ? `1 person runs this ${it}` : `${n} people run this ${it}`;
 }
 
 /** WHAT BECOMING STAFF COSTS A GYM, in one sentence the screen can print.
@@ -159,8 +160,9 @@ export function staffCountLabel(staff) {
  *
  *  What IS true after that fix, and what this says: staff are excluded from the
  *  seat cap, so appointing somebody does not use up a paid member seat. */
-export const STAFF_SEATS_NOTE =
-  "Staff don't use up one of your paid member seats.";
+export function staffSeatsNote(orgType) {
+  return `Staff don't use up one of your paid ${orgWords(orgType).person} seats.`;
+}
 
 // ── THE TICK BOXES (Kd ruling :11429, settled :15381) ───────────────────────
 //
@@ -177,54 +179,62 @@ export const STAFF_SEATS_NOTE =
  *  **The words describe what the PERSON can do, never what the code is called.**
  *  `members.confirm` is "Let people into the gym"; nobody outside this repo has
  *  ever heard of an application being confirmed. */
-const PRIVILEGE_COPY = [
-  {
-    value: 'members.read',
-    label: 'See the member list',
-    hint: 'Who has joined your gym, and when.',
-  },
-  {
-    value: 'codes.invite',
-    label: 'Share the join code',
-    hint: 'See the code and hand it out to new people.',
-  },
-  {
-    // KD'S RULING 18's SECOND HALF, AND IT LIVES HERE AND NOWHERE ELSE
-    // (:28107): *"also stafs can see it too default permission owner can
-    // change it"*. Without a box, "the owner can change it" is a sentence
-    // with no control behind it — the gap `org.manage` and `billing.manage`
-    // are already in, which `OWED.md` carries.
-    //
-    // A READ, so it sits high in the least-powerful-first order: seeing who
-    // came in is a smaller thing than letting somebody into the gym.
-    value: 'attendance.read',
-    label: 'See who came in',
-    hint: 'The list of people who marked themselves in each day.',
-  },
-  {
-    value: 'members.confirm',
-    label: 'Let people into the gym',
-    hint: 'Say yes or no to people waiting to join.',
-  },
-  {
-    value: 'members.remove',
-    label: 'Remove members',
-    hint: 'Take somebody out of your gym.',
-  },
-  {
-    value: 'codes.manage',
-    label: 'Change join codes',
-    hint: 'Make a new code, pause one, or give it an end date.',
-  },
-  {
-    value: 'staff.manage',
-    label: 'Manage staff',
-    hint: 'Add people, change what they can do, and take their keys back.',
-  },
-];
+function privilegeCopy(orgType) {
+  const words = orgWords(orgType);
+  return [
+    {
+      value: 'members.read',
+      label: `See the ${words.person} list`,
+      hint: `Who has joined your ${words.it}, and when.`,
+    },
+    {
+      value: 'codes.invite',
+      label: 'Share the join code',
+      hint: 'See the code and hand it out to new people.',
+    },
+    {
+      // KD'S RULING 18's SECOND HALF, AND IT LIVES HERE AND NOWHERE ELSE
+      // (:28107): *"also stafs can see it too default permission owner can
+      // change it"*. Without a box, "the owner can change it" is a sentence
+      // with no control behind it — the gap `org.manage` and `billing.manage`
+      // are already in, which `OWED.md` carries.
+      //
+      // A READ, so it sits high in the least-powerful-first order: seeing who
+      // came in is a smaller thing than letting somebody into the gym.
+      value: 'attendance.read',
+      label: 'See who came in',
+      hint: 'The list of people who marked themselves in each day.',
+    },
+    {
+      value: 'members.confirm',
+      label: `Let people into the ${words.it}`,
+      hint: 'Say yes or no to people waiting to join.',
+    },
+    {
+      value: 'members.remove',
+      label: `Remove ${words.people}`,
+      hint: `Take somebody out of your ${words.it}.`,
+    },
+    {
+      value: 'codes.manage',
+      label: 'Change join codes',
+      hint: 'Make a new code, pause one, or give it an end date.',
+    },
+    {
+      value: 'staff.manage',
+      label: 'Manage staff',
+      hint: 'Add people, change what they can do, and take their keys back.',
+    },
+  ];
+}
 
-/** The ticks in drawing order, as plain strings. */
-const PRIVILEGE_ORDER = PRIVILEGE_COPY.map((p) => p.value);
+/** The ticks in drawing order, as plain strings.
+ *
+ *  **Read off the GYM's copy, and the words are irrelevant to it** — it is the
+ *  `value` list, which is identical for every org type. Taking it from one
+ *  known type rather than threading a type through `effectivePrivileges` keeps
+ *  "what order do ticks draw in" a single answer for the whole console. */
+const PRIVILEGE_ORDER = privilegeCopy('gym').map((p) => p.value);
 
 /** THE BOXES THIS ROW MAY BE GIVEN — and for anybody but the owner, "Manage
  *  staff" is not among them.
@@ -241,11 +251,10 @@ const PRIVILEGE_ORDER = PRIVILEGE_COPY.map((p) => p.value);
  *
  *  An unknown role takes the REFUSING side, like `canManageStaff` above: a role
  *  invented later is offered the smaller set until somebody decides otherwise. */
-export function privilegeChoices(role) {
-  if (role === 'owner') return PRIVILEGE_COPY.map((choice) => ({ ...choice }));
-  return PRIVILEGE_COPY.filter((choice) => !isOwnerOnlyPrivilege(choice.value)).map((choice) => ({
-    ...choice,
-  }));
+export function privilegeChoices(role, orgType) {
+  const copy = privilegeCopy(orgType);
+  if (role === 'owner') return copy;
+  return copy.filter((choice) => !isOwnerOnlyPrivilege(choice.value));
 }
 
 /** Is this one of the ticks only an owner's row may carry? Read from the shared
@@ -329,7 +338,7 @@ export function privilegesDiffer(before, after) {
  *  BECOME the set, so for somebody an owner had hand-NARROWED the reset can
  *  hand back MORE than they had. "Their permissions become the defaults for the
  *  new role" is true in both directions. */
-export function roleChangeWarning(person, nextRole) {
+export function roleChangeWarning(person, nextRole, orgType) {
   const name = person?.displayName ?? 'them';
-  return `Make ${name} a ${roleLabel(nextRole).toLowerCase()}? Their permissions become the defaults for the new role.`;
+  return `Make ${name} a ${roleLabel(nextRole, orgType).toLowerCase()}? Their permissions become the defaults for the new role.`;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { orgWords } from '@app/shared';
 import {
   CalendarDays,
   CheckCircle2,
@@ -232,6 +233,9 @@ function CameDay({ day }) {
 
 export default function AttendancePanel({ gym }) {
   const gymId = gym?.id ?? null;
+  // The words this panel speaks — off the org row `/v1/orgs/mine` already
+  // carries for this membership (roadmap 2b).
+  const orgType = gym?.orgType;
   const [mark, setMark] = useState({ busy: false, done: null, error: null });
   // `status` is named rather than inferred from an empty list: "nobody has a
   // visit yet" and "we could not ask" look identical in the data and must never
@@ -547,7 +551,7 @@ export default function AttendancePanel({ gym }) {
   // KD'S RULING OF 2026-09-03 REACHING THE SCREEN. Null means press away — and
   // it is null for every state we cannot decide, because the server is the
   // enforcement and refusing on a guess is the worse mistake (:24141 §3a).
-  const shutReason = attendanceShutReason(hours, tick);
+  const shutReason = attendanceShutReason(hours, tick, orgType);
 
   return (
     <div className="mt-3">
@@ -568,7 +572,7 @@ export default function AttendancePanel({ gym }) {
             Attendance
           </p>
           <p className="text-sm mt-0.5 mb-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Pressing this marks your attendance at the gym.
+            Pressing this marks your attendance at the {orgWords(orgType).itToMembers}.
           </p>
           <button
             type="button"
@@ -608,6 +612,7 @@ export default function AttendancePanel({ gym }) {
             {markedSentence(mark.done.visit, {
               alreadyMarked: mark.done.alreadyMarked === true,
               clockFormat: mark.done.clockFormat ?? '24h',
+              orgType,
             })}
           </span>
         </p>

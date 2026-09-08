@@ -195,6 +195,15 @@ describe('what the form refuses to send at all', () => {
     expect(gymDetailsProblem(gymDetailsDraft(ORG))).toBeNull();
   });
 
+  it('asks in the studio’s own words (roadmap 2b)', () => {
+    expect(gymDetailsProblem({ ...gymDetailsDraft(ORG), name: '' }, 'studio')).toBe(
+      'Your studio needs a name — it is what your clients see.',
+    );
+    expect(gymDetailsProblem({ ...gymDetailsDraft(ORG), timezone: '' }, 'studio')).toBe(
+      "Your studio needs a time zone — it decides when your studio's day ends.",
+    );
+  });
+
   /** An empty COUNTRY is not an error — it is what every pre-`0014` gym holds.
    *  Refusing to save a name because a gym was never asked where it is would be
    *  this screen inventing a requirement the server does not have. */

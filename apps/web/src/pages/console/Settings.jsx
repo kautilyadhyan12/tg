@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import { orgWords } from '@app/shared';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
@@ -43,7 +44,7 @@ export default function Settings() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your gym…" />
+        <ConsoleLoading label="Loading your organisation…" />
       </div>
     );
   }
@@ -61,7 +62,7 @@ export default function Settings() {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find a gym you run at this address.
+            We couldn&apos;t find an organisation you run at this address.
           </p>
           <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
             Your organisations
@@ -79,6 +80,8 @@ export default function Settings() {
   // (Kd's ruling, :23711 — read-only "seals nobody out"), so the panels are
   // drawn exactly as before and it is their CONTROLS that go quiet.
   const readOnly = consoleIsReadOnly(org);
+  // The words this screen speaks (roadmap 2b).
+  const words = orgWords(org.orgType);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
@@ -218,7 +221,7 @@ export default function Settings() {
            a gym with no staff and no name. */
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            Only the gym&apos;s owner can change these settings.
+            Only the {words.it}&apos;s owner can change these settings.
           </p>
         </ConsoleCard>
       ) : null}
@@ -226,7 +229,7 @@ export default function Settings() {
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
         Your join codes are on{' '}
         <Link to={`/console/${orgSlug}`} style={{ color: '#FF8A1F' }}>
-          your gym&apos;s main screen
+          your {words.it}&apos;s main screen
         </Link>
         .
       </p>

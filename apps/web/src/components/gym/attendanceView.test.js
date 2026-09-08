@@ -4,8 +4,8 @@
 // check first are named where they are asserted.
 import { describe, expect, it } from 'vitest';
 import {
-  GYM_CLOSED_TODAY_MESSAGE,
-  GYM_SHUT_NOW_MESSAGE,
+  gymClosedTodayMessage,
+  gymShutNowMessage,
   attendanceShutReason,
   markedSentence,
   mergeVisits,
@@ -90,6 +90,18 @@ describe('what the screen says after a tap', () => {
       expect(sentence).toMatch(/^You're marked in/);
       expect(sentence).not.toMatch(/sorry|error|invalid|not allowed|can't|cannot/i);
     }
+  });
+
+  it('speaks the type of the place after a tap — a trainer’s client joined a trainer', () => {
+    expect(markedSentence(visit({ hoursStatus: 'open_24h' }), { orgType: 'studio' })).toBe(
+      "You're marked in. Your studio is open 24 hours.",
+    );
+    expect(
+      markedSentence(visit({ hoursStatus: 'outside_hours' }), { orgType: 'personal_trainer' }),
+    ).toBe("You're marked in — that's outside your trainer's opening times.");
+    expect(markedSentence(visit({ hoursStatus: 'closed_day' }), { orgType: 'studio' })).toBe(
+      "You're marked in — your studio said it's closed today.",
+    );
   });
 
   it('says the gym is open around the clock when it is', () => {
@@ -263,7 +275,28 @@ describe('whether the button may be pressed', () => {
   // KD'S OWN CASE, THE ONE HE FOUND AT HIS BROWSER: hours 07:00–08:00, and it
   // is 05:28. This is the assertion the whole card exists for.
   it('refuses before the gym opens', () => {
-    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC)).toBe(GYM_SHUT_NOW_MESSAGE);
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC)).toBe(gymShutNowMessage('gym'));
+  });
+
+  /** ROADMAP 2b, and this is the observer for the third argument: drop
+   *  `orgType` at the call site and a studio's client is back to reading "Your
+   *  gym isn't open right now". The sentences are asserted as LITERALS, not
+   *  through the helper, so the helper cannot vouch for itself. */
+  it('names the place in its own word when it refuses', () => {
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'studio')).toBe(
+      "Your studio isn't open right now, so attendance isn't open.",
+    );
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'personal_trainer')).toBe(
+      "Your trainer isn't open right now, so attendance isn't open.",
+    );
+    const closed = scheduled({ closures: [{ day: '2026-09-03' }] });
+    expect(attendanceShutReason(closed, THURSDAY_0528_UTC, 'studio')).toBe(
+      "Your studio is closed today, so attendance isn't open.",
+    );
+    // The gym's sentence is the one that must not move.
+    expect(attendanceShutReason(scheduled(), THURSDAY_0528_UTC, 'gym')).toBe(
+      "Your gym isn't open right now, so attendance isn't open.",
+    );
   });
 
   // THE STATE IT IS *NOT* IN WHEN YOU FIND IT (:31295's standing rule). A gate
@@ -280,7 +313,7 @@ describe('whether the button may be pressed', () => {
     expect(attendanceShutReason(scheduled(), new Date('2026-09-03T07:00:00.000Z'))).toBeNull();
     expect(attendanceShutReason(scheduled(), new Date('2026-09-03T07:59:00.000Z'))).toBeNull();
     expect(attendanceShutReason(scheduled(), new Date('2026-09-03T08:00:00.000Z'))).toBe(
-      GYM_SHUT_NOW_MESSAGE,
+      gymShutNowMessage('gym'),
     );
   });
 
@@ -302,7 +335,7 @@ describe('whether the button may be pressed', () => {
   it('refuses on a weekday the gym listed no sessions for', () => {
     // The session sits on the Thursday; this instant is the Friday.
     expect(attendanceShutReason(scheduled(), new Date('2026-09-04T07:30:00.000Z'))).toBe(
-      GYM_SHUT_NOW_MESSAGE,
+      gymShutNowMessage('gym'),
     );
   });
 
@@ -311,7 +344,7 @@ describe('whether the button may be pressed', () => {
   it('says CLOSED TODAY over a session that is running', () => {
     const hours = scheduled({ closures: [{ day: '2026-09-03', note: 'Holi' }] });
     expect(attendanceShutReason(hours, new Date('2026-09-03T07:30:00.000Z'))).toBe(
-      GYM_CLOSED_TODAY_MESSAGE,
+      gymClosedTodayMessage('gym'),
     );
   });
 
@@ -323,7 +356,7 @@ describe('whether the button may be pressed', () => {
       week: [],
       closures: [{ day: '2026-09-03', note: null }],
     };
-    expect(attendanceShutReason(hours, THURSDAY_0528_UTC)).toBe(GYM_CLOSED_TODAY_MESSAGE);
+    expect(attendanceShutReason(hours, THURSDAY_0528_UTC)).toBe(gymClosedTodayMessage('gym'));
   });
 
   it('ignores a closure on some other date', () => {
@@ -352,7 +385,7 @@ describe('whether the button may be pressed', () => {
   // still to come in one and running in the other.
   it('judges the minute on the GYM zone, not the reader s', () => {
     const week = [{ weekday: 4, sessions: [{ opensMinute: 600, closesMinute: 660 }] }];
-    expect(attendanceShutReason(scheduled({ week }), THURSDAY_0528_UTC)).toBe(GYM_SHUT_NOW_MESSAGE);
+    expect(attendanceShutReason(scheduled({ week }), THURSDAY_0528_UTC)).toBe(gymShutNowMessage('gym'));
     expect(
       attendanceShutReason(scheduled({ week, timezone: 'Asia/Kolkata' }), THURSDAY_0528_UTC),
     ).toBeNull();
@@ -369,7 +402,7 @@ describe('whether the button may be pressed', () => {
     const at = new Date('2026-09-03T20:00:00.000Z');
     expect(attendanceShutReason(scheduled({ week }), at)).toBeNull();
     expect(attendanceShutReason(scheduled({ week, timezone: 'Asia/Kolkata' }), at)).toBe(
-      GYM_SHUT_NOW_MESSAGE,
+      gymShutNowMessage('gym'),
     );
   });
 
@@ -397,14 +430,14 @@ describe('whether the button may be pressed', () => {
   // The server would refuse it too — it never stored one.
   it('refuses on a session whose window cannot be read', () => {
     expect(attendanceShutReason(scheduled({ week: undefined }), THURSDAY_0528_UTC)).toBe(
-      GYM_SHUT_NOW_MESSAGE,
+      gymShutNowMessage('gym'),
     );
     expect(
       attendanceShutReason(
         scheduled({ week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: null }] }] }),
         new Date('2026-09-03T07:30:00.000Z'),
       ),
-    ).toBe(GYM_SHUT_NOW_MESSAGE);
+    ).toBe(gymShutNowMessage('gym'));
   });
 
   // ── T3 ROUND 1, L-4: THE BRANCH ORDER HAD NO OBSERVER ────────────────────
@@ -442,7 +475,7 @@ describe('whether the button may be pressed', () => {
   // the defect `clockLabel`'s header names. A reworded sentence that smuggles
   // the times back in fails here rather than being noticed in a browser.
   it('never names a time in either refusal', () => {
-    for (const sentence of [GYM_CLOSED_TODAY_MESSAGE, GYM_SHUT_NOW_MESSAGE]) {
+    for (const sentence of [gymClosedTodayMessage('gym'), gymShutNowMessage('gym')]) {
       expect(sentence).not.toMatch(/\d/);
     }
   });

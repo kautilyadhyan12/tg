@@ -253,6 +253,17 @@ describe('the last 30 days', () => {
       '1 of 1 member came in the last 30 days',
     );
   });
+
+  /** ROADMAP 2b's observer for the second argument. Both the singular and the
+   *  plural, because they are two different fields of the word table. */
+  it('counts a studio’s people as clients', () => {
+    expect(adoptionLine({ visitors: 12, members: 28, adoptionPct: 77 }, 'studio').text).toBe(
+      '12 of 28 clients came in the last 30 days',
+    );
+    expect(adoptionLine({ visitors: 1, members: 1, adoptionPct: 100 }, 'studio').text).toBe(
+      '1 of 1 client came in the last 30 days',
+    );
+  });
 });
 
 describe('a tile is a number and a caption', () => {
@@ -355,6 +366,12 @@ describe('the two numbers that can disagree without either being wrong', () => {
 
   it('explains the gap when somebody came and the share did not move', () => {
     expect(crowdNote(quiet(owner).tiles)).toMatch(/Free seats/);
+  });
+
+  it('names the place in its own word in that explanation', () => {
+    expect(crowdNote(quiet(owner).tiles, 'studio')).toMatch(/anyone the studio isn’t charged for/);
+    expect(crowdNote(quiet(owner).tiles, 'gym')).toMatch(/anyone the gym isn’t charged for/);
+    expect(crowdNote(quiet(owner).tiles, 'studio')).not.toMatch(/gym/);
   });
 
   it('says nothing when a counted member is the one who came', () => {

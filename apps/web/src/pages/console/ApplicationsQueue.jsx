@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
-import { READ_ONLY_QUEUE_NOTE } from './billingView';
+import { readOnlyQueueNote } from './billingView';
 import {
   expiresInLabel,
   nudgedLabel,
@@ -51,7 +51,7 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
   // **AND THE DEADLINE GOES WHEN THE GYM HAS NO PLAN, because the sweep no
   // longer acts on it** (:25092 §1(a); the expiry's `gymOnPlan` guard). `Expires
   // in 11 days` and `Due to expire` are both FALSE for a held row, and they sat
-  // one line under `READ_ONLY_QUEUE_NOTE` — *"The people waiting keep their
+  // one line under `readOnlyQueueNote` — *"The people waiting keep their
   // place."* — contradicting it in the same viewport. :5807's class, found by
   // T3 round 1 on this card.
   //
@@ -147,7 +147,12 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
   );
 }
 
-export default function ApplicationsQueue({ gymId, readOnly = false, onRosterChanged }) {
+export default function ApplicationsQueue({
+  gymId,
+  orgType,
+  readOnly = false,
+  onRosterChanged,
+}) {
   const [state, setState] = useState({
     loading: true,
     error: null,
@@ -294,7 +299,7 @@ export default function ApplicationsQueue({ gymId, readOnly = false, onRosterCha
             already says the gym has no plan. */}
         {readOnly ? (
           <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
-            {READ_ONLY_QUEUE_NOTE}
+            {readOnlyQueueNote(orgType)}
           </p>
         ) : null}
       </div>

@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react';
+import { orgWords } from '@app/shared';
 
 // PART 3 §2.4 — "the join screen shows a 'What {org} can see' sheet with
 // exactly this list".
@@ -74,8 +75,15 @@ function Row({ children, tone }) {
   );
 }
 
-export default function OrgVisibilitySheet({ orgName = null }) {
-  const who = typeof orgName === 'string' && orgName.trim() !== '' ? orgName : 'a gym';
+export default function OrgVisibilitySheet({ orgName = null, orgType = undefined }) {
+  // NAMED WHERE THERE IS A NAME, and otherwise the TYPE's own word (roadmap
+  // 2b). The nameless case is the sheet drawn under the empty code box, where
+  // nobody has typed a code yet and there is no type either — `orgWords`
+  // answers with the gym's word there, which is what it said before.
+  const who =
+    typeof orgName === 'string' && orgName.trim() !== ''
+      ? orgName
+      : `a ${orgWords(orgType).itToMembers}`;
   return (
     <section
       className="rounded-2xl p-5"
@@ -86,7 +94,7 @@ export default function OrgVisibilitySheet({ orgName = null }) {
       </h2>
 
       <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Only while you are a member.
+        Only while you are a {orgWords(orgType).person}.
       </p>
 
       <ul className="mt-3">

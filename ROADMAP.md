@@ -25,7 +25,12 @@ is here, the rest is under "After launch".
 1. [x] **Sign-in by email code.** One "Get started" screen: Continue with Google · Continue with email (6-digit code). Signed in at once, straight to onboarding. Sign-in doors relabelled "Train" and "Manage my gym, studio or clients". No password at all (Kd, 2026-09-07 — the optional-password and reset-screen halves are struck); verify-email step gone (a code proves the email); deleting an account confirmed by an emailed code. Email through Resend (the service is the dependency; no new package). *Built 2026-09-07; three review rounds; merged to `master` 2026-09-08 (PR #51, CI green).*
 2. **Organisation types** (split 2026-09-08).
    - 2a. [x] **Types at creation.** Gym · studio · personal trainer; a new owner from the "Manage" door lands on "create your organisation" with no personal onboarding. *Merged 2026-09-08 (PR #53).*
-   - 2b. [ ] **Words by type, everywhere else.** Every console screen says Clients / Sessions / Coach for a studio or a trainer where it says Members / Workouts / Trainer for a gym (spec Part 3 §2.2), and the member-facing screens (the join screen, its "doesn't match any gym" messages, My Gyms) speak the type of the code they were given. Today the create screen, the front door, the join-code card and the staff-role hints speak a trainer's words, and the join screen says "gym, studio or trainer".
+   - 2b. [x] **Words by type, everywhere else.** Every console screen, the member's
+     join door and My Gyms speak the organisation's own words — Clients / Coach for a
+     studio and a personal trainer where a gym says Members / Trainer (spec Part 3 §2.2).
+     One table in `@app/shared`, read by the API and by every screen, so the server's
+     refusals and the screen agree. *Merged 2026-09-08 (PR #55).*
+
 3. **Onboarding v2, server side** (split 2026-09-08; the science first because every screen shows its number).
    - 3a. [ ] **The plan maths and its sanity rules.** Resting burn, daily activity + training days, pace → deficit or surplus, macros, finish date; target direction, healthy-weight floor, over-a-year pace, the calorie floor; the under-18 and flagged-condition rules (no deficit). Pure functions, a test for every rule. Nothing on screen yet; the click-through says so.
    - 3b. [ ] **Health screening, Safe mode and the consent log, server side.** Readiness answers stored; the "Check first" choice recorded and changeable; the Safe mode flag every plan route reads; the consent log (time, app version, wording) for sign-up, the health step and the plan screen. Tenancy test on every route.

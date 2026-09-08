@@ -2,7 +2,7 @@
 // code, list mine, read the roster. Authorization decisions live here (R3.3
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
-import { JOIN_CODE_LENGTH, currencyForCountry } from "@app/shared";
+import { JOIN_CODE_LENGTH, ORG_TYPES_PHRASE, currencyForCountry, orgWords } from "@app/shared";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -47,6 +47,7 @@ import {
 import type {
   AddOrgStaffRequest,
   AttendanceDayQuery,
+  OrgType,
   AttendanceHistoryQuery,
   CloseGymDayRequest,
   CloseGymDayResponse,
@@ -254,7 +255,7 @@ export async function createOrg(
   throw new OrgsError(
     503,
     "org_create_unavailable",
-    "Could not create the gym just now. Please try again.",
+    `Could not create the ${orgWords(req.orgType).it} just now. Please try again.`,
   );
 }
 
@@ -275,10 +276,19 @@ export async function createOrg(
  *  reword this and the test goes red, and a human has to look at the new
  *  sentence and decide whether it is true of a gym with no country. That is the
  *  only check that actually applies here, and it is stated as such rather than
- *  dressed up as semantic. */
-export const CURRENCY_LOCKED_MESSAGE =
-  "The currency your gym is billed in can't change while your gym has a subscription, " +
-  "and that country uses a different one. Contact us and we'll move it for you.";
+ *  dressed up as semantic.
+ *
+ *  **The noun follows the org type (roadmap 2b) and A GYM'S SENTENCE IS
+ *  UNCHANGED TO THE BYTE**, which is what keeps the golden string above doing
+ *  its job: the fixture it guards is a gym, so re-wording this still arrives
+ *  red. */
+export function currencyLockedMessage(orgType: OrgType): string {
+  const it = orgWords(orgType).it;
+  return (
+    `The currency your ${it} is billed in can't change while your ${it} has a subscription, ` +
+    "and that country uses a different one. Contact us and we'll move it for you."
+  );
+}
 
 /** A GYM CAN FINALLY FIX ITS OWN DETAILS (Kd approved `org.manage` 2026-08-26).
  *
@@ -307,7 +317,7 @@ export async function updateOrg(
   gymId: string,
   req: UpdateOrgRequest,
 ): Promise<UpdateOrgResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "org.manage");
 
   const patch: repo.OrgPatch = {};
   // `in`, not `!== undefined`: `city: null` is a real instruction ("clear it")
@@ -367,12 +377,12 @@ export async function updateOrg(
       // paid plan, and the old sentence told those gyms they were on one. The
       // round that wrote it said its purpose was to make the refusal TRUE and
       // left this half carrying the pre-fix wording.
-      throw new OrgsError(409, "currency_locked", CURRENCY_LOCKED_MESSAGE);
+      throw new OrgsError(409, "currency_locked", currencyLockedMessage(org.orgType));
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org
       // and 404'd a stranger — but a gym archived or deleted between that read
       // and this write must not surface as a 500. The module's standing 404.
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -571,17 +581,33 @@ export async function applyToOrg(
         },
       });
     }
+    // THE REFUSALS NAME THE PLACE IN ITS OWN WORD (roadmap 2b, Part 3 §2.2).
+    // These sentences are the SERVER'S and the client prints them verbatim
+    // (`JoinGymPanel` records that about itself), so this is the only place they
+    // can be made to follow the org type.
+    //
+    // `no_such_code` is the one that cannot: no code means no org, so it names
+    // all three types rather than guessing at one.
     case "no_such_code":
-      throw new OrgsError(404, "code_not_found", "That code doesn't match any gym.");
+      throw new OrgsError(
+        404,
+        "code_not_found",
+        `That code doesn't match any ${ORG_TYPES_PHRASE}.`,
+      );
     case "org_archived":
-      throw new OrgsError(409, "org_archived", "That gym is no longer active.");
+      throw new OrgsError(
+        409,
+        "org_archived",
+        `That ${orgWords(outcome.orgType).itToMembers} is no longer active.`,
+      );
     case "code_unusable": {
+      const it = orgWords(outcome.orgType).itToMembers;
       const message =
         outcome.reason === "paused"
-          ? "That code has been paused. Ask the gym for a current one."
+          ? `That code has been paused. Ask the ${it} for a current one.`
           : outcome.reason === "expired"
-            ? "That code has expired. Ask the gym for a current one."
-            : "That code has been used the maximum number of times. Ask the gym for a new one.";
+            ? `That code has expired. Ask the ${it} for a current one.`
+            : `That code has been used the maximum number of times. Ask the ${it} for a new one.`;
       throw new OrgsError(409, `code_${outcome.reason}`, message);
     }
     case "consent_required":
@@ -651,7 +677,11 @@ export async function nudgeMyApplication(
         409,
         `application_${outcome.status}`,
         outcome.status === "confirmed"
-          ? "You're already a member of this gym."
+          ? // NO NOUN, because this arm cannot read one: `nudgeApplication`
+            // answers about the APPLICATION and never loads the org, and a
+            // person nudging a request that has already been accepted is owed
+            // the fact rather than our vocabulary for the place.
+            "That request was already accepted — you're in."
           : "That request has already been dealt with. You can ask again whenever you like.",
       );
     default:
@@ -763,7 +793,7 @@ async function requirePrivilege(
     repo.getStaffAuthority(deps.sql, gymId, userId),
   ]);
   if (org === null || authority === null) {
-    throw new OrgsError(404, "org_not_found", "Gym not found.");
+    throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
   if (!privilegesFor(authority.role, authority.privileges).includes(privilege)) {
     // The message says ROLE because that is what a person understands, and it
@@ -773,6 +803,17 @@ async function requirePrivilege(
   }
   return { org, role: authority.role };
 }
+
+/** THE 404 EVERY ORG-SCOPED ROUTE ANSWERS — and the one sentence here that
+ *  CANNOT name a type, which is why it names none.
+ *
+ *  It is thrown when the org does not exist AND when the caller has no standing
+ *  in it, deliberately indistinguishable (that is the whole tenancy answer). In
+ *  the first case there is no `org_type` to read, and in the second, telling a
+ *  stranger "that STUDIO was not found" would answer a question they were
+ *  refused. "Organisation" is the word `ConsoleHome` already puts above the list
+ *  of everything somebody runs, so it is not a new one to learn. */
+const ORG_NOT_FOUND_MESSAGE = "Organisation not found.";
 
 /** THE SENTENCE A REFUSED WRITE CARRIES, and it is written once because twelve
  *  routes say it.
@@ -786,15 +827,22 @@ async function requirePrivilege(
  *  **It is TRUE FOR EVERY STAFF ROLE, which is what Kd's ruling required of it.**
  *  A trainer reading it cannot subscribe, so it does not tell them to; it says
  *  what is wrong and what has to change. "Ask your gym's owner" was the other
- *  wording and is not used: the person reading it may BE the owner. */
-const GYM_NOT_ON_PLAN_MESSAGE = "This gym needs a plan before anything here can be changed.";
+ *  wording and is not used: the person reading it may BE the owner.
+ *
+ *  **It names the ORGANISATION IN ITS OWN WORD** (roadmap 2b): a studio's owner
+ *  reads "This studio needs a plan". The web draws the same sentence on the
+ *  screens themselves (`billingView.js`'s `readOnlyNote`), from the same table,
+ *  so the banner and the refusal cannot disagree. */
+function notOnPlanMessage(orgType: OrgType): string {
+  return `This ${orgWords(orgType).it} needs a plan before anything here can be changed.`;
+}
 
 /** WHAT A CLOSED GYM'S STAFF ARE TOLD — Part 3 §4.2's archived state, which
  *  `archiveSweep.ts` finally writes (Kd's four months, 2026-08-31).
  *
  *  **It is `startGymTrial`'s existing sentence, hoisted rather than re-worded**,
  *  so the two doors that refuse a closed gym to its own STAFF say one thing.
- *  **`applyByCode` keeps *"That gym is no longer active"* on purpose**: a
+ *  **`applyByCode` keeps *"That … is no longer active"* on purpose**: a
  *  different audience — somebody who is not staff of this gym and is owed the
  *  effect rather than our vocabulary (:25092 §1(d)'s boundary).
  *
@@ -811,7 +859,9 @@ const GYM_NOT_ON_PLAN_MESSAGE = "This gym needs a plan before anything here can 
  *  Complete without a button, like every other refusal on this console: a closed
  *  gym is re-opened by an operator (`tools/gym-restore.ts`) or by paying, and
  *  neither is a link this app can offer yet (:5807). */
-const GYM_ARCHIVED_MESSAGE = "This gym is archived.";
+function archivedMessage(orgType: OrgType): string {
+  return `This ${orgWords(orgType).it} is archived.`;
+}
 
 /** AUTHORISE A WRITE — the privilege check above, plus Part 3 §4.2's read-only
  *  console.
@@ -856,7 +906,7 @@ async function requireWritablePrivilege(
 ): Promise<{ org: repo.OrgRow; role: OrgRole }> {
   const authorised = await requirePrivilege(deps, gymId, userId, privilege);
   if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {
-    throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);
+    throw new OrgsError(409, "gym_not_on_plan", notOnPlanMessage(authorised.org.orgType));
   }
   // **A CLOSED GYM CANNOT BE CHANGED EVEN IF A PLAN SAYS OTHERWISE** — Kd's
   // ruling of 2026-08-31 that a lapsed gym is archived after four months, and
@@ -866,7 +916,7 @@ async function requireWritablePrivilege(
   // Every gym the sweep can close has no live plan, so the check above answers
   // first and staff of a closed gym keep reading the sentence their own screen
   // is already showing them (`READ_ONLY_NOTE`, drawn from this module's
-  // `GYM_NOT_ON_PLAN_MESSAGE`). Reversed, one refusal would have two different
+  // `notOnPlanMessage`). Reversed, one refusal would have two different
   // sentences depending on which door produced it — the drift `billingView.js`
   // warns about, bought for nothing.
   //
@@ -884,7 +934,7 @@ async function requireWritablePrivilege(
   // The 409 code and sentence are `startGymTrial`'s own, not a third variant —
   // one state, one word for it.
   if (authorised.org.status !== "active") {
-    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
+    throw new OrgsError(409, "org_archived", archivedMessage(authorised.org.orgType));
   }
   return authorised;
 }
@@ -924,7 +974,7 @@ export async function startOrgTrial(
   userId: string,
   gymId: string,
 ): Promise<StartOrgTrialResponse> {
-  await requirePrivilege(deps, gymId, userId, "billing.manage");
+  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");
 
   const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });
 
@@ -970,7 +1020,7 @@ export async function startOrgTrial(
       throw new OrgsError(
         409,
         "trial_already_used",
-        "You've already used your free trial. It's one per person, not one per gym.",
+        `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`,
       );
     case "no_plan":
       // TRUE AND SPECIFIC, because the alternative is a person concluding the
@@ -1003,12 +1053,12 @@ export async function startOrgTrial(
         "We're not open for business in your country yet, so there's no plan to start.",
       );
     case "org_archived":
-      throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
+      throw new OrgsError(409, "org_archived", archivedMessage(org.orgType));
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org and
       // 404'd a stranger — but a gym archived or deleted between that read and
       // this write must not surface as a 500. The module's standing 404.
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -1145,7 +1195,9 @@ export async function listOrgMembers(
     throw new OrgsError(
       403,
       "trainer_scope_unavailable",
-      "Trainer access to this list isn't available yet.",
+      // This arm fires only where the role is NOT called Trainer — a studio's
+      // Coach, a clinic's Clinician — so the role word follows the type.
+      `${orgWords(org.orgType).coachCap} access to this list isn't available yet.`,
     );
   }
 
@@ -1273,7 +1325,7 @@ export async function createOrgCode(
   gymId: string,
   req: CreateOrgCodeRequest,
 ): Promise<OrgCodeMutationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
   const expiresAt = assertFutureExpiry(req.expiresAt);
 
   const outcome = await mintCode(deps, (code) =>
@@ -1298,7 +1350,7 @@ export async function createOrgCode(
       throw new OrgsError(
         409,
         "too_many_codes",
-        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before making another.`,
+        `This ${orgWords(org.orgType).it} already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before making another.`,
       );
     default:
       return assertNever(outcome);
@@ -1312,7 +1364,7 @@ export async function updateOrgCode(
   code: string,
   req: UpdateOrgCodeRequest,
 ): Promise<OrgCodeMutationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   // Only an expiry the caller actually SENT is checked. `expiresAt: null`
   // ("never expires") is a legitimate change and must not be run past the
@@ -1340,7 +1392,7 @@ export async function updateOrgCode(
       // The module's standing 404: another gym's code must not be
       // distinguishable from one that never existed. Codes are globally unique,
       // so a 403 here would confirm a stranger's code exists.
-      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+      throw new OrgsError(404, "code_not_found", `That code isn't one of this ${orgWords(org.orgType).it}'s.`);
     case "max_uses_below_uses":
       throw new OrgsError(
         409,
@@ -1359,7 +1411,7 @@ export async function rotateOrgCode(
   gymId: string,
   code: string,
 ): Promise<RotateOrgCodeResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   const outcome = await mintCode(deps, (newCode) =>
     repo.rotateCode(deps.sql, {
@@ -1377,12 +1429,12 @@ export async function rotateOrgCode(
         replaced: toOrgCode(outcome.replaced),
       });
     case "not_found":
-      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+      throw new OrgsError(404, "code_not_found", `That code isn't one of this ${orgWords(org.orgType).it}'s.`);
     case "too_many":
       throw new OrgsError(
         409,
         "too_many_codes",
-        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before replacing this one.`,
+        `This ${orgWords(org.orgType).it} already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before replacing this one.`,
       );
     default:
       return assertNever(outcome);
@@ -1405,7 +1457,7 @@ export async function removeOrgCode(
   gymId: string,
   code: string,
 ): Promise<RemoveOrgCodeResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   const outcome = await repo.removeCode(deps.sql, {
     gymId,
@@ -1417,7 +1469,7 @@ export async function removeOrgCode(
     case "removed":
       return removeOrgCodeResponseSchema.parse({ status: "removed" });
     case "not_found":
-      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+      throw new OrgsError(404, "code_not_found", `That code isn't one of this ${orgWords(org.orgType).it}'s.`);
     case "still_usable":
       throw new OrgsError(
         409,
@@ -1480,7 +1532,7 @@ export async function confirmOrgApplication(
   gymId: string,
   applicationId: string,
 ): Promise<ConfirmApplicationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
 
   const outcome = await repo.confirmApplication(deps.sql, {
     gymId,
@@ -1519,7 +1571,11 @@ export async function confirmOrgApplication(
           : "That request has already been dealt with.",
       );
     case "org_archived":
-      throw new OrgsError(409, "org_archived", "That gym is no longer active.");
+      throw new OrgsError(
+        409,
+        "org_archived",
+        `That ${orgWords(org.orgType).it} is no longer active.`,
+      );
     case "seat_cap":
       // The application is deliberately still waiting — the owner adds a seat
       // and taps again. Naming the number here IS right, unlike at the join
@@ -1527,7 +1583,7 @@ export async function confirmOrgApplication(
       throw new OrgsError(
         409,
         "seat_cap_reached",
-        `Your plan covers ${String(outcome.cap)} members and they are all taken. Add a seat, then confirm again — this person is still waiting.`,
+        `Your plan covers ${String(outcome.cap)} ${orgWords(org.orgType).people} and they are all taken. Add a seat, then confirm again — this person is still waiting.`,
       );
     case "rejected":
       // Not reachable from confirm; the union is shared with reject.
@@ -1606,7 +1662,7 @@ export async function removeOrgMember(
   gymId: string,
   targetUserId: string,
 ): Promise<RemoveMemberResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
 
   const outcome = await repo.removeMember(deps.sql, {
     gymId,
@@ -1623,12 +1679,12 @@ export async function removeOrgMember(
       // Same 404 reasoning as everywhere else in this module: a person who was
       // never in THIS gym is indistinguishable from a user id that does not
       // exist, so holding a uuid tells the caller nothing.
-      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+      throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
     case "is_staff":
       throw new OrgsError(
         409,
         "member_is_staff",
-        `${outcome.role === "owner" ? "The owner" : "A staff member"} can't be removed from the member list. Staff membership is managed with staff.`,
+        `${outcome.role === "owner" ? "The owner" : "A staff member"} can't be removed from the ${orgWords(org.orgType).person} list. Staff membership is managed with staff.`,
       );
     default:
       return assertNever(outcome);
@@ -1684,7 +1740,7 @@ export async function addOrgStaff(
   gymId: string,
   input: AddOrgStaffRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.addStaff(deps.sql, {
     gymId,
@@ -1707,15 +1763,15 @@ export async function addOrgStaff(
       throw new OrgsError(
         404,
         "not_a_member",
-        "Nobody in this gym has that email address. They need to join the gym first — send them your join code.",
+        `Nobody in this ${orgWords(org.orgType).it} has that email address. They need to join first — send them your join code.`,
       );
     case "already_staff":
       throw new OrgsError(
         409,
         "already_staff",
         outcome.staff.role === "owner"
-          ? "That person owns this gym."
-          : `${outcome.staff.displayName} is already ${outcome.staff.role === "manager" ? "a manager" : "a trainer"} here. Change their role instead of adding them again.`,
+          ? `That person owns this ${orgWords(org.orgType).it}.`
+          : `${outcome.staff.displayName} is already ${outcome.staff.role === "manager" ? "a manager" : `a ${orgWords(org.orgType).coach}`} here. Change their role instead of adding them again.`,
       );
     default:
       return assertNever(outcome);
@@ -1729,7 +1785,7 @@ export async function updateOrgStaffRole(
   targetUserId: string,
   input: UpdateOrgStaffRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.updateStaffRole(deps.sql, {
     gymId,
@@ -1761,12 +1817,12 @@ export async function updateOrgStaffRole(
     case "unchanged":
       return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
     case "not_staff":
-      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+      throw new OrgsError(404, "not_staff", `That person doesn't run this ${orgWords(org.orgType).it}.`);
     case "is_owner":
       throw new OrgsError(
         409,
         "owner_role_locked",
-        "The gym's owner keeps the owner role. Handing a gym over to somebody else isn't something the app can do yet.",
+        `The ${orgWords(org.orgType).it}'s owner keeps the owner role. Handing a ${orgWords(org.orgType).it} over to somebody else isn't something the app can do yet.`,
       );
     default:
       return assertNever(outcome);
@@ -1846,7 +1902,7 @@ export async function updateOrgStaffPrivileges(
   targetUserId: string,
   input: UpdateOrgStaffPrivilegesRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.setStaffPrivileges(deps.sql, {
     gymId,
@@ -1865,12 +1921,16 @@ export async function updateOrgStaffPrivileges(
     case "unchanged":
       return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
     case "not_staff":
-      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+      throw new OrgsError(
+        404,
+        "not_staff",
+        `That person doesn't run this ${orgWords(org.orgType).it}.`,
+      );
     case "owner_only_privilege":
       throw new OrgsError(
         409,
         "owner_only_privilege",
-        "Managing staff stays with the gym's owner. You can give this person any of the other permissions.",
+        `Managing staff stays with the ${orgWords(org.orgType).it}'s owner. You can give this person any of the other permissions.`,
       );
     case "last_owner_locked":
       // NAMES BOTH ABILITIES, because the guard covers both and this message
@@ -1890,7 +1950,7 @@ export async function updateOrgStaffPrivileges(
       throw new OrgsError(
         409,
         "last_owner_locked",
-        "A gym's last owner has to keep both staff management and billing, so somebody in the gym can always hand out the keys and pay.",
+        `A ${orgWords(org.orgType).it}'s last owner has to keep both staff management and billing, so somebody there can always hand out the keys and pay.`,
       );
     default:
       return assertNever(outcome);
@@ -1913,7 +1973,7 @@ export async function removeOrgStaff(
   gymId: string,
   targetUserId: string,
 ): Promise<RemoveOrgStaffResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.removeStaff(deps.sql, {
     gymId,
@@ -1929,12 +1989,12 @@ export async function removeOrgStaff(
     case "removed":
       return removeOrgStaffResponseSchema.parse({ status: "removed" });
     case "not_staff":
-      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+      throw new OrgsError(404, "not_staff", `That person doesn't run this ${orgWords(org.orgType).it}.`);
     case "last_owner":
       throw new OrgsError(
         409,
         "last_owner",
-        "A gym can't be left with nobody in charge, so its last owner can't be removed.",
+        `A ${orgWords(org.orgType).it} can't be left with nobody in charge, so its last owner can't be removed.`,
       );
     default:
       return assertNever(outcome);
@@ -1992,7 +2052,7 @@ async function requireGymAudience(deps: OrgsDeps, gymId: string, userId: string)
     repo.isLiveMember(deps.sql, gymId, userId),
   ]);
   if (org === null || (authority === null && !member)) {
-    throw new OrgsError(404, "org_not_found", "Gym not found.");
+    throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
 }
 
@@ -2200,7 +2260,7 @@ export async function getOrgHours(
 ): Promise<GymHoursResponse> {
   await requireGymAudience(deps, gymId, userId);
   const row = await repo.getGymHours(deps.sql, gymId);
-  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+  if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   return gymHoursResponseSchema.parse({ hours: toGymHours(row) });
 }
 
@@ -2231,7 +2291,7 @@ export async function setOrgHours(
     case "not_found":
       // Unreachable in practice — the gate above already read the org — but a
       // gym deleted between that read and this write must not surface as a 500.
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -2265,7 +2325,7 @@ export async function closeOrgDay(
     case "closed":
       return closeGymDayResponseSchema.parse({ hours: toGymHours(outcome.hours) });
     case "not_found":
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -2295,7 +2355,7 @@ export async function removeOrgClosure(
         hours: toGymHours(outcome.hours),
       });
     case "not_found":
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -2325,8 +2385,9 @@ function toAttendanceVisit(row: repo.GymAttendanceVisitRow): GymAttendanceVisit 
  *  step** (:26586: the scan path is phone-app work). A bare "not allowed" would
  *  leave a member believing attendance is broken, and the owner who switched it
  *  off did so expecting scanning to replace it. */
-const MANUAL_ATTENDANCE_OFF_MESSAGE =
-  "This gym doesn't take attendance from the web. Scanning arrives with the phone app.";
+function manualAttendanceOffMessage(orgType: OrgType): string {
+  return `This ${orgWords(orgType).itToMembers} doesn't take attendance from the web. Scanning arrives with the phone app.`;
+}
 
 /** `06:00` on the gym's own clock — 24-hour, always, and NOT the gym's
  *  `clockFormat`.
@@ -2347,21 +2408,32 @@ function clock24(minutes: number): string {
  *  Kd's ruling of 2026-09-03. **It never scolds and it always says what to do
  *  next** — the sentence a person reads at a locked door should be the opening
  *  times, not a refusal on its own, and a gym whose pattern has no sessions
- *  today gets a different sentence from one that is simply between them. */
-function gymClosedMessage(outcome: {
-  hoursStatus: "outside_hours" | "closed_day";
-  todayHours: { opensMinute: number; closesMinute: number }[];
-}): string {
+ *  today gets a different sentence from one that is simply between them.
+ *
+ *  **THE NOUN FOLLOWS THE ORG TYPE and a gym's three sentences are unchanged to
+ *  the byte** (roadmap 2b). A personal trainer's client reads "Your trainer is
+ *  closed today", which is how anybody speaks of a business run by one person
+ *  ("the dentist is closed today") — the alternative was a fourth sentence for
+ *  one type, and two spellings of one refusal is what this file's neighbours
+ *  keep warning about. */
+function gymClosedMessage(
+  outcome: {
+    hoursStatus: "outside_hours" | "closed_day";
+    todayHours: { opensMinute: number; closesMinute: number }[];
+  },
+  orgType: OrgType,
+): string {
+  const it = orgWords(orgType).itToMembers;
   if (outcome.hoursStatus === "closed_day") {
-    return "Your gym is closed today, so attendance isn't open.";
+    return `Your ${it} is closed today, so attendance isn't open.`;
   }
   if (outcome.todayHours.length === 0) {
-    return "Your gym isn't open today, so attendance isn't open.";
+    return `Your ${it} isn't open today, so attendance isn't open.`;
   }
   const windows = outcome.todayHours
     .map((h) => `${clock24(h.opensMinute)}–${clock24(h.closesMinute)}`)
     .join(", ");
-  return `Your gym is open ${windows} today — attendance opens then.`;
+  return `Your ${it} is open ${windows} today — attendance opens then.`;
 }
 
 /** A PAGE MARKER WE CANNOT READ IS A 400, NEVER A SILENT "START AGAIN".
@@ -2419,10 +2491,18 @@ export async function markOrgAttendance(
     repo.isLiveMember(deps.sql, gymId, userId),
   ]);
   if (org === null || !member) {
-    throw new OrgsError(404, "org_not_found", "Gym not found.");
+    throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
   if (org.status === "archived") {
-    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
+    // THE MEMBER'S WORD, not the staff's: this is the one archived refusal a
+    // member reaches, and a personal trainer's client joined a trainer, not a
+    // business. The same `itToMembers` the join door and the switched-off
+    // message on this path already use.
+    throw new OrgsError(
+      409,
+      "org_archived",
+      `This ${orgWords(org.orgType).itToMembers} is no longer active.`,
+    );
   }
 
   const outcome = await repo.markGymAttendance(deps.sql, {
@@ -2484,13 +2564,13 @@ export async function markOrgAttendance(
         clockFormat: outcome.clockFormat,
       });
     case "manual_disabled":
-      throw new OrgsError(409, "manual_attendance_off", MANUAL_ATTENDANCE_OFF_MESSAGE);
+      throw new OrgsError(409, "manual_attendance_off", manualAttendanceOffMessage(org.orgType));
     case "closed":
-      throw new OrgsError(409, "gym_closed_now", gymClosedMessage(outcome));
+      throw new OrgsError(409, "gym_closed_now", gymClosedMessage(outcome, org.orgType));
     case "not_found":
       // Unreachable in practice — the gate above read the org — but a gym
       // deleted between that read and this write must not surface as a 500.
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     default:
       return assertNever(outcome);
   }
@@ -2523,7 +2603,7 @@ export async function getOrgAttendanceDay(
     statuses: query.statuses,
     cursor: cursor === undefined ? undefined : { markedAt: cursor.markedAt, userId: cursor.id },
   });
-  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+  if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
 
   return gymAttendanceDayResponseSchema.parse({
     attendance: {
@@ -2587,7 +2667,7 @@ export async function getOrgAttendanceHistory(
       repo.isLiveMember(deps.sql, gymId, userId),
     ]);
     if (org === null || !member) {
-      throw new OrgsError(404, "org_not_found", "Gym not found.");
+      throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     }
   } else {
     await requirePrivilege(deps, gymId, userId, "attendance.read");
@@ -2607,7 +2687,7 @@ export async function getOrgAttendanceHistory(
     to: query.to === undefined ? undefined : requireCalendarDate(query.to),
     cursor: requireAttendanceCursor(query.cursor),
   });
-  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+  if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
 
   return gymAttendanceHistoryResponseSchema.parse({
     attendance: {
@@ -2646,7 +2726,7 @@ export async function getOrgOverview(
   await requirePrivilege(deps, gymId, userId, "attendance.read");
 
   const row = await repo.getOrgOverview(deps.sql, { gymId });
-  if (row === null) throw new OrgsError(404, "org_not_found", "Gym not found.");
+  if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
 
   /** THE REGULARS RIDE ON THIS READ RATHER THAN TAKING ONE OF THEIR OWN.
    *
@@ -2760,7 +2840,7 @@ export async function sendOrgCheer(
   targetUserId: string,
   input: SendGymCheerRequest,
 ): Promise<SendGymCheerResponse> {
-  await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
+  const { org } = await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
 
   const outcome = await repo.sendGymCheer(deps.sql, {
     gymId,
@@ -2774,7 +2854,7 @@ export async function sendOrgCheer(
       // ONE SENTENCE FOR "no such person" AND "not your member" (R3.2). The
       // caller is authorised for THIS gym, so the only thing this hides is
       // whether a uuid they already hold belongs to somebody else's roster.
-      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+      throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
     case "too_soon":
       // **THE INSTANT IS DELIBERATELY NOT ON THE ERROR, and the reason is scope
       // rather than taste.** `OrgsError` carries a status, a code and a
@@ -2800,7 +2880,11 @@ export async function sendOrgCheer(
       // calendar one. **The rule moved to the calendar, so the plainest word is
       // also the accurate one**, which is the rare direction for this kind of
       // change.
-      throw new OrgsError(409, "cheer_already_sent", "This member has already been cheered today.");
+      throw new OrgsError(
+        409,
+        "cheer_already_sent",
+        `This ${orgWords(org.orgType).person} has already been cheered today.`,
+      );
     case "sent":
       return sendGymCheerResponseSchema.parse({
         cheer: { preset: outcome.preset, sentAt: outcome.sentAt.toISOString() },
@@ -2840,7 +2924,7 @@ export async function sendOrgNudge(
   targetUserId: string,
   input: SendGymNudgeRequest,
 ): Promise<SendGymNudgeResponse> {
-  await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
+  const { org } = await requireWritablePrivilege(deps, gymId, actorUserId, "members.read");
 
   const outcome = await repo.sendGymNudge(deps.sql, {
     gymId,
@@ -2855,7 +2939,7 @@ export async function sendOrgNudge(
       // same words `sendOrgCheer` uses — deliberately, because two doors that
       // refuse the same condition differently tell an attacker which door they
       // are at.
-      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+      throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
     case "too_soon":
       // **THE INSTANT IS DELIBERATELY NOT ON THE ERROR**, for `sendOrgCheer`'s
       // recorded reason: `OrgsError` carries a status, a code and a sentence,
@@ -2883,7 +2967,7 @@ export async function sendOrgNudge(
       throw new OrgsError(
         409,
         "nudge_already_sent",
-        "This member has already been sent a message in the last 7 days.",
+        `This ${orgWords(org.orgType).person} has already been sent a message in the last 7 days.`,
       );
     case "sent":
       return sendGymNudgeResponseSchema.parse({

@@ -132,7 +132,7 @@ describe('the join panel', () => {
   it('applies with the typed code and reports WAITING, naming the gym', async () => {
     orgService.join.mockReturnValue(ok({ outcome: 'pending', org: ORG, application: APPLICATION }));
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'k7qm2x' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
 
     await waitFor(() => expect(screen.getByText(/you've asked to join iron house/i)).toBeTruthy());
@@ -161,7 +161,7 @@ describe('the join panel', () => {
       }),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'k7qm2x' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
 
     await waitFor(() => expect(screen.getByText(/you've asked to join iron house/i)).toBeTruthy());
@@ -187,7 +187,7 @@ describe('the join panel', () => {
       }),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'k7qm2x' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
 
     await screen.findByText(/being held/i);
@@ -203,7 +203,7 @@ describe('the join panel', () => {
     // a perfectly healthy gym that it has stopped taking members.
     orgService.join.mockReturnValue(ok({ outcome: 'pending', org: ORG, application: APPLICATION }));
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'k7qm2x' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
 
     await screen.findByText(/you've asked to join iron house/i);
@@ -225,7 +225,7 @@ describe('the join panel', () => {
     // that could quote a different date.
     orgService.join.mockReturnValue(ok({ outcome: 'pending', org: ORG, application: APPLICATION }));
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByText(/you've asked to join/i)).toBeTruthy());
 
@@ -253,9 +253,48 @@ describe('the join panel', () => {
       ok({ outcome: 'already_pending', org: ORG, application: APPLICATION }),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByText(/you've asked to join iron house/i)).toBeTruthy());
+  });
+
+  /** ROADMAP 2b: the join door speaks the type of the place the SERVER named
+   *  in its answer. The panel holds the whole org, so this is the one screen
+   *  where the type is knowable the moment a code is typed.
+   *
+   *  The gym's wording is asserted in the case below this one, unchanged. */
+  it('calls a studio’s people clients when it says you are already in', async () => {
+    orgService.join.mockReturnValue(
+      ok({
+        outcome: 'already_member',
+        org: { ...ORG, name: 'Flow Studio', orgType: 'studio' },
+        membership: { id: 'm1', joinedAt: '2026-08-01T00:00:00.000Z', groupLabel: 'Front Desk' },
+      }),
+    );
+    draw(<JoinGymPanel />);
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+    await waitFor(() => expect(screen.getByText(/already a client of flow studio/i)).toBeTruthy());
+    expect(screen.getByText(/your studio's features are already on/i)).toBeTruthy();
+    expect(screen.queryByText(/already a member/i)).toBeNull();
+  });
+
+  it('tells a trainer’s client that the TRAINER confirms them', async () => {
+    orgService.join.mockReturnValue(
+      ok({
+        outcome: 'pending',
+        org: { ...ORG, name: 'Coach Priya', orgType: 'personal_trainer' },
+        application: APPLICATION,
+      }),
+    );
+    draw(<JoinGymPanel />);
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Someone at the trainer confirms new clients from their side/i)).toBeTruthy(),
+    );
+    // The sheet under it names the place and the relationship in the same word.
+    expect(screen.getByText(/Only while you are a client\./i)).toBeTruthy();
   });
 
   it('tells somebody already in the gym that they are already in', async () => {
@@ -267,7 +306,7 @@ describe('the join panel', () => {
       }),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() =>
       expect(screen.getByText(/already a member of iron house/i)).toBeTruthy(),
@@ -280,12 +319,12 @@ describe('the join panel', () => {
       serverSaid(409, 'code_paused', 'That code has been paused. Ask the gym for a current one.'),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'PAUSED' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'PAUSED' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByText(/that code has been paused/i)).toBeTruthy());
     // Still on the form, with what they typed, so the next attempt is one edit
     // away rather than a fresh start.
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('PAUSED');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('PAUSED');
   });
 
   it('never reports a refusal as a connection problem, or the reverse', async () => {
@@ -293,7 +332,7 @@ describe('the join panel', () => {
       Object.assign(Promise.reject(new Error('Network Error')), {}),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'K7QM2X' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'K7QM2X' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByText(/couldn't reach the server/i)).toBeTruthy());
   });
@@ -308,7 +347,7 @@ describe('the join panel', () => {
     draw(<JoinGymPanel />);
     expect(screen.queryByRole('checkbox')).toBeNull();
 
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'CLINIC' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'CLINIC' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByRole('checkbox')).toBeTruthy());
 
@@ -333,12 +372,12 @@ describe('the join panel', () => {
       serverSaid(400, 'consent_required', 'Joining this clinic needs your agreement.'),
     );
     draw(<JoinGymPanel />);
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'CLINIC' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'CLINIC' } });
     fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
     await waitFor(() => expect(screen.getByRole('checkbox')).toBeTruthy());
     fireEvent.click(screen.getByRole('checkbox'));
 
-    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'OTHERG' } });
+    fireEvent.change(screen.getByLabelText(/your join code/i), { target: { value: 'OTHERG' } });
     expect(screen.queryByRole('checkbox')).toBeNull();
 
     orgService.join.mockReturnValueOnce(
@@ -352,7 +391,7 @@ describe('the join panel', () => {
   it('prefills the code a poster link carried, and still waits to be pressed', () => {
     // A QR taped to a wall must not enrol whoever points a phone at it.
     draw(<JoinGymPanel initialCode="k7qm2x" />);
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('K7QM2X');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
   });
 });
@@ -367,7 +406,7 @@ describe('the join panel', () => {
 describe('/org/join, the address a poster QR points at', () => {
   it('reads the code out of the URL and prefills it, unsubmitted (T3 r1 L-2)', () => {
     drawRoute('/org/join?code=ttusd2');
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('TTUSD2');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('TTUSD2');
     // Prefilled, never sent: applying puts your name in front of a gym and is
     // a deliberate act, so a scanned poster may fill the box and nothing more.
     expect(orgService.join).not.toHaveBeenCalled();
@@ -375,7 +414,7 @@ describe('/org/join, the address a poster QR points at', () => {
 
   it('opens an empty box when the address carries no code at all', () => {
     drawRoute('/org/join');
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('');
   });
 
   it('follows the URL to a SECOND poster rather than keeping the first code', () => {
@@ -385,9 +424,9 @@ describe('/org/join, the address a poster QR points at', () => {
     // The navigation here is a real in-router one (a link press), which is the
     // case a fresh `render` would quietly step over.
     drawRoute('/org/join?code=aaa111');
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('AAA111');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('AAA111');
     fireEvent.click(screen.getByText('second poster'));
-    expect(screen.getByLabelText(/your gym's code/i).value).toBe('BBB222');
+    expect(screen.getByLabelText(/your join code/i).value).toBe('BBB222');
   });
 });
 
@@ -502,6 +541,33 @@ describe('the gym card on the dashboard', () => {
       expect(screen.getByText(/iron house didn't confirm your request/i)).toBeTruthy(),
     );
     expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
+  });
+
+  /** ROADMAP 2b on the three rows themselves. `gymStatusRows` carries the
+   *  type onto every row (its own suite asserts the field), and this is where
+   *  the row is proven to READ it — remove `orgType` from the row and each of
+   *  these three sentences goes back to "member" and "the gym". */
+  it('speaks a studio’s words on the member, removed and refused rows', async () => {
+    const STUDIO = { ...ORG, id: 'st-1', name: 'Flow Studio', slug: 'flow-studio', orgType: 'studio' };
+    const GONE = { ...ORG, id: 'st-2', name: 'Old Studio', slug: 'old-studio', orgType: 'studio' };
+    const NO = { ...ORG, id: 'st-3', name: 'Strict Studio', slug: 'strict', orgType: 'studio' };
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, id: 'app-no', status: 'rejected', org: NO }] }),
+    );
+    orgService.getMine.mockReturnValue(
+      ok({
+        orgs: [{ ...STUDIO, staffRole: null, isMember: true, joinedAt: '2026-08-01T00:00:00.000Z' }],
+        formerOrgs: [{ ...GONE, removedAt: '2026-08-20T04:41:16.656Z' }],
+      }),
+    );
+    draw(<GymMembershipCard />);
+
+    expect(await screen.findByText(/you're a client of flow studio/i)).toBeTruthy();
+    expect(screen.getByText(/you're no longer a client of old studio/i)).toBeTruthy();
+    expect(screen.getByText(/strict studio didn't confirm your request/i)).toBeTruthy();
+    expect(screen.getByText(/check with the studio, then ask again/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/a member of/i);
+    expect(document.body.textContent).not.toMatch(/with the gym/i);
   });
 
   it('TELLS a removed member they were removed, in words that are TRUE (Kd 2026-08-20)', async () => {

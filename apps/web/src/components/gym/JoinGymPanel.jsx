@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import OrgVisibilitySheet from './OrgVisibilitySheet';
@@ -33,8 +34,9 @@ import { orgService, errorText, errorCode } from '../../api/orgsApi';
 /** The server normalises case, spaces and dashes before it looks a code up, so
  *  this is only about what the person SEES while typing: their own gym's code
  *  is printed in capitals. Nothing is rejected here — a pasted "aihg-24kq7b"
- *  must reach the server and come back with "that code doesn't match any gym",
- *  which is a different and more useful answer than a local length check. */
+ *  must reach the server and come back with "that code doesn't match any gym,
+ *  studio or trainer", which is a different and more useful answer than a local
+ *  length check. */
 function forDisplay(raw) {
   return raw.toUpperCase().slice(0, 32);
 }
@@ -108,14 +110,15 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
           <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#4ade80' }} />
           <div>
             <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-              You&apos;re already a member of {result.org.name}.
+              You&apos;re already a {orgWords(result.org.orgType).person} of {result.org.name}.
             </p>
             <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Nothing to do — your gym&apos;s features are already on.
+              Nothing to do — your {orgWords(result.org.orgType).itToMembers}&apos;s features are
+              already on.
             </p>
           </div>
         </div>
-        <OrgVisibilitySheet orgName={result.org.name} />
+        <OrgVisibilitySheet orgName={result.org.name} orgType={result.org.orgType} />
         <button
           type="button"
           onClick={startOver}
@@ -141,6 +144,9 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
     // sends nothing and the shared schema defaults it to null, which is "we
     // could not ask" and never "no" (C97's rule, :23711).
     const held = result.application?.orgCanConfirm === false;
+    // THE WORDS THE PLACE THEY JUST APPLIED TO IS SPOKEN IN (roadmap 2b) —
+    // off the org the SERVER named in its answer, never guessed from the code.
+    const words = orgWords(result.org.orgType);
     return (
       <div className="flex flex-col gap-4">
         <div
@@ -173,13 +179,13 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
                 paying. */}
             {held ? (
               <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                {result.org.name} can&apos;t take new members right now. Your request is being
-                held — it won&apos;t run out while that&apos;s the case.
+                {result.org.name} can&apos;t take new {words.people} right now. Your request is
+                being held — it won&apos;t run out while that&apos;s the case.
               </p>
             ) : (
               <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Someone at the gym confirms new members from their side. If you&apos;re standing at
-                the front desk, ask them now — it takes one tap.
+                Someone at the {words.itToMembers} confirms new {words.people} from their side. If
+                you&apos;re standing at the front desk, ask them now — it takes one tap.
               </p>
             )}
             {/* THE THIRD SENTENCE HAD TO SPLIT TOO, AND NOT FOR TIDINESS.
@@ -200,14 +206,14 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
             ) : (
               <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
                 Keep using the app in the meantime. Nothing is on hold: your workouts, streak and
-                everything free stay exactly as they are, and your gym&apos;s extras switch on the
-                moment they confirm you.
+                everything free stay exactly as they are, and your {words.itToMembers}&apos;s extras
+                switch on the moment they confirm you.
               </p>
             )}
           </div>
         </div>
 
-        <OrgVisibilitySheet orgName={result.org.name} />
+        <OrgVisibilitySheet orgName={result.org.name} orgType={result.org.orgType} />
 
         <div className="flex items-center gap-4">
           <Link to="/dashboard" className="text-sm font-medium" style={{ color: '#FF8A1F' }}>
@@ -228,7 +234,7 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
         style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
       >
         <label htmlFor="gym-join-code" className="text-sm font-semibold" style={{ color: '#fff' }}>
-          Your gym&apos;s code
+          Your join code
         </label>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
           Ask at the front desk, or read it off their poster.
@@ -284,8 +290,11 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
       </div>
 
       {/* The server's own sentence, never reworded here — "That code doesn't
-          match any gym", "That code has been paused. Ask the gym for a current
-          one." Rewriting them on this side is how the two answers drift. */}
+          match any gym, studio or trainer", "That code has been paused. Ask the
+          studio for a current one." **The SERVER is where those sentences learn
+          the org type** (roadmap 2b): it has the row, and this side has only a
+          code that may belong to nobody. Rewriting them here is how the two
+          answers drift. */}
       {error !== null ? (
         <div
           className="rounded-2xl p-4 flex items-start gap-3"

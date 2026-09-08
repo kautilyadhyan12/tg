@@ -5,6 +5,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
+import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
   viewerPrivileges,
@@ -13,7 +14,7 @@ import {
   memberCountLabel,
   seatIsFree,
 } from './consoleView';
-import { consoleIsReadOnly, READ_ONLY_NOTE, seatLineText, seatMeter } from './billingView';
+import { consoleIsReadOnly, readOnlyNote, seatLineText, seatMeter } from './billingView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
@@ -66,7 +67,7 @@ import { consoleIsReadOnly, READ_ONLY_NOTE, seatLineText, seatMeter } from './bi
  *  The consequence is stated where the gym reads it, because it is Kd's own
  *  rule: the person loses the gym's features immediately and keeps every
  *  workout they ever did. */
-function RemoveControl({ member, busy, readOnly, onRemove }) {
+function RemoveControl({ member, busy, readOnly, words, onRemove }) {
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -86,7 +87,8 @@ function RemoveControl({ member, busy, readOnly, onRemove }) {
   return (
     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
       <span className="text-xs text-right" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        Remove {member.displayName}? They keep their own workouts and lose your gym&apos;s features.
+        Remove {member.displayName}? They keep their own workouts and lose your {words.it}&apos;s
+        features.
       </span>
       <div className="flex items-center gap-2">
         <button
@@ -114,7 +116,7 @@ function RemoveControl({ member, busy, readOnly, onRemove }) {
   );
 }
 
-function MemberRow({ member, busy, canRemove, readOnly, onRemove }) {
+function MemberRow({ member, busy, canRemove, readOnly, words, onRemove }) {
   return (
     <div
       className="rounded-2xl p-4 flex items-center gap-4"
@@ -156,7 +158,13 @@ function MemberRow({ member, busy, canRemove, readOnly, onRemove }) {
            drawing nothing tells them nothing false; read-only is a temporary
            fact about the GYM, and a manager whose Remove button vanished would
            be left guessing whether their permissions had changed. */
-        <RemoveControl member={member} busy={busy} readOnly={readOnly} onRemove={onRemove} />
+        <RemoveControl
+          member={member}
+          busy={busy}
+          readOnly={readOnly}
+          words={words}
+          onRemove={onRemove}
+        />
       ) : null}
     </div>
   );
@@ -184,6 +192,10 @@ export default function Members() {
   // the safe direction: a screen with no roster on it yet has no control to
   // grey out.
   const readOnly = consoleIsReadOnly(org);
+  // THE WORDS THIS SCREEN SPEAKS (roadmap 2b) — a gym has members, a studio
+  // and a trainer have clients. Off the org row already in hand; the gym's
+  // words while it loads, which is what every sentence here said before.
+  const words = orgWords(org?.orgType);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -208,13 +220,13 @@ export default function Members() {
         const message =
           errorCode(err) === 'trainer_scope_unavailable'
             ? errorText(err, "Your role doesn't allow that.")
-            : errorText(err, "We couldn't load the members.");
+            : errorText(err, `We couldn't load the ${words.people}.`);
         setState({ loading: false, error: message, items: [], nextCursor: null });
       });
     return () => {
       cancelled = true;
     };
-  }, [gymId, attempt]);
+  }, [gymId, attempt, words]);
 
   const retry = () => {
     setState({ loading: true, error: null, items: [], nextCursor: null });
@@ -272,7 +284,7 @@ export default function Members() {
   if (orgLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your gym…" />
+        <ConsoleLoading label="Loading your organisation…" />
       </div>
     );
   }
@@ -290,7 +302,7 @@ export default function Members() {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find a gym you run at this address.
+            We couldn&apos;t find an organisation you run at this address.
           </p>
           <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
             Your organisations
@@ -300,7 +312,10 @@ export default function Members() {
     );
   }
 
-  const countLabel = memberCountLabel({ items: state.items, nextCursor: state.nextCursor });
+  const countLabel = memberCountLabel(
+    { items: state.items, nextCursor: state.nextCursor },
+    org?.orgType,
+  );
   // §4.3's header meter. Null for a gym on no plan and for a capless band — both
   // are real states, and neither may be drawn as "0 of 0" (:5807). It does NOT
   // wait on the roster read: the numbers come off the org row, so a gym whose
@@ -311,7 +326,7 @@ export default function Members() {
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Members
+          {words.peopleCap}
         </h1>
         {!state.loading && state.error === null ? (
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
@@ -331,7 +346,7 @@ export default function Members() {
                 full-gym clause out itself, which meant the banner overhead and
                 the line under it were two copies of one sentence with nothing
                 keeping them equal. */}
-            {seatLineText(meter)}
+            {seatLineText(meter, org?.orgType)}
           </p>
         ) : null}
         {/* THE NOTE IS DRAWN WHERE THERE IS A GREYED CONTROL TO EXPLAIN, and on
@@ -342,7 +357,7 @@ export default function Members() {
             waiting queue below carries its own sentence for its own reason. */}
         {readOnly && canRemove ? (
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {READ_ONLY_NOTE}
+            {readOnlyNote(org?.orgType)}
           </p>
         ) : null}
       </div>
@@ -351,9 +366,14 @@ export default function Members() {
           its own failure: a queue that cannot be read must never take the
           member list down with it, and a trainer — who may read the roster and
           may not confirm — sees no section rather than a refusal. */}
-      <ApplicationsQueue gymId={gymId} readOnly={readOnly} onRosterChanged={reloadRoster} />
+      <ApplicationsQueue
+        gymId={gymId}
+        orgType={org?.orgType}
+        readOnly={readOnly}
+        onRosterChanged={reloadRoster}
+      />
 
-      {state.loading ? <ConsoleLoading label="Loading members…" /> : null}
+      {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 
       {/* T3 r1 L-3: `ConsoleFailed`'s own contract is "a failure ALWAYS offers a
           way out", and this one dead-ended. The way out of a failed removal is
@@ -374,7 +394,7 @@ export default function Members() {
             Nobody has joined yet.
           </p>
           <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Share your join code and members will appear here.
+            Share your join code and {words.people} will appear here.
           </p>
         </ConsoleCard>
       ) : null}
@@ -385,6 +405,7 @@ export default function Members() {
             <MemberRow
               key={m.userId}
               member={m}
+              words={words}
               busy={removingId === m.userId}
               canRemove={canRemove}
               readOnly={readOnly}

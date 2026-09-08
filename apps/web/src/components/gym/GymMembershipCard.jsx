@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Building2, Clock, Loader2, XCircle } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
@@ -56,6 +57,8 @@ import GymHoursNote from './GymHoursNote';
 // sentence — never a second reminder. R3.3 from the client's side: hiding is
 // not the enforcement, and the enforcement is a database column.
 function WaitingRow({ row }) {
+  // The words this row speaks — the type of the place they applied to.
+  const words = orgWords(row?.orgType);
   const [state, setState] = useState({ busy: false, sent: null, error: null });
   const expiring = expiresInLabel(row.expiresAt);
   const { ready } = nudgeState(row);
@@ -116,8 +119,8 @@ function WaitingRow({ row }) {
             before it works is the same defect Card A refused to ship. */}
         <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
           {held
-            ? `${row.orgName} can't take new members right now. Your request is being held — it won't run out while that's the case.`
-            : 'Someone at the gym confirms new members from their side — one tap at the front desk. Everything in the app keeps working meanwhile.'}
+            ? `${row.orgName} can't take new ${words.people} right now. Your request is being held — it won't run out while that's the case.`
+            : `Someone at the ${words.itToMembers} confirms new ${words.people} from their side — one tap at the front desk. Everything in the app keeps working meanwhile.`}
         </p>
         {/* The deadline comes off the server's own `expiresAt`, read through
             the SAME helper the gym's queue uses, so the two screens cannot
@@ -137,7 +140,7 @@ function WaitingRow({ row }) {
             The server's own time is what the sentence uses now. */}
         {state.sent !== null ? (
           <p className="text-sm mt-2" style={{ color: '#FF8A1F' }}>
-            The gym can see you&apos;re still waiting. You can do this again{' '}
+            The {words.itToMembers} can see you&apos;re still waiting. You can do this again{' '}
             {nextNudgeText(state.sent.nextNudgeAt)}.
           </p>
         ) : null}
@@ -179,6 +182,8 @@ function WaitingRow({ row }) {
 }
 
 function Row({ row }) {
+  // The words this row speaks — the type of the place it is about.
+  const words = orgWords(row?.orgType);
   if (row.kind === 'member') {
     return (
       <div className="flex items-start gap-3">
@@ -190,7 +195,7 @@ function Row({ row }) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: '#fff' }}>
-            You&apos;re a member of {row.orgName}
+            You&apos;re a {words.person} of {row.orgName}
           </p>
           {/* WHEN THE GYM IS OPEN — Kd ruled members see it (:26684 §2), and this
               row is the only one it belongs on: a person WAITING to join is not
@@ -227,7 +232,7 @@ function Row({ row }) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-            You&apos;re no longer a member of {row.orgName}
+            You&apos;re no longer a {words.person} of {row.orgName}
           </p>
           {/* The sentence is the thing people actually fear when access ends,
               and it is TRUE — verified, not assumed: `removeMember` writes
@@ -273,7 +278,7 @@ function Row({ row }) {
             : `${row.orgName} didn't confirm your request`}
         </p>
         <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          Check with the gym, then ask again — it takes seconds.
+          Check with the {words.itToMembers}, then ask again — it takes seconds.
         </p>
         <Link to="/org/join" className="text-sm font-medium inline-block mt-1.5" style={{ color: '#FF8A1F' }}>
           Try again

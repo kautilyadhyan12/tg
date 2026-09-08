@@ -232,7 +232,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
         style={{ padding: collapsed ? '12px 8px' : '12px' }}
       >
         <div className="space-y-0.5">
-          {navWithMyGyms(navItems, gyms.length, { dot: hasFreshCheer(gyms) }).map(({ to, icon: Icon, label, dot }) => (
+          {navWithMyGyms(navItems, gyms, { dot: hasFreshCheer(gyms) }).map(({ to, icon: Icon, label, dot }) => (
             <NavLink
               key={to}
               to={to}
@@ -296,7 +296,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
                     <span
                       className={collapsed ? '' : 'ml-auto'}
                       role="status"
-                      aria-label="New from your gym"
+                      aria-label="New message"
                       style={{
                         width: 7,
                         height: 7,

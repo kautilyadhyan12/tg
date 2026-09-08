@@ -485,7 +485,7 @@ describe('The gym', () => {
   it('says so plainly when the address is not a gym you run', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [MEMBER_ONLY_ORG] } });
     drawOverview();
-    expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
+    expect(await screen.findByText(/couldn't find an organisation you run/i)).toBeTruthy();
   });
 
   it('offers no retry on a refusal that retrying can never fix (round 2 Low-4)', async () => {
@@ -629,7 +629,7 @@ describe('The gym', () => {
     drawOverview();
     expect(await screen.findByText(/couldn't read/i)).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
-    expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
+    expect(screen.queryByText(/couldn't find an organisation you run/i)).toBeNull();
     // And it must not be reported as a network problem — the server answered.
     expect(screen.queryByText(/Check your connection/i)).toBeNull();
   });
@@ -1654,7 +1654,7 @@ describe('what may I do here', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
     clickBackIn();
 
-    expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
+    expect(await screen.findByText(/couldn't find an organisation you run/i)).toBeTruthy();
   });
 });
 
@@ -1709,7 +1709,7 @@ describe('a gym you have just made', () => {
     // Scoped to the hero card: the code also appears in the panel below, and an
     // unscoped query would pass on either.
     expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
-    expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
+    expect(screen.queryByText(/couldn't find an organisation you run/i)).toBeNull();
   });
 
   it('is listed under "Your organisations" without a reload', async () => {

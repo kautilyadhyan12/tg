@@ -169,6 +169,33 @@ describe('counts are bounded rather than guessed', () => {
     expect(memberCountLabel({})).toBeNull();
   });
 
+  /** ROADMAP 2b: the count is a sentence, so it takes the org's word. Both
+   *  the singular and the plural are checked at both types, because they are
+   *  built from two different fields and dropping either one leaves a screen
+   *  saying "1 member" over a list headed Clients. */
+  it('counts a studio’s people as clients and a gym’s as members', () => {
+    const one = { items: [member('a')], nextCursor: null };
+    const two = { items: [member('a'), member('b')], nextCursor: null };
+    const more = { items: [member('a')], nextCursor: 'x|y' };
+    expect(memberCountLabel(one, 'studio')).toBe('1 client');
+    expect(memberCountLabel(two, 'studio')).toBe('2 clients');
+    expect(memberCountLabel(more, 'studio')).toBe('1+ clients');
+    expect(memberCountLabel(one, 'personal_trainer')).toBe('1 client');
+    expect(memberCountLabel(one, 'gym')).toBe('1 member');
+    // No type in hand reads as the gym's word — what this said before 2b.
+    expect(memberCountLabel(one)).toBe('1 member');
+  });
+
+  it('says “1 client (you)” to a studio’s owner about their own seat', () => {
+    // The whole point of `memberCountLine`, in the studio's word: the single
+    // membership is the owner's own complimentary seat.
+    const page = { items: [{ ...member('u1', true), userId: 'u1' }], nextCursor: null };
+    expect(memberCountLine(page, 'u1', 'studio')).toBe('1 client (you)');
+    expect(memberCountLine(page, 'u1', 'gym')).toBe('1 member (you)');
+    // Somebody else's seat is still just the count, in the same word.
+    expect(memberCountLine(page, 'someone-else', 'studio')).toBe('1 client');
+  });
+
   it('does not count the owner’s complimentary seat as somebody who joined', () => {
     // A brand-new gym has one membership — the owner's own, created silently by
     // the wizard — and nobody has joined it.
@@ -279,7 +306,25 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
     expect(orgTypeLabel('personal_trainer')).toBe('Personal trainer');
     expect(roleLabel('owner')).toBe('Owner');
     expect(roleLabel('manager')).toBe('Manager');
+    expect(roleLabel('trainer', 'gym')).toBe('Trainer');
+  });
+
+  /** §2.2's vocabulary row, and roadmap 2b puts a personal trainer's
+   *  assistant on the studio's side: gym Trainer · studio Coach · trainer
+   *  Coach. The owner and the manager are the same word everywhere, which is
+   *  asserted rather than assumed — it is the reason only one of the three is
+   *  looked up. */
+  it('calls the third role Trainer at a gym and Coach at a studio or a trainer', () => {
+    expect(roleLabel('trainer', 'studio')).toBe('Coach');
+    expect(roleLabel('trainer', 'personal_trainer')).toBe('Coach');
+    // No type in hand — mid-load, or an api older than this bundle — reads as
+    // the gym's word, which is what every console said before this card.
     expect(roleLabel('trainer')).toBe('Trainer');
+    expect(roleLabel('trainer', 'franchise')).toBe('Trainer');
+    for (const type of ['gym', 'studio', 'personal_trainer']) {
+      expect(roleLabel('owner', type)).toBe('Owner');
+      expect(roleLabel('manager', type)).toBe('Manager');
+    }
   });
 
   it('shows an unknown value as itself rather than relabelling it', () => {

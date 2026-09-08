@@ -6,6 +6,7 @@
 // agreed to. It is a small form and it can do two large things wrong: move a
 // gym's day boundary by accident, and turn a rename into a refusal for a gym
 // that is paying us.
+import { orgWords } from '@app/shared';
 import { timezoneOptions } from './consoleView';
 
 /** MAY THIS PERSON EDIT THE GYM'S DETAILS?
@@ -143,12 +144,13 @@ export function timezoneChoices(detected, ...wanted) {
  *
  *  Nothing here checks a LENGTH ceiling: the boxes carry `maxLength`, which is
  *  where the create wizard puts the same bound. */
-export function gymDetailsProblem(draft) {
+export function gymDetailsProblem(draft, orgType) {
+  const words = orgWords(orgType);
   if ((draft?.name ?? '').trim() === '') {
-    return 'Your gym needs a name — it is what your members see.';
+    return `Your ${words.it} needs a name — it is what your ${words.people} see.`;
   }
   if ((draft?.timezone ?? '').trim() === '') {
-    return "Your gym needs a time zone — it decides when your gym's day ends.";
+    return `Your ${words.it} needs a time zone — it decides when your ${words.it}'s day ends.`;
   }
   return null;
 }
