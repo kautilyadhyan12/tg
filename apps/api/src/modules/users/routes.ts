@@ -98,7 +98,7 @@ export function registerUserRoutes(
   });
 
   // The consent log: one row per disclaimer tap; the person can read their own
-  // (the newest hundred, with the total so a short list never passes for all).
+  // (the newest page, with the total so a short list never passes for all).
   app.get("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
     const list = await service.listConsents(usersDeps, authedUserId(req));
     return reply.status(200).send(list);
@@ -108,9 +108,18 @@ export function registerUserRoutes(
   // top of the global one: three screens carry a disclaimer, so thirty taps an
   // hour is far beyond honest use. Keyed on the signed-in person AND the IP
   // (authenticate runs first, R3.3, so the person is known here).
+  //
+  // THE TWO DIMENSIONS ARE DELIBERATELY ASYMMETRIC, the same reasoning the gym
+  // trial door records (orgs/routes.ts) and the coach cap answers by dropping
+  // the IP dimension outright: a gym's whole floor shares one address on
+  // induction day, so the person's own 30 would have thrown the ELEVENTH
+  // person off the wi-fi mid-onboarding — a tap they cannot finish signing up
+  // without. 600 an hour from one address is two hundred people getting
+  // through all three disclaimers, still a bound on a script.
   const consentLimit = createDualRateLimit({
     name: "consent",
     max: 30,
+    ipMax: 600,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,

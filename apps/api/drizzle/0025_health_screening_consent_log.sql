@@ -13,8 +13,9 @@
 -- Safe mode and "no calorie cut" are DERIVED in code from these two, never
 -- stored, so the two cannot disagree. (The older free-text
 -- `user_fitness_profiles.medical_conditions` column from `0006` is still
--- written by the fitness-profile screens; its future is Kd's call, asked at
--- the 3b review — this migration does not touch it.)
+-- written by the fitness-profile screens; Kd ruled on 2026-09-09 that it is
+-- switched off and the stored text wiped when the v2 health screen lands at
+-- 4b — this migration does not touch it.)
 --
 -- The second CHECK is the contradiction guard: a "cleared" with nothing to be
 -- cleared of, or a yes with no choice made, can never sit in the table.

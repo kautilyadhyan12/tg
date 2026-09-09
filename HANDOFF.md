@@ -35,8 +35,22 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Kd ruled the same day (RULINGS 2026-09-09): consent log kept six years past deletion, then
   removed — built as a run-level step of the Day-14 purge (`CONSENT_PROOF_RETENTION_DAYS`,
   `repo.deleteExpiredConsentProof`, fake-clock test); the old conditions box goes at 4b.
-- Open: the re-check of the fixes; Kd's click-through (no screen — the preview tool and the
-  routes). 4b builds the screen.
+- Re-check (fresh chat): one High, five Low, four test gaps — all fixed in this commit. The consent
+  limiter's IP dimension capped a whole gym at thirty an hour, so the eleventh person onboarding from
+  the gym's wi-fi could not record their tap (`ipMax: 600`, the trial door's pattern); the export's
+  1000-row consent cap was silent (the envelope gained `truncated`, schemaVersion 2); the proof now
+  outlives six CALENDAR years (`6*365+2` — the old number deleted it two days early); a failed
+  consent-expiry step no longer reads as a member's failed purge (its own field, both entrypoints
+  still fail the run); the two comments that contradicted RULINGS 2026-09-09 corrected.
+- Every new test was run RED against the old code first: 11 people × 3 taps from ONE address all 201 ·
+  the export cap AND its count · an ACTIVE user with a stale `deleted_at` keeps their proof (pins the
+  `status = 'deleted'` clause) · a failed expiry reports `errors: 0` with its own flag · and an
+  UNGATED (so CI runs it) check that the window is never shorter than six calendar years.
+- Verified after the re-check fixes: shared tsc + 66 tests; api tsc + eslint exit 0; `plan.unit` +
+  `nutrition.unit` 76; local Postgres `privacy.purge` 24 · `privacy.export` 12 · `users.health.routes`
+  20 (56 in one run) · `db.migration` 21; the CI-shaped run with no DATABASE_URL 296 passed.
+- Open: Kd's click-through (no screen — the preview tool and the routes) and merging PR #57.
+  4b builds the screen.
 
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 

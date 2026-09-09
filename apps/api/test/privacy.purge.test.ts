@@ -267,6 +267,59 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(await count(live.userId)).toBe(1);
   });
 
+  /** Consent rows still held for this user. */
+  const consentRows = async (userId: string): Promise<number> =>
+    (
+      await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${userId}`
+    )[0]?.n ?? -1;
+
+  it("keeps the proof of an ACTIVE account carrying a stale deleted_at — the row shape `status = 'deleted'` is there for", { timeout: 60_000 }, async () => {
+    // restoreUser nulls deleted_at (users/repo.ts), so with only that path in
+    // mind the status clause in the expiry statement looks like dead weight and
+    // deleting it leaves every test green. This is the row it exists for: back
+    // to active, old timestamp never cleared. Without the clause its six years
+    // of proof would be destroyed on the next sweep.
+    const restored = await makeUser(uniqEmail("dpdp-consent-restored"), CONSENT_PROOF_RETENTION_DAYS + 1);
+    await sql`UPDATE users SET status = 'active' WHERE id = ${restored.userId}`;
+
+    await run();
+
+    expect(await consentRows(restored.userId)).toBe(1);
+    // ...and the account itself is untouched, being active again.
+    expect((await directCounts(restored.userId))["streaks"]).toBe(1);
+  });
+
+  it("counts a failed consent-log expiry as its OWN step, never as a member's purge", { timeout: 60_000 }, async () => {
+    const u = await makeUser(uniqEmail("dpdp-consent-boom"), CONSENT_PROOF_RETENTION_DAYS + 1);
+    // A client that throws for the expiry statement and hands every other
+    // statement to the real database — so the run genuinely purges the user
+    // while that one step fails, which is the pair being counted apart. The
+    // handler takes the client's own argument types, so there is no cast.
+    const failing = new Proxy(sql, {
+      apply(_target, _thisArg, args: Parameters<typeof sql>) {
+        if (args[0].join("").includes("DELETE FROM consent_log")) {
+          throw new Error("injected failure: consent-log expiry");
+        }
+        return sql(...args);
+      },
+    });
+
+    const result = await purgeDueUsers({ sql: failing, log: testLogger() }, {});
+
+    // The message an operator wakes up to is built from these two: before the
+    // split, this run read as "1 failed" — a member whose purge never failed.
+    expect({ errors: result.errors, expiryFailed: result.consentProofExpiryFailed }).toEqual({
+      errors: 0,
+      expiryFailed: true,
+    });
+    expect(result.consentProofExpired).toBe(0);
+    // The member's own cascade still ran; the proof row is untouched, so the
+    // next run simply tries again.
+    expect((await directCounts(u.userId))["streaks"]).toBe(0);
+    expect(await consentRows(u.userId)).toBe(1);
+  });
+
   it("leaves NO row in any §5.2 table, cascades included", { timeout: 60_000 }, async () => {
     const u = await makeUser(uniqEmail("dpdp-all"), 20);
 

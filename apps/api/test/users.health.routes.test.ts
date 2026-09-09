@@ -82,11 +82,14 @@ d("health screening + consent routes (real Postgres)", () => {
     url: string;
     body?: unknown;
     cookies?: Record<string, string>;
+    /** A FIXED address, for the one test about a shared connection. Everything
+     *  else takes nextIp() so only the per-person dimension can trip. */
+    ip?: string;
   }) =>
     api().inject({
       method: opts.method,
       url: opts.url,
-      remoteAddress: nextIp(),
+      remoteAddress: opts.ip ?? nextIp(),
       headers: opts.body !== undefined ? { "content-type": "application/json" } : {},
       cookies: opts.cookies ?? {},
       ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
@@ -388,7 +391,7 @@ d("health screening + consent routes (real Postgres)", () => {
     expect(JSON.parse(list.body)).toEqual({ consents: [], total: 0 });
   });
 
-  it("lists the newest hundred and says how many there are in all, so a short list never passes for the whole record", { timeout: 30_000 }, async () => {
+  it("lists one capped page and says how many there are in all, so a short list never passes for the whole record", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("hs-consent-many@example.com");
     const n = CONSENT_LIST_LIMIT + 1;
     // Straight into the table: the route's own ceiling is thirty an hour.
@@ -416,6 +419,32 @@ d("health screening + consent routes (real Postgres)", () => {
     expect((await tap(b.cookies)).statusCode).toBe(201);
     const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM consent_log WHERE user_id = ${a.userId}`;
     expect(rows[0]?.n).toBe("30");
+  });
+
+  // The case the test above is deliberately blind to (it gives every request a
+  // fresh IP), and the one the limiter got wrong: `max: 30` with no `ipMax`
+  // capped the ADDRESS at thirty too, so on a gym's one connection the
+  // ELEVENTH person to onboard could not record their disclaimer tap — and
+  // cannot finish signing up without it. Eleven people, three taps each, one
+  // address: 33 requests, all of which must be served.
+  it("does NOT throttle a gym: eleven people onboarding from ONE address all record their taps", { timeout: 90_000 }, async () => {
+    const gymIp = "203.0.113.42";
+    const people = [];
+    for (let i = 0; i < 11; i += 1) people.push(await makeUser(`hs-consent-nat-${String(i)}@example.com`));
+    const codes: number[] = [];
+    for (const person of people) {
+      for (const purpose of ["sign_up", "health_step", "plan_screen"]) {
+        const res = await inject({
+          method: "POST",
+          url: "/v1/users/me/consents",
+          body: { purpose, wordingVersion: "v1", appVersion: "web" },
+          cookies: person.cookies,
+          ip: gymIp,
+        });
+        codes.push(res.statusCode);
+      }
+    }
+    expect(codes).toEqual(Array.from({ length: 33 }, () => 201));
   });
 
   it("isolates users: A's consents are never in B's list, and B cannot write into A's", { timeout: 30_000 }, async () => {

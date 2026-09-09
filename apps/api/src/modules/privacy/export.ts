@@ -124,12 +124,24 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
   // The consent log is the person's own record of what they agreed to, exported
   // although it is kept after a purge (tables.ts, 2026-09-09). Keyed by its real
   // table name like the rest, so the two lists still read side by side.
-  data["consent_log"] = await selectExportConsents(deps.sql, userId);
+  //
+  // It is the one read here with a ceiling (CONSENT_EXPORT_LIMIT), so it is the
+  // one that can hand back less than the person has. Saying so is not optional:
+  // this file IS the answer to "give me everything you hold", and a silent cut
+  // makes that answer false. `truncated` carries the count beside the rows.
+  const consents = await selectExportConsents(deps.sql, userId);
+  data["consent_log"] = consents.rows;
+
+  const truncated: Record<string, { returned: number; total: number }> = {};
+  if (consents.total > consents.rows.length) {
+    truncated["consent_log"] = { returned: consents.rows.length, total: consents.total };
+  }
 
   return {
     exportedAt: (deps.now?.() ?? new Date()).toISOString(),
     schemaVersion: DPDP_EXPORT_SCHEMA_VERSION,
     user,
     data,
+    truncated,
   };
 }

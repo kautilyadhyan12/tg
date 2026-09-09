@@ -12,8 +12,12 @@
 import { z } from "zod";
 
 /** Bump when the envelope's SHAPE changes (not when a table's columns do) —
- *  a downstream re-importer needs to know which layout it is reading. */
-export const DPDP_EXPORT_SCHEMA_VERSION = 1;
+ *  a downstream re-importer needs to know which layout it is reading.
+ *  2 (2026-09-09): `truncated` joined the envelope, always present. Version 1
+ *  files stay readable — every key they had is still where it was — but a
+ *  reader that wants to know whether a list was cut needs to know which
+ *  layout it holds, which is exactly what this number is for. */
+export const DPDP_EXPORT_SCHEMA_VERSION = 2;
 
 /** The export envelope.
  *
@@ -40,6 +44,24 @@ export const dpdpExportSchema = z.object({
    *  with an EMPTY ARRAY when the user has no rows: a missing key would be
    *  indistinguishable from "we forgot to export that table". */
   data: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
+  /** tableName -> what the file carries and what exists, for any read that hit
+   *  a server cap. ALWAYS PRESENT and usually `{}`, for the same reason `data`
+   *  keeps empty arrays: a missing key cannot be told apart from "nothing was
+   *  cut". A capped list must never pass for the whole record — the rule the
+   *  consent list route follows with its `total`, applied to the file a person
+   *  downloads and keeps. */
+  truncated: z.record(
+    z.string(),
+    z
+      .object({
+        returned: z.number().int().nonnegative(),
+        total: z.number().int().nonnegative(),
+      })
+      .strict()
+      .refine((t) => t.returned < t.total, {
+        message: "an entry here means rows were cut; equal counts are not a truncation",
+      }),
+  ),
 });
 
 export type DpdpExport = z.infer<typeof dpdpExportSchema>;

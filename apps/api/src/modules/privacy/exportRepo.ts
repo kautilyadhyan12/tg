@@ -133,11 +133,24 @@ export const CONSENT_EXPORT_LIMIT = 1000;
  *
  *  It is not an ExportedTable, so `stripInternal` never sees it and no
  *  INTERNAL_COLUMNS_BY_TABLE entry can ever cover it: THE EXPLICIT COLUMN LIST
- *  BELOW IS THE GUARD. Never widen it to `SELECT *`. */
-export async function selectExportConsents(sql: Sql, userId: string): Promise<Row[]> {
-  return await sql<Row[]>`
+ *  BELOW IS THE GUARD. Never widen it to `SELECT *`.
+ *
+ *  The TOTAL comes back beside the rows, exactly as the list route's read does
+ *  (users/repo.ts listConsents): the cap above must never let a short file pass
+ *  for the whole record — an export that quietly drops rows is the one place
+ *  where "here is your data" would be false. `export.ts` says so in the file. */
+export async function selectExportConsents(
+  sql: Sql,
+  userId: string,
+): Promise<{ rows: Row[]; total: number }> {
+  const rows = await sql<Row[]>`
     SELECT id, purpose, wording_version, wording, app_version, recorded_at
     FROM consent_log WHERE user_id = ${userId}
     ORDER BY recorded_at, id
     LIMIT ${CONSENT_EXPORT_LIMIT}`;
+  const counted = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${userId}`;
+  // Never below what was actually read: a total under the row count would make
+  // the envelope's own "listed ≤ total" claim false.
+  return { rows, total: Math.max(counted[0]?.n ?? 0, rows.length) };
 }

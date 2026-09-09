@@ -299,11 +299,18 @@ export async function lockDueUserForPurge(
 }
 
 /** The consent log's own, later expiry (retention.ts CONSENT_PROOF_RETENTION_
- *  DAYS): rows whose account was deleted before `cutoff` go. Keyed through the
- *  tombstone's deleted_at — a live account's consents are never touched, and
- *  a restored account (status back to active) keeps its rows. Run-level, not
+ *  DAYS): rows whose account was deleted before `cutoff` go. Run-level, not
  *  per user: the accounts concerned were purged years earlier and are no
- *  longer in selectDueUsers' batch. Returns how many rows went. */
+ *  longer in selectDueUsers' batch. Returns how many rows went.
+ *
+ *  TWO conditions guard a live account, deliberately, because they fail
+ *  differently. `deleted_at IS NOT NULL` is the one restoreUser satisfies
+ *  today (it nulls the column, users/repo.ts) — so a restored account keeps
+ *  its rows even if the status clause were dropped. `status = 'deleted'` is
+ *  the belt: any future path that flips a person back to active while leaving
+ *  an old deleted_at behind would otherwise silently destroy their consent
+ *  proof. A test pins that row shape — an ACTIVE user carrying a stale
+ *  deleted_at — so the clause cannot be deleted as dead weight. */
 export async function deleteExpiredConsentProof(sql: Sql, cutoff: Date): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     DELETE FROM consent_log c

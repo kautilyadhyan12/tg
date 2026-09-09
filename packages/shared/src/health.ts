@@ -8,8 +8,9 @@
 // first": either a professional has cleared the person, or not yet. THIS
 // screening stores exactly those two facts and derives the rest. (The older
 // free-text "medical conditions" box on the fitness profile still exists and
-// still stores what is typed; whether it leaves with the v2 health screen, 4b,
-// is Kd's call — asked at the 3b review, 2026-09-09.)
+// still stores what is typed; Kd ruled on 2026-09-09 that it is switched off
+// and the stored text wiped when the v2 health screen lands at 4b —
+// RULINGS.md, "Privacy and legal".)
 //   · any yes  → no calorie cut, cleared or not (the app cannot know what the
 //                yes is, so it treats every yes the careful way);
 //   · not yet  → Safe mode: no workout or run plans, no intensity progression;
@@ -48,7 +49,12 @@ export const healthScreeningSchema = z
     checkFirst: checkFirstSchema.nullable(),
     /** A yes with "not yet": no workout or run plans until a professional clears the person. */
     safeMode: z.boolean(),
-    /** Any yes, cleared or not: the plan holds no calorie deficit. */
+    /** THE HEALTH ANSWER ALONE: any yes, cleared or not. It is NOT "the plan
+     *  holds the cut" — age is a separate rule with the same effect, so a
+     *  16-year-old who answered no reads false here while their targets and
+     *  plan hold the deficit anyway and say so in their own `noCalorieCut`
+     *  (nutrition.ts, which is that combined answer). A screen that wants to
+     *  know whether the cut is held must read the plan or the targets. */
     noCalorieCut: z.boolean(),
     updatedAt: z.string().datetime().nullable(),
   })

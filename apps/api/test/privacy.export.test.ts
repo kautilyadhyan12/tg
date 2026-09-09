@@ -12,7 +12,11 @@ import { dpdpExportSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { buildUserExport } from "../src/modules/privacy/export.js";
-import { EXPORT_READERS } from "../src/modules/privacy/exportRepo.js";
+import { CONSENT_EXPORT_LIMIT, EXPORT_READERS } from "../src/modules/privacy/exportRepo.js";
+import {
+  CONSENT_PROOF_RETENTION_DAYS,
+  CONSENT_PROOF_RETENTION_YEARS,
+} from "../src/retention.js";
 import { getTableColumns } from "drizzle-orm";
 import { coachMessages, coachThreads } from "../src/db/schema/coach.js";
 import { workouts } from "../src/db/schema/training.js";
@@ -156,6 +160,9 @@ d("DPDP data export (real Postgres)", () => {
     // the person's own record) — present, and carrying the words verbatim.
     expect(out.data["consent_log"]).toHaveLength(1);
     expect(out.data["consent_log"]?.[0]).toMatchObject({ purpose: "health_step", wording: "wording-all" });
+    // Nothing was cut, and the envelope says so out loud rather than by an
+    // absent key (the same reason every table keeps an empty array).
+    expect(out.truncated).toEqual({});
 
     // T3 round 2, F6: the `now` seam's doc claimed "so exportedAt is
     // assertable" while no caller or test ever passed one — a claim with
@@ -163,6 +170,29 @@ d("DPDP data export (real Postgres)", () => {
     const fixed = new Date("2026-07-23T09:15:00.000Z");
     const stamped = await buildUserExport({ sql, now: () => fixed }, u.userId);
     expect(stamped.exportedAt).toBe("2026-07-23T09:15:00.000Z");
+  });
+
+  // The consent read is the ONE capped read in the export, so it is the one
+  // that can hand a person less than they have. Before this test the cap was
+  // silent: deleting `LIMIT ${CONSENT_EXPORT_LIMIT}` left the whole suite green
+  // (measured at the 3b re-check), because no fixture ever had two consent
+  // rows. Both halves are asserted — the file stops at the cap, AND it says
+  // how many rows exist — so neither the ceiling nor the count can be dropped.
+  it("caps the consent log and SAYS the file is short of the whole record", { timeout: 90_000 }, async () => {
+    const u = await makeUser("capped");
+    // makeUser seeded one; add exactly the ceiling, so one row cannot fit.
+    await sql`
+      INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version, recorded_at)
+      SELECT ${u.userId}, 'plan_screen', 'v1', 'w', 'test', now() - (g * interval '1 second')
+      FROM generate_series(1, ${CONSENT_EXPORT_LIMIT}) AS g`;
+
+    const out = await buildUserExport({ sql }, u.userId);
+    expect(() => dpdpExportSchema.parse(out)).not.toThrow();
+    expect(out.data["consent_log"]).toHaveLength(CONSENT_EXPORT_LIMIT);
+    expect(out.truncated["consent_log"]).toEqual({
+      returned: CONSENT_EXPORT_LIMIT,
+      total: CONSENT_EXPORT_LIMIT + 1,
+    });
   });
 
   it("NEVER includes credentials or excluded tables", { timeout: 60_000 }, async () => {
@@ -420,5 +450,29 @@ describe("DPDP export list (no database)", () => {
     expect(EXPORTED_TABLES.length + Object.keys(EXPORT_EXCLUDED_TABLES).length).toBe(
       PII_TABLES.length,
     );
+  });
+});
+
+// Ungated for the same reason as the block above: no SQL, and CI runs it.
+describe("consent-proof retention window (no database)", () => {
+  // The window is a legal promise — "six years from the deletion date" — kept
+  // as a whole number of DAYS, and the rounding may only ever err long. The
+  // plain `6 * 365` this shipped with erred SHORT by two days for a 2026
+  // deletion (2190 against 2192), which no route test, type or migration could
+  // see: the constant is only ever compared with itself. Real dates instead.
+  it("is never shorter than six calendar years, wherever the leap days fall", () => {
+    const spanDays = (isoDay: string): number => {
+      const from = new Date(`${isoDay}T00:00:00.000Z`);
+      const to = new Date(from);
+      to.setUTCFullYear(to.getUTCFullYear() + CONSENT_PROOF_RETENTION_YEARS);
+      return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+    };
+    // Six-year spans hold one or two 29 Februaries: 2191 or 2192 days.
+    const spans = ["2025-01-01", "2026-03-01", "2026-09-09", "2027-07-15", "2030-11-30"].map(spanDays);
+    const longest = Math.max(...spans);
+    expect(longest).toBe(2192); // the fixture itself must cover the long case
+    expect(CONSENT_PROOF_RETENTION_DAYS).toBeGreaterThanOrEqual(longest);
+    // ...and not generously long either: at most a day past the promise.
+    expect(CONSENT_PROOF_RETENTION_DAYS - longest).toBeLessThanOrEqual(1);
   });
 });

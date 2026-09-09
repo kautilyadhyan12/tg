@@ -50,6 +50,9 @@ export interface PurgeResult {
   /** The in-tx guard found the user already purged (a concurrent runner) or
    *  restored — nothing to do. Not an error, not a completion. */
   skipped: number;
+  /** A USER's transaction threw. Only that — a run-level step that fails has
+   *  its own field, so the ops message an operator reads names the thing that
+   *  actually broke instead of blaming a member's purge. */
   errors: number;
   /** Run-level: leaderboard snapshots NOT in the documented shape, so the
    *  scrub cannot certify their erasure. > 0 fails the run loudly and, this
@@ -61,6 +64,10 @@ export interface PurgeResult {
    *  more than CONSENT_PROOF_RETENTION_DAYS ago (the proof of the disclaimer
    *  tap outlives the Day-14 purge, then goes). Zero on a dry run. */
   consentProofExpired: number;
+  /** Run-level: that one statement threw this run. Kept OUT of `errors` (it is
+   *  not a user's transaction) and still a shortfall — both entrypoints fail
+   *  the run on it, and the next run retries: the delete is idempotent. */
+  consentProofExpiryFailed: boolean;
   dryRun: boolean;
 }
 
@@ -137,6 +144,7 @@ export async function purgeDueUsers(
     errors: 0,
     schemaDriftSnapshots: schemaDrift,
     consentProofExpired: 0,
+    consentProofExpiryFailed: false,
     dryRun,
   };
 
@@ -219,7 +227,11 @@ export async function purgeDueUsers(
   try {
     result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
   } catch (err) {
-    result.errors += 1;
+    // NOT result.errors: that counter is "a user's transaction threw", and the
+    // worker interpolates it into the message an operator wakes up to. One
+    // failed statement here was reading as "1 user failed" while every user's
+    // purge had in fact completed.
+    result.consentProofExpiryFailed = true;
     deps.log.error(
       {
         errName: err instanceof Error ? err.name : typeof err,
