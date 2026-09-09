@@ -97,12 +97,15 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
 }
 
 /** GAP-D: point users.weight_kg at the user's LATEST non-null measurement
- *  (mirrors nutrition/repo.ts refreshWeight verbatim). Idempotent. */
+ *  (mirrors nutrition/repo.ts refreshWeight verbatim, COALESCE included — a
+ *  user whose imported measurements are all weightless keeps the weight the
+ *  users import carried, instead of losing it to an empty subquery).
+ *  Idempotent. */
 export async function refreshUserWeight(sql: Sql, userId: string): Promise<void> {
   await sql`
-    UPDATE users SET weight_kg = (
+    UPDATE users SET weight_kg = coalesce((
       SELECT weight_kg FROM body_measurements
       WHERE user_id = ${userId} AND weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, id DESC LIMIT 1)
+      ORDER BY measured_at DESC, id DESC LIMIT 1), weight_kg)
     WHERE id = ${userId}`;
 }

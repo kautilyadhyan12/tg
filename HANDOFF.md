@@ -67,6 +67,40 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `auth.routes` whose two-statement fixture cleanup lost a race to another file's insert
   (ROADMAP item 10); `auth.routes` + `workouts.sync` 43 passed together alone.
 
+- Re-check round 2 (fresh chat): one High, two Low, two test gaps — all fixed in this commit. THE
+  HIGH is the same wipe one step later: round 1 stopped a WEIGHTLESS measurement from running the
+  mirror, but deleting (or clearing the weight on) the LAST weighed one left the subquery empty and
+  the statement wrote that NULL over the weight screen 2 typed — a mis-entered weigh-in, corrected,
+  blanked the weight, the plan and the macro rings, and the typed number was unrecoverable.
+  Reproduced through the real routes first (`expected null to be 69`). The mirror now COALESCEs to
+  the number already on the row: it MOVES the weight, never empties it. Emptying stays where the
+  person asks for it — screen 2's `weightKg: null` and PATCH /v1/users/me, both tested.
+- That fix made round 1's three guards invisible to their own test (an empty subquery is harmless
+  now), so they are re-pinned in the state that still tells them apart: a weigh-in of 68, then a
+  NEWER 72 typed on screen 2, then a waist created / edited / deleted — each must leave 72, and an
+  unguarded mirror snaps back to 68. Each guard was removed on its own and each leg went red.
+- Also fixed: the equipment cap is ONE object now (`equipmentArraySchema` in `users.ts`, its cap
+  read from the enum's own length), so the comment claiming the v1 rail was "reused rather than
+  restated" is true — it was still a second `uniqueArray(equipmentSchema, 5)` at both call sites.
+  The migration tool's copy of the mirror gets the same COALESCE, its "verbatim" comment with it.
+- The two weak tests are gone: the equipment "cap" test asserted nothing (five enum members plus
+  the duplicate rule make a sixth item unreachable — raising the cap to 50 kept it green), and now
+  sweeps all 32 subsets for agreement between the two surfaces instead, saying plainly that the cap
+  itself cannot be pinned; the weight test stopped one step before the harm and now carries it.
+  `nutrition.routes`'s "measurement owns current weight" asserted the wipe as correct — it now
+  asserts the number survives the delete and that PATCH /v1/users/me is what clears it.
+- Kd's, not fixed here, both recorded in ROADMAP 4a-ii: a person carried over from the v1 form with
+  "none + dumbbells" stored gets a 400 on screen 7's first Save unless the screen drops "none" as
+  it loads; and `onboardingCompleted` is whatever the client sends, so `true` with no answers opens
+  the training side (the v1 PUT is the same and nothing on the server gates on it).
+- Verified after the re-check fixes: shared tsc + eslint exit 0, 79 tests; api tsc + eslint exit 0;
+  the CI-shaped run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` (25
+  tests) · `nutrition.routes` · `nutrition.unit` · `users.routes` · `migrate.nutrition.idempotency`
+  95 in one run; the FULL local suite twice — 952 then 953 passed, the failures `workouts.sync`
+  both times (13 across two files, then 12 in that one), which passes alone (23). A failure count
+  that changes between runs is ROADMAP item 10's shared-database flake, the same file yesterday's
+  entry records; nothing it touches is in this diff.
+
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 
 - Kd was offered the 3c plan (tag the 131 curated foods, a "contains …" line on search and meals, no

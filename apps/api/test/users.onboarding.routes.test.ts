@@ -700,11 +700,104 @@ d("onboarding v2 routes (real Postgres)", () => {
     ).toBe(204);
     expect((await get(cookies)).answers["weightKg"]).toBe(70);
 
-    // A measurement that DOES carry a weight still owns the number, as it
+    // A measurement that DOES carry a weight still sets the number, as it
     // always has — the mirror is narrowed, not switched off.
-    const weighed = await measure({ measuredAt: new Date().toISOString(), weightKg: 68 });
+    const weighed = await measure({ measuredAt: "2026-09-02T08:00:00.000Z", weightKg: 68 });
     expect(weighed.statusCode).toBe(201);
     expect((await get(cookies)).answers["weightKg"]).toBe(68);
+
+    // And now the guards on their own, with a weighed measurement ALREADY
+    // there: the person types a newer weight on screen 2 than any weigh-in
+    // holds, then logs a waist. Nothing in that waist says the older 68 is true
+    // again, so a mirror that ran anyway would silently undo what they just
+    // typed. Each of the three writes is asked separately — this is the state
+    // that tells a narrowed mirror from an unnarrowed one.
+    expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
+    const second = await measure({ measuredAt: "2026-09-03T08:00:00.000Z", metrics: { waist_cm: 78 } });
+    expect(second.statusCode).toBe(201);
+    const secondId = (JSON.parse(second.body) as { measurement: { id: string } }).measurement.id;
+    expect((await get(cookies)).answers["weightKg"], "creating a weightless row moved the weight").toBe(72);
+    expect(
+      (
+        await inject({
+          method: "PATCH",
+          url: `/v1/nutrition/body-measurements/${secondId}`,
+          body: { metrics: { waist_cm: 77 } },
+          cookies,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).answers["weightKg"], "editing a weightless row moved the weight").toBe(72);
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${secondId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"], "deleting a weightless row moved the weight").toBe(72);
+  });
+
+  it("removing the weight a measurement carried leaves the number, never a blank plan", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-measure-gone@example.com");
+    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    const measure = async (body: unknown) => {
+      const res = await inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
+      expect(res.statusCode, res.body).toBe(201);
+      return (JSON.parse(res.body) as { measurement: { id: string } }).measurement.id;
+    };
+    const ringsMissing = async () => {
+      const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      return (JSON.parse(res.body) as { missing: string[] }).missing;
+    };
+
+    // Two weigh-ins, and the mirror follows the newer one, as it always has.
+    const older = await measure({ measuredAt: "2026-09-01T08:00:00.000Z", weightKg: 69 });
+    const newer = await measure({ measuredAt: "2026-09-05T08:00:00.000Z", weightKg: 68 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(68);
+
+    // Deleting the newer one falls back to the one before it. Keeping a number
+    // is not FREEZING it: the mirror still moves whenever there is somewhere to
+    // move it TO.
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${newer}`, cookies })).statusCode,
+    ).toBe(204);
+    const onOlder = await get(cookies);
+    expect(onOlder.answers["weightKg"]).toBe(69);
+
+    // Deleting the LAST weighed one has nowhere to move to — and the number in
+    // that column is also the answer screen 2 typed, with no measurement behind
+    // it. Writing the empty subquery here would destroy it and take the plan and
+    // the macro rings with it, in answer to "that weigh-in was a mis-entry".
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${older}`, cookies })).statusCode,
+    ).toBe(204);
+    const afterDelete = await get(cookies);
+    expect(afterDelete.answers["weightKg"]).toBe(69);
+    expect(afterDelete.missing).toEqual([]);
+    expect(afterDelete.plan).toEqual(onOlder.plan);
+    expect(await ringsMissing()).toEqual([]);
+
+    // The same harm one step earlier: clearing the weight ON the measurement.
+    const again = await measure({ measuredAt: "2026-09-06T08:00:00.000Z", weightKg: 67 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(67);
+    expect(
+      (
+        await inject({
+          method: "PATCH",
+          url: `/v1/nutrition/body-measurements/${again}`,
+          body: { weightKg: null },
+          cookies,
+        })
+      ).statusCode,
+    ).toBe(200);
+    const afterClear = await get(cookies);
+    expect(afterClear.answers["weightKg"]).toBe(67);
+    expect(afterClear.missing).toEqual([]);
+    expect(afterClear.plan).not.toBeNull();
+
+    // Nobody is stuck with a number they no longer want: screen 2 clears it
+    // outright, and so does PATCH /v1/users/me. Emptying the weight is a thing
+    // the person asks for, never something a delete does behind their back.
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(cleared.missing).toContain("weightKg");
   });
 
   it("a v1 profile write's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {

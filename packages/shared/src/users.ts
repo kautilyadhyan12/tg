@@ -104,6 +104,17 @@ export const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
     .max(max)
     .refine((a) => new Set(a).size === a.length, { message: "duplicate values are not allowed" });
 
+/** THE equipment rail, one object, used by every surface that writes
+ *  `available_equipment` (this form's PUT and onboarding v2's screen 7). Not a
+ *  second call with the same arguments: two calls are two caps, and two caps can
+ *  drift until the same answer is taken on one screen and refused on the other.
+ *
+ *  The cap IS the number of kinds there are, read from the enum rather than
+ *  typed again, so adding a sixth kind raises both surfaces in the same edit.
+ *  With duplicates already refused it can never fire on its own; it stays as a
+ *  bound on the size of the payload. */
+export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema.options.length);
+
 /** The stored profile. EVERY field is nullable: the wizard may be partial, and
  *  fitness_level is NULL until answered — unanswered is not 'beginner'
  *  (Kd-approved; the old Mongo model defaulted it, we deliberately do not).
@@ -149,7 +160,7 @@ export const putFitnessProfileRequestSchema = z
     fitnessLevel: fitnessLevelSchema.nullable().optional(),
     fitnessGoals: uniqueArray(fitnessGoalSchema, 7).optional(),
     exerciseFrequency: z.number().int().min(1).max(7).nullable().optional(),
-    availableEquipment: uniqueArray(equipmentSchema, 5).optional(),
+    availableEquipment: equipmentArraySchema.optional(),
     sessionDurationMin: z.number().int().min(5).max(240).nullable().optional(),
     preferredWorkoutTime: workoutTimeSchema.nullable().optional(),
     medicalConditions: z.string().trim().max(2000).nullable().optional(),

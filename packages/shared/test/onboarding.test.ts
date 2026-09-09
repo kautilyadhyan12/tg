@@ -3,6 +3,7 @@
 // response makes about when a number exists.
 import { describe, expect, it } from "vitest";
 import {
+  equipmentSchema,
   fitnessGoalSchema,
   onboardingAnswersSchema,
   onboardingResponseSchema,
@@ -98,18 +99,27 @@ describe("one screen's save", () => {
     expect(bothAgree(15, "age", "age")).toBe(false);
     expect(bothAgree(16, "age", "age")).toBe(true);
 
-    // Equipment is one column asked by two screens as well, and its cap and
-    // no-duplicates rule are literally the v1 profile's `uniqueArray` — pinned
-    // here at the boundary, like the numbers above.
+    // Equipment is one column asked by two screens as well. Its CAP is not
+    // pinned here and cannot be: the two surfaces share one rail object
+    // (`equipmentArraySchema`), whose cap is the number of kinds the enum has,
+    // so no surface can raise it alone and no array of unique kinds can reach
+    // it. What a person could see is the two screens taking different answers,
+    // and that is asked of EVERY combination there is below.
     const bothTakeEquipment = (value: string[]) => {
       const a = putFitnessProfileRequestSchema.safeParse({ availableEquipment: value }).success;
       const b = patchOnboardingRequestSchema.safeParse({ availableEquipment: value }).success;
-      expect(b, `availableEquipment ${JSON.stringify(value)} disagrees with the v1 profile`).toBe(a);
+      const differsOnlyByTheNoneRule = a && !b && value.includes("none") && value.length > 1;
+      expect(differsOnlyByTheNoneRule || b === a, `availableEquipment ${JSON.stringify(value)} disagrees`).toBe(
+        true,
+      );
       return a;
     };
-    expect(bothTakeEquipment([])).toBe(true);
-    expect(bothTakeEquipment(["dumbbells"])).toBe(true);
-    expect(bothTakeEquipment(["dumbbells", "resistance_bands", "kettlebells", "pull_up_bar"])).toBe(true);
+    // All 32 subsets of the five kinds, in every size, including the whole set.
+    const kinds = [...equipmentSchema.options];
+    for (let mask = 0; mask < 1 << kinds.length; mask++) {
+      const subset = kinds.filter((_, i) => (mask & (1 << i)) !== 0);
+      expect(bothTakeEquipment(subset), `the v1 profile refused ${JSON.stringify(subset)}`).toBe(true);
+    }
     expect(bothTakeEquipment(["dumbbells", "dumbbells"])).toBe(false);
     expect(bothTakeEquipment(["barbell"])).toBe(false);
   });

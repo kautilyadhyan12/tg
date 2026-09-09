@@ -387,22 +387,31 @@ const toMeasurement = (r: MeasurementDbRow): MeasurementRow => ({
 /** users.weight_kg mirrors the latest non-null measurement (single write
  *  path for weight history — supersedes P2.2 GAP-2, DECISIONS 2026-07-12).
  *
- *  CALLED ONLY FROM A WRITE THAT CAN CHANGE THAT ANSWER — see the guard at each
- *  of the three call sites below. A measurement that carries NO weight (a waist,
- *  a body-fat percentage) is never the row this subquery selects, so refreshing
- *  after one could only ever do harm: with no weighted measurement anywhere the
- *  subquery is NULL, and this statement would then wipe a weight the person
- *  TYPED — onboarding screen 2, or PATCH /v1/users/me — taking their plan and
- *  their macro rings with it, in answer to a question about their waist.
+ *  That column is NOT the measurements' alone: onboarding screen 2 and
+ *  PATCH /v1/users/me write a weight the person TYPED straight into it, with no
+ *  measurement behind it to fall back to. So this statement MOVES the number and
+ *  never EMPTIES it, and two rules keep it honest:
  *
- *  A weight the person DID give a measurement for is still owned by the
- *  measurements: the guards narrow when the mirror runs, never what it says. */
+ *  1. COALESCE. An empty subquery means "no measurement has anything to say
+ *     about this person's weight", which is not the same as "this person has no
+ *     weight". Assigning it would destroy the typed answer and blank the plan
+ *     and the macro rings in the same moment — the harm arrives one step after
+ *     the guards below, when the LAST weighed measurement is deleted or has its
+ *     weight cleared (a mis-entry, the wrong day), which is an ordinary
+ *     correction and not a request to erase anything.
+ *  2. THE GUARDS at each of the three call sites: called only from a write that
+ *     can change which measurement is the latest weighted one. Without them a
+ *     waist logged after the person typed a NEWER weight than any weigh-in would
+ *     snap the column back to that older measurement.
+ *
+ *  Emptying the weight stays available where the person asks for it: screen 2's
+ *  `weightKg: null` and PATCH /v1/users/me both write the column directly. */
 async function refreshWeight(sql: TransactionSql, userId: string): Promise<void> {
   await sql`
-    UPDATE users SET weight_kg = (
+    UPDATE users SET weight_kg = coalesce((
       SELECT weight_kg FROM body_measurements
       WHERE user_id = ${userId} AND weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, id DESC LIMIT 1)
+      ORDER BY measured_at DESC, id DESC LIMIT 1), weight_kg)
     WHERE id = ${userId}`;
 }
 
@@ -474,8 +483,8 @@ export async function deleteMeasurement(sql: Sql, userId: string, id: string): P
       RETURNING id, weight_kg`;
     // Deleting a weightless row cannot change which measurement is the latest
     // weighted one; deleting a weighted one falls back to the one before it,
-    // and to nothing when it was the last — which is what "the measurements own
-    // this weight" has always meant.
+    // and to the number already on the users row when it was the last (see
+    // refreshWeight: a correction is not an erasure).
     if (rows[0]?.weight_kg != null) await refreshWeight(tx, userId);
     return rows.length > 0;
   });
