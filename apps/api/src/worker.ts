@@ -27,7 +27,7 @@ import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
-import { purgeDueUsers } from "./modules/privacy/purge.js";
+import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 
 const config = loadConfig(process.env);
 const log = pino({ level: config.LOG_LEVEL });
@@ -313,19 +313,22 @@ const worker = new Worker(
       { ...result, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
       "job finished",
     );
-    // R8.3: a run that did not fully succeed must NOT be acked COMPLETED —
-    // it has to reach the failed set, the DLQ tail, the `failed` handler and
-    // Sentry. Two ways it can fall short, and BOTH must throw (T3 round 3, F4
-    // added the second — round 2 covered only per-user errors):
-    //   errors               — a user's transaction threw
-    //   schemaDriftSnapshots — a leaderboard snapshot the scrub cannot certify,
-    //                          so this run withheld every marker (fail-closed)
-    // tools/dpdp-purge.ts exits non-zero on the identical condition; the two
-    // entrypoints must not disagree about what a failure is.
-    if (result.errors > 0 || result.schemaDriftSnapshots > 0) {
+    // R8.3: a run that did not fully succeed must NOT be acked COMPLETED — it
+    // has to reach the failed set, the DLQ tail, the `failed` handler and
+    // Sentry. WHAT COUNTS AS FALLING SHORT IS `purgeShortfall`, not a copy of
+    // the condition spelled out here: tools/dpdp-purge.ts exits non-zero on the
+    // same call, so the two entrypoints cannot drift apart, and the shared
+    // function is unit-tested (privacy.purge.test.ts, ungated) over all three
+    // flags — nothing tested either copy while they were inline.
+    //
+    // The three are still named separately IN THE MESSAGE because they are
+    // different jobs for whoever reads it: a failed user retries next run,
+    // drift needs a code fix, a failed consent-log expiry retries next run.
+    if (purgeShortfall(result)) {
       throw new Error(
-        `purge not fully certified: ${String(result.errors)} failed, ` +
-          `${String(result.schemaDriftSnapshots)} uncertifiable snapshot(s)`,
+        `purge not fully certified: ${String(result.errors)} user(s) failed, ` +
+          `${String(result.schemaDriftSnapshots)} uncertifiable snapshot(s), ` +
+          `consent-log expiry ${result.consentProofExpiryFailed ? "FAILED" : "ok"}`,
       );
     }
   },

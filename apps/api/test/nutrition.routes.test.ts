@@ -455,7 +455,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // through real storage (a contract mismatch would show here, not there).
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:60})).statusCode).toBe(200);
     const done=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(done.json()).toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46},missing:[]});
+    expect(done.json()).toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46,noCalorieCut:false},missing:[]});
 
     // R7.2 (T3 finding): both arms are parsed through the SHARED contract, so
     // the route's shape and the client's types cannot drift apart silently.

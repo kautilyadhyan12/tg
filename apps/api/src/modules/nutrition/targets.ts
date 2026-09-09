@@ -38,7 +38,7 @@ import {
 // differs is the activity factor and the size of the cut — this route reads the
 // old profile (days a week, a fixed −400 / +300); item 4a moves it onto the
 // stored plan answers so one daily-calories number exists.
-import { CALORIE_FLOOR_KCAL, macrosFor, restingBurn } from "../plan/maths.js";
+import { ADULT_AGE, CALORIE_FLOOR_KCAL, macrosFor, restingBurn } from "../plan/maths.js";
 
 /** Days per week → activity multiplier (nutrition.py:140-141). The salvage's
  *  other map — the "1-2"/"3-4"/"5-6"/"daily" strings at :132-137 — is
@@ -96,6 +96,9 @@ export interface TargetInputs {
   weightKg: number | null;
   exerciseFrequency: number | null;
   fitnessGoals: string[];
+  /** A yes on the health question (users/service getPlanHealth): no calorie
+   *  cut, cleared or not. Never "missing" — an unanswered screen is false. */
+  noCalorieCut: boolean;
 }
 
 // NutritionTargets / MissingTargetInput / NutritionTargetsResponse are NOT
@@ -110,6 +113,7 @@ export interface ResolvedTargetInputs {
   weightKg: number;
   exerciseFrequency: number;
   fitnessGoals: string[];
+  noCalorieCut: boolean;
 }
 
 export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
@@ -155,7 +159,7 @@ export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
 }
 
 export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
-  const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals } = input;
+  const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals, noCalorieCut } = input;
 
   // BMR, Mifflin-St Jeor (:126-129), the plan calculator's line: ONLY "female"
   // takes −161; male, other and prefer_not_to_say all take +5. Mifflin-St Jeor
@@ -167,10 +171,18 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
 
   const tdee = bmr * (ACTIVITY_BY_FREQUENCY[exerciseFrequency] ?? DEFAULT_ACTIVITY); // :143,:145
 
-  // Goal adjustment (:148-153): weight_loss is tested FIRST.
+  // Goal adjustment (:148-153): weight_loss is tested FIRST. The cut — and only
+  // the cut — is held back by a yes on the health question (RULINGS 2026-09-07,
+  // one general question since 2026-09-09) OR by an age under 18 (the same
+  // ruling; the app admits 16 and over): a flagged or under-age person on
+  // weight_loss eats their daily burn. A gain is untouched, as in the plan
+  // calculator, whose noDeficitReasons lists the same two rules.
   const goals = new Set(fitnessGoals);
+  const cutHeld = (noCalorieCut || age < ADULT_AGE) && goals.has("weight_loss");
   const adjusted = goals.has("weight_loss")
-    ? tdee - 400
+    ? cutHeld
+      ? tdee
+      : tdee - 400
     : goals.has("muscle_gain")
       ? tdee + 300
       : tdee;
@@ -188,6 +200,7 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
     tdee: Math.round(tdee),
     kcal: Math.round(kcal),
     ...macrosFor(kcal, weightKg, proteinPerKg),
+    noCalorieCut: cutHeld,
   };
 }
 
@@ -220,7 +233,15 @@ function resolveTargetsUnchecked(input: TargetInputs): NutritionTargetsResponse 
     throw new Error("targets: REQUIRED_TARGET_INPUTS does not cover every calculator input");
   }
   return {
-    targets: calculateTargets({ age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals: input.fitnessGoals }),
+    targets: calculateTargets({
+      age,
+      gender,
+      heightCm,
+      weightKg,
+      exerciseFrequency,
+      fitnessGoals: input.fitnessGoals,
+      noCalorieCut: input.noCalorieCut,
+    }),
     missing,
   };
 }

@@ -2,8 +2,9 @@
 
 The ordered list of work to launch on web and mobile. Kd decides the order; a chat
 picks the next unticked item in the current stage unless Kd says otherwise.
-Tick an item when it is merged to main and Kd has clicked through it. If a
-feature is deferred, add it here in the same commit, never in prose elsewhere.
+Tick an item when it is merged to main and Kd has clicked through it — or, for a
+card with no screen, on merge alone (RULINGS 2026-09-09). If a feature is
+deferred, add it here in the same commit, never in prose elsewhere.
 
 One lettered line is one chat and one pull request. A chat that finds its line is
 still too big (it touches more than one of sign-in, money and other people's data,
@@ -33,11 +34,11 @@ is here, the rest is under "After launch".
 
 3. **Onboarding v2, server side** (split 2026-09-08; the science first because every screen shows its number).
    - 3a. [x] **The plan maths and its sanity rules.** Resting burn, daily activity + training days, pace → deficit or surplus, macros, finish date; target direction, healthy-weight floor, over-a-year pace, the calorie floor; the under-18 and flagged-condition rules (no deficit). Pure functions, a test for every rule. Nothing on screen yet; the click-through says so.
-   - 3b. [ ] **Health screening, Safe mode and the consent log, server side.** Readiness answers stored; the "Check first" choice recorded and changeable; the Safe mode flag every plan route reads — added to the plan contract's health answers as `safeMode`, with `safe_mode` as a no-deficit reason the calculator honours (a Safe-mode person cut on a dizziness answer must get no deficit, RULINGS 2026-09-07); the consent log (time, app version, wording) for sign-up, the health step and the plan screen. Tenancy test on every route.
-   - 3c. [ ] **Allergen tags on every food, contraindication tags on every exercise.** The catalog data, its migration, and the "contains …" line the meal routes will show.
+   - 3b. [ ] **Health screening, Safe mode and the consent log, server side.** ONE general question stored as a yes/no plus the "Check first" choice, changeable any time (RULINGS 2026-09-09 — no named condition, ever); Safe mode and "no calorie cut" derived on the server and read by the plan maths (`hasCondition` + `safeMode`, reasons `health_answer` / `safe_mode`) and by the live macro rings; the consent log (time, app version, wording verbatim) for sign-up, the health step and the plan screen. Tenancy test on every route. *Built 2026-09-09, branch `health-screening`; review round 1 fixed the same day; Kd ruled on the consent log (kept six years, sweep built) and the old conditions box (off at 4b); re-check done the same day (one High — the consent limiter throttled a whole gym — five Low, all fixed); round-2 re-check found no Critical/High (four Low + three test gaps, all fixed). No click-through: 3b has no screen (RULINGS 2026-09-09). Awaiting merge of PR #57.*
+   - 3c. [ ] **Allergen tags on every food.** The catalog data, its migration, and the "contains …" line the meal routes will show. (Contraindication tags on exercises are struck: with one general health question the app cannot know which exercises to exclude, RULINGS 2026-09-09; a cleared person gets the normal plan with a "follow your professional" line, built with 6a.)
 4. **Onboarding v2, screens** (split 2026-09-08 along the twelve screens in RULINGS; master is not live, so a half-built flow may land and the next half continues it).
    - 4a. [ ] **Screens 1–7:** goal · about you · target · your day · your training (push-up and plank checks) · your week · equipment. Tap-only, saved as you go, the live plan number on every screen from the moment it exists (after "your week", screen 6, when the eight core answers are in; earlier screens say what is still needed — no number from a default, RULINGS 2026-07-15). The plan route takes "today" from the device's time zone and the server clock, never from a body field. The nutrition targets route (`/v1/nutrition/targets`, still shown by the web's macro rings) moves onto the stored plan answers so ONE daily-calories number exists — today it reads the old profile with a fixed −400/+300 and can differ from the plan number by a few hundred kcal.
-   - 4b. [ ] **Screens 8–11:** health (readiness questions, "Check first", the disclaimer tap) · food · running · code, with the gym code applied first.
+   - 4b. [ ] **Screens 8–11:** health (the ONE question, "Check first", the disclaimer tap — on the 3b routes) · food · running · code, with the gym code applied first. Settings gets the same health screen so the answer can be changed later (RULINGS 2026-09-09). The old free-text "medical conditions" box (Onboarding, Settings) is switched off here and `user_fitness_profiles.medical_conditions` is wiped by migration (RULINGS 2026-09-09).
    - 4c. [ ] **Screen 12, your plan:** live numbers, the disclaimer, Adjust, and the Safe mode version that shows no workout or run plan.
 5. **Goals and the Today screen** (split 2026-09-08).
    - 5a. [ ] **Goals, server side.** The goal object (type, target, period day/week/month/year, app-set or user-set), the starter set from onboarding answers, progress from existing data. Routes with the stranger-gets-404 test.

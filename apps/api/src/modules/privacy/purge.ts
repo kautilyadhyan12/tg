@@ -9,7 +9,7 @@
 // where a date decides whether data lives): the window tests move time, they
 // do not wait 14 days.
 import type { Sql, TransactionSql } from "postgres";
-import { DPDP_RETENTION_DAYS } from "../../retention.js";
+import { CONSENT_PROOF_RETENTION_DAYS, DPDP_RETENTION_DAYS } from "../../retention.js";
 import * as repo from "./repo.js";
 
 /** Structurally satisfied by FastifyBaseLogger — the worker passes pino, the
@@ -50,6 +50,9 @@ export interface PurgeResult {
   /** The in-tx guard found the user already purged (a concurrent runner) or
    *  restored — nothing to do. Not an error, not a completion. */
   skipped: number;
+  /** A USER's transaction threw. Only that — a run-level step that fails has
+   *  its own field, so the ops message an operator reads names the thing that
+   *  actually broke instead of blaming a member's purge. */
   errors: number;
   /** Run-level: leaderboard snapshots NOT in the documented shape, so the
    *  scrub cannot certify their erasure. > 0 fails the run loudly and, this
@@ -57,7 +60,30 @@ export interface PurgeResult {
    *  while a shape we cannot scrub exists. Zero unless a P4 writer drifts the
    *  schema — the table is empty today. */
   schemaDriftSnapshots: number;
+  /** Run-level: consent-log rows removed because their account was deleted
+   *  more than CONSENT_PROOF_RETENTION_DAYS ago (the proof of the disclaimer
+   *  tap outlives the Day-14 purge, then goes). Zero on a dry run. */
+  consentProofExpired: number;
+  /** Run-level: that one statement threw this run. Kept OUT of `errors` (it is
+   *  not a user's transaction) and still a shortfall — both entrypoints fail
+   *  the run on it, and the next run retries: the delete is idempotent. */
+  consentProofExpiryFailed: boolean;
   dryRun: boolean;
+}
+
+/** DID THIS RUN FALL SHORT? The one definition, so the two entrypoints cannot
+ *  disagree about what a failure is — src/worker.ts throws on it (failed set,
+ *  DLQ tail, Sentry) and tools/dpdp-purge.ts exits 1 on it (what a cron reads).
+ *  Both used to spell the condition out for themselves, and neither is imported
+ *  by any test, so a term dropped from one of the copies was invisible.
+ *
+ *  Three ways, each a different job for whoever reads the log: a user's
+ *  transaction threw (retried next run), a leaderboard snapshot the scrub
+ *  cannot certify so this run withheld every marker (needs a code fix), or the
+ *  run-level consent-log expiry threw (retried next run). A run that fell short
+ *  must NEVER be acked COMPLETED — R8.3. */
+export function purgeShortfall(result: PurgeResult): boolean {
+  return result.errors > 0 || result.schemaDriftSnapshots > 0 || result.consentProofExpiryFailed;
 }
 
 const DEFAULT_LIMIT = 500;
@@ -132,6 +158,8 @@ export async function purgeDueUsers(
     skipped: 0,
     errors: 0,
     schemaDriftSnapshots: schemaDrift,
+    consentProofExpired: 0,
+    consentProofExpiryFailed: false,
     dryRun,
   };
 
@@ -207,8 +235,30 @@ export async function purgeDueUsers(
     }
   }
 
+  // The consent log's later expiry, one statement for the whole run. Its own
+  // try: a failure here must not hide the per-user outcomes above, and the
+  // next run simply tries again (idempotent — the rows are either gone or due).
+  const consentCutoff = new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
+  } catch (err) {
+    // NOT result.errors: that counter is "a user's transaction threw", and the
+    // worker interpolates it into the message an operator wakes up to. One
+    // failed statement here was reading as "1 user failed" while every user's
+    // purge had in fact completed.
+    result.consentProofExpiryFailed = true;
+    deps.log.error(
+      {
+        errName: err instanceof Error ? err.name : typeof err,
+        errMessage: err instanceof Error ? err.message : undefined,
+        event: "dpdp.purge.consent_expiry_failed",
+      },
+      "consent-log expiry failed; will retry next run",
+    );
+  }
+
   deps.log.info(
-    { ...result, cutoff: cutoff.toISOString(), event: "dpdp.purge.finished" },
+    { ...result, cutoff: cutoff.toISOString(), consentCutoff: consentCutoff.toISOString(), event: "dpdp.purge.finished" },
     "DPDP purge finished",
   );
   return result;

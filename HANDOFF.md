@@ -4,6 +4,74 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-09 · Health screening, Safe mode and the consent log (Stage 1 item 3b), branch `health-screening`
+
+- Kd ruled mid-plan (RULINGS 2026-09-09): ONE general health question, no named condition ever
+  asked or stored (a fitness app, not a medical one); any yes = no calorie cut, cleared or not;
+  changeable after sign-in. The plan contract's health block is now `{ hasCondition, safeMode }`
+  and the no-deficit reasons `under_18 · health_answer · safe_mode`.
+- Built: `packages/shared/src/health.ts` (screening + consent contracts, `deriveHealthFlags`, the
+  three disclaimer wordings v1 with a test that bans "safe for you" / "treats" / "cures");
+  migration `0025` (`user_health_screenings` 1:1 with two CHECKs incl. the contradiction guard;
+  `consent_log` append-only, wording copied verbatim, FK with NO cascade); routes GET/PUT
+  `/v1/users/me/health-screening`, GET/POST `/v1/users/me/consents`; `getPlanHealth(sql, userId)`
+  in users/service is the flag every plan route reads (4a uses it); the API's macro-rings number
+  (`/v1/nutrition/targets`) now holds the −400 cut for a yes AND under 18, and the response says so
+  (`noCalorieCut`); nothing on the web screen shows it yet — 4c owns that.
+- Privacy: `user_health_screenings` on the Day-14 delete list and in the export; `consent_log`
+  KEPT after a purge (proof of the tap, like audit_log) and exported — Kd was asked to confirm the
+  keep, not yet answered.
+- Review round 1 (2026-09-09): three High, six Low, five test gaps. Fixed: the under-18 rule was
+  missing from the targets route (H1, now tested at 16/17/18 in unit + route); consent POST gets a
+  30/hour per-person limit, the list returns `total` beside the capped 100, the export read is
+  bounded at 1000; a repo-level test for the active-only inserts; the PK column asserted by name;
+  the re-run 429 was the address's 60-second code gap (sign_in_codes now cleared in setup, proved
+  both ways). Two are Kd's decisions, asked: the old free-text "medical conditions" box still
+  stored on the fitness profile (H2 — comments corrected meanwhile) and consent_log after a purge (H3).
+- Verified after the fixes: shared tsc + 66 tests; api tsc + eslint exit 0; `plan.unit` +
+  `nutrition.unit` 76; local Postgres per file: `users.health.routes` 19 (twice, back to back) ·
+  `db.migration` 21 · `privacy.purge` 21 · `privacy.export` 10 · `users.fitness.routes` 10 ·
+  `nutrition.routes` 29. Mutations: under-18 line and the active-only guards removed → 3 tests red.
+- Kd ruled the same day (RULINGS 2026-09-09): consent log kept six years past deletion, then
+  removed — built as a run-level step of the Day-14 purge (`CONSENT_PROOF_RETENTION_DAYS`,
+  `repo.deleteExpiredConsentProof`, fake-clock test); the old conditions box goes at 4b.
+- Re-check (fresh chat): one High, five Low, four test gaps — all fixed in this commit. The consent
+  limiter's IP dimension capped a whole gym at thirty an hour, so the eleventh person onboarding from
+  the gym's wi-fi could not record their tap (`ipMax: 600`, the trial door's pattern); the export's
+  1000-row consent cap was silent (the envelope gained `truncated`, schemaVersion 2); the proof now
+  outlives six CALENDAR years (`6*365+2` — the old number deleted it two days early); a failed
+  consent-expiry step no longer reads as a member's failed purge (its own field, both entrypoints
+  still fail the run); the two comments that contradicted RULINGS 2026-09-09 corrected.
+- Every new test was run RED against the old code first: 11 people × 3 taps from ONE address all 201 ·
+  the export cap AND its count · an ACTIVE user with a stale `deleted_at` keeps their proof (pins the
+  `status = 'deleted'` clause) · a failed expiry reports `errors: 0` with its own flag · and an
+  UNGATED (so CI runs it) check that the window is never shorter than six calendar years.
+- Verified after the re-check fixes: shared tsc + 66 tests; api tsc + eslint exit 0; `plan.unit` +
+  `nutrition.unit` 76; local Postgres `privacy.purge` 24 · `privacy.export` 12 · `users.health.routes`
+  20 (56 in one run) · `db.migration` 21; the CI-shaped run with no DATABASE_URL 296 passed.
+- Re-check round 2 (fresh chat): NO Critical/High — four Lows and three test gaps, all fixed in
+  this commit. The export's consent read is ONE statement now (`count(*) OVER ()`, so a tap landing
+  between two round trips can no longer make the file announce a cut that never happened) and reads
+  NEWEST-first like the list route, so a capped export keeps the taps the person agreed to LAST;
+  the consent limiter's address ceiling is the gym-floor 3000 (600 was still under a 300-member
+  induction's 900 taps); `noCalorieCut`'s doc no longer points a screen at a flag that cannot
+  answer "does the under-18 rule apply to this person" — nothing does, so 4b/4c read the age.
+- The shortfall rule lives once now (`purgeShortfall`), called by both entrypoints. Neither
+  `src/worker.ts` nor `tools/dpdp-purge.ts` is imported by any test, so deleting
+  `|| consentProofExpiryFailed` from both copies left the whole suite green — and a run whose
+  six-year expiry failed would have been acked COMPLETED (no failed set, no Sentry, exit 0).
+- Every new test was run RED first: the dropped shortfall term · an inline copy put back in
+  worker.ts · the export read flipped to oldest-first (the file then led with `older-1000`, the
+  fixture's newest row gone) · `truncated`'s `.strict()` and its refine, removed one at a time.
+- Verified: api tsc + eslint exit 0; shared tsc + eslint exit 0; shared 69; the CI-shaped run with
+  no DATABASE_URL 299 passed; local Postgres `privacy.export` 12 · `privacy.purge` 27 ·
+  `users.health.routes` 20 (59 in one run); the FULL local suite 931/939 — the 8 are
+  `workouts.sync`, which passes alone (23), ROADMAP item 10's shared-database flake. That full run
+  earned its keep: it caught the new cap test stamping its rows from `now()`, which on a loaded
+  database put a seeded row ahead of the fixture's own. Stamped from the fixture's row instead.
+- Kd ruled the same day (RULINGS 2026-09-09): a card with no screen gets no click-through, so 3b
+  is proved by its tests and checks alone. Open: merging PR #57 on his word. 4b builds the screen.
+
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 
 - Built: the contract `packages/shared/src/plan.ts` (answers so far in, `plan` or `missing` out,

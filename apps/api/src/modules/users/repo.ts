@@ -235,6 +235,119 @@ export interface FitnessProfileWrite {
   onboardingCompleted: boolean;
 }
 
+// ── health screening (ROADMAP Stage 1 item 3b) ──────────────────────────────
+
+export interface HealthScreeningRow {
+  hasCondition: boolean;
+  checkFirst: string | null;
+  updatedAt: Date;
+}
+
+interface HealthScreeningDbRow {
+  has_condition: boolean;
+  check_first: string | null;
+  updated_at: Date;
+}
+
+const toHealthScreening = (r: HealthScreeningDbRow): HealthScreeningRow => ({
+  hasCondition: r.has_condition,
+  checkFirst: r.check_first,
+  updatedAt: r.updated_at,
+});
+
+/** Null until the health screen has been saved once — the common case before
+ *  onboarding; the service turns that into the unanswered shape. Keyed on userId. */
+export async function getHealthScreening(sql: SqlOrTx, userId: string): Promise<HealthScreeningRow | null> {
+  const rows = await sql<HealthScreeningDbRow[]>`
+    SELECT has_condition, check_first, updated_at
+    FROM user_health_screenings WHERE user_id = ${userId}`;
+  return rows[0] === undefined ? null : toHealthScreening(rows[0]);
+}
+
+/** Full replace (PUT), idempotent by construction like the fitness profile,
+ *  and active-only the same way: INSERT…SELECT from users, so a deleted user's
+ *  write inserts nothing and returns null. The two CHECKs on the table refuse
+ *  a contradiction the schema already refused at the boundary. */
+export async function upsertHealthScreening(
+  sql: Sql,
+  userId: string,
+  input: { hasCondition: boolean; checkFirst: string | null },
+): Promise<HealthScreeningRow | null> {
+  const rows = await sql<HealthScreeningDbRow[]>`
+    INSERT INTO user_health_screenings (user_id, has_condition, check_first, updated_at)
+    SELECT u.id, ${input.hasCondition}, ${input.checkFirst}, now()
+    FROM users u WHERE u.id = ${userId} AND u.status = 'active'
+    ON CONFLICT (user_id) DO UPDATE SET
+      has_condition = EXCLUDED.has_condition,
+      check_first = EXCLUDED.check_first,
+      updated_at = now()
+    RETURNING has_condition, check_first, updated_at`;
+  return rows[0] === undefined ? null : toHealthScreening(rows[0]);
+}
+
+// ── the consent log ─────────────────────────────────────────────────────────
+
+export interface ConsentRow {
+  id: string;
+  purpose: string;
+  wordingVersion: string;
+  wording: string;
+  appVersion: string;
+  recordedAt: Date;
+}
+
+interface ConsentDbRow {
+  id: string;
+  purpose: string;
+  wording_version: string;
+  wording: string;
+  app_version: string;
+  recorded_at: Date;
+}
+
+const toConsent = (r: ConsentDbRow): ConsentRow => ({
+  id: r.id,
+  purpose: r.purpose,
+  wordingVersion: r.wording_version,
+  wording: r.wording,
+  appVersion: r.app_version,
+  recordedAt: r.recorded_at,
+});
+
+/** Append one tap. Active-only by the same INSERT…SELECT; the wording is the
+ *  text the SERVICE looked up for the named version — the row holds it verbatim
+ *  so a later edit to the words in code cannot change what was agreed to. */
+export async function insertConsent(
+  sql: Sql,
+  userId: string,
+  input: { purpose: string; wordingVersion: string; wording: string; appVersion: string },
+): Promise<ConsentRow | null> {
+  const rows = await sql<ConsentDbRow[]>`
+    INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
+    SELECT u.id, ${input.purpose}, ${input.wordingVersion}, ${input.wording}, ${input.appVersion}
+    FROM users u WHERE u.id = ${userId} AND u.status = 'active'
+    RETURNING id, purpose, wording_version, wording, app_version, recorded_at`;
+  return rows[0] === undefined ? null : toConsent(rows[0]);
+}
+
+/** The person's own consents, newest first, bounded (a tap is rare; the cap
+ *  only keeps a runaway client from making this read unbounded) — with the
+ *  count of ALL their rows, so the caller can say when the list is short. */
+export async function listConsents(
+  sql: Sql,
+  userId: string,
+  limit: number,
+): Promise<{ rows: ConsentRow[]; total: number }> {
+  const rows = await sql<ConsentDbRow[]>`
+    SELECT id, purpose, wording_version, wording, app_version, recorded_at
+    FROM consent_log WHERE user_id = ${userId}
+    ORDER BY recorded_at DESC, id DESC
+    LIMIT ${limit}`;
+  const counted = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${userId}`;
+  return { rows: rows.map(toConsent), total: counted[0]?.n ?? 0 };
+}
+
 export interface UserSyncContext {
   weightKg: number | null;
   timezone: string | null;

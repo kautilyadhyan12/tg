@@ -108,6 +108,8 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   // Health data (medical_conditions) — DECISIONS 2026-07-15/16 made this the
   // condition on which the onboarding-storage card was merged.
   await tx`DELETE FROM user_fitness_profiles WHERE user_id = ${userId}`;
+  // The health screening — the same footing (tables.ts, 2026-09-09).
+  await tx`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
 }
 
 /** Rows keyed on the person's ADDRESS rather than their id — `sign_in_codes`
@@ -294,6 +296,31 @@ export async function lockDueUserForPurge(
       AND a.target_id = ${userId}
       AND a.at >= ${row.deleted_at}`;
   return marked.length === 0;
+}
+
+/** The consent log's own, later expiry (retention.ts CONSENT_PROOF_RETENTION_
+ *  DAYS): rows whose account was deleted before `cutoff` go. Run-level, not
+ *  per user: the accounts concerned were purged years earlier and are no
+ *  longer in selectDueUsers' batch. Returns how many rows went.
+ *
+ *  TWO conditions guard a live account, deliberately, because they fail
+ *  differently. `deleted_at IS NOT NULL` is the one restoreUser satisfies
+ *  today (it nulls the column, users/repo.ts) — so a restored account keeps
+ *  its rows even if the status clause were dropped. `status = 'deleted'` is
+ *  the belt: any future path that flips a person back to active while leaving
+ *  an old deleted_at behind would otherwise silently destroy their consent
+ *  proof. A test pins that row shape — an ACTIVE user carrying a stale
+ *  deleted_at — so the clause cannot be deleted as dead weight. */
+export async function deleteExpiredConsentProof(sql: Sql, cutoff: Date): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM consent_log c
+    USING users u
+    WHERE u.id = c.user_id
+      AND u.status = 'deleted'
+      AND u.deleted_at IS NOT NULL
+      AND u.deleted_at <= ${cutoff}
+    RETURNING c.id`;
+  return rows.length;
 }
 
 /** The purge marker AND the ops record (Part 8: a user's life should be

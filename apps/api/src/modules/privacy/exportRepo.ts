@@ -116,4 +116,59 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   user_fitness_profiles: (sql, u) =>
     sql<Row[]>`SELECT * FROM user_fitness_profiles WHERE user_id = ${u}`,
+
+  user_health_screenings: (sql, u) =>
+    sql<Row[]>`SELECT * FROM user_health_screenings WHERE user_id = ${u}`,
 };
+
+/** The most consent rows one export carries. Thirty taps an hour is the route's
+ *  ceiling (users/routes.ts), so an honest account never gets near this; it
+ *  exists so a runaway client cannot turn the export — which holds the
+ *  process's only connection (export.ts) — into an unbounded read. */
+export const CONSENT_EXPORT_LIMIT = 1000;
+
+/** The consent log is NOT on the Day-14 delete list (tables.ts: kept as proof
+ *  for six years, like audit_log) but it IS the person's own record of what they agreed to, so the
+ *  export carries it beside the PII tables. Read here, keyed on the owner.
+ *
+ *  It is not an ExportedTable, so `stripInternal` never sees it and no
+ *  INTERNAL_COLUMNS_BY_TABLE entry can ever cover it: THE EXPLICIT COLUMN LIST
+ *  BELOW IS THE GUARD. Never widen it to `SELECT *`.
+ *
+ *  ONE STATEMENT, NEWEST FIRST — the list route's read (users/repo.ts
+ *  listConsents) in both respects, and both of them matter:
+ *
+ *   · `count(*) OVER ()` is computed BEFORE the LIMIT, so the rows and the
+ *     total come from one snapshot. Counted in a second round trip they could
+ *     not: a disclaimer tap landing between the two (1000 read, 1001 counted)
+ *     would make the file announce a cut that never happened — the same false
+ *     statement `truncated` exists to prevent. One statement also spares the
+ *     export's single connection (export.ts) a nineteenth trip.
+ *   · DESC keeps the person's MOST RECENT taps — the wording they agreed to
+ *     last — when the cap bites. `truncated` says how many rows were cut, never
+ *     which end, so the end that survives has to be the useful one, and it must
+ *     be the end the list route shows or the two answers disagree.
+ *
+ *  The cap must never let a short file pass for the whole record: an export
+ *  that quietly drops rows is the one place where "here is your data" would be
+ *  false. `export.ts` says so in the file. */
+export async function selectExportConsents(
+  sql: Sql,
+  userId: string,
+): Promise<{ rows: Row[]; total: number }> {
+  const counted = await sql<(Row & { total: number })[]>`
+    SELECT id, purpose, wording_version, wording, app_version, recorded_at,
+           (count(*) OVER ())::int AS total
+    FROM consent_log WHERE user_id = ${userId}
+    ORDER BY recorded_at DESC, id DESC
+    LIMIT ${CONSENT_EXPORT_LIMIT}`;
+  // `total` carries the window's answer, not the person's data — it is dropped
+  // before the rows reach the file (the export test asserts the exact key set
+  // of an exported row, so neither this filter nor the SELECT can drift). No
+  // `Math.max` guard any more: one statement cannot report a total below the
+  // rows it just returned.
+  const rows: Row[] = counted.map((r) =>
+    Object.fromEntries(Object.entries(r).filter(([column]) => column !== "total")),
+  );
+  return { rows, total: counted[0]?.total ?? 0 };
+}

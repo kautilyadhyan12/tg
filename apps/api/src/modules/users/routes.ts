@@ -15,6 +15,8 @@ import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js
 import {
   deleteAccountRequestSchema,
   putFitnessProfileRequestSchema,
+  putHealthScreeningRequestSchema,
+  recordConsentRequestSchema,
   restoreAccountRequestSchema,
   updateProfileRequestSchema,
 } from "./schemas.js";
@@ -78,6 +80,60 @@ export function registerUserRoutes(
     if (body === null) return;
     const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
     return reply.status(200).send({ fitnessProfile });
+  });
+
+  // Health screening and Safe mode (ROADMAP 3b). Same tenancy argument as the
+  // fitness profile: no id param, so only the signed-in person's own row.
+  app.get("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const healthScreening = await service.getHealthScreening(usersDeps, authedUserId(req));
+    return reply.status(200).send({ healthScreening });
+  });
+
+  // PUT: the whole screening replaced; the same body twice yields the same row.
+  app.put("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = parseBody(putHealthScreeningRequestSchema, req, reply);
+    if (body === null) return;
+    const healthScreening = await service.putHealthScreening(usersDeps, authedUserId(req), body);
+    return reply.status(200).send({ healthScreening });
+  });
+
+  // The consent log: one row per disclaimer tap; the person can read their own
+  // (the newest page, with the total so a short list never passes for all).
+  app.get("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const list = await service.listConsents(usersDeps, authedUserId(req));
+    return reply.status(200).send(list);
+  });
+
+  // Appends to a table the purge never empties, so it gets its own ceiling on
+  // top of the global one: three screens carry a disclaimer, so thirty taps an
+  // hour is far beyond honest use. Keyed on the signed-in person AND the IP
+  // (authenticate runs first, R3.3, so the person is known here).
+  //
+  // THE TWO DIMENSIONS ARE DELIBERATELY ASYMMETRIC, and the IP number is the
+  // GYM-FLOOR figure this repo already uses for the routes a whole building
+  // shares (orgs/routes.ts: attendanceMarkLimit, cheerLimit, memberNudgeLimit).
+  // A gym's whole floor onboards from one address, so the person's own 30
+  // counted against the address would have thrown the ELEVENTH person off the
+  // wi-fi mid-onboarding — a tap they cannot finish signing up without.
+  // 600 was the first answer to that and was still too tight: three taps a
+  // person is only 200 people an hour, under the 300 members a trial
+  // organisation admits (RULINGS 2026-08-25), so a bulk induction would 429 its
+  // tail with the identical consequence. 3000 clears any one gym's whole roster
+  // and still bounds a script; the abuse guard is the PER-PERSON 30, untouched.
+  const consentLimit = createDualRateLimit({
+    name: "consent",
+    max: 30,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post("/v1/users/me/consents", { preHandler: [app.authenticate, consentLimit] }, async (req, reply) => {
+    const body = parseBody(recordConsentRequestSchema, req, reply);
+    if (body === null) return;
+    const consent = await service.recordConsent(usersDeps, authedUserId(req), body);
+    return reply.status(201).send({ consent });
   });
 
   // Step 1 of deleting: a code goes to the account's own address. The day cap

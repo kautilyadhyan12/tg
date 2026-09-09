@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, orgTypeSchema } from "@app/shared";
+import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, orgTypeSchema } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -679,6 +679,45 @@ d("0001_init on a real database", () => {
     // The read side keeps `clinic` for legacy rows even though the door refuses
     // it — the assertion that keeps this test about the READ vocabulary.
     expect(inCheck).toContain("clinic");
+  });
+
+  /** `0025`'s TWO TABLES, read back off the deployed catalogue. The screening's
+   *  second CHECK is the contradiction guard (a yes must choose; a no cannot be
+   *  "cleared"); the consent purpose CHECK lists exactly the screens the shared
+   *  enum knows. Both proven by CAUSING them, and the consent log's FK to users
+   *  is NOT a cascade — the row is kept as proof after a purge. */
+  it("0025's health screening and consent log constraints exist on the deployed database", async () => {
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0025@example.com', 'zz 0025')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const ownerId = owner[0]?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await refused(sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first) VALUES (${ownerId}, true, NULL)`);
+      await refused(sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first) VALUES (${ownerId}, false, 'cleared')`);
+      await refused(sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first) VALUES (${ownerId}, true, 'later')`);
+      await refused(sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version) VALUES (${ownerId}, 'marketing', 'v1', 'w', 'a')`);
+
+      const [defRow] = await sql<{ def: string }[]>`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = 'consent_log'::regclass AND conname = 'consent_log_purpose_check'`;
+      const inCheck = [...(defRow?.def ?? "").matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+      expect(inCheck).toEqual([...consentPurposeSchema.options].sort());
+
+      const fk = await sql<{ confdeltype: string }[]>`
+        SELECT confdeltype FROM pg_constraint WHERE conrelid = 'consent_log'::regclass AND contype = 'f'`;
+      expect(fk.map((r) => r.confdeltype)).toEqual(["a"]); // NO ACTION: never cascades
+      // One row per person: the primary key IS user_id, by name, not merely
+      // "some primary key exists".
+      const pk = await sql<{ attname: string }[]>`
+        SELECT a.attname FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+        WHERE i.indrelid = 'user_health_screenings'::regclass AND i.indisprimary`;
+      expect(pk.map((r) => r.attname)).toEqual(["user_id"]);
+    } finally {
+      await sql`DELETE FROM consent_log WHERE user_id = ${ownerId}`;
+      await sql`DELETE FROM users WHERE id = ${ownerId}`;
+    }
   });
 
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the

@@ -169,6 +169,13 @@
       "when": 1788220800007,
       "tag": "0024_org_type_personal_trainer",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788220800008,
+      "tag": "0025_health_screening_consent_log",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import {
   calendarDaySchema,
   missingPlanInputSchema,
   planAnswersSchema,
+  planHealthSchema,
   planInputsSchema,
   planResponseSchema,
   planStartDaySchema,
@@ -99,7 +100,7 @@ const sample: PlanInputs = {
   dayActivity: "sitting",
   trainingDays: 3,
   sessionMinutes: 45,
-  health: { pregnant: false, heart: false, bloodPressure: false, diabetes: false },
+  health: { hasCondition: false, safeMode: false },
   today: "2026-09-08",
 };
 
@@ -202,7 +203,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     const paces = ["gentle", "brisk"] as const;
     const days = ["sitting", "very_active"] as const;
     const weeks = [{ trainingDays: 0, sessionMinutes: 0 }, { trainingDays: 7, sessionMinutes: 240 }];
-    const healths = [null, { pregnant: true, heart: true, bloodPressure: true, diabetes: true }];
+    const healths = [null, { hasCondition: true, safeMode: false }, { hasCondition: true, safeMode: true }];
     let bodies = 0;
     const unaccepted: PlanInputs[] = [];
     const failures: { body: PlanInputs; broken: string[] }[] = [];
@@ -502,30 +503,32 @@ describe("plan maths — the sanity rules", () => {
     expect(computePlan({ ...sample, age: 16 }).flags).toEqual([{ code: "no_deficit", reasons: ["under_18"] }]);
   });
 
-  it("no calorie deficit in pregnancy or for a flagged heart, blood-pressure or diabetes answer", () => {
-    for (const [key, reason] of [
-      ["pregnant", "pregnancy"],
-      ["heart", "heart"],
-      ["bloodPressure", "blood_pressure"],
-      ["diabetes", "diabetes"],
-    ] as const) {
-      const plan = computePlan({
-        ...sample,
-        health: { pregnant: false, heart: false, bloodPressure: false, diabetes: false, [key]: true },
-      });
-      expect(plan.flags).toEqual([{ code: "no_deficit", reasons: [reason] }]);
+  it("no calorie deficit for a yes on the health question, cleared or not (one question, Kd 2026-09-09)", () => {
+    for (const health of [{ hasCondition: true, safeMode: false }, { hasCondition: true, safeMode: true }]) {
+      const plan = computePlan({ ...sample, health });
+      expect(plan.flags[0]).toEqual({ code: "no_deficit", reasons: health.safeMode ? ["health_answer", "safe_mode"] : ["health_answer"] });
+      expect(plan.flags).toHaveLength(1);
       expect(plan.dailyChangeKcal).toBe(0);
+      expect(plan.targetKcal).toBe(plan.dailyBurnKcal);
       expect(plan.daysToTarget).toBeNull();
+      expect(plan.plannedTargetKg).toBe(82);
     }
+    // A "no" is not a rule: the cut runs.
+    expect(computePlan({ ...sample, health: { hasCondition: false, safeMode: false } }).flags).toEqual([]);
   });
 
   it("every reason is listed, in one fixed order", () => {
-    const reasons = noDeficitReasons({
-      age: 17,
-      health: { pregnant: true, heart: true, bloodPressure: true, diabetes: true },
-    });
-    expect(reasons).toEqual(["under_18", "pregnancy", "heart", "blood_pressure", "diabetes"]);
+    expect(noDeficitReasons({ age: 17, health: { hasCondition: true, safeMode: true } })).toEqual(["under_18", "health_answer", "safe_mode"]);
+    expect(noDeficitReasons({ age: 17, health: { hasCondition: true, safeMode: false } })).toEqual(["under_18", "health_answer"]);
+    expect(noDeficitReasons({ age: 40, health: { hasCondition: false, safeMode: false } })).toEqual([]);
     expect(noDeficitReasons({ age: 40, health: null })).toEqual([]);
+  });
+
+  it("the contract refuses Safe mode without a yes — the two facts cannot contradict", () => {
+    expect(planHealthSchema.safeParse({ hasCondition: false, safeMode: true }).success).toBe(false);
+    expect(planHealthSchema.safeParse({ hasCondition: true, safeMode: true }).success).toBe(true);
+    expect(planHealthSchema.safeParse({ hasCondition: false, safeMode: false }).success).toBe(true);
+    expect(planHealthSchema.safeParse({ pregnant: true }).success).toBe(false); // the old shape is gone
   });
 
   it("an unanswered health screen applies no condition rule yet; the age rule needs no answer", () => {
@@ -534,7 +537,7 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("the rules only refuse a CUT: a gain or a maintain is untouched by them", () => {
-    const flagged = { pregnant: true, heart: true, bloodPressure: true, diabetes: true };
+    const flagged = { hasCondition: true, safeMode: true };
     const gain = computePlan({ ...sample, age: 17, health: flagged, goal: "gain", weightKg: 60, targetWeightKg: 65 });
     expect(gain.flags).toEqual([]);
     expect(gain.dailyChangeKcal).toBe(550);

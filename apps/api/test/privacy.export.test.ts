@@ -12,7 +12,11 @@ import { dpdpExportSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { buildUserExport } from "../src/modules/privacy/export.js";
-import { EXPORT_READERS } from "../src/modules/privacy/exportRepo.js";
+import { CONSENT_EXPORT_LIMIT, EXPORT_READERS } from "../src/modules/privacy/exportRepo.js";
+import {
+  CONSENT_PROOF_RETENTION_DAYS,
+  CONSENT_PROOF_RETENTION_YEARS,
+} from "../src/retention.js";
 import { getTableColumns } from "drizzle-orm";
 import { coachMessages, coachThreads } from "../src/db/schema/coach.js";
 import { workouts } from "../src/db/schema/training.js";
@@ -64,6 +68,7 @@ d("DPDP data export (real Postgres)", () => {
       for (const t of DIRECT_DELETE_TABLES) {
         await sql`DELETE FROM ${sql(t)} WHERE user_id = ANY(${madeUsers})`;
       }
+      await sql`DELETE FROM consent_log WHERE user_id = ANY(${madeUsers})`; // no cascade: kept as proof
       await sql`DELETE FROM users WHERE id = ANY(${madeUsers})`;
     }
     if (challengeId !== "") await sql`DELETE FROM challenges WHERE id = ${challengeId}`;
@@ -88,6 +93,10 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${userId}, 'google', ${"sub-" + userId})`;
     await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, medical_conditions)
               VALUES (${userId}, 31, 'female', 165, ${`asthma-${label}`})`;
+    await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
+              VALUES (${userId}, true, 'cleared')`;
+    await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
+              VALUES (${userId}, 'health_step', 'v1', ${`wording-${label}`}, 'test')`;
     const wId = randomUUID();
     await sql`INSERT INTO workouts (id, user_id, started_at, platform, engine_version, quality_flags)
               VALUES (${wId}, ${userId}, now(), 'web', '1.0.0', ${sql.array(["anticheat-marker"])})`;
@@ -147,6 +156,13 @@ d("DPDP data export (real Postgres)", () => {
       expect({ t, n: out.data[t]?.length ?? -1 }).toEqual({ t, n: 1 });
     }
     expect(out.user["display_name"]).toBe(u.name);
+    // The consent log rides beside the PII tables (kept after a purge, still
+    // the person's own record) — present, and carrying the words verbatim.
+    expect(out.data["consent_log"]).toHaveLength(1);
+    expect(out.data["consent_log"]?.[0]).toMatchObject({ purpose: "health_step", wording: "wording-all" });
+    // Nothing was cut, and the envelope says so out loud rather than by an
+    // absent key (the same reason every table keeps an empty array).
+    expect(out.truncated).toEqual({});
 
     // T3 round 2, F6: the `now` seam's doc claimed "so exportedAt is
     // assertable" while no caller or test ever passed one — a claim with
@@ -154,6 +170,62 @@ d("DPDP data export (real Postgres)", () => {
     const fixed = new Date("2026-07-23T09:15:00.000Z");
     const stamped = await buildUserExport({ sql, now: () => fixed }, u.userId);
     expect(stamped.exportedAt).toBe("2026-07-23T09:15:00.000Z");
+  });
+
+  // The consent read is the ONE capped read in the export, so it is the one
+  // that can hand a person less than they have. Before this test the cap was
+  // silent: deleting `LIMIT ${CONSENT_EXPORT_LIMIT}` left the whole suite green
+  // (measured at the 3b re-check), because no fixture ever had two consent
+  // rows. Three things are asserted — the file stops at the cap, it says how
+  // many rows exist, and WHICH rows survived — so neither the ceiling, the
+  // count nor the ordering can be dropped.
+  it("caps the consent log, SAYS the file is short, and keeps the NEWEST taps", { timeout: 90_000 }, async () => {
+    const u = await makeUser("capped");
+    // makeUser seeded one, and it must be the NEWEST row of the set. Add
+    // exactly the ceiling below it, so one row cannot fit and the cap has to
+    // choose an end to drop.
+    //
+    // STAMPED FROM THE FIXTURE'S OWN ROW, not from `now()`. `now()` is the
+    // statement's transaction time, and makeUser runs ~20 inserts before this
+    // one: on a loaded database that took over a second, which put `now() - 1s`
+    // AFTER the fixture's row and made "the newest" ambiguous. Green scoped,
+    // red in the full suite — the fixture must not depend on how fast the
+    // database is.
+    await sql`
+      INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version, recorded_at)
+      SELECT ${u.userId}, 'plan_screen', 'v1', 'older-' || g::text, 'test',
+             (SELECT c.recorded_at FROM consent_log c WHERE c.user_id = ${u.userId})
+               - (g * interval '1 second')
+      FROM generate_series(1, ${CONSENT_EXPORT_LIMIT}) AS g`;
+
+    const out = await buildUserExport({ sql }, u.userId);
+    expect(() => dpdpExportSchema.parse(out)).not.toThrow();
+    expect(out.data["consent_log"]).toHaveLength(CONSENT_EXPORT_LIMIT);
+    expect(out.truncated["consent_log"]).toEqual({
+      returned: CONSENT_EXPORT_LIMIT,
+      total: CONSENT_EXPORT_LIMIT + 1,
+    });
+
+    // WHICH thousand came back. The counts above pass whichever end is cut, and
+    // the envelope never says which — so the export must keep the person's most
+    // recent taps (the wording they agreed to last), the same end the list route
+    // shows. Ordered oldest-first, this suite stayed green while silently
+    // dropping makeUser's own row, the newest one of all.
+    const wordings = (out.data["consent_log"] ?? []).map((r) => r["wording"]);
+    expect(wordings[0]).toBe("wording-capped"); // the newest, first in the file
+    expect(wordings).toContain("older-1"); // the second-newest survives
+    expect(wordings).not.toContain(`older-${String(CONSENT_EXPORT_LIMIT)}`); // the oldest is the one cut
+    // ...and the row carries EXACTLY the six columns the read enumerates: not
+    // `total`, the carrier the count now rides in, and not a seventh column
+    // added to the SELECT and forgotten by the filter that drops it.
+    expect(Object.keys((out.data["consent_log"] ?? [])[0] ?? {}).sort()).toEqual([
+      "app_version",
+      "id",
+      "purpose",
+      "recorded_at",
+      "wording",
+      "wording_version",
+    ]);
   });
 
   it("NEVER includes credentials or excluded tables", { timeout: 60_000 }, async () => {
@@ -411,5 +483,29 @@ describe("DPDP export list (no database)", () => {
     expect(EXPORTED_TABLES.length + Object.keys(EXPORT_EXCLUDED_TABLES).length).toBe(
       PII_TABLES.length,
     );
+  });
+});
+
+// Ungated for the same reason as the block above: no SQL, and CI runs it.
+describe("consent-proof retention window (no database)", () => {
+  // The window is a legal promise — "six years from the deletion date" — kept
+  // as a whole number of DAYS, and the rounding may only ever err long. The
+  // plain `6 * 365` this shipped with erred SHORT by two days for a 2026
+  // deletion (2190 against 2192), which no route test, type or migration could
+  // see: the constant is only ever compared with itself. Real dates instead.
+  it("is never shorter than six calendar years, wherever the leap days fall", () => {
+    const spanDays = (isoDay: string): number => {
+      const from = new Date(`${isoDay}T00:00:00.000Z`);
+      const to = new Date(from);
+      to.setUTCFullYear(to.getUTCFullYear() + CONSENT_PROOF_RETENTION_YEARS);
+      return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+    };
+    // Six-year spans hold one or two 29 Februaries: 2191 or 2192 days.
+    const spans = ["2025-01-01", "2026-03-01", "2026-09-09", "2027-07-15", "2030-11-30"].map(spanDays);
+    const longest = Math.max(...spans);
+    expect(longest).toBe(2192); // the fixture itself must cover the long case
+    expect(CONSENT_PROOF_RETENTION_DAYS).toBeGreaterThanOrEqual(longest);
+    // ...and not generously long either: at most a day past the promise.
+    expect(CONSENT_PROOF_RETENTION_DAYS - longest).toBeLessThanOrEqual(1);
   });
 });

@@ -284,7 +284,7 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // The contract's refine(), which the TYPES cannot express — both impossible
   // pairings typecheck fine and were accepted by the bare shape (T3 round 2).
   it("rejects both impossible target/missing pairings at the contract boundary", () => {
-    const t = { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 };
+    const t = { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46, noCalorieCut: false };
     expect(nutritionTargetsResponseSchema.safeParse({ targets: t, missing: [] }).success).toBe(true);
     expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: ["age"] }).success).toBe(true);
     // No targets AND nothing missing — a prompt that names no fields.
@@ -298,24 +298,24 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // 1646.3875; protein 60×2.0 (:161) = 120; fat = kcal·0.25/9 = 45.7330;
   // carbs = (kcal − 4·120 − 9·fat)/4 = 188.6977. Rounded only at the end.
   it("computes the female / weight_loss golden exactly", () => {
-    expect(calculateTargets({ age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"] }))
-      .toEqual({ bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 });
+    expect(calculateTargets({ age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"], noCalorieCut: false }))
+      .toEqual({ bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46, noCalorieCut: false });
   });
 
   // male → +5 (:129). bmr = 750 + 1125 − 125 + 5 = 1755; tdee = ×1.725 = 3027.375;
   // muscle_gain +300 (:151) = 3327.375; protein 75×2.2 (:159) = 165.
   it("computes the male / muscle_gain golden exactly", () => {
-    expect(calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: ["muscle_gain"] }))
-      .toEqual({ bmr: 1755, tdee: 3027, kcal: 3327, proteinG: 165, carbsG: 459, fatG: 92 });
+    expect(calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: ["muscle_gain"], noCalorieCut: false }))
+      .toEqual({ bmr: 1755, tdee: 3027, kcal: 3327, proteinG: 165, carbsG: 459, fatG: 92, noCalorieCut: false });
   });
 
   // Mifflin-St Jeor defines only two formulas; the salvage's `else` (:128-129)
   // catches everything that is not "female". Ported as-is — inventing a
   // midpoint for other/prefer_not_to_say would be re-deriving a constant.
   it("routes other / prefer_not_to_say through the else (+5) branch", () => {
-    const male = calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: [] });
+    const male = calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: [], noCalorieCut: false });
     for (const gender of ["other", "prefer_not_to_say"])
-      expect(calculateTargets({ age: 25, gender, heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: [] })).toEqual(male);
+      expect(calculateTargets({ age: 25, gender, heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: [], noCalorieCut: false })).toEqual(male);
   });
 
   // THE SALVAGE QUIRK, ported deliberately: the kcal adjustment tests
@@ -324,18 +324,18 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // 400 while protein uses the bulking 2.2 g/kg. Pinned so no future edit
   // "tidies" it into consistency without a ruling.
   it("keeps the opposite goal precedence of the kcal and protein branches", () => {
-    expect(calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: ["weight_loss", "muscle_gain"] }))
-      .toEqual({ bmr: 1755, tdee: 3027, kcal: 2627, proteinG: 165, carbsG: 328, fatG: 73 });
+    expect(calculateTargets({ age: 25, gender: "male", heightCm: 180, weightKg: 75, exerciseFrequency: 6, fitnessGoals: ["weight_loss", "muscle_gain"], noCalorieCut: false }))
+      .toEqual({ bmr: 1755, tdee: 3027, kcal: 2627, proteinG: 165, carbsG: 328, fatG: 73, noCalorieCut: false });
   });
 
   it("applies the goal adjustment branches and the 1200 kcal floor (:149,:151,:153,:155)", () => {
-    const base = { age: 25, gender: "male" as const, heightCm: 180, weightKg: 75, exerciseFrequency: 6 };
-    const none = calculateTargets({ ...base, fitnessGoals: [] });
+    const base = { age: 25, gender: "male" as const, heightCm: 180, weightKg: 75, exerciseFrequency: 6, noCalorieCut: false };
+    const none = calculateTargets({ ...base, fitnessGoals: [], noCalorieCut: false });
     expect(none.kcal).toBe(3027); // tdee unchanged (:153)
-    expect(calculateTargets({ ...base, fitnessGoals: ["weight_loss"] }).kcal).toBe(none.kcal - 400);
-    expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"] }).kcal).toBe(none.kcal + 300);
+    expect(calculateTargets({ ...base, fitnessGoals: ["weight_loss"], noCalorieCut: false }).kcal).toBe(none.kcal - 400);
+    expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"], noCalorieCut: false }).kcal).toBe(none.kcal + 300);
     // Floor: bmr = 350 + 875 − 400 − 161 = 664; tdee ×1.2 = 796.8; −400 = 396.8 → 1200.
-    expect(calculateTargets({ age: 80, gender: "female", heightCm: 140, weightKg: 35, exerciseFrequency: 1, fitnessGoals: ["weight_loss"] }))
+    expect(calculateTargets({ age: 80, gender: "female", heightCm: 140, weightKg: 35, exerciseFrequency: 1, fitnessGoals: ["weight_loss"], noCalorieCut: false }))
       .toMatchObject({ bmr: 664, tdee: 797, kcal: 1200 });
   });
 
@@ -347,16 +347,55 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   it("applies the 50 g carbohydrate floor and keeps the grams adding up to the calories", () => {
     // bmr = 2000 + 318.75 − 600 − 161 = 1557.75; tdee ×1.2 = 1869.3; −400 = 1469.3;
     // fat 40.8; protein = (1469.3 − 200 − 367.3)/4 = 225.5, not 400.
-    const t = calculateTargets({ age: 120, gender: "female", heightCm: 51, weightKg: 200, exerciseFrequency: 1, fitnessGoals: ["weight_loss"] });
-    expect(t).toEqual({ bmr: 1558, tdee: 1869, kcal: 1469, proteinG: 225, carbsG: 50, fatG: 41 });
+    const t = calculateTargets({ age: 120, gender: "female", heightCm: 51, weightKg: 200, exerciseFrequency: 1, fitnessGoals: ["weight_loss"], noCalorieCut: false });
+    expect(t).toEqual({ bmr: 1558, tdee: 1869, kcal: 1469, proteinG: 225, carbsG: 50, fatG: 41, noCalorieCut: false });
     expect(t.proteinG * 4 + t.carbsG * 4 + t.fatG * 9).toBe(1469);
   });
 
-  it("selects the protein-per-kg constant per goal (:158-163)", () => {
+  // A yes on the health question (RULINGS 2026-09-07; one general question
+  // since 2026-09-09) holds the weight-loss cut back and says so; a gain and a
+  // plain profile are untouched, as in the plan calculator.
+  it("a health yes holds back the weight-loss cut only, and reports it", () => {
     const base = { age: 25, gender: "male" as const, heightCm: 180, weightKg: 75, exerciseFrequency: 6 };
-    expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"] }).proteinG).toBe(Math.round(75 * 2.2));
-    expect(calculateTargets({ ...base, fitnessGoals: ["weight_loss"] }).proteinG).toBe(Math.round(75 * 2.0));
-    expect(calculateTargets({ ...base, fitnessGoals: ["general_fitness"] }).proteinG).toBe(Math.round(75 * 1.6));
+    const cut = calculateTargets({ ...base, fitnessGoals: ["weight_loss"], noCalorieCut: false });
+    const held = calculateTargets({ ...base, fitnessGoals: ["weight_loss"], noCalorieCut: true });
+    expect(cut).toMatchObject({ kcal: 2627, noCalorieCut: false });
+    expect(held).toMatchObject({ kcal: 3027, noCalorieCut: true }); // = tdee, the cut gone
+    // The macros follow the held calories (still weight_loss's 2.0 g/kg protein),
+    // adding up to them within the grams' rounding.
+    expect(Math.abs(held.proteinG * 4 + held.carbsG * 4 + held.fatG * 9 - held.kcal)).toBeLessThanOrEqual(9);
+    expect(held.proteinG).toBe(Math.round(75 * 2.0));
+    expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"], noCalorieCut: true }))
+      .toEqual(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"], noCalorieCut: false }));
+    expect(calculateTargets({ ...base, fitnessGoals: [], noCalorieCut: true }))
+      .toEqual(calculateTargets({ ...base, fitnessGoals: [], noCalorieCut: false }));
+    // Through the one entry point, with the contract's parse.
+    expect(resolveTargets({ ...base, fitnessGoals: ["weight_loss"], noCalorieCut: true }).targets)
+      .toMatchObject({ kcal: 3027, noCalorieCut: true });
+  });
+
+  // Under 18 there is never a calorie-cutting target (RULINGS 2026-09-07); the
+  // app admits 16 and over, so 16 and 17 are real inputs here. The same age
+  // line as the plan calculator's noDeficitReasons.
+  it("never cuts calories under 18, whatever the health answer, and reports it", () => {
+    const base = { gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"], noCalorieCut: false };
+    // bmr = 600 + 1031.25 − 80 − 161 = 1390.25; tdee ×1.55 = 2154.89; no −400.
+    expect(calculateTargets({ ...base, age: 16 })).toMatchObject({ tdee: 2155, kcal: 2155, noCalorieCut: true });
+    expect(calculateTargets({ ...base, age: 17 })).toMatchObject({ tdee: 2147, kcal: 2147, noCalorieCut: true });
+    // 18 is an adult for this rule.
+    expect(calculateTargets({ ...base, age: 18 })).toMatchObject({ tdee: 2139, kcal: 1739, noCalorieCut: false });
+    // A gain or a plain profile is untouched by age, as by the health answer.
+    expect(calculateTargets({ ...base, age: 16, fitnessGoals: ["muscle_gain"] })).toMatchObject({ kcal: 2455, noCalorieCut: false });
+    expect(calculateTargets({ ...base, age: 16, fitnessGoals: [] })).toMatchObject({ kcal: 2155, noCalorieCut: false });
+    // Through the one entry point, with the contract's parse.
+    expect(resolveTargets({ ...base, age: 16 }).targets).toMatchObject({ kcal: 2155, noCalorieCut: true });
+  });
+
+  it("selects the protein-per-kg constant per goal (:158-163)", () => {
+    const base = { age: 25, gender: "male" as const, heightCm: 180, weightKg: 75, exerciseFrequency: 6, noCalorieCut: false };
+    expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"], noCalorieCut: false }).proteinG).toBe(Math.round(75 * 2.2));
+    expect(calculateTargets({ ...base, fitnessGoals: ["weight_loss"], noCalorieCut: false }).proteinG).toBe(Math.round(75 * 2.0));
+    expect(calculateTargets({ ...base, fitnessGoals: ["general_fitness"], noCalorieCut: false }).proteinG).toBe(Math.round(75 * 1.6));
   });
 
   // Kd ruling (this card): all five inputs are REQUIRED — each moves the
@@ -368,7 +407,7 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // test enumerates the CLASS (null · undefined · key absent), because rounds
   // 3 and 4 each verified only the single mutation the previous round named.
   it("treats every shape of absence as missing, not just an explicit null", () => {
-    const base = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [] };
+    const base = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [], noCalorieCut: false };
     expect(missingTargetInputs(base)).toEqual([]);
     expect(missingTargetInputs({ ...base, age: null })).toEqual(["age"]);
     expect(missingTargetInputs({ ...base, age: undefined as unknown as null })).toEqual(["age"]);
@@ -378,17 +417,17 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   });
 
   it("reports every missing required input, and treats empty goals as answered", () => {
-    const complete = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [] };
+    const complete = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [], noCalorieCut: false };
     expect(missingTargetInputs(complete)).toEqual([]);
     expect(missingTargetInputs({ ...complete, age: null })).toEqual(["age"]);
-    expect(missingTargetInputs({ age: null, gender: null, heightCm: null, weightKg: null, exerciseFrequency: null, fitnessGoals: [] }))
+    expect(missingTargetInputs({ age: null, gender: null, heightCm: null, weightKg: null, exerciseFrequency: null, fitnessGoals: [], noCalorieCut: false }))
       .toEqual(["age", "gender", "heightCm", "weightKg", "exerciseFrequency"]);
   });
 
   it("resolveTargets withholds targets entirely when anything is missing", () => {
-    expect(resolveTargets({ age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"] }))
-      .toEqual({ targets: { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 }, missing: [] });
-    expect(resolveTargets({ age: 30, gender: "female", heightCm: null, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [] }))
+    expect(resolveTargets({ age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"], noCalorieCut: false }))
+      .toEqual({ targets: { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46, noCalorieCut: false }, missing: [] });
+    expect(resolveTargets({ age: 30, gender: "female", heightCm: null, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [], noCalorieCut: false }))
       .toEqual({ targets: null, missing: ["heightCm"] });
   });
 });

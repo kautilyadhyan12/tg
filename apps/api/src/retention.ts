@@ -23,3 +23,19 @@ export const DPDP_RETENTION_DAYS = 14;
 
 /** The same window in milliseconds, for the one-time-token TTL. */
 export const DPDP_RETENTION_MS = DPDP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/** How long the consent log outlives a purged account (Kd, 2026-09-09: keep
+ *  the proof of the disclaimer tap for as long as a claim could still be
+ *  brought, then remove it — six years covers the longest common limitation
+ *  period across the US, Europe, India and Canada). Counted from the day the
+ *  account was deleted, in whole days.
+ *
+ *  THE `+ 2` IS THE LEAP DAYS AND IT IS THE POINT. Six calendar years span
+ *  2191 or 2192 days depending on where 29 February falls in them, so a plain
+ *  `6 * 365` (2190) deletes the proof one or two days BEFORE the sixth
+ *  anniversary — the one direction this number must never err in, because the
+ *  row is evidence and the claim it answers is still live on that day. 2192 is
+ *  the longer of the two spans, so this is never short and at most a day long.
+ *  privacy.export.test.ts pins it against real dates. */
+export const CONSENT_PROOF_RETENTION_YEARS = 6;
+export const CONSENT_PROOF_RETENTION_DAYS = CONSENT_PROOF_RETENTION_YEARS * 365 + 2;

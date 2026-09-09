@@ -173,3 +173,50 @@ export const userFitnessProfiles = pgTable(
     ),
   ],
 );
+
+// Health screening (migration 0025; Kd 2026-09-07 / 2026-09-09). ONE general
+// question, never a named condition: `has_condition` is the yes/no, and
+// `check_first` the choice a yes opens. Safe mode and "no calorie cut" are
+// derived in code (@app/shared `deriveHealthFlags`), never stored. Health data
+// in the broad sense: on the Day-14 delete list and in the export.
+export const userHealthScreenings = pgTable(
+  "user_health_screenings",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    hasCondition: boolean("has_condition").notNull(),
+    checkFirst: text("check_first"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("user_health_screenings_check_first_check", sql`${t.checkFirst} IN ('cleared','not_yet')`),
+    check(
+      "user_health_screenings_check_first_required",
+      sql`(${t.hasCondition} AND ${t.checkFirst} IS NOT NULL) OR (NOT ${t.hasCondition} AND ${t.checkFirst} IS NULL)`,
+    ),
+  ],
+);
+
+// The consent log (migration 0025; RULINGS 2026-09-07): one append-only row per
+// disclaimer tap, wording copied verbatim. Kept after a purge like audit_log
+// (no name, address or health fact on the row); exported.
+export const consentLog = pgTable(
+  "consent_log",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    purpose: text("purpose").notNull(),
+    wordingVersion: text("wording_version").notNull(),
+    wording: text("wording").notNull(),
+    appVersion: text("app_version").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("consent_log_purpose_check", sql`${t.purpose} IN ('sign_up','health_step','plan_screen')`),
+    index("consent_log_user_recorded_idx").on(t.userId, t.recordedAt.desc()),
+  ],
+);
