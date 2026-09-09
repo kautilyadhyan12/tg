@@ -7,6 +7,7 @@
 // Every query is keyed by the owning userId (R3.2).
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
+import { recordTypedWeight } from "../nutrition/repo.js";
 import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
@@ -91,17 +92,19 @@ export async function updateProfile(
     if (patch.locale !== undefined) cols["locale"] = patch.locale;
     if (patch.units !== undefined) cols["units"] = patch.units;
     if (patch.timezone !== undefined) cols["timezone"] = patch.timezone;
-    if (patch.weightKg !== undefined) cols["weight_kg"] = patch.weightKg;
     if (patch.leaderboardOptOut !== undefined) cols["leaderboard_opt_out"] = patch.leaderboardOptOut;
+
+    if (Object.keys(cols).length > 0) {
+      await tx`
+        UPDATE users SET ${tx(cols)}
+        WHERE id = ${userId} AND status = 'active'`;
+    }
+    // Weight is not a column write: a typed weight is a measurement of its own
+    // (nutrition/repo.ts recordTypedWeight), so history and the number agree.
+    if (patch.weightKg !== undefined) await recordTypedWeight(tx, userId, patch.weightKg);
 
     // RETURNING cannot carry the joined onboarding_completed, so the row is
     // re-read through the one profile select — same tx, so it stays atomic.
-    const rows = await tx<{ id: string }[]>`
-      UPDATE users SET ${tx(cols)}
-      WHERE id = ${userId} AND status = 'active'
-      RETURNING id`;
-    if (rows[0] === undefined) return null;
-
     return await selectProfile(tx, userId);
   });
 }
@@ -379,9 +382,9 @@ export async function patchOnboarding(
         UPDATE user_fitness_profiles SET ${tx(cols)}, updated_at = now()
         WHERE user_id = ${userId}`;
     }
-    if (patch.weightKg !== undefined) {
-      await tx`UPDATE users SET weight_kg = ${patch.weightKg} WHERE id = ${userId}`;
-    }
+    // Screen 2's weight is a measurement of its own, not a column write (see
+    // nutrition/repo.ts recordTypedWeight).
+    if (patch.weightKg !== undefined) await recordTypedWeight(tx, userId, patch.weightKg);
     return await getOnboarding(tx, userId);
   });
 }

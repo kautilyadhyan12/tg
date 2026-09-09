@@ -170,7 +170,7 @@ d("users routes (real Postgres)", () => {
     expect((JSON.parse(after.body) as { user: { emailVerified: boolean } }).user.emailVerified).toBe(true);
   });
 
-  it("PATCH updates profile weight without touching nutrition-owned body_measurements", { timeout: 30_000 }, async () => {
+  it("PATCH's weight becomes a self-reported measurement; the same number twice writes one row", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("p22u-patch@example.com");
     const res = await inject({
       method: "PATCH",
@@ -198,25 +198,32 @@ d("users routes (real Postgres)", () => {
     const count = async () =>
       (await sql<{ n: string }[]>`
         SELECT count(*) AS n FROM body_measurements WHERE user_id = ${userId}`)[0]?.n;
-    // P2.6a: users is profile-only; measurement history is owned by
-    // /v1/nutrition/body-measurements.
-    expect(await count()).toBe("0");
+    // A typed weight is a measurement of its own (Kd ruling 2026-09-10): the
+    // number on the profile is always the latest weighed row, so a deleted
+    // mis-entry has something true to fall back to.
+    expect(await count()).toBe("1");
+    const history = await inject({ method: "GET", url: "/v1/nutrition/body-measurements", cookies });
+    expect(history.statusCode).toBe(200);
+    expect(
+      (JSON.parse(history.body) as { items: { weightKg: number; source: string }[] }).items,
+    ).toEqual([expect.objectContaining({ weightKg: 72.5, source: "self_reported" })]);
 
     // Same weight again → no new history row.
     const same = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 72.5 } });
     expect(same.statusCode).toBe(200);
-    expect(await count()).toBe("0");
+    expect(await count()).toBe("1");
 
     // Changed weight → appended.
     const changed = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 73 } });
     expect(changed.statusCode).toBe(200);
-    expect(await count()).toBe("0");
+    expect(await count()).toBe("2");
 
-    // Clearing to null → profile null, nothing appended (DECISIONS P2.2 GAP-2).
+    // Clearing to null → profile null, nothing appended and nothing removed:
+    // clearing is about the number on screen, not the history.
     const cleared = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: null } });
     expect(cleared.statusCode).toBe(200);
     expect((JSON.parse(cleared.body) as { user: { weightKg: null } }).user.weightKg).toBeNull();
-    expect(await count()).toBe("0");
+    expect(await count()).toBe("2");
   });
 
   it("PATCH rejects unknown keys, bad enum values, and an empty body", { timeout: 30_000 }, async () => {

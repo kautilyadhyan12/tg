@@ -333,12 +333,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect((item?.kcalPoint??0)>=(item?.kcalLow??0)&&(item?.kcalPoint??0)<=(item?.kcalHigh??1)).toBe(true);
   },30_000);
 
-  // Deleting the last weighed measurement leaves the number on the users row:
-  // that column also holds the weight onboarding screen 2 and PATCH /v1/users/me
-  // TYPE, which no measurement stands behind, so an empty subquery would erase
-  // an answer nobody asked to erase (nutrition/repo.ts refreshWeight). Emptying
-  // it is its own request, made below.
-  it("dishware and body measurement CRUD are tenant-scoped; a measurement sets current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const weightOf=async()=>(await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg;const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect(await weightOf()).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect(await weightOf()).toBe("72.50");expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:null})).statusCode).toBe(200);expect(await weightOf()).toBeNull();},30_000);
+  // The users row holds the latest weighed measurement by date, and a typed
+  // weight (PATCH /v1/users/me) is a measurement of its own — so deleting the
+  // last weigh-in falls back to what was typed, never to a blank. Emptying the
+  // number is its own request, made at the end.
+  it("dishware and body measurement CRUD are tenant-scoped; a measurement sets current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const weightOf=async()=>(await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg;expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:70})).statusCode).toBe(200);expect(await weightOf()).toBe("70.00");const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date(Date.now()+1000).toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect(await weightOf()).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect(await weightOf()).toBe("70.00");expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:null})).statusCode).toBe(200);expect(await weightOf()).toBeNull();},30_000);
 
   // Card 5c2 — dishware portions: an item's amount can be "my dish, this full"
   // instead of grams; the SERVER computes grams (volume × fill × density) at

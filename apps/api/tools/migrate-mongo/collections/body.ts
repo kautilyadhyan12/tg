@@ -96,11 +96,12 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
   return res.count;
 }
 
-/** GAP-D: point users.weight_kg at the user's LATEST non-null measurement
- *  (mirrors nutrition/repo.ts refreshWeight verbatim, COALESCE included — a
- *  user whose imported measurements are all weightless keeps the weight the
- *  users import carried, instead of losing it to an empty subquery).
- *  Idempotent. */
+/** GAP-D: point users.weight_kg at the user's LATEST non-null measurement.
+ *  Unlike the live nutrition/repo.ts refreshWeight this one COALESCEs onto the
+ *  column: the users import wrote a weight the legacy profile held, no
+ *  measurement stands behind it, and an import has no mis-entry to fall back
+ *  from — so a user whose imported measurements are all weightless keeps it
+ *  instead of losing it to an empty subquery. Idempotent. */
 export async function refreshUserWeight(sql: Sql, userId: string): Promise<void> {
   await sql`
     UPDATE users SET weight_kg = coalesce((

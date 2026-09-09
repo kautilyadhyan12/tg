@@ -666,11 +666,15 @@ d("onboarding v2 routes (real Postgres)", () => {
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       return (JSON.parse(res.body) as { targets: unknown; missing: string[] }).missing;
     };
+    // Weigh-ins are dated a few seconds AFTER the typed weight: the number on
+    // screen is the latest weighed row BY DATE, and a weigh-in logged for last
+    // week does not outrank what the person typed today.
+    const at = (s: number) => new Date(Date.now() + s * 1000).toISOString();
 
     // A waist-only measurement says NOTHING about weight (weightKg is optional
     // on that contract), so it must not be able to erase screen 2's answer —
     // which would blank the plan and the macro rings in the same moment.
-    const waist = await measure({ measuredAt: new Date().toISOString(), metrics: { waist_cm: 80 } });
+    const waist = await measure({ measuredAt: at(1), metrics: { waist_cm: 80 } });
     expect(waist.statusCode).toBe(201);
     const waistId = (JSON.parse(waist.body) as { measurement: { id: string } }).measurement.id;
     const afterWaist = await get(cookies);
@@ -692,28 +696,30 @@ d("onboarding v2 routes (real Postgres)", () => {
     ).toBe(200);
     expect((await get(cookies)).answers["weightKg"]).toBe(70);
 
-    // Nor does deleting it. All three legs are asked WHILE THE TYPED WEIGHT IS
-    // THE ONLY ONE THERE IS, because that is the only state in which the mirror
-    // has nothing to say and answering anyway destroys the answer.
+    // Nor does deleting it.
     expect(
       (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${waistId}`, cookies })).statusCode,
     ).toBe(204);
     expect((await get(cookies)).answers["weightKg"]).toBe(70);
 
-    // A measurement that DOES carry a weight still sets the number, as it
-    // always has — the mirror is narrowed, not switched off.
-    const weighed = await measure({ measuredAt: "2026-09-02T08:00:00.000Z", weightKg: 68 });
+    // A measurement that DOES carry a weight sets the number, as it always has.
+    const weighed = await measure({ measuredAt: at(2), weightKg: 68 });
     expect(weighed.statusCode).toBe(201);
+    const weighedId = (JSON.parse(weighed.body) as { measurement: { id: string } }).measurement.id;
     expect((await get(cookies)).answers["weightKg"]).toBe(68);
 
-    // And now the guards on their own, with a weighed measurement ALREADY
-    // there: the person types a newer weight on screen 2 than any weigh-in
-    // holds, then logs a waist. Nothing in that waist says the older 68 is true
-    // again, so a mirror that ran anyway would silently undo what they just
-    // typed. Each of the three writes is asked separately — this is the state
-    // that tells a narrowed mirror from an unnarrowed one.
+    // And deleting it comes back to the typed 70, because the typed weight is
+    // a weighed row of its own — not to a blank, not to the deleted 68.
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${weighedId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // The guards on their own: the person types a new weight, then logs a waist.
+    // Nothing in that waist says anything about weight, so none of the three
+    // weightless writes may move the number.
     expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
-    const second = await measure({ measuredAt: "2026-09-03T08:00:00.000Z", metrics: { waist_cm: 78 } });
+    const second = await measure({ measuredAt: at(3), metrics: { waist_cm: 78 } });
     expect(second.statusCode).toBe(201);
     const secondId = (JSON.parse(second.body) as { measurement: { id: string } }).measurement.id;
     expect((await get(cookies)).answers["weightKg"], "creating a weightless row moved the weight").toBe(72);
@@ -734,63 +740,69 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["weightKg"], "deleting a weightless row moved the weight").toBe(72);
   });
 
-  it("removing the weight a measurement carried leaves the number, never a blank plan", { timeout: 60_000 }, async () => {
+  it("a deleted or cleared mis-entry falls back to the weight before it, never to itself and never to a blank", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-measure-gone@example.com");
-    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    const typed = await completeSeven(cookies);
+    expect(typed.plan).toMatchObject(GOLDEN_LOSE);
+    const at = (s: number) => new Date(Date.now() + s * 1000).toISOString();
     const measure = async (body: unknown) => {
       const res = await inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
       expect(res.statusCode, res.body).toBe(201);
       return (JSON.parse(res.body) as { measurement: { id: string } }).measurement.id;
+    };
+    const del = async (id: string) => {
+      expect((await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${id}`, cookies })).statusCode).toBe(204);
+    };
+    const clearWeight = async (id: string) => {
+      expect(
+        (await inject({ method: "PATCH", url: `/v1/nutrition/body-measurements/${id}`, body: { weightKg: null }, cookies }))
+          .statusCode,
+      ).toBe(200);
     };
     const ringsMissing = async () => {
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       return (JSON.parse(res.body) as { missing: string[] }).missing;
     };
 
-    // Two weigh-ins, and the mirror follows the newer one, as it always has.
-    const older = await measure({ measuredAt: "2026-09-01T08:00:00.000Z", weightKg: 69 });
-    const newer = await measure({ measuredAt: "2026-09-05T08:00:00.000Z", weightKg: 68 });
+    // Two weigh-ins, and the number follows the newer one.
+    const older = await measure({ measuredAt: at(1), weightKg: 69 });
+    const newer = await measure({ measuredAt: at(2), weightKg: 68 });
     expect((await get(cookies)).answers["weightKg"]).toBe(68);
 
-    // Deleting the newer one falls back to the one before it. Keeping a number
-    // is not FREEZING it: the mirror still moves whenever there is somewhere to
-    // move it TO.
-    expect(
-      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${newer}`, cookies })).statusCode,
-    ).toBe(204);
+    // Deleting the newer one falls back to the one before it.
+    await del(newer);
     const onOlder = await get(cookies);
     expect(onOlder.answers["weightKg"]).toBe(69);
+    expect(onOlder.plan).not.toEqual(typed.plan);
 
-    // Deleting the LAST weighed one has nowhere to move to — and the number in
-    // that column is also the answer screen 2 typed, with no measurement behind
-    // it. Writing the empty subquery here would destroy it and take the plan and
-    // the macro rings with it, in answer to "that weigh-in was a mis-entry".
-    expect(
-      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${older}`, cookies })).statusCode,
-    ).toBe(204);
+    // Deleting the last weigh-in falls back to the TYPED weight — the fix this
+    // test exists for. A COALESCE onto the column would have kept 69 here, the
+    // very number the person just said was wrong; an empty subquery would have
+    // blanked the plan and the rings. The plan is the one screen 2 produced.
+    await del(older);
     const afterDelete = await get(cookies);
-    expect(afterDelete.answers["weightKg"]).toBe(69);
+    expect(afterDelete.answers["weightKg"]).toBe(70);
     expect(afterDelete.missing).toEqual([]);
-    expect(afterDelete.plan).toEqual(onOlder.plan);
+    expect(afterDelete.plan).toEqual(typed.plan);
     expect(await ringsMissing()).toEqual([]);
 
-    // The same harm one step earlier: clearing the weight ON the measurement.
-    const again = await measure({ measuredAt: "2026-09-06T08:00:00.000Z", weightKg: 67 });
+    // The same correction one step earlier: clearing the weight ON the row.
+    const again = await measure({ measuredAt: at(3), weightKg: 67 });
     expect((await get(cookies)).answers["weightKg"]).toBe(67);
-    expect(
-      (
-        await inject({
-          method: "PATCH",
-          url: `/v1/nutrition/body-measurements/${again}`,
-          body: { weightKg: null },
-          cookies,
-        })
-      ).statusCode,
-    ).toBe(200);
+    await clearWeight(again);
     const afterClear = await get(cookies);
-    expect(afterClear.answers["weightKg"]).toBe(67);
+    expect(afterClear.answers["weightKg"]).toBe(70);
     expect(afterClear.missing).toEqual([]);
-    expect(afterClear.plan).not.toBeNull();
+    expect(afterClear.plan).toEqual(typed.plan);
+
+    // And with an older weigh-in still present, clearing the newest moves the
+    // number to THAT one — the guard on the update must run for a cleared
+    // weight, not only for a row that still carries one.
+    await measure({ measuredAt: at(4), weightKg: 66 });
+    const top = await measure({ measuredAt: at(5), weightKg: 65 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(65);
+    await clearWeight(top);
+    expect((await get(cookies)).answers["weightKg"]).toBe(66);
 
     // Nobody is stuck with a number they no longer want: screen 2 clears it
     // outright, and so does PATCH /v1/users/me. Emptying the weight is a thing

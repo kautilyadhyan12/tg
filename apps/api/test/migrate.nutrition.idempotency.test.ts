@@ -94,6 +94,24 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     expect(w?.weight_kg === null ? null : Number(w?.weight_kg)).toBe(75);
     const [m] = await sql<{ metrics: Record<string, number> }[]>`SELECT metrics FROM body_measurements WHERE id = ${row.id}`;
     expect(m?.metrics).toEqual({ waist_cm: 68, body_fat_pct: 20 });
+
+    // A user whose imported measurements are ALL weightless keeps the weight
+    // the users import carried (the COALESCE in refreshUserWeight): the state
+    // the import can produce and the live app cannot.
+    await sql`DELETE FROM body_measurements WHERE user_id = ${userId} AND weight_kg IS NOT NULL`;
+    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
+    const weightless = transformBody({
+      _id: "p27d-body-weightless-0001",
+      user_id: userMongoId,
+      measured_at: "2026-05-24T11:27:03Z",
+      waist_cm: 67,
+    });
+    expect(weightless).not.toBeNull();
+    if (weightless === null) return;
+    expect(await insertBody(sql, weightless)).toBe(1);
+    await refreshUserWeight(sql, userId);
+    const [kept] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
+    expect(kept?.weight_kg === null ? null : Number(kept?.weight_kg)).toBe(80);
   }, 60_000);
 
   it("meal recompute (onMealLogged) awards first_meal exactly once (GAP-E)", async () => {

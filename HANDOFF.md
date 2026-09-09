@@ -4,102 +4,26 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-09 · Onboarding v2 answers and the live plan, server side (Stage 1 item 4a-i), branch `onboarding-plan-server`
+## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
 
-- Kd ruled two things first (RULINGS 2026-09-09): screen 1 asks for ONE main goal out of the seven
-  the app already offers, never a multi-select — the weight direction (lose/gain/keep) is DERIVED
-  from it, not asked; and screen 5 keeps the push-up and plank checks beside the self-rating, both
-  skippable. 4a was then split: this card is the server, 4a-ii is the seven screens.
-- Built: `packages/shared/src/onboarding.ts` (the answers, the save-as-you-go PATCH body, the
-  response, and `PLAN_GOAL_BY_MAIN_GOAL` — the one place a goal becomes a direction); migration
-  `0026` adding five columns to `user_fitness_profiles` (`main_goal`, `pace`, `day_activity`,
-  `push_ups_max`, `plank_hold_seconds`) with a CHECK each; `GET`/`PATCH /v1/users/me/onboarding`;
-  `plan/answers.ts` (pure, the only crossing from stored answers to the calculator's input).
-- Deliberately NOT new columns: training days, session minutes, equipment, level, age, gender,
-  height and target weight already exist from `0006`, and body weight lives on `users.weight_kg`.
-  The v2 surface renames the first two to the screens' words and maps them in the repo, so one
-  answer never means two things; the shared rails are pinned to each other by a test.
-- Two writers, one row, and it is handled: the v1 fitness-profile PUT is a full replace but does
-  NOT touch the five v2 columns (it cannot ask about them), and the v2 PATCH writes a one-element
-  `fitness_goals` mirror so the live macro rings still see the goal. Both pinned; the mirror ends
-  at 4a-ii when the rings move onto these answers.
-- "Today" is the server clock read in the device's IANA zone (query parameter), never a body field;
-  an unknown zone is a 400 rather than a silent fall back to UTC, which would have moved a finish
-  date by a day with nothing on screen to say so. Stored `users.timezone` is the fallback.
-- Verified: api tsc + eslint exit 0; shared tsc + eslint exit 0; shared 78 (was 69); the CI-shaped
-  api run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` 19 ·
-  `db.migration` 22 · with users/plan/nutrition unit suites 155 in one run · `privacy.export` +
-  `privacy.purge` + `nutrition.routes` 68; the FULL local api suite 959/959, no flake this run.
-  Web 1876 passed (`poseAssets.contract.test.js` still red on clean master — it imports nothing
-  from `@app/shared`, checked, so this card cannot be its cause).
-- Every new test was run RED first, nine mutants, all bit: the v1 PUT nulling the v2 columns · the
-  goals mirror dropped · PATCH turned into a full replace · the device's zone ignored · an unknown
-  zone silently UTC · the goal no longer setting the direction · the write no longer active-only ·
-  the shared trainingDays rail drifting from the v1 profile's · the deployed `main_goal` CHECK
-  drifting from the enum. (Anchors had to match the files' CRLF endings — two "survived" until then.)
-- No click-through: 4a-i has no screen (RULINGS 2026-09-09). Open: review, then 4a-ii.
-- Review round 1 (fresh chat): one High, five Low, five test gaps — all fixed in the second commit.
-  THE HIGH: `users.weight_kg` is also a mirror of the latest weighted body measurement, and the
-  mirror ran after EVERY measurement write — so logging a waist (weight is optional on that
-  contract) set it to NULL and took the onboarding answer, the plan and the macro rings with it.
-  Reproduced through the real routes before the fix. The mirror now runs only when the row written,
-  updated or deleted actually carries a weight; a measurement that DOES carry one still owns the
-  number, so `nutrition.routes`'s "measurement owns current weight" is unchanged. The reviewer's
-  COALESCE would have kept a weight the person had just deleted on screen — not taken.
-- Also fixed: the v2 save took the users row FOR UPDATE while the v1 PUT takes the profile row
-  first and the users row as FOR KEY SHARE (its FK check), so the two could deadlock — proved by
-  holding that key-share lock, which blocked the save for the full five-second timeout; FOR NO KEY
-  UPDATE keeps the active-only guard and lets the FK check through (same test, 358 ms). The mirror
-  comment claimed the two goal columns "can never disagree" — true only of this route, so it now
-  says which way the guarantee runs; the equipment rail is the v1 profile's own `uniqueArray`
-  instead of a second copy, and refuses "none" beside real equipment (the v1 form is a live free
-  multi-select and is deliberately not tightened). ROADMAP 4a-i unticked — it ticks on merge.
-- Test gaps closed: `onboardingCompleted` stored and read back on `/v1/users/me`; `updatedAt`
-  moves across two saves and is null while only a weight is stored; the macro rings' NUMBER follows
-  the goal (−400 / +300, not merely "not null"); a stored height past the plan's rails is a 500 that
-  echoes no value; the equipment cap pinned against the v1 rail. Five mutants run: the two the
-  reviewer found alive both die now, and the three guards each die on their own leg (the delete
-  guard survived the first draft — the test still had a weighted row to fall back on).
-- Verified after the fixes: shared tsc + eslint exit 0, 79 tests; api tsc + eslint exit 0; the
-  CI-shaped run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` 24 ·
-  `nutrition.routes` + `nutrition.unit` + `users.routes` + `users.fitness.routes` + `migrate.body`
-  81 in one run; the FULL local suite 944 passed, 0 test failures — one SUITE error in
-  `auth.routes` whose two-statement fixture cleanup lost a race to another file's insert
-  (ROADMAP item 10); `auth.routes` + `workouts.sync` 43 passed together alone.
-
-- Re-check round 2 (fresh chat): one High, two Low, two test gaps — all fixed in this commit. THE
-  HIGH is the same wipe one step later: round 1 stopped a WEIGHTLESS measurement from running the
-  mirror, but deleting (or clearing the weight on) the LAST weighed one left the subquery empty and
-  the statement wrote that NULL over the weight screen 2 typed — a mis-entered weigh-in, corrected,
-  blanked the weight, the plan and the macro rings, and the typed number was unrecoverable.
-  Reproduced through the real routes first (`expected null to be 69`). The mirror now COALESCEs to
-  the number already on the row: it MOVES the weight, never empties it. Emptying stays where the
-  person asks for it — screen 2's `weightKg: null` and PATCH /v1/users/me, both tested.
-- That fix made round 1's three guards invisible to their own test (an empty subquery is harmless
-  now), so they are re-pinned in the state that still tells them apart: a weigh-in of 68, then a
-  NEWER 72 typed on screen 2, then a waist created / edited / deleted — each must leave 72, and an
-  unguarded mirror snaps back to 68. Each guard was removed on its own and each leg went red.
-- Also fixed: the equipment cap is ONE object now (`equipmentArraySchema` in `users.ts`, its cap
-  read from the enum's own length), so the comment claiming the v1 rail was "reused rather than
-  restated" is true — it was still a second `uniqueArray(equipmentSchema, 5)` at both call sites.
-  The migration tool's copy of the mirror gets the same COALESCE, its "verbatim" comment with it.
-- The two weak tests are gone: the equipment "cap" test asserted nothing (five enum members plus
-  the duplicate rule make a sixth item unreachable — raising the cap to 50 kept it green), and now
-  sweeps all 32 subsets for agreement between the two surfaces instead, saying plainly that the cap
-  itself cannot be pinned; the weight test stopped one step before the harm and now carries it.
-  `nutrition.routes`'s "measurement owns current weight" asserted the wipe as correct — it now
-  asserts the number survives the delete and that PATCH /v1/users/me is what clears it.
-- Kd's, not fixed here, both recorded in ROADMAP 4a-ii: a person carried over from the v1 form with
-  "none + dumbbells" stored gets a 400 on screen 7's first Save unless the screen drops "none" as
-  it loads; and `onboardingCompleted` is whatever the client sends, so `true` with no answers opens
-  the training side (the v1 PUT is the same and nothing on the server gates on it).
-- Verified after the re-check fixes: shared tsc + eslint exit 0, 79 tests; api tsc + eslint exit 0;
-  the CI-shaped run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` (25
-  tests) · `nutrition.routes` · `nutrition.unit` · `users.routes` · `migrate.nutrition.idempotency`
-  95 in one run; the FULL local suite twice — 952 then 953 passed, the failures `workouts.sync`
-  both times (13 across two files, then 12 in that one), which passes alone (23). A failure count
-  that changes between runs is ROADMAP item 10's shared-database flake, the same file yesterday's
-  entry records; nothing it touches is in this diff.
+- Kd ruled first (RULINGS 2026-09-09): ONE main goal on screen 1, direction derived; push-up and
+  plank checks kept on screen 5. 4a split: this is the server, 4a-ii is the seven screens.
+- Built: `packages/shared/src/onboarding.ts` (answers, PATCH body, response, goal→direction);
+  migration `0026` (five columns on `user_fitness_profiles`); `GET`/`PATCH /v1/users/me/onboarding`;
+  `plan/answers.ts`. "Today" is the server clock in the device's zone; an unknown zone is a 400.
+- The v2 PATCH writes a one-element `fitness_goals` mirror so the macro rings see the goal; the v1
+  PUT never touches the five v2 columns. Both end at 4a-ii when the rings move onto the answers.
+- Weight (Kd ruling 2026-09-10): `users.weight_kg` IS the latest weighed measurement by date. A
+  typed weight (screen 2, PATCH /v1/users/me) is written as a `self_reported` measurement first
+  (`nutrition/repo.ts recordTypedWeight`; same number twice writes one row; `null` clears the
+  column only). Deleting a mis-entered weigh-in falls back to the weight before it.
+- Verified this chat: api tsc + eslint exit 0; shared tsc exit 0; local Postgres
+  `users.onboarding.routes` 25 · `users.routes` 8 · `nutrition.routes` 29 ·
+  `migrate.nutrition.idempotency` 3; full local api 952 passed, 13 failed in `catalog.seed` +
+  `workouts.sync` under load, 30/30 alone (item 10's flake); web 1876 passed (`poseAssets.contract`
+  red on master too). Three mutants bit: typed weight as a column write · the update guard ignoring
+  a cleared weight · the migration COALESCE dropped.
+- Open: reviewer re-check of the weight commit; then merge and 4a-ii. No click-through (no screen).
 
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 
