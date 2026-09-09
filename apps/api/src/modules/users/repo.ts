@@ -7,7 +7,7 @@
 // Every query is keyed by the owning userId (R3.2).
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
-import type { UpdateProfileRequest } from "./schemas.js";
+import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
  *  TransactionSql are siblings, not sub/supertypes — neither is assignable to
@@ -121,6 +121,12 @@ export interface FitnessProfileRow {
   preferredWorkoutTime: string | null;
   medicalConditions: string | null;
   onboardingCompleted: boolean;
+  // Onboarding v2 (migration 0026).
+  mainGoal: string | null;
+  pace: string | null;
+  dayActivity: string | null;
+  pushUpsMax: number | null;
+  plankHoldSeconds: number | null;
   updatedAt: Date;
 }
 
@@ -137,6 +143,11 @@ interface FitnessProfileDbRow {
   preferred_workout_time: string | null;
   medical_conditions: string | null;
   onboarding_completed: boolean;
+  main_goal: string | null;
+  pace: string | null;
+  day_activity: string | null;
+  push_ups_max: number | null;
+  plank_hold_seconds: number | null;
   updated_at: Date;
 }
 
@@ -153,20 +164,47 @@ const toFitnessProfile = (r: FitnessProfileDbRow): FitnessProfileRow => ({
   preferredWorkoutTime: r.preferred_workout_time,
   medicalConditions: r.medical_conditions,
   onboardingCompleted: r.onboarding_completed,
+  mainGoal: r.main_goal,
+  pace: r.pace,
+  dayActivity: r.day_activity,
+  pushUpsMax: r.push_ups_max,
+  plankHoldSeconds: r.plank_hold_seconds,
   updatedAt: r.updated_at,
 });
 
+/** The columns every fitness-profile read and RETURNING lists, in one place, so
+ *  a column added to the row type cannot be silently missing from one of them
+ *  (it would arrive `undefined` and map to `undefined`, not null). */
+const FITNESS_PROFILE_COLUMNS = [
+  "age",
+  "gender",
+  "height_cm",
+  "target_weight_kg",
+  "fitness_level",
+  "fitness_goals",
+  "exercise_frequency",
+  "available_equipment",
+  "session_duration_min",
+  "preferred_workout_time",
+  "medical_conditions",
+  "onboarding_completed",
+  "main_goal",
+  "pace",
+  "day_activity",
+  "push_ups_max",
+  "plank_hold_seconds",
+  "updated_at",
+] as const;
+
 /** Null when the user has not started onboarding (no row) — the common case;
- *  the service turns that into the empty profile. Keyed on userId (R3.2). */
+ *  the service turns that into the empty profile. Keyed on userId (R3.2).
+ *  Accepts a transaction so the onboarding merge can read its own write. */
 export async function getFitnessProfile(
-  sql: Sql,
+  sql: SqlOrTx,
   userId: string,
 ): Promise<FitnessProfileRow | null> {
   const rows = await sql<FitnessProfileDbRow[]>`
-    SELECT age, gender, height_cm, target_weight_kg, fitness_level,
-           fitness_goals, exercise_frequency, available_equipment,
-           session_duration_min, preferred_workout_time, medical_conditions,
-           onboarding_completed, updated_at
+    SELECT ${sql(FITNESS_PROFILE_COLUMNS)}
     FROM user_fitness_profiles WHERE user_id = ${userId}`;
   return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
 }
@@ -179,7 +217,13 @@ export async function getFitnessProfile(
  *  deleted user's SELECT yields no row, so nothing inserts, no conflict fires,
  *  and RETURNING is empty → null. A check-then-insert would be a TOCTOU race
  *  against a concurrent account deletion. The FK guarantees the user EXISTS but
- *  says nothing about status, since §5.2 soft-deletes. */
+ *  says nothing about status, since §5.2 soft-deletes.
+ *
+ *  THE ONBOARDING v2 COLUMNS (0026) ARE DELIBERATELY ABSENT from both the
+ *  INSERT list and the DO UPDATE SET: this is the v1 screen's route, which has
+ *  no way to ask for a pace or a push-up count, so writing NULL over them would
+ *  throw away an answer this form never offered. "Full document" means the
+ *  fields THIS contract carries. `patchOnboarding` below owns the rest. */
 export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
@@ -211,10 +255,7 @@ export async function upsertFitnessProfile(
       medical_conditions = EXCLUDED.medical_conditions,
       onboarding_completed = EXCLUDED.onboarding_completed,
       updated_at = now()
-    RETURNING age, gender, height_cm, target_weight_kg, fitness_level,
-              fitness_goals, exercise_frequency, available_equipment,
-              session_duration_min, preferred_workout_time, medical_conditions,
-              onboarding_completed, updated_at`;
+    RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
   return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
 }
 
@@ -233,6 +274,98 @@ export interface FitnessProfileWrite {
   preferredWorkoutTime: string | null;
   medicalConditions: string | null;
   onboardingCompleted: boolean;
+}
+
+// ── onboarding v2: save as you go (ROADMAP Stage 1 item 4a) ─────────────────
+
+/** The two rows one screen's answers can touch, read back after the write. */
+export interface OnboardingRow {
+  /** Null until the person has saved at least one profile answer. */
+  profile: FitnessProfileRow | null;
+  /** users.weight_kg — screen 2 asks it; it lives there unduplicated. */
+  weightKg: number | null;
+  /** users.timezone — the fallback for a client that sent none (service). */
+  timezone: string | null;
+}
+
+/** Reads both rows. Keyed on userId; no status filter for the same reason
+ *  `getSyncContext` has none — every caller is behind `authenticate`. */
+export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<OnboardingRow> {
+  const profile = await getFitnessProfile(sql, userId);
+  const rows = await sql<{ weight_kg: string | null; timezone: string | null }[]>`
+    SELECT weight_kg, timezone FROM users WHERE id = ${userId}`;
+  const raw = rows[0]?.weight_kg;
+  return { profile, weightKg: raw == null ? null : Number(raw), timezone: rows[0]?.timezone ?? null };
+}
+
+/** PATCH semantics, one transaction: a key PRESENT in the parsed body is
+ *  written (an explicit null clears the answer), a key ABSENT is left alone.
+ *  The profile row and the body weight move together, so a screen can never
+ *  half-save.
+ *
+ *  Two statements rather than one `INSERT … ON CONFLICT DO UPDATE`, because the
+ *  column list VARIES with the screen: the upsert form has to name every column
+ *  and would write NULL over the answers this screen never asked about — the
+ *  exact opposite of what saving as you go means. The row is created empty
+ *  first (every column on this table is nullable by design), then only this
+ *  screen's columns are set.
+ *
+ *  Active-only, and this one cannot use the INSERT…SELECT trick: an EXISTING
+ *  profile row would still be updatable by a soft-deleted account. The users
+ *  row is taken FOR UPDATE first instead (the `updateProfile` pattern), which
+ *  both proves the account is active and blocks a concurrent deletion for the
+ *  rest of the transaction. Null = not active. */
+export async function patchOnboarding(
+  sql: Sql,
+  userId: string,
+  patch: PatchOnboardingRequest,
+): Promise<OnboardingRow | null> {
+  return await sql.begin(async (tx) => {
+    const active = await tx<{ id: string }[]>`
+      SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR UPDATE`;
+    if (active[0] === undefined) return null;
+
+    // Fixed field→column map. `trainingDays` and `sessionMinutes` are the
+    // screens' words for columns 0006 already owns — renamed on this surface,
+    // never duplicated in the table (migration 0026's note).
+    const cols: Record<string, string | number | boolean | null | string[]> = {};
+    if (patch.age !== undefined) cols["age"] = patch.age;
+    if (patch.gender !== undefined) cols["gender"] = patch.gender;
+    if (patch.heightCm !== undefined) cols["height_cm"] = patch.heightCm;
+    if (patch.targetWeightKg !== undefined) cols["target_weight_kg"] = patch.targetWeightKg;
+    if (patch.pace !== undefined) cols["pace"] = patch.pace;
+    if (patch.dayActivity !== undefined) cols["day_activity"] = patch.dayActivity;
+    if (patch.fitnessLevel !== undefined) cols["fitness_level"] = patch.fitnessLevel;
+    if (patch.pushUpsMax !== undefined) cols["push_ups_max"] = patch.pushUpsMax;
+    if (patch.plankHoldSeconds !== undefined) cols["plank_hold_seconds"] = patch.plankHoldSeconds;
+    if (patch.trainingDays !== undefined) cols["exercise_frequency"] = patch.trainingDays;
+    if (patch.sessionMinutes !== undefined) cols["session_duration_min"] = patch.sessionMinutes;
+    if (patch.availableEquipment !== undefined) cols["available_equipment"] = patch.availableEquipment;
+    if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;
+    if (patch.mainGoal !== undefined) {
+      cols["main_goal"] = patch.mainGoal;
+      // THE MIRROR, and it is temporary. The live macro rings still read the
+      // v1 `fitness_goals` ARRAY (nutrition/targets.ts), so a person who picks
+      // "lose weight" on the new screen 1 must not read as having no goal
+      // there. Written in the same statement as `main_goal`, so the two can
+      // never disagree. Item 4a-ii moves the rings onto these answers and this
+      // line goes with them (migration 0026's note).
+      cols["fitness_goals"] = patch.mainGoal === null ? [] : [patch.mainGoal];
+    }
+
+    if (Object.keys(cols).length > 0) {
+      await tx`
+        INSERT INTO user_fitness_profiles (user_id) VALUES (${userId})
+        ON CONFLICT (user_id) DO NOTHING`;
+      await tx`
+        UPDATE user_fitness_profiles SET ${tx(cols)}, updated_at = now()
+        WHERE user_id = ${userId}`;
+    }
+    if (patch.weightKg !== undefined) {
+      await tx`UPDATE users SET weight_kg = ${patch.weightKg} WHERE id = ${userId}`;
+    }
+    return await getOnboarding(tx, userId);
+  });
 }
 
 // ── health screening (ROADMAP Stage 1 item 3b) ──────────────────────────────

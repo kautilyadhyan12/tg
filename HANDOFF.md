@@ -4,6 +4,41 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-09 · Onboarding v2 answers and the live plan, server side (Stage 1 item 4a-i), branch `onboarding-plan-server`
+
+- Kd ruled two things first (RULINGS 2026-09-09): screen 1 asks for ONE main goal out of the seven
+  the app already offers, never a multi-select — the weight direction (lose/gain/keep) is DERIVED
+  from it, not asked; and screen 5 keeps the push-up and plank checks beside the self-rating, both
+  skippable. 4a was then split: this card is the server, 4a-ii is the seven screens.
+- Built: `packages/shared/src/onboarding.ts` (the answers, the save-as-you-go PATCH body, the
+  response, and `PLAN_GOAL_BY_MAIN_GOAL` — the one place a goal becomes a direction); migration
+  `0026` adding five columns to `user_fitness_profiles` (`main_goal`, `pace`, `day_activity`,
+  `push_ups_max`, `plank_hold_seconds`) with a CHECK each; `GET`/`PATCH /v1/users/me/onboarding`;
+  `plan/answers.ts` (pure, the only crossing from stored answers to the calculator's input).
+- Deliberately NOT new columns: training days, session minutes, equipment, level, age, gender,
+  height and target weight already exist from `0006`, and body weight lives on `users.weight_kg`.
+  The v2 surface renames the first two to the screens' words and maps them in the repo, so one
+  answer never means two things; the shared rails are pinned to each other by a test.
+- Two writers, one row, and it is handled: the v1 fitness-profile PUT is a full replace but does
+  NOT touch the five v2 columns (it cannot ask about them), and the v2 PATCH writes a one-element
+  `fitness_goals` mirror so the live macro rings still see the goal. Both pinned; the mirror ends
+  at 4a-ii when the rings move onto these answers.
+- "Today" is the server clock read in the device's IANA zone (query parameter), never a body field;
+  an unknown zone is a 400 rather than a silent fall back to UTC, which would have moved a finish
+  date by a day with nothing on screen to say so. Stored `users.timezone` is the fallback.
+- Verified: api tsc + eslint exit 0; shared tsc + eslint exit 0; shared 78 (was 69); the CI-shaped
+  api run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` 19 ·
+  `db.migration` 22 · with users/plan/nutrition unit suites 155 in one run · `privacy.export` +
+  `privacy.purge` + `nutrition.routes` 68; the FULL local api suite 959/959, no flake this run.
+  Web 1876 passed (`poseAssets.contract.test.js` still red on clean master — it imports nothing
+  from `@app/shared`, checked, so this card cannot be its cause).
+- Every new test was run RED first, nine mutants, all bit: the v1 PUT nulling the v2 columns · the
+  goals mirror dropped · PATCH turned into a full replace · the device's zone ignored · an unknown
+  zone silently UTC · the goal no longer setting the direction · the write no longer active-only ·
+  the shared trainingDays rail drifting from the v1 profile's · the deployed `main_goal` CHECK
+  drifting from the enum. (Anchors had to match the files' CRLF endings — two "survived" until then.)
+- No click-through: 4a-i has no screen (RULINGS 2026-09-09). Open: review, then 4a-ii.
+
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 
 - Kd was offered the 3c plan (tag the 131 curated foods, a "contains …" line on search and meals, no

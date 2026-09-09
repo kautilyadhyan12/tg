@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, orgTypeSchema } from "@app/shared";
+import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, fitnessGoalSchema, orgTypeSchema } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -716,6 +716,55 @@ d("0001_init on a real database", () => {
       expect(pk.map((r) => r.attname)).toEqual(["user_id"]);
     } finally {
       await sql`DELETE FROM consent_log WHERE user_id = ${ownerId}`;
+      await sql`DELETE FROM users WHERE id = ${ownerId}`;
+    }
+  });
+
+  /** `0026`'s FIVE ONBOARDING v2 COLUMNS, read back off the deployed catalogue.
+   *
+   *  The MAIN GOAL CHECK carries the `0024` guard for the same reason: a `.sql`
+   *  file the journal does not name is applied silently and reports success,
+   *  and both directions of a drift fail far from the edit. A goal in the enum
+   *  without the migration 400s nothing and 500s the save on an unmapped 23514;
+   *  a goal in the CHECK without the enum is the direction only this test
+   *  covers — a row written with it is refused on the way OUT, at the service's
+   *  `onboardingAnswersSchema.parse`, turning that person's every onboarding
+   *  read into a 500.
+   *
+   *  The other four are proven by CAUSING them, and NULL is proven to pass all
+   *  five: a half-finished wizard is the normal state of this table. */
+  it("0026's onboarding answer columns exist on the deployed database, with their CHECKs", async () => {
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0026@example.com', 'zz 0026')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const ownerId = owner[0]?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${ownerId}) ON CONFLICT DO NOTHING`;
+      // Every one of the five is NULLable — the wizard saves as it goes.
+      const nulls = await sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM user_fitness_profiles
+        WHERE user_id = ${ownerId} AND main_goal IS NULL AND pace IS NULL
+          AND day_activity IS NULL AND push_ups_max IS NULL AND plank_hold_seconds IS NULL`;
+      expect(nulls[0]?.n).toBe("1");
+
+      await refused(sql`UPDATE user_fitness_profiles SET main_goal = 'get_ripped' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET pace = 'extreme' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET day_activity = 'lying_down' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = -1 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = 501 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = -1 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = 3601 WHERE user_id = ${ownerId}`);
+
+      const [defRow] = await sql<{ def: string }[]>`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = 'user_fitness_profiles'::regclass
+          AND conname = 'user_fitness_profiles_main_goal_check'`;
+      const def = defRow?.def;
+      if (def === undefined) throw new Error("user_fitness_profiles_main_goal_check is not on the table");
+      const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+      expect(inCheck).toEqual([...fitnessGoalSchema.options].sort());
+    } finally {
       await sql`DELETE FROM users WHERE id = ${ownerId}`;
     }
   });
