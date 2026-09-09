@@ -52,9 +52,13 @@ export const healthScreeningSchema = z
     /** THE HEALTH ANSWER ALONE: any yes, cleared or not. It is NOT "the plan
      *  holds the cut" — age is a separate rule with the same effect, so a
      *  16-year-old who answered no reads false here while their targets and
-     *  plan hold the deficit anyway and say so in their own `noCalorieCut`
-     *  (nutrition.ts, which is that combined answer). A screen that wants to
-     *  know whether the cut is held must read the plan or the targets. */
+     *  plan hold the deficit anyway.
+     *
+     *  The targets' and the plan's own `noCalorieCut` (nutrition.ts) is not the
+     *  combined answer either: it says A DEFICIT WAS WITHHELD, which also needs
+     *  a weight-loss goal, so it too reads false for a 16-year-old who is not
+     *  trying to lose weight. NO SINGLE FLAG says "the under-18 rule applies to
+     *  this person" — a screen that needs that reads the age. */
     noCalorieCut: z.boolean(),
     updatedAt: z.string().datetime().nullable(),
   })

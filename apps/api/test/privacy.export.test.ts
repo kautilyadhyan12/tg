@@ -176,14 +176,26 @@ d("DPDP data export (real Postgres)", () => {
   // that can hand a person less than they have. Before this test the cap was
   // silent: deleting `LIMIT ${CONSENT_EXPORT_LIMIT}` left the whole suite green
   // (measured at the 3b re-check), because no fixture ever had two consent
-  // rows. Both halves are asserted — the file stops at the cap, AND it says
-  // how many rows exist — so neither the ceiling nor the count can be dropped.
-  it("caps the consent log and SAYS the file is short of the whole record", { timeout: 90_000 }, async () => {
+  // rows. Three things are asserted — the file stops at the cap, it says how
+  // many rows exist, and WHICH rows survived — so neither the ceiling, the
+  // count nor the ordering can be dropped.
+  it("caps the consent log, SAYS the file is short, and keeps the NEWEST taps", { timeout: 90_000 }, async () => {
     const u = await makeUser("capped");
-    // makeUser seeded one; add exactly the ceiling, so one row cannot fit.
+    // makeUser seeded one, and it must be the NEWEST row of the set. Add
+    // exactly the ceiling below it, so one row cannot fit and the cap has to
+    // choose an end to drop.
+    //
+    // STAMPED FROM THE FIXTURE'S OWN ROW, not from `now()`. `now()` is the
+    // statement's transaction time, and makeUser runs ~20 inserts before this
+    // one: on a loaded database that took over a second, which put `now() - 1s`
+    // AFTER the fixture's row and made "the newest" ambiguous. Green scoped,
+    // red in the full suite — the fixture must not depend on how fast the
+    // database is.
     await sql`
       INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version, recorded_at)
-      SELECT ${u.userId}, 'plan_screen', 'v1', 'w', 'test', now() - (g * interval '1 second')
+      SELECT ${u.userId}, 'plan_screen', 'v1', 'older-' || g::text, 'test',
+             (SELECT c.recorded_at FROM consent_log c WHERE c.user_id = ${u.userId})
+               - (g * interval '1 second')
       FROM generate_series(1, ${CONSENT_EXPORT_LIMIT}) AS g`;
 
     const out = await buildUserExport({ sql }, u.userId);
@@ -193,6 +205,27 @@ d("DPDP data export (real Postgres)", () => {
       returned: CONSENT_EXPORT_LIMIT,
       total: CONSENT_EXPORT_LIMIT + 1,
     });
+
+    // WHICH thousand came back. The counts above pass whichever end is cut, and
+    // the envelope never says which — so the export must keep the person's most
+    // recent taps (the wording they agreed to last), the same end the list route
+    // shows. Ordered oldest-first, this suite stayed green while silently
+    // dropping makeUser's own row, the newest one of all.
+    const wordings = (out.data["consent_log"] ?? []).map((r) => r["wording"]);
+    expect(wordings[0]).toBe("wording-capped"); // the newest, first in the file
+    expect(wordings).toContain("older-1"); // the second-newest survives
+    expect(wordings).not.toContain(`older-${String(CONSENT_EXPORT_LIMIT)}`); // the oldest is the one cut
+    // ...and the row carries EXACTLY the six columns the read enumerates: not
+    // `total`, the carrier the count now rides in, and not a seventh column
+    // added to the SELECT and forgotten by the filter that drops it.
+    expect(Object.keys((out.data["consent_log"] ?? [])[0] ?? {}).sort()).toEqual([
+      "app_version",
+      "id",
+      "purpose",
+      "recorded_at",
+      "wording",
+      "wording_version",
+    ]);
   });
 
   it("NEVER includes credentials or excluded tables", { timeout: 60_000 }, async () => {

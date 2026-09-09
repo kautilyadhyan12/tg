@@ -135,22 +135,40 @@ export const CONSENT_EXPORT_LIMIT = 1000;
  *  INTERNAL_COLUMNS_BY_TABLE entry can ever cover it: THE EXPLICIT COLUMN LIST
  *  BELOW IS THE GUARD. Never widen it to `SELECT *`.
  *
- *  The TOTAL comes back beside the rows, exactly as the list route's read does
- *  (users/repo.ts listConsents): the cap above must never let a short file pass
- *  for the whole record — an export that quietly drops rows is the one place
- *  where "here is your data" would be false. `export.ts` says so in the file. */
+ *  ONE STATEMENT, NEWEST FIRST — the list route's read (users/repo.ts
+ *  listConsents) in both respects, and both of them matter:
+ *
+ *   · `count(*) OVER ()` is computed BEFORE the LIMIT, so the rows and the
+ *     total come from one snapshot. Counted in a second round trip they could
+ *     not: a disclaimer tap landing between the two (1000 read, 1001 counted)
+ *     would make the file announce a cut that never happened — the same false
+ *     statement `truncated` exists to prevent. One statement also spares the
+ *     export's single connection (export.ts) a nineteenth trip.
+ *   · DESC keeps the person's MOST RECENT taps — the wording they agreed to
+ *     last — when the cap bites. `truncated` says how many rows were cut, never
+ *     which end, so the end that survives has to be the useful one, and it must
+ *     be the end the list route shows or the two answers disagree.
+ *
+ *  The cap must never let a short file pass for the whole record: an export
+ *  that quietly drops rows is the one place where "here is your data" would be
+ *  false. `export.ts` says so in the file. */
 export async function selectExportConsents(
   sql: Sql,
   userId: string,
 ): Promise<{ rows: Row[]; total: number }> {
-  const rows = await sql<Row[]>`
-    SELECT id, purpose, wording_version, wording, app_version, recorded_at
+  const counted = await sql<(Row & { total: number })[]>`
+    SELECT id, purpose, wording_version, wording, app_version, recorded_at,
+           (count(*) OVER ())::int AS total
     FROM consent_log WHERE user_id = ${userId}
-    ORDER BY recorded_at, id
+    ORDER BY recorded_at DESC, id DESC
     LIMIT ${CONSENT_EXPORT_LIMIT}`;
-  const counted = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${userId}`;
-  // Never below what was actually read: a total under the row count would make
-  // the envelope's own "listed ≤ total" claim false.
-  return { rows, total: Math.max(counted[0]?.n ?? 0, rows.length) };
+  // `total` carries the window's answer, not the person's data — it is dropped
+  // before the rows reach the file (the export test asserts the exact key set
+  // of an exported row, so neither this filter nor the SELECT can drift). No
+  // `Math.max` guard any more: one statement cannot report a total below the
+  // rows it just returned.
+  const rows: Row[] = counted.map((r) =>
+    Object.fromEntries(Object.entries(r).filter(([column]) => column !== "total")),
+  );
+  return { rows, total: counted[0]?.total ?? 0 };
 }

@@ -71,6 +71,21 @@ export interface PurgeResult {
   dryRun: boolean;
 }
 
+/** DID THIS RUN FALL SHORT? The one definition, so the two entrypoints cannot
+ *  disagree about what a failure is — src/worker.ts throws on it (failed set,
+ *  DLQ tail, Sentry) and tools/dpdp-purge.ts exits 1 on it (what a cron reads).
+ *  Both used to spell the condition out for themselves, and neither is imported
+ *  by any test, so a term dropped from one of the copies was invisible.
+ *
+ *  Three ways, each a different job for whoever reads the log: a user's
+ *  transaction threw (retried next run), a leaderboard snapshot the scrub
+ *  cannot certify so this run withheld every marker (needs a code fix), or the
+ *  run-level consent-log expiry threw (retried next run). A run that fell short
+ *  must NEVER be acked COMPLETED — R8.3. */
+export function purgeShortfall(result: PurgeResult): boolean {
+  return result.errors > 0 || result.schemaDriftSnapshots > 0 || result.consentProofExpiryFailed;
+}
+
 const DEFAULT_LIMIT = 500;
 
 /** One user's cascade, inside the caller's transaction (§5.2 "in one

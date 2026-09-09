@@ -11,7 +11,7 @@
 import pino from "pino";
 import postgres from "postgres";
 import { z } from "zod";
-import { purgeDueUsers } from "../src/modules/privacy/purge.js";
+import { purgeDueUsers, purgeShortfall } from "../src/modules/privacy/purge.js";
 import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 
 // Standalone tool: it parses ONLY the env it needs (R2.3), following
@@ -40,16 +40,12 @@ try {
     apply ? "purge applied" : "DRY RUN — nothing was written; re-run with --apply to purge",
   );
   await sql.end();
-  // Non-zero exit is what an operator (and a cron) needs to see. Three ways
-  // the run fell short, matching the worker entrypoint exactly (T3 round 3,
-  // F4; the third added at the 3b re-check): a user's transaction threw
-  // (errors), a leaderboard snapshot the scrub cannot certify made this run
-  // withhold every marker (schemaDriftSnapshots), or the run-level consent-log
-  // expiry threw (consentProofExpiryFailed — counted apart from `errors` so
-  // the log names the step, not a member).
-  const shortfall =
-    result.errors > 0 || result.schemaDriftSnapshots > 0 || result.consentProofExpiryFailed;
-  process.exit(shortfall ? 1 : 0);
+  // Non-zero exit is what an operator (and a cron) needs to see. The condition
+  // is `purgeShortfall` — the SAME call src/worker.ts throws on, so the two
+  // entrypoints cannot drift apart, which a copy of the condition here could
+  // and did (neither entrypoint is imported by a test; the shared function is,
+  // ungated, in privacy.purge.test.ts).
+  process.exit(purgeShortfall(result) ? 1 : 0);
 } catch (err) {
   log.fatal({ errName: err instanceof Error ? err.name : typeof err }, "purge run failed");
   await sql.end();

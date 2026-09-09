@@ -1,10 +1,12 @@
 // P1.1 — schema contract tests (Part 2 §2, v1 §5.3).
 import { describe, expect, it } from "vitest";
 import {
+  DPDP_EXPORT_SCHEMA_VERSION,
   ORG_PRIVILEGES,
   KEYPOINT_COUNT,
   KP,
   VISIBILITY_THRESHOLD,
+  dpdpExportSchema,
   frameResultSchema,
   holdEventSchema,
   instantSchema,
@@ -516,5 +518,58 @@ describe("privileges a newer server knows and this build does not", () => {
       privileges: ["members.read", newestPrivilege],
     });
     expect(newest.success).toBe(true);
+  });
+});
+
+// The export envelope's `truncated` block (Part 4 §5.2, schemaVersion 2). Its
+// guards were fed nothing but valid server output — the api suite parses whole
+// exports the server just built — so deleting the `.strict()` or the refine
+// left everything green. This is the only place they are pushed on.
+describe("DPDP export envelope: the truncation block", () => {
+  const envelope = (truncated: unknown) => ({
+    exportedAt: "2026-09-09T10:00:00.000Z",
+    schemaVersion: DPDP_EXPORT_SCHEMA_VERSION,
+    user: { id: "u1" },
+    data: { consent_log: [] },
+    truncated,
+  });
+
+  it("accepts no truncation and a real one", () => {
+    // `{}` is the ordinary case and must stay legal: the key is ALWAYS present,
+    // so "nothing was cut" is said out loud rather than by an absent key.
+    expect(dpdpExportSchema.safeParse(envelope({})).success).toBe(true);
+    expect(
+      dpdpExportSchema.safeParse(envelope({ consent_log: { returned: 1000, total: 1001 } })).success,
+    ).toBe(true);
+  });
+
+  it("refuses an entry that is not a truncation, or one carrying extra keys", () => {
+    // returned === total is the false statement the whole block exists to
+    // prevent — an envelope announcing a cut that never happened.
+    expect(
+      dpdpExportSchema.safeParse(envelope({ consent_log: { returned: 3, total: 3 } })).success,
+    ).toBe(false);
+    // ...and returned > total is the same lie pointed the other way.
+    expect(
+      dpdpExportSchema.safeParse(envelope({ consent_log: { returned: 4, total: 3 } })).success,
+    ).toBe(false);
+    // A stray key means the producer and this contract disagree about the
+    // shape; a downloadable file is the wrong place to find that out.
+    expect(
+      dpdpExportSchema.safeParse(
+        envelope({ consent_log: { returned: 1, total: 2, cut: "oldest" } }),
+      ).success,
+    ).toBe(false);
+    // Negative counts, and a missing half, are not counts at all.
+    expect(
+      dpdpExportSchema.safeParse(envelope({ consent_log: { returned: -1, total: 3 } })).success,
+    ).toBe(false);
+    expect(dpdpExportSchema.safeParse(envelope({ consent_log: { total: 3 } })).success).toBe(false);
+  });
+
+  it("requires the block itself — a file that cannot say it is whole is not the contract", () => {
+    const withoutBlock: Record<string, unknown> = { ...envelope({}) };
+    delete withoutBlock["truncated"];
+    expect(dpdpExportSchema.safeParse(withoutBlock).success).toBe(false);
   });
 });

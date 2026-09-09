@@ -49,6 +49,26 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified after the re-check fixes: shared tsc + 66 tests; api tsc + eslint exit 0; `plan.unit` +
   `nutrition.unit` 76; local Postgres `privacy.purge` 24 · `privacy.export` 12 · `users.health.routes`
   20 (56 in one run) · `db.migration` 21; the CI-shaped run with no DATABASE_URL 296 passed.
+- Re-check round 2 (fresh chat): NO Critical/High — four Lows and three test gaps, all fixed in
+  this commit. The export's consent read is ONE statement now (`count(*) OVER ()`, so a tap landing
+  between two round trips can no longer make the file announce a cut that never happened) and reads
+  NEWEST-first like the list route, so a capped export keeps the taps the person agreed to LAST;
+  the consent limiter's address ceiling is the gym-floor 3000 (600 was still under a 300-member
+  induction's 900 taps); `noCalorieCut`'s doc no longer points a screen at a flag that cannot
+  answer "does the under-18 rule apply to this person" — nothing does, so 4b/4c read the age.
+- The shortfall rule lives once now (`purgeShortfall`), called by both entrypoints. Neither
+  `src/worker.ts` nor `tools/dpdp-purge.ts` is imported by any test, so deleting
+  `|| consentProofExpiryFailed` from both copies left the whole suite green — and a run whose
+  six-year expiry failed would have been acked COMPLETED (no failed set, no Sentry, exit 0).
+- Every new test was run RED first: the dropped shortfall term · an inline copy put back in
+  worker.ts · the export read flipped to oldest-first (the file then led with `older-1000`, the
+  fixture's newest row gone) · `truncated`'s `.strict()` and its refine, removed one at a time.
+- Verified: api tsc + eslint exit 0; shared tsc + eslint exit 0; shared 69; the CI-shaped run with
+  no DATABASE_URL 299 passed; local Postgres `privacy.export` 12 · `privacy.purge` 27 ·
+  `users.health.routes` 20 (59 in one run); the FULL local suite 931/939 — the 8 are
+  `workouts.sync`, which passes alone (23), ROADMAP item 10's shared-database flake. That full run
+  earned its keep: it caught the new cap test stamping its rows from `now()`, which on a loaded
+  database put a seeded row ahead of the fixture's own. Stamped from the fixture's row instead.
 - Open: Kd's click-through (no screen — the preview tool and the routes) and merging PR #57.
   4b builds the screen.
 

@@ -109,17 +109,21 @@ export function registerUserRoutes(
   // hour is far beyond honest use. Keyed on the signed-in person AND the IP
   // (authenticate runs first, R3.3, so the person is known here).
   //
-  // THE TWO DIMENSIONS ARE DELIBERATELY ASYMMETRIC, the same reasoning the gym
-  // trial door records (orgs/routes.ts) and the coach cap answers by dropping
-  // the IP dimension outright: a gym's whole floor shares one address on
-  // induction day, so the person's own 30 would have thrown the ELEVENTH
-  // person off the wi-fi mid-onboarding — a tap they cannot finish signing up
-  // without. 600 an hour from one address is two hundred people getting
-  // through all three disclaimers, still a bound on a script.
+  // THE TWO DIMENSIONS ARE DELIBERATELY ASYMMETRIC, and the IP number is the
+  // GYM-FLOOR figure this repo already uses for the routes a whole building
+  // shares (orgs/routes.ts: attendanceMarkLimit, cheerLimit, memberNudgeLimit).
+  // A gym's whole floor onboards from one address, so the person's own 30
+  // counted against the address would have thrown the ELEVENTH person off the
+  // wi-fi mid-onboarding — a tap they cannot finish signing up without.
+  // 600 was the first answer to that and was still too tight: three taps a
+  // person is only 200 people an hour, under the 300 members a trial
+  // organisation admits (RULINGS 2026-08-25), so a bulk induction would 429 its
+  // tail with the identical consequence. 3000 clears any one gym's whole roster
+  // and still bounds a script; the abuse guard is the PER-PERSON 30, untouched.
   const consentLimit = createDualRateLimit({
     name: "consent",
     max: 30,
-    ipMax: 600,
+    ipMax: 3000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,

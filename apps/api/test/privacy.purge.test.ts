@@ -17,9 +17,15 @@
 // where the worker does this on a schedule anyway) — but a suite that
 // silently destroys data outside its own fixtures must say so out loud.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { purgeDueUsers, purgeUser } from "../src/modules/privacy/purge.js";
+import {
+  purgeDueUsers,
+  purgeShortfall,
+  purgeUser,
+  type PurgeResult,
+} from "../src/modules/privacy/purge.js";
 import { lockDueUserForPurge, recordPurge } from "../src/modules/privacy/repo.js";
 import {
   ADDRESS_KEYED_PURGE_TABLES,
@@ -702,5 +708,66 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       WHERE n.nspname = 'public' AND c.relkind = 'r'`;
     const real = new Set(rows.map((r) => r.tbl));
     expect(USER_LINKED_NOT_PURGED_TABLES.filter((t) => !real.has(t))).toEqual([]);
+  });
+});
+
+// UNGATED — no SQL, so CI runs it, and that is the entire point.
+//
+// Nothing tested either entrypoint's shortfall decision: neither src/worker.ts
+// nor tools/dpdp-purge.ts is imported by any test (measured: a grep for both
+// paths across apps/api/test returned nothing). Each spelled the condition out
+// for itself, so deleting `|| result.consentProofExpiryFailed` from BOTH left
+// the whole suite green — and a run whose six-year retention delete failed
+// would then have been acked COMPLETED: no failed set, no DLQ tail, no Sentry,
+// exit 0 for the cron. The condition now lives once, in `purgeShortfall`, and
+// these two tests are what stand behind it.
+describe("purge shortfall (no database)", () => {
+  const certified: PurgeResult = {
+    scanned: 3,
+    purged: 3,
+    skipped: 0,
+    errors: 0,
+    schemaDriftSnapshots: 0,
+    consentProofExpired: 2,
+    consentProofExpiryFailed: false,
+    dryRun: false,
+  };
+
+  it("a fully certified run is not a shortfall", () => {
+    expect(purgeShortfall(certified)).toBe(false);
+    // ...and neither is a run that simply had nothing to do.
+    expect(purgeShortfall({ ...certified, scanned: 0, purged: 0, consentProofExpired: 0 })).toBe(
+      false,
+    );
+    // A skipped user is a concurrent runner or a restored account — not a failure.
+    expect(purgeShortfall({ ...certified, purged: 2, skipped: 1 })).toBe(false);
+  });
+
+  it("EVERY way a run can fall short is one, taken alone", () => {
+    // Alone, so dropping any single term from the condition turns this red —
+    // which is exactly what an inline copy in two files could hide.
+    expect(purgeShortfall({ ...certified, errors: 1 })).toBe(true);
+    expect(purgeShortfall({ ...certified, schemaDriftSnapshots: 1 })).toBe(true);
+    expect(purgeShortfall({ ...certified, consentProofExpiryFailed: true })).toBe(true);
+  });
+
+  // The other half: the function can be right and still not be CALLED. Both
+  // entrypoints are scripts (a BullMQ worker, a CLI that calls process.exit),
+  // so neither can be imported into a test — the source is what is assertable,
+  // the idiom orgs.cheers/orgs.nudges already use for repo.ts.
+  it("both entrypoints ask this function, and neither keeps its own copy", () => {
+    for (const path of ["../src/worker.ts", "../tools/dpdp-purge.ts"]) {
+      const src = readFileSync(new URL(path, import.meta.url), "utf8");
+      expect({ path, calls: src.includes("purgeShortfall(result)") }).toEqual({
+        path,
+        calls: true,
+      });
+      // The inline condition each used to carry. Re-introducing it is how the
+      // two would silently disagree again.
+      expect({ path, inlineCopy: src.includes("result.errors > 0") }).toEqual({
+        path,
+        inlineCopy: false,
+      });
+    }
   });
 });
