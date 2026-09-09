@@ -18,6 +18,7 @@ import { bustEntitlements } from "../entitlements/service.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import {
+  consentListResponseSchema,
   consentRecordSchema,
   deriveHealthFlags,
   DISCLAIMER_WORDINGS,
@@ -25,6 +26,7 @@ import {
   healthScreeningSchema,
 } from "./schemas.js";
 import type {
+  ConsentListResponse,
   ConsentRecord,
   FitnessProfile,
   HealthScreening,
@@ -267,7 +269,8 @@ export async function putHealthScreening(
 
 // ── the consent log ─────────────────────────────────────────────────────────
 
-const CONSENT_LIST_LIMIT = 100;
+/** The most rows one GET lists. Exported for its test only. */
+export const CONSENT_LIST_LIMIT = 100;
 
 function toConsent(row: repo.ConsentRow): ConsentRecord {
   return consentRecordSchema.parse({ ...row, recordedAt: row.recordedAt.toISOString() });
@@ -297,8 +300,11 @@ export async function recordConsent(
   return toConsent(row);
 }
 
-export async function listConsents(deps: UsersDeps, userId: string): Promise<ConsentRecord[]> {
-  return (await repo.listConsents(deps.sql, userId, CONSENT_LIST_LIMIT)).map(toConsent);
+/** The newest CONSENT_LIST_LIMIT taps and the person's total, parsed through
+ *  the contract so a list shorter than its total is always labelled as such. */
+export async function listConsents(deps: UsersDeps, userId: string): Promise<ConsentListResponse> {
+  const { rows, total } = await repo.listConsents(deps.sql, userId, CONSENT_LIST_LIMIT);
+  return consentListResponseSchema.parse({ consents: rows.map(toConsent), total });
 }
 
 /** Deleting an account is confirmed with a code emailed to the account's own

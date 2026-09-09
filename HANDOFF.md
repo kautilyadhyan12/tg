@@ -15,18 +15,25 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   migration `0025` (`user_health_screenings` 1:1 with two CHECKs incl. the contradiction guard;
   `consent_log` append-only, wording copied verbatim, FK with NO cascade); routes GET/PUT
   `/v1/users/me/health-screening`, GET/POST `/v1/users/me/consents`; `getPlanHealth(sql, userId)`
-  in users/service is the flag every plan route reads (4a uses it); the live macro rings
-  (`/v1/nutrition/targets`) now hold the −400 cut for a yes and say so (`noCalorieCut`).
+  in users/service is the flag every plan route reads (4a uses it); the API's macro-rings number
+  (`/v1/nutrition/targets`) now holds the −400 cut for a yes AND under 18, and the response says so
+  (`noCalorieCut`); nothing on the web screen shows it yet — 4c owns that.
 - Privacy: `user_health_screenings` on the Day-14 delete list and in the export; `consent_log`
   KEPT after a purge (proof of the tap, like audit_log) and exported — Kd was asked to confirm the
   keep, not yet answered.
-- Verified: shared tsc + 65 tests; api tsc + eslint exit 0; `plan.unit` + `nutrition.unit` 75
-  passed; local Postgres: `users.health.routes` 15 · `users.fitness.routes` 10 · `privacy.purge` 21 ·
-  `privacy.export` 10 · `nutrition.routes` 29 · `db.migration` 21 — all passed run per file (six at
-  once tripped the known shared-database flake once, ROADMAP item 10). Web nutrition tests 27 passed.
-  `tools/plan-preview.ts --condition=yes --check=not_yet` shows the cut held with both reasons.
-- Open: review round; Kd's click-through (no screen — the preview tool and the routes); Kd's word
-  on keeping the consent log after deletion. 4b builds the screen on these routes.
+- Review round 1 (2026-09-09): three High, six Low, five test gaps. Fixed: the under-18 rule was
+  missing from the targets route (H1, now tested at 16/17/18 in unit + route); consent POST gets a
+  30/hour per-person limit, the list returns `total` beside the capped 100, the export read is
+  bounded at 1000; a repo-level test for the active-only inserts; the PK column asserted by name;
+  the re-run 429 was the address's 60-second code gap (sign_in_codes now cleared in setup, proved
+  both ways). Two are Kd's decisions, asked: the old free-text "medical conditions" box still
+  stored on the fitness profile (H2 — comments corrected meanwhile) and consent_log after a purge (H3).
+- Verified after the fixes: shared tsc + 66 tests; api tsc + eslint exit 0; `plan.unit` +
+  `nutrition.unit` 76; local Postgres per file: `users.health.routes` 19 (twice, back to back) ·
+  `db.migration` 21 · `privacy.purge` 21 · `privacy.export` 10 · `users.fitness.routes` 10 ·
+  `nutrition.routes` 29. Mutations: under-18 line and the active-only guards removed → 3 tests red.
+- Open: the re-check of the fixes; Kd's two answers (RULINGS lines to add); Kd's click-through
+  (no screen — the preview tool and the routes). Merge waits on the H3 answer. 4b builds the screen.
 
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 

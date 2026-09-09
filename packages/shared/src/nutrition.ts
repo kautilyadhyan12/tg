@@ -153,8 +153,9 @@ export const nutritionTargetsSchema = z.object({
   proteinG: z.number().int(),
   carbsG: z.number().int(),
   fatG: z.number().int(),
-  /** True when a yes on the health question held the weight-loss cut back
-   *  (RULINGS 2026-09-07/09): `kcal` is then the daily burn, not burn − 400. */
+  /** True when a yes on the health question, or an age under 18, held the
+   *  weight-loss cut back (RULINGS 2026-09-07/09): `kcal` is then the daily
+   *  burn, not burn − 400. */
   noCalorieCut: z.boolean(),
 }).strict();
 // The EXACTLY is enforced, not merely asserted (T3 round 2): both impossible

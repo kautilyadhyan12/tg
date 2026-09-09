@@ -524,7 +524,7 @@ describe("plan maths — the sanity rules", () => {
     expect(noDeficitReasons({ age: 40, health: null })).toEqual([]);
   });
 
-  it("the contract refuses Safe mode without a yes � the two facts cannot contradict", () => {
+  it("the contract refuses Safe mode without a yes — the two facts cannot contradict", () => {
     expect(planHealthSchema.safeParse({ hasCondition: false, safeMode: true }).success).toBe(false);
     expect(planHealthSchema.safeParse({ hasCondition: true, safeMode: true }).success).toBe(true);
     expect(planHealthSchema.safeParse({ hasCondition: false, safeMode: false }).success).toBe(true);

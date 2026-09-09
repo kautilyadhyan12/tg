@@ -121,12 +121,23 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
     sql<Row[]>`SELECT * FROM user_health_screenings WHERE user_id = ${u}`,
 };
 
+/** The most consent rows one export carries. Thirty taps an hour is the route's
+ *  ceiling (users/routes.ts), so an honest account never gets near this; it
+ *  exists so a runaway client cannot turn the export — which holds the
+ *  process's only connection (export.ts) — into an unbounded read. */
+export const CONSENT_EXPORT_LIMIT = 1000;
+
 /** The consent log is NOT on the delete list (tables.ts: kept as proof, like
  *  audit_log) but it IS the person's own record of what they agreed to, so the
- *  export carries it beside the PII tables. Read here, keyed on the owner. */
+ *  export carries it beside the PII tables. Read here, keyed on the owner.
+ *
+ *  It is not an ExportedTable, so `stripInternal` never sees it and no
+ *  INTERNAL_COLUMNS_BY_TABLE entry can ever cover it: THE EXPLICIT COLUMN LIST
+ *  BELOW IS THE GUARD. Never widen it to `SELECT *`. */
 export async function selectExportConsents(sql: Sql, userId: string): Promise<Row[]> {
   return await sql<Row[]>`
     SELECT id, purpose, wording_version, wording, app_version, recorded_at
     FROM consent_log WHERE user_id = ${userId}
-    ORDER BY recorded_at, id`;
+    ORDER BY recorded_at, id
+    LIMIT ${CONSENT_EXPORT_LIMIT}`;
 }

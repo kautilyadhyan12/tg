@@ -707,10 +707,13 @@ d("0001_init on a real database", () => {
       const fk = await sql<{ confdeltype: string }[]>`
         SELECT confdeltype FROM pg_constraint WHERE conrelid = 'consent_log'::regclass AND contype = 'f'`;
       expect(fk.map((r) => r.confdeltype)).toEqual(["a"]); // NO ACTION: never cascades
-      const pk = await sql<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM pg_index i
+      // One row per person: the primary key IS user_id, by name, not merely
+      // "some primary key exists".
+      const pk = await sql<{ attname: string }[]>`
+        SELECT a.attname FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
         WHERE i.indrelid = 'user_health_screenings'::regclass AND i.indisprimary`;
-      expect(pk[0]?.n).toBe(1);
+      expect(pk.map((r) => r.attname)).toEqual(["user_id"]);
     } finally {
       await sql`DELETE FROM consent_log WHERE user_id = ${ownerId}`;
       await sql`DELETE FROM users WHERE id = ${ownerId}`;

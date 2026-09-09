@@ -331,14 +331,21 @@ export async function insertConsent(
 }
 
 /** The person's own consents, newest first, bounded (a tap is rare; the cap
- *  only keeps a runaway client from making this read unbounded). */
-export async function listConsents(sql: Sql, userId: string, limit: number): Promise<ConsentRow[]> {
+ *  only keeps a runaway client from making this read unbounded) — with the
+ *  count of ALL their rows, so the caller can say when the list is short. */
+export async function listConsents(
+  sql: Sql,
+  userId: string,
+  limit: number,
+): Promise<{ rows: ConsentRow[]; total: number }> {
   const rows = await sql<ConsentDbRow[]>`
     SELECT id, purpose, wording_version, wording, app_version, recorded_at
     FROM consent_log WHERE user_id = ${userId}
     ORDER BY recorded_at DESC, id DESC
     LIMIT ${limit}`;
-  return rows.map(toConsent);
+  const counted = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${userId}`;
+  return { rows: rows.map(toConsent), total: counted[0]?.n ?? 0 };
 }
 
 export interface UserSyncContext {

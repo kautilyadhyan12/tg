@@ -6,12 +6,15 @@
 -- since. Its journal entry is part of this commit.
 --
 -- ONE QUESTION, NOT A LIST OF CONDITIONS. Kd ruled on 2026-09-09 that the app is
--- a fitness app and must never ask for, or hold, a named condition. The row
+-- a fitness app and should never ask for, or hold, a named condition. THIS row
 -- stores two facts only: whether the person answered yes to "a medical
 -- condition, an injury, pregnancy or anything else that could affect exercise
 -- or eating", and — after a yes — whether a professional has cleared them.
 -- Safe mode and "no calorie cut" are DERIVED in code from these two, never
--- stored, so the two cannot disagree.
+-- stored, so the two cannot disagree. (The older free-text
+-- `user_fitness_profiles.medical_conditions` column from `0006` is still
+-- written by the fitness-profile screens; its future is Kd's call, asked at
+-- the 3b review — this migration does not touch it.)
 --
 -- The second CHECK is the contradiction guard: a "cleared" with nothing to be
 -- cleared of, or a yes with no choice made, can never sit in the table.

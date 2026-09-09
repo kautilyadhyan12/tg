@@ -97,13 +97,26 @@ export function registerUserRoutes(
     return reply.status(200).send({ healthScreening });
   });
 
-  // The consent log: one row per disclaimer tap; the person can read their own.
+  // The consent log: one row per disclaimer tap; the person can read their own
+  // (the newest hundred, with the total so a short list never passes for all).
   app.get("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const consents = await service.listConsents(usersDeps, authedUserId(req));
-    return reply.status(200).send({ consents });
+    const list = await service.listConsents(usersDeps, authedUserId(req));
+    return reply.status(200).send(list);
   });
 
-  app.post("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
+  // Appends to a table the purge never empties, so it gets its own ceiling on
+  // top of the global one: three screens carry a disclaimer, so thirty taps an
+  // hour is far beyond honest use. Keyed on the signed-in person AND the IP
+  // (authenticate runs first, R3.3, so the person is known here).
+  const consentLimit = createDualRateLimit({
+    name: "consent",
+    max: 30,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post("/v1/users/me/consents", { preHandler: [app.authenticate, consentLimit] }, async (req, reply) => {
     const body = parseBody(recordConsentRequestSchema, req, reply);
     if (body === null) return;
     const consent = await service.recordConsent(usersDeps, authedUserId(req), body);

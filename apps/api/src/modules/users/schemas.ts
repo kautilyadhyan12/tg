@@ -19,6 +19,7 @@ export {
   userProfileSchema,
 } from "@app/shared";
 export type {
+  ConsentListResponse,
   ConsentRecord,
   HealthScreening,
   PlanHealth,

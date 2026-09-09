@@ -374,6 +374,23 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
       .toMatchObject({ kcal: 3027, noCalorieCut: true });
   });
 
+  // Under 18 there is never a calorie-cutting target (RULINGS 2026-09-07); the
+  // app admits 16 and over, so 16 and 17 are real inputs here. The same age
+  // line as the plan calculator's noDeficitReasons.
+  it("never cuts calories under 18, whatever the health answer, and reports it", () => {
+    const base = { gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: ["weight_loss"], noCalorieCut: false };
+    // bmr = 600 + 1031.25 − 80 − 161 = 1390.25; tdee ×1.55 = 2154.89; no −400.
+    expect(calculateTargets({ ...base, age: 16 })).toMatchObject({ tdee: 2155, kcal: 2155, noCalorieCut: true });
+    expect(calculateTargets({ ...base, age: 17 })).toMatchObject({ tdee: 2147, kcal: 2147, noCalorieCut: true });
+    // 18 is an adult for this rule.
+    expect(calculateTargets({ ...base, age: 18 })).toMatchObject({ tdee: 2139, kcal: 1739, noCalorieCut: false });
+    // A gain or a plain profile is untouched by age, as by the health answer.
+    expect(calculateTargets({ ...base, age: 16, fitnessGoals: ["muscle_gain"] })).toMatchObject({ kcal: 2455, noCalorieCut: false });
+    expect(calculateTargets({ ...base, age: 16, fitnessGoals: [] })).toMatchObject({ kcal: 2155, noCalorieCut: false });
+    // Through the one entry point, with the contract's parse.
+    expect(resolveTargets({ ...base, age: 16 }).targets).toMatchObject({ kcal: 2155, noCalorieCut: true });
+  });
+
   it("selects the protein-per-kg constant per goal (:158-163)", () => {
     const base = { age: 25, gender: "male" as const, heightCm: 180, weightKg: 75, exerciseFrequency: 6, noCalorieCut: false };
     expect(calculateTargets({ ...base, fitnessGoals: ["muscle_gain"], noCalorieCut: false }).proteinG).toBe(Math.round(75 * 2.2));

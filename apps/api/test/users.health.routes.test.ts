@@ -13,7 +13,8 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
-import { getPlanHealth } from "../src/modules/users/service.js";
+import { insertConsent, upsertHealthScreening } from "../src/modules/users/repo.js";
+import { CONSENT_LIST_LIMIT, getPlanHealth } from "../src/modules/users/service.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -114,9 +115,12 @@ d("health screening + consent routes (real Postgres)", () => {
 
   beforeAll(async () => {
     // consent_log has NO cascade (kept as proof) — clear it first, then users;
-    // user_health_screenings cascades.
+    // user_health_screenings cascades. Sign-in codes are keyed on the ADDRESS,
+    // not the user, and carry a sixty-second resend gap, so without this line
+    // a second run inside a minute 429s at the delete-code step.
     await sql`DELETE FROM consent_log WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'hs-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'hs-%@example.com'`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'hs-%@example.com'`;
     app = await buildApp(loadConfig(baseEnv), {
       emailSender: silentAuthSender(),
       usersEmailSender: capturingUsersSender(),
@@ -199,19 +203,24 @@ d("health screening + consent routes (real Postgres)", () => {
     expect(rows[0]?.n).toBe("1");
   });
 
-  it("PUT is idempotent — the same body twice yields the same row", { timeout: 30_000 }, async () => {
-    const { cookies } = await makeUser("hs-idem@example.com");
+  it("PUT is a full replace: the same body twice yields the same answer, and the second save is a real write (updatedAt moves)", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("hs-idem@example.com");
     const body = { hasCondition: true, checkFirst: "cleared" };
     const first = await putScreening(cookies, body);
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const second = await putScreening(cookies, body);
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    const strip = (raw: string) => {
-      const s = { ...(JSON.parse(raw) as { healthScreening: Record<string, unknown> }).healthScreening };
-      delete s["updatedAt"];
-      return s;
-    };
-    expect(strip(second.body)).toEqual(strip(first.body));
+    const parse = (raw: string) => (JSON.parse(raw) as { healthScreening: Record<string, unknown> }).healthScreening;
+    const [a, b] = [parse(first.body), parse(second.body)];
+    const { updatedAt: aAt, ...aRest } = a;
+    const { updatedAt: bAt, ...bRest } = b;
+    expect(bRest).toEqual(aRest);
+    // ON CONFLICT … DO UPDATE, not DO NOTHING: the second save is written.
+    expect(String(bAt) > String(aAt)).toBe(true);
+    const rows = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM user_health_screenings WHERE user_id = ${userId}`;
+    expect(rows[0]?.n).toBe("1");
   });
 
   it("refuses every contradiction and every stray field, and writes nothing", { timeout: 30_000 }, async () => {
@@ -279,7 +288,24 @@ d("health screening + consent routes (real Postgres)", () => {
     expect(await targets()).toMatchObject({ kcal: 1646, noCalorieCut: false });
   });
 
-  it("a soft-deleted user cannot write a screening or a consent (active-only inserts)", { timeout: 30_000 }, async () => {
+  it("the macro rings' number never cuts calories under 18, with a NO on the health screen (RULINGS 2026-09-07)", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("hs-teen@example.com");
+    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { weightKg: 60 }, cookies })).statusCode).toBe(200);
+    expect((await putScreening(cookies, { hasCondition: false })).statusCode).toBe(200);
+    const targetsAt = async (age: number) => {
+      expect((await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: { ...LOSING_PROFILE, age }, cookies })).statusCode).toBe(200);
+      const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body) as { targets: { tdee: number; kcal: number; noCalorieCut: boolean } }).targets;
+    };
+    // 16: bmr 1390.25 × 1.55 = 2154.89 → the whole daily burn, no −400, and it says so.
+    expect(await targetsAt(16)).toEqual(expect.objectContaining({ tdee: 2155, kcal: 2155, noCalorieCut: true }));
+    expect(await targetsAt(17)).toMatchObject({ tdee: 2147, kcal: 2147, noCalorieCut: true });
+    // 18 is an adult for this rule: the cut runs.
+    expect(await targetsAt(18)).toMatchObject({ tdee: 2139, kcal: 1739, noCalorieCut: false });
+  });
+
+  it("a soft-deleted person's session is refused before any write (401), and the tables stay empty", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("hs-deleted@example.com");
     expect((await inject({ method: "POST", url: "/v1/users/me/delete-code", cookies })).statusCode).toBe(200);
     const code = deleteCodes[deleteCodes.length - 1];
@@ -288,6 +314,22 @@ d("health screening + consent routes (real Postgres)", () => {
     expect(
       (await inject({ method: "POST", url: "/v1/users/me/consents", body: { purpose: "sign_up", wordingVersion: "v1", appVersion: "web-test" }, cookies })).statusCode,
     ).toBe(401);
+    const s = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM user_health_screenings WHERE user_id = ${userId}`;
+    const c = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM consent_log WHERE user_id = ${userId}`;
+    expect(s[0]?.n).toBe("0");
+    expect(c[0]?.n).toBe("0");
+  });
+
+  it("the repo's active-only inserts refuse a soft-deleted user on their own — the guard the route never reaches", { timeout: 30_000 }, async () => {
+    const { userId } = await makeUser("hs-deleted-repo@example.com");
+    // Prove the guard has something to guard: the same calls succeed while active.
+    expect(await upsertHealthScreening(sql, userId, { hasCondition: false, checkFirst: null })).not.toBeNull();
+    await sql`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
+    expect(await upsertHealthScreening(sql, userId, { hasCondition: true, checkFirst: "not_yet" })).toBeNull();
+    expect(
+      await insertConsent(sql, userId, { purpose: "sign_up", wordingVersion: "v1", wording: "w", appVersion: "test" }),
+    ).toBeNull();
     const s = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM user_health_screenings WHERE user_id = ${userId}`;
     const c = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM consent_log WHERE user_id = ${userId}`;
     expect(s[0]?.n).toBe("0");
@@ -317,7 +359,8 @@ d("health screening + consent routes (real Postgres)", () => {
 
     const list = await inject({ method: "GET", url: "/v1/users/me/consents", cookies });
     expect(list.statusCode).toBe(200);
-    const consents = (JSON.parse(list.body) as { consents: Record<string, unknown>[] }).consents;
+    const { consents, total } = JSON.parse(list.body) as { consents: Record<string, unknown>[]; total: number };
+    expect(total).toBe(3);
     expect(consents.map((c) => c["purpose"])).toEqual(["plan_screen", "health_step", "sign_up"]);
     expect(consents[0]).toMatchObject({ wording: DISCLAIMER_WORDINGS.plan_screen["v1"], appVersion: "android-12" });
 
@@ -342,7 +385,37 @@ d("health screening + consent routes (real Postgres)", () => {
       expect(res.statusCode, `expected ${String(status)} for ${JSON.stringify(body)}`).toBe(status);
     }
     const list = await inject({ method: "GET", url: "/v1/users/me/consents", cookies });
-    expect((JSON.parse(list.body) as { consents: unknown[] }).consents).toEqual([]);
+    expect(JSON.parse(list.body)).toEqual({ consents: [], total: 0 });
+  });
+
+  it("lists the newest hundred and says how many there are in all, so a short list never passes for the whole record", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("hs-consent-many@example.com");
+    const n = CONSENT_LIST_LIMIT + 1;
+    // Straight into the table: the route's own ceiling is thirty an hour.
+    await sql`
+      INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version, recorded_at)
+      SELECT ${userId}, 'plan_screen', 'v1', 'w', 'test', now() - (g * interval '1 second')
+      FROM generate_series(1, ${n}) AS g`;
+    const list = await inject({ method: "GET", url: "/v1/users/me/consents", cookies });
+    expect(list.statusCode).toBe(200);
+    const body = JSON.parse(list.body) as { consents: unknown[]; total: number };
+    expect(body.consents).toHaveLength(CONSENT_LIST_LIMIT);
+    expect(body.total).toBe(n);
+  });
+
+  it("caps disclaimer taps at thirty an hour per person, without touching anyone else's", { timeout: 60_000 }, async () => {
+    const a = await makeUser("hs-consent-flood@example.com");
+    const b = await makeUser("hs-consent-calm@example.com");
+    const tap = (cookies: Record<string, string>) =>
+      inject({ method: "POST", url: "/v1/users/me/consents", body: { purpose: "plan_screen", wordingVersion: "v1", appVersion: "web" }, cookies });
+    // Every request arrives from a fresh IP (nextIp), so only the per-person bucket can trip.
+    for (let i = 0; i < 30; i += 1) expect((await tap(a.cookies)).statusCode, `tap ${String(i + 1)}`).toBe(201);
+    const refused = await tap(a.cookies);
+    expect(refused.statusCode).toBe(429);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("rate_limited");
+    expect((await tap(b.cookies)).statusCode).toBe(201);
+    const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM consent_log WHERE user_id = ${a.userId}`;
+    expect(rows[0]?.n).toBe("30");
   });
 
   it("isolates users: A's consents are never in B's list, and B cannot write into A's", { timeout: 30_000 }, async () => {

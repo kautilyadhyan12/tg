@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
+  consentListResponseSchema,
   consentPurposeSchema,
   deriveHealthFlags,
   healthScreeningSchema,
@@ -77,5 +78,16 @@ describe("consent contract", () => {
     expect(ok({ purpose: "sign_up", wordingVersion: "v1", appVersion: "x".repeat(41) })).toBe(false);
     expect(ok({ purpose: "sign_up", wordingVersion: "v1", appVersion: "web", wording: "mine" })).toBe(false);
     expect(ok({ purpose: "camera", wordingVersion: "v1", appVersion: "web" })).toBe(false);
+  });
+
+  it("the list always carries a total, and never claims fewer rows than it shows", () => {
+    const ok = (b: unknown) => consentListResponseSchema.safeParse(b).success;
+    expect(ok({ consents: [], total: 0 })).toBe(true);
+    expect(ok({ consents: [], total: 101 })).toBe(true); // a capped list, honestly labelled
+    expect(ok({ consents: [] })).toBe(false); // no total = no way to tell a cap from the whole
+    const row = { id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d", purpose: "sign_up", wordingVersion: "v1", wording: "w", appVersion: "web", recordedAt: "2026-09-09T00:00:00.000Z" };
+    expect(ok({ consents: [row], total: 1 })).toBe(true);
+    expect(ok({ consents: [row], total: 0 })).toBe(false);
+    expect(ok({ consents: [row], total: -1 })).toBe(false);
   });
 });

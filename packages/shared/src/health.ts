@@ -2,11 +2,14 @@
 // 2026-09-09, Onboarding; ROADMAP Stage 1 item 3b).
 //
 // ONE question, never a list of conditions (Kd, 2026-09-09: a fitness app, not
-// a medical one — nothing specific is ever asked or stored). "Do you have a
-// medical condition, an injury, or are you pregnant, or anything else that
-// could affect exercise or eating?" A yes opens "Check first": either a
-// professional has cleared the person, or not yet. The server stores exactly
-// those two facts and derives the rest:
+// a medical one — the ruling says nothing specific is ever asked or stored).
+// "Do you have a medical condition, an injury, or are you pregnant, or
+// anything else that could affect exercise or eating?" A yes opens "Check
+// first": either a professional has cleared the person, or not yet. THIS
+// screening stores exactly those two facts and derives the rest. (The older
+// free-text "medical conditions" box on the fitness profile still exists and
+// still stores what is typed; whether it leaves with the v2 health screen, 4b,
+// is Kd's call — asked at the 3b review, 2026-09-09.)
 //   · any yes  → no calorie cut, cleared or not (the app cannot know what the
 //                yes is, so it treats every yes the careful way);
 //   · not yet  → Safe mode: no workout or run plans, no intensity progression;
@@ -131,5 +134,10 @@ export const consentRecordSchema = z
 export type ConsentRecord = z.infer<typeof consentRecordSchema>;
 
 export const consentRecordResponseSchema = z.object({ consent: consentRecordSchema }).strict();
-export const consentListResponseSchema = z.object({ consents: z.array(consentRecordSchema) }).strict();
+/** The newest taps, plus how many rows the person has in all — so a list that
+ *  stops at the server's cap never passes for the whole record. */
+export const consentListResponseSchema = z
+  .object({ consents: z.array(consentRecordSchema), total: z.number().int().nonnegative() })
+  .strict()
+  .refine((r) => r.consents.length <= r.total, { message: "total counts every row, listed or not" });
 export type ConsentListResponse = z.infer<typeof consentListResponseSchema>;
