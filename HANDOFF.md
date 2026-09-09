@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
+
+- Kd was offered the 3c plan (tag the 131 curated foods, a "contains …" line on search and meals, no
+  allergy question) and ruled it not needed: every meal suggestion gets a food-allergy caution line
+  instead, built with 7a; nothing ever asks about allergies. RULINGS and ROADMAP updated; no code touched.
+- Worth knowing for 7a: the food list is code (`apps/api/src/modules/nutrition/foods.ts`), not a
+  table, so there is no allergen data to reach for — the caution line is the whole answer.
+- Open: Stage 1 item 4a (onboarding screens 1–7) starts in a fresh chat on a branch off `master`.
+
 ## 2026-09-09 · Health screening, Safe mode and the consent log (Stage 1 item 3b), branch `health-screening`
 
 - Kd ruled mid-plan (RULINGS 2026-09-09): ONE general health question, no named condition ever
