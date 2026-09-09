@@ -25,17 +25,19 @@ export type PlanPace = z.infer<typeof planPaceSchema>;
 export const dayActivitySchema = z.enum(["sitting", "on_feet", "active", "very_active"]);
 export type DayActivity = z.infer<typeof dayActivitySchema>;
 
-/** The health answers the maths needs (screen 8). A "yes" here removes the calorie
- *  deficit (RULINGS 2026-09-07). Absent until the health screen is answered; the
- *  age rule needs no health answer, it comes from screen 2. */
+/** The health facts the maths needs (screen 8), both derived by the server from
+ *  the stored screening (`health.ts`): ONE general question, never a condition
+ *  by name (Kd, 2026-09-09). `hasCondition` — any yes — removes the calorie
+ *  deficit, cleared or not; `safeMode` (a yes with "not yet") is listed as its
+ *  own reason so the screen can say why. Absent until the health screen is
+ *  answered; the age rule needs no health answer, it comes from screen 2. */
 export const planHealthSchema = z
   .object({
-    pregnant: z.boolean(),
-    heart: z.boolean(),
-    bloodPressure: z.boolean(),
-    diabetes: z.boolean(),
+    hasCondition: z.boolean(),
+    safeMode: z.boolean(),
   })
-  .strict();
+  .strict()
+  .refine((h) => !h.safeMode || h.hasCondition, { message: "safeMode needs a yes" });
 export type PlanHealth = z.infer<typeof planHealthSchema>;
 
 /** A calendar day, YYYY-MM-DD, in the person's own time zone (RULINGS 2026-07-21:
@@ -104,8 +106,10 @@ export const missingPlanInputSchema = z.enum([
 ]);
 export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
 
-/** Why the plan holds no calorie cut. */
-export const noDeficitReasonSchema = z.enum(["under_18", "pregnancy", "heart", "blood_pressure", "diabetes"]);
+/** Why the plan holds no calorie cut: under 18 · a yes on the health question
+ *  (a condition, an injury, pregnancy or anything else) · Safe mode on top of
+ *  that yes (RULINGS 2026-09-07, amended 2026-09-09). */
+export const noDeficitReasonSchema = z.enum(["under_18", "health_answer", "safe_mode"]);
 export type NoDeficitReason = z.infer<typeof noDeficitReasonSchema>;
 
 /** The sanity rules, each a fact the screen can show in plain words. */

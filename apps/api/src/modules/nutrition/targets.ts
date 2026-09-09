@@ -96,6 +96,9 @@ export interface TargetInputs {
   weightKg: number | null;
   exerciseFrequency: number | null;
   fitnessGoals: string[];
+  /** A yes on the health question (users/service getPlanHealth): no calorie
+   *  cut, cleared or not. Never "missing" — an unanswered screen is false. */
+  noCalorieCut: boolean;
 }
 
 // NutritionTargets / MissingTargetInput / NutritionTargetsResponse are NOT
@@ -110,6 +113,7 @@ export interface ResolvedTargetInputs {
   weightKg: number;
   exerciseFrequency: number;
   fitnessGoals: string[];
+  noCalorieCut: boolean;
 }
 
 export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
@@ -155,7 +159,7 @@ export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
 }
 
 export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
-  const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals } = input;
+  const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals, noCalorieCut } = input;
 
   // BMR, Mifflin-St Jeor (:126-129), the plan calculator's line: ONLY "female"
   // takes −161; male, other and prefer_not_to_say all take +5. Mifflin-St Jeor
@@ -167,10 +171,16 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
 
   const tdee = bmr * (ACTIVITY_BY_FREQUENCY[exerciseFrequency] ?? DEFAULT_ACTIVITY); // :143,:145
 
-  // Goal adjustment (:148-153): weight_loss is tested FIRST.
+  // Goal adjustment (:148-153): weight_loss is tested FIRST. The cut — and only
+  // the cut — is held back by a yes on the health question (RULINGS 2026-09-07,
+  // one general question since 2026-09-09): a flagged person on weight_loss
+  // eats their daily burn. A gain is untouched, as in the plan calculator.
   const goals = new Set(fitnessGoals);
+  const cutHeld = noCalorieCut && goals.has("weight_loss");
   const adjusted = goals.has("weight_loss")
-    ? tdee - 400
+    ? cutHeld
+      ? tdee
+      : tdee - 400
     : goals.has("muscle_gain")
       ? tdee + 300
       : tdee;
@@ -188,6 +198,7 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
     tdee: Math.round(tdee),
     kcal: Math.round(kcal),
     ...macrosFor(kcal, weightKg, proteinPerKg),
+    noCalorieCut: cutHeld,
   };
 }
 
@@ -220,7 +231,15 @@ function resolveTargetsUnchecked(input: TargetInputs): NutritionTargetsResponse 
     throw new Error("targets: REQUIRED_TARGET_INPUTS does not cover every calculator input");
   }
   return {
-    targets: calculateTargets({ age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals: input.fitnessGoals }),
+    targets: calculateTargets({
+      age,
+      gender,
+      heightCm,
+      weightKg,
+      exerciseFrequency,
+      fitnessGoals: input.fitnessGoals,
+      noCalorieCut: input.noCalorieCut,
+    }),
     missing,
   };
 }

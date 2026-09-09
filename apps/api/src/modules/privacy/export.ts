@@ -9,7 +9,7 @@
 import type { Sql } from "postgres";
 import { DPDP_EXPORT_SCHEMA_VERSION, type DpdpExport } from "@app/shared";
 import { EXPORTED_TABLES, type ExportedTable } from "./tables.js";
-import { EXPORT_READERS, selectExportUser } from "./exportRepo.js";
+import { EXPORT_READERS, selectExportConsents, selectExportUser } from "./exportRepo.js";
 
 /** Columns stripped from EVERY exported row, whatever table it came from.
  *
@@ -121,6 +121,10 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
     // DATABASE_URL-gated test would have caught and CI does not run it.
     data[table] = stripInternal(table, await EXPORT_READERS[table](deps.sql, userId));
   }
+  // The consent log is the person's own record of what they agreed to, exported
+  // although it is kept after a purge (tables.ts, 2026-09-09). Keyed by its real
+  // table name like the rest, so the two lists still read side by side.
+  data["consent_log"] = await selectExportConsents(deps.sql, userId);
 
   return {
     exportedAt: (deps.now?.() ?? new Date()).toISOString(),

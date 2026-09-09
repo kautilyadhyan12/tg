@@ -15,6 +15,8 @@ import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js
 import {
   deleteAccountRequestSchema,
   putFitnessProfileRequestSchema,
+  putHealthScreeningRequestSchema,
+  recordConsentRequestSchema,
   restoreAccountRequestSchema,
   updateProfileRequestSchema,
 } from "./schemas.js";
@@ -78,6 +80,34 @@ export function registerUserRoutes(
     if (body === null) return;
     const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
     return reply.status(200).send({ fitnessProfile });
+  });
+
+  // Health screening and Safe mode (ROADMAP 3b). Same tenancy argument as the
+  // fitness profile: no id param, so only the signed-in person's own row.
+  app.get("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const healthScreening = await service.getHealthScreening(usersDeps, authedUserId(req));
+    return reply.status(200).send({ healthScreening });
+  });
+
+  // PUT: the whole screening replaced; the same body twice yields the same row.
+  app.put("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = parseBody(putHealthScreeningRequestSchema, req, reply);
+    if (body === null) return;
+    const healthScreening = await service.putHealthScreening(usersDeps, authedUserId(req), body);
+    return reply.status(200).send({ healthScreening });
+  });
+
+  // The consent log: one row per disclaimer tap; the person can read their own.
+  app.get("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const consents = await service.listConsents(usersDeps, authedUserId(req));
+    return reply.status(200).send({ consents });
+  });
+
+  app.post("/v1/users/me/consents", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = parseBody(recordConsentRequestSchema, req, reply);
+    if (body === null) return;
+    const consent = await service.recordConsent(usersDeps, authedUserId(req), body);
+    return reply.status(201).send({ consent });
   });
 
   // Step 1 of deleting: a code goes to the account's own address. The day cap

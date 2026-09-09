@@ -135,10 +135,11 @@ export function macrosFor(kcal: number, weightKg: number, proteinPerKg: number):
 export function noDeficitReasons(input: Pick<PlanInputs, "age" | "health">): NoDeficitReason[] {
   const reasons: NoDeficitReason[] = [];
   if (input.age < ADULT_AGE) reasons.push("under_18");
-  if (input.health?.pregnant) reasons.push("pregnancy");
-  if (input.health?.heart) reasons.push("heart");
-  if (input.health?.bloodPressure) reasons.push("blood_pressure");
-  if (input.health?.diabetes) reasons.push("diabetes");
+  // One general question (Kd, 2026-09-09): any yes refuses the cut, cleared or
+  // not, because the app never learns what the yes is. Safe mode is a yes plus
+  // "not yet", listed as well so the screen can say both.
+  if (input.health?.hasCondition) reasons.push("health_answer");
+  if (input.health?.safeMode) reasons.push("safe_mode");
   return reasons;
 }
 

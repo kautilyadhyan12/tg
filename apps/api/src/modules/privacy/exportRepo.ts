@@ -116,4 +116,17 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   user_fitness_profiles: (sql, u) =>
     sql<Row[]>`SELECT * FROM user_fitness_profiles WHERE user_id = ${u}`,
+
+  user_health_screenings: (sql, u) =>
+    sql<Row[]>`SELECT * FROM user_health_screenings WHERE user_id = ${u}`,
 };
+
+/** The consent log is NOT on the delete list (tables.ts: kept as proof, like
+ *  audit_log) but it IS the person's own record of what they agreed to, so the
+ *  export carries it beside the PII tables. Read here, keyed on the owner. */
+export async function selectExportConsents(sql: Sql, userId: string): Promise<Row[]> {
+  return await sql<Row[]>`
+    SELECT id, purpose, wording_version, wording, app_version, recorded_at
+    FROM consent_log WHERE user_id = ${userId}
+    ORDER BY recorded_at, id`;
+}

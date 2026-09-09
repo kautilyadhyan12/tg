@@ -17,10 +17,21 @@ import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
-import { fitnessProfileSchema } from "./schemas.js";
+import {
+  consentRecordSchema,
+  deriveHealthFlags,
+  DISCLAIMER_WORDINGS,
+  fitnessProfileSchema,
+  healthScreeningSchema,
+} from "./schemas.js";
 import type {
+  ConsentRecord,
   FitnessProfile,
+  HealthScreening,
+  PlanHealth,
   PutFitnessProfileRequest,
+  PutHealthScreeningRequest,
+  RecordConsentRequest,
   UpdateProfileRequest,
   UserProfile,
 } from "./schemas.js";
@@ -50,12 +61,14 @@ export interface UserTargetContext {
   weightKg: number | null;
   exerciseFrequency: number | null;
   fitnessGoals: string[];
+  noCalorieCut: boolean;
 }
 
 export async function getUserTargetContext(sql: Sql, userId: string): Promise<UserTargetContext> {
-  const [sync, fitness] = await Promise.all([
+  const [sync, fitness, health] = await Promise.all([
     repo.getSyncContext(sql, userId),
     repo.getFitnessProfile(sql, userId),
+    getPlanHealth(sql, userId),
   ]);
   // No profile row = the user has not onboarded; every field reads as missing
   // rather than defaulting (the whole point of the honest-empty-state ruling).
@@ -66,7 +79,20 @@ export async function getUserTargetContext(sql: Sql, userId: string): Promise<Us
     weightKg: sync.weightKg,
     exerciseFrequency: fitness?.exerciseFrequency ?? null,
     fitnessGoals: fitness?.fitnessGoals ?? [],
+    // An unanswered screen applies no rule yet (as the plan calculator's null).
+    noCalorieCut: health?.hasCondition ?? false,
   };
+}
+
+/** THE flag every plan route reads (ROADMAP 3b): the stored screening as the
+ *  plan calculator's health input — null until the screen is answered, which
+ *  the calculator treats as "no condition rule yet". sql-only like the two
+ *  above, so the plan route (4a) and the nutrition targets can call it. */
+export async function getPlanHealth(sql: Sql, userId: string): Promise<PlanHealth | null> {
+  const row = await repo.getHealthScreening(sql, userId);
+  if (row === null) return null;
+  const stored = { hasCondition: row.hasCondition, checkFirst: checkFirstOf(row.checkFirst) };
+  return { hasCondition: stored.hasCondition, safeMode: deriveHealthFlags(stored).safeMode };
 }
 
 /** Typed failure for the central error mapper (R8.1); message client-safe. */
@@ -183,6 +209,96 @@ export async function putFitnessProfile(
   // No row = the user was deleted mid-request (the upsert is active-only).
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return toFitnessProfile(row);
+}
+
+// ── health screening and Safe mode (ROADMAP Stage 1 item 3b) ────────────────
+
+/** The column is a plain string with a CHECK; narrowed once here, failing loud
+ *  on a value outside the enum rather than treating it as "cleared". */
+function checkFirstOf(raw: string | null): "cleared" | "not_yet" | null {
+  if (raw === null) return null;
+  if (raw === "cleared" || raw === "not_yet") return raw;
+  throw new Error(`user_health_screenings.check_first outside the enum: ${raw}`);
+}
+
+const UNANSWERED_SCREENING: HealthScreening = {
+  answered: false,
+  hasCondition: null,
+  checkFirst: null,
+  safeMode: false,
+  noCalorieCut: false,
+  updatedAt: null,
+};
+
+/** The response is built from the STORED answer through the one rule
+ *  (`deriveHealthFlags`) and re-parsed through the contract, whose refines pin
+ *  the derived flags to the answer — so a response that says Safe mode is off
+ *  for a "not yet" cannot leave the server. */
+function toHealthScreening(row: repo.HealthScreeningRow | null): HealthScreening {
+  if (row === null) return UNANSWERED_SCREENING;
+  const stored = { hasCondition: row.hasCondition, checkFirst: checkFirstOf(row.checkFirst) };
+  return healthScreeningSchema.parse({
+    answered: true,
+    ...stored,
+    ...deriveHealthFlags(stored),
+    updatedAt: row.updatedAt.toISOString(),
+  });
+}
+
+export async function getHealthScreening(deps: UsersDeps, userId: string): Promise<HealthScreening> {
+  return toHealthScreening(await repo.getHealthScreening(deps.sql, userId));
+}
+
+/** PUT = the whole screening replaced; saving again is how the person changes
+ *  their mind later (Kd 2026-09-09: changeable once signed in, and everything
+ *  that reads it updates at once, because nothing derived is stored). */
+export async function putHealthScreening(
+  deps: UsersDeps,
+  userId: string,
+  body: PutHealthScreeningRequest,
+): Promise<HealthScreening> {
+  const row = await repo.upsertHealthScreening(deps.sql, userId, {
+    hasCondition: body.hasCondition,
+    checkFirst: body.hasCondition ? (body.checkFirst ?? null) : null,
+  });
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  return toHealthScreening(row);
+}
+
+// ── the consent log ─────────────────────────────────────────────────────────
+
+const CONSENT_LIST_LIMIT = 100;
+
+function toConsent(row: repo.ConsentRow): ConsentRecord {
+  return consentRecordSchema.parse({ ...row, recordedAt: row.recordedAt.toISOString() });
+}
+
+/** Records one tap. The client names the screen and the wording VERSION it
+ *  showed; the server writes the text it holds for that version, so the row
+ *  can only ever carry words the app has actually shown. An unknown version
+ *  is refused: recording a consent to words nobody can produce would be a
+ *  record of nothing. */
+export async function recordConsent(
+  deps: UsersDeps,
+  userId: string,
+  body: RecordConsentRequest,
+): Promise<ConsentRecord> {
+  const wording = DISCLAIMER_WORDINGS[body.purpose][body.wordingVersion];
+  if (wording === undefined) {
+    throw new UsersError(400, "unknown_wording", "That wording version is not one this app has shown.");
+  }
+  const row = await repo.insertConsent(deps.sql, userId, {
+    purpose: body.purpose,
+    wordingVersion: body.wordingVersion,
+    wording,
+    appVersion: body.appVersion,
+  });
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  return toConsent(row);
+}
+
+export async function listConsents(deps: UsersDeps, userId: string): Promise<ConsentRecord[]> {
+  return (await repo.listConsents(deps.sql, userId, CONSENT_LIST_LIMIT)).map(toConsent);
 }
 
 /** Deleting an account is confirmed with a code emailed to the account's own

@@ -64,6 +64,7 @@ d("DPDP data export (real Postgres)", () => {
       for (const t of DIRECT_DELETE_TABLES) {
         await sql`DELETE FROM ${sql(t)} WHERE user_id = ANY(${madeUsers})`;
       }
+      await sql`DELETE FROM consent_log WHERE user_id = ANY(${madeUsers})`; // no cascade: kept as proof
       await sql`DELETE FROM users WHERE id = ANY(${madeUsers})`;
     }
     if (challengeId !== "") await sql`DELETE FROM challenges WHERE id = ${challengeId}`;
@@ -88,6 +89,10 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${userId}, 'google', ${"sub-" + userId})`;
     await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, medical_conditions)
               VALUES (${userId}, 31, 'female', 165, ${`asthma-${label}`})`;
+    await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
+              VALUES (${userId}, true, 'cleared')`;
+    await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
+              VALUES (${userId}, 'health_step', 'v1', ${`wording-${label}`}, 'test')`;
     const wId = randomUUID();
     await sql`INSERT INTO workouts (id, user_id, started_at, platform, engine_version, quality_flags)
               VALUES (${wId}, ${userId}, now(), 'web', '1.0.0', ${sql.array(["anticheat-marker"])})`;
@@ -147,6 +152,10 @@ d("DPDP data export (real Postgres)", () => {
       expect({ t, n: out.data[t]?.length ?? -1 }).toEqual({ t, n: 1 });
     }
     expect(out.user["display_name"]).toBe(u.name);
+    // The consent log rides beside the PII tables (kept after a purge, still
+    // the person's own record) — present, and carrying the words verbatim.
+    expect(out.data["consent_log"]).toHaveLength(1);
+    expect(out.data["consent_log"]?.[0]).toMatchObject({ purpose: "health_step", wording: "wording-all" });
 
     // T3 round 2, F6: the `now` seam's doc claimed "so exportedAt is
     // assertable" while no caller or test ever passed one — a claim with

@@ -4,11 +4,11 @@
 //
 //   corepack pnpm --filter api exec tsx tools/plan-preview.ts
 //   corepack pnpm --filter api exec tsx tools/plan-preview.ts --goal=lose --weight=82 --target=75 --pace=steady
-//   corepack pnpm --filter api exec tsx tools/plan-preview.ts --pregnant=yes --heart=no --bp=no --diabetes=no
+//   corepack pnpm --filter api exec tsx tools/plan-preview.ts --condition=yes --check=not_yet
 //
-// The health screen counts as answered only when all four of --pregnant, --heart,
-// --bp and --diabetes are given (yes/no); otherwise it is unanswered, as it is
-// for a person who has not reached that screen. Every flag is a fact the screens
+// The health screen is ONE question (--condition=yes/no); a yes takes --check=
+// cleared or not_yet. Without --condition it is unanswered, as it is for a
+// person who has not reached that screen. Every flag is a fact the screens
 // will later say in plain words.
 import { planAnswersSchema } from "@app/shared";
 import { resolvePlan } from "../src/modules/plan/maths.js";
@@ -29,19 +29,15 @@ function yesNo(name: string): boolean | undefined {
   throw new Error(`--${name} must be yes or no, got "${raw}"`);
 }
 
-const pregnant = yesNo("pregnant");
-const heart = yesNo("heart");
-const bloodPressure = yesNo("bp");
-const diabetes = yesNo("diabetes");
-const healthArgs = [pregnant, heart, bloodPressure, diabetes];
-const answered = healthArgs.filter((v) => v !== undefined).length;
-if (answered !== 0 && answered !== 4) {
-  throw new Error("the health screen is answered all at once: give all four of --pregnant --heart --bp --diabetes, or none");
+const hasCondition = yesNo("condition");
+const check = arg("check");
+if (hasCondition === true && check !== "cleared" && check !== "not_yet") {
+  throw new Error("a yes needs --check=cleared or --check=not_yet");
 }
-const health =
-  pregnant !== undefined && heart !== undefined && bloodPressure !== undefined && diabetes !== undefined
-    ? { pregnant, heart, bloodPressure, diabetes }
-    : undefined;
+if (hasCondition !== true && check !== undefined) {
+  throw new Error("--check only goes with --condition=yes");
+}
+const health = hasCondition === undefined ? undefined : { hasCondition, safeMode: check === "not_yet" };
 
 const answers = planAnswersSchema.parse({
   goal: arg("goal") ?? "lose",

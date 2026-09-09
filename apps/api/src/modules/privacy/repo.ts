@@ -108,6 +108,8 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   // Health data (medical_conditions) — DECISIONS 2026-07-15/16 made this the
   // condition on which the onboarding-storage card was merged.
   await tx`DELETE FROM user_fitness_profiles WHERE user_id = ${userId}`;
+  // The health screening — the same footing (tables.ts, 2026-09-09).
+  await tx`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
 }
 
 /** Rows keyed on the person's ADDRESS rather than their id — `sign_in_codes`

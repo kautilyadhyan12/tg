@@ -49,6 +49,11 @@ export const DIRECT_DELETE_TABLES = [
   "challenge_participants",
   "auth_identities",
   "user_fitness_profiles", // NOT in §5.2's prose — added by Kd ruling, below
+  // The health screening (migration 0025, 2026-09-09): ONE yes/no and the
+  // "check first" choice — no named condition, by Kd's ruling that day — but a
+  // yes still says a person has SOME condition, injury or pregnancy, so it
+  // stands on user_fitness_profiles' footing: deleted at Day 14 and exported.
+  "user_health_screenings",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row
@@ -311,6 +316,12 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gyms", // gyms.owner_user_id
   "subscriptions", // subscriptions.owner_id — polymorphic, no FK, see below
   "exercise_definitions", // exercise_definitions.published_by
+  // The consent log (migration 0025, 2026-09-09): KEPT on the audit_log
+  // footing — it is the proof a disclaimer was tapped, and a row holds only the
+  // link to the tombstone, a screen name, a wording version, the words shown
+  // and an app build. No name, address or health fact. The chat's
+  // recommendation; Kd asked to confirm. It IS in the export (exportRepo.ts).
+  "consent_log",
 ] as const;
 
 // THE METHOD'S REMAINING BLIND SPOT IS DOCUMENTS, NOT COLUMNS (T3 round 2).

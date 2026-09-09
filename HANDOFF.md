@@ -4,6 +4,30 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-09 · Health screening, Safe mode and the consent log (Stage 1 item 3b), branch `health-screening`
+
+- Kd ruled mid-plan (RULINGS 2026-09-09): ONE general health question, no named condition ever
+  asked or stored (a fitness app, not a medical one); any yes = no calorie cut, cleared or not;
+  changeable after sign-in. The plan contract's health block is now `{ hasCondition, safeMode }`
+  and the no-deficit reasons `under_18 · health_answer · safe_mode`.
+- Built: `packages/shared/src/health.ts` (screening + consent contracts, `deriveHealthFlags`, the
+  three disclaimer wordings v1 with a test that bans "safe for you" / "treats" / "cures");
+  migration `0025` (`user_health_screenings` 1:1 with two CHECKs incl. the contradiction guard;
+  `consent_log` append-only, wording copied verbatim, FK with NO cascade); routes GET/PUT
+  `/v1/users/me/health-screening`, GET/POST `/v1/users/me/consents`; `getPlanHealth(sql, userId)`
+  in users/service is the flag every plan route reads (4a uses it); the live macro rings
+  (`/v1/nutrition/targets`) now hold the −400 cut for a yes and say so (`noCalorieCut`).
+- Privacy: `user_health_screenings` on the Day-14 delete list and in the export; `consent_log`
+  KEPT after a purge (proof of the tap, like audit_log) and exported — Kd was asked to confirm the
+  keep, not yet answered.
+- Verified: shared tsc + 65 tests; api tsc + eslint exit 0; `plan.unit` + `nutrition.unit` 75
+  passed; local Postgres: `users.health.routes` 15 · `users.fitness.routes` 10 · `privacy.purge` 21 ·
+  `privacy.export` 10 · `nutrition.routes` 29 · `db.migration` 21 — all passed run per file (six at
+  once tripped the known shared-database flake once, ROADMAP item 10). Web nutrition tests 27 passed.
+  `tools/plan-preview.ts --condition=yes --check=not_yet` shows the cut held with both reasons.
+- Open: review round; Kd's click-through (no screen — the preview tool and the routes); Kd's word
+  on keeping the consent log after deletion. 4b builds the screen on these routes.
+
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 
 - Built: the contract `packages/shared/src/plan.ts` (answers so far in, `plan` or `missing` out,
