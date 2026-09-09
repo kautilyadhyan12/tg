@@ -97,6 +97,33 @@ describe("one screen's save", () => {
     // The age rail is the ruled one on both (RULINGS 2026-09-07: 16 and over).
     expect(bothAgree(15, "age", "age")).toBe(false);
     expect(bothAgree(16, "age", "age")).toBe(true);
+
+    // Equipment is one column asked by two screens as well, and its cap and
+    // no-duplicates rule are literally the v1 profile's `uniqueArray` — pinned
+    // here at the boundary, like the numbers above.
+    const bothTakeEquipment = (value: string[]) => {
+      const a = putFitnessProfileRequestSchema.safeParse({ availableEquipment: value }).success;
+      const b = patchOnboardingRequestSchema.safeParse({ availableEquipment: value }).success;
+      expect(b, `availableEquipment ${JSON.stringify(value)} disagrees with the v1 profile`).toBe(a);
+      return a;
+    };
+    expect(bothTakeEquipment([])).toBe(true);
+    expect(bothTakeEquipment(["dumbbells"])).toBe(true);
+    expect(bothTakeEquipment(["dumbbells", "resistance_bands", "kettlebells", "pull_up_bar"])).toBe(true);
+    expect(bothTakeEquipment(["dumbbells", "dumbbells"])).toBe(false);
+    expect(bothTakeEquipment(["barbell"])).toBe(false);
+  });
+
+  it("refuses 'no equipment' beside real equipment — the one rail v2 holds tighter", () => {
+    // Screen 7 asks one question and takes one answer: "none and dumbbells"
+    // would reach the plan builder (6a) as two contradictory ones.
+    expect(patchOnboardingRequestSchema.safeParse({ availableEquipment: ["none"] }).success).toBe(true);
+    expect(patchOnboardingRequestSchema.safeParse({ availableEquipment: ["none", "dumbbells"] }).success).toBe(false);
+    // The v1 profile is deliberately left as it was: its live web form is a
+    // free multi-select that can still send that pair, and refusing it there
+    // would be a save the person cannot complete. That is the ONE place the two
+    // rails differ, and it is pinned so it cannot spread by accident.
+    expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment: ["none", "dumbbells"] }).success).toBe(true);
   });
 });
 

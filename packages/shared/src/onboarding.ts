@@ -22,7 +22,14 @@ import {
   planPaceSchema,
   type PlanGoal,
 } from "./plan.js";
-import { equipmentSchema, fitnessGoalSchema, fitnessLevelSchema, genderSchema, type FitnessGoal } from "./users.js";
+import {
+  equipmentSchema,
+  fitnessGoalSchema,
+  fitnessLevelSchema,
+  genderSchema,
+  uniqueArray,
+  type FitnessGoal,
+} from "./users.js";
 
 /** Screen 1: the ONE goal the person picks, from the seven the app already
  *  offers (the same value set the old multi-select used, so nothing the user
@@ -83,12 +90,21 @@ export const onboardingAnswersSchema = z
   .strict();
 export type OnboardingAnswers = z.infer<typeof onboardingAnswersSchema>;
 
-/** A set, not a list (the fitness profile's rule): a repeated value is refused
- *  rather than silently deduped. */
-const uniqueEquipment = z
-  .array(equipmentSchema)
-  .max(5)
-  .refine((a) => new Set(a).size === a.length, { message: "duplicate values are not allowed" });
+/** Screen 7's rail. The cap and the no-duplicates rule are the v1 profile's own
+ *  `uniqueArray`, reused rather than restated: this is the SAME column, and a
+ *  restated cap is a cap that can drift.
+ *
+ *  On top of that, and only here: "no equipment" is exclusive. "None and
+ *  dumbbells" is not an answer to screen 7's question, and the plan builder
+ *  (6a) would have to guess which half to believe. The v1 contract is
+ *  deliberately NOT tightened to match — its live web form is a free
+ *  multi-select that can still send that pair, and a 400 there would be a save
+ *  the person cannot complete with nothing on screen to explain it. Screen 7
+ *  (4a-ii) makes the choice exclusive as you tap. */
+const uniqueEquipment = uniqueArray(equipmentSchema, 5).refine(
+  (a) => !a.includes("none") || a.length === 1,
+  { message: "'none' cannot be combined with equipment" },
+);
 
 /** One screen's save. Every field optional — the screen sends only what it
  *  asked. An empty body is allowed and simply re-reads the plan: a screen whose

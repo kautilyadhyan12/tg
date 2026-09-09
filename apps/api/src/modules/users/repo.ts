@@ -312,9 +312,19 @@ export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<Onboa
  *
  *  Active-only, and this one cannot use the INSERT…SELECT trick: an EXISTING
  *  profile row would still be updatable by a soft-deleted account. The users
- *  row is taken FOR UPDATE first instead (the `updateProfile` pattern), which
- *  both proves the account is active and blocks a concurrent deletion for the
- *  rest of the transaction. Null = not active. */
+ *  row is locked first instead, which both proves the account is active and
+ *  blocks a concurrent deletion (itself an UPDATE of that row) for the rest of
+ *  the transaction. Null = not active.
+ *
+ *  NO KEY, and that word is load-bearing. `upsertFitnessProfile` above takes
+ *  the same two rows in the OPPOSITE order — the profile row first, then the
+ *  users row as FOR KEY SHARE, which is what its foreign key check does. Plain
+ *  FOR UPDATE is the one mode that conflicts with FOR KEY SHARE, so one person
+ *  saving on the v1 screen and this one at the same moment could deadlock
+ *  (40P01, and a 500 on a save that was perfectly fine). FOR NO KEY UPDATE
+ *  still excludes every other writer of this row and the deletion, and lets
+ *  that FK check through, so neither route ever waits on the other's second
+ *  lock. Pinned by a test that holds exactly that key-share lock. */
 export async function patchOnboarding(
   sql: Sql,
   userId: string,
@@ -322,7 +332,7 @@ export async function patchOnboarding(
 ): Promise<OnboardingRow | null> {
   return await sql.begin(async (tx) => {
     const active = await tx<{ id: string }[]>`
-      SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR UPDATE`;
+      SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     if (active[0] === undefined) return null;
 
     // Fixed field→column map. `trainingDays` and `sessionMinutes` are the
@@ -347,9 +357,17 @@ export async function patchOnboarding(
       // THE MIRROR, and it is temporary. The live macro rings still read the
       // v1 `fitness_goals` ARRAY (nutrition/targets.ts), so a person who picks
       // "lose weight" on the new screen 1 must not read as having no goal
-      // there. Written in the same statement as `main_goal`, so the two can
-      // never disagree. Item 4a-ii moves the rings onto these answers and this
-      // line goes with them (migration 0026's note).
+      // there. Written in the same statement as `main_goal`, so a save on THIS
+      // route can never leave the two disagreeing.
+      //
+      // That guarantee is ONE-WAY, and only this way: `upsertFitnessProfile`
+      // (the v1 PUT, still the live web form) replaces `fitness_goals` and does
+      // not touch `main_goal` — it has no such question to ask. After one of
+      // those the rings follow the list that form just wrote, which is what
+      // that person asked for, while `main_goal` holds the answer screen 1 was
+      // given. Nothing puts `main_goal` on a screen yet, so nothing false is
+      // shown; item 4a-ii moves the rings onto these answers and ends the
+      // mirror and that divergence together (migration 0026's note).
       cols["fitness_goals"] = patch.mainGoal === null ? [] : [patch.mainGoal];
     }
 

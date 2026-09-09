@@ -437,27 +437,48 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["mainGoal"]).toBeNull();
   });
 
-  it("keeps the macro rings honest: the one main goal is mirrored onto the v1 goals column", { timeout: 30_000 }, async () => {
+  it("keeps the macro rings honest: the one main goal moves the rings' own number", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-mirror@example.com");
     await completeSeven(cookies);
     const goals = async () =>
       (await sql<{ fitness_goals: string[] | null }[]>`
         SELECT fitness_goals FROM user_fitness_profiles WHERE user_id = ${userId}`)[0]?.fitness_goals;
+    // The rings' kcal, not merely "a number exists": `fitnessGoals` is not one
+    // of the five inputs the targets route requires, so it answers with a
+    // number whatever the mirror says. Only the SIZE of that number can show
+    // the mirror working — the goal is worth −400 on a cut and +300 on a gain
+    // (nutrition/targets.ts), and those are the differences asserted below.
+    const kcal = async () => {
+      const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { targets: { kcal: number } | null; missing: string[] };
+      expect(body.missing).toEqual([]);
+      if (body.targets === null) throw new Error("the rings answered with no number");
+      return body.targets.kcal;
+    };
+
     expect(await goals()).toEqual(["weight_loss"]);
-    // The live rings read that column today, so they see the same goal.
-    const targets = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
-    expect(targets.statusCode).toBe(200);
-    expect((JSON.parse(targets.body) as { targets: { kcal: number } | null }).targets).not.toBeNull();
+    const lose = await kcal();
 
     await patchOk(cookies, { mainGoal: "muscle_gain" });
     expect(await goals()).toEqual(["muscle_gain"]);
-    // Clearing the goal clears the mirror — it can never outlive its source.
+    const gain = await kcal();
+
+    await patchOk(cookies, { mainGoal: "general_fitness" });
+    expect(await goals()).toEqual(["general_fitness"]);
+    const hold = await kcal();
+    expect(lose, "the rings did not follow the goal onto a cut").toBe(hold - 400);
+    expect(gain, "the rings did not follow the goal onto a surplus").toBe(hold + 300);
+
+    // Clearing the goal clears the mirror — it can never outlive its source —
+    // and the rings fall back to holding the weight, with no goal to read.
     await patchOk(cookies, { mainGoal: null });
     expect(await goals()).toEqual([]);
+    expect(await kcal()).toBe(hold);
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
-    const { cookies } = await makeUser("ob-v1-put@example.com");
+    const { userId, cookies } = await makeUser("ob-v1-put@example.com");
     await completeSeven(cookies);
     const put = await inject({
       method: "PUT",
@@ -487,6 +508,22 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect([...after.missing].sort()).toEqual(["heightCm", "targetWeightKg"]);
     // The pace, though, is a v2 column: the target went and the pace stayed.
     expect(after.answers["pace"]).toBe("steady");
+
+    // GOALS ARE THE ONE PLACE THE TWO SURFACES CAN DISAGREE, and this pins
+    // exactly how far. The v1 form replaces the `fitness_goals` ARRAY and does
+    // not touch `main_goal` — it has no such question to ask — so the mirror
+    // the v2 save writes is only guaranteed in one direction: a v2 save keeps
+    // the two in step, a v1 save can move the array out from under the stored
+    // main goal. The rings then follow the array the form just wrote, which is
+    // what that person asked for; `main_goal` stands until screen 1 is answered
+    // again, and nothing shows it yet. Item 4a-ii moves the rings onto these
+    // answers, which ends the mirror and this divergence with it.
+    expect(after.answers["mainGoal"]).toBe("weight_loss");
+    const goals = (
+      await sql<{ fitness_goals: string[] | null }[]>`
+        SELECT fitness_goals FROM user_fitness_profiles WHERE user_id = ${userId}`
+    )[0]?.fitness_goals;
+    expect(goals).toEqual(["endurance"]);
   });
 
   it("isolates users: A's answers are invisible to B and untouched by B's writes", { timeout: 60_000 }, async () => {
@@ -557,5 +594,154 @@ d("onboarding v2 routes (real Postgres)", () => {
       else if (direction === "gain") expect(change, goal).toBeGreaterThan(0);
       else expect(change, goal).toBe(0);
     }
+  });
+
+  it("stores the flag that opens the training side, and /v1/users/me reads it back", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-completed@example.com");
+    const completed = async () => {
+      const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted;
+    };
+    expect(await completed()).toBe(false);
+    expect((await patchOk(cookies, { onboardingCompleted: true })).answers["onboardingCompleted"]).toBe(true);
+    // The gate the whole training side reads is the SAME column, so this is
+    // what the rest of the app sees — not just what this route echoes back.
+    expect(await completed()).toBe(true);
+    // And a later screen's save does not undo it.
+    expect((await patchOk(cookies, { mainGoal: "posture" })).answers["onboardingCompleted"]).toBe(true);
+    expect(await completed()).toBe(true);
+  });
+
+  it("stamps every real save, and says honestly when there is nothing stamped yet", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-stamp@example.com");
+    // Body weight lives on the users row, so a weight-only save creates no
+    // profile row: there is no stamp, and the contract says null rather than
+    // inventing one.
+    const weightOnly = await patchOk(cookies, { weightKg: 70 });
+    expect(weightOnly.answers["weightKg"]).toBe(70);
+    expect(weightOnly.answers["updatedAt"]).toBeNull();
+
+    const first = await patchOk(cookies, { mainGoal: "weight_loss" });
+    const firstAt = first.answers["updatedAt"];
+    expect(typeof firstAt).toBe("string");
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await patchOk(cookies, { fitnessLevel: "beginner" });
+    // The screens read this to know a save landed, so it has to MOVE on a save.
+    expect(new Date(String(second.answers["updatedAt"])).getTime()).toBeGreaterThan(
+      new Date(String(firstAt)).getTime(),
+    );
+
+    // Clearing the typed weight is a real answer too, and it comes back empty.
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(cleared.missing).toContain("weightKg");
+  });
+
+  it("a stored answer outside the plan's rails fails loud — it never becomes a number", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-past-rails@example.com");
+    await completeSeven(cookies);
+    expect((await get(cookies)).plan).not.toBeNull();
+    // The column is numeric(5,2) with no CHECK; the plan's rail is 50–300 cm.
+    // Only a writer that skipped the contract could store this, which is what
+    // the raw statement stands in for. The promise being pinned is the one
+    // plan/answers.ts makes: fail loud, never serve a number nobody can explain.
+    await sql`UPDATE user_fitness_profiles SET height_cm = 999.99 WHERE user_id = ${userId}`;
+    const res = await inject({ method: "GET", url: path(), cookies });
+    expect(res.statusCode).toBe(500);
+    const body = JSON.parse(res.body) as { error: string; message: string };
+    expect(body.error).toBe("internal_error");
+    // And the refusal says nothing about the stored value.
+    expect(res.body).not.toContain("999");
+    // The person is not stuck: answering through the contract restores it.
+    expect((await patchOk(cookies, { heightCm: 165 })).plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  it("a body measurement that carries no weight leaves the typed weight, the plan and the rings alone", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-measure@example.com");
+    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    const measure = (body: unknown) =>
+      inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
+    const ringsAnswer = async () => {
+      const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      return (JSON.parse(res.body) as { targets: unknown; missing: string[] }).missing;
+    };
+
+    // A waist-only measurement says NOTHING about weight (weightKg is optional
+    // on that contract), so it must not be able to erase screen 2's answer —
+    // which would blank the plan and the macro rings in the same moment.
+    const waist = await measure({ measuredAt: new Date().toISOString(), metrics: { waist_cm: 80 } });
+    expect(waist.statusCode).toBe(201);
+    const waistId = (JSON.parse(waist.body) as { measurement: { id: string } }).measurement.id;
+    const afterWaist = await get(cookies);
+    expect(afterWaist.answers["weightKg"]).toBe(70);
+    expect(afterWaist.missing).toEqual([]);
+    expect(afterWaist.plan).toMatchObject(GOLDEN_LOSE);
+    expect(await ringsAnswer()).toEqual([]);
+
+    // Editing that row's waist alone does not disturb the weight either.
+    expect(
+      (
+        await inject({
+          method: "PATCH",
+          url: `/v1/nutrition/body-measurements/${waistId}`,
+          body: { metrics: { waist_cm: 79 } },
+          cookies,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // Nor does deleting it. All three legs are asked WHILE THE TYPED WEIGHT IS
+    // THE ONLY ONE THERE IS, because that is the only state in which the mirror
+    // has nothing to say and answering anyway destroys the answer.
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${waistId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // A measurement that DOES carry a weight still owns the number, as it
+    // always has — the mirror is narrowed, not switched off.
+    const weighed = await measure({ measuredAt: new Date().toISOString(), weightKg: 68 });
+    expect(weighed.statusCode).toBe(201);
+    expect((await get(cookies)).answers["weightKg"]).toBe(68);
+  });
+
+  it("a v1 profile write's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {
+    const { userId } = await makeUser("ob-locks@example.com");
+    // WHAT THIS GUARDS: the v1 upsert takes the two rows in the OPPOSITE order
+    // to this route — the profile row first, then the users row as FOR KEY
+    // SHARE, which is what its foreign key check does. Holding the users row
+    // with a lock that conflicts with FOR KEY SHARE therefore makes one person
+    // saving on both screens at the same moment a deadlock (40P01 → a 500 on a
+    // save that was perfectly fine). The lock below is exactly the one that FK
+    // check takes; the save must not wait on it.
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holder = sql.begin(async (tx) => {
+      await tx`SELECT id FROM users WHERE id = ${userId} FOR KEY SHARE`;
+      await held;
+    });
+    const save = patchOnboarding(sql, userId, { mainGoal: "endurance", weightKg: 71 });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let outcome = "blocked";
+    try {
+      outcome = await Promise.race([
+        save.then(() => "saved"),
+        new Promise<string>((resolve) => {
+          timer = setTimeout(() => {
+            resolve("blocked");
+          }, 5000);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      release();
+      await holder;
+      await save;
+    }
+    expect(outcome, "the v2 save waited on the lock the v1 write's FK check takes").toBe("saved");
   });
 });

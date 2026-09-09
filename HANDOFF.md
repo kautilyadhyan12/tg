@@ -38,6 +38,34 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   the shared trainingDays rail drifting from the v1 profile's · the deployed `main_goal` CHECK
   drifting from the enum. (Anchors had to match the files' CRLF endings — two "survived" until then.)
 - No click-through: 4a-i has no screen (RULINGS 2026-09-09). Open: review, then 4a-ii.
+- Review round 1 (fresh chat): one High, five Low, five test gaps — all fixed in the second commit.
+  THE HIGH: `users.weight_kg` is also a mirror of the latest weighted body measurement, and the
+  mirror ran after EVERY measurement write — so logging a waist (weight is optional on that
+  contract) set it to NULL and took the onboarding answer, the plan and the macro rings with it.
+  Reproduced through the real routes before the fix. The mirror now runs only when the row written,
+  updated or deleted actually carries a weight; a measurement that DOES carry one still owns the
+  number, so `nutrition.routes`'s "measurement owns current weight" is unchanged. The reviewer's
+  COALESCE would have kept a weight the person had just deleted on screen — not taken.
+- Also fixed: the v2 save took the users row FOR UPDATE while the v1 PUT takes the profile row
+  first and the users row as FOR KEY SHARE (its FK check), so the two could deadlock — proved by
+  holding that key-share lock, which blocked the save for the full five-second timeout; FOR NO KEY
+  UPDATE keeps the active-only guard and lets the FK check through (same test, 358 ms). The mirror
+  comment claimed the two goal columns "can never disagree" — true only of this route, so it now
+  says which way the guarantee runs; the equipment rail is the v1 profile's own `uniqueArray`
+  instead of a second copy, and refuses "none" beside real equipment (the v1 form is a live free
+  multi-select and is deliberately not tightened). ROADMAP 4a-i unticked — it ticks on merge.
+- Test gaps closed: `onboardingCompleted` stored and read back on `/v1/users/me`; `updatedAt`
+  moves across two saves and is null while only a weight is stored; the macro rings' NUMBER follows
+  the goal (−400 / +300, not merely "not null"); a stored height past the plan's rails is a 500 that
+  echoes no value; the equipment cap pinned against the v1 rail. Five mutants run: the two the
+  reviewer found alive both die now, and the three guards each die on their own leg (the delete
+  guard survived the first draft — the test still had a weighted row to fall back on).
+- Verified after the fixes: shared tsc + eslint exit 0, 79 tests; api tsc + eslint exit 0; the
+  CI-shaped run with no DATABASE_URL 299 passed; local Postgres `users.onboarding.routes` 24 ·
+  `nutrition.routes` + `nutrition.unit` + `users.routes` + `users.fitness.routes` + `migrate.body`
+  81 in one run; the FULL local suite 944 passed, 0 test failures — one SUITE error in
+  `auth.routes` whose two-statement fixture cleanup lost a race to another file's insert
+  (ROADMAP item 10); `auth.routes` + `workouts.sync` 43 passed together alone.
 
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 

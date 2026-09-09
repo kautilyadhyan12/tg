@@ -385,7 +385,18 @@ const toMeasurement = (r: MeasurementDbRow): MeasurementRow => ({
 });
 
 /** users.weight_kg mirrors the latest non-null measurement (single write
- *  path for weight history — supersedes P2.2 GAP-2, DECISIONS 2026-07-12). */
+ *  path for weight history — supersedes P2.2 GAP-2, DECISIONS 2026-07-12).
+ *
+ *  CALLED ONLY FROM A WRITE THAT CAN CHANGE THAT ANSWER — see the guard at each
+ *  of the three call sites below. A measurement that carries NO weight (a waist,
+ *  a body-fat percentage) is never the row this subquery selects, so refreshing
+ *  after one could only ever do harm: with no weighted measurement anywhere the
+ *  subquery is NULL, and this statement would then wipe a weight the person
+ *  TYPED — onboarding screen 2, or PATCH /v1/users/me — taking their plan and
+ *  their macro rings with it, in answer to a question about their waist.
+ *
+ *  A weight the person DID give a measurement for is still owned by the
+ *  measurements: the guards narrow when the mirror runs, never what it says. */
 async function refreshWeight(sql: TransactionSql, userId: string): Promise<void> {
   await sql`
     UPDATE users SET weight_kg = (
@@ -420,9 +431,11 @@ export async function createMeasurement(
       INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
       VALUES (${userId}, ${new Date(v.measuredAt)}, ${v.weightKg ?? null}, ${tx.json(v.metrics)}, ${v.source})
       RETURNING id, measured_at, weight_kg, metrics, source, created_at`;
-    await refreshWeight(tx, userId);
     const r = rows[0];
     if (r === undefined) throw new Error("measurement insert returned no row");
+    // Only a row that carries a weight can change which measurement is the
+    // latest weighted one.
+    if (r.weight_kg !== null) await refreshWeight(tx, userId);
     return toMeasurement(r);
   });
 }
@@ -442,16 +455,28 @@ export async function updateMeasurement(
         source = coalesce(${v.source ?? null}, source)
       WHERE id = ${id} AND user_id = ${userId}
       RETURNING id, measured_at, weight_kg, metrics, source, created_at`;
-    if (rows.length > 0) await refreshWeight(tx, userId);
-    return rows[0] === undefined ? null : toMeasurement(rows[0]);
+    const r = rows[0];
+    // The mirror can only move if this row carries a weight NOW (its own weight
+    // may have changed, or `measured_at` may have moved it past another row's),
+    // or carried one that this very write has just cleared. A weightless row
+    // whose waist or source changed cannot affect it either way.
+    if (r !== undefined && (r.weight_kg !== null || v.weightKg !== undefined)) {
+      await refreshWeight(tx, userId);
+    }
+    return r === undefined ? null : toMeasurement(r);
   });
 }
 
 export async function deleteMeasurement(sql: Sql, userId: string, id: string): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ id: string }[]>`
-      DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
-    if (rows.length > 0) await refreshWeight(tx, userId);
+    const rows = await tx<{ id: string; weight_kg: string | null }[]>`
+      DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId}
+      RETURNING id, weight_kg`;
+    // Deleting a weightless row cannot change which measurement is the latest
+    // weighted one; deleting a weighted one falls back to the one before it,
+    // and to nothing when it was the last — which is what "the measurements own
+    // this weight" has always meant.
+    if (rows[0]?.weight_kg != null) await refreshWeight(tx, userId);
     return rows.length > 0;
   });
 }

@@ -92,8 +92,13 @@ export type WorkoutTime = z.infer<typeof workoutTimeSchema>;
 
 /** A set, not a list: duplicates are rejected rather than silently deduped, so
  *  the parsed value is a true multiset-free set (R2.3 parse-don't-validate) —
- *  a repeated goal would otherwise double-weight Part 2B §4's scorer. */
-const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
+ *  a repeated goal would otherwise double-weight Part 2B §4's scorer.
+ *
+ *  Exported so a second surface asking for the SAME column can reuse the rail
+ *  instead of restating it (onboarding v2's screen 7 and this form both write
+ *  `available_equipment`): a restated cap is a cap that can drift, and the same
+ *  answer would then be acceptable on one screen and refused on the other. */
+export const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
   z
     .array(item)
     .max(max)
