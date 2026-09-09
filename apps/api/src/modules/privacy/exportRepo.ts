@@ -127,8 +127,8 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
  *  process's only connection (export.ts) — into an unbounded read. */
 export const CONSENT_EXPORT_LIMIT = 1000;
 
-/** The consent log is NOT on the delete list (tables.ts: kept as proof, like
- *  audit_log) but it IS the person's own record of what they agreed to, so the
+/** The consent log is NOT on the Day-14 delete list (tables.ts: kept as proof
+ *  for six years, like audit_log) but it IS the person's own record of what they agreed to, so the
  *  export carries it beside the PII tables. Read here, keyed on the owner.
  *
  *  It is not an ExportedTable, so `stripInternal` never sees it and no

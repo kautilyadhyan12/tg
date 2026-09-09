@@ -32,8 +32,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `nutrition.unit` 76; local Postgres per file: `users.health.routes` 19 (twice, back to back) ·
   `db.migration` 21 · `privacy.purge` 21 · `privacy.export` 10 · `users.fitness.routes` 10 ·
   `nutrition.routes` 29. Mutations: under-18 line and the active-only guards removed → 3 tests red.
-- Open: the re-check of the fixes; Kd's two answers (RULINGS lines to add); Kd's click-through
-  (no screen — the preview tool and the routes). Merge waits on the H3 answer. 4b builds the screen.
+- Kd ruled the same day (RULINGS 2026-09-09): consent log kept six years past deletion, then
+  removed — built as a run-level step of the Day-14 purge (`CONSENT_PROOF_RETENTION_DAYS`,
+  `repo.deleteExpiredConsentProof`, fake-clock test); the old conditions box goes at 4b.
+- Open: the re-check of the fixes; Kd's click-through (no screen — the preview tool and the
+  routes). 4b builds the screen.
 
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 

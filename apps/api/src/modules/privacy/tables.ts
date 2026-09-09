@@ -316,11 +316,14 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gyms", // gyms.owner_user_id
   "subscriptions", // subscriptions.owner_id — polymorphic, no FK, see below
   "exercise_definitions", // exercise_definitions.published_by
-  // The consent log (migration 0025, 2026-09-09): KEPT on the audit_log
+  // The consent log (migration 0025): KEPT past Day 14 on the audit_log
   // footing — it is the proof a disclaimer was tapped, and a row holds only the
   // link to the tombstone, a screen name, a wording version, the words shown
-  // and an app build. No name, address or health fact. The chat's
-  // recommendation; Kd asked to confirm. It IS in the export (exportRepo.ts).
+  // and an app build. No name, address or health fact. Kd ruled 2026-09-09:
+  // keep it for as long as a claim could be brought, then remove it — the
+  // purge deletes it CONSENT_PROOF_RETENTION_DAYS (six years) after the
+  // account's deletion (purge.ts, repo.deleteExpiredConsentProof). It IS in
+  // the export (exportRepo.ts).
   "consent_log",
 ] as const;
 

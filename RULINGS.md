@@ -153,6 +153,8 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-18 · Sharing is opt-in and scoped; gyms never see meal logs, body weight, coach conversations or run routes. [archive :9604 §6]
 - 2026-08-18 · An in-app consent screen for health data and the camera is needed before a US gym signs. Privacy-law scope beyond India (GDPR, CCPA, LGPD) is an OPEN question for Kd and a lawyer. [archive :592, :9944]
 - 2026-09-07 · Recorded consent at sign-up; see Onboarding for the health screening, Safe mode and disclaimers.
+- 2026-09-09 · The consent log outlives account deletion (proof of the tap; no name or health fact on the row) and is removed six years after the deletion date — the market's standard practice that fits US, EU, Indian and Canadian law. *"do the standard practise"*
+- 2026-09-09 · The old free-text "medical conditions" box on the fitness profile is switched off when the v2 health screen (4b) lands, and the stored text is wiped then. *"follow your recommendation"*
 
 ## How work is done (the process Kd chose on 2026-09-07)
 

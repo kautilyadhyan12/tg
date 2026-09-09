@@ -298,6 +298,24 @@ export async function lockDueUserForPurge(
   return marked.length === 0;
 }
 
+/** The consent log's own, later expiry (retention.ts CONSENT_PROOF_RETENTION_
+ *  DAYS): rows whose account was deleted before `cutoff` go. Keyed through the
+ *  tombstone's deleted_at — a live account's consents are never touched, and
+ *  a restored account (status back to active) keeps its rows. Run-level, not
+ *  per user: the accounts concerned were purged years earlier and are no
+ *  longer in selectDueUsers' batch. Returns how many rows went. */
+export async function deleteExpiredConsentProof(sql: Sql, cutoff: Date): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM consent_log c
+    USING users u
+    WHERE u.id = c.user_id
+      AND u.status = 'deleted'
+      AND u.deleted_at IS NOT NULL
+      AND u.deleted_at <= ${cutoff}
+    RETURNING c.id`;
+  return rows.length;
+}
+
 /** The purge marker AND the ops record (Part 8: a user's life should be
  *  narratable from audit_log). actor_user_id is NULL — the sweep is the
  *  system acting on a schedule, not a person. `meta` carries counts only,

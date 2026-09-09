@@ -41,10 +41,11 @@ CREATE TABLE "user_health_screenings" (
 -- can never change what a person agreed to. Append-only: nothing updates or
 -- deletes a row here in normal operation.
 --
--- KEPT after an account is purged (the chat's recommendation, 2026-09-09; Kd to
--- confirm): it is the proof the tap happened, like `audit_log`, and it holds no
--- name, address or health fact — only the link to the tombstoned users row. It
--- is therefore on `USER_LINKED_NOT_PURGED_TABLES` and IS in the data export.
+-- KEPT after an account is purged (Kd, 2026-09-09): it is the proof the tap
+-- happened, like `audit_log`, and it holds no name, address or health fact —
+-- only the link to the tombstoned users row. It is on
+-- `USER_LINKED_NOT_PURGED_TABLES`, IS in the data export, and the purge removes
+-- it six years after the account's deletion (src/retention.ts).
 CREATE TABLE "consent_log" (
   "id"               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "user_id"          uuid NOT NULL REFERENCES "users"("id"),

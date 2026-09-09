@@ -23,3 +23,12 @@ export const DPDP_RETENTION_DAYS = 14;
 
 /** The same window in milliseconds, for the one-time-token TTL. */
 export const DPDP_RETENTION_MS = DPDP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/** How long the consent log outlives a purged account (Kd, 2026-09-09: keep
+ *  the proof of the disclaimer tap for as long as a claim could still be
+ *  brought, then remove it — six years covers the longest common limitation
+ *  period across the US, Europe, India and Canada). Counted from the day the
+ *  account was deleted; whole days, leap days ignored, which errs a day or
+ *  two LONGER than six calendar years, never shorter. */
+export const CONSENT_PROOF_RETENTION_YEARS = 6;
+export const CONSENT_PROOF_RETENTION_DAYS = CONSENT_PROOF_RETENTION_YEARS * 365;

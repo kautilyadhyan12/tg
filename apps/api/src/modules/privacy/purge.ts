@@ -9,7 +9,7 @@
 // where a date decides whether data lives): the window tests move time, they
 // do not wait 14 days.
 import type { Sql, TransactionSql } from "postgres";
-import { DPDP_RETENTION_DAYS } from "../../retention.js";
+import { CONSENT_PROOF_RETENTION_DAYS, DPDP_RETENTION_DAYS } from "../../retention.js";
 import * as repo from "./repo.js";
 
 /** Structurally satisfied by FastifyBaseLogger — the worker passes pino, the
@@ -57,6 +57,10 @@ export interface PurgeResult {
    *  while a shape we cannot scrub exists. Zero unless a P4 writer drifts the
    *  schema — the table is empty today. */
   schemaDriftSnapshots: number;
+  /** Run-level: consent-log rows removed because their account was deleted
+   *  more than CONSENT_PROOF_RETENTION_DAYS ago (the proof of the disclaimer
+   *  tap outlives the Day-14 purge, then goes). Zero on a dry run. */
+  consentProofExpired: number;
   dryRun: boolean;
 }
 
@@ -132,6 +136,7 @@ export async function purgeDueUsers(
     skipped: 0,
     errors: 0,
     schemaDriftSnapshots: schemaDrift,
+    consentProofExpired: 0,
     dryRun,
   };
 
@@ -207,8 +212,26 @@ export async function purgeDueUsers(
     }
   }
 
+  // The consent log's later expiry, one statement for the whole run. Its own
+  // try: a failure here must not hide the per-user outcomes above, and the
+  // next run simply tries again (idempotent — the rows are either gone or due).
+  const consentCutoff = new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
+  } catch (err) {
+    result.errors += 1;
+    deps.log.error(
+      {
+        errName: err instanceof Error ? err.name : typeof err,
+        errMessage: err instanceof Error ? err.message : undefined,
+        event: "dpdp.purge.consent_expiry_failed",
+      },
+      "consent-log expiry failed; will retry next run",
+    );
+  }
+
   deps.log.info(
-    { ...result, cutoff: cutoff.toISOString(), event: "dpdp.purge.finished" },
+    { ...result, cutoff: cutoff.toISOString(), consentCutoff: consentCutoff.toISOString(), event: "dpdp.purge.finished" },
     "DPDP purge finished",
   );
   return result;

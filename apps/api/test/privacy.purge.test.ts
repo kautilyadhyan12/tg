@@ -28,7 +28,7 @@ import {
   PII_TABLES,
   USER_LINKED_NOT_PURGED_TABLES,
 } from "../src/modules/privacy/tables.js";
-import { DPDP_RETENTION_DAYS } from "../src/retention.js";
+import { CONSENT_PROOF_RETENTION_DAYS, DPDP_RETENTION_DAYS } from "../src/retention.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -234,7 +234,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect((await directCounts(old.userId))["streaks"]).toBe(0);
   });
 
-  it("KEEPS the consent log through a purge (proof of the tap, tables.ts 2026-09-09) while the screening goes", { timeout: 60_000 }, async () => {
+  it("KEEPS the consent log through a purge (proof of the tap, RULINGS 2026-09-09) while the screening goes", { timeout: 60_000 }, async () => {
     const u = await makeUser(uniqEmail("dpdp-consent"), 20);
     const before = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${u.userId}`;
     expect(before[0]?.n).toBe(1);
@@ -243,6 +243,28 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const after = await sql<{ n: number; wording: string }[]>`
       SELECT count(*)::int AS n, min(wording) AS wording FROM consent_log WHERE user_id = ${u.userId}`;
     expect(after[0]).toEqual({ n: 1, wording: "fixture wording" });
+  });
+
+  it("removes the consent log six years after the account was deleted, and not a day before (fake clock)", { timeout: 60_000 }, async () => {
+    const expired = await makeUser(uniqEmail("dpdp-consent-old"), CONSENT_PROOF_RETENTION_DAYS + 1);
+    const nearly = await makeUser(uniqEmail("dpdp-consent-nearly"), CONSENT_PROOF_RETENTION_DAYS - 1);
+    const live = await makeUser(uniqEmail("dpdp-consent-live"), null);
+    const count = async (id: string) =>
+      (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM consent_log WHERE user_id = ${id}`)[0]?.n ?? -1;
+    // A dry run touches nothing.
+    const dry = await run({ dryRun: true });
+    expect(dry.consentProofExpired).toBe(0);
+    expect(await count(expired.userId)).toBe(1);
+    const result = await run();
+    expect(result.consentProofExpired).toBeGreaterThanOrEqual(1);
+    expect(await count(expired.userId)).toBe(0);
+    expect(await count(nearly.userId)).toBe(1);
+    expect(await count(live.userId)).toBe(1);
+    // Two days later the nearly-due one goes; the live account's never does.
+    const later = await run({ now: new Date(Date.now() + 2 * DAY_MS) });
+    expect(later.consentProofExpired).toBeGreaterThanOrEqual(1);
+    expect(await count(nearly.userId)).toBe(0);
+    expect(await count(live.userId)).toBe(1);
   });
 
   it("leaves NO row in any §5.2 table, cascades included", { timeout: 60_000 }, async () => {
