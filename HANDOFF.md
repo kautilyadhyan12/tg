@@ -13,17 +13,21 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `plan/answers.ts`. "Today" is the server clock in the device's zone; an unknown zone is a 400.
 - The v2 PATCH writes a one-element `fitness_goals` mirror so the macro rings see the goal; the v1
   PUT never touches the five v2 columns. Both end at 4a-ii when the rings move onto the answers.
-- Weight (Kd ruling 2026-09-10): `users.weight_kg` IS the latest weighed measurement by date. A
-  typed weight (screen 2, PATCH /v1/users/me) is written as a `self_reported` measurement first
-  (`nutrition/repo.ts recordTypedWeight`; same number twice writes one row; `null` clears the
-  column only). Deleting a mis-entered weigh-in falls back to the weight before it.
-- Verified this chat: api tsc + eslint exit 0; shared tsc exit 0; local Postgres
-  `users.onboarding.routes` 25 · `users.routes` 8 · `nutrition.routes` 29 ·
-  `migrate.nutrition.idempotency` 3; full local api 952 passed, 13 failed in `catalog.seed` +
-  `workouts.sync` under load, 30/30 alone (item 10's flake); web 1876 passed (`poseAssets.contract`
-  red on master too). Three mutants bit: typed weight as a column write · the update guard ignoring
-  a cleared weight · the migration COALESCE dropped.
-- Open: reviewer re-check of the weight commit; then merge and 4a-ii. No click-through (no screen).
+- Weight (Kd ruling 2026-09-10; review round 4 found four Highs in round 3's version, all fixed):
+  the history is the ONE source and `users.weight_kg` is a cache of the newest row that says
+  something about weight. A typed number (screen 2, PATCH /v1/users/me) is a `self_reported` row
+  dated after everything the person has (a weigh-in dated ahead of the clock cannot swallow it);
+  a same-day retype edits that row in place; a clear is a typed row with no weight; migration
+  `0027` (data-only, idempotent) puts a typed row under every weight that had none. The typed row
+  shows "typed by me" in Progress → Measurements; `source` is no longer patchable.
+- Verified this chat: api tsc + eslint exit 0; shared tsc exit 0; local Postgres, the five touched
+  suites 92 passed (`users.onboarding.routes` 29 · `users.routes` 8 · `nutrition.routes` 29 ·
+  `migrate.nutrition.idempotency` 3 · `db.migration` 23); web 63 files passed, `poseAssets.contract`
+  red on master too. Three mutants bit: typed row dated `now()` · the rule ignoring a clear row ·
+  dedupe against any newest row. Full local api suite: see the pull request.
+- Open: reviewer re-check of the round-4 fixes; then merge and 4a-ii. No click-through (no screen).
+  Note for Kd: this PR now carries two migration files (`0026` schema, `0027` data), one more than
+  the rule allows; `0027` can be folded into `0026` in one edit if he prefers.
 
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 

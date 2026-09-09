@@ -93,7 +93,7 @@ export type WorkoutTime = z.infer<typeof workoutTimeSchema>;
 /** A set, not a list: duplicates are rejected rather than silently deduped, so
  *  the parsed value is a true multiset-free set (R2.3 parse-don't-validate) —
  *  a repeated goal would otherwise double-weight Part 2B §4's scorer. */
-export const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
+const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
   z
     .array(item)
     .max(max)

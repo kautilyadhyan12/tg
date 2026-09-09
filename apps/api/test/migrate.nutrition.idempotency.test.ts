@@ -96,8 +96,11 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     expect(m?.metrics).toEqual({ waist_cm: 68, body_fat_pct: 20 });
 
     // A user whose imported measurements are ALL weightless keeps the weight
-    // the users import carried (the COALESCE in refreshUserWeight): the state
-    // the import can produce and the live app cannot.
+    // the users import carried — and under the one-source rule (RULINGS
+    // 2026-09-10) keeping it means giving it a typed row of its own, dated
+    // after everything imported, so the live app's first correction to that
+    // person's history has something true to fall back to. Idempotent: the
+    // second run adds no second row.
     await sql`DELETE FROM body_measurements WHERE user_id = ${userId} AND weight_kg IS NOT NULL`;
     await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
     const weightless = transformBody({
@@ -110,8 +113,13 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     if (weightless === null) return;
     expect(await insertBody(sql, weightless)).toBe(1);
     await refreshUserWeight(sql, userId);
+    await refreshUserWeight(sql, userId);
     const [kept] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
     expect(kept?.weight_kg === null ? null : Number(kept?.weight_kg)).toBe(80);
+    const typed = await sql<{ weight_kg: string | null; newest: boolean }[]>`
+      SELECT weight_kg, measured_at > ${weightless.measuredAt} AS newest FROM body_measurements
+      WHERE user_id = ${userId} AND source = 'self_reported'`;
+    expect(typed).toEqual([{ weight_kg: "80.00", newest: true }]);
   }, 60_000);
 
   it("meal recompute (onMealLogged) awards first_meal exactly once (GAP-E)", async () => {

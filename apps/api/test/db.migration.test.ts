@@ -769,6 +769,97 @@ d("0001_init on a real database", () => {
     }
   });
 
+  /** MIGRATION `0027`'s BACKFILL: every weight that existed before the
+   *  one-source rule (RULINGS 2026-09-10) gets a typed row of its own, so the
+   *  live app's first ordinary correction to that person's history — log a
+   *  weigh-in, delete it — cannot blank a number that had no row behind it.
+   *
+   *  Same construction as `0014`'s: the legacy states are BUILT here (a fresh
+   *  database has none), and the statements are run **read out of the shipped
+   *  file**. Four subjects, one per branch of the two statements plus the two
+   *  that must be left alone: a weight with no row · a weight with a newer,
+   *  different row (the column was written directly after it) · an emptied
+   *  column over a weighed row (a clear under the old code) · a weight whose
+   *  newest row already carries it, and a tombstoned account, both untouched.
+   *  Then the whole thing again, to prove it finds nothing the second time.
+   *  Rolled back. */
+  it("0027's backfill puts a typed row under every weight that had none, and only those", async () => {
+    const migration = await readFile(new URL("../drizzle/0027_typed_weight_rows.sql", import.meta.url), "utf8");
+    const statements = migration
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.includes("INSERT INTO"));
+    if (statements.length !== 2) {
+      throw new Error(`0027 no longer contains exactly two INSERTs (found ${String(statements.length)})`);
+    }
+    const runBackfill = async (tx: postgres.TransactionSql) => {
+      for (const s of statements) await tx.unsafe(s);
+    };
+
+    await sql
+      .begin(async (tx) => {
+        const user = async (name: string, weight: number | null, status = "active") => {
+          const [u] = await tx<{ id: string }[]>`
+            INSERT INTO users (display_name, weight_kg, status) VALUES (${name}, ${weight}, ${status}) RETURNING id`;
+          if (u === undefined) throw new Error(`${name} fixture insert failed`);
+          return u.id;
+        };
+        const weighIn = async (userId: string, weight: number | null, at: string) => {
+          await tx`
+            INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
+            VALUES (${userId}, ${at}, ${weight}, '{}', 'manual')`;
+        };
+        const noRow = await user("zz-0027-no-row", 80);
+        const differs = await user("zz-0027-differs", 80);
+        await weighIn(differs, 82, "2026-05-01T10:00:00Z");
+        const emptied = await user("zz-0027-emptied", null);
+        await weighIn(emptied, 82, "2026-05-01T10:00:00Z");
+        const agrees = await user("zz-0027-agrees", 82);
+        await weighIn(agrees, 82, "2026-05-01T10:00:00Z");
+        const gone = await user("zz-0027-gone", 80, "deleted");
+
+        const rowsOf = async (userId: string) =>
+          tx<{ weight_kg: string | null; source: string; newest: boolean }[]>`
+            SELECT weight_kg, source, measured_at > '2026-05-01T10:00:00Z' AS newest
+            FROM body_measurements WHERE user_id = ${userId} AND source = 'self_reported'`;
+        const columnOf = async (userId: string) =>
+          (await tx<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+
+        for (let pass = 1; pass <= 2; pass += 1) {
+          await runBackfill(tx);
+          // The number that showed before is the number that shows after — for
+          // everyone. The backfill adds rows; it never moves a weight.
+          expect(await columnOf(noRow), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(differs), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(emptied), `pass ${String(pass)}`).toBeNull();
+          expect(await columnOf(agrees), `pass ${String(pass)}`).toBe("82.00");
+          expect(await columnOf(gone), `pass ${String(pass)}`).toBe("80.00");
+          // And exactly the rows that make the one-source rule true, each the
+          // newest thing in that person's history.
+          expect(await rowsOf(noRow), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(differs), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(emptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
+          expect(await rowsOf(agrees), `pass ${String(pass)}`).toEqual([]);
+          expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([]);
+        }
+
+        // What the rows are FOR: from here the live rule computes the same
+        // number the column held, so nothing can vanish on the first correction.
+        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"]] as const) {
+          const [rule] = await tx<{ weight_kg: string | null }[]>`
+            SELECT weight_kg FROM body_measurements
+            WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
+            ORDER BY measured_at DESC, id DESC LIMIT 1`;
+          expect(rule?.weight_kg ?? null).toBe(expected);
+        }
+        throw new Error("ROLLBACK-0027-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0027-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the
    *  gym-details card and shipping DEAD.
    *

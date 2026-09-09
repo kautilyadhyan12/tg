@@ -208,22 +208,40 @@ d("users routes (real Postgres)", () => {
       (JSON.parse(history.body) as { items: { weightKg: number; source: string }[] }).items,
     ).toEqual([expect.objectContaining({ weightKg: 72.5, source: "self_reported" })]);
 
+    const newest = async () =>
+      (await sql<{ weight_kg: string | null; source: string }[]>`
+        SELECT weight_kg, source FROM body_measurements WHERE user_id = ${userId}
+        ORDER BY measured_at DESC, id DESC LIMIT 1`)[0];
+
     // Same weight again → no new history row.
     const same = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 72.5 } });
     expect(same.statusCode).toBe(200);
     expect(await count()).toBe("1");
 
-    // Changed weight → appended.
+    // A different number the same day (the person's zone) corrects today's
+    // typed entry in place — one entry, never a stack of numbers they never had.
     const changed = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 73 } });
     expect(changed.statusCode).toBe(200);
-    expect(await count()).toBe("2");
+    expect(await count()).toBe("1");
+    expect(await newest()).toEqual({ weight_kg: "73.00", source: "self_reported" });
 
-    // Clearing to null → profile null, nothing appended and nothing removed:
-    // clearing is about the number on screen, not the history.
+    // Another day → a new entry; yesterday's stays as the weight they had then.
+    await sql`
+      UPDATE body_measurements SET created_at = created_at - interval '1 day'
+      WHERE user_id = ${userId} AND source = 'self_reported'`;
+    const nextDay = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 74 } });
+    expect(nextDay.statusCode).toBe(200);
+    expect(await count()).toBe("2");
+    expect(await newest()).toEqual({ weight_kg: "74.00", source: "self_reported" });
+
+    // Clearing → profile null, recorded on today's typed entry as "no weight":
+    // the clear is the newest thing the history says, so no older number can
+    // come back behind the person's back.
     const cleared = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: null } });
     expect(cleared.statusCode).toBe(200);
     expect((JSON.parse(cleared.body) as { user: { weightKg: null } }).user.weightKg).toBeNull();
     expect(await count()).toBe("2");
+    expect(await newest()).toEqual({ weight_kg: null, source: "self_reported" });
   });
 
   it("PATCH rejects unknown keys, bad enum values, and an empty body", { timeout: 30_000 }, async () => {

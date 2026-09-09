@@ -1,9 +1,9 @@
 // P2.7d — body_measurements stage. Transforms a legacy `body_measurements` doc
 // into a `body_measurements` row (weight + a `metrics` jsonb of the *_cm /
 // body_fat_pct fields), inserts it idempotently, and exposes the users.weight_kg
-// refresh (GAP-D: body history is the authoritative weight, §3.6; mirrors
-// nutrition/repo.ts refreshWeight). All values are the legacy numbers — none
-// fabricated.
+// refresh (GAP-D: body history is the ONE source of weight, RULINGS
+// 2026-09-10; the same rule as nutrition/repo.ts refreshWeight). All values
+// are the legacy numbers — none fabricated.
 import { z } from "zod";
 import type { Sql } from "postgres";
 import { uuidv5 } from "../uuid5.js";
@@ -96,17 +96,33 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
   return res.count;
 }
 
-/** GAP-D: point users.weight_kg at the user's LATEST non-null measurement.
- *  Unlike the live nutrition/repo.ts refreshWeight this one COALESCEs onto the
- *  column: the users import wrote a weight the legacy profile held, no
- *  measurement stands behind it, and an import has no mis-entry to fall back
- *  from — so a user whose imported measurements are all weightless keeps it
- *  instead of losing it to an empty subquery. Idempotent. */
+/** GAP-D, under the one-source rule (RULINGS 2026-09-10; migration `0027`
+ *  makes the same repair for rows already in Postgres): the column is a cache
+ *  of the newest row that says something about weight. The users import wrote
+ *  the weight the legacy profile held with no measurement behind it, so when
+ *  the imported measurements carry no newer number that profile weight becomes
+ *  a `self_reported` row of its own, dated after everything imported for that
+ *  person — the same statement `0027` runs, kept in step with it. Then the
+ *  column follows the newest weight-bearing row, as the live app does
+ *  (nutrition/repo.ts refreshWeight). Idempotent: the second run finds the
+ *  typed row already newest and equal to the column. */
 export async function refreshUserWeight(sql: Sql, userId: string): Promise<void> {
   await sql`
-    UPDATE users SET weight_kg = coalesce((
+    INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
+    SELECT u.id,
+           GREATEST(now(), (SELECT max(measured_at) FROM body_measurements WHERE user_id = u.id) + interval '1 second'),
+           u.weight_kg, '{}'::jsonb, 'self_reported'
+    FROM users u
+    LEFT JOIN LATERAL (
       SELECT weight_kg FROM body_measurements
-      WHERE user_id = ${userId} AND weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, id DESC LIMIT 1), weight_kg)
-    WHERE id = ${userId}`;
+      WHERE user_id = u.id AND (weight_kg IS NOT NULL OR source = 'self_reported')
+      ORDER BY measured_at DESC, id DESC LIMIT 1) newest ON true
+    WHERE u.id = ${userId} AND u.status = 'active' AND u.weight_kg IS NOT NULL
+      AND (newest.weight_kg IS NULL OR newest.weight_kg <> u.weight_kg)`;
+  await sql`
+    UPDATE users SET weight_kg = (
+      SELECT weight_kg FROM body_measurements
+      WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
+      ORDER BY measured_at DESC, id DESC LIMIT 1)
+    WHERE id = ${userId} AND status = 'active'`;
 }

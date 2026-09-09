@@ -202,9 +202,12 @@ export default function MeasurementsTracker() {
       // old backend precomputed it; the new contract is data-shaped and leaves
       // display aggregation to the client.
       const res = await progressService.getMeasurements(60);
+      // `source` is kept: a weight the person typed on a form (onboarding,
+      // profile) is a row of its own, and the ruling says it is marked as such.
       const rows = (res.data.items || []).map((m) => ({
         id: m.id,
         measured_at: m.measuredAt,
+        source: m.source,
         ...(m.weightKg != null ? { weight_kg: m.weightKg } : {}),
         ...m.metrics,
       }));
@@ -397,12 +400,20 @@ export default function MeasurementsTracker() {
                     style={{ background: 'rgba(255,255,255,0.02)' }}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white">{date}</p>
+                      <p className="text-xs font-semibold text-white">
+                        {date}
+                        {m.source === 'self_reported' && (
+                          <span className="ml-2 font-normal"
+                                style={{ color: 'rgba(255,255,255,0.40)' }}>
+                            typed by me
+                          </span>
+                        )}
+                      </p>
                       <p className="text-2xs truncate"
                          style={{ color: 'rgba(255,255,255,0.40)' }}>
-                        {logged.map((mk) =>
-                          `${mk.label}: ${m[mk.key]}${mk.unit}`
-                        ).join(' · ')}
+                        {logged.length > 0
+                          ? logged.map((mk) => `${mk.label}: ${m[mk.key]}${mk.unit}`).join(' · ')
+                          : 'Weight cleared'}
                       </p>
                     </div>
                     <button

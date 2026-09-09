@@ -133,7 +133,9 @@ export const bodyMeasurementInputSchema = z.object({
   weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
   metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
-export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+// `source` is not patchable: a row the person typed ("self_reported") must
+// not be relabelled a weigh-in, and nothing else is ever sent for it.
+export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type BodyMeasurementInput = z.infer<typeof bodyMeasurementInputSchema>;
 export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 
