@@ -70,7 +70,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   earned its keep: it caught the new cap test stamping its rows from `now()`, which on a loaded
   database put a seeded row ahead of the fixture's own. Stamped from the fixture's row instead.
 - Kd ruled the same day (RULINGS 2026-09-09): a card with no screen gets no click-through, so 3b
-  is proved by its tests and checks alone. Open: merging PR #57 on his word. 4b builds the screen.
+  is proved by its tests and checks alone. Merged to `master` 2026-09-09 on his word (PR #57, all
+  five CI jobs green, branch deleted, roadmap ticked). Only `master` and the stale local
+  `workout-calendar-parked` remain.
+- Open: Stage 1 item 3c (allergen tags on every food), then 4a. 4b builds the health screen these
+  routes are waiting for, and switches off the old free-text conditions box.
 
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 
