@@ -69,8 +69,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `workouts.sync`, which passes alone (23), ROADMAP item 10's shared-database flake. That full run
   earned its keep: it caught the new cap test stamping its rows from `now()`, which on a loaded
   database put a seeded row ahead of the fixture's own. Stamped from the fixture's row instead.
-- Open: Kd's click-through (no screen — the preview tool and the routes) and merging PR #57.
-  4b builds the screen.
+- Kd ruled the same day (RULINGS 2026-09-09): a card with no screen gets no click-through, so 3b
+  is proved by its tests and checks alone. Open: merging PR #57 on his word. 4b builds the screen.
 
 ## 2026-09-08 · The plan maths and its sanity rules (Stage 1 item 3a), branch `plan-maths`
 
