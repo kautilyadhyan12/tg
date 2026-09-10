@@ -48,4 +48,33 @@ describe('MeasurementsTracker history', () => {
     expect(screen.getByText('Weight: 71kg')).toBeTruthy();
     expect(screen.getByText('Waist: 80cm')).toBeTruthy();
   });
+
+  it('an empty weigh-in is not called a clear, and a typed row shows under the day it was typed', async () => {
+    progressService.getMeasurements.mockResolvedValue({
+      data: {
+        items: [
+          // A typed row is dated after everything the person has, so its
+          // measuredAt can be tomorrow; it was typed today.
+          item({
+            id: 'a1a1a1a1-2222-4111-8111-111111111111',
+            source: 'self_reported',
+            weightKg: 71,
+            measuredAt: '2026-09-11T12:00:00.000Z',
+            createdAt: '2026-09-10T12:00:00.000Z',
+          }),
+          // A weigh-in with nothing in it is only that: nobody cleared anything.
+          item({ id: 'b2b2b2b2-2222-4111-8111-111111111111', measuredAt: '2026-09-08T12:00:00.000Z' }),
+        ],
+        nextCursor: null,
+      },
+    });
+    render(<MeasurementsTracker />);
+    await waitFor(() => expect(screen.getByText('Recent entries')).toBeTruthy());
+
+    expect(screen.getByText('No values')).toBeTruthy();
+    expect(screen.queryByText('Weight cleared')).toBeNull();
+    expect(screen.getByText('Sep 10, 2026')).toBeTruthy();
+    expect(screen.queryByText('Sep 11, 2026')).toBeNull();
+    expect(screen.getByText('Sep 8, 2026')).toBeTruthy();
+  });
 });

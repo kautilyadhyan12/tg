@@ -15,7 +15,7 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
 import { patchOnboarding } from "../src/modules/users/repo.js";
-import { recordTypedWeight } from "../src/modules/nutrition/repo.js";
+import { recordTypedWeight, updateMeasurement } from "../src/modules/nutrition/repo.js";
 import { planAnswersFor } from "../src/modules/plan/answers.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -971,6 +971,75 @@ d("onboarding v2 routes (real Postgres)", () => {
     // And typing a number again the same day fills the cleared entry in.
     expect((await patchOk(cookies, { weightKg: 71 })).answers["weightKg"]).toBe(71);
     expect((await history(cookies)).filter((m) => m.source === "self_reported").map((m) => m.weightKg)).toEqual([71]);
+  });
+
+  it("a cache that disagrees with the history is repaired by the next typed weight, never preserved", { timeout: 60_000 }, async () => {
+    // The rule says the column IS the history's newest weight-bearing row. The
+    // live code never lets them drift, but a save that finds nothing to write
+    // must still recompute — otherwise a drift, from wherever it came, is kept
+    // for as long as the person keeps typing the number they already have.
+    const { userId, cookies } = await makeUser("ob-measure-stale@example.com");
+    await completeSeven(cookies); // types 70: one typed row, column 70
+    const columnOf = async () =>
+      (await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+
+    // Drift 1: the column says 80, the person's own typed row still says 70.
+    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
+    expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
+    expect(await columnOf()).toBe("70.00");
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70]]);
+
+    // Drift 2: a weight with NO row under it (the pre-0027 shape). Clearing it
+    // must empty the column (RULINGS 2026-09-10) even though there is no
+    // weight-bearing row to write a clear over.
+    await sql`DELETE FROM body_measurements WHERE user_id = ${userId}`;
+    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(await columnOf()).toBeNull();
+    expect(await history(cookies)).toEqual([]);
+  });
+
+  it("editing the typed entry while screen 2 saves it never deadlocks: the users row is taken first", { timeout: 30_000 }, async () => {
+    // The onboarding save holds the users row and then updates today's typed
+    // row in place. A history edit of that same row that took the row first
+    // and the users row second (refreshWeight) is the opposite order; the two
+    // interleaved are a deadlock, and the save — with every answer in it —
+    // is the one Postgres aborts. Reproduced before the fix: "deadlock detected".
+    const { userId, cookies } = await makeUser("ob-measure-lock-order@example.com");
+    await completeSeven(cookies); // one typed row, today
+    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
+    if (typed === undefined) throw new Error("no typed row");
+
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let saveError: unknown = null;
+    // A: the save's shape — users row first, then the typed row.
+    const save = sql
+      .begin(async (tx) => {
+        await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+        await held; // B is started while this lock is held
+        await tx`UPDATE body_measurements SET weight_kg = 71 WHERE id = ${typed.id} AND user_id = ${userId}`;
+      })
+      .catch((err: unknown) => {
+        saveError = err;
+      });
+    // B: the history edit of that row, through the real repo transaction.
+    const edit = updateMeasurement(sql, userId, typed.id, { weightKg: 72 });
+    // Let B reach whichever lock it takes first, then let A continue.
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 500);
+    });
+    release();
+    await save;
+    const edited = await edit;
+
+    expect(saveError, "the save was aborted").toBeNull();
+    expect(edited?.weightKg).toBe(72);
+    // B ran after A committed, so its number is the one that stands.
+    expect((await get(cookies)).answers["weightKg"]).toBe(72);
   });
 
   it("a typed weight is never written for an account that is not active", { timeout: 30_000 }, async () => {

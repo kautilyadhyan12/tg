@@ -20,14 +20,25 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   a same-day retype edits that row in place; a clear is a typed row with no weight; migration
   `0027` (data-only, idempotent) puts a typed row under every weight that had none. The typed row
   shows "typed by me" in Progress → Measurements; `source` is no longer patchable.
-- Verified this chat: api tsc + eslint exit 0; shared tsc exit 0; local Postgres, the five touched
-  suites 92 passed (`users.onboarding.routes` 29 · `users.routes` 8 · `nutrition.routes` 29 ·
-  `migrate.nutrition.idempotency` 3 · `db.migration` 23); web 63 files passed, `poseAssets.contract`
-  red on master too. Three mutants bit: typed row dated `now()` · the rule ignoring a clear row ·
-  dedupe against any newest row. Full local api suite: see the pull request.
-- Open: reviewer re-check of the round-4 fixes; then merge and 4a-ii. No click-through (no screen).
-  Note for Kd: this PR now carries two migration files (`0026` schema, `0027` data), one more than
-  the rule allows; `0027` can be folded into `0026` in one edit if he prefers.
+- Review round 5 (re-check of round 4) found three Highs, all fixed: `0027` now backfills
+  soft-deleted accounts too (they keep their weight for the 14-day undo window; only the purge nulls
+  it); a typed weight that has nothing to write still recomputes the cache, so a column that
+  disagrees with the history is repaired, never kept; every history write takes the users row
+  FIRST (`lockOwner`), the same order as the profile and onboarding saves, so editing today's typed
+  entry while screen 2 saves it no longer deadlocks. Lows: the Mongo import refreshes every imported
+  user, not only those with measurement docs; an empty weigh-in reads "No values", not "Weight
+  cleared"; a typed row shows under the day it was typed; `source` un-patchable is pinned in shared
+  and at the route.
+- Verified this chat: api tsc + eslint exit 0; shared tsc exit 0, 80 passed; local Postgres, the five
+  touched suites 95 passed (`db.migration`'s 0005 test failed once under the five-file run and
+  passed alone — ROADMAP item 10's shared-database flake); web `measurementsTracker.render` 2 passed.
+  Three mutants bit: the lock removed → "deadlock detected"; the recompute removed → 80 kept over
+  70; the status filter put back → the soft-deleted account gets no row.
+- Open: reviewer re-check of the round-5 fixes; then merge and 4a-ii. No click-through (no screen).
+  Note for Kd: this PR carries two migration files (`0026` schema, `0027` data), one more than the
+  rule allows; `0027` can be folded into `0026` in one edit if he prefers. This is the fifth review
+  round on the weight code; CLAUDE.md §2.6 says two rounds of Criticals in one place is a stop —
+  the next chat should not patch a sixth time without asking Kd.
 
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 

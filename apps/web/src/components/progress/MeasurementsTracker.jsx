@@ -204,9 +204,13 @@ export default function MeasurementsTracker() {
       const res = await progressService.getMeasurements(60);
       // `source` is kept: a weight the person typed on a form (onboarding,
       // profile) is a row of its own, and the ruling says it is marked as such.
+      // A typed row is DATED after everything the person has (a weigh-in may
+      // be dated up to a day ahead of the clock), so its measuredAt can sit in
+      // tomorrow; the day it shows under is the day it was typed (createdAt).
       const rows = (res.data.items || []).map((m) => ({
         id: m.id,
         measured_at: m.measuredAt,
+        shown_at: m.source === 'self_reported' && m.createdAt ? m.createdAt : m.measuredAt,
         source: m.source,
         ...(m.weightKg != null ? { weight_kg: m.weightKg } : {}),
         ...m.metrics,
@@ -244,8 +248,8 @@ export default function MeasurementsTracker() {
     .filter((m) => m[activeMetric] != null)
     .reverse()
     .map((m) => ({
-      date:  m.measured_at
-        ? new Date(m.measured_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      date:  m.shown_at
+        ? new Date(m.shown_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : '',
       value: m[activeMetric],
     }));
@@ -385,8 +389,8 @@ export default function MeasurementsTracker() {
             </p>
             <div className="space-y-1.5">
               {measurements.slice(0, 5).map((m) => {
-                const date = m.measured_at
-                  ? new Date(m.measured_at).toLocaleDateString('en-US', {
+                const date = m.shown_at
+                  ? new Date(m.shown_at).toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric', year: 'numeric',
                     })
                   : '';
@@ -413,7 +417,7 @@ export default function MeasurementsTracker() {
                          style={{ color: 'rgba(255,255,255,0.40)' }}>
                         {logged.length > 0
                           ? logged.map((mk) => `${mk.label}: ${m[mk.key]}${mk.unit}`).join(' · ')
-                          : 'Weight cleared'}
+                          : m.source === 'self_reported' ? 'Weight cleared' : 'No values'}
                       </p>
                     </div>
                     <button

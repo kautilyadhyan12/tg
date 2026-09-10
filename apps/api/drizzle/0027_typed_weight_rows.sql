@@ -23,23 +23,29 @@
 -- under it" (a COALESCE onto the column, which kept the very mis-entry a
 -- person had just deleted).
 --
--- STATEMENT 1: an active user whose column holds a weight that the newest
+-- STATEMENT 1: a user whose column holds a weight that the newest
 -- weight-bearing row does not carry (no such row, or a different number: the
 -- column was written directly after it) gets ONE typed row with that number,
 -- dated so that it is the newest of everything they have — now(), or one
 -- second after their newest entry if that is ahead of the clock. Nobody's
 -- number moves; it gains the row that will let it survive.
 --
--- STATEMENT 2: an active user whose column is EMPTY while their newest
+-- STATEMENT 2: a user whose column is EMPTY while their newest
 -- weight-bearing row carries a number cleared it on purpose under the old
 -- code (the only way that state arises: the import wrote the newest row's
 -- number, and only PATCH weightKg: null could empty it after). The clear
 -- becomes the row it now is — typed, no weight, newest — so the next edit to
 -- their history cannot bring the cleared number back.
 --
--- Tombstoned accounts already have a NULL column (privacy/repo.ts) and are
--- left alone. Re-running either statement finds nothing to do: after the
--- first run the newest weight-bearing row equals the column for everyone.
+-- NO status filter, on purpose. A soft-deleted account keeps its weight and
+-- its history for the whole undo window (users/repo.ts softDeleteUser nulls
+-- neither; only the Day-14 purge in privacy/repo.ts does), and restoreUser
+-- brings it back exactly as it was — so it needs the same row as everyone
+-- else, or the restored person is the one whose number vanishes on their
+-- first correction. A purged account has a NULL column and no rows, so it
+-- matches neither statement. Re-running either statement finds nothing to
+-- do: after the first run the newest weight-bearing row equals the column
+-- for everyone.
 INSERT INTO "body_measurements" ("user_id", "measured_at", "weight_kg", "metrics", "source")
 SELECT u."id",
        GREATEST(now(), (SELECT max("measured_at") FROM "body_measurements" WHERE "user_id" = u."id") + interval '1 second'),
@@ -49,8 +55,7 @@ LEFT JOIN LATERAL (
   SELECT "weight_kg" FROM "body_measurements"
   WHERE "user_id" = u."id" AND ("weight_kg" IS NOT NULL OR "source" = 'self_reported')
   ORDER BY "measured_at" DESC, "id" DESC LIMIT 1) newest ON true
-WHERE u."status" = 'active'
-  AND u."weight_kg" IS NOT NULL
+WHERE u."weight_kg" IS NOT NULL
   AND (newest."weight_kg" IS NULL OR newest."weight_kg" <> u."weight_kg");--> statement-breakpoint
 INSERT INTO "body_measurements" ("user_id", "measured_at", "weight_kg", "metrics", "source")
 SELECT u."id",
@@ -61,6 +66,5 @@ JOIN LATERAL (
   SELECT "weight_kg" FROM "body_measurements"
   WHERE "user_id" = u."id" AND ("weight_kg" IS NOT NULL OR "source" = 'self_reported')
   ORDER BY "measured_at" DESC, "id" DESC LIMIT 1) newest ON true
-WHERE u."status" = 'active'
-  AND u."weight_kg" IS NULL
+WHERE u."weight_kg" IS NULL
   AND newest."weight_kg" IS NOT NULL;

@@ -42,6 +42,10 @@ async function main(): Promise<void> {
   const sql = connectPg(env.data.DATABASE_URL);
   try {
     // ── users ────────────────────────────────────────────────────────────
+    // Every user the import touched: the body stage's weight refresh runs for
+    // each of them, not only those with measurement docs — a profile weight
+    // with no measurements behind it is exactly the one that needs its row.
+    const importedUsers = new Set<string>();
     {
       let read = 0;
       let transformed = 0;
@@ -57,6 +61,7 @@ async function main(): Promise<void> {
           return;
         }
         transformed += 1;
+        importedUsers.add(row.id);
         if (apply) {
           // Per-row fail-soft: a genuine unique collision (e.g. duplicate email)
           // is logged with its _id and counted, never silently dropped and never
@@ -188,10 +193,11 @@ async function main(): Promise<void> {
           }
         }
       });
+      const weightUsers = new Set<string>([...importedUsers, ...bodyUsers]);
       if (apply) {
-        for (const userId of bodyUsers) await refreshUserWeight(sql, userId);
+        for (const userId of weightUsers) await refreshUserWeight(sql, userId);
       }
-      console.log(`body_measurements: read=${String(read)} transformed=${String(transformed)} skipped=${String(skipped)} inserted=${String(inserted)} weight_refreshed_users=${String(apply ? bodyUsers.size : 0)} errors=${String(errors)} mode=${apply ? "apply" : "dry-run"}`);
+      console.log(`body_measurements: read=${String(read)} transformed=${String(transformed)} skipped=${String(skipped)} inserted=${String(inserted)} weight_refreshed_users=${String(apply ? weightUsers.size : 0)} errors=${String(errors)} mode=${apply ? "apply" : "dry-run"}`);
       if (errors > 0) process.exitCode = 1;
     }
 

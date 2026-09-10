@@ -780,9 +780,11 @@ d("0001_init on a real database", () => {
    *  that must be left alone: a weight with no row · a weight with a newer,
    *  different row (the column was written directly after it) · an emptied
    *  column over a weighed row (a clear under the old code) · a weight whose
-   *  newest row already carries it, and a tombstoned account, both untouched.
-   *  Then the whole thing again, to prove it finds nothing the second time.
-   *  Rolled back. */
+   *  newest row already carries it (untouched) · a SOFT-DELETED account still
+   *  inside its undo window, which keeps its weight and must get the row like
+   *  anyone else, or restoring it restores the very state this repairs · a
+   *  purged tombstone (NULL column, no rows), untouched. Then the whole thing
+   *  again, to prove it finds nothing the second time. Rolled back. */
   it("0027's backfill puts a typed row under every weight that had none, and only those", async () => {
     const migration = await readFile(new URL("../drizzle/0027_typed_weight_rows.sql", import.meta.url), "utf8");
     const statements = migration
@@ -817,6 +819,8 @@ d("0001_init on a real database", () => {
         const agrees = await user("zz-0027-agrees", 82);
         await weighIn(agrees, 82, "2026-05-01T10:00:00Z");
         const gone = await user("zz-0027-gone", 80, "deleted");
+        await tx`UPDATE users SET deleted_at = now() WHERE id = ${gone}`;
+        const purged = await user("zz-0027-purged", null, "deleted");
 
         const rowsOf = async (userId: string) =>
           tx<{ weight_kg: string | null; source: string; newest: boolean }[]>`
@@ -834,18 +838,21 @@ d("0001_init on a real database", () => {
           expect(await columnOf(emptied), `pass ${String(pass)}`).toBeNull();
           expect(await columnOf(agrees), `pass ${String(pass)}`).toBe("82.00");
           expect(await columnOf(gone), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(purged), `pass ${String(pass)}`).toBeNull();
           // And exactly the rows that make the one-source rule true, each the
           // newest thing in that person's history.
           expect(await rowsOf(noRow), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
           expect(await rowsOf(differs), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
           expect(await rowsOf(emptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
           expect(await rowsOf(agrees), `pass ${String(pass)}`).toEqual([]);
-          expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([]);
+          expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(purged), `pass ${String(pass)}`).toEqual([]);
         }
 
         // What the rows are FOR: from here the live rule computes the same
-        // number the column held, so nothing can vanish on the first correction.
-        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"]] as const) {
+        // number the column held, so nothing can vanish on the first correction
+        // — including for the soft-deleted person once restoreUser brings them back.
+        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"]] as const) {
           const [rule] = await tx<{ weight_kg: string | null }[]>`
             SELECT weight_kg FROM body_measurements
             WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
