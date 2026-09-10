@@ -269,16 +269,17 @@ const tenthsOf = ({ whole, tenth }) => whole * 10 + tenth;
 const partsOf = (tenths) => ({ whole: Math.floor(tenths / 10), tenth: tenths % 10 });
 
 /** The rows the target wheel offers: whole units strictly on the goal's side
- *  of the current weight (in the parts of the units on screen). */
-export function targetWholes(units, direction, weight) {
+ *  of the current weight (in the parts of the units on screen), stretched to
+ *  reach `at`, the row a stored target sits on, as the other wheels stretch. */
+export function targetWholes(units, direction, weight, at = null) {
   const [from, to] = WEIGHT_WHOLES[units === 'imperial' ? 'imperial' : 'metric'];
   if (direction === 'gain') {
     const min = weight.tenth === 9 ? weight.whole + 1 : weight.whole;
     // At the top of the list the row above the weight is still offered.
-    return range(min, Math.max(to, weight.whole + 1));
+    return range(min, Math.max(to, weight.whole + 1, at?.whole ?? to));
   }
   const max = weight.tenth === 0 ? weight.whole - 1 : weight.whole;
-  return range(Math.min(from, max), max);
+  return range(Math.min(from, max, at?.whole ?? from), max);
 }
 
 /** The tenths offered beside `whole`: all ten, except on the weight's own
@@ -305,6 +306,14 @@ export function clampTarget(direction, weight, parts) {
   const wrong = direction === 'gain' ? tenthsOf(parts) <= tenthsOf(weight) : tenthsOf(parts) >= tenthsOf(weight);
   return wrong ? targetEdge(direction, weight) : parts;
 }
+
+/** The row the wheel shows for a stored target on the goal's side: its own
+ *  row, unless rounding to the units on show lands it on the weight's own row
+ *  (140.0 lb and 139.9 lb are stored as 63.5 and 63.46 kg, and both read
+ *  63.5 kg). Then it is the nearest row on the goal's side, so the target
+ *  never reads the same as the weight and always sits on a row it offers. */
+export const targetRow = (direction, weight, targetKg, units) =>
+  clampTarget(direction, weight, weightParts(targetKg, units));
 
 /** Height: whole centimetres, or feet and inches. */
 export const HEIGHT_REST = { metric: { cm: 170 }, imperial: { ft: 5, inch: 7 } };

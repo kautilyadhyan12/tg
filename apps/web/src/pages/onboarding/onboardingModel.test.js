@@ -286,6 +286,40 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
     expect(m.targetRest('gain', { whole: 70, tenth: 3 })).toEqual({ whole: 71, tenth: 0 });
   });
 
+  it('a target stored in the other units sits on a row the wheel offers, never on the weight\'s own row', () => {
+    // Every weight on the wheel of one unit, with its nearest target on each
+    // side, stored in kilograms and shown in the other unit: 140.0 lb and
+    // 139.9 lb are stored as 63.5 and 63.46 kg, which both read 63.5 kg.
+    const bad = [];
+    let sameRow = 0;
+    for (const [from, to] of [['imperial', 'metric'], ['metric', 'imperial']]) {
+      for (const whole of m.weightWholes(from, null)) {
+        for (const tenth of m.TENTHS) {
+          const weightKg = m.kgFromParts({ whole, tenth }, from);
+          const weight = m.weightParts(weightKg, to);
+          for (const direction of ['lose', 'gain']) {
+            const targetKg = m.kgFromParts(m.targetEdge(direction, m.weightParts(weightKg, from)), from);
+            const own = m.weightParts(targetKg, to);
+            if (own.whole === weight.whole && own.tenth === weight.tenth) sameRow += 1;
+            const row = m.targetRow(direction, weight, targetKg, to);
+            const offered =
+              m.targetWholes(to, direction, weight, row).includes(row.whole) &&
+              m.targetTenths(direction, weight, row.whole).includes(row.tenth);
+            const onWeight = row.whole === weight.whole && row.tenth === weight.tenth;
+            if (m.targetWrongSide(direction, targetKg, weightKg) || !offered || onWeight) {
+              bad.push(`${from} to ${to} ${direction} ${whole}.${tenth}`);
+            }
+          }
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(sameRow).toBeGreaterThan(0); // the case is real: rounding does put some there
+    // A stored target past the ends of the list is on the wheel too.
+    expect(m.targetWholes('metric', 'lose', { whole: 70, tenth: 0 }, { whole: 25, tenth: 0 })[0]).toBe(25);
+    expect(m.targetWholes('metric', 'gain', { whole: 240, tenth: 0 }, { whole: 260, tenth: 0 }).at(-1)).toBe(260);
+  });
+
   it('starts in pounds and feet for a US browser, kilograms and centimetres elsewhere', () => {
     expect(m.defaultUnits('en-US')).toBe('imperial');
     expect(m.defaultUnits('en-GB')).toBe('metric');

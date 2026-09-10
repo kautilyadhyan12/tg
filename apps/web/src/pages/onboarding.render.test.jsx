@@ -299,11 +299,135 @@ describe('onboarding screens 1–7', () => {
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
     expect(age.scrollTop).toBe(40 * 14); // back on its resting row, 30
-    // A flick: row 20 of 16…120 is 36.
+    // A flick on a wheel the person has touched: row 20 of 16…120 is 36.
+    fireEvent.focus(age);
     fireEvent.wheel(age);
     age.scrollTop = 40 * 20;
     fireEvent.scroll(age);
     await saved({ age: 36 });
+  });
+
+  it('an untouched wheel lets the page scroll past it, so scrolling the page never sets an answer', async () => {
+    // Screen 2 is taller than a laptop or a phone and its wheels are full
+    // width: a wheel that took every scroll over it would set the age, or
+    // write a weigh-in, while the person was only scrolling down the page.
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    const age = spin('Age');
+    expect(age.className).toContain('overflow-y-hidden');
+    // The test browser cannot scroll for real, so the worst case is acted
+    // out: a mouse wheel and a thumb over the untouched wheel, and the wheel
+    // moving all the same. It picks nothing and goes back to its row.
+    fireEvent.wheel(age);
+    fireEvent.touchStart(age);
+    fireEvent.pointerDown(age);
+    age.scrollTop = 40 * 20;
+    fireEvent.scroll(age);
+    fireEvent.touchEnd(age);
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(age.scrollTop).toBe(40 * 14);
+    expect(age.getAttribute('aria-valuetext')).toBe('Not set');
+    // Tapped or focused, it turns under the person's flick…
+    fireEvent.focus(age);
+    expect(age.className).toContain('overflow-y-scroll');
+    // …and a press anywhere else lets it go again.
+    fireEvent.pointerDown(screen.getByRole('heading', { name: 'About you' }));
+    expect(spin('Age').className).toContain('overflow-y-hidden');
+  });
+
+  it('a press or a mouse wheel that moves nothing leaves nothing behind for a later scroll to pick', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    const age = spin('Age');
+    fireEvent.focus(age);
+    // A right-click, a press on the space above the first row, a mouse wheel
+    // at an end of the column: the gesture ends and nothing scrolls.
+    fireEvent.pointerDown(age, { button: 2 });
+    fireEvent.pointerUp(age, { button: 2 });
+    fireEvent.wheel(age);
+    await settleWheels();
+    // Then a scroll the code makes (switching the units makes one). It is
+    // not the person's, so it picks nothing.
+    age.scrollTop = 40 * 20;
+    fireEvent.scroll(age);
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(age.scrollTop).toBe(40 * 14);
+  });
+
+  it('re-picking the weight and height on show saves nothing, though they were stored in kilograms and centimetres', async () => {
+    // 70 kg reads 154.3 lb and 175 cm reads 5 ft 9 in. Picked back, those rows
+    // mean 69.99 kg and 175.26 cm: a "typed by me" weigh-in and a height the
+    // person never changed (RULINGS 2026-09-10).
+    serve({ mainGoal: 'posture', age: 30, gender: 'female', heightCm: 175, weightKg: 70 });
+    draw();
+    await heading('Your day');
+    tap('About you');
+    await heading('About you');
+    expect(pressed(/lb · ft/)).toBe('true'); // the test browser is en-US
+    tapRow('Weight in whole pounds', '154');
+    tapRow('Weight, tenths of a pound', '.3');
+    tapRow('Height, feet', '5 ft');
+    tapRow('Height, inches', '9 in');
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(screen.getByText('154.3 lb')).toBeTruthy();
+    // A different row is a new answer.
+    tapRow('Weight, tenths of a pound', '.4');
+    await saved({ weightKg: 70.03 });
+  });
+
+  it('re-picking in kilograms and centimetres a weight and height stored from pounds and inches saves nothing', async () => {
+    // 154.0 lb is stored as 69.85 kg and 5 ft 9 in as 175.26 cm.
+    serve({ mainGoal: 'posture', age: 30, gender: 'female', heightCm: 175.26, weightKg: 69.85 });
+    draw();
+    await heading('Your day');
+    tap('About you');
+    await heading('About you');
+    tap(/kg · cm/);
+    for (const wheel of ['Weight in whole kilograms', 'Weight, tenths of a kilogram', 'Height in centimetres']) {
+      tapRow(wheel, spin(wheel).getAttribute('aria-valuetext'));
+    }
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(spin('Height in centimetres').getAttribute('aria-valuetext')).toBe('175');
+  });
+
+  it('after a switch to kilograms a target never reads the same as the weight, and sits on a row of its wheel', async () => {
+    // 140.0 lb is stored as 63.5 kg and a target of 139.9 lb as 63.46 kg. In
+    // kilograms both round to 63.5, and 63.5 is not a row a loss can offer.
+    serve({ ...ALL, weightKg: 63.5, targetWeightKg: 63.46 });
+    draw();
+    await heading('Equipment');
+    tap('Your target');
+    await heading('Your target');
+    expect(screen.getByText(/You weigh 140\.0 lb\./)).toBeTruthy();
+    tap(/kg · cm/);
+    expect(spin('Target weight in whole kilograms').getAttribute('aria-valuetext')).toBe('63');
+    expect(spin('Target weight, tenths of a kilogram').getAttribute('aria-valuetext')).toBe('.4');
+    const target = screen.getByRole('group', { name: 'Target weight' });
+    expect(within(target).getByText('63.4 kg')).toBeTruthy();
+    expect(screen.getByText(/You weigh 63\.5 kg\./)).toBeTruthy();
+    expect(button(/continue/i).disabled).toBe(false);
+    // The rows on show are the answer already stored: picked again, nothing is saved.
+    tapRow('Target weight, tenths of a kilogram', '.4');
+    tapRow('Target weight in whole kilograms', '63');
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+  });
+
+  it('a stored target past the ends of the target wheel is still on it', async () => {
+    serve({ ...ALL, mainGoal: 'muscle_gain', weightKg: 240, targetWeightKg: 260 });
+    draw();
+    await heading('Equipment');
+    tap('Your target');
+    await heading('Your target');
+    tap(/kg · cm/);
+    expect(spin('Target weight in whole kilograms').getAttribute('aria-valuetext')).toBe('260');
+    expect(spin('Target weight, tenths of a kilogram').getAttribute('aria-valuetext')).toBe('.0');
   });
 
   it('the target wheel cannot be set on the wrong side of the weight', async () => {
@@ -342,6 +466,9 @@ describe('onboarding screens 1–7', () => {
     await heading('Your target'); // the first screen still open
     tap(/kg · cm/);
     expect(screen.getByText('83.0 kg is not below your current 70.0 kg. Pick a weight below it.')).toBeTruthy();
+    // No row on the wheel is the stored 83, so the wheel reads "Not set", never its resting row.
+    expect(spin('Target weight in whole kilograms').getAttribute('aria-valuetext')).toBe('Not set');
+    expect(spin('Target weight, tenths of a kilogram').getAttribute('aria-valuetext')).toBe('Not set');
     expect(button(/continue/i).disabled).toBe(true);
     expect(button('Your day').disabled).toBe(true);
     tapRow('Target weight in whole kilograms', '65');

@@ -40,6 +40,7 @@ import {
   stepIn,
   stepInches,
   targetRest,
+  targetRow,
   targetTenths,
   targetWholes,
   targetWrongSide,
@@ -53,6 +54,12 @@ import {
  *  contract refuses: a list stretched to reach an odd stored answer can hold
  *  rows past the rails. */
 const takes = (patch) => patchOnboardingRequestSchema.safeParse(patch).success;
+
+/** A pick of the rows already on show is not a new answer, and saves nothing.
+ *  Compared as rows, never as kilograms: 70 kg reads 154.3 lb, and 154.3 lb
+ *  back is 69.99 kg, so re-picking it would write a weigh-in the person never
+ *  made (RULINGS 2026-09-10). */
+const sameRows = (a, b) => a.whole === b.whole && a.tenth === b.tenth;
 
 function Choice({ selected, onSelect, icon: Icon, label, desc }) {
   return (
@@ -157,7 +164,12 @@ function HeightWheel({ cm, units, save }) {
   if (units === 'imperial') {
     const parts = isSet ? heightParts(cm, 'imperial') : HEIGHT_REST.imperial;
     const feet = heightFeetList(parts.ft);
-    const pick = (next) => set(cmFromParts(next, 'imperial'));
+    // The rows on show are the answer already stored (175 cm reads 5 ft 9 in,
+    // and 5 ft 9 in back is 175.26 cm): picked again, they save nothing.
+    const pick = (next) => {
+      if (isSet && next.ft === parts.ft && next.inch === parts.inch) return;
+      set(cmFromParts(next, 'imperial'));
+    };
     return (
       <NumberWheel
         id="ob-height"
@@ -187,6 +199,10 @@ function HeightWheel({ cm, units, save }) {
   }
   const at = isSet ? heightParts(cm, 'metric').cm : HEIGHT_REST.metric.cm;
   const list = heightCmList(at);
+  // As above: 5 ft 9 in is stored as 175.26 cm and reads 175.
+  const pick = (value) => {
+    if (!(isSet && value === at)) set(value);
+  };
   return (
     <NumberWheel
       id="ob-height"
@@ -195,9 +211,9 @@ function HeightWheel({ cm, units, save }) {
       isSet={isSet}
       unit="cm"
       stepLabel="Height"
-      onStep={(by) => set(stepIn(list, at, by))}
+      onStep={(by) => pick(stepIn(list, at, by))}
       columns={[
-        { label: 'Height in centimetres', values: list, index: list.indexOf(at), format: String, onPick: (i) => set(list[i]) },
+        { label: 'Height in centimetres', values: list, index: list.indexOf(at), format: String, onPick: (i) => pick(list[i]) },
       ]}
     />
   );
@@ -242,12 +258,16 @@ function WeightWheel({ id, question, shown, isSet, at, wholes, tenths, units, on
  *  target already on the wrong side is named, and the screen waits. */
 function TargetWheel({ target, weightKg, direction, units, save }) {
   const weight = weightParts(weightKg, units);
-  const isSet = target !== null;
   const wrong = targetWrongSide(direction, target, weightKg);
-  const at = isSet && !wrong ? weightParts(target, units) : targetRest(direction, weight);
-  const wholes = targetWholes(units, direction, weight);
+  // A wrong-side target is on no row of the wheel, so the wheel rests and
+  // reads "Not set" while the error under it names the target.
+  const isSet = target !== null && !wrong;
+  const at = isSet ? targetRow(direction, weight, target, units) : targetRest(direction, weight);
+  const wholes = targetWholes(units, direction, weight, at);
   const pick = (parts) => {
-    const kg = kgFromParts(clampTarget(direction, weight, parts), units);
+    const row = clampTarget(direction, weight, parts);
+    if (isSet && sameRows(row, at)) return;
+    const kg = kgFromParts(row, units);
     // The rows offered are all on the right side; this is the belt with the braces.
     if (targetWrongSide(direction, kg, weightKg)) return;
     if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
@@ -258,7 +278,7 @@ function TargetWheel({ target, weightKg, direction, units, save }) {
       <WeightWheel
         id="ob-target"
         question="Target weight"
-        shown={isSet ? weightShown(weightParts(target, units), units) : 'Not set'}
+        shown={target === null ? 'Not set' : weightShown(isSet ? at : weightParts(target, units), units)}
         isSet={isSet}
         at={at}
         wholes={wholes}
@@ -367,6 +387,7 @@ export function AboutScreen({ answers, save, units, setUnits, name }) {
           tenths={TENTHS}
           units={units}
           onPick={(parts) => {
+            if (weightSet && sameRows(parts, weightAt)) return;
             const kg = kgFromParts(parts, units);
             if (kg !== weightKg && takes({ weightKg: kg })) save({ weightKg: kg });
           }}
