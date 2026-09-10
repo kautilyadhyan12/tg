@@ -19,7 +19,24 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   CI's first run failed `xpDisplay` "non-array recommendations" (reads the message without waiting; 3/3 locally): item 10.
 - Kd clicked through: passed. His look changes, built the same day (RULINGS 2026-09-10): line icons for emoji, a big units
   switch first, a clickable step bar, no number box before the number, the disclaimer's first sentence only under it.
-- Open: Kd's answer on the full disclaimer elsewhere, then the fresh-chat review. Until 4a-iii the rings can differ.
+  Pushed as 7508a3d; all five CI jobs green.
+- FIVE FIXES REMAIN on this branch before the review, from his second look (build them first, plan first, tests alongside):
+  (1) Flexibility and Pull-up bar icons drawn by hand in lucide's line style — the library's wheelchair and arrow are
+  wrong; (2) age, height, weight and target become flick wheels with + and − buttons — nothing typed, nothing pre-filled
+  (RULINGS: tap-only screens; "Not set" until touched, as Settings' slider does); (3) "About you" opens with "What should
+  we call you?", the one typed box that stays, saved as `displayName` (a code sign-in names the account after the email's
+  local part today; Settings can change it); (4) screen 5 asks "How many push-ups can you do in a row?" and "How long can
+  you hold a plank?" as plain questions with a "Not sure" tap — no timer, no test wording; nothing reads the two numbers
+  until 6a; (5) "How is this worked out?" under the number: the SERVER sends the steps (it alone knows the day factor,
+  the MET and the protein table), the screen prints each with Kd's own numbers and the source named in maths.ts's header.
+- Then: tests, Kd's click-through again, the fresh-chat review, merge. After merge: 4a-iii (rings, small) → 4a-iv (goals
+  and gym) → 4b (health). Kd builds the rest with a different model; his goals ruling is in RULINGS and its design in 4a-iv/6a.
+- OPEN DECISIONS, to ask in the next plan: B "A gym" on screen 7 (recommended yes) · C the health question gains "or take
+  any medicine, including for weight loss" (recommended yes) · D "follow their advice over the app's" stays on sign-up,
+  the health step and the plan screen for the lawyer to reword (recommended yes). Kd has not answered these.
+- Local servers (memory `run-api-locally-env-file`): API on local Postgres, web on 5173; the sign-in code prints in the
+  API log. `kd.onboarding.test@example.com` has finished onboarding on the local database — use a fresh address, or
+  Settings → Reset onboarding. Until 4a-iii the Nutrition rings can show a different daily number.
 
 ## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
 
