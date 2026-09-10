@@ -37,6 +37,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Local servers (memory `run-api-locally-env-file`): API on local Postgres, web on 5173; the sign-in code prints in the
   API log. `kd.onboarding.test@example.com` has finished onboarding on the local database — use a fresh address, or
   Settings → Reset onboarding. Until 4a-iii the Nutrition rings can show a different daily number.
+- Two more asks from Kd, both for 4b, NOT this branch (each needs a column): veg / non-veg on the food screen, and a
+  running question for everyone on screen 5 plus the runner's own on screen 10 — ruled and specified in RULINGS
+  2026-09-10 and ROADMAP 4b / 7b.
 
 ## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
 
