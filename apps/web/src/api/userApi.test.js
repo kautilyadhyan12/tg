@@ -1,13 +1,12 @@
-// Card 6 (web repoint) — userService on the new /v1 API. Pins: the wizard→
-// contract mapper (unit conversion + 2dp rounding for multipleOf(0.01), the
-// sessionDuration→sessionDurationMin rename, empty medical→null, .strict()-safe
-// key set), the exact request shapes for the 4 calls, and the usage guard that
-// the OLD mlApi backend is gone from this module.
+// Card 6 (web repoint) — userService on the new /v1 API. Pins: unit conversion
+// + 2dp rounding for multipleOf(0.01), the Settings merge, the exact request
+// shapes for the 4 calls, and the usage guard that the OLD mlApi backend is
+// gone from this module.
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
+import { heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -55,68 +54,6 @@ describe('userService repoint (Card 6)', () => {
     expect(convertWeight('70', 'lbs')).toBe('154.32');  // 70 / 0.453592
     expect(convertWeight('154', 'kg')).toBe('69.85');   // 154 × 0.453592
     expect(convertWeight('', 'lbs')).toBe('');
-  });
-
-  // ── The full wizard→profile payload ──────────────────────────────────────────
-  it('toFitnessProfilePayload maps every field, converts units, and never leaks weight', () => {
-    const form = {
-      age: '28', gender: 'male',
-      heightValue: '5.9', heightUnit: 'ft',
-      weightValue: '154', weightUnit: 'lbs',   // weight goes to PATCH /v1/users/me, NOT here
-      targetWeightValue: '150',
-      fitnessLevel: 'intermediate', exerciseFrequency: 4,
-      medicalConditions: '  none  ',
-      fitnessGoals: ['muscle_gain', 'endurance'],
-      availableEquipment: ['dumbbells'],
-      sessionDuration: 45, preferredWorkoutTime: 'evening',
-    };
-    const out = toFitnessProfilePayload(form);
-    expect(out).toEqual({
-      age: 28,
-      gender: 'male',
-      heightCm: 179.83,
-      targetWeightKg: 68.04,          // 150 lbs × 0.453592 = 68.0388
-      fitnessLevel: 'intermediate',
-      fitnessGoals: ['muscle_gain', 'endurance'],
-      exerciseFrequency: 4,
-      availableEquipment: ['dumbbells'],
-      sessionDurationMin: 45,         // renamed from sessionDuration
-      preferredWorkoutTime: 'evening',
-      medicalConditions: 'none',      // trimmed
-    });
-    // weight is NEVER in the fitness-profile body (the weigh-in history owns it).
-    expect('weightKg' in out).toBe(false);
-    expect('weight' in out).toBe(false);
-    // no onboardingCompleted here — the caller adds it (kept out of the mapper
-    // so a future Settings edit can reuse it without flipping the gate).
-    expect('onboardingCompleted' in out).toBe(false);
-  });
-
-  it('empty / whitespace medicalConditions and a missing target weight become null', () => {
-    const base = {
-      age: '30', gender: 'female', heightValue: '165', heightUnit: 'cm',
-      fitnessLevel: 'beginner', exerciseFrequency: 3, fitnessGoals: [],
-      availableEquipment: [], sessionDuration: 30, preferredWorkoutTime: 'morning',
-    };
-    expect(toFitnessProfilePayload({ ...base, medicalConditions: '   ' }).medicalConditions).toBe(null);
-    expect(toFitnessProfilePayload({ ...base, medicalConditions: undefined }).medicalConditions).toBe(null);
-    // targetWeightValue absent → targetWeightKg null (nullable in the contract).
-    expect(toFitnessProfilePayload(base).targetWeightKg).toBe(null);
-  });
-
-  it('the payload holds ONLY the contract keys (.strict() body — no stray wizard fields)', () => {
-    const out = toFitnessProfilePayload({
-      age: '20', gender: 'other', heightValue: '180', heightUnit: 'cm',
-      weightValue: '80', weightUnit: 'kg', targetWeightValue: '78',
-      fitnessLevel: 'advanced', exerciseFrequency: 5,
-      fitnessGoals: ['weight_loss'], availableEquipment: ['none'],
-      sessionDuration: 60, preferredWorkoutTime: 'afternoon', medicalConditions: 'asthma',
-    });
-    expect(Object.keys(out).sort()).toEqual([
-      'age', 'availableEquipment', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
-      'gender', 'heightCm', 'medicalConditions', 'preferredWorkoutTime',
-      'sessionDurationMin', 'targetWeightKg',
-    ]);
   });
 
   // ── Card 7: read-modify-write merge (the two Settings traps) ──────────────────

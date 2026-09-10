@@ -1,141 +1,72 @@
+// Onboarding v2, screens 1–7 (ROADMAP Stage 1 item 4a-ii; RULINGS 2026-09-07
+// and 2026-09-09): goal · about you · target · your day · your training ·
+// your week · equipment. Every answer is saved the moment it is given, and the
+// server's plan number sits on every screen from the moment it exists.
+// Screens 8–12 (health, food, running, code, your plan) follow in 4b and 4c.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
-import { userService, toFitnessProfilePayload, heightToCm, weightToKg, convertHeight, convertWeight } from '../api/userApi';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { Check, ChevronLeft, ChevronRight, Clock, Dumbbell, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import PlanPanel from './onboarding/PlanPanel';
 import {
-  User, Target, Dumbbell,
-  Clock, ChevronRight, ChevronLeft,
-  Check, Zap, LogOut,
-} from 'lucide-react';
+  AboutScreen,
+  DayScreen,
+  EquipmentScreen,
+  GoalScreen,
+  TargetScreen,
+  TrainingScreen,
+  WeekScreen,
+} from './onboarding/OnboardingScreens';
+import { useOnboardingAnswers } from './onboarding/useOnboardingAnswers';
+import {
+  SCREENS,
+  SCREEN_OF_MISSING,
+  cleanEquipment,
+  defaultUnits,
+  directionOf,
+  firstOpenScreen,
+  heightText,
+  missingText,
+  parseAge,
+  parseHeight,
+  parseWeight,
+  sameValue,
+  screenAnswered,
+  visibleScreens,
+  weightText,
+} from './onboarding/onboardingModel';
 
-const STEPS = [
-  { id: 1, title: 'Basic Info',    icon: User,     desc: 'Tell us about yourself'      },
-  { id: 2, title: 'Fitness Level', icon: Zap,      desc: 'Your current fitness status' },
-  { id: 3, title: 'Your Goals',    icon: Target,   desc: 'What do you want to achieve' },
-  { id: 4, title: 'Equipment',     icon: Dumbbell, desc: 'What you have available'     },
-  { id: 5, title: 'Preferences',   icon: Clock,    desc: 'When and how long you train' },
-];
+const ICONS = { goal: Target, about: User, target: TrendingDown, day: Sun, training: Zap, week: Clock, equipment: Dumbbell };
 
-const FITNESS_GOALS = [
-  { value: 'weight_loss',     label: 'Weight Loss',        emoji: '🔥' },
-  { value: 'muscle_gain',     label: 'Muscle Gain',        emoji: '💪' },
-  { value: 'general_fitness', label: 'General Fitness',    emoji: '⚡' },
-  { value: 'flexibility',     label: 'Flexibility',        emoji: '🧘' },
-  { value: 'endurance',       label: 'Endurance',          emoji: '🏃' },
-  { value: 'posture',         label: 'Posture Correction', emoji: '🎯' },
-  { value: 'stress_relief',   label: 'Stress Relief',      emoji: '😌' },
-];
+const SCREEN_VIEWS = {
+  goal: GoalScreen,
+  about: AboutScreen,
+  target: TargetScreen,
+  day: DayScreen,
+  training: TrainingScreen,
+  week: WeekScreen,
+  equipment: EquipmentScreen,
+};
 
-const EQUIPMENT_OPTIONS = [
-  { value: 'none',             label: 'No Equipment',     emoji: '🏠' },
-  { value: 'dumbbells',        label: 'Dumbbells',        emoji: '🏋️' },
-  { value: 'resistance_bands', label: 'Resistance Bands', emoji: '🎽' },
-  { value: 'kettlebells',      label: 'Kettlebells',      emoji: '⚫' },
-  { value: 'pull_up_bar',      label: 'Pull-up Bar',      emoji: '🔩' },
-];
+/** The typed boxes: the answer each one saves, how its text parses, and how a
+ *  stored answer is shown in the units on screen. */
+const TYPED = {
+  age: { key: 'age', parse: (t) => parseAge(t), show: (v) => (v === null ? '' : String(v)) },
+  height: { key: 'heightCm', parse: (t, u) => parseHeight(t, u), show: (v, u) => heightText(v, u) },
+  weight: { key: 'weightKg', parse: (t, u) => parseWeight(t, u), show: (v, u) => weightText(v, u) },
+  target: { key: 'targetWeightKg', parse: (t, u) => parseWeight(t, u), show: (v, u) => weightText(v, u) },
+};
+const TYPED_ON = { about: ['age', 'height', 'weight'], target: ['target'] };
 
-const FITNESS_LEVELS = [
-  { value: 'beginner',     label: 'Beginner',     desc: 'New to exercise or returning after a long break',  emoji: '🌱' },
-  { value: 'intermediate', label: 'Intermediate', desc: 'Exercise regularly, familiar with most movements', emoji: '⚡' },
-  { value: 'advanced',     label: 'Advanced',     desc: 'Train consistently and looking to push limits',    emoji: '🔥' },
-];
-
-const SESSION_DURATIONS = [
-  { value: 15, label: '15 min', desc: 'Quick session' },
-  { value: 30, label: '30 min', desc: 'Standard'      },
-  { value: 45, label: '45 min', desc: 'Extended'      },
-  { value: 60, label: '60 min', desc: 'Full workout'  },
-  { value: 90, label: '90 min', desc: 'Intensive'     },
-];
-
-const WORKOUT_TIMES = [
-  { value: 'morning',   label: 'Morning',   emoji: '🌅', desc: '5am – 12pm' },
-  { value: 'afternoon', label: 'Afternoon', emoji: '☀️', desc: '12pm – 5pm' },
-  { value: 'evening',   label: 'Evening',   emoji: '🌙', desc: '5pm – 10pm' },
-];
-
-function MultiSelectCard({ item, selected, onToggle }) {
-  const isSelected = selected.includes(item.value);
+function Spinner() {
   return (
-    <button
-      onClick={() => onToggle(item.value)}
-      className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 text-left w-full
-                 ${isSelected
-                   ? 'border-primary-500 bg-primary-500/10'
-                   : 'border-white/10 bg-dark-100 hover:border-white/20'
-                 }`}
-    >
-      <span className="text-2xl">{item.emoji}</span>
-      <div className="flex-1 min-w-0">
-        <p className={`font-medium text-sm ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-          {item.label}
-        </p>
-        {item.desc && (
-          <p className="text-gray-500 text-xs mt-0.5 truncate">{item.desc}</p>
-        )}
-      </div>
-      {isSelected && (
-        <div className="w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <Check className="w-3 h-3 text-white" />
-        </div>
-      )}
-    </button>
-  );
-}
-
-function SingleSelectCard({ item, selected, onSelect }) {
-  const isSelected = selected === item.value;
-  return (
-    <button
-      onClick={() => onSelect(item.value)}
-      className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 text-left w-full
-                 ${isSelected
-                   ? 'border-primary-500 bg-primary-500/10'
-                   : 'border-white/10 bg-dark-100 hover:border-white/20'
-                 }`}
-    >
-      <span className="text-2xl">{item.emoji}</span>
-      <div className="flex-1">
-        <p className={`font-medium text-sm ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-          {item.label}
-        </p>
-        {item.desc && (
-          <p className="text-gray-500 text-xs mt-0.5">{item.desc}</p>
-        )}
-      </div>
-      {isSelected && (
-        <div className="w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <Check className="w-3 h-3 text-white" />
-        </div>
-      )}
-    </button>
-  );
-}
-
-function NumberInput({ label, value, onChange, min, max, unit, placeholder }) {
-  return (
-    <div>
-      <label className="block text-sm mb-2">
-        {label}
-      </label>
-      <div className="flex gap-2">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          min={min}
-          max={max}
-          placeholder={placeholder}
-          className="input-field flex-1"
-        />
-        {unit && (
-          <div className="bg-dark-100 border border-white/10 rounded-xl px-4 flex items-center text-gray-400 text-sm flex-shrink-0">
-            {unit}
-          </div>
-        )}
-      </div>
+    <div className="flex justify-center py-16">
+      <div
+        className="w-8 h-8 border-2 rounded-full animate-spin"
+        style={{ borderColor: 'rgba(255,138,31,0.2)', borderTopColor: '#FF8A1F' }}
+      />
     </div>
   );
 }
@@ -144,21 +75,13 @@ export default function Onboarding() {
   const navigate               = useNavigate();
   const { updateUser, logout } = useAuth();
 
-  // THE ONLY WAY OUT OF THIS SCREEN WITHOUT FINISHING IT (added 2026-08-19).
-  // `ProtectedRoute` sends every un-onboarded account here and this wizard has
-  // no other exit — no sidebar, and "Skip for now" was deliberately removed
-  // below because it just bounced off the gate. So a person who signed up and
-  // wants to stop, or who picked the wrong door and wants the other one, was
-  // stuck with no way even to sign out; found by Kd in his own browser on the
-  // login-door smoke, on his very first step.
-  //
-  // It is NOT a skip: it ends the session and returns to the login page, so the
-  // gate is untouched and an un-onboarded member still cannot reach the member
-  // app. It matters more now that `My Gym` is gone from the sidebar — picking
-  // the member door by mistake used to be recoverable from inside the app.
-  // Feedback, not a guard (T3 round 1, L8) — and it is a SEPARATE flag from the
-  // form's own `loading`, because these two waits mean opposite things: one is
-  // saving your answers, the other is throwing them away.
+  // THE ONLY WAY OUT OF THIS SCREEN WITHOUT FINISHING IT (Kd, 2026-08-19).
+  // `ProtectedRoute` sends every un-onboarded account here and the wizard has
+  // no sidebar, so a person who picked the wrong door, or wants to stop, needs
+  // this. It is NOT a skip: it ends the session and returns to the login page,
+  // so the gate is untouched. A separate flag from the wizard's own `busy`,
+  // because the two waits mean opposite things: one is saving the answers,
+  // the other is leaving them.
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
@@ -167,479 +90,144 @@ export default function Onboarding() {
     navigate('/login');
   };
 
-  const [step,    setStep]    = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [direction, setDirection] = useState(1);
+  const ob = useOnboardingAnswers();
+  const [picked, setPicked] = useState(null); // null: where the person landed
+  const [drafts, setDrafts] = useState({}); // typed text not yet saved, by box
+  const [errors, setErrors] = useState({});
+  const [units, setUnits] = useState(() => defaultUnits(typeof navigator === 'undefined' ? undefined : navigator.language));
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(null); // the questions a refused finish named
 
-  const [formData, setFormData] = useState({
-    age:                  '',
-    gender:               '',
-    heightValue:          '',
-    heightUnit:           'cm',
-    weightValue:          '',
-    weightUnit:           'kg',
-    targetWeightValue:    '',
-    fitnessLevel:         '',
-    exerciseFrequency:    3,
-    medicalConditions:    '',
-    fitnessGoals:         [],
-    availableEquipment:   [],
-    sessionDuration:      30,
-    preferredWorkoutTime: 'morning',
-  });
+  const answers = ob.answers;
+  // What the screen is showing: the answers, with every box that holds a
+  // valid number counted as answered before it has been saved.
+  const effective = { ...answers };
+  for (const [name, text] of Object.entries(drafts)) {
+    const parsed = TYPED[name].parse(text, units);
+    if (parsed.error === null) effective[TYPED[name].key] = parsed.value;
+  }
 
-  const update = (field, value) =>
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
-  // Card 6: switching a unit must CONVERT the value already in the box, not
-  // leave it (175 cm silently becoming 175 ft = 5334 cm → the server's 300 cm
-  // cap rejects it, the "Failed to save profile" bug). Conversion + rounding
-  // live in userApi (pure + unit-tested). Weight and target weight share the
-  // one unit, so both convert together.
-  const changeHeightUnit = (newUnit) =>
-    setFormData((prev) => (prev.heightUnit === newUnit ? prev : {
-      ...prev,
-      heightUnit: newUnit,
-      heightValue: convertHeight(prev.heightValue, newUnit),
-    }));
-  const changeWeightUnit = (newUnit) =>
-    setFormData((prev) => (prev.weightUnit === newUnit ? prev : {
-      ...prev,
-      weightUnit: newUnit,
-      weightValue: convertWeight(prev.weightValue, newUnit),
-      targetWeightValue: convertWeight(prev.targetWeightValue, newUnit),
-    }));
-
-  const toggleMulti = (field, value) => {
-    setFormData((prev) => {
-      const arr = prev[field];
-      return {
-        ...prev,
-        [field]: arr.includes(value)
-          ? arr.filter((v) => v !== value)
-          : [...arr, value],
-      };
+  const commitTyped = (name) => {
+    if (!(name in drafts)) return true;
+    const { key, parse } = TYPED[name];
+    const parsed = parse(drafts[name], units);
+    if (parsed.error !== null) {
+      setErrors((e) => ({ ...e, [name]: parsed.error }));
+      return false;
+    }
+    setDrafts((d) => {
+      const next = { ...d };
+      delete next[name];
+      return next;
     });
+    if (!sameValue(parsed.value, answers[key] ?? null)) ob.save({ [key]: parsed.value });
+    return true;
   };
 
-  const goNext = () => {
-    if (!validateStep()) return;
-    setDirection(1);
-    setStep((s) => Math.min(s + 1, STEPS.length));
+  const switchUnits = (next) => {
+    if (next === units) return;
+    // A box holding a valid number keeps it, re-expressed; one holding
+    // something that does not parse goes back to the stored answer.
+    setDrafts((d) => {
+      const out = {};
+      for (const [name, text] of Object.entries(d)) {
+        const parsed = TYPED[name].parse(text, units);
+        if (parsed.error === null) out[name] = TYPED[name].show(parsed.value, next);
+      }
+      return out;
+    });
+    setErrors({});
+    setUnits(next);
+  };
+
+  const typed = {
+    units,
+    text: (name) => drafts[name] ?? TYPED[name].show(answers[TYPED[name].key] ?? null, units),
+    error: (name) => errors[name] ?? null,
+    change: (name, value) => {
+      setDrafts((d) => ({ ...d, [name]: value }));
+      setErrors((e) => ({ ...e, [name]: null }));
+    },
+    commit: commitTyped,
+    setUnits: switchUnits,
+  };
+
+  const loaded = ob.first !== null;
+  const screens = visibleScreens(effective);
+  const current = picked ?? (loaded ? firstOpenScreen(ob.first) : SCREENS[0].id);
+  const index = Math.max(0, screens.findIndex((s) => s.id === current));
+  const screen = screens[index];
+  const isLast = index === screens.length - 1;
+  const direction = directionOf(effective.mainGoal);
+  const answered = screenAnswered(screen.id, effective);
+
+  const goTo = (id) => {
+    setPicked(id);
+    setRefused(null);
+  };
+
+  const goNext = async () => {
+    // Every box on the screen is checked, so each one shows its own message.
+    const ok = (TYPED_ON[screen.id] ?? []).map(commitTyped).every(Boolean);
+    if (!ok) return;
+    setBusy(true);
+    const saved = await ob.settled();
+    setBusy(false);
+    if (saved) goTo(screens[index + 1].id);
   };
 
   const goBack = () => {
-    setDirection(-1);
-    setStep((s) => Math.max(s - 1, 1));
+    if (index > 0) goTo(screens[index - 1].id);
   };
 
-  const validateStep = () => {
-    switch (step) {
-      case 1:
-        if (!formData.age || !formData.gender ||
-            !formData.heightValue || !formData.weightValue) {
-          toast.error('Please fill in all required fields');
-          return false;
-        }
-        if (formData.age < 16 || formData.age > 100) {
-          toast.error('Please enter a valid age (16-100)');
-          return false;
-        }
-        return true;
-      case 2:
-        if (!formData.fitnessLevel) {
-          toast.error('Please select your fitness level');
-          return false;
-        }
-        return true;
-      case 3:
-        if (formData.fitnessGoals.length === 0) {
-          toast.error('Please select at least one goal');
-          return false;
-        }
-        return true;
-      default:
-        return true;
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      // Card 6: onboarding now writes to the new /v1 API (was backend-ml).
-      // Weight lives in the weigh-in history (Part 4 §0), the rest on
-      // user_fitness_profiles. Save weight FIRST so onboarding is only marked
-      // complete once it is stored — a failed profile PUT then leaves the gate
-      // closed and the user retries (both writes are idempotent: same body
-      // twice = same rows).
-      const weightKg = weightToKg(formData.weightValue, formData.weightUnit);
-      if (weightKg !== null) {
-        await userService.updateProfile({ weightKg });
-      }
-      await userService.putFitnessProfile({
-        ...toFitnessProfilePayload(formData),
-        onboardingCompleted: true, // flips the gate (PUT is a full-doc replace)
-      });
+  const finish = async () => {
+    setBusy(true);
+    const result = await ob.finish({ availableEquipment: cleanEquipment(answers.availableEquipment) });
+    setBusy(false);
+    if (result.ok) {
       updateUser({ onboardingCompleted: true });
-      toast.success('Profile set up! Let\'s get started 💪');
-      // '/dashboard' unconditionally, and since Kd's 2026-08-19 amendment that
-      // is CORRECT for both login doors: a gym-door sign-in goes straight to
-      // the console and never reaches this wizard at all, so everyone finishing
-      // here came through the MEMBER door and was heading into the member app.
-      // (The reason used to be phrased as "reaches this wizard only by pressing
-      // Back to the app"; that link was removed later the same day — :11616 —
-      // and the conclusion is now MORE true, not less: the member door is the
-      // only way in. This card's first draft routed the exit through the door
-      // instead, which was needed only while the wizard stood in front of the
-      // console.)
+      toast.success("You're all set. Let's train.");
+      // Everyone here came through the member door, heading for the member app.
       navigate('/dashboard');
-    } catch (err) {
-      // Log the MESSAGE only, never `err` — the axios error carries config.data,
-      // i.e. the PUT body with medicalConditions (health data). It must not land
-      // in the browser console (R3.10 / DPDP; T3 finding).
-      console.error('Onboarding save failed:', err?.message);
-      // A 400 means a value is out of range — point the user at what to check
-      // instead of a dead-end "try again" (the ft/cm mix-up class of error).
-      toast.error(
-        err.response?.status === 400
-          ? 'Some values look out of range — please check your age, height, and weight.'
-          : 'Failed to save profile. Please try again.',
-      );
-    } finally {
-      setLoading(false);
+      return;
     }
+    if (result.missing) setRefused(result.missing);
   };
 
-  // Card 6: LIVE range checks — recomputed every render, so the message shows
-  // the instant a value goes out of the API's accepted range (heightCm 50–300,
-  // weightKg 1–999) as the user types, not after all 5 steps. Only flags a
-  // NON-EMPTY field (an empty box is "not filled yet", handled separately).
-  const hCm = heightToCm(formData.heightValue, formData.heightUnit);
-  const heightError = formData.heightValue && (hCm === null || hCm < 50 || hCm > 300)
-    ? (formData.heightUnit === 'ft'
-        ? 'That height looks off — enter about 1.7–9.8 ft (e.g. 5.75)'
-        : 'That height looks off — enter 50–300 cm')
-    : null;
-  const wKg = weightToKg(formData.weightValue, formData.weightUnit);
-  const weightError = formData.weightValue && (wKg === null || wKg <= 0 || wKg >= 1000)
-    ? (formData.weightUnit === 'lbs'
-        ? 'That weight looks off — enter 1–2200 lbs'
-        : 'That weight looks off — enter 1–999 kg')
-    : null;
-  const tKg = weightToKg(formData.targetWeightValue, formData.weightUnit);
-  const targetError = formData.targetWeightValue && (tKg === null || tKg <= 0 || tKg >= 1000)
-    ? 'That target weight looks off — please check it'
-    : null;
-  // Step 1's Continue is blocked while any value is out of range (Kd: a wrong
-  // value must not be accepted) — the inline message says exactly what to fix.
-  const step1Blocked = step === 1 && (heightError || weightError || targetError);
+  // What still stands between the person and Finish, in the server's words.
+  const open = refused ?? (ob.plan === null ? ob.missing : []);
+  const openScreens = [...new Set(open.map((k) => SCREEN_OF_MISSING[k]).filter(Boolean))];
+  const canFinish = answered && open.length === 0 && !busy;
 
-  const renderStep = () => {
-    switch (step) {
-
-      case 1:
-        return (
-          <div className="space-y-5">
-            <NumberInput
-              label="Age *"
-              value={formData.age}
-              onChange={(v) => update('age', v)}
-              min={13} max={100}
-              placeholder="25"
-              unit="years"
-            />
-
-            <div>
-              <label className="block text-sm mb-3">Gender *</label>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { value: 'male',              label: 'Male',              emoji: '♂️' },
-                  { value: 'female',            label: 'Female',            emoji: '♀️' },
-                  { value: 'other',             label: 'Other',             emoji: '⚧️' },
-                  { value: 'prefer_not_to_say', label: 'Prefer not to say', emoji: '🔒' },
-                ].map((g) => (
-                  <button
-                    key={g.value}
-                    onClick={() => update('gender', g.value)}
-                    className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all text-sm font-medium
-                               ${formData.gender === g.value
-                                 ? 'border-primary-500 bg-primary-500/10 text-white'
-                                 : 'border-white/10 bg-dark-100 text-gray-300 hover:border-white/20'
-                               }`}
-                  >
-                    <span>{g.emoji}</span> {g.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Height *</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={formData.heightValue}
-                  onChange={(e) => update('heightValue', e.target.value)}
-                  placeholder={formData.heightUnit === 'cm' ? '175' : '5.75'}
-                  className="input-field flex-1"
-                  style={heightError ? { borderColor: '#f87171' } : undefined}
-                />
-                <select
-                  value={formData.heightUnit}
-                  onChange={(e) => changeHeightUnit(e.target.value)}
-                  className="bg-dark-100 border border-white/10 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="cm">cm</option>
-                  <option value="ft">ft</option>
-                </select>
-              </div>
-              {/* Card 6: live range message (shows as you type) OR the ft hint. */}
-              {heightError ? (
-                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{heightError}</p>
-              ) : formData.heightUnit === 'ft' && (
-                <p className="text-2xs mt-1" style={{ color: 'rgba(255,255,255,0.40)' }}>
-                  Decimal feet — e.g. 5.75 = 5 ft 9 in
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Current Weight *</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={formData.weightValue}
-                  onChange={(e) => update('weightValue', e.target.value)}
-                  placeholder={formData.weightUnit === 'kg' ? '70' : '154'}
-                  className="input-field flex-1"
-                  style={weightError ? { borderColor: '#f87171' } : undefined}
-                />
-                <select
-                  value={formData.weightUnit}
-                  onChange={(e) => changeWeightUnit(e.target.value)}
-                  className="bg-dark-100 border border-white/10 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="kg">kg</option>
-                  <option value="lbs">lbs</option>
-                </select>
-              </div>
-              {weightError && (
-                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{weightError}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">
-                Target Weight
-                <span className="text-gray-500 font-normal ml-1">(optional)</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={formData.targetWeightValue}
-                  onChange={(e) => update('targetWeightValue', e.target.value)}
-                  placeholder={formData.weightUnit === 'kg' ? '65' : '143'}
-                  className="input-field flex-1"
-                  style={targetError ? { borderColor: '#f87171' } : undefined}
-                />
-                <div className="bg-dark-100 border border-white/10 rounded-xl px-4 flex items-center text-gray-400 text-sm">
-                  {formData.weightUnit}
-                </div>
-              </div>
-              {targetError && (
-                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{targetError}</p>
-              )}
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="space-y-4">
-            <div>
-              <p className="text-gray-400 text-sm mb-3">
-                Select the option that best describes you:
-              </p>
-              <div className="space-y-3">
-                {FITNESS_LEVELS.map((level) => (
-                  <SingleSelectCard
-                    key={level.value}
-                    item={level}
-                    selected={formData.fitnessLevel}
-                    onSelect={(v) => update('fitnessLevel', v)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-3">
-                How often do you exercise per week?
-              </label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => update('exerciseFrequency', n)}
-                    className={`flex-1 py-3 rounded-xl border-2 font-bold transition-all text-sm
-                               ${formData.exerciseFrequency === n
-                                 ? 'border-primary-500 bg-primary-500/10 text-white'
-                                 : 'border-white/10 bg-dark-100 text-gray-400 hover:border-white/20'
-                               }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="text-gray-500 text-xs mt-2 text-center">
-                {formData.exerciseFrequency} day{formData.exerciseFrequency !== 1 ? 's' : ''} per week
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">
-                Any injuries or medical conditions?
-                <span className="text-gray-500 font-normal ml-1">(optional)</span>
-              </label>
-              <textarea
-                value={formData.medicalConditions}
-                onChange={(e) => update('medicalConditions', e.target.value)}
-                placeholder="e.g. Lower back pain, knee injury, asthma..."
-                rows={3}
-                maxLength={2000}
-                className="input-field resize-none"
-              />
-              <p className="text-gray-500 text-xs mt-1">
-                This helps us avoid exercises that may aggravate your condition
-              </p>
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="space-y-3">
-            <p className="text-gray-400 text-sm">
-              Select all that apply — you can have multiple goals:
-            </p>
-            {FITNESS_GOALS.map((goal) => (
-              <MultiSelectCard
-                key={goal.value}
-                item={goal}
-                selected={formData.fitnessGoals}
-                onToggle={(v) => toggleMulti('fitnessGoals', v)}
-              />
-            ))}
-          </div>
-        );
-
-      case 4:
-        return (
-          <div className="space-y-3">
-            <p className="text-gray-400 text-sm">
-              Select all equipment you have access to:
-            </p>
-            {EQUIPMENT_OPTIONS.map((eq) => (
-              <MultiSelectCard
-                key={eq.value}
-                item={eq}
-                selected={formData.availableEquipment}
-                onToggle={(v) => toggleMulti('availableEquipment', v)}
-              />
-            ))}
-            <div className="bg-dark-100 border border-white/5 rounded-2xl p-4 mt-2">
-              <p className="text-gray-400 text-xs leading-relaxed">
-                💡 Don't worry if you don't have equipment — our bodyweight exercises are just as effective and all 58 exercises work without any equipment.
-              </p>
-            </div>
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm mb-3">
-                How long can you train per session?
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {SESSION_DURATIONS.map((d) => (
-                  <button
-                    key={d.value}
-                    onClick={() => update('sessionDuration', d.value)}
-                    className={`p-3 rounded-xl border-2 transition-all text-center
-                               ${formData.sessionDuration === d.value
-                                 ? 'border-primary-500 bg-primary-500/10'
-                                 : 'border-white/10 bg-dark-100 hover:border-white/20'
-                               }`}
-                  >
-                    <p className={`font-bold text-sm ${formData.sessionDuration === d.value ? 'text-white' : 'text-gray-300'}`}>
-                      {d.label}
-                    </p>
-                    <p className="text-gray-500 text-xs mt-0.5">{d.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-3">
-                When do you prefer to workout?
-              </label>
-              <div className="space-y-2">
-                {WORKOUT_TIMES.map((t) => (
-                  <SingleSelectCard
-                    key={t.value}
-                    item={t}
-                    selected={formData.preferredWorkoutTime}
-                    onSelect={(v) => update('preferredWorkoutTime', v)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  const currentStepInfo = STEPS[step - 1];
-  const StepIcon        = currentStepInfo.icon;
-  const progress        = ((step - 1) / (STEPS.length - 1)) * 100;
+  const View = SCREEN_VIEWS[screen.id];
+  const StepIcon = ICONS[screen.id];
+  const progress = screens.length > 1 ? (index / (screens.length - 1)) * 100 : 100;
 
   return (
     <div className="onboarding-page min-h-screen flex flex-col relative" style={{ background: '#0A0908' }}>
-
       {/* ── Vitruvian Man watermark ────────────────────────────────────────── */}
       <div className="fixed inset-0 z-0 pointer-events-none flex items-center justify-center">
         <div
           style={{
-            width:           700,
-            height:          700,
-            backgroundImage:    "url('/images/exercises/exercisebackground2.jpg')",
-            backgroundSize:     'contain',
-            backgroundRepeat:   'no-repeat',
+            width: 700,
+            height: 700,
+            backgroundImage: "url('/images/exercises/exercisebackground2.jpg')",
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center center',
-            opacity:         0.52,
-            maskImage:       'radial-gradient(ellipse 45% 60% at 50% 50%, black 30%, transparent 78%)',
+            opacity: 0.52,
+            maskImage: 'radial-gradient(ellipse 45% 60% at 50% 50%, black 30%, transparent 78%)',
             WebkitMaskImage: 'radial-gradient(ellipse 45% 60% at 50% 50%, black 30%, transparent 78%)',
-            filter:          'drop-shadow(0 0 60px rgba(255,180,80,0.45)) drop-shadow(0 0 120px rgba(255,138,31,0.25))',
+            filter: 'drop-shadow(0 0 60px rgba(255,180,80,0.45)) drop-shadow(0 0 120px rgba(255,138,31,0.25))',
           }}
         />
       </div>
 
       <div className="relative z-10 flex flex-col flex-1">
-
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div
           className="border-b border-white/5 px-6 py-3"
-          style={{
-            background:           'rgba(13,12,11,0.55)',
-            backdropFilter:       'blur(18px)',
-            WebkitBackdropFilter: 'blur(18px)',
-          }}
+          style={{ background: 'rgba(13,12,11,0.55)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' }}
         >
           <div className="max-w-lg mx-auto">
             <div className="flex justify-end mb-2">
@@ -653,128 +241,135 @@ export default function Onboarding() {
                 {signingOut ? 'Signing out…' : 'Sign out'}
               </button>
             </div>
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-gray-500 text-xs whitespace-nowrap">
-                Step {step} of {STEPS.length}
-              </span>
-              <div className="flex-1 h-1.5 bg-dark-300 rounded-full overflow-hidden">
-                <motion.div
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.4 }}
-                  className="h-full bg-primary-600 rounded-full"
-                />
-              </div>
-              <span className="text-primary-400 text-xs font-medium whitespace-nowrap">
-                {Math.round(progress)}%
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              {STEPS.map((s) => (
-                <div key={s.id} className="flex flex-col items-center gap-1">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all
-                                  ${s.id < step
-                                    ? 'bg-green-500'
-                                    : s.id === step
-                                      ? 'bg-primary-600'
-                                      : 'bg-dark-300'
-                                  }`}>
-                    {s.id < step
-                      ? <Check className="w-4 h-4 text-white" />
-                      : <s.icon className="w-4 h-4 text-white/60" />
-                    }
-                  </div>
-                  <span className={`text-xs hidden sm:block ${s.id === step ? 'text-primary-400' : 'text-gray-600'}`}>
-                    {s.title}
+            {loaded && (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-gray-500 text-xs whitespace-nowrap">
+                    Step {index + 1} of {screens.length}
                   </span>
+                  <div className="flex-1 h-1.5 bg-dark-300 rounded-full overflow-hidden">
+                    <motion.div
+                      animate={{ width: `${progress}%` }}
+                      transition={{ duration: 0.4 }}
+                      className="h-full bg-primary-600 rounded-full"
+                    />
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div className="flex justify-between">
+                  {screens.map((s, i) => {
+                    const Icon = ICONS[s.id];
+                    return (
+                      <div key={`step-${s.id}`} className="flex flex-col items-center gap-1">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                            i < index ? 'bg-green-500' : i === index ? 'bg-primary-600' : 'bg-dark-300'
+                          }`}
+                        >
+                          {i < index ? <Check className="w-4 h-4 text-white" /> : <Icon className="w-4 h-4 text-white/60" />}
+                        </div>
+                        <span className={`text-xs hidden sm:block ${i === index ? 'text-primary-400' : 'text-gray-600'}`}>
+                          {s.title}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
         {/* ── Content ─────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-lg mx-auto px-6 py-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-primary-500/20 rounded-2xl flex items-center justify-center flex-shrink-0">
-                <StepIcon className="w-6 h-6 text-primary-400" />
+            {!loaded && ob.status === 'failed' && (
+              <div className="card-glass text-center space-y-4">
+                <p className="text-sm">{ob.error}</p>
+                <button type="button" onClick={ob.retry} className="btn-primary">
+                  Try again
+                </button>
               </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">
-                  {currentStepInfo.title}
-                </h2>
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>
-                  {currentStepInfo.desc}
-                </p>
-              </div>
-            </div>
+            )}
+            {!loaded && ob.status !== 'failed' && <Spinner />}
+            {loaded && (
+              <>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-primary-500/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <StepIcon className="w-6 h-6 text-primary-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">{screen.title}</h2>
+                    <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>
+                      {screen.desc}
+                    </p>
+                  </div>
+                </div>
 
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, x: direction * 40 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: direction * -40 }}
-                transition={{ duration: 0.25 }}
-              >
-                {renderStep()}
-              </motion.div>
-            </AnimatePresence>
+                <PlanPanel plan={ob.plan} missing={ob.missing} direction={direction} units={units} />
+
+                <motion.div
+                  key={`screen-${screen.id}`}
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <View answers={answers} save={ob.save} typed={typed} direction={direction} />
+                </motion.div>
+
+                {isLast && open.length > 0 && (
+                  <div role="status" className="card-glass mt-6 space-y-3">
+                    <p className="text-sm">Before you finish, answer {missingText(open)}.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {openScreens.map((id) => (
+                        <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
+                          Go to {SCREENS.find((s) => s.id === id)?.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
-        <div
-          className="border-t border-white/5 px-6 py-3 flex-shrink-0"
-          style={{
-            background:           'rgba(13,12,11,0.55)',
-            backdropFilter:       'blur(18px)',
-            WebkitBackdropFilter: 'blur(18px)',
-          }}
-        >
-          <div className="max-w-lg mx-auto flex gap-3">
-            {step > 1 && (
-              <button
-                onClick={goBack}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Back
-              </button>
-            )}
-
-            {step < STEPS.length ? (
-              <button
-                onClick={goNext}
-                disabled={!!step1Blocked}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="btn-primary flex-1 flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Complete Setup
-                  </>
-                )}
-              </button>
-            )}
+        {loaded && (
+          <div
+            className="border-t border-white/5 px-6 py-3 flex-shrink-0"
+            style={{ background: 'rgba(13,12,11,0.55)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' }}
+          >
+            <div className="max-w-lg mx-auto flex gap-3">
+              {index > 0 && (
+                <button type="button" onClick={goBack} className="btn-secondary flex items-center gap-2">
+                  <ChevronLeft className="w-4 h-4" />
+                  Back
+                </button>
+              )}
+              {isLast ? (
+                <button
+                  type="button"
+                  onClick={finish}
+                  disabled={!canFinish}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check className="w-5 h-5" />
+                  Finish setup
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!answered || busy}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
-          {/* Card 6: "Skip for now" removed — onboarding is now enforced by the
-              gate (ProtectedRoute), so skipping to /dashboard just bounced the
-              user straight back here (T3 dead-end finding; Kd ruled remove). */}
-        </div>
-
+        )}
       </div>
     </div>
   );
