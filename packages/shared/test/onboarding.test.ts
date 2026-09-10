@@ -181,7 +181,8 @@ describe("what the server answers with", () => {
   });
 
   it("always carries the name the app calls the person", () => {
-    const { displayName: _name, ...nameless } = answers;
+    const nameless = Object.fromEntries(Object.entries(answers).filter(([key]) => key !== "displayName"));
+    expect(Object.keys(nameless)).not.toContain("displayName");
     expect(onboardingAnswersSchema.safeParse(nameless).success).toBe(false);
   });
 });
