@@ -151,9 +151,10 @@ export type PlanFlag = z.infer<typeof planFlagSchema>;
  *  under the daily number (Kd, 2026-09-10). The server sends every figure the
  *  steps use — only it knows the day factor, the training figure and the
  *  protein table — and the screen adds the words and the sources. Every kcal
- *  and gram is whole, and the sums the screen prints are checked against the
- *  plan's own numbers by the refine on `planNumbersSchema`, so a working that
- *  does not add up is refused on both sides of the wire. */
+ *  and gram is whole, and every line the screen prints, each product and each
+ *  sum, is checked by the refine on `planNumbersSchema` against the plan's own
+ *  numbers, so a working that does not multiply out or add up is refused on
+ *  both sides of the wire. */
 export const planWorkingsSchema = z
   .object({
     /** Mifflin-St Jeor: 10 × weight + 6.25 × height − 5 × age + `constant`,
@@ -245,10 +246,19 @@ export const planNumbersSchema = z
   .strict()
   .refine(
     (p) => {
-      // Every sum "How is this worked out?" prints, against the plan's own numbers.
+      // Every line "How is this worked out?" prints: each product as the
+      // calculator rounds it (the same expressions, so the same floating
+      // point), then each sum against the plan's own numbers.
       const w = p.workings;
+      const r = w.resting;
+      const t = w.training;
       return (
-        w.resting.kcal === p.restingBurnKcal &&
+        r.kcal === Math.round(10 * r.weightKg + 6.25 * r.heightCm - 5 * r.age + r.constant) &&
+        w.day.kcal === Math.round(r.kcal * w.day.factor) &&
+        t.kcal === Math.round((t.kcalPerKgHour * t.weightKg * ((t.sessionMinutes * t.trainingDays) / 60)) / 7) &&
+        (w.change === null || Math.abs(w.change.kcal) === Math.round((w.change.kgPerWeek * w.change.kcalPerKg) / 7)) &&
+        w.protein.wantedG === Math.round(w.protein.weightKg * w.protein.gPerKg) &&
+        r.kcal === p.restingBurnKcal &&
         w.day.kcal + w.training.kcal === p.dailyBurnKcal &&
         w.beforeFloorKcal === p.dailyBurnKcal + (w.change?.kcal ?? 0) &&
         p.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal) &&

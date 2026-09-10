@@ -226,11 +226,21 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(plan.proteinG).toBe(204);
   });
 
-  it("the contract refuses a working that does not add up, whichever sum breaks", () => {
+  it("the contract refuses a working that does not add up or multiply out, whichever line breaks", () => {
     const plan = computePlan(sample);
     expect(planNumbersSchema.safeParse(plan).success).toBe(true);
     const w = plan.workings;
+    const change = w.change;
+    if (change === null) throw new Error("the sample is a cut, so its working has a change");
     const broken = [
+      // Each multiplication the screen prints, broken with its kcal left alone:
+      // "1,769 × 1.3 = 2,123 kcal" would be false on screen.
+      { ...w, day: { ...w.day, factor: 1.3 } },
+      { ...w, resting: { ...w.resting, age: 40 } },
+      { ...w, training: { ...w.training, sessionMinutes: 60 } },
+      { ...w, change: { ...change, kgPerWeek: 0.75 } },
+      { ...w, protein: { ...w.protein, gPerKg: 2.5 } },
+      // Each sum.
       { ...w, day: { ...w.day, kcal: w.day.kcal + 1 } },
       { ...w, training: { ...w.training, kcal: w.training.kcal - 1 } },
       { ...w, resting: { ...w.resting, kcal: w.resting.kcal + 1 } },
