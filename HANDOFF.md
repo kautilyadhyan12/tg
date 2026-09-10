@@ -16,6 +16,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   files); web 1921 passed (poseAssets.contract is the known local encoding red). Run red first: finish rule off (409→200),
   date formatter without UTC (Los Angeles showed Nov 18), and the wizard's sign-out mutants D16/D17 by hand.
 - Found: `mutate-login-door.mjs` aborts at D9 (anchor is the "I run a gym" label renamed 2026-09-07); not re-anchored.
+  CI's first run failed `xpDisplay` "non-array recommendations" (reads the message without waiting; 3/3 locally): item 10.
 - Open: Kd's click-through, then the fresh-chat review. Until 4a-iii the Nutrition rings can show a different daily number.
 
 ## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
