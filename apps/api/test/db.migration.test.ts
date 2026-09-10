@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
-import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, orgTypeSchema } from "@app/shared";
+import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, fitnessGoalSchema, orgTypeSchema } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -718,6 +718,161 @@ d("0001_init on a real database", () => {
       await sql`DELETE FROM consent_log WHERE user_id = ${ownerId}`;
       await sql`DELETE FROM users WHERE id = ${ownerId}`;
     }
+  });
+
+  /** `0026`'s FIVE ONBOARDING v2 COLUMNS, read back off the deployed catalogue.
+   *
+   *  The MAIN GOAL CHECK carries the `0024` guard for the same reason: a `.sql`
+   *  file the journal does not name is applied silently and reports success,
+   *  and both directions of a drift fail far from the edit. A goal in the enum
+   *  without the migration 400s nothing and 500s the save on an unmapped 23514;
+   *  a goal in the CHECK without the enum is the direction only this test
+   *  covers — a row written with it is refused on the way OUT, at the service's
+   *  `onboardingAnswersSchema.parse`, turning that person's every onboarding
+   *  read into a 500.
+   *
+   *  The other four are proven by CAUSING them, and NULL is proven to pass all
+   *  five: a half-finished wizard is the normal state of this table. */
+  it("0026's onboarding answer columns exist on the deployed database, with their CHECKs", async () => {
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0026@example.com', 'zz 0026')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const ownerId = owner[0]?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${ownerId}) ON CONFLICT DO NOTHING`;
+      // Every one of the five is NULLable — the wizard saves as it goes.
+      const nulls = await sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM user_fitness_profiles
+        WHERE user_id = ${ownerId} AND main_goal IS NULL AND pace IS NULL
+          AND day_activity IS NULL AND push_ups_max IS NULL AND plank_hold_seconds IS NULL`;
+      expect(nulls[0]?.n).toBe("1");
+
+      await refused(sql`UPDATE user_fitness_profiles SET main_goal = 'get_ripped' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET pace = 'extreme' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET day_activity = 'lying_down' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = -1 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = 501 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = -1 WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = 3601 WHERE user_id = ${ownerId}`);
+
+      const [defRow] = await sql<{ def: string }[]>`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = 'user_fitness_profiles'::regclass
+          AND conname = 'user_fitness_profiles_main_goal_check'`;
+      const def = defRow?.def;
+      if (def === undefined) throw new Error("user_fitness_profiles_main_goal_check is not on the table");
+      const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+      expect(inCheck).toEqual([...fitnessGoalSchema.options].sort());
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${ownerId}`;
+    }
+  });
+
+  /** MIGRATION `0026`'s BACKFILL (its part 2): every weight that existed
+   *  before the one-source rule (RULINGS 2026-09-10) gets a typed row of its
+   *  own, so the live app's first ordinary correction to that person's
+   *  history — log a weigh-in, delete it — cannot blank a number that had no
+   *  row behind it.
+   *
+   *  Same construction as `0014`'s: the legacy states are BUILT here (a fresh
+   *  database has none), and the statements are run **read out of the shipped
+   *  file**. The subjects, one per branch of the two statements plus those
+   *  that must be left alone: a weight with no row · a weight with a newer,
+   *  different row (the column was written directly after it) · an emptied
+   *  column over a weighed row (a clear under the old code) · a weight whose
+   *  newest row already carries it (untouched) · two SOFT-DELETED accounts
+   *  still inside their undo window, one per statement — they keep their
+   *  weight and history, and restoring them must not restore the very state
+   *  this repairs · a purged tombstone (NULL column, no rows), untouched. Then
+   *  the whole thing again, to prove it finds nothing the second time. Rolled
+   *  back. */
+  it("0026's backfill puts a typed row under every weight that had none, and only those", async () => {
+    const migration = await readFile(new URL("../drizzle/0026_onboarding_plan_answers.sql", import.meta.url), "utf8");
+    const statements = migration
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.includes('INSERT INTO "body_measurements"'));
+    if (statements.length !== 2) {
+      throw new Error(`0026 no longer contains exactly two backfill INSERTs (found ${String(statements.length)})`);
+    }
+    const runBackfill = async (tx: postgres.TransactionSql) => {
+      for (const s of statements) await tx.unsafe(s);
+    };
+
+    await sql
+      .begin(async (tx) => {
+        const user = async (name: string, weight: number | null, status = "active") => {
+          const [u] = await tx<{ id: string }[]>`
+            INSERT INTO users (display_name, weight_kg, status) VALUES (${name}, ${weight}, ${status}) RETURNING id`;
+          if (u === undefined) throw new Error(`${name} fixture insert failed`);
+          return u.id;
+        };
+        const weighIn = async (userId: string, weight: number | null, at: string) => {
+          await tx`
+            INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
+            VALUES (${userId}, ${at}, ${weight}, '{}', 'manual')`;
+        };
+        const noRow = await user("zz-0026-no-row", 80);
+        const differs = await user("zz-0026-differs", 80);
+        await weighIn(differs, 82, "2026-05-01T10:00:00Z");
+        const emptied = await user("zz-0026-emptied", null);
+        await weighIn(emptied, 82, "2026-05-01T10:00:00Z");
+        const agrees = await user("zz-0026-agrees", 82);
+        await weighIn(agrees, 82, "2026-05-01T10:00:00Z");
+        const gone = await user("zz-0026-gone", 80, "deleted");
+        await tx`UPDATE users SET deleted_at = now() WHERE id = ${gone}`;
+        // Statement 2's soft-deleted case: cleared under the old code, then deleted.
+        const goneEmptied = await user("zz-0026-gone-emptied", null, "deleted");
+        await tx`UPDATE users SET deleted_at = now() WHERE id = ${goneEmptied}`;
+        await weighIn(goneEmptied, 82, "2026-05-01T10:00:00Z");
+        const purged = await user("zz-0026-purged", null, "deleted");
+
+        const rowsOf = async (userId: string) =>
+          tx<{ weight_kg: string | null; source: string; newest: boolean }[]>`
+            SELECT weight_kg, source, measured_at > '2026-05-01T10:00:00Z' AS newest
+            FROM body_measurements WHERE user_id = ${userId} AND source = 'self_reported'`;
+        const columnOf = async (userId: string) =>
+          (await tx<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+
+        for (let pass = 1; pass <= 2; pass += 1) {
+          await runBackfill(tx);
+          // The number that showed before is the number that shows after — for
+          // everyone. The backfill adds rows; it never moves a weight.
+          expect(await columnOf(noRow), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(differs), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(emptied), `pass ${String(pass)}`).toBeNull();
+          expect(await columnOf(agrees), `pass ${String(pass)}`).toBe("82.00");
+          expect(await columnOf(gone), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(goneEmptied), `pass ${String(pass)}`).toBeNull();
+          expect(await columnOf(purged), `pass ${String(pass)}`).toBeNull();
+          // And exactly the rows that make the one-source rule true, each the
+          // newest thing in that person's history.
+          expect(await rowsOf(noRow), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(differs), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(emptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
+          expect(await rowsOf(agrees), `pass ${String(pass)}`).toEqual([]);
+          expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(goneEmptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
+          expect(await rowsOf(purged), `pass ${String(pass)}`).toEqual([]);
+        }
+
+        // What the rows are FOR: from here the live rule computes the same
+        // number the column held, so nothing can vanish on the first correction
+        // — including for the soft-deleted person once restoreUser brings them back.
+        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"], [goneEmptied, null]] as const) {
+          const [rule] = await tx<{ weight_kg: string | null }[]>`
+            SELECT weight_kg FROM body_measurements
+            WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
+            ORDER BY measured_at DESC, id DESC LIMIT 1`;
+          expect(rule?.weight_kg ?? null).toBe(expected);
+        }
+        throw new Error("ROLLBACK-0026-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0026-BACKFILL-FIXTURE") return;
+        throw err;
+      });
   });
 
   /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the

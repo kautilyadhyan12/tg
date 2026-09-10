@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -159,6 +160,19 @@ export const userFitnessProfiles = pgTable(
     preferredWorkoutTime: text("preferred_workout_time"),
     medicalConditions: text("medical_conditions"), // health data — see the DPDP note above
     onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+    // Onboarding v2 (migration 0026; ROADMAP 4a). The ONE main goal of screen 1
+    // — the weight direction the plan maths works in is DERIVED from it
+    // (@app/shared PLAN_GOAL_BY_MAIN_GOAL), never stored. The v1 `fitnessGoals`
+    // array above is kept as a one-element mirror while the macro rings still
+    // read it (4a-ii moves them). Training days and session minutes are NOT
+    // duplicated here: they are `exerciseFrequency` and `sessionDurationMin`.
+    mainGoal: text("main_goal"),
+    pace: text("pace"),
+    dayActivity: text("day_activity"),
+    // Screen 5's two checks; NULL when skipped ("I'll rate myself"). Never an
+    // input to the calorie plan — the plan builder (6a) reads them.
+    pushUpsMax: smallint("push_ups_max"),
+    plankHoldSeconds: smallint("plank_hold_seconds"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
@@ -170,6 +184,20 @@ export const userFitnessProfiles = pgTable(
     check(
       "user_fitness_profiles_preferred_workout_time_check",
       sql`${t.preferredWorkoutTime} IN ('morning','afternoon','evening')`,
+    ),
+    check(
+      "user_fitness_profiles_main_goal_check",
+      sql`${t.mainGoal} IN ('weight_loss','muscle_gain','general_fitness','flexibility','endurance','posture','stress_relief')`,
+    ),
+    check("user_fitness_profiles_pace_check", sql`${t.pace} IN ('gentle','steady','brisk')`),
+    check(
+      "user_fitness_profiles_day_activity_check",
+      sql`${t.dayActivity} IN ('sitting','on_feet','active','very_active')`,
+    ),
+    check("user_fitness_profiles_push_ups_max_check", sql`${t.pushUpsMax} >= 0 AND ${t.pushUpsMax} <= 500`),
+    check(
+      "user_fitness_profiles_plank_hold_seconds_check",
+      sql`${t.plankHoldSeconds} >= 0 AND ${t.plankHoldSeconds} <= 3600`,
     ),
   ],
 );

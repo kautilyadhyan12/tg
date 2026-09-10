@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
+
+- Built: `GET`/`PATCH /v1/users/me/onboarding` — answers saved as you go, the live plan or the list
+  of what is missing (contracts in `packages/shared/src/onboarding.ts`); migration `0026` adds five
+  answer columns, then a typed row under every existing weight. One main goal (RULINGS 2026-09-09).
+- Weight (RULINGS 2026-09-10): the history is the one source, `users.weight_kg` its cache. A typed
+  weight is a `self_reported` row dated after everything else; a same-day retype edits it; a clear is
+  a typed row with no weight. Every history write takes the users row first and refuses a deleted account.
+- Verified after the last review round (no Critical/High left): api tsc + eslint 0; shared tsc + eslint
+  0, 81 tests; local Postgres users.onboarding 34, nutrition.routes 30, db.migration 23, migrate.nutrition
+  4, users.routes 8; web 2; a fresh database takes all 26 migrations; six deliberate breaks each failed a test.
+- Open: CI, merge, then 4a-ii (the seven screens; the `fitness_goals` mirror ends there). No click-through.
+
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 
 - Kd was offered the 3c plan (tag the 131 curated foods, a "contains …" line on search and meals, no

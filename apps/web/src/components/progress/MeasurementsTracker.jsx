@@ -202,9 +202,18 @@ export default function MeasurementsTracker() {
       // old backend precomputed it; the new contract is data-shaped and leaves
       // display aggregation to the client.
       const res = await progressService.getMeasurements(60);
+      // `source` is kept: a weight the person typed on a form (onboarding,
+      // profile) is a row of its own, and the ruling says it is marked as such.
+      // A typed row is DATED after everything the person has (a weigh-in may
+      // be dated up to a day ahead of the clock), so its measuredAt can sit in
+      // tomorrow; the day it shows under is the day the row was written
+      // (createdAt) — the day it was typed, except for a row the migration
+      // backfilled, which shows the day that ran.
       const rows = (res.data.items || []).map((m) => ({
         id: m.id,
         measured_at: m.measuredAt,
+        shown_at: m.source === 'self_reported' && m.createdAt ? m.createdAt : m.measuredAt,
+        source: m.source,
         ...(m.weightKg != null ? { weight_kg: m.weightKg } : {}),
         ...m.metrics,
       }));
@@ -241,8 +250,8 @@ export default function MeasurementsTracker() {
     .filter((m) => m[activeMetric] != null)
     .reverse()
     .map((m) => ({
-      date:  m.measured_at
-        ? new Date(m.measured_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      date:  m.shown_at
+        ? new Date(m.shown_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : '',
       value: m[activeMetric],
     }));
@@ -382,8 +391,8 @@ export default function MeasurementsTracker() {
             </p>
             <div className="space-y-1.5">
               {measurements.slice(0, 5).map((m) => {
-                const date = m.measured_at
-                  ? new Date(m.measured_at).toLocaleDateString('en-US', {
+                const date = m.shown_at
+                  ? new Date(m.shown_at).toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric', year: 'numeric',
                     })
                   : '';
@@ -397,12 +406,20 @@ export default function MeasurementsTracker() {
                     style={{ background: 'rgba(255,255,255,0.02)' }}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white">{date}</p>
+                      <p className="text-xs font-semibold text-white">
+                        {date}
+                        {m.source === 'self_reported' && (
+                          <span className="ml-2 font-normal"
+                                style={{ color: 'rgba(255,255,255,0.40)' }}>
+                            typed by me
+                          </span>
+                        )}
+                      </p>
                       <p className="text-2xs truncate"
                          style={{ color: 'rgba(255,255,255,0.40)' }}>
-                        {logged.map((mk) =>
-                          `${mk.label}: ${m[mk.key]}${mk.unit}`
-                        ).join(' · ')}
+                        {logged.length > 0
+                          ? logged.map((mk) => `${mk.label}: ${m[mk.key]}${mk.unit}`).join(' · ')
+                          : m.source === 'self_reported' ? 'Weight cleared' : 'No values'}
                       </p>
                     </div>
                     <button

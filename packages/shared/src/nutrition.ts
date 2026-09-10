@@ -133,9 +133,29 @@ export const bodyMeasurementInputSchema = z.object({
   weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
   metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
-export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+// `source` is not patchable: a row the person typed ("self_reported") must
+// not be relabelled a weigh-in, and nothing else is ever sent for it.
+export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type BodyMeasurementInput = z.infer<typeof bodyMeasurementInputSchema>;
 export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
+
+// One row of the body history as the API sends it. `createdAt` is when the
+// row was written: a typed weight ("self_reported") is DATED after everything
+// the person has, so its measuredAt can sit ahead of the clock, and the web
+// shows it under the day it was written instead.
+export const bodyMeasurementSchema = z.object({
+  id: z.string().uuid(),
+  measuredAt: z.string().datetime(),
+  weightKg: z.number().nullable(),
+  metrics: z.record(z.number().finite().nonnegative()),
+  source: z.enum(["manual", "self_reported"]),
+  createdAt: z.string().datetime(),
+}).strict();
+export const bodyMeasurementListResponseSchema = z.object({
+  items: z.array(bodyMeasurementSchema),
+  nextCursor: z.string().nullable(),
+}).strict();
+export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();

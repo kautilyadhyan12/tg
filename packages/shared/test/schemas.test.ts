@@ -6,12 +6,14 @@ import {
   KEYPOINT_COUNT,
   KP,
   VISIBILITY_THRESHOLD,
+  bodyMeasurementSchema,
   dpdpExportSchema,
   frameResultSchema,
   holdEventSchema,
   instantSchema,
   myOrgsResponseSchema,
   orgStaffResponseSchema,
+  patchBodyMeasurementSchema,
   poseFrameSchema,
   repEventSchema,
   sessionInputSchema,
@@ -64,6 +66,32 @@ describe("PoseFrame (§2.1)", () => {
     expect(KP.right_foot_index).toBe(32);
     expect(Object.keys(KP)).toHaveLength(KEYPOINT_COUNT);
     expect(VISIBILITY_THRESHOLD).toBe(0.3);
+  });
+});
+
+describe("body measurement PATCH (RULINGS 2026-09-10)", () => {
+  it("cannot relabel a row: `source` is not a patchable field, and a stray key is still refused", () => {
+    // `.omit()` must keep the input schema's strictness — a partial that
+    // silently strips unknown keys would let `source` through as a no-op and
+    // hide the refusal the person should see.
+    expect(patchBodyMeasurementSchema.safeParse({ weightKg: 70 }).success).toBe(true);
+    expect(patchBodyMeasurementSchema.safeParse({ source: "manual" }).success).toBe(false);
+    expect(patchBodyMeasurementSchema.safeParse({ weightKg: 70, source: "manual" }).success).toBe(false);
+    expect(patchBodyMeasurementSchema.safeParse({ weightKg: 70, smuggled: true }).success).toBe(false);
+    expect(patchBodyMeasurementSchema.safeParse({}).success).toBe(false);
+  });
+  it("a history row carries when it was written: the web dates a typed row by it", () => {
+    const row = {
+      id: "7f1c1f5e-3b7a-4c8e-9a51-0d2b6f4e8a10",
+      measuredAt: "2026-09-11T08:00:00.000Z",
+      weightKg: 70,
+      metrics: {},
+      source: "self_reported",
+      createdAt: "2026-09-10T08:00:00.000Z",
+    };
+    expect(bodyMeasurementSchema.safeParse(row).success).toBe(true);
+    expect(bodyMeasurementSchema.safeParse({ ...row, createdAt: undefined }).success).toBe(false);
+    expect(bodyMeasurementSchema.safeParse({ ...row, source: "imported" }).success).toBe(false);
   });
 });
 

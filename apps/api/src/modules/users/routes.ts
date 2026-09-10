@@ -6,14 +6,16 @@
 // dual-key — no identifier in the body, so the IP bucket carries it).
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import type { z } from "zod";
+import { z } from "zod";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
+import { safeTimeZone } from "../gamification/streak.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
 import {
   deleteAccountRequestSchema,
+  patchOnboardingRequestSchema,
   putFitnessProfileRequestSchema,
   putHealthScreeningRequestSchema,
   recordConsentRequestSchema,
@@ -34,6 +36,39 @@ function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyR
     return null;
   }
   return parsed.data;
+}
+
+/** The query the two onboarding routes take. `timeZone` is the DEVICE's IANA
+ *  zone (RULINGS 2026-07-21); the day itself is never accepted from a client. */
+const onboardingQuerySchema = z
+  .object({ timeZone: z.string().trim().min(1).max(64).optional() })
+  .strict();
+
+/** The device's zone, refused outright when the runtime does not know it: the
+ *  alternative is `safeTimeZone`'s silent fall back to UTC, which would hand a
+ *  person in Auckland a finish date a day out with nothing on screen to say so.
+ *  Returns undefined when the reply has been sent. */
+function parseTimeZone(req: FastifyRequest, reply: FastifyReply): string | null | undefined {
+  const parsed = onboardingQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    void reply.status(400).send({
+      error: "validation_error",
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      requestId: req.id,
+    });
+    return undefined;
+  }
+  const requested = parsed.data.timeZone;
+  if (requested === undefined) return null;
+  if (safeTimeZone(requested) !== requested) {
+    void reply.status(400).send({
+      error: "unknown_time_zone",
+      message: "That is not a time zone this server knows.",
+      requestId: req.id,
+    });
+    return undefined;
+  }
+  return requested;
 }
 
 export function registerUserRoutes(
@@ -80,6 +115,29 @@ export function registerUserRoutes(
     if (body === null) return;
     const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
     return reply.status(200).send({ fitnessProfile });
+  });
+
+  // Onboarding v2 (ROADMAP 4a): the answers so far and the plan they make.
+  // Same tenancy argument as everything else on this surface — no id param
+  // exists, so a caller can only ever address their own answers (R3.2).
+  app.get("/v1/users/me/onboarding", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const timeZone = parseTimeZone(req, reply);
+    if (timeZone === undefined) return;
+    const result = await service.getOnboarding(usersDeps, authedUserId(req), timeZone);
+    return reply.status(200).send(result);
+  });
+
+  // PATCH, not PUT: one screen at a time, and a screen must never write NULL
+  // over the answers it did not ask about (RULINGS 2026-09-07 — saved as you
+  // go). Idempotent all the same, so no Idempotency-Key: the same body twice
+  // leaves the same row (R3.5).
+  app.patch("/v1/users/me/onboarding", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const timeZone = parseTimeZone(req, reply);
+    if (timeZone === undefined) return;
+    const body = parseBody(patchOnboardingRequestSchema, req, reply);
+    if (body === null) return;
+    const result = await service.patchOnboarding(usersDeps, authedUserId(req), body, timeZone);
+    return reply.status(200).send(result);
   });
 
   // Health screening and Safe mode (ROADMAP 3b). Same tenancy argument as the

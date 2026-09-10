@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { nutritionTargetsResponseSchema } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, nutritionTargetsResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -333,7 +333,39 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect((item?.kcalPoint??0)>=(item?.kcalLow??0)&&(item?.kcalPoint??0)<=(item?.kcalHigh??1)).toBe(true);
   },30_000);
 
-  it("dishware and body measurement CRUD are tenant-scoped; measurement owns current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect((await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect((await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg).toBeNull();},30_000);
+  // The users row holds the newest weight-bearing measurement by date, and a
+  // typed weight (PATCH /v1/users/me) is a measurement of its own — so deleting
+  // the last weigh-in falls back to what was typed, never to a blank. The
+  // weigh-in is dated one second after the TYPED row (read back, not assumed),
+  // so it outranks it by date and not by this process's clock. Emptying the
+  // number is its own request, made at the end.
+  it("dishware and body measurement CRUD are tenant-scoped; a measurement sets current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const weightOf=async()=>(await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg;expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:70})).statusCode).toBe(200);expect(await weightOf()).toBe("70.00");const typedAt=(await sql<{measured_at:Date}[]>`SELECT measured_at FROM body_measurements WHERE user_id=${userA} AND source='self_reported' ORDER BY measured_at DESC LIMIT 1`)[0]?.measured_at;if(typedAt===undefined)throw new Error("the typed weight wrote no row");const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date(typedAt.getTime()+1000).toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect(await weightOf()).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect(await weightOf()).toBe("70.00");expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:null})).statusCode).toBe(200);expect(await weightOf()).toBeNull();},30_000);
+
+  // A typed row must stay a typed row: the PATCH refuses `source` (and any
+  // other key it does not know) as a 400 at the boundary, never as a silent drop.
+  // A stranger's edit is a 404 that changes nothing, and every row the routes
+  // send matches the shared contract — createdAt included, which the web
+  // needs to date a typed row.
+  it("PATCH body-measurement: source and stray keys are 400, a stranger's edit is 404, a real edit is 200",async()=>{
+    const created=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:75});
+    expect(created.statusCode,created.body).toBe(201);
+    const id=bodyMeasurementSchema.parse(created.json<{measurement:unknown}>().measurement).id;
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{source:"manual"})).statusCode).toBe(400);
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,source:"self_reported"})).statusCode).toBe(400);
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,smuggled:true})).statusCode).toBe(400);
+    const edited=await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76});
+    expect(edited.statusCode,edited.body).toBe(200);
+    expect(bodyMeasurementSchema.parse(edited.json<{measurement:unknown}>().measurement)).toMatchObject({weightKg:76,source:"manual"});
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieB,{weightKg:99})).statusCode).toBe(404);
+    const [still]=await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM body_measurements WHERE id=${id}`;
+    expect(still?.weight_kg).toBe("76.00");
+    const list=await inject("GET","/v1/nutrition/body-measurements?limit=100",cookieA);
+    expect(list.statusCode).toBe(200);
+    expect(bodyMeasurementListResponseSchema.parse(list.json()).items.find((m)=>m.id===id)).toMatchObject({weightKg:76,source:"manual"});
+    const theirs=await inject("GET","/v1/nutrition/body-measurements?limit=100",cookieB);
+    expect(bodyMeasurementListResponseSchema.parse(theirs.json()).items.some((m)=>m.id===id)).toBe(false);
+    expect((await inject("DELETE",`/v1/nutrition/body-measurements/${id}`,cookieA)).statusCode).toBe(204);
+  },30_000);
 
   // Card 5c2 — dishware portions: an item's amount can be "my dish, this full"
   // instead of grams; the SERVER computes grams (volume × fill × density) at

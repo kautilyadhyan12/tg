@@ -1,0 +1,1210 @@
+// Onboarding v2, server half (ROADMAP Stage 1 item 4a) against REAL Postgres.
+// DATABASE_URL-gated; needs migration 0026.
+//
+// Covers, per route: the happy path, a validation failure and the cross-user
+// denial (CLAUDE.md §4) — plus the rules that decide what a person sees:
+// saving as you go never wipes an answer another screen gave, the number
+// appears only once the eight core answers are in (never from a default),
+// "today" comes from the device's zone and the server clock, the one main goal
+// decides the direction, and the health and age rules still hold the cut.
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import { onboardingAnswersSchema, PLAN_GOAL_BY_MAIN_GOAL } from "@app/shared";
+import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+import type { EmailSender } from "../src/modules/auth/email.js";
+import type { UsersEmailSender } from "../src/modules/users/email.js";
+import { patchOnboarding } from "../src/modules/users/repo.js";
+import {
+  createMeasurement,
+  deleteMeasurement,
+  recordTypedWeight,
+  updateMeasurement,
+} from "../src/modules/nutrition/repo.js";
+import { planAnswersFor } from "../src/modules/plan/answers.js";
+import { resolvePlan } from "../src/modules/plan/maths.js";
+
+const url = process.env["DATABASE_URL"];
+const d = describe.skipIf(url === undefined || url === "");
+
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+
+const baseEnv = {
+  NODE_ENV: "test",
+  DATABASE_URL: url ?? "",
+  WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "ofp-test-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
+  LOG_LEVEL: "error",
+};
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+
+const silentAuthSender = (): EmailSender => ({
+  sendVerificationEmail: () => Promise.resolve(),
+  sendPasswordResetEmail: () => Promise.resolve(),
+  sendSignInCodeEmail: () => Promise.resolve(),
+});
+const deleteCodes: string[] = [];
+const capturingUsersSender = (): UsersEmailSender => ({
+  sendAccountDeletionEmail: () => Promise.resolve(),
+  sendAccountDeleteCodeEmail: (_e, code) => {
+    deleteCodes.push(code);
+    return Promise.resolve();
+  },
+});
+
+let ipCounter = 0;
+const nextIp = () => `10.9.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
+  Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+
+/** The eight answers the calorie maths cannot work without. Before a goal is
+ *  picked the target weight and the pace are NOT among them — five of the seven
+ *  goals never move the weight on purpose and so never ask. */
+const CORE_EIGHT = [
+  "goal",
+  "age",
+  "gender",
+  "heightCm",
+  "weightKg",
+  "dayActivity",
+  "trainingDays",
+  "sessionMinutes",
+];
+
+/** The golden person, hand-computed from plan/maths.ts:
+ *    resting burn  10·70 + 6.25·165 − 5·30 − 161            = 1420.25 → 1420
+ *    a session      5 MET · 70 kg · 0.75 h                   = 262.5 kcal
+ *    daily burn     1420.25 · 1.2 (sitting) + 262.5·3/7      = 1816.8  → 1817
+ *    steady         0.5 kg/week · 7700 ÷ 7                   = −550 a day
+ *    eat            1817 − 550                               = 1267
+ *    5 kg to lose   5 · 7700 ÷ 550                           = 70 days
+ *    macros (lose, 2.0 g/kg): fat 1267·0.25/9 = 35 g; protein min(140, 187.6)
+ *                   = 140 g; carbs (1267 − 560 − 316.75)/4   = 98 g */
+const GOLDEN_LOSE = {
+  restingBurnKcal: 1420,
+  dailyBurnKcal: 1817,
+  targetKcal: 1267,
+  dailyChangeKcal: -550,
+  proteinG: 140,
+  carbsG: 98,
+  fatG: 35,
+  plannedTargetKg: 65,
+  daysToTarget: 70,
+  flags: [],
+};
+
+/** The same person's seven screens, one object per screen. */
+const SCREENS = {
+  goal: { mainGoal: "weight_loss" },
+  aboutYou: { age: 30, gender: "female", heightCm: 165, weightKg: 70 },
+  target: { targetWeightKg: 65, pace: "steady" },
+  yourDay: { dayActivity: "sitting" },
+  yourTraining: { fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 },
+  yourWeek: { trainingDays: 3, sessionMinutes: 45 },
+  equipment: { availableEquipment: ["dumbbells", "pull_up_bar"] },
+} as const;
+
+interface PlanBody {
+  answers: Record<string, unknown>;
+  plan: Record<string, unknown> | null;
+  missing: string[];
+}
+
+d("onboarding v2 routes (real Postgres)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  let app: App | undefined;
+  const api = (): App => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+
+  const inject = (opts: {
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    url: string;
+    body?: unknown;
+    cookies?: Record<string, string>;
+  }) =>
+    api().inject({
+      method: opts.method,
+      url: opts.url,
+      remoteAddress: nextIp(),
+      headers: opts.body !== undefined ? { "content-type": "application/json" } : {},
+      cookies: opts.cookies ?? {},
+      ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
+    });
+
+  const makeUser = async (email: string) => {
+    const reg = await inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      body: { email, password: PASSWORD, displayName: "OB Fixture" },
+    });
+    expect(reg.statusCode).toBe(201);
+    const { userId } = JSON.parse(reg.body) as { userId: string };
+    const login = await inject({ method: "POST", url: "/v1/auth/login", body: { email, password: PASSWORD } });
+    expect(login.statusCode).toBe(200);
+    return { userId, cookies: cookieMap(login) };
+  };
+
+  const path = (timeZone?: string) =>
+    timeZone === undefined
+      ? "/v1/users/me/onboarding"
+      : `/v1/users/me/onboarding?timeZone=${encodeURIComponent(timeZone)}`;
+
+  const get = async (cookies: Record<string, string>, timeZone?: string) => {
+    const res = await inject({ method: "GET", url: path(timeZone), cookies });
+    expect(res.statusCode).toBe(200);
+    return JSON.parse(res.body) as PlanBody;
+  };
+  const patch = (cookies: Record<string, string>, body: unknown, timeZone?: string) =>
+    inject({ method: "PATCH", url: path(timeZone), body, cookies });
+  const patchOk = async (cookies: Record<string, string>, body: unknown, timeZone?: string) => {
+    const res = await patch(cookies, body, timeZone);
+    expect(res.statusCode, `PATCH ${JSON.stringify(body)} → ${res.body}`).toBe(200);
+    return JSON.parse(res.body) as PlanBody;
+  };
+
+  /** The whole wizard, through the routes, in screen order. */
+  const completeSeven = async (cookies: Record<string, string>) => {
+    let last: PlanBody | undefined;
+    for (const screen of Object.values(SCREENS)) last = await patchOk(cookies, screen);
+    if (last === undefined) throw new Error("no screens");
+    return last;
+  };
+
+  beforeAll(async () => {
+    await sql`DELETE FROM consent_log WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'ob-%@example.com')`;
+    await sql`DELETE FROM users WHERE email LIKE 'ob-%@example.com'`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'ob-%@example.com'`;
+    app = await buildApp(loadConfig(baseEnv), {
+      emailSender: silentAuthSender(),
+      usersEmailSender: capturingUsersSender(),
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    if (app !== undefined) await app.close();
+    await sql.end({ timeout: 5 });
+  });
+
+  it("both routes require authentication", { timeout: 30_000 }, async () => {
+    expect((await inject({ method: "GET", url: path() })).statusCode).toBe(401);
+    expect((await inject({ method: "PATCH", url: path(), body: { mainGoal: "weight_loss" } })).statusCode).toBe(401);
+  });
+
+  it("before any screen: NO number, and an honest list of the eight answers it needs", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-empty@example.com");
+    const body = await get(cookies);
+    expect(body.plan).toBeNull();
+    expect([...body.missing].sort()).toEqual([...CORE_EIGHT].sort());
+    expect(body.answers).toMatchObject({
+      mainGoal: null,
+      age: null,
+      gender: null,
+      heightCm: null,
+      weightKg: null,
+      targetWeightKg: null,
+      pace: null,
+      dayActivity: null,
+      fitnessLevel: null,
+      pushUpsMax: null,
+      plankHoldSeconds: null,
+      trainingDays: null,
+      sessionMinutes: null,
+      availableEquipment: [],
+      onboardingCompleted: false,
+      updatedAt: null,
+    });
+    // No profile row was created by a mere read.
+    const rows = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id IN (SELECT id FROM users WHERE email = 'ob-empty@example.com')`;
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("saves as you go: the number appears at 'your week' and not one screen earlier", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-wizard@example.com");
+
+    // Screen 1 — a goal that moves the weight starts asking for a target and a pace.
+    const s1 = await patchOk(cookies, SCREENS.goal);
+    expect(s1.plan).toBeNull();
+    expect(s1.missing).toContain("targetWeightKg");
+    expect(s1.missing).toContain("pace");
+    expect(s1.missing).not.toContain("goal");
+    expect(s1.answers["mainGoal"]).toBe("weight_loss");
+
+    const s2 = await patchOk(cookies, SCREENS.aboutYou);
+    expect(s2.plan).toBeNull();
+    expect(s2.missing).toEqual(expect.arrayContaining(["targetWeightKg", "pace", "dayActivity", "trainingDays", "sessionMinutes"]));
+
+    const s3 = await patchOk(cookies, SCREENS.target);
+    expect(s3.plan).toBeNull();
+    const s4 = await patchOk(cookies, SCREENS.yourDay);
+    expect(s4.plan).toBeNull();
+
+    // Screen 5's two checks are stored and are NOT calorie inputs: still no number.
+    const s5 = await patchOk(cookies, SCREENS.yourTraining);
+    expect(s5.plan).toBeNull();
+    expect(s5.missing).toEqual(["trainingDays", "sessionMinutes"]);
+    expect(s5.answers).toMatchObject({ fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 });
+
+    // Screen 6 completes the eight — the number exists from here on.
+    const s6 = await patchOk(cookies, SCREENS.yourWeek);
+    expect(s6.missing).toEqual([]);
+    expect(s6.plan).toMatchObject(GOLDEN_LOSE);
+    expect(typeof s6.plan?.["finishDate"]).toBe("string");
+
+    // Screen 7 changes nothing about the calories — equipment is the plan
+    // builder's input (6a), not the maths'.
+    const s7 = await patchOk(cookies, SCREENS.equipment);
+    expect(s7.plan).toEqual(s6.plan);
+    expect(s7.answers["availableEquipment"]).toEqual(["dumbbells", "pull_up_bar"]);
+
+    // And every earlier answer is still there: PATCH merges, it does not replace.
+    expect(s7.answers).toMatchObject({
+      mainGoal: "weight_loss",
+      age: 30,
+      gender: "female",
+      heightCm: 165,
+      weightKg: 70,
+      targetWeightKg: 65,
+      pace: "steady",
+      dayActivity: "sitting",
+      fitnessLevel: "beginner",
+      pushUpsMax: 12,
+      plankHoldSeconds: 45,
+      trainingDays: 3,
+      sessionMinutes: 45,
+    });
+    expect(await get(cookies)).toEqual(s7);
+  });
+
+  it("an explicit null clears one answer, and the number honestly disappears with it", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-clear@example.com");
+    await completeSeven(cookies);
+    const cleared = await patchOk(cookies, { dayActivity: null });
+    expect(cleared.plan).toBeNull();
+    expect(cleared.missing).toEqual(["dayActivity"]);
+    expect(cleared.answers["dayActivity"]).toBeNull();
+    // Everything else survived the clear.
+    expect(cleared.answers).toMatchObject({ mainGoal: "weight_loss", trainingDays: 3 });
+    const back = await patchOk(cookies, { dayActivity: "sitting" });
+    expect(back.plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  it("an empty save is a no-op that re-reads the plan, and never a 400", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-noop@example.com");
+    const done = await completeSeven(cookies);
+    const noop = await patchOk(cookies, {});
+    expect(noop.plan).toEqual(done.plan);
+    expect(noop.answers["updatedAt"]).toBe(done.answers["updatedAt"]);
+  });
+
+  it("the ONE main goal decides the direction: only two of the seven move the weight", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-goals@example.com");
+    await completeSeven(cookies);
+
+    // muscle_gain → a surplus of the same size, and a target above the weight.
+    const gain = await patchOk(cookies, { mainGoal: "muscle_gain", targetWeightKg: 75 });
+    expect(gain.plan).toMatchObject({ dailyBurnKcal: 1817, targetKcal: 2367, dailyChangeKcal: 550, plannedTargetKg: 75, daysToTarget: 70 });
+
+    // general_fitness → the weight is held: no target, no pace, no date, and
+    // the two are not even asked for.
+    const steady = await patchOk(cookies, { mainGoal: "general_fitness" });
+    expect(steady.missing).toEqual([]);
+    expect(steady.plan).toMatchObject({ targetKcal: 1817, dailyChangeKcal: 0, plannedTargetKg: 70, daysToTarget: null, finishDate: null, flags: [] });
+
+    // The stored target and pace are untouched by the switch — going back to
+    // "lose weight" restores the original plan exactly.
+    expect(steady.answers).toMatchObject({ targetWeightKg: 75, pace: "steady" });
+    const back = await patchOk(cookies, { mainGoal: "weight_loss", targetWeightKg: 65 });
+    expect(back.plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  it("holds the calorie cut for a YES on the health question, and says why", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-health@example.com");
+    await completeSeven(cookies);
+    expect(
+      (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst: "cleared" }, cookies })).statusCode,
+    ).toBe(200);
+    const held = await get(cookies);
+    expect(held.plan).toMatchObject({
+      targetKcal: 1817, // the whole daily burn
+      dailyChangeKcal: 0,
+      plannedTargetKg: 70,
+      daysToTarget: null,
+      finishDate: null,
+      flags: [{ code: "no_deficit", reasons: ["health_answer"] }],
+    });
+    // Safe mode is listed as its own reason on top of the yes.
+    expect(
+      (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst: "not_yet" }, cookies })).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).plan?.["flags"]).toEqual([{ code: "no_deficit", reasons: ["health_answer", "safe_mode"] }]);
+    // Answering no gives the cut back, at once.
+    expect(
+      (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: false }, cookies })).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  it("never cuts calories under 18, with no health answer at all", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-teen@example.com");
+    await completeSeven(cookies);
+    const teen = await patchOk(cookies, { age: 17 });
+    // resting 10·70 + 6.25·165 − 5·17 − 161 = 1485.25; burn 1485.25·1.2 + 112.5 = 1894.8
+    expect(teen.plan).toMatchObject({
+      restingBurnKcal: 1485,
+      dailyBurnKcal: 1895,
+      targetKcal: 1895,
+      dailyChangeKcal: 0,
+      flags: [{ code: "no_deficit", reasons: ["under_18"] }],
+    });
+    expect((await patchOk(cookies, { age: 18 })).plan).toMatchObject({ dailyChangeKcal: -550 });
+  });
+
+  it("takes the day from the DEVICE's zone and the server clock — never from the body", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-tz@example.com");
+    await completeSeven(cookies);
+    // 26 hours apart, so their calendar days can never be the same instant's day.
+    const east = await get(cookies, "Etc/GMT-14");
+    const west = await get(cookies, "Etc/GMT+12");
+    expect(east.plan?.["daysToTarget"]).toBe(70);
+    expect(west.plan?.["daysToTarget"]).toBe(70);
+    expect(east.plan?.["finishDate"]).not.toBe(west.plan?.["finishDate"]);
+    // A day cannot be dictated: `today` is not a field this route accepts.
+    expect((await patch(cookies, { today: "2030-01-01" })).statusCode).toBe(400);
+    // A zone the server does not know is refused, not silently turned into UTC.
+    const bad = await inject({ method: "GET", url: path("Mars/Olympus_Mons"), cookies });
+    expect(bad.statusCode).toBe(400);
+    expect((JSON.parse(bad.body) as { error: string }).error).toBe("unknown_time_zone");
+    // And an unknown query parameter is refused rather than ignored.
+    expect((await inject({ method: "GET", url: "/v1/users/me/onboarding?tz=Asia/Kolkata", cookies })).statusCode).toBe(400);
+  });
+
+  it("falls back to the person's stored zone when a client sends none", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-tz-stored@example.com");
+    await completeSeven(cookies);
+    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { timezone: "Etc/GMT-14" }, cookies })).statusCode).toBe(200);
+    const stored = await get(cookies);
+    expect(stored.plan?.["finishDate"]).toBe((await get(cookies, "Etc/GMT-14")).plan?.["finishDate"]);
+    // The device still wins over the stored zone when it says where it is.
+    expect((await get(cookies, "Etc/GMT+12")).plan?.["finishDate"]).not.toBe(stored.plan?.["finishDate"]);
+  });
+
+  it("the route's numbers are the pure calculator's, and its answers are the published contract", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-parity@example.com");
+    const body = await completeSeven(cookies);
+    // The response parses as the contract — so this comparison is against the
+    // published shape, not against whatever the route happened to send.
+    const answers = onboardingAnswersSchema.parse(body.answers);
+    const direct = resolvePlan(planAnswersFor({ answers, health: null, today: "2026-01-01" }));
+    expect({ ...body.plan, finishDate: null }).toEqual({ ...direct.plan, finishDate: null });
+    // Only the date depends on "today", and it is a real day 70 days out.
+    expect(String(body.plan?.["finishDate"])).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(direct.plan?.finishDate).toBe("2026-03-12"); // 2026-01-01 + 70
+  });
+
+  it("refuses every out-of-range answer and every stray field, and writes nothing", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-invalid@example.com");
+    const bad: unknown[] = [
+      { mainGoal: "get_ripped" }, // not one of the seven
+      { age: 15 }, // the app is for 16 and over
+      { age: 121 },
+      { gender: "yes" },
+      { heightCm: 49 },
+      { heightCm: 175.555 }, // two decimals, as the column stores
+      { weightKg: 0 },
+      { weightKg: 1000 },
+      { targetWeightKg: -5 },
+      { pace: "extreme" },
+      { dayActivity: "lying_down" },
+      { fitnessLevel: "expert" },
+      { pushUpsMax: -1 },
+      { pushUpsMax: 501 },
+      { pushUpsMax: 10.5 },
+      { plankHoldSeconds: 3601 },
+      { trainingDays: 0 },
+      { trainingDays: 8 },
+      { sessionMinutes: 4 },
+      { sessionMinutes: 241 },
+      { availableEquipment: ["dumbbells", "dumbbells"] }, // a set, not a list
+      { availableEquipment: ["barbell"] },
+      { mainGoal: "weight_loss", planGoal: "lose" }, // the direction is derived, never sent
+      { targetKcal: 1200 }, // nor is any number of the plan's
+    ];
+    for (const body of bad) {
+      const res = await patch(cookies, body);
+      expect(res.statusCode, `expected 400 for ${JSON.stringify(body)}`).toBe(400);
+    }
+    const rows = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    expect(rows[0]?.n).toBe("0");
+    expect((await get(cookies)).answers["mainGoal"]).toBeNull();
+  });
+
+  it("keeps the macro rings honest: the one main goal moves the rings' own number", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-mirror@example.com");
+    await completeSeven(cookies);
+    const goals = async () =>
+      (await sql<{ fitness_goals: string[] | null }[]>`
+        SELECT fitness_goals FROM user_fitness_profiles WHERE user_id = ${userId}`)[0]?.fitness_goals;
+    // The rings' kcal, not merely "a number exists": `fitnessGoals` is not one
+    // of the five inputs the targets route requires, so it answers with a
+    // number whatever the mirror says. Only the SIZE of that number can show
+    // the mirror working — the goal is worth −400 on a cut and +300 on a gain
+    // (nutrition/targets.ts), and those are the differences asserted below.
+    const kcal = async () => {
+      const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { targets: { kcal: number } | null; missing: string[] };
+      expect(body.missing).toEqual([]);
+      if (body.targets === null) throw new Error("the rings answered with no number");
+      return body.targets.kcal;
+    };
+
+    expect(await goals()).toEqual(["weight_loss"]);
+    const lose = await kcal();
+
+    await patchOk(cookies, { mainGoal: "muscle_gain" });
+    expect(await goals()).toEqual(["muscle_gain"]);
+    const gain = await kcal();
+
+    await patchOk(cookies, { mainGoal: "general_fitness" });
+    expect(await goals()).toEqual(["general_fitness"]);
+    const hold = await kcal();
+    expect(lose, "the rings did not follow the goal onto a cut").toBe(hold - 400);
+    expect(gain, "the rings did not follow the goal onto a surplus").toBe(hold + 300);
+
+    // Clearing the goal clears the mirror — it can never outlive its source —
+    // and the rings fall back to holding the weight, with no goal to read.
+    await patchOk(cookies, { mainGoal: null });
+    expect(await goals()).toEqual([]);
+    expect(await kcal()).toBe(hold);
+  });
+
+  it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-v1-put@example.com");
+    await completeSeven(cookies);
+    const put = await inject({
+      method: "PUT",
+      url: "/v1/users/me/fitness-profile",
+      body: { age: 41, gender: "male", fitnessGoals: ["endurance"], exerciseFrequency: 5, sessionDurationMin: 60 },
+      cookies,
+    });
+    expect(put.statusCode).toBe(200);
+    const after = await get(cookies);
+    // The five columns only onboarding v2 knows about survived a full-document PUT.
+    expect(after.answers).toMatchObject({
+      mainGoal: "weight_loss",
+      pace: "steady",
+      dayActivity: "sitting",
+      pushUpsMax: 12,
+      plankHoldSeconds: 45,
+    });
+    // The columns the two screens SHARE follow the newer write, as they must —
+    // they are one answer, asked twice, not two answers.
+    expect(after.answers).toMatchObject({ age: 41, gender: "male", trainingDays: 5, sessionMinutes: 60 });
+    // And every shared column the PUT body OMITTED is cleared, because that is
+    // what a full-document PUT has always meant on this route. Unchanged
+    // behaviour, pinned here so the v1 form's reach stays visible — and exact,
+    // so a column quietly joining or leaving that reach shows up as a failure.
+    expect(after.answers["heightCm"]).toBeNull();
+    expect(after.answers["targetWeightKg"]).toBeNull();
+    expect([...after.missing].sort()).toEqual(["heightCm", "targetWeightKg"]);
+    // The pace, though, is a v2 column: the target went and the pace stayed.
+    expect(after.answers["pace"]).toBe("steady");
+
+    // GOALS ARE THE ONE PLACE THE TWO SURFACES CAN DISAGREE, and this pins
+    // exactly how far. The v1 form replaces the `fitness_goals` ARRAY and does
+    // not touch `main_goal` — it has no such question to ask — so the mirror
+    // the v2 save writes is only guaranteed in one direction: a v2 save keeps
+    // the two in step, a v1 save can move the array out from under the stored
+    // main goal. The rings then follow the array the form just wrote, which is
+    // what that person asked for; `main_goal` stands until screen 1 is answered
+    // again, and nothing shows it yet. Item 4a-ii moves the rings onto these
+    // answers, which ends the mirror and this divergence with it.
+    expect(after.answers["mainGoal"]).toBe("weight_loss");
+    const goals = (
+      await sql<{ fitness_goals: string[] | null }[]>`
+        SELECT fitness_goals FROM user_fitness_profiles WHERE user_id = ${userId}`
+    )[0]?.fitness_goals;
+    expect(goals).toEqual(["endurance"]);
+  });
+
+  it("isolates users: A's answers are invisible to B and untouched by B's writes", { timeout: 60_000 }, async () => {
+    const a = await makeUser("ob-tenant-a@example.com");
+    const b = await makeUser("ob-tenant-b@example.com");
+    await completeSeven(a.cookies);
+    await patchOk(b.cookies, { mainGoal: "posture", age: 55 });
+    expect((await get(a.cookies)).answers).toMatchObject({ mainGoal: "weight_loss", age: 30 });
+    expect((await get(b.cookies)).answers).toMatchObject({ mainGoal: "posture", age: 55, pace: null });
+    expect((await get(b.cookies)).plan).toBeNull();
+    const rows = await sql<{ user_id: string; main_goal: string | null }[]>`
+      SELECT user_id, main_goal FROM user_fitness_profiles
+      WHERE user_id IN (${a.userId}, ${b.userId}) ORDER BY main_goal`;
+    expect(rows).toEqual([
+      { user_id: b.userId, main_goal: "posture" },
+      { user_id: a.userId, main_goal: "weight_loss" },
+    ]);
+  });
+
+  it("a soft-deleted person is refused before any write, and their answers stop changing", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-deleted@example.com");
+    await patchOk(cookies, SCREENS.goal);
+    expect((await inject({ method: "POST", url: "/v1/users/me/delete-code", cookies })).statusCode).toBe(200);
+    const code = deleteCodes[deleteCodes.length - 1];
+    expect((await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code } })).statusCode).toBe(200);
+    expect((await patch(cookies, { mainGoal: "posture" })).statusCode).toBe(401);
+    expect((await inject({ method: "GET", url: path(), cookies })).statusCode).toBe(401);
+    const rows = await sql<{ main_goal: string | null }[]>`
+      SELECT main_goal FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    expect(rows[0]?.main_goal).toBe("weight_loss");
+  });
+
+  it("the repo's own active-only guard refuses a soft-deleted user — the route never reaches it", { timeout: 30_000 }, async () => {
+    const { userId } = await makeUser("ob-deleted-repo@example.com");
+    // Prove the guard has something to guard: the same call works while active.
+    expect(await patchOnboarding(sql, userId, { mainGoal: "flexibility" })).not.toBeNull();
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
+    expect(await patchOnboarding(sql, userId, { mainGoal: "posture", weightKg: 99 })).toBeNull();
+    const rows = await sql<{ main_goal: string | null }[]>`
+      SELECT main_goal FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    expect(rows[0]?.main_goal).toBe("flexibility");
+    const weight = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
+    expect(weight[0]?.weight_kg).toBeNull();
+  });
+
+  it("the database refuses a value the contract would have refused, for any writer that skips it", { timeout: 30_000 }, async () => {
+    const { userId } = await makeUser("ob-checks@example.com");
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+    await refused(sql`UPDATE user_fitness_profiles SET main_goal = 'get_ripped' WHERE user_id = ${userId}`);
+    await refused(sql`UPDATE user_fitness_profiles SET pace = 'extreme' WHERE user_id = ${userId}`);
+    await refused(sql`UPDATE user_fitness_profiles SET day_activity = 'lying_down' WHERE user_id = ${userId}`);
+    await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = 501 WHERE user_id = ${userId}`);
+    await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = -1 WHERE user_id = ${userId}`);
+  });
+
+  it("every one of the seven goals is storable and maps to a direction the maths knows", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-seven@example.com");
+    await completeSeven(cookies);
+    for (const [goal, direction] of Object.entries(PLAN_GOAL_BY_MAIN_GOAL)) {
+      // A target on the right side of 70 kg for the direction the goal implies.
+      const targetWeightKg = direction === "gain" ? 75 : 65;
+      const body = await patchOk(cookies, { mainGoal: goal, targetWeightKg, pace: "steady" });
+      expect(body.answers["mainGoal"]).toBe(goal);
+      expect(body.plan, `${goal} produced no plan`).not.toBeNull();
+      const change = Number(body.plan?.["dailyChangeKcal"]);
+      if (direction === "lose") expect(change, goal).toBeLessThan(0);
+      else if (direction === "gain") expect(change, goal).toBeGreaterThan(0);
+      else expect(change, goal).toBe(0);
+    }
+  });
+
+  it("stores the flag that opens the training side, and /v1/users/me reads it back", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-completed@example.com");
+    const completed = async () => {
+      const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted;
+    };
+    expect(await completed()).toBe(false);
+    expect((await patchOk(cookies, { onboardingCompleted: true })).answers["onboardingCompleted"]).toBe(true);
+    // The gate the whole training side reads is the SAME column, so this is
+    // what the rest of the app sees — not just what this route echoes back.
+    expect(await completed()).toBe(true);
+    // And a later screen's save does not undo it.
+    expect((await patchOk(cookies, { mainGoal: "posture" })).answers["onboardingCompleted"]).toBe(true);
+    expect(await completed()).toBe(true);
+  });
+
+  it("stamps every real save, and says honestly when there is nothing stamped yet", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-stamp@example.com");
+    // Body weight lives on the users row, so a weight-only save creates no
+    // profile row: there is no stamp, and the contract says null rather than
+    // inventing one.
+    const weightOnly = await patchOk(cookies, { weightKg: 70 });
+    expect(weightOnly.answers["weightKg"]).toBe(70);
+    expect(weightOnly.answers["updatedAt"]).toBeNull();
+
+    const first = await patchOk(cookies, { mainGoal: "weight_loss" });
+    const firstAt = first.answers["updatedAt"];
+    expect(typeof firstAt).toBe("string");
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await patchOk(cookies, { fitnessLevel: "beginner" });
+    // The screens read this to know a save landed, so it has to MOVE on a save.
+    expect(new Date(String(second.answers["updatedAt"])).getTime()).toBeGreaterThan(
+      new Date(String(firstAt)).getTime(),
+    );
+
+    // Clearing the typed weight is a real answer too, and it comes back empty.
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(cleared.missing).toContain("weightKg");
+  });
+
+  it("a stored answer outside the plan's rails fails loud — it never becomes a number", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-past-rails@example.com");
+    await completeSeven(cookies);
+    expect((await get(cookies)).plan).not.toBeNull();
+    // The column is numeric(5,2) with no CHECK; the plan's rail is 50–300 cm.
+    // Only a writer that skipped the contract could store this, which is what
+    // the raw statement stands in for. The promise being pinned is the one
+    // plan/answers.ts makes: fail loud, never serve a number nobody can explain.
+    await sql`UPDATE user_fitness_profiles SET height_cm = 999.99 WHERE user_id = ${userId}`;
+    const res = await inject({ method: "GET", url: path(), cookies });
+    expect(res.statusCode).toBe(500);
+    const body = JSON.parse(res.body) as { error: string; message: string };
+    expect(body.error).toBe("internal_error");
+    // And the refusal says nothing about the stored value.
+    expect(res.body).not.toContain("999");
+    // The person is not stuck: answering through the contract restores it.
+    expect((await patchOk(cookies, { heightCm: 165 })).plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  // ── body weight: the history is the one source (RULINGS 2026-09-10) ──────
+  interface HistoryItem {
+    id: string;
+    measuredAt: string;
+    weightKg: number | null;
+    source: string;
+  }
+  /** The person's weigh-in history, newest first, off the real route. */
+  const history = async (cookies: Record<string, string>): Promise<HistoryItem[]> => {
+    const res = await inject({ method: "GET", url: "/v1/nutrition/body-measurements?limit=100", cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { items: HistoryItem[] }).items;
+  };
+  /** `s` seconds after the newest TYPED row — fixtures are dated off the row
+   *  they must outrank, never off this process's clock, so the test cannot
+   *  pass by the clock skew it is supposed to rule out. */
+  const afterTyped = async (cookies: Record<string, string>, s: number): Promise<string> => {
+    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
+    if (typed === undefined) throw new Error("no typed row to date a fixture from");
+    return new Date(Date.parse(typed.measuredAt) + s * 1000).toISOString();
+  };
+  const measureOk = async (cookies: Record<string, string>, body: unknown): Promise<string> => {
+    const res = await inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
+    expect(res.statusCode, res.body).toBe(201);
+    return (JSON.parse(res.body) as { measurement: { id: string } }).measurement.id;
+  };
+  const deleteOk = async (cookies: Record<string, string>, id: string): Promise<void> => {
+    expect((await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${id}`, cookies })).statusCode).toBe(204);
+  };
+  const ringsMissing = async (cookies: Record<string, string>): Promise<string[]> => {
+    const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+    return (JSON.parse(res.body) as { missing: string[] }).missing;
+  };
+  /** Moves every typed row of this person back a day, so the next typed weight
+   *  is "another day's" and appends instead of editing in place. */
+  const ageTypedRows = async (userId: string): Promise<void> => {
+    await sql`
+      UPDATE body_measurements SET created_at = created_at - interval '1 day'
+      WHERE user_id = ${userId} AND source = 'self_reported'`;
+  };
+
+  it("a body measurement that carries no weight leaves the typed weight, the plan and the rings alone", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-measure@example.com");
+    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    const measure = (body: unknown) =>
+      inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
+    const ringsAnswer = () => ringsMissing(cookies);
+    // Weigh-ins dated a few seconds AFTER the typed weight: the number on
+    // screen is the newest weight-bearing row BY DATE.
+    const at = (s: number) => afterTyped(cookies, s);
+
+    // A waist-only measurement says NOTHING about weight (weightKg is optional
+    // on that contract), so it must not be able to erase screen 2's answer —
+    // which would blank the plan and the macro rings in the same moment.
+    const waist = await measure({ measuredAt: await at(1), metrics: { waist_cm: 80 } });
+    expect(waist.statusCode).toBe(201);
+    const waistId = (JSON.parse(waist.body) as { measurement: { id: string } }).measurement.id;
+    const afterWaist = await get(cookies);
+    expect(afterWaist.answers["weightKg"]).toBe(70);
+    expect(afterWaist.missing).toEqual([]);
+    expect(afterWaist.plan).toMatchObject(GOLDEN_LOSE);
+    expect(await ringsAnswer()).toEqual([]);
+
+    // Editing that row's waist alone does not disturb the weight either.
+    expect(
+      (
+        await inject({
+          method: "PATCH",
+          url: `/v1/nutrition/body-measurements/${waistId}`,
+          body: { metrics: { waist_cm: 79 } },
+          cookies,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // Nor does deleting it.
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${waistId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // A weigh-in dated AFTER the typed weight sets the number.
+    const weighed = await measure({ measuredAt: await at(2), weightKg: 68 });
+    expect(weighed.statusCode).toBe(201);
+    const weighedId = (JSON.parse(weighed.body) as { measurement: { id: string } }).measurement.id;
+    expect((await get(cookies)).answers["weightKg"]).toBe(68);
+
+    // And deleting it comes back to the typed 70, because the typed weight is
+    // a weighed row of its own — not to a blank, not to the deleted 68.
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${weighedId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // A weigh-in the person dates BEFORE what they typed today does not outrank
+    // it: the typed row is the newest, so the screen keeps saying 70.
+    const earlier = await measure({ measuredAt: await at(-3600), weightKg: 64 });
+    expect(earlier.statusCode).toBe(201);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // The person types a new weight, then logs a waist. Nothing in that waist
+    // says anything about weight, so none of the three weightless writes may
+    // move the number. (The call-site guards that skip the recompute on these
+    // writes are a cost saving, not what keeps the number still: the rule
+    // itself never picks a weightless row. These pin the behaviour, not the guards.)
+    expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
+    const second = await measure({ measuredAt: await at(3), metrics: { waist_cm: 78 } });
+    expect(second.statusCode).toBe(201);
+    const secondId = (JSON.parse(second.body) as { measurement: { id: string } }).measurement.id;
+    expect((await get(cookies)).answers["weightKg"], "creating a weightless row moved the weight").toBe(72);
+    expect(
+      (
+        await inject({
+          method: "PATCH",
+          url: `/v1/nutrition/body-measurements/${secondId}`,
+          body: { metrics: { waist_cm: 77 } },
+          cookies,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await get(cookies)).answers["weightKg"], "editing a weightless row moved the weight").toBe(72);
+    expect(
+      (await inject({ method: "DELETE", url: `/v1/nutrition/body-measurements/${secondId}`, cookies })).statusCode,
+    ).toBe(204);
+    expect((await get(cookies)).answers["weightKg"], "deleting a weightless row moved the weight").toBe(72);
+  });
+
+  it("a deleted or cleared mis-entry falls back to the weight before it, never to itself and never to a blank", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-measure-gone@example.com");
+    const typed = await completeSeven(cookies);
+    expect(typed.plan).toMatchObject(GOLDEN_LOSE);
+    const at = (s: number) => afterTyped(cookies, s);
+    const measure = (body: unknown) => measureOk(cookies, body);
+    const del = (id: string) => deleteOk(cookies, id);
+    const clearWeight = async (id: string) => {
+      expect(
+        (await inject({ method: "PATCH", url: `/v1/nutrition/body-measurements/${id}`, body: { weightKg: null }, cookies }))
+          .statusCode,
+      ).toBe(200);
+    };
+
+    // Two weigh-ins, and the number follows the newer one.
+    const older = await measure({ measuredAt: await at(1), weightKg: 69 });
+    const newer = await measure({ measuredAt: await at(2), weightKg: 68 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(68);
+
+    // Deleting the newer one falls back to the one before it.
+    await del(newer);
+    const onOlder = await get(cookies);
+    expect(onOlder.answers["weightKg"]).toBe(69);
+    expect(onOlder.plan).not.toEqual(typed.plan);
+
+    // Deleting the last weigh-in falls back to the TYPED weight — the fix this
+    // test exists for. A COALESCE onto the column would have kept 69 here, the
+    // very number the person just said was wrong; an empty subquery would have
+    // blanked the plan and the rings. The plan is the one screen 2 produced.
+    await del(older);
+    const afterDelete = await get(cookies);
+    expect(afterDelete.answers["weightKg"]).toBe(70);
+    expect(afterDelete.missing).toEqual([]);
+    expect(afterDelete.plan).toEqual(typed.plan);
+    expect(await ringsMissing(cookies)).toEqual([]);
+
+    // The same correction one step earlier: clearing the weight ON the row.
+    const again = await measure({ measuredAt: await at(3), weightKg: 67 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(67);
+    await clearWeight(again);
+    const afterClear = await get(cookies);
+    expect(afterClear.answers["weightKg"]).toBe(70);
+    expect(afterClear.missing).toEqual([]);
+    expect(afterClear.plan).toEqual(typed.plan);
+
+    // And with an older weigh-in still present, clearing the newest moves the
+    // number to THAT one — the recompute must run for a cleared weight, not
+    // only for a row that still carries one.
+    const sixtySix = await measure({ measuredAt: await at(4), weightKg: 66 });
+    const top = await measure({ measuredAt: await at(5), weightKg: 65 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(65);
+    await clearWeight(top);
+    expect((await get(cookies)).answers["weightKg"]).toBe(66);
+
+    // Nobody is stuck with a number they no longer want: screen 2 clears it
+    // outright, and so does PATCH /v1/users/me. Emptying the weight is a thing
+    // the person asks for, never something a delete does behind their back.
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(cleared.missing).toContain("weightKg");
+
+    // The clear is a row of its own, the newest one, so deleting an OLDER
+    // weigh-in afterwards cannot bring its number back: the person said
+    // "no weight", and the history still says so.
+    await del(sixtySix);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+    expect(await ringsMissing(cookies)).toContain("weightKg");
+  });
+
+  it("a weigh-in dated ahead of the clock never outranks the weight typed today, and retyping it stacks nothing", { timeout: 60_000 }, async () => {
+    // The contract lets a weigh-in be dated up to 24 h ahead (a phone clock
+    // that runs fast). Such a row must not swallow what the person types on
+    // screen 2 — the screen and the plan would then show a number they did
+    // not type — and a typed row that never became the newest one was being
+    // re-inserted on every save of that screen.
+    const { cookies } = await makeUser("ob-measure-future@example.com");
+    const ahead = await measureOk(cookies, {
+      measuredAt: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+      weightKg: 85,
+    });
+    expect((await get(cookies)).answers["weightKg"]).toBe(85);
+
+    // Screen 2 types 70. The screen reads back 70 and the plan is built from 70.
+    const done = await completeSeven(cookies);
+    expect(done.answers["weightKg"]).toBe(70);
+    expect(done.plan).toMatchObject(GOLDEN_LOSE);
+    expect(await ringsMissing(cookies)).toEqual([]);
+
+    // The typed row is the newest of everything, including the row dated ahead.
+    const items = await history(cookies);
+    expect(items.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70], ["manual", 85]]);
+
+    // The same 70 sent three more times (a save-as-you-go screen) adds nothing.
+    for (let i = 0; i < 3; i += 1) expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
+    expect((await history(cookies)).length).toBe(2);
+
+    // Deleting the typed row falls back to the weigh-in, the only weight left.
+    const typed = items[0];
+    if (typed === undefined) throw new Error("no typed row");
+    await deleteOk(cookies, typed.id);
+    expect((await get(cookies)).answers["weightKg"]).toBe(85);
+    await deleteOk(cookies, ahead);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+  });
+
+  it("typing the number already showing is still recorded; a same-day retype edits that entry; another day appends", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-retype@example.com");
+    // A weigh-in of 70 from nine days ago is the number showing.
+    const old = await measureOk(cookies, {
+      measuredAt: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+      weightKg: 70,
+    });
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+
+    // Screen 2 types the same 70. The ruling says a typed weight is saved as a
+    // weigh-in too, and this one must exist: it is what the number falls back
+    // to when the nine-day-old entry is later deleted as a mistake.
+    await completeSeven(cookies);
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70], ["manual", 70]]);
+
+    // 70 → 71 → 72 on a save-as-you-go screen is ONE typed entry that ends at
+    // 72, not three "weigh-ins" of which two are numbers the person never had.
+    // (Same day in the person's zone — UTC for a fixture with no zone set — so
+    // this leg could only misfire within a second of UTC midnight.)
+    expect((await patchOk(cookies, { weightKg: 71 })).answers["weightKg"]).toBe(71);
+    expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
+    const sameDay = await history(cookies);
+    expect(sameDay.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 72], ["manual", 70]]);
+
+    // Another day, another number: that is a new entry, and the day before's
+    // stays in the history as the weight the person had then.
+    await ageTypedRows(userId);
+    expect((await patchOk(cookies, { weightKg: 73 })).answers["weightKg"]).toBe(73);
+    const nextDay = await history(cookies);
+    expect(nextDay.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 73], ["self_reported", 72], ["manual", 70]]);
+
+    // Deleting entries walks back through numbers the person actually had —
+    // 72, then the weigh-in — and never lands on the 71 that was retyped away.
+    const [newest, previous] = nextDay;
+    if (newest === undefined || previous === undefined) throw new Error("history too short");
+    await deleteOk(cookies, newest.id);
+    expect((await get(cookies)).answers["weightKg"]).toBe(72);
+    await deleteOk(cookies, previous.id);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+    await deleteOk(cookies, old);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+  });
+
+  it("a weight the person cleared stays cleared, whatever happens to older entries", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-cleared@example.com");
+    await completeSeven(cookies); // types 70
+    await ageTypedRows(userId);
+    expect((await patchOk(cookies, { weightKg: 73 })).answers["weightKg"]).toBe(73);
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 73], ["self_reported", 70]]);
+
+    // The clear lands on today's typed entry: it now says "no weight", and it
+    // is the newest thing that says anything about weight.
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(cleared.missing).toContain("weightKg");
+    const afterClear = await history(cookies);
+    expect(afterClear.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", null], ["self_reported", 70]]);
+    // Clearing again changes nothing.
+    await patchOk(cookies, { weightKg: null });
+    expect((await history(cookies)).length).toBe(2);
+
+    // Deleting the older 70 does not bring anything back; nor does a waist.
+    const older = afterClear[1];
+    if (older === undefined) throw new Error("no older row");
+    await deleteOk(cookies, older.id);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+    await measureOk(cookies, { measuredAt: await afterTyped(cookies, 1), metrics: { waist_cm: 80 } });
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+
+    // A NEW weigh-in dated after the clear sets the number, and deleting that
+    // weigh-in falls back to the clear — never to the 70 that was cleared.
+    const fresh = await measureOk(cookies, { measuredAt: await afterTyped(cookies, 2), weightKg: 74 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(74);
+    await deleteOk(cookies, fresh);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+    expect(await ringsMissing(cookies)).toContain("weightKg");
+
+    // And typing a number again the same day fills the cleared entry in.
+    expect((await patchOk(cookies, { weightKg: 71 })).answers["weightKg"]).toBe(71);
+    expect((await history(cookies)).filter((m) => m.source === "self_reported").map((m) => m.weightKg)).toEqual([71]);
+  });
+
+  it("a cache that disagrees with the history is repaired by the next typed weight, never preserved", { timeout: 60_000 }, async () => {
+    // The rule says the column IS the history's newest weight-bearing row. The
+    // live code never lets them drift, but a save that finds nothing to write
+    // must still recompute — otherwise a drift, from wherever it came, is kept
+    // for as long as the person keeps typing the number they already have.
+    const { userId, cookies } = await makeUser("ob-measure-stale@example.com");
+    await completeSeven(cookies); // types 70: one typed row, column 70
+    const columnOf = async () =>
+      (await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+
+    // Drift 1: the column says 80, the person's own typed row still says 70.
+    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
+    expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
+    expect(await columnOf()).toBe("70.00");
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70]]);
+
+    // Drift 2: a weight with NO row under it (the shape before 0026's backfill). Clearing it
+    // must empty the column (RULINGS 2026-09-10) even though there is no
+    // weight-bearing row to write a clear over.
+    await sql`DELETE FROM body_measurements WHERE user_id = ${userId}`;
+    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
+    const cleared = await patchOk(cookies, { weightKg: null });
+    expect(cleared.answers["weightKg"]).toBeNull();
+    expect(await columnOf()).toBeNull();
+    expect(await history(cookies)).toEqual([]);
+  });
+
+  /** Resolves once another connection is queued on a lock `holderPid` holds.
+   *  A lock test must SEE the second transaction waiting before it lets the
+   *  first go on: a fixed sleep lets a slow start run the second one after the
+   *  first has committed, and then no conflict forms and a broken lock order
+   *  passes. */
+  const waitUntilQueuedBehind = async (holderPid: number): Promise<void> => {
+    for (let i = 0; i < 400; i += 1) {
+      const [row] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND ${holderPid}::int = ANY(pg_blocking_pids(pid))`;
+      if ((row?.n ?? 0) > 0) return;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 25);
+      });
+    }
+    throw new Error(`nothing queued behind backend ${String(holderPid)} within 10 s`);
+  };
+
+  /** Runs `first` in a transaction and holds it open at `hold` until `second`
+   *  is seen queued behind it, then lets it finish. Both outcomes come back,
+   *  errors included, so a deadlock reads as a failed expectation. */
+  const interleave = async <T>(
+    first: (tx: postgres.TransactionSql, hold: () => Promise<void>) => Promise<void>,
+    second: () => Promise<T>,
+  ): Promise<{ firstError: unknown; secondError: unknown; second: T | null }> => {
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reportPid: (pid: number) => void = () => undefined;
+    const pidOfFirst = new Promise<number>((resolve) => {
+      reportPid = resolve;
+    });
+    let firstError: unknown = null;
+    const firstDone = sql
+      .begin(async (tx) => {
+        await first(tx, async () => {
+          const [me] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+          reportPid(me?.pid ?? -1);
+          await held;
+        });
+      })
+      .catch((err: unknown) => {
+        firstError = err;
+      });
+    const pid = await pidOfFirst;
+    let secondError: unknown = null;
+    const secondDone = second().catch((err: unknown) => {
+      secondError = err;
+      return null;
+    });
+    await waitUntilQueuedBehind(pid);
+    release();
+    await firstDone;
+    const result = await secondDone;
+    return { firstError, secondError, second: result };
+  };
+
+  /** Screen 2's save, by shape: the users row first, then today's typed row
+   *  edited in place (users/repo.ts, nutrition/repo.ts recordTypedWeight). */
+  const screenTwoSave = (userId: string, typedId: string) =>
+    async (tx: postgres.TransactionSql, hold: () => Promise<void>) => {
+      await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+      await hold();
+      await tx`UPDATE body_measurements SET weight_kg = 71 WHERE id = ${typedId} AND user_id = ${userId}`;
+    };
+
+  it("editing the typed entry while screen 2 saves it never deadlocks: the users row is taken first", { timeout: 30_000 }, async () => {
+    // A history edit of that same row that took the row first and the users
+    // row second (refreshWeight) is the opposite order; the two interleaved
+    // are a deadlock, and the save — with every answer in it — is the one
+    // Postgres aborts. Reproduced with the lock removed: "deadlock detected".
+    const { userId, cookies } = await makeUser("ob-measure-lock-order@example.com");
+    await completeSeven(cookies); // one typed row, today
+    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
+    if (typed === undefined) throw new Error("no typed row");
+
+    const out = await interleave(screenTwoSave(userId, typed.id), () =>
+      updateMeasurement(sql, userId, typed.id, { weightKg: 72 }),
+    );
+
+    expect(out.firstError, "the save was aborted").toBeNull();
+    expect(out.secondError, "the edit was aborted").toBeNull();
+    expect(out.second?.weightKg).toBe(72);
+    // The edit ran after the save committed, so its number is the one that stands.
+    expect((await get(cookies)).answers["weightKg"]).toBe(72);
+  });
+
+  it("deleting the typed entry while screen 2 saves it never deadlocks either", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-lock-order-delete@example.com");
+    await completeSeven(cookies);
+    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
+    if (typed === undefined) throw new Error("no typed row");
+
+    const out = await interleave(screenTwoSave(userId, typed.id), () => deleteMeasurement(sql, userId, typed.id));
+
+    expect(out.firstError, "the save was aborted").toBeNull();
+    expect(out.secondError, "the delete was aborted").toBeNull();
+    expect(out.second).toBe(true);
+    // The delete ran after the save: the entry is gone, and it was the only weight.
+    expect((await history(cookies)).filter((m) => m.source === "self_reported")).toEqual([]);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+  });
+
+  it("a weigh-in that waits behind the account's deletion writes nothing", { timeout: 30_000 }, async () => {
+    // It passes sign-in while the deletion is still uncommitted, then queues
+    // on the users row. Saving it after the deletion would leave a row the
+    // cache never took (refreshWeight skips a deleted account), so a restored
+    // account would show one weight on the profile and another in its history.
+    const { userId, cookies } = await makeUser("ob-measure-deleted-mid-request@example.com");
+    const out = await interleave(
+      async (tx, hold) => {
+        // softDeleteUser's first statement.
+        await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId} AND status = 'active'`;
+        await hold();
+      },
+      async () =>
+        await inject({
+          method: "POST",
+          url: "/v1/nutrition/body-measurements",
+          body: { measuredAt: new Date().toISOString(), weightKg: 70 },
+          cookies,
+        }),
+    );
+
+    expect(out.firstError).toBeNull();
+    expect(out.second?.statusCode, out.second?.body).toBe(401);
+    const [count] = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM body_measurements WHERE user_id = ${userId}`;
+    expect(count?.n).toBe("0");
+  });
+
+  it("no history write lands on an account that is not active", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-gone-history@example.com");
+    const id = await measureOk(cookies, { measuredAt: new Date().toISOString(), weightKg: 70 });
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
+
+    const input = { measuredAt: new Date().toISOString(), weightKg: 71, metrics: {}, source: "manual" as const };
+    expect(await createMeasurement(sql, userId, input)).toBeNull();
+    expect(await updateMeasurement(sql, userId, id, { weightKg: 72 })).toBeNull();
+    expect(await deleteMeasurement(sql, userId, id)).toBe(false);
+
+    const rows = await sql<{ id: string; weight_kg: string | null }[]>`
+      SELECT id, weight_kg FROM body_measurements WHERE user_id = ${userId}`;
+    expect(rows).toEqual([{ id, weight_kg: "70.00" }]);
+    const [user] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
+    expect(user?.weight_kg).toBe("70.00");
+  });
+
+  it("a typed weight is never written for an account that is not active", { timeout: 30_000 }, async () => {
+    // The guarantee lives in the SQL, not in the promise that callers hold the
+    // users row: a third caller reaching recordTypedWeight for a tombstoned
+    // account gets no row and no column write.
+    const { userId } = await makeUser("ob-measure-gone-account@example.com");
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
+    await sql.begin(async (tx) => {
+      await recordTypedWeight(tx, userId, 70);
+    });
+    const [count] = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM body_measurements WHERE user_id = ${userId}`;
+    expect(count?.n).toBe("0");
+    const [row] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
+    expect(row?.weight_kg).toBeNull();
+  });
+
+  it("a v1 profile write's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {
+    const { userId } = await makeUser("ob-locks@example.com");
+    // WHAT THIS GUARDS: the v1 upsert takes the two rows in the OPPOSITE order
+    // to this route — the profile row first, then the users row as FOR KEY
+    // SHARE, which is what its foreign key check does. Holding the users row
+    // with a lock that conflicts with FOR KEY SHARE therefore makes one person
+    // saving on both screens at the same moment a deadlock (40P01 → a 500 on a
+    // save that was perfectly fine). The lock below is exactly the one that FK
+    // check takes; the save must not wait on it.
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holder = sql.begin(async (tx) => {
+      await tx`SELECT id FROM users WHERE id = ${userId} FOR KEY SHARE`;
+      await held;
+    });
+    const save = patchOnboarding(sql, userId, { mainGoal: "endurance", weightKg: 71 });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let outcome = "blocked";
+    try {
+      outcome = await Promise.race([
+        save.then(() => "saved"),
+        new Promise<string>((resolve) => {
+          timer = setTimeout(() => {
+            resolve("blocked");
+          }, 5000);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      release();
+      await holder;
+      await save;
+    }
+    expect(outcome, "the v2 save waited on the lock the v1 write's FK check takes").toBe("saved");
+  });
+});

@@ -8,6 +8,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
+import { dayInTz } from "../gamification/streak.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
 export interface DishwareRow {
@@ -362,7 +363,7 @@ export async function deleteDishware(sql: Sql, userId: string, id: string): Prom
   return rows.length > 0;
 }
 
-// ── body measurements (Part 4 §3.6; users.weight_kg sync — DECISIONS) ──────
+// ── body measurements (Part 4 §3.6; users.weight_kg — RULINGS 2026-09-10) ──
 
 const metricsSchema = z.record(z.number().finite().nonnegative());
 
@@ -384,15 +385,148 @@ const toMeasurement = (r: MeasurementDbRow): MeasurementRow => ({
   createdAt: r.created_at,
 });
 
-/** users.weight_kg mirrors the latest non-null measurement (single write
- *  path for weight history — supersedes P2.2 GAP-2, DECISIONS 2026-07-12). */
+/** The `source` of a measurement the person typed on a form (onboarding
+ *  screen 2, PATCH /v1/users/me) rather than logged as a weigh-in. It shows in
+ *  their history marked "typed by me". A row with this source and NO weight is
+ *  the record of the person clearing their weight on purpose. */
+export const TYPED_WEIGHT_SOURCE = "self_reported";
+
+/** THE ONE RULE (Kd ruling 2026-09-10; supersedes P2.2 GAP-2): the history is
+ *  the only source of body weight, and `users.weight_kg` is a cache of the
+ *  newest row that SAYS SOMETHING about weight — a weigh-in that carries one,
+ *  or a typed row (which may carry none: that is a clear). Nothing else ever
+ *  writes the column, and every write to the history ends by running this, so
+ *  the cache can never disagree with the history; migration `0026` put every
+ *  weight that existed before this rule under a typed row of its own.
+ *
+ *  So a deleted mis-entry falls back to the weight before it — never to the
+ *  mis-entry (a COALESCE onto the column did exactly that), never to a blank
+ *  while a weighed row remains, and never to a weight the person had already
+ *  cleared (the clear is itself a row, and the newest one).
+ *
+ *  A weightless row (waist only) is never picked up; a write that only touched
+ *  such a row cannot move the number. The call-site guards that skip this on
+ *  those writes are a cost saving and nothing more: run unconditionally the
+ *  statement would recompute the same value. */
 async function refreshWeight(sql: TransactionSql, userId: string): Promise<void> {
   await sql`
     UPDATE users SET weight_kg = (
       SELECT weight_kg FROM body_measurements
-      WHERE user_id = ${userId} AND weight_kg IS NOT NULL
+      WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = ${TYPED_WEIGHT_SOURCE})
       ORDER BY measured_at DESC, id DESC LIMIT 1)
-    WHERE id = ${userId}`;
+    WHERE id = ${userId} AND status = 'active'`;
+}
+
+/** True when this row can be the one the rule above picks. */
+const bearsWeight = (r: { weight_kg: string | null; source: string }): boolean =>
+  r.weight_kg !== null || r.source === TYPED_WEIGHT_SOURCE;
+
+/** The users row joined to its newest weight-bearing row, or to nothing (the
+ *  three nullable columns are the LEFT JOIN's empty side). */
+interface NewestWeightRow {
+  id: string | null;
+  weight_kg: string | null;
+  source: string | null;
+  created_at: Date | null;
+  timezone: string | null;
+}
+
+/** A weight typed on screen 2 or PATCH /v1/users/me, or cleared there
+ *  (`null`). Three cases, and the invariant that the typed row is the newest
+ *  weight-bearing row is ENFORCED BY THE WRITE, not assumed:
+ *
+ *  - The newest weight-bearing row is already this person's own typed row from
+ *    TODAY (their zone; the row's own created_at, which is never in the future):
+ *    it is edited in place. A save-as-you-go screen sending 70 → 71 → 72 in a
+ *    minute leaves ONE entry saying 72, never three "weigh-ins" of which two
+ *    are numbers the person never had (RULINGS 2026-09-07 and 2026-09-10).
+ *    The same number again, on any day, writes nothing while the person's
+ *    own typed row is still the newest thing that says it.
+ *  - Otherwise a number is a NEW typed row — even the number a weigh-in
+ *    already shows, so that weigh-in can later be deleted as a mistake and
+ *    the typed number is what comes back — dated so that it is the newest of
+ *    everything this person has — `now()`, or one second after their newest
+ *    entry when one is dated ahead of the clock (the contract allows a weigh-in
+ *    up to 24 h in the future; it must not swallow what was typed today).
+ *  - Otherwise `null` is a new typed row WITH NO WEIGHT, dated the same way,
+ *    so nothing older than the clear can outrank it; when the number is
+ *    already empty there is nothing to clear and nothing is written.
+ *
+ *  Both statements re-assert the account is active: callers hold the users
+ *  row, but the guarantee lives in the SQL, not in that promise. */
+export async function recordTypedWeight(
+  tx: TransactionSql,
+  userId: string,
+  weightKg: number | null,
+): Promise<void> {
+  const rows = await tx<NewestWeightRow[]>`
+    SELECT m.id, m.weight_kg, m.source, m.created_at, u.timezone
+    FROM users u
+    LEFT JOIN LATERAL (
+      SELECT id, weight_kg, source, created_at FROM body_measurements
+      WHERE user_id = u.id AND (weight_kg IS NOT NULL OR source = ${TYPED_WEIGHT_SOURCE})
+      ORDER BY measured_at DESC, id DESC LIMIT 1) m ON true
+    WHERE u.id = ${userId} AND u.status = 'active'`;
+  const newest = rows[0];
+  if (newest === undefined) return; // not an active account: nothing is written
+  const current = newest.weight_kg === null ? null : Number(newest.weight_kg);
+  const ownTyped = newest.id !== null && newest.source === TYPED_WEIGHT_SOURCE;
+  // Nothing to record: the person's own typed row already says exactly this,
+  // or there is no weight to clear. A WEIGH-IN carrying the same number is
+  // not the same thing — typing it must still leave a typed row, or deleting
+  // that weigh-in as a mistake later would leave nothing to fall back to.
+  // `current` is what the HISTORY says; the cache is recomputed from it even
+  // when no row is written, so a column that disagrees with the history (a
+  // state this code never creates, but must not preserve) is repaired here
+  // rather than kept: with no weight-bearing row at all, a clear still
+  // empties the column (RULINGS 2026-09-10).
+  if ((ownTyped && current === weightKg) || (weightKg === null && current === null)) {
+    await refreshWeight(tx, userId);
+    return;
+  }
+
+  const zone = newest.timezone ?? "UTC";
+  const typedToday =
+    ownTyped &&
+    newest.created_at !== null &&
+    dayInTz(newest.created_at, zone) === dayInTz(new Date(), zone);
+  if (typedToday) {
+    await tx`
+      UPDATE body_measurements SET weight_kg = ${weightKg}
+      WHERE id = ${newest.id} AND user_id = ${userId}`;
+  } else {
+    // GREATEST ignores a NULL, so a person with no history gets now().
+    await tx`
+      INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
+      SELECT u.id,
+             GREATEST(now(), (SELECT max(measured_at) FROM body_measurements WHERE user_id = u.id) + interval '1 second'),
+             ${weightKg}, ${tx.json({})}, ${TYPED_WEIGHT_SOURCE}
+      FROM users u WHERE u.id = ${userId} AND u.status = 'active'`;
+  }
+  await refreshWeight(tx, userId);
+}
+
+/** LOCK ORDER, and the reason the three history writes below start with it:
+ *  users row, THEN measurement rows. The profile and onboarding saves
+ *  (users/repo.ts) take the users row first and then, through
+ *  recordTypedWeight, update or insert a measurement row; a history write
+ *  that took its measurement row first and then ran refreshWeight's UPDATE of
+ *  the users row would be the opposite order, and a person saving screen 2
+ *  while editing that same typed entry would deadlock (40P01 — a 500 on the
+ *  save, and every answer in that transaction lost). FOR NO KEY UPDATE, not
+ *  FOR UPDATE: every foreign-key check on this user elsewhere (a meal logged,
+ *  a workout synced, the v1 profile save) takes KEY SHARE, which FOR UPDATE
+ *  would make wait behind a weigh-in; NO KEY UPDATE lets them through.
+ *
+ *  And the status gate: false when the account is not active, so the write
+ *  is refused. A request that passed sign-in and then queued here behind the
+ *  account's deletion would otherwise save a row the cache never takes
+ *  (refreshWeight skips a deleted account) — and a restored account would
+ *  show one weight on the profile and another in its history. */
+async function lockOwner(tx: TransactionSql, userId: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+  return rows.length > 0;
 }
 
 export async function listMeasurements(
@@ -410,19 +544,22 @@ export async function listMeasurements(
   return rows.map(toMeasurement);
 }
 
+/** Null: the account is not active (lockOwner). */
 export async function createMeasurement(
   sql: Sql,
   userId: string,
   v: BodyMeasurementInput,
-): Promise<MeasurementRow> {
+): Promise<MeasurementRow | null> {
   return await sql.begin(async (tx) => {
+    if (!(await lockOwner(tx, userId))) return null;
     const rows = await tx<MeasurementDbRow[]>`
       INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
       VALUES (${userId}, ${new Date(v.measuredAt)}, ${v.weightKg ?? null}, ${tx.json(v.metrics)}, ${v.source})
       RETURNING id, measured_at, weight_kg, metrics, source, created_at`;
-    await refreshWeight(tx, userId);
     const r = rows[0];
     if (r === undefined) throw new Error("measurement insert returned no row");
+    // A weightless row cannot be the one the rule picks (refreshWeight's note).
+    if (bearsWeight(r)) await refreshWeight(tx, userId);
     return toMeasurement(r);
   });
 }
@@ -434,24 +571,34 @@ export async function updateMeasurement(
   v: PatchBodyMeasurement,
 ): Promise<MeasurementRow | null> {
   return await sql.begin(async (tx) => {
+    if (!(await lockOwner(tx, userId))) return null;
     const rows = await tx<MeasurementDbRow[]>`
       UPDATE body_measurements SET
         measured_at = coalesce(${v.measuredAt === undefined ? null : new Date(v.measuredAt)}, measured_at),
         weight_kg = CASE WHEN ${v.weightKg !== undefined} THEN ${v.weightKg ?? null} ELSE weight_kg END,
-        metrics = coalesce(${v.metrics === undefined ? null : tx.json(v.metrics)}, metrics),
-        source = coalesce(${v.source ?? null}, source)
+        metrics = coalesce(${v.metrics === undefined ? null : tx.json(v.metrics)}, metrics)
       WHERE id = ${id} AND user_id = ${userId}
       RETURNING id, measured_at, weight_kg, metrics, source, created_at`;
-    if (rows.length > 0) await refreshWeight(tx, userId);
-    return rows[0] === undefined ? null : toMeasurement(rows[0]);
+    const r = rows[0];
+    // Skipped only for a row that bears no weight now and bore none before this
+    // write (a waist edit): such a row is never the one the rule picks.
+    if (r !== undefined && (bearsWeight(r) || v.weightKg !== undefined)) {
+      await refreshWeight(tx, userId);
+    }
+    return r === undefined ? null : toMeasurement(r);
   });
 }
 
 export async function deleteMeasurement(sql: Sql, userId: string, id: string): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ id: string }[]>`
-      DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
-    if (rows.length > 0) await refreshWeight(tx, userId);
+    if (!(await lockOwner(tx, userId))) return false;
+    const rows = await tx<{ id: string; weight_kg: string | null; source: string }[]>`
+      DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId}
+      RETURNING id, weight_kg, source`;
+    // Deleting a row the rule could pick falls back to the one before it;
+    // deleting a weightless row cannot move the number.
+    const gone = rows[0];
+    if (gone !== undefined && bearsWeight(gone)) await refreshWeight(tx, userId);
     return rows.length > 0;
   });
 }

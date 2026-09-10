@@ -318,7 +318,13 @@ export function registerNutritionRoutes(
   app.post("/v1/nutrition/body-measurements", { preHandler: [app.authenticate] }, async (req, reply) => {
     const v = parse(bodyMeasurementInputSchema, req.body, req, reply);
     if (v === null) return;
-    return reply.status(201).send({ measurement: await service.createMeasurement(readDeps, authedUserId(req), v) });
+    const measurement = await service.createMeasurement(readDeps, authedUserId(req), v);
+    // Null: the account was deleted while this request waited on it — the
+    // answer sign-in gives every request after it.
+    if (measurement === null) {
+      return reply.status(401).send({ error: "unauthorized", message: "authentication required", requestId: req.id });
+    }
+    return reply.status(201).send({ measurement });
   });
 
   app.patch<{ Params: { id: string } }>(

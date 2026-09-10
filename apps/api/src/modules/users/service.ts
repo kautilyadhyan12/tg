@@ -15,6 +15,12 @@ import {
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
+// THE repo-wide "what day is it there" helper. Imported rather than copied: a
+// second definition of a calendar day would be a second answer to the only
+// question a finish date depends on.
+import { dayInTz, safeTimeZone } from "../gamification/streak.js";
+import { planAnswersFor } from "../plan/answers.js";
+import { resolvePlan } from "../plan/maths.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import {
@@ -24,12 +30,17 @@ import {
   DISCLAIMER_WORDINGS,
   fitnessProfileSchema,
   healthScreeningSchema,
+  onboardingAnswersSchema,
+  onboardingResponseSchema,
 } from "./schemas.js";
 import type {
   ConsentListResponse,
   ConsentRecord,
   FitnessProfile,
   HealthScreening,
+  OnboardingAnswers,
+  OnboardingResponse,
+  PatchOnboardingRequest,
   PlanHealth,
   PutFitnessProfileRequest,
   PutHealthScreeningRequest,
@@ -211,6 +222,116 @@ export async function putFitnessProfile(
   // No row = the user was deleted mid-request (the upsert is active-only).
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return toFitnessProfile(row);
+}
+
+// ── onboarding v2: save as you go, and the live plan (ROADMAP item 4a) ──────
+
+/** The answers of a person who has saved nothing yet. Every question reads as
+ *  unanswered — no defaults anywhere (RULINGS 2026-07-15). */
+const EMPTY_ONBOARDING_ANSWERS = {
+  mainGoal: null,
+  age: null,
+  gender: null,
+  heightCm: null,
+  weightKg: null,
+  targetWeightKg: null,
+  pace: null,
+  dayActivity: null,
+  fitnessLevel: null,
+  pushUpsMax: null,
+  plankHoldSeconds: null,
+  trainingDays: null,
+  sessionMinutes: null,
+  availableEquipment: [],
+  onboardingCompleted: false,
+  updatedAt: null,
+};
+
+/** The two rows as one set of answers. Re-parsed through the shared contract so
+ *  the enum columns (plain strings out of Postgres) are narrowed WITHOUT a cast
+ *  (R2.2), and a row that violates a 0026 CHECK fails loud rather than being
+ *  served (the `toFitnessProfile` argument, for the same reason).
+ *
+ *  `trainingDays` and `sessionMinutes` are the screens' words for the columns
+ *  0006 already owns — the rename happens here and in the repo's write map, and
+ *  nowhere else. */
+function toOnboardingAnswers(row: repo.OnboardingRow): OnboardingAnswers {
+  const p = row.profile;
+  if (p === null) {
+    return onboardingAnswersSchema.parse({ ...EMPTY_ONBOARDING_ANSWERS, weightKg: row.weightKg });
+  }
+  return onboardingAnswersSchema.parse({
+    mainGoal: p.mainGoal,
+    age: p.age,
+    gender: p.gender,
+    heightCm: p.heightCm,
+    weightKg: row.weightKg,
+    targetWeightKg: p.targetWeightKg,
+    pace: p.pace,
+    dayActivity: p.dayActivity,
+    fitnessLevel: p.fitnessLevel,
+    pushUpsMax: p.pushUpsMax,
+    plankHoldSeconds: p.plankHoldSeconds,
+    trainingDays: p.exerciseFrequency,
+    sessionMinutes: p.sessionDurationMin,
+    availableEquipment: p.availableEquipment,
+    onboardingCompleted: p.onboardingCompleted,
+    updatedAt: p.updatedAt.toISOString(),
+  });
+}
+
+/** Which time zone the day is counted in. The DEVICE's zone wins (RULINGS
+ *  2026-07-21: it comes from the device and is never guessed) — the route has
+ *  already refused one the runtime does not know, so `requested` is either a
+ *  real zone or absent. The person's stored zone is the fallback for a client
+ *  that sent none, and UTC is the last resort: the only guess in the ladder,
+ *  and the same one every other reader of `users.timezone` makes. */
+function resolveTimeZone(requested: string | null, stored: string | null): string {
+  return safeTimeZone(requested ?? stored);
+}
+
+/** THE plan, from the stored answers. "Today" is the SERVER's clock read in the
+ *  person's own time zone — a client sends where it is, never what day it is,
+ *  so a finish date cannot be moved by a request body (ROADMAP 4a). */
+async function toOnboardingResponse(
+  sql: Sql,
+  userId: string,
+  row: repo.OnboardingRow,
+  requestedTimeZone: string | null,
+): Promise<OnboardingResponse> {
+  const answers = toOnboardingAnswers(row);
+  const health = await getPlanHealth(sql, userId);
+  const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
+  return onboardingResponseSchema.parse({
+    answers,
+    ...resolvePlan(planAnswersFor({ answers, health, today })),
+  });
+}
+
+export async function getOnboarding(
+  deps: UsersDeps,
+  userId: string,
+  requestedTimeZone: string | null,
+): Promise<OnboardingResponse> {
+  const row = await repo.getOnboarding(deps.sql, userId);
+  return await toOnboardingResponse(deps.sql, userId, row, requestedTimeZone);
+}
+
+/** One screen's save: PATCH semantics — a field the screen did not ask about is
+ *  left alone, and an explicit null clears an answer. The reply carries the
+ *  plan the new answers produce, so the number on screen is always the one the
+ *  server just stored and never a second round trip out of step with it. */
+export async function patchOnboarding(
+  deps: UsersDeps,
+  userId: string,
+  body: PatchOnboardingRequest,
+  requestedTimeZone: string | null,
+): Promise<OnboardingResponse> {
+  const row = await repo.patchOnboarding(deps.sql, userId, body);
+  // No row = the user stopped being active mid-request (the write is
+  // active-only), the same answer every other write on this surface gives.
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  return await toOnboardingResponse(deps.sql, userId, row, requestedTimeZone);
 }
 
 // ── health screening and Safe mode (ROADMAP Stage 1 item 3b) ────────────────
