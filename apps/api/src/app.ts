@@ -21,7 +21,7 @@ import {
   createResendUsersEmailSender,
   type UsersEmailSender,
 } from "./modules/users/email.js";
-import { UsersError } from "./modules/users/service.js";
+import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
@@ -168,6 +168,8 @@ export async function buildApp(
         ...(err instanceof AuthError && err.retryAfterSeconds !== undefined
           ? { retryAfterSeconds: err.retryAfterSeconds }
           : {}),
+        // A refused finish names the questions still open.
+        ...(err instanceof OnboardingIncompleteError ? { missing: err.missing } : {}),
       });
       return;
     }

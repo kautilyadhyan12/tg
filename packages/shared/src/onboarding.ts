@@ -159,3 +159,16 @@ export const onboardingResponseSchema = z
     message: "plan must be null exactly when missing is non-empty",
   });
 export type OnboardingResponse = z.infer<typeof onboardingResponseSchema>;
+
+/** The 409 a finish gets while the plan still lacks an answer: onboarding
+ *  comes before the training side (RULINGS 2026-07-19). `missing` names the
+ *  questions still open, so the screen can send the person to them. */
+export const onboardingIncompleteBodySchema = z
+  .object({
+    error: z.literal("onboarding_incomplete"),
+    message: z.string(),
+    requestId: z.string(),
+    missing: z.array(missingPlanInputSchema).min(1),
+  })
+  .strict();
+export type OnboardingIncompleteBody = z.infer<typeof onboardingIncompleteBodySchema>;

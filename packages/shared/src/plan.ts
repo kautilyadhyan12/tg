@@ -20,6 +20,15 @@ export type PlanGoal = z.infer<typeof planGoalSchema>;
 export const planPaceSchema = z.enum(["gentle", "steady", "brisk"]);
 export type PlanPace = z.infer<typeof planPaceSchema>;
 
+/** How fast each pace moves the weight, in kg a week: one table, read by the
+ *  plan maths and by the screen that offers the choice. The same table serves
+ *  losing and gaining. */
+export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
+  gentle: 0.25,
+  steady: 0.5,
+  brisk: 0.75,
+};
+
 /** Screen 4 ("your day"): what the day looks like OUTSIDE training. Training is
  *  added on top from the week's answers, so these factors are the no-exercise ones. */
 export const dayActivitySchema = z.enum(["sitting", "on_feet", "active", "very_active"]);

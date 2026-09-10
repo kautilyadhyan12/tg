@@ -9,7 +9,7 @@
 // decides the direction, and the health and age rules still hold the cut.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { onboardingAnswersSchema, PLAN_GOAL_BY_MAIN_GOAL } from "@app/shared";
+import { onboardingAnswersSchema, onboardingIncompleteBodySchema, PLAN_GOAL_BY_MAIN_GOAL } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -432,6 +432,7 @@ d("onboarding v2 routes (real Postgres)", () => {
       { sessionMinutes: 241 },
       { availableEquipment: ["dumbbells", "dumbbells"] }, // a set, not a list
       { availableEquipment: ["barbell"] },
+      { availableEquipment: ["none", "dumbbells"] }, // "no equipment" stands alone
       { mainGoal: "weight_loss", planGoal: "lose" }, // the direction is derived, never sent
       { targetKcal: 1200 }, // nor is any number of the plan's
     ];
@@ -603,21 +604,64 @@ d("onboarding v2 routes (real Postgres)", () => {
     }
   });
 
-  it("stores the flag that opens the training side, and /v1/users/me reads it back", { timeout: 30_000 }, async () => {
-    const { cookies } = await makeUser("ob-completed@example.com");
+  it("finishing is refused while an answer is missing, and a refused finish writes nothing", { timeout: 60_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-completed@example.com");
+    // The gate the whole training side reads is the SAME column, so this is
+    // what the rest of the app sees — not just what this route echoes back.
     const completed = async () => {
       const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
       expect(res.statusCode).toBe(200);
       return (JSON.parse(res.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted;
     };
+    const refused = async (body: unknown, missing: string[]) => {
+      const res = await patch(cookies, body);
+      expect(res.statusCode, res.body).toBe(409);
+      const parsed = onboardingIncompleteBodySchema.parse(JSON.parse(res.body));
+      expect([...parsed.missing].sort()).toEqual([...missing].sort());
+    };
+
+    // Nothing answered: refused, naming all eight, and not even a row is made.
+    await refused({ onboardingCompleted: true }, CORE_EIGHT);
     expect(await completed()).toBe(false);
-    expect((await patchOk(cookies, { onboardingCompleted: true })).answers["onboardingCompleted"]).toBe(true);
-    // The gate the whole training side reads is the SAME column, so this is
-    // what the rest of the app sees — not just what this route echoes back.
+    const rows = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    expect(rows[0]?.n).toBe("0");
+
+    // A refused finish takes the rest of its body down with it — the answer
+    // and the weigh-in alike. The list is read from the answers AS SENT, so
+    // the goal and the weight are no longer in it.
+    await refused(
+      { mainGoal: "posture", weightKg: 80, onboardingCompleted: true },
+      CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"),
+    );
+    expect((await get(cookies)).answers["mainGoal"]).toBeNull();
+    expect(await currentWeightKg(sql, userId)).toBeNull();
+
+    // One answer short: the open one is named, and the gate stays shut.
+    for (const screen of [SCREENS.goal, SCREENS.aboutYou, SCREENS.target, SCREENS.yourDay, SCREENS.yourTraining]) {
+      await patchOk(cookies, screen);
+    }
+    await patchOk(cookies, { trainingDays: 3 });
+    await refused({ onboardingCompleted: true }, ["sessionMinutes"]);
+    expect(await completed()).toBe(false);
+
+    // The save that brings the last answer may finish in the same body.
+    const done = await patchOk(cookies, { sessionMinutes: 45, onboardingCompleted: true });
+    expect(done.answers["onboardingCompleted"]).toBe(true);
+    expect(done.plan).toMatchObject(GOLDEN_LOSE);
     expect(await completed()).toBe(true);
-    // And a later screen's save does not undo it.
-    expect((await patchOk(cookies, { mainGoal: "posture" })).answers["onboardingCompleted"]).toBe(true);
+
+    // Changing an answer afterwards is allowed and does not undo the finish…
+    expect((await patchOk(cookies, { dayActivity: null })).answers["onboardingCompleted"]).toBe(true);
     expect(await completed()).toBe(true);
+    // …but finishing again reads the answers, not the flag's history, and a
+    // refusal leaves the stored flag as it was.
+    await refused({ onboardingCompleted: true }, ["dayActivity"]);
+    expect(await completed()).toBe(true);
+
+    // Going back to "not finished" is always allowed.
+    expect((await patchOk(cookies, { onboardingCompleted: false })).answers["onboardingCompleted"]).toBe(false);
+    expect(await completed()).toBe(false);
   });
 
   it("stamps every real save, and says honestly when there is nothing stamped yet", { timeout: 30_000 }, async () => {

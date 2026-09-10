@@ -333,11 +333,15 @@ export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<Onboa
  *  (40P01, and a 500 on a save that was perfectly fine). FOR NO KEY UPDATE
  *  still excludes every other writer of this row and the deletion, and lets
  *  that FK check through, so neither route ever waits on the other's second
- *  lock. Pinned by a test that holds exactly that key-share lock. */
+ *  lock. Pinned by a test that holds exactly that key-share lock.
+ *
+ *  `verify` sees the answers as saved, before the commit; it throws to refuse
+ *  the save, and then nothing of it is written. */
 export async function patchOnboarding(
   sql: Sql,
   userId: string,
   patch: PatchOnboardingRequest,
+  verify?: (saved: OnboardingRow) => void,
 ): Promise<OnboardingRow | null> {
   return await sql.begin(async (tx) => {
     const active = await tx<{ id: string }[]>`
@@ -391,7 +395,11 @@ export async function patchOnboarding(
     // Screen 2's weight is a row of the history, the only place weight lives
     // (nutrition/repo.ts recordTypedWeight).
     if (patch.weightKg !== undefined) await recordTypedWeight(tx, userId, patch.weightKg);
-    return await getOnboarding(tx, userId);
+    const saved = await getOnboarding(tx, userId);
+    // A check that throws here rolls the whole save back, so a refused save
+    // writes nothing at all.
+    verify?.(saved);
+    return saved;
   });
 }
 

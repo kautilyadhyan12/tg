@@ -23,6 +23,7 @@
 // training added on top at 5 MET), and the ten-year horizon.
 import {
   missingPlanInputSchema,
+  PACE_KG_PER_WEEK,
   planInputsSchema,
   planResponseSchema,
   type DayActivity,
@@ -58,12 +59,9 @@ export const ONE_YEAR_DAYS = 365;
  *  calendar the contract accepts. */
 export const MAX_PLAN_DAYS = 10 * ONE_YEAR_DAYS;
 
-/** How fast each pace moves the weight. The same table serves losing and gaining. */
-export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
-  gentle: 0.25,
-  steady: 0.5,
-  brisk: 0.75,
-};
+/** How fast each pace moves the weight: the shared table, so the screen that
+ *  offers the paces and this file cannot disagree. */
+export { PACE_KG_PER_WEEK };
 const PACES: readonly PlanPace[] = ["gentle", "steady", "brisk"];
 
 /** Resting burn × this = the day's burn WITHOUT training (training is added from

@@ -20,7 +20,7 @@ import { bustEntitlements } from "../entitlements/service.js";
 // question a finish date depends on.
 import { dayInTz, safeTimeZone } from "../gamification/streak.js";
 import { planAnswersFor } from "../plan/answers.js";
-import { resolvePlan } from "../plan/maths.js";
+import { missingPlanInputs, resolvePlan } from "../plan/maths.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import {
@@ -41,6 +41,7 @@ import type {
   OnboardingAnswers,
   OnboardingResponse,
   PatchOnboardingRequest,
+  MissingPlanInput,
   PlanHealth,
   PutFitnessProfileRequest,
   PutHealthScreeningRequest,
@@ -117,6 +118,18 @@ export class UsersError extends Error {
     this.name = "UsersError";
     this.statusCode = statusCode;
     this.code = code;
+  }
+}
+
+/** Finishing onboarding while the plan still lacks an answer (RULINGS
+ *  2026-07-19: the questions come before the training side). Carries the list
+ *  so the screen can send the person to the question that is open. */
+export class OnboardingIncompleteError extends UsersError {
+  readonly missing: readonly MissingPlanInput[];
+  constructor(missing: readonly MissingPlanInput[]) {
+    super(409, "onboarding_incomplete", "Answer every question before you finish.");
+    this.name = "OnboardingIncompleteError";
+    this.missing = missing;
   }
 }
 
@@ -290,6 +303,14 @@ function resolveTimeZone(requested: string | null, stored: string | null): strin
   return safeTimeZone(requested ?? stored);
 }
 
+/** What the plan still needs, from the answers as saved. The health screening
+ *  is not read: an unanswered health screen is never missing (plan.ts), so it
+ *  cannot change this list. */
+function missingOnboardingAnswers(row: repo.OnboardingRow, requestedTimeZone: string | null): MissingPlanInput[] {
+  const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
+  return missingPlanInputs(planAnswersFor({ answers: toOnboardingAnswers(row), health: null, today }));
+}
+
 /** THE plan, from the stored answers. "Today" is the SERVER's clock read in the
  *  person's own time zone — a client sends where it is, never what day it is,
  *  so a finish date cannot be moved by a request body (ROADMAP 4a). */
@@ -327,7 +348,18 @@ export async function patchOnboarding(
   body: PatchOnboardingRequest,
   requestedTimeZone: string | null,
 ): Promise<OnboardingResponse> {
-  const row = await repo.patchOnboarding(deps.sql, userId, body);
+  // Finishing opens the training side, so it is refused while the plan still
+  // lacks an answer (RULINGS 2026-07-19). Checked on the answers AS SAVED,
+  // inside the save's own transaction: a body that brings the last answer and
+  // finishes is accepted, and a refused one writes nothing at all.
+  const verify =
+    body.onboardingCompleted === true
+      ? (saved: repo.OnboardingRow): void => {
+          const missing = missingOnboardingAnswers(saved, requestedTimeZone);
+          if (missing.length > 0) throw new OnboardingIncompleteError(missing);
+        }
+      : undefined;
+  const row = await repo.patchOnboarding(deps.sql, userId, body, verify);
   // No row = the user stopped being active mid-request (the write is
   // active-only), the same answer every other write on this surface gives.
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
