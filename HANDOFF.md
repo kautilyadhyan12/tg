@@ -17,7 +17,14 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   web 1937 (poseAssets.contract the known local red); web eslint 0 on touched files. Four hand mutations went red, restored.
 - Kd answered B, C, D (RULINGS 2026-09-10): gym card yes (4a-iv), medicine words yes (4b), "follow their advice" stays but
   the comparison with the app goes (new wording versions in 4b). Git's credential helper points at a missing
-  `D:\extracted\gh\bin\gh.exe`; pushes still land (checked with ls-remote). Open: Kd's click-through, then the review.
+  `D:\extracted\gh\bin\gh.exe`; pushes still land (checked with ls-remote). CI's first run failed on shared lint (an unused
+  `_name` in a test), fixed in 10d2da2; all five jobs green after.
+- Kd's click-through found "Lose weight" + 70 kg + target 83 accepted silently (the server flagged it, but only on screen 6).
+  Fixed (RULINGS 2026-09-11): the target wheel offers only the goal's side; a stored wrong-side target is named and
+  `screenAnswered('target')` is false until it moves. Web onboarding tests 69, eslint 0. He also asked whether age lowering
+  the number and the macro sizes are right: yes — Mifflin-St Jeor's −5 kcal a year; 1.6 g/kg protein, 25 % fat, carbs the
+  rest all sit inside the IOM acceptable ranges — answered in chat, no ruling. Many goals is 4a-iv, not this card.
+  Open: Kd re-checks the target screen, then the fresh-chat review.
 
 ## 2026-09-10 · Onboarding screens 1–7 (item 4a-ii), branch `onboarding-screens-1-7`
 
