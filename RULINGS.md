@@ -63,6 +63,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-09-07 · Disclaimer at sign-up (one explicit tap, stored with time, app version and wording), at the health step and on the plan screen: not medical advice; consult a professional; follow them over the app. The words "safe for you", "treats" and "cures" never appear.
 - 2026-09-07 · Food safety: every food carries allergen tags (milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soy, sesame); suggestions exclude the user's allergens and show "contains …" plus "check labels; we cannot see hidden ingredients"; photo scans say they estimate calories and cannot detect allergens; no diet claims for conditions. **SUPERSEDED 2026-09-09** (allergen tags and the allergen question): see the next line.
 - 2026-09-09 · No allergen tags on foods and no allergy question anywhere — *"it is not needed"*. Every food suggestion carries a caution line instead: the person must take care if they have any food allergy, and check labels. Photo scans still say they estimate calories and cannot detect allergens; still no diet claims for conditions. Stage 1 item 3c is struck.
+- 2026-09-10 · Onboarding screens 1–7 replace the old five-step form now (4a-ii), so its free-text conditions box leaves onboarding one card before 4b; the Settings copy stays until 4b switches it off. Finishing is refused while the plan still lacks an answer. *"go"*
 
 ## Goals and plans
 
@@ -158,7 +159,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-18 · An in-app consent screen for health data and the camera is needed before a US gym signs. Privacy-law scope beyond India (GDPR, CCPA, LGPD) is an OPEN question for Kd and a lawyer. [archive :592, :9944]
 - 2026-09-07 · Recorded consent at sign-up; see Onboarding for the health screening, Safe mode and disclaimers.
 - 2026-09-09 · The consent log outlives account deletion (proof of the tap; no name or health fact on the row) and is removed six years after the deletion date — the market's standard practice that fits US, EU, Indian and Canadian law. *"do the standard practise"*
-- 2026-09-09 · The old free-text "medical conditions" box on the fitness profile is switched off when the v2 health screen (4b) lands, and the stored text is wiped then. *"follow your recommendation"*
+- 2026-09-09 · The old free-text "medical conditions" box on the fitness profile is switched off when the v2 health screen (4b) lands, and the stored text is wiped then. *"follow your recommendation"* **AMENDED 2026-09-10**: the onboarding copy went with the old form at 4a-ii; the Settings copy stays until 4b.
 
 ## How work is done (the process Kd chose on 2026-09-07)
 
