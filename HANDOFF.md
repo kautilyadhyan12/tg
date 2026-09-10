@@ -14,8 +14,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: api tsc + eslint 0; shared tsc 0; web 34 (userApi, the new Settings form render test, measurements);
   local Postgres migrate.nutrition + db.migration + users.onboarding 62. The new import test failed first; Settings
   forced to send the weight, and the reader made to ignore a clear, each turned a new test red.
-- Open: the re-check of these fixes, then merge. Roadmap item 10 gains a defect: a workout's calories use the
-  weight on the day it syncs, not the day it was done. Next: 4a-ii, the seven screens.
+- Kd waived the re-check (no Critical/High); merged 2026-09-10 (PR #59, five CI jobs green, branch deleted). Item 10
+  gains a defect: workout calories use the weight on the day it syncs, not the day it was done. Next: 4a-ii.
 
 ## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
 
