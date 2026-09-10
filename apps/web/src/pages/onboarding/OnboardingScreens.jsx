@@ -4,6 +4,7 @@
 // number: the plan panel shows the server's.
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
+import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
 import {
   DAYS,
   EQUIPMENT,
@@ -18,7 +19,7 @@ import {
   toggleEquipment,
 } from './onboardingModel';
 
-function Choice({ selected, onSelect, emoji, label, desc }) {
+function Choice({ selected, onSelect, icon: Icon, label, desc }) {
   return (
     <button
       type="button"
@@ -27,7 +28,19 @@ function Choice({ selected, onSelect, emoji, label, desc }) {
       className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 text-left w-full
                  ${selected ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
     >
-      {emoji && <span className="text-2xl" aria-hidden="true">{emoji}</span>}
+      {Icon && (
+        <span
+          aria-hidden="true"
+          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+          style={
+            selected
+              ? { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 14px rgba(255,138,31,0.35)' }
+              : { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }
+          }
+        >
+          <Icon className="w-5 h-5" strokeWidth={1.75} style={{ color: selected ? '#FFFFFF' : '#FFB347' }} />
+        </span>
+      )}
       <span className="flex-1 min-w-0">
         <span className={`block font-medium text-sm ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
         {desc && <span className="block text-gray-500 text-xs mt-0.5">{desc}</span>}
@@ -56,23 +69,28 @@ const FieldError = ({ children }) =>
     </p>
   ) : null;
 
+/** Big and first on the screen (Kd, 2026-09-10): the switch decides what
+ *  every box below it means, so it must be seen before anything is typed. */
 function UnitSwitch({ units, onChange }) {
   const options = [
-    ['metric', 'kg · cm'],
-    ['imperial', 'lb · ft'],
+    ['metric', 'kg · cm', 'Kilograms and centimetres'],
+    ['imperial', 'lb · ft', 'Pounds, feet and inches'],
   ];
   return (
-    <div className="flex justify-end">
-      <div role="group" aria-label="Units" className="inline-flex rounded-xl border border-white/10 overflow-hidden text-xs">
-        {options.map(([value, label]) => (
+    <div>
+      <Question>Units</Question>
+      <div role="group" aria-label="Units" className="grid grid-cols-2 gap-3">
+        {options.map(([value, label, desc]) => (
           <button
             key={`units-${value}`}
             type="button"
             aria-pressed={units === value}
             onClick={() => onChange(value)}
-            className={`px-3 py-1.5 ${units === value ? 'bg-primary-500/20 text-white' : 'text-gray-400'}`}
+            className={`p-4 rounded-2xl border-2 text-left transition-all duration-200
+                       ${units === value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
           >
-            {label}
+            <span className={`block text-lg font-bold ${units === value ? 'text-white' : 'text-gray-300'}`}>{label}</span>
+            <span className="block text-gray-500 text-xs mt-0.5">{desc}</span>
           </button>
         ))}
       </div>
@@ -160,7 +178,7 @@ export function GoalScreen({ answers, save }) {
           key={`goal-${g.value}`}
           selected={answers.mainGoal === g.value}
           onSelect={() => answers.mainGoal !== g.value && save({ mainGoal: g.value })}
-          emoji={g.emoji}
+          icon={GOAL_ICONS[g.value]}
           label={g.label}
         />
       ))}
@@ -339,7 +357,7 @@ export function TrainingScreen({ answers, save }) {
             key={`level-${l.value}`}
             selected={answers.fitnessLevel === l.value}
             onSelect={() => answers.fitnessLevel !== l.value && save({ fitnessLevel: l.value })}
-            emoji={l.emoji}
+            icon={LEVEL_ICONS[l.value]}
             label={l.label}
             desc={l.desc}
           />
@@ -450,7 +468,7 @@ export function EquipmentScreen({ answers, save }) {
           key={`equipment-${e.value}`}
           selected={shown.includes(e.value)}
           onSelect={() => save({ availableEquipment: toggleEquipment(shown, e.value) })}
-          emoji={e.emoji}
+          icon={EQUIPMENT_ICONS[e.value]}
           label={e.label}
         />
       ))}

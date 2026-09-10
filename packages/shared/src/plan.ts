@@ -4,7 +4,7 @@
 // numbers or an honest list of what is still missing — never both, and never a
 // number built from a default (RULINGS 2026-07-15: unanswered is not "beginner").
 // So the number first exists once the eight core answers are in — after "your
-// week" (screen 6); screens 1–5 show what is still needed, in plain words. From
+// week" (screen 6); before that the screens show no number box (Kd, 2026-09-10). From
 // screen 6 on, every answer changes the number (RULINGS 2026-09-07).
 // The calculator itself lives in apps/api/src/modules/plan/maths.ts and is pure:
 // it reads no clock, so "today" is an input — the route (item 4a) derives it from

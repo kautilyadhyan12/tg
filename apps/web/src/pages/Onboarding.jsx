@@ -32,6 +32,7 @@ import {
   parseAge,
   parseHeight,
   parseWeight,
+  reachableScreens,
   sameValue,
   screenAnswered,
   visibleScreens,
@@ -160,6 +161,7 @@ export default function Onboarding() {
   const isLast = index === screens.length - 1;
   const direction = directionOf(effective.mainGoal);
   const answered = screenAnswered(screen.id, effective);
+  const reachable = reachableScreens(effective);
 
   const goTo = (id) => {
     setPicked(id);
@@ -178,6 +180,21 @@ export default function Onboarding() {
 
   const goBack = () => {
     if (index > 0) goTo(screens[index - 1].id);
+  };
+
+  /** The step bar (Kd, 2026-09-10): straight back to any screen, or forward to
+   *  one already reached. Going forward checks the boxes on the screen being
+   *  left and waits for its saves, exactly as Continue does. */
+  const jumpTo = async (id, target) => {
+    if (target > index) {
+      const ok = (TYPED_ON[screen.id] ?? []).map(commitTyped).every(Boolean);
+      if (!ok) return;
+      setBusy(true);
+      const saved = await ob.settled();
+      setBusy(false);
+      if (!saved) return;
+    }
+    goTo(id);
   };
 
   const finish = async () => {
@@ -255,25 +272,39 @@ export default function Onboarding() {
                     />
                   </div>
                 </div>
-                <div className="flex justify-between">
+                <nav aria-label="Steps" className="flex justify-between">
                   {screens.map((s, i) => {
                     const Icon = ICONS[s.id];
+                    const here = i === index;
+                    const done = !here && screenAnswered(s.id, effective);
+                    const open = reachable.has(s.id);
                     return (
-                      <div key={`step-${s.id}`} className="flex flex-col items-center gap-1">
-                        <div
+                      <button
+                        key={`step-${s.id}`}
+                        type="button"
+                        aria-label={s.title}
+                        title={s.title}
+                        aria-current={here ? 'step' : undefined}
+                        disabled={here || busy || !open}
+                        onClick={() => jumpTo(s.id, i)}
+                        className={`flex flex-col items-center gap-1 disabled:cursor-default enabled:hover:opacity-80 ${
+                          open || here ? '' : 'opacity-40'
+                        }`}
+                      >
+                        <span
                           className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                            i < index ? 'bg-green-500' : i === index ? 'bg-primary-600' : 'bg-dark-300'
+                            here ? 'bg-primary-600' : done ? 'bg-green-500' : 'bg-dark-300'
                           }`}
                         >
-                          {i < index ? <Check className="w-4 h-4 text-white" /> : <Icon className="w-4 h-4 text-white/60" />}
-                        </div>
-                        <span className={`text-xs hidden sm:block ${i === index ? 'text-primary-400' : 'text-gray-600'}`}>
+                          {done ? <Check className="w-4 h-4 text-white" /> : <Icon className="w-4 h-4 text-white/60" />}
+                        </span>
+                        <span className={`text-xs hidden sm:block ${here ? 'text-primary-400' : 'text-gray-600'}`}>
                           {s.title}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
-                </div>
+                </nav>
               </>
             )}
           </div>
@@ -305,7 +336,7 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                <PlanPanel plan={ob.plan} missing={ob.missing} direction={direction} units={units} />
+                <PlanPanel plan={ob.plan} direction={direction} units={units} />
 
                 <motion.div
                   key={`screen-${screen.id}`}

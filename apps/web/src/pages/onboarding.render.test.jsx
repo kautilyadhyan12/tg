@@ -111,7 +111,7 @@ const next = async (title) => {
 
 /** Screen 2 in kilograms and centimetres. */
 const aboutYou = async () => {
-  tap('kg · cm');
+  tap(/kg · cm/);
   type('Age', '30');
   tap(/^Female$/);
   type('Height in centimetres', '165');
@@ -126,12 +126,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('onboarding screens 1–7', () => {
-  it('starts a new person on the goal screen, with no number and a list of what it needs', async () => {
+  it('starts a new person on the goal screen, with no number box until there is a number', async () => {
     serve();
     draw();
     await heading('Your goal');
-    expect(panel().textContent).toContain('It appears once you have answered your goal, your age');
-    expect(panel().textContent).not.toMatch(/kcal/);
+    expect(screen.queryByRole('region', { name: 'Your plan' })).toBeNull();
     expect(button(/continue/i).disabled).toBe(true);
   });
 
@@ -153,8 +152,7 @@ describe('onboarding screens 1–7', () => {
     await next('Your training');
     tap(/^Beginner/);
     await next('Your week');
-    await waitFor(() => expect(panel().textContent).toContain('training days a week and session length'));
-    expect(panel().textContent).not.toMatch(/kcal/);
+    expect(screen.queryByRole('region', { name: 'Your plan' })).toBeNull();
 
     tap('3 days a week');
     tap('45 min');
@@ -162,6 +160,26 @@ describe('onboarding screens 1–7', () => {
     expect(panel().textContent).toContain('550 less than the 1,817 you burn a day.');
     expect(panel().textContent).toContain('Reach 65 kg around Nov 19, 2026.');
     expect(panel().textContent).toContain('not medical advice');
+    expect(panel().textContent).not.toContain('follow their advice');
+  });
+
+  it('jumps straight to any screen already reached from the step bar', async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    tap('Your goal');
+    await heading('Your goal');
+    tap('Your week'); // forward, to a screen already reached
+    await heading('Your week');
+  });
+
+  it('never lets the step bar skip a question', async () => {
+    serve({ mainGoal: 'weight_loss' });
+    draw();
+    await heading('About you');
+    expect(button('Your goal').disabled).toBe(false);
+    expect(button('Your target').disabled).toBe(true);
+    expect(button('Equipment').disabled).toBe(true);
   });
 
   it('does not ask for a target when the goal keeps the weight', async () => {
@@ -195,7 +213,7 @@ describe('onboarding screens 1–7', () => {
     serve({ mainGoal: 'posture' });
     draw();
     await heading('About you');
-    expect(pressed('lb · ft')).toBe('true'); // the test browser is en-US
+    expect(pressed(/lb · ft/)).toBe('true'); // the test browser is en-US
     type('Weight', '154');
     await stored({ weightKg: 69.85 });
 

@@ -1,15 +1,20 @@
 // The live plan number, on every screen from the moment the server has one
-// (RULINGS 2026-09-07: every answer changes the number on screen). Before
-// that, the panel says which answers it is still waiting for — never a number
-// built from a default (RULINGS 2026-07-15).
+// (RULINGS 2026-09-07: every answer changes the number on screen). Until then
+// the box is not drawn at all (Kd, 2026-09-10): the screens themselves ask the
+// questions, and no number is ever built from a default (RULINGS 2026-07-15).
 import { Flame } from 'lucide-react';
-import { PLAN_DISCLAIMER, changeLine, flagLines, kcalText, missingText, targetLine } from './onboardingModel';
+import { PLAN_NOTE, changeLine, flagLines, kcalText, targetLine } from './onboardingModel';
 
-function PlanNumbers({ plan, direction, units }) {
+export default function PlanPanel({ plan, direction, units }) {
+  if (plan === null) return null;
   const target = targetLine(plan, units);
   const flags = flagLines(plan, direction, units);
   return (
-    <>
+    <section aria-label="Your plan" className="card-glass mb-6">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
+        <Flame className="w-3.5 h-3.5" />
+        Your daily number
+      </p>
       <p className="mt-1">
         <span className="text-3xl font-bold tabular-nums text-white">{kcalText(plan.targetKcal)}</span>
         <span className="text-sm ml-1.5">kcal a day</span>
@@ -29,24 +34,8 @@ function PlanNumbers({ plan, direction, units }) {
         </ul>
       )}
       <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        {PLAN_DISCLAIMER}
+        {PLAN_NOTE}
       </p>
-    </>
-  );
-}
-
-export default function PlanPanel({ plan, missing, direction, units }) {
-  return (
-    <section aria-label="Your plan" className="card-glass mb-6">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
-        <Flame className="w-3.5 h-3.5" />
-        Your daily number
-      </p>
-      {plan === null ? (
-        <p className="text-sm mt-2">It appears once you have answered {missingText(missing)}.</p>
-      ) : (
-        <PlanNumbers plan={plan} direction={direction} units={units} />
-      )}
     </section>
   );
 }

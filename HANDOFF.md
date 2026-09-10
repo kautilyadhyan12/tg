@@ -17,7 +17,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   date formatter without UTC (Los Angeles showed Nov 18), and the wizard's sign-out mutants D16/D17 by hand.
 - Found: `mutate-login-door.mjs` aborts at D9 (anchor is the "I run a gym" label renamed 2026-09-07); not re-anchored.
   CI's first run failed `xpDisplay` "non-array recommendations" (reads the message without waiting; 3/3 locally): item 10.
-- Open: Kd's click-through, then the fresh-chat review. Until 4a-iii the Nutrition rings can show a different daily number.
+- Kd clicked through: passed. His look changes, built the same day (RULINGS 2026-09-10): line icons for emoji, a big units
+  switch first, a clickable step bar, no number box before the number, the disclaimer's first sentence only under it.
+- Open: Kd's answer on the full disclaimer elsewhere, then the fresh-chat review. Until 4a-iii the rings can differ.
 
 ## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
 

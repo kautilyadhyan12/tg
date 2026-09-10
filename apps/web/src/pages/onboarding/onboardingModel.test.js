@@ -4,6 +4,8 @@
 import process from 'node:process';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
+  CURRENT_DISCLAIMER_VERSION,
+  DISCLAIMER_WORDINGS,
   dayActivitySchema,
   equipmentSchema,
   fitnessGoalSchema,
@@ -15,6 +17,7 @@ import {
   planPaceSchema,
 } from '@app/shared';
 import * as m from './onboardingModel';
+import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
 
 const accepts = (body) => patchOnboardingRequestSchema.safeParse(body).success;
 const values = (table) => table.map((row) => row.value).sort();
@@ -38,6 +41,16 @@ describe('what the screens offer is exactly what the server accepts', () => {
     expect(values(m.DAYS)).toEqual([...dayActivitySchema.options].sort());
     expect(values(m.LEVELS)).toEqual([...fitnessLevelSchema.options].sort());
     expect(values(m.EQUIPMENT)).toEqual([...equipmentSchema.options].sort());
+  });
+
+  it('every goal, level and kind of equipment has a line icon, and nothing else does', () => {
+    const covered = (icons, options) => {
+      expect(Object.keys(icons).sort()).toEqual([...options].sort());
+      for (const icon of Object.values(icons)) expect(icon).toBeTruthy();
+    };
+    covered(GOAL_ICONS, fitnessGoalSchema.options);
+    covered(LEVEL_ICONS, fitnessLevelSchema.options);
+    covered(EQUIPMENT_ICONS, equipmentSchema.options);
   });
 
   it('every day count and session length on screen 6 is one the server takes', () => {
@@ -72,6 +85,16 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.firstOpenScreen({ ...EMPTY, mainGoal: 'posture', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
     expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('equipment');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] })).toBe('equipment');
+  });
+
+  it('lets the step bar reach every screen up to the first unanswered one, and none past it', () => {
+    expect([...m.reachableScreens(EMPTY)]).toEqual(['goal']);
+    expect([...m.reachableScreens({ ...EMPTY, mainGoal: 'posture' })]).toEqual(['goal', 'about']);
+    expect([...m.reachableScreens(ALL)]).toEqual(m.visibleScreens(ALL).map((s) => s.id));
+    const gap = m.reachableScreens({ ...ALL, dayActivity: null });
+    expect(gap.has('day')).toBe(true);
+    expect(gap.has('training')).toBe(false);
+    expect(gap.has('equipment')).toBe(false);
   });
 
   it('counts screen 5 answered on the self-rating alone: the two checks may be skipped', () => {
@@ -233,8 +256,10 @@ describe('the plan panel says what the server said', () => {
     expect(m.paceText('brisk', 'imperial')).toBe('about 1.7 lb a week');
   });
 
-  it('shows the plan screen disclaimer word for word', () => {
-    expect(m.PLAN_DISCLAIMER).toMatch(/^These numbers are general guidance, not medical advice\./);
+  it('notes under the number the opening sentence of the plan-screen disclaimer, word for word', () => {
+    const full = DISCLAIMER_WORDINGS.plan_screen[CURRENT_DISCLAIMER_VERSION.plan_screen];
+    expect(full.startsWith(m.PLAN_NOTE)).toBe(true);
+    expect(m.PLAN_NOTE).toBe('These numbers are general guidance, not medical advice.');
   });
 });
 

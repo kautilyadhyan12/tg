@@ -2,20 +2,20 @@
 // half. What each screen asks, when a screen counts as answered, the words the
 // plan panel uses, units, and the save queue. Every NUMBER on screen is the
 // server's (GET/PATCH /v1/users/me/onboarding); nothing here computes a plan.
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, PACE_KG_PER_WEEK, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
+import { PACE_KG_PER_WEEK, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
 //    by the test so a value added on the server cannot go missing here) ──────
 
 export const GOALS = [
-  { value: 'weight_loss',     label: 'Lose weight',           emoji: '🔥' },
-  { value: 'muscle_gain',     label: 'Build muscle',          emoji: '💪' },
-  { value: 'general_fitness', label: 'Get fitter',            emoji: '⚡' },
-  { value: 'flexibility',     label: 'Flexibility',           emoji: '🧘' },
-  { value: 'endurance',       label: 'Endurance and running', emoji: '🏃' },
-  { value: 'posture',         label: 'Posture',               emoji: '🎯' },
-  { value: 'stress_relief',   label: 'Stress relief',         emoji: '😌' },
+  { value: 'weight_loss',     label: 'Lose weight' },
+  { value: 'muscle_gain',     label: 'Build muscle' },
+  { value: 'general_fitness', label: 'Get fitter' },
+  { value: 'flexibility',     label: 'Flexibility' },
+  { value: 'endurance',       label: 'Endurance and running' },
+  { value: 'posture',         label: 'Posture' },
+  { value: 'stress_relief',   label: 'Stress relief' },
 ];
 
 export const GENDERS = [
@@ -39,20 +39,20 @@ export const DAYS = [
 ];
 
 export const LEVELS = [
-  { value: 'beginner',     label: 'Beginner',     desc: 'New to exercise, or back after a long break', emoji: '🌱' },
-  { value: 'intermediate', label: 'Intermediate', desc: 'I train regularly and know most moves',       emoji: '⚡' },
-  { value: 'advanced',     label: 'Advanced',     desc: 'I train hard and want a push',               emoji: '🔥' },
+  { value: 'beginner',     label: 'Beginner',     desc: 'New to exercise, or back after a long break' },
+  { value: 'intermediate', label: 'Intermediate', desc: 'I train regularly and know most moves' },
+  { value: 'advanced',     label: 'Advanced',     desc: 'I train hard and want a push' },
 ];
 
 export const TRAINING_DAYS = [1, 2, 3, 4, 5, 6, 7];
 export const SESSION_MINUTES = [15, 20, 30, 45, 60, 90];
 
 export const EQUIPMENT = [
-  { value: 'none',             label: 'No equipment',     emoji: '🏠' },
-  { value: 'dumbbells',        label: 'Dumbbells',        emoji: '🏋️' },
-  { value: 'resistance_bands', label: 'Resistance bands', emoji: '🎽' },
-  { value: 'kettlebells',      label: 'Kettlebells',      emoji: '⚫' },
-  { value: 'pull_up_bar',      label: 'Pull-up bar',      emoji: '🔩' },
+  { value: 'none',             label: 'No equipment' },
+  { value: 'dumbbells',        label: 'Dumbbells' },
+  { value: 'resistance_bands', label: 'Resistance bands' },
+  { value: 'kettlebells',      label: 'Kettlebells' },
+  { value: 'pull_up_bar',      label: 'Pull-up bar' },
 ];
 
 // ── The screens, and which of them a person still has to answer ─────────────
@@ -103,6 +103,14 @@ export function screenAnswered(id, a) {
 export function firstOpenScreen(answers) {
   const screens = visibleScreens(answers);
   return (screens.find((s) => !screenAnswered(s.id, answers)) ?? screens[screens.length - 1]).id;
+}
+
+/** Where the step bar may jump: every screen up to the first one still
+ *  unanswered. A screen past that would skip a question. */
+export function reachableScreens(answers) {
+  const screens = visibleScreens(answers);
+  const open = screens.findIndex((s) => !screenAnswered(s.id, answers));
+  return new Set(screens.slice(0, open === -1 ? screens.length : open + 1).map((s) => s.id));
 }
 
 /** The screen that asks each answer the plan can be missing. */
@@ -328,8 +336,11 @@ export function flagLines(plan, direction, units) {
   return lines.filter((line) => line !== null);
 }
 
-/** The plan screen's disclaimer, word for word — never a shorter paraphrase. */
-export const PLAN_DISCLAIMER = DISCLAIMER_WORDINGS.plan_screen[CURRENT_DISCLAIMER_VERSION.plan_screen];
+/** The note under the live number: the opening sentence of the plan screen's
+ *  disclaimer, word for word (the test pins it to the shared wording). The
+ *  whole disclaimer, and the tap that records it, belong to the plan screen
+ *  itself (screen 12). */
+export const PLAN_NOTE = 'These numbers are general guidance, not medical advice.';
 
 // ── Saving as you go ────────────────────────────────────────────────────────
 
