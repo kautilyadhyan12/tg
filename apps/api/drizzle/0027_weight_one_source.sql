@@ -1,13 +1,11 @@
--- BODY WEIGHT HAS ONE SOURCE, AND NO COPY (RULINGS 2026-09-10; the redesign
--- Kd asked for on 2026-09-10 after item 4a-i's review). Forward-only.
+-- BODY WEIGHT HAS ONE SOURCE, AND NO COPY (RULINGS 2026-09-10). Forward-only.
 --
 -- WHY. `0026` made the weigh-in history the source of body weight and kept
 -- `users.weight_kg` as a cache of its newest weight-bearing row. A cache is a
 -- second copy of one fact, and every write to the history had to remember to
--- recompute it: six review rounds each found one path that forgot, or one
--- check added to cover for the last. This migration removes the copy. From
--- here the number every screen shows is read from the history each time
--- (nutrition/repo.ts currentWeightKg), so there is nothing to keep in step.
+-- recompute it. This migration removes the copy. From here the number every
+-- screen shows is read from the history each time (nutrition/repo.ts
+-- currentWeightKg), so there is nothing to keep in step.
 --
 -- Hand-written, for the recorded reason `0016`-`0026` were: `drizzle/meta/`
 -- stops at `0012_snapshot.json`. Its journal entry is part of this commit.

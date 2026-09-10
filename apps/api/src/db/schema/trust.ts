@@ -92,5 +92,8 @@ export const bodyMeasurements = pgTable(
     legacyMongoId: text("legacy_mongo_id").unique(),
     createdAt: createdAt(),
   },
-  (t) => [index("body_measurements_user_measured_idx").on(t.userId, t.measuredAt.desc())],
+  (t) => [
+    index("body_measurements_user_measured_idx").on(t.userId, t.measuredAt.desc()),
+    check("body_measurements_source_check", sql`${t.source} IN ('manual','self_reported')`),
+  ],
 );

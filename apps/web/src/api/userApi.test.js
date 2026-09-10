@@ -84,7 +84,7 @@ describe('userService repoint (Card 6)', () => {
       preferredWorkoutTime: 'evening',
       medicalConditions: 'none',      // trimmed
     });
-    // weight is NEVER in the fitness-profile body (users.weight_kg owns it).
+    // weight is NEVER in the fitness-profile body (the weigh-in history owns it).
     expect('weightKg' in out).toBe(false);
     expect('weight' in out).toBe(false);
     // no onboardingCompleted here — the caller adds it (kept out of the mapper
@@ -187,7 +187,7 @@ describe('userService repoint (Card 6)', () => {
     });
   });
 
-  // ── The profile form sends only what changed (the 4a-i review's H1) ─────────
+  // ── The profile form sends only what changed ────────────────────────────────
   describe('profilePatchFor', () => {
     const profile = { displayName: 'Kd', weightKg: 90 };
 

@@ -984,11 +984,10 @@ d("onboarding v2 routes (real Postgres)", () => {
   });
 
   it("the profile form echoing a weigh-in's number leaves no phantom typed entry, so deleting the weigh-in undoes it", { timeout: 60_000 }, async () => {
-    // The review's H1, end to end. The web's profile form loads the current
-    // weight into its box and sends it with every save, even a name change.
-    // Before the redesign the server recorded that echo as "typed by me": an
-    // entry the person never typed, which outranked the weigh-in it copied,
-    // so deleting the weigh-in as a mistake kept the mistake on screen.
+    // A profile form that loads the current weight into its box may send it
+    // back with any save, even a name change. That echo is not a typed entry:
+    // recorded as "typed by me" it would outrank the weigh-in it copied, and
+    // deleting that weigh-in as a mistake would keep the mistake on screen.
     const { cookies } = await makeUser("ob-measure-echo@example.com");
     await completeSeven(cookies); // types 70
     const mistake = await measureOk(cookies, { measuredAt: await afterTyped(cookies, 1), weightKg: 90 });
@@ -1084,8 +1083,7 @@ d("onboarding v2 routes (real Postgres)", () => {
    *  row lock itself lives in the row's header, not in pg_locks — but every
    *  INSERT, UPDATE or DELETE first takes a table-level lock on the relation,
    *  and that one is listed. A writer that has not yet touched the history
-   *  holds nothing on it. (Proved with a mutant that ran the edit's UPDATE
-   *  before taking the users row: this went from 0 to 1.) */
+   *  holds nothing on it. */
   const historyLocksHeldBy = async (pids: number[]): Promise<number> => {
     const [row] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM pg_locks

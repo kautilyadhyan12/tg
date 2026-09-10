@@ -3,7 +3,7 @@
 // wrote onboarding to the legacy backend-ml PATCH /users/onboarding endpoint;
 // that storage now lives on user_fitness_profiles (onboarding-storage, PR #30):
 //   PUT   /v1/users/me/fitness-profile   full-document replace (idempotent)
-//   PATCH /v1/users/me                   weight (users.weight_kg, Part 4 §3.1)
+//   PATCH /v1/users/me                   weight (saved as a weigh-in, Part 4 §0)
 //   GET   /v1/users/me                   carries onboardingCompleted (the gate)
 // Shapes are @app/shared users.ts (putFitnessProfileRequestSchema,
 // updateProfileRequestSchema, userProfileSchema).
@@ -53,7 +53,7 @@ export function convertWeight(value, toUnit) {
  *  (putFitnessProfileRequestSchema). Renames sessionDuration→sessionDurationMin,
  *  converts height/target-weight units to metric + 2dp, and maps a blank
  *  medical note to null ("" is not "no conditions stated"). Weight is NOT here —
- *  it lives on users.weight_kg via PATCH /v1/users/me. `onboardingCompleted` is
+ *  it is a weigh-in, saved via PATCH /v1/users/me. `onboardingCompleted` is
  *  added by the caller (kept out so a future Settings edit can reuse this mapper
  *  without flipping the gate). Pure + unit-tested. */
 export function toFitnessProfilePayload(formData) {

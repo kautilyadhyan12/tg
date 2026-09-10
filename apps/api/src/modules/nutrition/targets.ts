@@ -7,8 +7,8 @@
 //
 // DELIBERATELY NOT PORTED:
 //  · the lbs→kg (:115-118) and ft→cm (:120-123) branches — legacy Mongo stored
-//    {value, unit} documents; the new API is metric-only (users.weight_kg,
-//    user_fitness_profiles.height_cm), so there is no unit to inspect.
+//    {value, unit} documents; the new API is metric-only (body_measurements
+//    .weight_kg, user_fitness_profiles.height_cm), so there is no unit to inspect.
 //  · the weight 70 / height 170 / age 25 / gender "male" defaults (:103-106)
 //    and the `using_defaults` output flag (:178). A fabricated target renders
 //    identically to a real one, which is the exact class of default the Card-7

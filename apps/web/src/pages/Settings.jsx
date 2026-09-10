@@ -494,8 +494,8 @@ function AccountTab({ profile, onSaved }) {
     try {
       // Card 7 (Kd ruled WIPE): PUT {} is the full-clear — it wipes every
       // fitness-profile field AND sets onboarding_completed → false
-      // (DECISIONS 2026-07-15). Weight (users.weight_kg) is a separate column
-      // used elsewhere and is intentionally NOT cleared here.
+      // (DECISIONS 2026-07-15). Weight (the weigh-in history) is kept
+      // separately and is intentionally NOT cleared here.
       await userService.putFitnessProfile({});
       // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).
       // Without this refresh, opening the Fitness tab and saving would merge

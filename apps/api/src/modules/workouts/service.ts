@@ -58,7 +58,7 @@ export async function handleWorkoutSync(
   const ctx = await getUserSyncContext(sql, userId);
 
   // 2B §2.2: kcal computed server-side at sync, MET per exercise from the
-  // catalog, weight from users (70 kg fallback). WHICH formula runs is the
+  // catalog, the person's current weight (70 kg fallback). WHICH formula runs is the
   // PAYLOAD's shape, not the deploy date: `restSeconds` present = a client
   // that understands the v2 three-tier accounting (Kd, 2026-08-07); absent =
   // a payload queued before the card, priced by v1 byte-for-byte and stamped

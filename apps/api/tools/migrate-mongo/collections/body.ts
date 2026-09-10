@@ -100,22 +100,25 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
  *  held a weight with no measurement behind it and no date. It becomes a
  *  `self_reported` row ONLY for a person none of whose imported measurements
  *  carries a weight: the history wins wherever it says anything, because an
- *  undated profile number must never outrank a dated weigh-in (an earlier
- *  version let it, whenever the two numbers differed). Runs AFTER the body
- *  stage's inserts, so "nothing carries a weight" is judged on the imported
- *  history. Idempotent: the second run finds the typed row and inserts nothing. */
+ *  undated profile number must never outrank a dated weigh-in. Runs AFTER the
+ *  body stage's inserts, so "nothing carries a weight" is judged on the
+ *  imported history. A person the users stage could not insert (a duplicate
+ *  email, logged there) is skipped here too, so the run goes on to the next
+ *  stages. Idempotent: the second run finds the typed row and inserts nothing. */
 export async function recordLegacyProfileWeight(sql: Sql, userId: string, weightKg: number | null): Promise<number> {
   if (weightKg === null) return 0;
   const res = await sql`
     INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
-    SELECT ${userId}, now(), ${weightKg}, '{}'::jsonb, 'self_reported'
-    WHERE NOT EXISTS (
-      SELECT 1 FROM body_measurements
-      WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported'))`;
+    SELECT u.id, now(), ${weightKg}, '{}'::jsonb, 'self_reported'
+    FROM users u
+    WHERE u.id = ${userId}
+      AND NOT EXISTS (
+        SELECT 1 FROM body_measurements
+        WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported'))`;
   return res.count;
 }
 
-/** The body stage's last step, for every user the users stage imported: the
+/** The body stage's last step, for every user the users stage read: the
  *  legacy profile weight of each (null for most) through the rule above.
  *  Returns how many typed rows were written. */
 export async function recordLegacyProfileWeights(

@@ -59,7 +59,7 @@ something about weight — a weigh-in carrying one, or a `self_reported` row
 (a weight typed on a form; with no weight, a deliberate clear). Every reader
 computes it from the history (`nutrition/repo.ts currentWeightKg`); the
 column was a cache of that row for one release and was dropped by migration
-`0027` after six review rounds each found a writer that forgot to refresh it.
+`0027`, so no second copy can go stale.
 `source` is a status column: `CHECK (source IN ('manual','self_reported'))`.
 
 ## 1. Conventions (every table obeys these; deviations are called out
@@ -492,14 +492,16 @@ find), kept; org-invisible by §2.4 boundary
  measured_at timestamptz NOT NULL, weight_kg numeric(5,2),
  metrics jsonb NOT NULL DEFAULT '{}',           -- waist_cm etc. —
 display-only, never computed upon except weight
- source text NOT NULL DEFAULT 'manual',
+ source text NOT NULL DEFAULT 'manual'
+   CHECK (source IN ('manual','self_reported')),  -- §0 amendment 5
  legacy_mongo_id text UNIQUE
 );
 CREATE INDEX ON body_measurements (user_id, measured_at DESC);
 ```
-Calorie computation uses the person's current weight — the newest
-weight-bearing row, §0 amendment 5 — else 70 (2B §2.1) — resolved at sync,
-stamped into `workouts.kcal_*`, never recomputed silently (P3 doctrine).
+Calorie computation uses the newest weight-bearing row (§0 amendment 5)
+≤ workout time, else the person's current weight, else 70 (2B §2.1) —
+resolved at sync, stamped into `workouts.kcal_*`, never recomputed silently
+(P3 doctrine).
 
 ### 3.7 Coach (Chroma → pgvector, v1 §6.1)
 

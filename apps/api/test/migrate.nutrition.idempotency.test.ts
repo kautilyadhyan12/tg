@@ -146,6 +146,16 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     expect(await currentWeightKg(sql, none.id)).toBeNull();
   }, 60_000);
 
+  // A user the users stage could not insert (a duplicate email, which run.ts
+  // logs and survives) still has a legacy weight in the map. Their weight is
+  // skipped with them, and the run goes on to the stages after this one.
+  it("a profile weight for someone the users stage did not import is skipped, not a crash", async () => {
+    const neverImported = uuidv5("p27d-user-never-imported-0001");
+    expect(await recordLegacyProfileWeights(sql, new Map([[neverImported, 77]]))).toBe(0);
+    const [n] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM body_measurements WHERE user_id = ${neverImported}`;
+    expect(n?.n).toBe(0);
+  }, 60_000);
+
   it("meal recompute (onMealLogged) awards first_meal exactly once (GAP-E)", async () => {
     await onMealLogged({ sql }, userId, null);
     await onMealLogged({ sql }, userId, null); // second run must not double-award

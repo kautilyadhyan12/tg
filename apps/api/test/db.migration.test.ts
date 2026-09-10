@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
+import { currentWeightKg } from "../src/modules/nutrition/repo.js";
 import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, fitnessGoalSchema, orgTypeSchema } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -879,15 +880,12 @@ d("0001_init on a real database", () => {
           expect(await ageOf(adult), `pass ${String(pass)}`).toBe(16);
         }
 
-        // What the rows are FOR: once the column is gone, the live rule computes
-        // the same number it held, so nothing vanishes — including for the
-        // soft-deleted person once restoreUser brings them back.
-        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"], [goneEmptied, null]] as const) {
-          const [rule] = await tx<{ weight_kg: string | null }[]>`
-            SELECT weight_kg FROM body_measurements
-            WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
-            ORDER BY measured_at DESC, id DESC LIMIT 1`;
-          expect(rule?.weight_kg ?? null).toBe(expected);
+        // What the rows are FOR: once the column is gone, the live reader
+        // every screen calls returns the number the column held, so nothing
+        // vanishes — including for the soft-deleted person once restoreUser
+        // brings them back.
+        for (const [userId, expected] of [[noRow, 80], [differs, 80], [emptied, null], [agrees, 82], [gone, 80], [goneEmptied, null]] as const) {
+          expect(await currentWeightKg(tx, userId), userId).toBe(expected);
         }
         throw new Error("ROLLBACK-0027-BACKFILL-FIXTURE");
       })

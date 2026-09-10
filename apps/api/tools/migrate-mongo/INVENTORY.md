@@ -39,7 +39,7 @@ lastRunDate, completed_challenges, createdAt, updatedAt, __v`.
 | `email` | `users.email` (citext) | MAP |
 | `password` | `users.password_hash` + `hash_algo='bcrypt'` | MAP (bcrypt preserved) |
 | `fullName` | `users.display_name` (NOT NULL) | XFORM (fallback = email local-part if empty) |
-| `weight {value,unit}` | `users.weight_kg` | XFORM lbs→kg (`normalize_weight_kg`) |
+| `weight {value,unit}` | one `self_reported` `body_measurements` row (§6) | XFORM lbs→kg (`normalize_weight_kg`) |
 | `lastLogin` | `users.last_active_at` | MAP |
 | `streak`,`lastWorkoutDate`,`badges`,`xp`,`level`,`running_*`,`completed_challenges` | `streaks` / `user_achievements` | **RECOMPUTE** from migrated history (§7:882-884) — NOT trusted from Mongo |
 | `age,gender,height,fitnessLevel,fitnessGoals,exerciseFrequency,availableEquipment,sessionDuration,preferredWorkoutTime,medicalConditions,onboardingCompleted,targetWeight,profilePicture` | *(no columns)* | **DROP** (no target; the queued onboarding-storage gap) |

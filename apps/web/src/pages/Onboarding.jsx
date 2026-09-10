@@ -267,7 +267,7 @@ export default function Onboarding() {
     setLoading(true);
     try {
       // Card 6: onboarding now writes to the new /v1 API (was backend-ml).
-      // Weight lives on users.weight_kg (Part 4 §3.1), the rest on
+      // Weight lives in the weigh-in history (Part 4 §0), the rest on
       // user_fitness_profiles. Save weight FIRST so onboarding is only marked
       // complete once it is stored — a failed profile PUT then leaves the gate
       // closed and the user retries (both writes are idempotent: same body

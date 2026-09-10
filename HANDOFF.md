@@ -4,27 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`
+## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
 
-- Why: the post-merge review of 4a-i found one High (the web profile form echoes the loaded weight on
-  every save; the server recorded the echo as "typed by me", which outranked the weigh-in it copied, so
-  deleting a mistaken weigh-in kept its number) plus thirteen Lows, most of them layers added over six
-  review rounds to keep `users.weight_kg` in step with the history. Kd ruled: redesign (RULINGS 2026-09-10).
-- Built: migration `0027` re-runs 0026's backfill, DROPS `users.weight_kg`, adds the `source` CHECK and
-  clears ages under 16; `nutrition/repo.ts currentWeightKg` is the one reader (profile, onboarding answers,
-  sync context, so rings and workout calories); `recordTypedWeight` writes nothing when the history already
-  shows the number; refreshWeight, bearsWeight and the lock-order essays are gone; the three history writes
-  throw `AccountNotActiveError` → one 401 from the service; `onboardingQuerySchema` moved to `@app/shared`;
-  the Mongo import writes the legacy profile weight as a typed row only when no imported measurement carries
-  one; the web form sends only what changed (`profilePatchFor`, unit-tested).
-- Verified: api tsc + eslint 0; shared tsc + eslint 0, 81 tests; web 1882 (the pre-existing
-  `poseAssets.contract` encoding failure only); local Postgres: users.onboarding 33 · nutrition.routes 30 ·
-  users.routes 8 · db.migration/migrate.nutrition/privacy.purge/privacy.export/users.fitness/workouts.sync/
-  users.health 120 in one run. Two mutants: the echo rule removed → 3 tests red; the edit taking its history
-  row before the users row → the lock-order test red (its first version passed that mutant: pg_locks does not
-  list row locks; it asserts the table-level lock now).
-- Not changed: `Onboarding.jsx` (old form) still sends the weight on finish; the server's echo rule covers it.
-  The spec's Part 4 carries amendment 5. Next: 4a-ii, the seven screens.
+- Built (Kd's redesign, RULINGS 2026-09-10): `0027` re-runs 0026's backfill, drops `users.weight_kg`, adds the
+  `source` CHECK, clears ages under 16; every screen reads the newest weigh-in (`currentWeightKg`); re-sending the
+  weight already showing writes nothing; the web profile form sends only what changed (the old onboarding form does not).
+- Also fixed: the Mongo import skips the profile weight of a person it could not import (it stopped the run);
+  the spec's workout-calorie rule keeps "≤ workout time"; stale "weight is on the user row" comments corrected.
+- Verified: api tsc + eslint 0; shared tsc 0; web 34 (userApi, the new Settings form render test, measurements);
+  local Postgres migrate.nutrition + db.migration + users.onboarding 62. The new import test failed first; Settings
+  forced to send the weight, and the reader made to ignore a clear, each turned a new test red.
+- Open: the re-check of these fixes, then merge. Roadmap item 10 gains a defect: a workout's calories use the
+  weight on the day it syncs, not the day it was done. Next: 4a-ii, the seven screens.
 
 ## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
 

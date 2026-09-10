@@ -123,7 +123,7 @@ export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
   // Same ≤24h-future bound as takenAt (T3 P2.6a: a measurement dated 2099
-  // would pin users.weight_kg as the "latest" forever).
+  // would stay the person's weight, as the newest weigh-in, forever).
   measuredAt: z
     .string()
     .datetime()
