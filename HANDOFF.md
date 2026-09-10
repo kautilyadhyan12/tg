@@ -15,7 +15,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified after the last review round (no Critical/High left): api tsc + eslint 0; shared tsc + eslint
   0, 81 tests; local Postgres users.onboarding 34, nutrition.routes 30, db.migration 23, migrate.nutrition
   4, users.routes 8; web 2; a fresh database takes all 26 migrations; six deliberate breaks each failed a test.
-- Open: CI, merge, then 4a-ii (the seven screens; the `fitness_goals` mirror ends there). No click-through.
+- Kd waived the re-check of the last fixes (no Critical/High). Merged 2026-09-10 (PR #58, all five CI
+  jobs green, branch deleted). Next: 4a-ii, the seven screens (the `fitness_goals` mirror ends there).
 
 ## 2026-09-09 · Item 3c struck (allergen tags); next is 4a
 
