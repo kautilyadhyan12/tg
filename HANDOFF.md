@@ -4,6 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · Kd's second look at screens 1–7 (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
+
+- Built the five fixes (RULINGS 2026-09-10, second look), commit 0c67859: flick wheels with − and + for age, height, weight
+  and target (`NumberWheel.jsx`; "Not set" until touched; a scroll the person did not make saves nothing); "What should we
+  call you?" opens About you and saves `displayName` through the onboarding PATCH; screen 5 is two plain questions with
+  "Not sure", no timer; "How is this worked out?" prints `plan.workings`, which the shared contract refuses unless its sums
+  match the plan; Flexibility and Pull-up bar drawn with `createLucideIcon` (rendered with headless Edge and looked at first).
+- Maths: the daily burn is now the sum of the whole-kcal steps it prints (±1 kcal against 3a; plan.unit's golden 2254 → 2255);
+  the finish date counts whole hundredths of a kilo — 64.01 → 63.01 kg at 275 a day said 29 days, not 28 (test red first).
+- Verified: api tsc + eslint 0; shared tsc 0, 83 tests; plan.unit 52; CI-shaped api 305; local Postgres onboarding routes 34;
+  web 1937 (poseAssets.contract the known local red); web eslint 0 on touched files. Four hand mutations went red, restored.
+- Kd answered B, C, D (RULINGS 2026-09-10): gym card yes (4a-iv), medicine words yes (4b), "follow their advice" stays but
+  the comparison with the app goes (new wording versions in 4b). Git's credential helper points at a missing
+  `D:\extracted\gh\bin\gh.exe`; pushes still land (checked with ls-remote). Open: Kd's click-through, then the review.
+
 ## 2026-09-10 · Onboarding screens 1–7 (item 4a-ii), branch `onboarding-screens-1-7`
 
 - Built: seven screens replace the old five-step form (`pages/Onboarding.jsx` + `pages/onboarding/`): one goal · about you
