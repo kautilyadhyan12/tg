@@ -24,6 +24,7 @@ import {
   TRAINING_DAYS,
   WEIGHT_REST,
   ageList,
+  clampTarget,
   cleanEquipment,
   cmFromParts,
   heightCmList,
@@ -38,6 +39,10 @@ import {
   pushUpShown,
   stepIn,
   stepInches,
+  targetRest,
+  targetTenths,
+  targetWholes,
+  targetWrongSide,
   toggleEquipment,
   weightParts,
   weightShown,
@@ -198,40 +203,80 @@ function HeightWheel({ cm, units, save }) {
   );
 }
 
-/** A weight on two columns, whole kilos or pounds and tenths. While unset it
- *  rests on `restParts`. */
-function WeightWheel({ id, question, kg, restParts, units, onPick }) {
-  const isSet = kg !== null;
-  const parts = isSet ? weightParts(kg, units) : restParts;
-  const wholes = weightWholes(units, parts.whole);
-  const pick = (next) => onPick(kgFromParts(next, units));
+/** A weight on two columns, whole kilos or pounds and tenths. `at` is the row
+ *  pair on show; `wholes` and `tenths` are the rows offered; `onPick` gets the
+ *  pair picked, in parts. */
+function WeightWheel({ id, question, shown, isSet, at, wholes, tenths, units, onPick }) {
   const unitWord = units === 'imperial' ? 'pound' : 'kilogram';
   return (
     <NumberWheel
       id={id}
       question={question}
-      shown={isSet ? weightShown(parts, units) : 'Not set'}
+      shown={shown}
       isSet={isSet}
       unit={units === 'imperial' ? 'lb' : 'kg'}
       stepLabel={question}
-      onStep={(by) => pick({ whole: stepIn(wholes, parts.whole, by), tenth: parts.tenth })}
+      onStep={(by) => onPick({ whole: stepIn(wholes, at.whole, by), tenth: at.tenth })}
       columns={[
         {
           label: `${question} in whole ${unitWord}s`,
           values: wholes,
-          index: wholes.indexOf(parts.whole),
+          index: wholes.indexOf(at.whole),
           format: String,
-          onPick: (i) => pick({ whole: wholes[i], tenth: parts.tenth }),
+          onPick: (i) => onPick({ whole: wholes[i], tenth: at.tenth }),
         },
         {
           label: `${question}, tenths of a ${unitWord}`,
-          values: TENTHS,
-          index: parts.tenth,
+          values: tenths,
+          index: tenths.indexOf(at.tenth),
           format: (v) => `.${v}`,
-          onPick: (i) => pick({ whole: parts.whole, tenth: TENTHS[i] }),
+          onPick: (i) => onPick({ whole: at.whole, tenth: tenths[i] }),
         },
       ]}
     />
+  );
+}
+
+/** Screen 3's wheel (Kd, 2026-09-11): only weights on the goal's side of the
+ *  current weight are on it, so a contradiction cannot be picked. A stored
+ *  target already on the wrong side is named, and the screen waits. */
+function TargetWheel({ target, weightKg, direction, units, save }) {
+  const weight = weightParts(weightKg, units);
+  const isSet = target !== null;
+  const wrong = targetWrongSide(direction, target, weightKg);
+  const at = isSet && !wrong ? weightParts(target, units) : targetRest(direction, weight);
+  const wholes = targetWholes(units, direction, weight);
+  const pick = (parts) => {
+    const kg = kgFromParts(clampTarget(direction, weight, parts), units);
+    // The rows offered are all on the right side; this is the belt with the braces.
+    if (targetWrongSide(direction, kg, weightKg)) return;
+    if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
+  };
+  const side = direction === 'gain' ? 'above' : 'below';
+  return (
+    <div>
+      <WeightWheel
+        id="ob-target"
+        question="Target weight"
+        shown={isSet ? weightShown(weightParts(target, units), units) : 'Not set'}
+        isSet={isSet}
+        at={at}
+        wholes={wholes}
+        tenths={targetTenths(direction, weight, at.whole)}
+        units={units}
+        onPick={pick}
+      />
+      {wrong ? (
+        <FieldError>
+          {`${weightShown(weightParts(target, units), units)} is not ${side} your current ${weightShown(weight, units)}. Pick a weight ${side} it.`}
+        </FieldError>
+      ) : (
+        <p className="text-gray-500 text-xs mt-2">
+          {direction === 'gain' ? 'The weight you want to build up to.' : 'The weight you want to reach.'} You weigh{' '}
+          {weightShown(weight, units)}.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -273,6 +318,8 @@ export function GoalScreen({ answers, save }) {
 // ── Screen 2 ────────────────────────────────────────────────────────────────
 export function AboutScreen({ answers, save, units, setUnits, name }) {
   const weightKg = answers.weightKg ?? null;
+  const weightSet = weightKg !== null;
+  const weightAt = weightSet ? weightParts(weightKg, units) : { whole: WEIGHT_REST[units], tenth: 0 };
   return (
     <div className="space-y-6">
       {/* The one typed box (Kd, 2026-09-10): it opens the screen. */}
@@ -313,10 +360,14 @@ export function AboutScreen({ answers, save, units, setUnits, name }) {
         <WeightWheel
           id="ob-weight"
           question="Weight"
-          kg={weightKg}
-          restParts={{ whole: WEIGHT_REST[units], tenth: 0 }}
+          shown={weightSet ? weightShown(weightAt, units) : 'Not set'}
+          isSet={weightSet}
+          at={weightAt}
+          wholes={weightWholes(units, weightAt.whole)}
+          tenths={TENTHS}
           units={units}
-          onPick={(kg) => {
+          onPick={(parts) => {
+            const kg = kgFromParts(parts, units);
             if (kg !== weightKg && takes({ weightKg: kg })) save({ weightKg: kg });
           }}
         />
@@ -330,27 +381,17 @@ export function AboutScreen({ answers, save, units, setUnits, name }) {
 export function TargetScreen({ answers, save, units, setUnits, direction }) {
   const target = answers.targetWeightKg ?? null;
   const weightKg = answers.weightKg ?? null;
-  // Unset, the wheel rests on today's weight: the person moves from there.
-  const restParts = weightKg !== null ? weightParts(weightKg, units) : { whole: WEIGHT_REST[units], tenth: 0 };
   const verb = direction === 'gain' ? 'Gain' : 'Lose';
   return (
     <div className="space-y-6">
       <UnitSwitch units={units} onChange={setUnits} />
-      <div>
-        <WeightWheel
-          id="ob-target"
-          question="Target weight"
-          kg={target}
-          restParts={restParts}
-          units={units}
-          onPick={(kg) => {
-            if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
-          }}
-        />
-        <p className="text-gray-500 text-xs mt-2">
-          {direction === 'gain' ? 'The weight you want to build up to.' : 'The weight you want to reach.'}
-        </p>
-      </div>
+      {weightKg === null ? (
+        // Screen 2 comes first and the step bar cannot pass it unanswered;
+        // said plainly all the same, never a wheel with no side to keep to.
+        <p className="text-sm text-gray-300">Set your weight on About you first.</p>
+      ) : (
+        <TargetWheel target={target} weightKg={weightKg} direction={direction} units={units} save={save} />
+      )}
       <div>
         <Question>How fast?</Question>
         <div className="space-y-3">

@@ -90,7 +90,13 @@ export function screenAnswered(id, a) {
   switch (id) {
     case 'goal':      return answered(a.mainGoal);
     case 'about':     return answered(a.age) && answered(a.gender) && answered(a.heightCm) && answered(a.weightKg);
-    case 'target':    return !asksTarget(a.mainGoal) || (answered(a.targetWeightKg) && answered(a.pace));
+    case 'target':
+      return (
+        !asksTarget(a.mainGoal) ||
+        (answered(a.targetWeightKg) &&
+          answered(a.pace) &&
+          !targetWrongSide(directionOf(a.mainGoal), a.targetWeightKg, a.weightKg))
+      );
     case 'day':       return answered(a.dayActivity);
     case 'training':  return answered(a.fitnessLevel);
     case 'week':      return answered(a.trainingDays) && answered(a.sessionMinutes);
@@ -245,6 +251,60 @@ export function weightWholes(units, whole) {
 }
 
 export const weightShown = ({ whole, tenth }, units) => `${whole}.${tenth} ${units === 'imperial' ? 'lb' : 'kg'}`;
+
+// ── Screen 3: the target is always on the goal's side of the weight (Kd,
+//    2026-09-11: "Lose weight" with a target above the weight was accepted
+//    without a word; a contradiction must be impossible to pick) ─────────────
+
+/** A stored target on the wrong side: at or above the weight for a loss, at
+ *  or below it for a gain. The old form could store one, and a weight changed
+ *  on screen 2 can put an old target there; the screen names it and stays
+ *  unanswered until it is moved. */
+export function targetWrongSide(direction, targetKg, weightKg) {
+  if (!answered(targetKg) || !answered(weightKg)) return false;
+  return direction === 'gain' ? targetKg <= weightKg : targetKg >= weightKg;
+}
+
+const tenthsOf = ({ whole, tenth }) => whole * 10 + tenth;
+const partsOf = (tenths) => ({ whole: Math.floor(tenths / 10), tenth: tenths % 10 });
+
+/** The rows the target wheel offers: whole units strictly on the goal's side
+ *  of the current weight (in the parts of the units on screen). */
+export function targetWholes(units, direction, weight) {
+  const [from, to] = WEIGHT_WHOLES[units === 'imperial' ? 'imperial' : 'metric'];
+  if (direction === 'gain') {
+    const min = weight.tenth === 9 ? weight.whole + 1 : weight.whole;
+    // At the top of the list the row above the weight is still offered.
+    return range(min, Math.max(to, weight.whole + 1));
+  }
+  const max = weight.tenth === 0 ? weight.whole - 1 : weight.whole;
+  return range(Math.min(from, max), max);
+}
+
+/** The tenths offered beside `whole`: all ten, except on the weight's own
+ *  whole, where only the tenths past it remain. */
+export function targetTenths(direction, weight, whole) {
+  if (whole !== weight.whole) return TENTHS;
+  return direction === 'gain' ? range(weight.tenth + 1, 9) : range(0, weight.tenth - 1);
+}
+
+/** The allowed row nearest the weight: one tenth along the goal's side. */
+export const targetEdge = (direction, weight) => partsOf(tenthsOf(weight) + (direction === 'gain' ? 1 : -1));
+
+/** Where the wheel rests while unset (and where a wrong-side target is shown
+ *  from): the nearest WHOLE number on the goal's side, so a tap on "65" means
+ *  65.0 and not 65 with a tenth carried over from the weight. */
+export function targetRest(direction, weight) {
+  if (direction === 'gain') return { whole: weight.whole + 1, tenth: 0 };
+  return { whole: weight.tenth === 0 ? weight.whole - 1 : weight.whole, tenth: 0 };
+}
+
+/** A pick pulled onto the allowed side: a whole picked on the weight's own
+ *  whole keeps its tenth only if that tenth is past the weight. */
+export function clampTarget(direction, weight, parts) {
+  const wrong = direction === 'gain' ? tenthsOf(parts) <= tenthsOf(weight) : tenthsOf(parts) >= tenthsOf(weight);
+  return wrong ? targetEdge(direction, weight) : parts;
+}
 
 /** Height: whole centimetres, or feet and inches. */
 export const HEIGHT_REST = { metric: { cm: 170 }, imperial: { ft: 5, inch: 7 } };

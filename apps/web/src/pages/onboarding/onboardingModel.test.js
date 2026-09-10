@@ -221,6 +221,71 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
     expect(m.stepInches({ ft: 6, inch: 0 }, -1)).toEqual({ ft: 5, inch: 11 });
   });
 
+  it('the target wheel offers only weights on the goal\'s side, in both units, for every weight it can show', () => {
+    // Every weight the weight wheel can show × every row the target wheel then
+    // offers: each row, back in kilograms, is strictly on the goal's side and
+    // is a target the server takes. Nothing on the wheel can contradict the goal.
+    const bad = [];
+    let rows = 0;
+    for (const units of ['metric', 'imperial']) {
+      for (const whole of m.weightWholes(units, null)) {
+        for (const tenth of m.TENTHS) {
+          const weightKg = m.kgFromParts({ whole, tenth }, units);
+          const weight = m.weightParts(weightKg, units);
+          for (const direction of ['lose', 'gain']) {
+            const wholes = m.targetWholes(units, direction, weight);
+            const offered = wholes.flatMap((w) => m.targetTenths(direction, weight, w).map((t) => ({ whole: w, tenth: t })));
+            for (const row of offered) {
+              rows += 1;
+              if (m.targetWrongSide(direction, m.kgFromParts(row, units), weightKg)) {
+                bad.push(`${units} ${direction} weight ${whole}.${tenth} offered ${row.whole}.${row.tenth}`);
+              }
+            }
+            // The two ends of what is offered are targets the server takes
+            // (every row between them is a weight the weight wheel already
+            // proved above).
+            for (const row of [offered[0], offered[offered.length - 1]]) {
+              if (!accepts({ targetWeightKg: m.kgFromParts(row, units) })) bad.push(`refused ${units} ${direction} ${row.whole}.${row.tenth}`);
+            }
+            // The edge and the resting row are offered, and a pick on the weight's own row is pulled onto the right side.
+            for (const row of [m.targetEdge(direction, weight), m.targetRest(direction, weight)]) {
+              if (!wholes.includes(row.whole) || !m.targetTenths(direction, weight, row.whole).includes(row.tenth)) bad.push(`row ${units} ${direction} ${whole}.${tenth}`);
+            }
+            const clamped = m.clampTarget(direction, weight, weight);
+            if (m.targetWrongSide(direction, m.kgFromParts(clamped, units), weightKg)) bad.push(`clamp ${units} ${direction} ${whole}.${tenth}`);
+          }
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(rows).toBeGreaterThan(100_000);
+  });
+
+  it('a target at or past the weight is the wrong side; the screen then stays unanswered', () => {
+    expect(m.targetWrongSide('lose', 83, 70)).toBe(true);
+    expect(m.targetWrongSide('lose', 70, 70)).toBe(true);
+    expect(m.targetWrongSide('lose', 69.9, 70)).toBe(false);
+    expect(m.targetWrongSide('gain', 65, 70)).toBe(true);
+    expect(m.targetWrongSide('gain', 70.1, 70)).toBe(false);
+    expect(m.targetWrongSide('lose', null, 70)).toBe(false);
+    expect(m.screenAnswered('target', { ...ALL, targetWeightKg: 83 })).toBe(false);
+    expect(m.screenAnswered('target', { ...ALL, mainGoal: 'muscle_gain', targetWeightKg: 83 })).toBe(true);
+    expect(m.screenAnswered('target', ALL)).toBe(true);
+    // A weight changed on screen 2 after the target was set re-opens screen 3.
+    expect(m.firstOpenScreen({ ...ALL, weightKg: 60 })).toBe('target');
+    expect(m.reachableScreens({ ...ALL, weightKg: 60 }).has('day')).toBe(false);
+    // The wheel itself: 70.0 kg losing offers up to 69.9; gaining from 70.1.
+    expect(Math.max(...m.targetWholes('metric', 'lose', { whole: 70, tenth: 0 }))).toBe(69);
+    expect(m.targetTenths('lose', { whole: 70, tenth: 3 }, 70)).toEqual([0, 1, 2]);
+    expect(Math.min(...m.targetWholes('metric', 'gain', { whole: 70, tenth: 9 }))).toBe(71);
+    expect(m.targetEdge('gain', { whole: 70, tenth: 9 })).toEqual({ whole: 71, tenth: 0 });
+    expect(m.targetEdge('lose', { whole: 70, tenth: 0 })).toEqual({ whole: 69, tenth: 9 });
+    // It rests on a whole number, so a tap on "65" is 65.0.
+    expect(m.targetRest('lose', { whole: 70, tenth: 0 })).toEqual({ whole: 69, tenth: 0 });
+    expect(m.targetRest('lose', { whole: 70, tenth: 3 })).toEqual({ whole: 70, tenth: 0 });
+    expect(m.targetRest('gain', { whole: 70, tenth: 3 })).toEqual({ whole: 71, tenth: 0 });
+  });
+
   it('starts in pounds and feet for a US browser, kilograms and centimetres elsewhere', () => {
     expect(m.defaultUnits('en-US')).toBe('imperial');
     expect(m.defaultUnits('en-GB')).toBe('metric');

@@ -306,6 +306,50 @@ describe('onboarding screens 1–7', () => {
     await saved({ age: 36 });
   });
 
+  it('the target wheel cannot be set on the wrong side of the weight', async () => {
+    // Kd, 2026-09-11: "Lose weight", 70 kg, target 83 was accepted without a word.
+    serve({ mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
+    draw();
+    await heading('Your target');
+    tap(/kg · cm/);
+    const wholes = spin('Target weight in whole kilograms');
+    expect(within(wholes).queryByText('83')).toBeNull();
+    expect(within(wholes).queryByText('70')).toBeNull();
+    expect(within(wholes).getByText('69')).toBeTruthy();
+    expect(screen.getByText(/You weigh 70\.0 kg\./)).toBeTruthy();
+    // + from the resting row (69.0, the whole number just under the weight)
+    // cannot climb past the weight: it saves the row it rests on.
+    tap('Target weight: one more');
+    await stored({ targetWeightKg: 69 });
+    tapRow('Target weight in whole kilograms', '65');
+    await stored({ targetWeightKg: 65 });
+
+    // Build muscle: the same wheel offers only weights above.
+    tap('Your goal');
+    await heading('Your goal');
+    tap(/Build muscle/);
+    await stored({ mainGoal: 'muscle_gain' });
+    await next('About you');
+    await next('Your target');
+    const gainWholes = spin('Target weight in whole kilograms');
+    expect(within(gainWholes).queryByText('69')).toBeNull();
+    expect(within(gainWholes).getByText('71')).toBeTruthy();
+  });
+
+  it('names a stored target already on the wrong side, and will not continue until it is moved', async () => {
+    serve({ ...ALL, targetWeightKg: 83 }); // the old form, or a weight changed since
+    draw();
+    await heading('Your target'); // the first screen still open
+    tap(/kg · cm/);
+    expect(screen.getByText('83.0 kg is not below your current 70.0 kg. Pick a weight below it.')).toBeTruthy();
+    expect(button(/continue/i).disabled).toBe(true);
+    expect(button('Your day').disabled).toBe(true);
+    tapRow('Target weight in whole kilograms', '65');
+    await stored({ targetWeightKg: 65 });
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
+    expect(screen.queryByText(/is not below/)).toBeNull();
+  });
+
   it('saves pounds as kilograms, and feet and inches as centimetres', async () => {
     serve({ mainGoal: 'posture' });
     draw();
