@@ -1,5 +1,7 @@
-// P2.6a — users repo owns profile columns only. body_measurements moved to
-// nutrition (Part 4 §3.6). Until their modules exist (gyms: P3.10;
+// P2.6a — users repo owns profile columns only. Body weight is not one of
+// them: it lives only in the history (nutrition/repo.ts, RULINGS 2026-09-10),
+// which this file reads through `currentWeightKg` and writes through
+// `recordTypedWeight`. Until their modules exist (gyms: P3.10;
 // notifications: P5), this file also owns gym_members close and
 // push_tokens delete that Part 4 §5.2 Day 0 requires. Auth-owned tables
 // (refresh_tokens, one_time_tokens) are NEVER touched here — the users
@@ -7,7 +9,7 @@
 // Every query is keyed by the owning userId (R3.2).
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
-import { recordTypedWeight } from "../nutrition/repo.js";
+import { currentWeightKg, recordTypedWeight } from "../nutrition/repo.js";
 import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
@@ -35,20 +37,19 @@ interface ProfileDbRow {
   locale: string;
   units: string;
   timezone: string | null;
-  weight_kg: string | null; // numeric arrives as string
   leaderboard_opt_out: boolean;
   onboarding_completed: boolean;
   created_at: Date;
 }
 
-const toProfile = (r: ProfileDbRow): ProfileRow => ({
+const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
   id: r.id,
   email: r.email,
   displayName: r.display_name,
   locale: r.locale,
   units: r.units,
   timezone: r.timezone,
-  weightKg: r.weight_kg === null ? null : Number(r.weight_kg),
+  weightKg,
   leaderboardOptOut: r.leaderboard_opt_out,
   onboardingCompleted: r.onboarding_completed,
   createdAt: r.created_at,
@@ -56,24 +57,29 @@ const toProfile = (r: ProfileDbRow): ProfileRow => ({
 
 /** The one profile read. onboarding_completed lives on user_fitness_profiles
  *  (onboarding-storage card), so it arrives by LEFT JOIN and COALESCEs to false
- *  for a user who has not started onboarding — no row is the common case. */
+ *  for a user who has not started onboarding — no row is the common case. The
+ *  weight is the history's newest weight-bearing row, read fresh every time. */
 async function selectProfile(sql: SqlOrTx, userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileDbRow[]>`
     SELECT u.id, u.email, u.display_name, u.locale, u.units, u.timezone,
-           u.weight_kg, u.leaderboard_opt_out, u.created_at,
+           u.leaderboard_opt_out, u.created_at,
            COALESCE(f.onboarding_completed, false) AS onboarding_completed
     FROM users u
     LEFT JOIN user_fitness_profiles f ON f.user_id = u.id
     WHERE u.id = ${userId} AND u.status = 'active'`;
-  return rows[0] === undefined ? null : toProfile(rows[0]);
+  const row = rows[0];
+  return row === undefined ? null : toProfile(row, await currentWeightKg(sql, userId));
 }
 
 export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow | null> {
   return await selectProfile(sql, userId);
 }
 
-/** Applies a profile-only PATCH. Measurement history is written exclusively
- * through the nutrition service (Part 4 §3.6). */
+/** Applies a profile PATCH. The users row is locked first — active-only, and
+ *  a concurrent deletion waits — then the columns, then the weight as a row
+ *  of the history (`recordTypedWeight`). NO KEY UPDATE for the reason
+ *  `patchOnboarding` records: plain FOR UPDATE would make every foreign-key
+ *  check on this person (a meal, a workout, a weigh-in) wait behind the save. */
 export async function updateProfile(
   sql: Sql,
   userId: string,
@@ -82,7 +88,7 @@ export async function updateProfile(
   return await sql.begin(async (tx) => {
     const prevRows = await tx<{ id: string }[]>`
       SELECT id FROM users
-      WHERE id = ${userId} AND status = 'active' FOR UPDATE`;
+      WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     const prev = prevRows[0];
     if (prev === undefined) return null;
 
@@ -99,8 +105,8 @@ export async function updateProfile(
         UPDATE users SET ${tx(cols)}
         WHERE id = ${userId} AND status = 'active'`;
     }
-    // Weight is not a column write: a typed weight is a measurement of its own
-    // (nutrition/repo.ts recordTypedWeight), so history and the number agree.
+    // A typed weight is a row of the history, the only place weight lives
+    // (nutrition/repo.ts recordTypedWeight).
     if (patch.weightKg !== undefined) await recordTypedWeight(tx, userId, patch.weightKg);
 
     // RETURNING cannot carry the joined onboarding_completed, so the row is
@@ -285,20 +291,20 @@ export interface FitnessProfileWrite {
 export interface OnboardingRow {
   /** Null until the person has saved at least one profile answer. */
   profile: FitnessProfileRow | null;
-  /** users.weight_kg — screen 2 asks it; it lives there unduplicated. */
+  /** The history's newest weight-bearing row — screen 2 asks it, and it is
+   *  saved as a row of that history (RULINGS 2026-09-10). */
   weightKg: number | null;
   /** users.timezone — the fallback for a client that sent none (service). */
   timezone: string | null;
 }
 
-/** Reads both rows. Keyed on userId; no status filter for the same reason
+/** Reads the answers. Keyed on userId; no status filter for the same reason
  *  `getSyncContext` has none — every caller is behind `authenticate`. */
 export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<OnboardingRow> {
   const profile = await getFitnessProfile(sql, userId);
-  const rows = await sql<{ weight_kg: string | null; timezone: string | null }[]>`
-    SELECT weight_kg, timezone FROM users WHERE id = ${userId}`;
-  const raw = rows[0]?.weight_kg;
-  return { profile, weightKg: raw == null ? null : Number(raw), timezone: rows[0]?.timezone ?? null };
+  const rows = await sql<{ timezone: string | null }[]>`
+    SELECT timezone FROM users WHERE id = ${userId}`;
+  return { profile, weightKg: await currentWeightKg(sql, userId), timezone: rows[0]?.timezone ?? null };
 }
 
 /** PATCH semantics, one transaction: a key PRESENT in the parsed body is
@@ -382,8 +388,8 @@ export async function patchOnboarding(
         UPDATE user_fitness_profiles SET ${tx(cols)}, updated_at = now()
         WHERE user_id = ${userId}`;
     }
-    // Screen 2's weight is a measurement of its own, not a column write (see
-    // nutrition/repo.ts recordTypedWeight).
+    // Screen 2's weight is a row of the history, the only place weight lives
+    // (nutrition/repo.ts recordTypedWeight).
     if (patch.weightKg !== undefined) await recordTypedWeight(tx, userId, patch.weightKg);
     return await getOnboarding(tx, userId);
   });
@@ -514,13 +520,11 @@ export interface UserSyncContext {
  *  prompt (P2.5b GAP-1 — only stored fields). No status filter: callers are
  *  behind authenticate (active-only), and reads must not flap mid-request. */
 export async function getSyncContext(sql: Sql, userId: string): Promise<UserSyncContext> {
-  const rows = await sql<
-    { weight_kg: string | null; timezone: string | null; display_name: string; units: string }[]
-  >`
-    SELECT weight_kg, timezone, display_name, units FROM users WHERE id = ${userId}`;
+  const rows = await sql<{ timezone: string | null; display_name: string; units: string }[]>`
+    SELECT timezone, display_name, units FROM users WHERE id = ${userId}`;
   const r = rows[0];
   return {
-    weightKg: r?.weight_kg == null ? null : Number(r.weight_kg),
+    weightKg: await currentWeightKg(sql, userId),
     timezone: r?.timezone ?? null,
     displayName: r?.display_name ?? "",
     units: r?.units ?? "metric",

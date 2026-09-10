@@ -4,6 +4,28 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`
+
+- Why: the post-merge review of 4a-i found one High (the web profile form echoes the loaded weight on
+  every save; the server recorded the echo as "typed by me", which outranked the weigh-in it copied, so
+  deleting a mistaken weigh-in kept its number) plus thirteen Lows, most of them layers added over six
+  review rounds to keep `users.weight_kg` in step with the history. Kd ruled: redesign (RULINGS 2026-09-10).
+- Built: migration `0027` re-runs 0026's backfill, DROPS `users.weight_kg`, adds the `source` CHECK and
+  clears ages under 16; `nutrition/repo.ts currentWeightKg` is the one reader (profile, onboarding answers,
+  sync context, so rings and workout calories); `recordTypedWeight` writes nothing when the history already
+  shows the number; refreshWeight, bearsWeight and the lock-order essays are gone; the three history writes
+  throw `AccountNotActiveError` → one 401 from the service; `onboardingQuerySchema` moved to `@app/shared`;
+  the Mongo import writes the legacy profile weight as a typed row only when no imported measurement carries
+  one; the web form sends only what changed (`profilePatchFor`, unit-tested).
+- Verified: api tsc + eslint 0; shared tsc + eslint 0, 81 tests; web 1882 (the pre-existing
+  `poseAssets.contract` encoding failure only); local Postgres: users.onboarding 33 · nutrition.routes 30 ·
+  users.routes 8 · db.migration/migrate.nutrition/privacy.purge/privacy.export/users.fitness/workouts.sync/
+  users.health 120 in one run. Two mutants: the echo rule removed → 3 tests red; the edit taking its history
+  row before the users row → the lock-order test red (its first version passed that mutant: pg_locks does not
+  list row locks; it asserts the table-level lock now).
+- Not changed: `Onboarding.jsx` (old form) still sends the weight on finish; the server's echo rule covers it.
+  The spec's Part 4 carries amendment 5. Next: 4a-ii, the seven screens.
+
 ## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
 
 - Built: `GET`/`PATCH /v1/users/me/onboarding` — answers saved as you go, the live plan or the list

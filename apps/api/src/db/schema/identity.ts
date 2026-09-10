@@ -28,7 +28,8 @@ export const users = pgTable(
     locale: text("locale").notNull().default("en"),
     units: text("units").notNull().default("metric"),
     timezone: text("timezone"), // recaps only; quotas stay UTC (v1)
-    weightKg: numeric("weight_kg", { precision: 5, scale: 2 }), // calorie lever (2B §2.3); history in body_measurements
+    // Body weight is NOT here: it lives only in body_measurements (RULINGS
+    // 2026-09-10; the cache column was dropped by migration 0027).
     status: text("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     legacyMongoId: text("legacy_mongo_id").unique(), // migration traceability (§7); drop after 6 months
@@ -139,9 +140,9 @@ export const refreshTokens = pgTable(
 // the queued Day-14/export worker card (DECISIONS 2026-07-11). It holds
 // medical_conditions (health data, sensitive under DPDP).
 //
-// Units are normalized to metric at the boundary, matching users.weight_kg
-// (Part 4 §3.1) and the INVENTORY.md:45 XFORM convention; users.units drives
-// display. Weight lives on users.weight_kg and is NOT duplicated here.
+// Units are normalized to metric at the boundary (the INVENTORY.md:45 XFORM
+// convention); users.units drives display. Body weight is NOT here: it lives
+// only in body_measurements (RULINGS 2026-09-10).
 export const userFitnessProfiles = pgTable(
   "user_fitness_profiles",
   {

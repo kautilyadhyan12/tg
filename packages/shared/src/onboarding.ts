@@ -66,8 +66,9 @@ const sessionMinutesSchema = z.number().int().min(5).max(240);
 
 /** Everything the twelve screens have answered so far. Every field is nullable:
  *  a half-finished wizard is the normal state, and unanswered is never a
- *  default (RULINGS 2026-07-15). `weightKg` is read through from the users row,
- *  where it lives unduplicated — the screen asks it on screen 2 like any other. */
+ *  default (RULINGS 2026-07-15). `weightKg` is the newest weigh-in — the only
+ *  place body weight lives (RULINGS 2026-09-10); screen 2 asks it, and what
+ *  is typed there is saved as a weigh-in marked "typed by me". */
 export const onboardingAnswersSchema = z
   .object({
     mainGoal: mainGoalSchema.nullable(),
@@ -106,6 +107,14 @@ const uniqueEquipment = equipmentArraySchema.refine(
   (a) => !a.includes("none") || a.length === 1,
   { message: "'none' cannot be combined with equipment" },
 );
+
+/** The query both onboarding routes take. `timeZone` is the DEVICE's IANA
+ *  zone (RULINGS 2026-07-21); the day itself is never accepted from a client.
+ *  Whether the runtime knows the zone is the server's check, not a shape. */
+export const onboardingQuerySchema = z
+  .object({ timeZone: z.string().trim().min(1).max(64).optional() })
+  .strict();
+export type OnboardingQuery = z.infer<typeof onboardingQuerySchema>;
 
 /** One screen's save. Every field optional — the screen sends only what it
  *  asked. An empty body is allowed and simply re-reads the plan: a screen whose

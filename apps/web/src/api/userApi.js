@@ -107,6 +107,26 @@ export function mergeFitnessProfile(current, edits) {
   return { ...base, ...defined, onboardingCompleted: current?.onboardingCompleted ?? true };
 }
 
+/** What the profile form sends to PATCH /v1/users/me: ONLY what changed.
+ *
+ *  The form loads the current weight into its box and used to send it back
+ *  with every save, even a name change. The server saves a weight it is sent
+ *  as a weigh-in marked "typed by me" (RULINGS 2026-09-10), so an echo of the
+ *  number already showing would be an entry the person never typed — and one
+ *  that outranks the weigh-in it copied, keeping a mistaken weigh-in's number
+ *  alive after that weigh-in is deleted. The server now ignores such an echo
+ *  too; this keeps the request honest at its source. A blank box sends
+ *  nothing (clearing the weight is not this form's job), and a blank name
+ *  sends nothing (the PATCH refuses an empty one). Pure + unit-tested. */
+export function profilePatchFor(profile, form) {
+  const patch = {};
+  const name = (form.fullName || '').trim();
+  if (name && name !== (profile?.displayName || '')) patch.displayName = name;
+  const wKg = weightToKg(form.weight, form.weightUnit);
+  if (wKg !== null && wKg !== (profile?.weightKg ?? null)) patch.weightKg = wKg;
+  return patch;
+}
+
 export const userService = {
   /** {user: userProfileSchema} — carries onboardingCompleted + weightKg etc. */
   getProfile: () => authApi.get('/v1/users/me'),

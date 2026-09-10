@@ -98,7 +98,9 @@ id=`UUIDv5(ns, convHex:index)` (**G-subid**).
 Real keys: `_id,user_id,measured_at,weight_kg,waist_cm,chest_cm,hips_cm,
 left_arm_cm,right_arm_cm,left_thigh_cm,right_thigh_cm,body_fat_pct,created_at`.
 `measured_at`→`measured_at`; `weight_kg`→`weight_kg`; all `*_cm`/`body_fat_pct`
-→`metrics` jsonb; `source='manual'`; latest per user also refreshes `users.weight_kg`.
+→`metrics` jsonb; `source='manual'`. The legacy PROFILE weight (§1) becomes one
+`self_reported` row for a user none of whose measurements carries a weight; the
+history is the one source of weight and there is no users column (RULINGS 2026-09-10).
 
 ## 7. `running_*` → `runs` / `saved_routes` / `run_schedules`
 - **`running_sessions` (8) → `runs`**: `started_at`; `duration_min`×60→`duration_s`;

@@ -38,6 +38,10 @@ export interface UserRow {
   passwordHash: string | null;
   hashAlgo: "bcrypt" | null;
   displayName: string;
+  /** The legacy profile weight. NOT a users column (there is none — body
+   *  weight lives only in the history, RULINGS 2026-09-10): the body stage
+   *  writes it as a typed row for a person whose imported measurements carry
+   *  no weight at all (body.ts). */
   weightKg: number | null;
   lastActiveAt: Date | null;
   legacyMongoId: string;
@@ -70,16 +74,17 @@ export function transformUser(doc: unknown): UserRow | null {
   };
 }
 
-/** Idempotent insert. ON CONFLICT is targeted on (id) so a RE-RUN is the
+/** Idempotent insert (the weight is the body stage's, see UserRow). ON
+ *  CONFLICT is targeted on (id) so a RE-RUN is the
  *  intended no-op (id = UUIDv5(_id) is stable). A genuine email collision (a
  *  different _id, same email) is NOT swallowed here — it raises 23505, which
  *  run.ts logs per-row as a real reconciliation event, never a silent drop
  *  (T3 finding 2). Returns rows inserted (0 on a re-run). */
 export async function insertUser(sql: Sql, r: UserRow): Promise<number> {
   const res = await sql`
-    INSERT INTO users (id, email, password_hash, hash_algo, display_name, weight_kg, last_active_at, legacy_mongo_id)
+    INSERT INTO users (id, email, password_hash, hash_algo, display_name, last_active_at, legacy_mongo_id)
     VALUES (${r.id}, ${r.email}, ${r.passwordHash}, ${r.hashAlgo}, ${r.displayName},
-            ${r.weightKg}, ${r.lastActiveAt}, ${r.legacyMongoId})
+            ${r.lastActiveAt}, ${r.legacyMongoId})
     ON CONFLICT (id) DO NOTHING`;
   return res.count;
 }

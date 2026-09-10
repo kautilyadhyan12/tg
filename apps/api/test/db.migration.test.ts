@@ -769,39 +769,63 @@ d("0001_init on a real database", () => {
     }
   });
 
-  /** MIGRATION `0026`'s BACKFILL (its part 2): every weight that existed
-   *  before the one-source rule (RULINGS 2026-09-10) gets a typed row of its
-   *  own, so the live app's first ordinary correction to that person's
-   *  history — log a weigh-in, delete it — cannot blank a number that had no
-   *  row behind it.
-   *
-   *  Same construction as `0014`'s: the legacy states are BUILT here (a fresh
-   *  database has none), and the statements are run **read out of the shipped
-   *  file**. The subjects, one per branch of the two statements plus those
-   *  that must be left alone: a weight with no row · a weight with a newer,
-   *  different row (the column was written directly after it) · an emptied
-   *  column over a weighed row (a clear under the old code) · a weight whose
-   *  newest row already carries it (untouched) · two SOFT-DELETED accounts
-   *  still inside their undo window, one per statement — they keep their
-   *  weight and history, and restoring them must not restore the very state
-   *  this repairs · a purged tombstone (NULL column, no rows), untouched. Then
-   *  the whole thing again, to prove it finds nothing the second time. Rolled
-   *  back. */
-  it("0026's backfill puts a typed row under every weight that had none, and only those", async () => {
-    const migration = await readFile(new URL("../drizzle/0026_onboarding_plan_answers.sql", import.meta.url), "utf8");
-    const statements = migration
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter((s) => s.includes('INSERT INTO "body_measurements"'));
-    if (statements.length !== 2) {
-      throw new Error(`0026 no longer contains exactly two backfill INSERTs (found ${String(statements.length)})`);
+  /** MIGRATION `0027`: BODY WEIGHT HAS NO COPY. `users.weight_kg` is gone, the
+   *  history's `source` has its CHECK, and an age under the app's floor is
+   *  unanswered — all read back off the deployed catalogue. */
+  it("0027 dropped users.weight_kg and checks body_measurements.source", async () => {
+    const [col] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'weight_kg'`;
+    expect(col?.n, "users.weight_kg still exists").toBe(0);
+
+    const [def] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'body_measurements'::regclass AND conname = 'body_measurements_source_check'`;
+    if (def === undefined) throw new Error("body_measurements_source_check is not on the table");
+    const inCheck = [...def.def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+    expect(inCheck).toEqual(["manual", "self_reported"]);
+
+    const [u] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0027@example.com', 'zz 0027')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    if (u === undefined) throw new Error("fixture user insert failed");
+    try {
+      // The CHECK bites: a third value is refused, the two known ones are not.
+      await expect(
+        sql`INSERT INTO body_measurements (user_id, measured_at, source) VALUES (${u.id}, now(), 'imported')`,
+      ).rejects.toMatchObject({ code: "23514" });
+      await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source) VALUES (${u.id}, now(), 70, 'manual')`;
+      await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source) VALUES (${u.id}, now(), 71, 'self_reported')`;
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${u.id}`;
     }
-    const runBackfill = async (tx: postgres.TransactionSql) => {
-      for (const s of statements) await tx.unsafe(s);
-    };
+  });
+
+  /** MIGRATION `0027`'s PART 1 (0026's backfill, run once more before the
+   *  column goes) and PART 4 (ages under 16 cleared). The legacy states are
+   *  BUILT here — the column is re-added inside a transaction that is rolled
+   *  back, since the deployed database no longer has it — and the statements
+   *  are run **read out of the shipped file**. The subjects, one per branch of
+   *  the two backfill statements plus those that must be left alone: a weight
+   *  with no row · a weight with a newer, different row (the column was
+   *  written directly after it) · an emptied column over a weighed row (a
+   *  clear under the old code) · a weight whose newest row already carries it
+   *  (untouched) · two SOFT-DELETED accounts still inside their undo window,
+   *  one per statement · a purged tombstone (NULL column, no rows), untouched.
+   *  Then the whole thing again, to prove it finds nothing the second time. */
+  it("0027's backfill puts a typed row under every weight that had none, and only those; ages under 16 become unanswered", async () => {
+    const migration = await readFile(new URL("../drizzle/0027_weight_one_source.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    const backfill = chunks.filter((s) => s.includes('INSERT INTO "body_measurements"'));
+    if (backfill.length !== 2) {
+      throw new Error(`0027 no longer contains exactly two backfill INSERTs (found ${String(backfill.length)})`);
+    }
+    const ageClear = chunks.find((s) => s.includes('UPDATE "user_fitness_profiles" SET "age" = NULL'));
+    if (ageClear === undefined) throw new Error("0027 no longer clears ages under 16");
 
     await sql
       .begin(async (tx) => {
+        await tx`ALTER TABLE users ADD COLUMN weight_kg numeric(5,2)`;
         const user = async (name: string, weight: number | null, status = "active") => {
           const [u] = await tx<{ id: string }[]>`
             INSERT INTO users (display_name, weight_kg, status) VALUES (${name}, ${weight}, ${status}) RETURNING id`;
@@ -813,40 +837,36 @@ d("0001_init on a real database", () => {
             INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
             VALUES (${userId}, ${at}, ${weight}, '{}', 'manual')`;
         };
-        const noRow = await user("zz-0026-no-row", 80);
-        const differs = await user("zz-0026-differs", 80);
+        const noRow = await user("zz-0027-no-row", 80);
+        const differs = await user("zz-0027-differs", 80);
         await weighIn(differs, 82, "2026-05-01T10:00:00Z");
-        const emptied = await user("zz-0026-emptied", null);
+        const emptied = await user("zz-0027-emptied", null);
         await weighIn(emptied, 82, "2026-05-01T10:00:00Z");
-        const agrees = await user("zz-0026-agrees", 82);
+        const agrees = await user("zz-0027-agrees", 82);
         await weighIn(agrees, 82, "2026-05-01T10:00:00Z");
-        const gone = await user("zz-0026-gone", 80, "deleted");
+        const gone = await user("zz-0027-gone", 80, "deleted");
         await tx`UPDATE users SET deleted_at = now() WHERE id = ${gone}`;
-        // Statement 2's soft-deleted case: cleared under the old code, then deleted.
-        const goneEmptied = await user("zz-0026-gone-emptied", null, "deleted");
+        const goneEmptied = await user("zz-0027-gone-emptied", null, "deleted");
         await tx`UPDATE users SET deleted_at = now() WHERE id = ${goneEmptied}`;
         await weighIn(goneEmptied, 82, "2026-05-01T10:00:00Z");
-        const purged = await user("zz-0026-purged", null, "deleted");
+        const purged = await user("zz-0027-purged", null, "deleted");
+        // Part 4's subjects: an age from the old 13-and-over form, and one the app accepts.
+        const young = await user("zz-0027-young", null);
+        await tx`INSERT INTO user_fitness_profiles (user_id, age) VALUES (${young}, 15)`;
+        const adult = await user("zz-0027-adult", null);
+        await tx`INSERT INTO user_fitness_profiles (user_id, age) VALUES (${adult}, 16)`;
 
         const rowsOf = async (userId: string) =>
           tx<{ weight_kg: string | null; source: string; newest: boolean }[]>`
             SELECT weight_kg, source, measured_at > '2026-05-01T10:00:00Z' AS newest
             FROM body_measurements WHERE user_id = ${userId} AND source = 'self_reported'`;
-        const columnOf = async (userId: string) =>
-          (await tx<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+        const ageOf = async (userId: string) =>
+          (await tx<{ age: number | null }[]>`SELECT age FROM user_fitness_profiles WHERE user_id = ${userId}`)[0]?.age;
 
         for (let pass = 1; pass <= 2; pass += 1) {
-          await runBackfill(tx);
-          // The number that showed before is the number that shows after — for
-          // everyone. The backfill adds rows; it never moves a weight.
-          expect(await columnOf(noRow), `pass ${String(pass)}`).toBe("80.00");
-          expect(await columnOf(differs), `pass ${String(pass)}`).toBe("80.00");
-          expect(await columnOf(emptied), `pass ${String(pass)}`).toBeNull();
-          expect(await columnOf(agrees), `pass ${String(pass)}`).toBe("82.00");
-          expect(await columnOf(gone), `pass ${String(pass)}`).toBe("80.00");
-          expect(await columnOf(goneEmptied), `pass ${String(pass)}`).toBeNull();
-          expect(await columnOf(purged), `pass ${String(pass)}`).toBeNull();
-          // And exactly the rows that make the one-source rule true, each the
+          for (const s of backfill) await tx.unsafe(s);
+          await tx.unsafe(ageClear);
+          // Exactly the rows that make the one-source rule true, each the
           // newest thing in that person's history.
           expect(await rowsOf(noRow), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
           expect(await rowsOf(differs), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
@@ -855,11 +875,13 @@ d("0001_init on a real database", () => {
           expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
           expect(await rowsOf(goneEmptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
           expect(await rowsOf(purged), `pass ${String(pass)}`).toEqual([]);
+          expect(await ageOf(young), `pass ${String(pass)}`).toBeNull();
+          expect(await ageOf(adult), `pass ${String(pass)}`).toBe(16);
         }
 
-        // What the rows are FOR: from here the live rule computes the same
-        // number the column held, so nothing can vanish on the first correction
-        // — including for the soft-deleted person once restoreUser brings them back.
+        // What the rows are FOR: once the column is gone, the live rule computes
+        // the same number it held, so nothing vanishes — including for the
+        // soft-deleted person once restoreUser brings them back.
         for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"], [goneEmptied, null]] as const) {
           const [rule] = await tx<{ weight_kg: string | null }[]>`
             SELECT weight_kg FROM body_measurements
@@ -867,10 +889,10 @@ d("0001_init on a real database", () => {
             ORDER BY measured_at DESC, id DESC LIMIT 1`;
           expect(rule?.weight_kg ?? null).toBe(expected);
         }
-        throw new Error("ROLLBACK-0026-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0027-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0026-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0027-BACKFILL-FIXTURE") return;
         throw err;
       });
   });

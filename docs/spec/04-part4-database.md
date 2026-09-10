@@ -52,6 +52,15 @@ and materialized once, in `org_daily_stats`.
 (default `USD`, since LLM/vision bill in USD; the v1 §9.3 circuit breaker
 converts with one config FX rate). The words *minor* and *micro* in a
 column name are load-bearing; nothing stores floats for money.
+5. **Body weight has one source and no copy** (2026-09-10, RULINGS; supersedes
+`users.weight_kg` in §3.1 and the "else `users.weight_kg`" fallback in §3.6).
+The person's weight is the newest `body_measurements` row that says
+something about weight — a weigh-in carrying one, or a `self_reported` row
+(a weight typed on a form; with no weight, a deliberate clear). Every reader
+computes it from the history (`nutrition/repo.ts currentWeightKg`); the
+column was a cache of that row for one release and was dropped by migration
+`0027` after six review rounds each found a writer that forgot to refresh it.
+`source` is a status column: `CHECK (source IN ('manual','self_reported'))`.
 
 ## 1. Conventions (every table obeys these; deviations are called out
 inline)
@@ -125,8 +134,8 @@ profanity-filtered at write
  locale text NOT NULL DEFAULT 'en', units text NOT NULL DEFAULT 'metric',
  timezone text,                                   -- recaps only; quotas
 stay UTC (v1)
- weight_kg numeric(5,2),                          -- calorie lever (2B
-§2.3); history in body_measurements
+ -- weight_kg: DROPPED by 0027 (§0 amendment 5) — weight lives only in
+body_measurements
  status text NOT NULL DEFAULT 'active' CHECK (status IN
 ('active','deleted')),
  deleted_at timestamptz,
@@ -488,8 +497,8 @@ display-only, never computed upon except weight
 );
 CREATE INDEX ON body_measurements (user_id, measured_at DESC);
 ```
-Calorie computation uses the latest `weight_kg` measurement ≤ workout
-time, else `users.weight_kg`, else 70 (2B §2.1) — resolved at sync,
+Calorie computation uses the person's current weight — the newest
+weight-bearing row, §0 amendment 5 — else 70 (2B §2.1) — resolved at sync,
 stamped into `workouts.kcal_*`, never recomputed silently (P3 doctrine).
 
 ### 3.7 Coach (Chroma → pgvector, v1 §6.1)
@@ -899,8 +908,9 @@ from the seed |
 for legacy rows |
 | `running_sessions` / `running_routes` / `running_schedules` | `runs` /
 `saved_routes` / `run_schedules` | polyline passthrough |
-| `body_measurements` | `body_measurements` | weight entries also refresh
-`users.weight_kg` (latest) |
+| `body_measurements` | `body_measurements` | the legacy profile weight
+becomes one `self_reported` row when no measurement carries a weight (§0
+amendment 5) |
 | `exercises` | **not migrated** — re-seeded canonically (§8);
 `legacy_mongo_id` set on seed rows by name-match so old workout references
 resolve |

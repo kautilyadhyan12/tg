@@ -728,12 +728,26 @@ export async function listMeasurements(
 ): Promise<repo.MeasurementRow[]> {
   return await repo.listMeasurements(deps.sql, userId, limit, cursor);
 }
+/** The three history writes refuse an account that is not active (a request
+ *  that passed sign-in and then waited behind the account's deletion) with the
+ *  answer sign-in gives every request after a deletion — the same 401 from
+ *  all three, whatever the write. */
+async function activeOnly<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (err: unknown) {
+    if (err instanceof repo.AccountNotActiveError) {
+      throw new NutritionError(401, "unauthorized", "authentication required");
+    }
+    throw err;
+  }
+}
 export async function createMeasurement(
   deps: ReadDeps,
   userId: string,
   v: Parameters<typeof repo.createMeasurement>[2],
-): Promise<repo.MeasurementRow | null> {
-  return await repo.createMeasurement(deps.sql, userId, v);
+): Promise<repo.MeasurementRow> {
+  return await activeOnly(() => repo.createMeasurement(deps.sql, userId, v));
 }
 export async function updateMeasurement(
   deps: ReadDeps,
@@ -741,10 +755,10 @@ export async function updateMeasurement(
   id: string,
   v: Parameters<typeof repo.updateMeasurement>[3],
 ): Promise<repo.MeasurementRow | null> {
-  return await repo.updateMeasurement(deps.sql, userId, id, v);
+  return await activeOnly(() => repo.updateMeasurement(deps.sql, userId, id, v));
 }
 export async function deleteMeasurement(deps: ReadDeps, userId: string, id: string): Promise<boolean> {
-  return await repo.deleteMeasurement(deps.sql, userId, id);
+  return await activeOnly(() => repo.deleteMeasurement(deps.sql, userId, id));
 }
 
 export const CURATED_COUNT = CURATED_FOODS.length;

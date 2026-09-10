@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
+import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -184,6 +184,34 @@ describe('userService repoint (Card 6)', () => {
       expect(out.age).toBe(null);
       expect(out.fitnessGoals).toEqual([]);
       expect(out.onboardingCompleted).toBe(true);
+    });
+  });
+
+  // ── The profile form sends only what changed (the 4a-i review's H1) ─────────
+  describe('profilePatchFor', () => {
+    const profile = { displayName: 'Kd', weightKg: 90 };
+
+    it('a name change alone does not echo the weight the form loaded', () => {
+      // The box still shows the 90 that came from the server: sending it back
+      // would become a "typed by me" weigh-in the person never typed.
+      expect(profilePatchFor(profile, { fullName: 'Kd Renamed', weight: '90', weightUnit: 'kg' }))
+        .toEqual({ displayName: 'Kd Renamed' });
+    });
+
+    it('nothing changed → nothing sent', () => {
+      expect(profilePatchFor(profile, { fullName: 'Kd', weight: '90', weightUnit: 'kg' })).toEqual({});
+      // The same weight in the other unit is still the same weight.
+      expect(profilePatchFor(profile, { fullName: 'Kd', weight: '198.42', weightUnit: 'lbs' })).toEqual({});
+    });
+
+    it('a typed weight IS sent, in kg, and a first weight is sent when the profile had none', () => {
+      expect(profilePatchFor(profile, { fullName: 'Kd', weight: '85', weightUnit: 'kg' })).toEqual({ weightKg: 85 });
+      expect(profilePatchFor({ displayName: 'Kd', weightKg: null }, { fullName: 'Kd', weight: '154', weightUnit: 'lbs' }))
+        .toEqual({ weightKg: 69.85 });
+    });
+
+    it('a blank box sends nothing — neither an empty name nor a cleared weight', () => {
+      expect(profilePatchFor(profile, { fullName: '  ', weight: '', weightUnit: 'kg' })).toEqual({});
     });
   });
 

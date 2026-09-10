@@ -333,13 +333,13 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect((item?.kcalPoint??0)>=(item?.kcalLow??0)&&(item?.kcalPoint??0)<=(item?.kcalHigh??1)).toBe(true);
   },30_000);
 
-  // The users row holds the newest weight-bearing measurement by date, and a
+  // The profile's weight IS the newest weight-bearing measurement by date, and a
   // typed weight (PATCH /v1/users/me) is a measurement of its own — so deleting
   // the last weigh-in falls back to what was typed, never to a blank. The
   // weigh-in is dated one second after the TYPED row (read back, not assumed),
   // so it outranks it by date and not by this process's clock. Emptying the
   // number is its own request, made at the end.
-  it("dishware and body measurement CRUD are tenant-scoped; a measurement sets current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const weightOf=async()=>(await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg;expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:70})).statusCode).toBe(200);expect(await weightOf()).toBe("70.00");const typedAt=(await sql<{measured_at:Date}[]>`SELECT measured_at FROM body_measurements WHERE user_id=${userA} AND source='self_reported' ORDER BY measured_at DESC LIMIT 1`)[0]?.measured_at;if(typedAt===undefined)throw new Error("the typed weight wrote no row");const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date(typedAt.getTime()+1000).toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect(await weightOf()).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect(await weightOf()).toBe("70.00");expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:null})).statusCode).toBe(200);expect(await weightOf()).toBeNull();},30_000);
+  it("dishware and body measurement CRUD are tenant-scoped; a measurement sets current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const weightOf=async()=>(await inject("GET","/v1/users/me",cookieA)).json<{user:{weightKg:number|null}}>().user.weightKg;expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:70})).statusCode).toBe(200);expect(await weightOf()).toBe(70);const typedAt=(await sql<{measured_at:Date}[]>`SELECT measured_at FROM body_measurements WHERE user_id=${userA} AND source='self_reported' ORDER BY measured_at DESC LIMIT 1`)[0]?.measured_at;if(typedAt===undefined)throw new Error("the typed weight wrote no row");const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date(typedAt.getTime()+1000).toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect(await weightOf()).toBe(72.5);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect(await weightOf()).toBe(70);expect((await inject("PATCH","/v1/users/me",cookieA,{weightKg:null})).statusCode).toBe(200);expect(await weightOf()).toBeNull();},30_000);
 
   // A typed row must stay a typed row: the PATCH refuses `source` (and any
   // other key it does not know) as a 400 at the boundary, never as a silent drop.
@@ -478,7 +478,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(empty.statusCode,empty.body).toBe(200);
     expect(empty.json()).toEqual({targets:null,missing:["age","gender","heightCm","weightKg","exerciseFrequency"]});
 
-    // Fill the profile but NOT the weight — weight lives on users.weight_kg,
+    // Fill the profile but NOT the weight — weight lives in the weigh-in history,
     // a different table, so this pins that the read spans both.
     expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:4,fitnessGoals:["weight_loss"],onboardingCompleted:true})).statusCode).toBe(200);
     expect((await inject("GET","/v1/nutrition/targets",t.access)).json()).toEqual({targets:null,missing:["weightKg"]});
