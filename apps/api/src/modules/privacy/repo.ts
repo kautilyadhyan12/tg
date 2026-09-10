@@ -128,9 +128,11 @@ export async function deleteAddressKeyedRows(tx: TransactionSql, userId: string)
 
 /** §5.2: "anonymize `users` row to a tombstone (email→null, display_name→
  *  'Deleted user', weight→null; row kept so FKs from audit/invoices
- *  resolve)". The row is NOT deleted and `status` stays 'deleted'.
+ *  resolve)". The row is NOT deleted and `status` stays 'deleted'. The
+ *  weight has no column any more (migration 0027): it lives only in
+ *  body_measurements, which this same transaction deletes.
  *
- *  Exactly the three fields the spec names are cleared. Everything else on
+ *  Exactly the fields the spec names are cleared. Everything else on
  *  the row is LEFT — §5.2 is silent on it and inventing scrub targets is
  *  R0.2 territory; recorded as a SPEC GAP for Kd instead. Login is already
  *  blocked by status='deleted'. The full list, completed at T3 round 2
@@ -143,7 +145,7 @@ export async function deleteAddressKeyedRows(tx: TransactionSql, userId: string)
 export async function anonymizeUser(tx: TransactionSql, userId: string): Promise<void> {
   await tx`
     UPDATE users
-    SET email = NULL, display_name = ${TOMBSTONE_DISPLAY_NAME}, weight_kg = NULL
+    SET email = NULL, display_name = ${TOMBSTONE_DISPLAY_NAME}
     WHERE id = ${userId}`;
 }
 

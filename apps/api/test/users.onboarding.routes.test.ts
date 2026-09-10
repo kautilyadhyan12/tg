@@ -14,9 +14,11 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
-import { patchOnboarding } from "../src/modules/users/repo.js";
+import { patchOnboarding, updateProfile } from "../src/modules/users/repo.js";
 import {
+  AccountNotActiveError,
   createMeasurement,
+  currentWeightKg,
   deleteMeasurement,
   recordTypedWeight,
   updateMeasurement,
@@ -571,8 +573,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     const rows = await sql<{ main_goal: string | null }[]>`
       SELECT main_goal FROM user_fitness_profiles WHERE user_id = ${userId}`;
     expect(rows[0]?.main_goal).toBe("flexibility");
-    const weight = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
-    expect(weight[0]?.weight_kg).toBeNull();
+    expect(await currentWeightKg(sql, userId)).toBeNull();
   });
 
   it("the database refuses a value the contract would have refused, for any writer that skips it", { timeout: 30_000 }, async () => {
@@ -621,9 +622,9 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("stamps every real save, and says honestly when there is nothing stamped yet", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ob-stamp@example.com");
-    // Body weight lives on the users row, so a weight-only save creates no
-    // profile row: there is no stamp, and the contract says null rather than
-    // inventing one.
+    // Body weight lives in the weigh-in history, so a weight-only save creates
+    // no profile row: there is no stamp, and the contract says null rather
+    // than inventing one.
     const weightOnly = await patchOk(cookies, { weightKg: 70 });
     expect(weightOnly.answers["weightKg"]).toBe(70);
     expect(weightOnly.answers["updatedAt"]).toBeNull();
@@ -766,9 +767,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
     // The person types a new weight, then logs a waist. Nothing in that waist
     // says anything about weight, so none of the three weightless writes may
-    // move the number. (The call-site guards that skip the recompute on these
-    // writes are a cost saving, not what keeps the number still: the rule
-    // itself never picks a weightless row. These pin the behaviour, not the guards.)
+    // move the number: the rule never picks a weightless row.
     expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
     const second = await measure({ measuredAt: await at(3), metrics: { waist_cm: 78 } });
     expect(second.statusCode).toBe(201);
@@ -866,7 +865,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // screen 2 — the screen and the plan would then show a number they did
     // not type — and a typed row that never became the newest one was being
     // re-inserted on every save of that screen.
-    const { cookies } = await makeUser("ob-measure-future@example.com");
+    const { userId, cookies } = await makeUser("ob-measure-future@example.com");
     const ahead = await measureOk(cookies, {
       measuredAt: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
       weightKg: 85,
@@ -883,8 +882,13 @@ d("onboarding v2 routes (real Postgres)", () => {
     const items = await history(cookies);
     expect(items.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70], ["manual", 85]]);
 
-    // The same 70 sent three more times (a save-as-you-go screen) adds nothing.
+    // The same 70 sent three more times (a save-as-you-go screen) adds nothing
+    // — and neither does the same 70 on a LATER day, which is what a profile
+    // form that echoes the weight it loaded sends on every save.
     for (let i = 0; i < 3; i += 1) expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
+    expect((await history(cookies)).length).toBe(2);
+    await ageTypedRows(userId);
+    expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
     expect((await history(cookies)).length).toBe(2);
 
     // Deleting the typed row falls back to the weigh-in, the only weight left.
@@ -896,7 +900,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["weightKg"]).toBeNull();
   });
 
-  it("typing the number already showing is still recorded; a same-day retype edits that entry; another day appends", { timeout: 60_000 }, async () => {
+  it("typing the number already showing writes nothing; a same-day retype edits the entry; another day appends", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-measure-retype@example.com");
     // A weigh-in of 70 from nine days ago is the number showing.
     const old = await measureOk(cookies, {
@@ -905,17 +909,18 @@ d("onboarding v2 routes (real Postgres)", () => {
     });
     expect((await get(cookies)).answers["weightKg"]).toBe(70);
 
-    // Screen 2 types the same 70. The ruling says a typed weight is saved as a
-    // weigh-in too, and this one must exist: it is what the number falls back
-    // to when the nine-day-old entry is later deleted as a mistake.
+    // Screen 2 types the same 70. The history already says 70, so nothing is
+    // written: a "typed by me" copy of a weigh-in would outrank it, and
+    // deleting that weigh-in as a mistake would then keep the mistake alive.
     await completeSeven(cookies);
-    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70], ["manual", 70]]);
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["manual", 70]]);
 
-    // 70 → 71 → 72 on a save-as-you-go screen is ONE typed entry that ends at
-    // 72, not three "weigh-ins" of which two are numbers the person never had.
+    // 71 → 72 on a save-as-you-go screen is ONE typed entry that ends at 72,
+    // not two "weigh-ins" of which one is a number the person never had.
     // (Same day in the person's zone — UTC for a fixture with no zone set — so
     // this leg could only misfire within a second of UTC midnight.)
     expect((await patchOk(cookies, { weightKg: 71 })).answers["weightKg"]).toBe(71);
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 71], ["manual", 70]]);
     expect((await patchOk(cookies, { weightKg: 72 })).answers["weightKg"]).toBe(72);
     const sameDay = await history(cookies);
     expect(sameDay.map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 72], ["manual", 70]]);
@@ -978,57 +983,55 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await history(cookies)).filter((m) => m.source === "self_reported").map((m) => m.weightKg)).toEqual([71]);
   });
 
-  it("a cache that disagrees with the history is repaired by the next typed weight, never preserved", { timeout: 60_000 }, async () => {
-    // The rule says the column IS the history's newest weight-bearing row. The
-    // live code never lets them drift, but a save that finds nothing to write
-    // must still recompute — otherwise a drift, from wherever it came, is kept
-    // for as long as the person keeps typing the number they already have.
-    const { userId, cookies } = await makeUser("ob-measure-stale@example.com");
-    await completeSeven(cookies); // types 70: one typed row, column 70
-    const columnOf = async () =>
-      (await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`)[0]?.weight_kg;
+  it("the profile form echoing a weigh-in's number leaves no phantom typed entry, so deleting the weigh-in undoes it", { timeout: 60_000 }, async () => {
+    // A profile form that loads the current weight into its box may send it
+    // back with any save, even a name change. That echo is not a typed entry:
+    // recorded as "typed by me" it would outrank the weigh-in it copied, and
+    // deleting that weigh-in as a mistake would keep the mistake on screen.
+    const { cookies } = await makeUser("ob-measure-echo@example.com");
+    await completeSeven(cookies); // types 70
+    const mistake = await measureOk(cookies, { measuredAt: await afterTyped(cookies, 1), weightKg: 90 });
+    expect((await get(cookies)).answers["weightKg"]).toBe(90);
 
-    // Drift 1: the column says 80, the person's own typed row still says 70.
-    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
-    expect((await patchOk(cookies, { weightKg: 70 })).answers["weightKg"]).toBe(70);
-    expect(await columnOf()).toBe("70.00");
-    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70]]);
+    // The profile form saves a new name — and, as it does, echoes the 90.
+    const echoed = await inject({ method: "PATCH", url: "/v1/users/me", body: { displayName: "Renamed", weightKg: 90 }, cookies });
+    expect(echoed.statusCode, echoed.body).toBe(200);
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["manual", 90], ["self_reported", 70]]);
 
-    // Drift 2: a weight with NO row under it (the shape before 0026's backfill). Clearing it
-    // must empty the column (RULINGS 2026-09-10) even though there is no
-    // weight-bearing row to write a clear over.
-    await sql`DELETE FROM body_measurements WHERE user_id = ${userId}`;
-    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
-    const cleared = await patchOk(cookies, { weightKg: null });
-    expect(cleared.answers["weightKg"]).toBeNull();
-    expect(await columnOf()).toBeNull();
-    expect(await history(cookies)).toEqual([]);
+    // The mistaken weigh-in is deleted: the previous true weight is back.
+    await deleteOk(cookies, mistake);
+    expect((await get(cookies)).answers["weightKg"]).toBe(70);
+    const me = await inject({ method: "GET", url: "/v1/users/me", cookies });
+    expect((JSON.parse(me.body) as { user: { weightKg: number | null; displayName: string } }).user).toMatchObject({ weightKg: 70, displayName: "Renamed" });
   });
 
-  /** Resolves once another connection is queued on a lock `holderPid` holds.
-   *  A lock test must SEE the second transaction waiting before it lets the
-   *  first go on: a fixed sleep lets a slow start run the second one after the
-   *  first has committed, and then no conflict forms and a broken lock order
-   *  passes. */
-  const waitUntilQueuedBehind = async (holderPid: number): Promise<void> => {
+  /** Resolves, with the waiting backend's pid, once `n` other connections are
+   *  queued on a lock `holderPid` holds. A lock test must SEE the second
+   *  transaction waiting before it lets the first go on: a fixed sleep lets a
+   *  slow start run the second one after the first has committed, and then no
+   *  conflict forms and a broken lock order passes. */
+  const waitUntilQueuedBehind = async (holderPid: number, n = 1): Promise<number[]> => {
     for (let i = 0; i < 400; i += 1) {
-      const [row] = await sql<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM pg_stat_activity
+      const rows = await sql<{ pid: number }[]>`
+        SELECT pid FROM pg_stat_activity
         WHERE wait_event_type = 'Lock' AND ${holderPid}::int = ANY(pg_blocking_pids(pid))`;
-      if ((row?.n ?? 0) > 0) return;
+      if (rows.length >= n) return rows.map((r) => r.pid);
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 25);
       });
     }
-    throw new Error(`nothing queued behind backend ${String(holderPid)} within 10 s`);
+    throw new Error(`fewer than ${String(n)} queued behind backend ${String(holderPid)} within 10 s`);
   };
 
   /** Runs `first` in a transaction and holds it open at `hold` until `second`
-   *  is seen queued behind it, then lets it finish. Both outcomes come back,
-   *  errors included, so a deadlock reads as a failed expectation. */
+   *  is seen queued behind it (`queued` sees the waiting backends then), then
+   *  lets it finish. Both outcomes come back, errors included, so a deadlock
+   *  reads as a failed expectation. */
   const interleave = async <T>(
     first: (tx: postgres.TransactionSql, hold: () => Promise<void>) => Promise<void>,
     second: () => Promise<T>,
+    queued: (pids: number[]) => Promise<void> = () => Promise.resolve(),
+    expectQueued = 1,
   ): Promise<{ firstError: unknown; secondError: unknown; second: T | null }> => {
     let release = (): void => undefined;
     const held = new Promise<void>((resolve) => {
@@ -1056,85 +1059,101 @@ d("onboarding v2 routes (real Postgres)", () => {
       secondError = err;
       return null;
     });
-    await waitUntilQueuedBehind(pid);
+    const pids = await waitUntilQueuedBehind(pid, expectQueued);
+    // The holder is released whatever `queued` found, so a failed expectation
+    // there never leaves a transaction open behind the next test.
+    const queuedOutcome = await queued(pids).then(
+      () => null,
+      (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
+    );
     release();
     await firstDone;
     const result = await secondDone;
+    if (queuedOutcome !== null) throw queuedOutcome;
     return { firstError, secondError, second: result };
   };
 
-  /** Screen 2's save, by shape: the users row first, then today's typed row
-   *  edited in place (users/repo.ts, nutrition/repo.ts recordTypedWeight). */
-  const screenTwoSave = (userId: string, typedId: string) =>
-    async (tx: postgres.TransactionSql, hold: () => Promise<void>) => {
-      await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
-      await hold();
-      await tx`UPDATE body_measurements SET weight_kg = 71 WHERE id = ${typedId} AND user_id = ${userId}`;
-    };
+  /** Holds the person's users row the way every real save takes it. */
+  const holdUsersRow = (userId: string) => async (tx: postgres.TransactionSql, hold: () => Promise<void>) => {
+    await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+    await hold();
+  };
 
-  it("editing the typed entry while screen 2 saves it never deadlocks: the users row is taken first", { timeout: 30_000 }, async () => {
-    // A history edit of that same row that took the row first and the users
-    // row second (refreshWeight) is the opposite order; the two interleaved
-    // are a deadlock, and the save — with every answer in it — is the one
-    // Postgres aborts. Reproduced with the lock removed: "deadlock detected".
+  /** Locks the waiting backends hold on the history TABLE: must be none. A
+   *  row lock itself lives in the row's header, not in pg_locks — but every
+   *  INSERT, UPDATE or DELETE first takes a table-level lock on the relation,
+   *  and that one is listed. A writer that has not yet touched the history
+   *  holds nothing on it. */
+  const historyLocksHeldBy = async (pids: number[]): Promise<number> => {
+    const [row] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM pg_locks
+      WHERE pid = ANY(${pids}::int[]) AND relation = 'body_measurements'::regclass AND granted`;
+    return row?.n ?? 0;
+  };
+
+  it("every real save takes the users row BEFORE any history row: none can deadlock with another", { timeout: 60_000 }, async () => {
+    // ONE lock order, pinned on the REAL writers, not on a hand-written copy
+    // of their shape. With the users row held, each of the five saves that
+    // touch the history queues on it — and while it waits it holds NO row of
+    // the history. A writer that took a history row first would be the
+    // opposite order, and interleaved with any of the others a deadlock
+    // (40P01 — a 500 on a save that was perfectly fine).
     const { userId, cookies } = await makeUser("ob-measure-lock-order@example.com");
     await completeSeven(cookies); // one typed row, today
     const typed = (await history(cookies)).find((m) => m.source === "self_reported");
     if (typed === undefined) throw new Error("no typed row");
+    const input = { measuredAt: new Date().toISOString(), weightKg: 69, metrics: {}, source: "manual" as const };
 
-    const out = await interleave(screenTwoSave(userId, typed.id), () =>
-      updateMeasurement(sql, userId, typed.id, { weightKg: 72 }),
-    );
-
-    expect(out.firstError, "the save was aborted").toBeNull();
-    expect(out.secondError, "the edit was aborted").toBeNull();
-    expect(out.second?.weightKg).toBe(72);
-    // The edit ran after the save committed, so its number is the one that stands.
-    expect((await get(cookies)).answers["weightKg"]).toBe(72);
+    const writers: [string, () => Promise<unknown>][] = [
+      ["screen 2", () => patchOnboarding(sql, userId, { weightKg: 71 })],
+      ["the profile form", () => updateProfile(sql, userId, { weightKg: 72 })],
+      ["an edit of the typed entry", () => updateMeasurement(sql, userId, typed.id, { weightKg: 73 })],
+      ["a new weigh-in", () => createMeasurement(sql, userId, input)],
+      ["a delete of the typed entry", () => deleteMeasurement(sql, userId, typed.id)],
+    ];
+    for (const [name, write] of writers) {
+      const out = await interleave(holdUsersRow(userId), write, async (pids) => {
+        expect(await historyLocksHeldBy(pids), `${name} took a history row before the users row`).toBe(0);
+      });
+      expect(out.firstError, `${name}: the holder was aborted`).toBeNull();
+      expect(out.secondError, `${name} was aborted`).toBeNull();
+    }
+    // Every write ran after the holder committed, in order: the typed entry
+    // ended at 73, then the weigh-in 69 was logged, then the typed entry was
+    // deleted — so the weigh-in is what is left.
+    expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["manual", 69]]);
+    expect((await get(cookies)).answers["weightKg"]).toBe(69);
   });
 
-  it("deleting the typed entry while screen 2 saves it never deadlocks either", { timeout: 30_000 }, async () => {
-    const { userId, cookies } = await makeUser("ob-measure-lock-order-delete@example.com");
-    await completeSeven(cookies);
-    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
-    if (typed === undefined) throw new Error("no typed row");
-
-    const out = await interleave(screenTwoSave(userId, typed.id), () => deleteMeasurement(sql, userId, typed.id));
-
-    expect(out.firstError, "the save was aborted").toBeNull();
-    expect(out.secondError, "the delete was aborted").toBeNull();
-    expect(out.second).toBe(true);
-    // The delete ran after the save: the entry is gone, and it was the only weight.
-    expect((await history(cookies)).filter((m) => m.source === "self_reported")).toEqual([]);
-    expect((await get(cookies)).answers["weightKg"]).toBeNull();
-  });
-
-  it("a weigh-in that waits behind the account's deletion writes nothing", { timeout: 30_000 }, async () => {
+  it("a history write that waits behind the account's deletion is refused with the same 401, whichever write it is", { timeout: 60_000 }, async () => {
     // It passes sign-in while the deletion is still uncommitted, then queues
-    // on the users row. Saving it after the deletion would leave a row the
-    // cache never took (refreshWeight skips a deleted account), so a restored
-    // account would show one weight on the profile and another in its history.
-    const { userId, cookies } = await makeUser("ob-measure-deleted-mid-request@example.com");
-    const out = await interleave(
-      async (tx, hold) => {
-        // softDeleteUser's first statement.
-        await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId} AND status = 'active'`;
-        await hold();
-      },
-      async () =>
-        await inject({
-          method: "POST",
-          url: "/v1/nutrition/body-measurements",
-          body: { measuredAt: new Date().toISOString(), weightKg: 70 },
-          cookies,
-        }),
-    );
-
-    expect(out.firstError).toBeNull();
-    expect(out.second?.statusCode, out.second?.body).toBe(401);
-    const [count] = await sql<{ n: string }[]>`
-      SELECT count(*)::text AS n FROM body_measurements WHERE user_id = ${userId}`;
-    expect(count?.n).toBe("0");
+    // on the users row. All three writes answer as sign-in does for every
+    // request after a deletion, and nothing is saved into the closing account.
+    // One person per write: the app's pool is a single connection, so only
+    // one request can be seen waiting at a time.
+    const writes: [string, (id: string) => { method: "POST" | "PATCH" | "DELETE"; url: string; body?: unknown }][] = [
+      ["post", () => ({ method: "POST", url: "/v1/nutrition/body-measurements", body: { measuredAt: new Date().toISOString(), weightKg: 71 } })],
+      ["patch", (id) => ({ method: "PATCH", url: `/v1/nutrition/body-measurements/${id}`, body: { weightKg: 72 } })],
+      ["delete", (id) => ({ method: "DELETE", url: `/v1/nutrition/body-measurements/${id}` })],
+    ];
+    for (const [name, request] of writes) {
+      const { userId, cookies } = await makeUser(`ob-measure-deleted-mid-${name}@example.com`);
+      const id = await measureOk(cookies, { measuredAt: new Date().toISOString(), weightKg: 70 });
+      const out = await interleave(
+        async (tx, hold) => {
+          // softDeleteUser's first statement.
+          await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId} AND status = 'active'`;
+          await hold();
+        },
+        () => inject({ ...request(id), cookies }),
+      );
+      expect(out.firstError, name).toBeNull();
+      expect(out.secondError, name).toBeNull();
+      expect(out.second?.statusCode, `${name}: ${out.second?.body ?? ""}`).toBe(401);
+      const rows = await sql<{ id: string; weight_kg: string | null }[]>`
+        SELECT id, weight_kg FROM body_measurements WHERE user_id = ${userId}`;
+      expect(rows, name).toEqual([{ id, weight_kg: "70.00" }]);
+    }
   });
 
   it("no history write lands on an account that is not active", { timeout: 30_000 }, async () => {
@@ -1143,31 +1162,30 @@ d("onboarding v2 routes (real Postgres)", () => {
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
 
     const input = { measuredAt: new Date().toISOString(), weightKg: 71, metrics: {}, source: "manual" as const };
-    expect(await createMeasurement(sql, userId, input)).toBeNull();
-    expect(await updateMeasurement(sql, userId, id, { weightKg: 72 })).toBeNull();
-    expect(await deleteMeasurement(sql, userId, id)).toBe(false);
+    await expect(createMeasurement(sql, userId, input)).rejects.toBeInstanceOf(AccountNotActiveError);
+    await expect(updateMeasurement(sql, userId, id, { weightKg: 72 })).rejects.toBeInstanceOf(AccountNotActiveError);
+    await expect(deleteMeasurement(sql, userId, id)).rejects.toBeInstanceOf(AccountNotActiveError);
 
     const rows = await sql<{ id: string; weight_kg: string | null }[]>`
       SELECT id, weight_kg FROM body_measurements WHERE user_id = ${userId}`;
     expect(rows).toEqual([{ id, weight_kg: "70.00" }]);
-    const [user] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
-    expect(user?.weight_kg).toBe("70.00");
   });
 
-  it("a typed weight is never written for an account that is not active", { timeout: 30_000 }, async () => {
-    // The guarantee lives in the SQL, not in the promise that callers hold the
-    // users row: a third caller reaching recordTypedWeight for a tombstoned
-    // account gets no row and no column write.
-    const { userId } = await makeUser("ob-measure-gone-account@example.com");
+  it("a typed weight is never written for an account that is not active — not even the same-day edit", { timeout: 30_000 }, async () => {
+    // Callers hold the users row, but the read inside recordTypedWeight asks
+    // for an active account on its own. The account has a typed row from
+    // TODAY, so the path a forgetful caller would reach is the in-place edit
+    // — the one statement with no check of its own.
+    const { userId, cookies } = await makeUser("ob-measure-gone-account@example.com");
+    await completeSeven(cookies); // types 70 today
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
     await sql.begin(async (tx) => {
-      await recordTypedWeight(tx, userId, 70);
+      await recordTypedWeight(tx, userId, 71);
+      await recordTypedWeight(tx, userId, null);
     });
-    const [count] = await sql<{ n: string }[]>`
-      SELECT count(*)::text AS n FROM body_measurements WHERE user_id = ${userId}`;
-    expect(count?.n).toBe("0");
-    const [row] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
-    expect(row?.weight_kg).toBeNull();
+    const rows = await sql<{ weight_kg: string | null; source: string }[]>`
+      SELECT weight_kg, source FROM body_measurements WHERE user_id = ${userId}`;
+    expect(rows).toEqual([{ weight_kg: "70.00", source: "self_reported" }]);
   });
 
   it("a v1 profile write's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {

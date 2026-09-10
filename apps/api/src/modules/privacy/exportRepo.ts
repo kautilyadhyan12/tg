@@ -30,7 +30,7 @@ type Row = Record<string, unknown>;
  *  omitted as an internal migration id that means nothing to the user. */
 export async function selectExportUser(sql: Sql, userId: string): Promise<Row | null> {
   const rows = await sql<Row[]>`
-    SELECT id, email, display_name, locale, units, timezone, weight_kg,
+    SELECT id, email, display_name, locale, units, timezone,
            leaderboard_opt_out, status, last_active_at, created_at
     FROM users
     WHERE id = ${userId}`;

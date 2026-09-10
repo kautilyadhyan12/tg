@@ -82,8 +82,8 @@ d("DPDP data export (real Postgres)", () => {
   async function makeUser(label: string): Promise<{ userId: string; name: string }> {
     const name = `Export Fixture ${label}`;
     const rows = await sql<{ id: string }[]>`
-      INSERT INTO users (email, display_name, weight_kg, password_hash, hash_algo)
-      VALUES (${`dpdp-exp-${label}-${uniq()}@example.com`}, ${name}, 71.50,
+      INSERT INTO users (email, display_name, password_hash, hash_algo)
+      VALUES (${`dpdp-exp-${label}-${uniq()}@example.com`}, ${name},
               ${"$2a$10$fixtureHashNotARealPassword000000000000000000000000000"}, 'bcrypt')
       RETURNING id`;
     const userId = rows[0]?.id ?? "";

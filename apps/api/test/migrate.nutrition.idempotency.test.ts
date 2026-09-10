@@ -1,15 +1,17 @@
 // P2.7d — end-to-end meals + body stages against real Postgres: rows persist,
 // the migrated meal item survives mealItemSchema on read-back, the whole stage
-// is idempotent, users.weight_kg is refreshed (GAP-D), and the meal-badge
-// recompute (onMealLogged) is idempotent (GAP-E). DATABASE_URL-gated; fixture
-// prefix p27d-, cleaned before + after.
+// is idempotent, the legacy profile weight becomes a typed row only when no
+// imported measurement carries a weight (GAP-D), and the meal-badge recompute
+// (onMealLogged) is idempotent (GAP-E). DATABASE_URL-gated; fixture prefix
+// p27d-, cleaned before + after.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { mealItemSchema } from "@app/shared";
 import { seed } from "../src/db/seed.js";
+import { currentWeightKg } from "../src/modules/nutrition/repo.js";
 import { insertUser, transformUser } from "../tools/migrate-mongo/collections/users.js";
 import { insertMeal, transformMeal } from "../tools/migrate-mongo/collections/meals.js";
-import { insertBody, refreshImportedWeights, refreshUserWeight, transformBody } from "../tools/migrate-mongo/collections/body.js";
+import { insertBody, recordLegacyProfileWeight, recordLegacyProfileWeights, transformBody } from "../tools/migrate-mongo/collections/body.js";
 import { onMealLogged } from "../src/modules/gamification/service.js";
 import { uuidv5 } from "../tools/migrate-mongo/uuid5.js";
 
@@ -74,7 +76,7 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     expect(stored?.calc_version).toBe(0);
   }, 60_000);
 
-  it("body migrates idempotently and refreshes users.weight_kg (GAP-D)", async () => {
+  it("body migrates idempotently; the history wins over the legacy profile weight (GAP-D)", async () => {
     const row = transformBody({
       _id: "p27d-body-eeee5555ffff6666",
       user_id: userMongoId,
@@ -88,21 +90,21 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
 
     expect(await insertBody(sql, row)).toBe(1);
     expect(await insertBody(sql, row)).toBe(0); // idempotent
-    await refreshUserWeight(sql, userId);
-
-    const [w] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
-    expect(w?.weight_kg === null ? null : Number(w?.weight_kg)).toBe(75);
     const [m] = await sql<{ metrics: Record<string, number> }[]>`SELECT metrics FROM body_measurements WHERE id = ${row.id}`;
     expect(m?.metrics).toEqual({ waist_cm: 68, body_fat_pct: 20 });
 
+    // The legacy profile said 85, undated; the imported weigh-in says 75 on a
+    // date. The history wins: no typed row is written, and the live app reads 75.
+    expect(await recordLegacyProfileWeight(sql, userId, 85)).toBe(0);
+    expect(await currentWeightKg(sql, userId)).toBe(75);
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM body_measurements WHERE user_id = ${userId} AND source = 'self_reported'`)[0]?.n).toBe(0);
+
     // A user whose imported measurements are ALL weightless keeps the weight
-    // the users import carried — and under the one-source rule (RULINGS
-    // 2026-09-10) keeping it means giving it a typed row of its own, dated
-    // after everything imported, so the live app's first correction to that
-    // person's history has something true to fall back to. Idempotent: the
-    // second run adds no second row.
+    // the legacy profile carried — and under the one-source rule (RULINGS
+    // 2026-09-10) keeping it means giving it a typed row of its own, so the
+    // live app's first correction to that person's history has something
+    // true to fall back to. Idempotent: the second run adds no second row.
     await sql`DELETE FROM body_measurements WHERE user_id = ${userId} AND weight_kg IS NOT NULL`;
-    await sql`UPDATE users SET weight_kg = 80 WHERE id = ${userId}`;
     const weightless = transformBody({
       _id: "p27d-body-weightless-0001",
       user_id: userMongoId,
@@ -112,34 +114,46 @@ d("migration meals + body stages: persistence + idempotency + refresh (real Post
     expect(weightless).not.toBeNull();
     if (weightless === null) return;
     expect(await insertBody(sql, weightless)).toBe(1);
-    await refreshUserWeight(sql, userId);
-    await refreshUserWeight(sql, userId);
-    const [kept] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
-    expect(kept?.weight_kg === null ? null : Number(kept?.weight_kg)).toBe(80);
-    const typed = await sql<{ weight_kg: string | null; newest: boolean }[]>`
-      SELECT weight_kg, measured_at > ${weightless.measuredAt} AS newest FROM body_measurements
-      WHERE user_id = ${userId} AND source = 'self_reported'`;
-    expect(typed).toEqual([{ weight_kg: "80.00", newest: true }]);
+    expect(await recordLegacyProfileWeight(sql, userId, 80)).toBe(1);
+    expect(await recordLegacyProfileWeight(sql, userId, 80)).toBe(0);
+    expect(await currentWeightKg(sql, userId)).toBe(80);
+    const typed = await sql<{ weight_kg: string | null }[]>`
+      SELECT weight_kg FROM body_measurements WHERE user_id = ${userId} AND source = 'self_reported'`;
+    expect(typed).toEqual([{ weight_kg: "80.00" }]);
   }, 60_000);
 
-  // The body stage refreshes every IMPORTED user, not only the owners of
-  // measurement docs: a profile weight with nothing under it is exactly the
-  // one that needs its typed row. The empty second set is the point — the
-  // stage's old set (measurement owners only) would skip this person.
+  // The body stage's last step runs for every IMPORTED user, not only the
+  // owners of measurement docs: a profile weight with nothing under it is
+  // exactly the one that needs its typed row; a person with no legacy weight
+  // gets nothing.
   it("an imported profile weight with no measurement docs gets its typed row", async () => {
     const mongoId = "p27d-user-weight-no-docs-0001";
     const u = transformUser({ _id: mongoId, email: "p27d-w@example.com", fullName: "W User", password: "$2b$10$abcdefghijklmnopqrstuv", weight: { value: 81, unit: "kg" } });
+    const none = transformUser({ _id: "p27d-user-no-weight-0001", email: "p27d-nw@example.com", fullName: "NW User", password: "$2b$10$abcdefghijklmnopqrstuv" });
     expect(u).not.toBeNull();
-    if (u === null) return;
+    expect(none).not.toBeNull();
+    if (u === null || none === null) return;
     await insertUser(sql, u);
+    await insertUser(sql, none);
 
-    expect(await refreshImportedWeights(sql, new Set([u.id]), new Set())).toBe(1);
-    expect(await refreshImportedWeights(sql, new Set([u.id]), new Set())).toBe(1);
+    const legacy = new Map([[u.id, u.weightKg], [none.id, none.weightKg]]);
+    expect(await recordLegacyProfileWeights(sql, legacy)).toBe(1);
+    expect(await recordLegacyProfileWeights(sql, legacy)).toBe(0);
     const rows = await sql<{ weight_kg: string | null; source: string }[]>`
       SELECT weight_kg, source FROM body_measurements WHERE user_id = ${u.id}`;
     expect(rows).toEqual([{ weight_kg: "81.00", source: "self_reported" }]);
-    const [w] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${u.id}`;
-    expect(w?.weight_kg).toBe("81.00");
+    expect(await currentWeightKg(sql, u.id)).toBe(81);
+    expect(await currentWeightKg(sql, none.id)).toBeNull();
+  }, 60_000);
+
+  // A user the users stage could not insert (a duplicate email, which run.ts
+  // logs and survives) still has a legacy weight in the map. Their weight is
+  // skipped with them, and the run goes on to the stages after this one.
+  it("a profile weight for someone the users stage did not import is skipped, not a crash", async () => {
+    const neverImported = uuidv5("p27d-user-never-imported-0001");
+    expect(await recordLegacyProfileWeights(sql, new Map([[neverImported, 77]]))).toBe(0);
+    const [n] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM body_measurements WHERE user_id = ${neverImported}`;
+    expect(n?.n).toBe(0);
   }, 60_000);
 
   it("meal recompute (onMealLogged) awards first_meal exactly once (GAP-E)", async () => {

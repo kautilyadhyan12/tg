@@ -36,8 +36,8 @@ function LogForm({ onSaved, latest }) {
     setLoading(true);
     try {
       // New /v1 API (Card 3): @app/shared bodyMeasurementInputSchema (.strict())
-      // — weight is a first-class column (Part 4 §3.6 mirrors it into
-      // users.weight_kg); every other measurement rides the metrics record.
+      // — weight is a first-class column (the newest weigh-in IS the person's
+      // weight, Part 4 §0); every other measurement rides the metrics record.
       const payload = { measuredAt: new Date().toISOString(), metrics: {} };
       for (const [k, v] of Object.entries(form)) {
         if (v === '' || v === undefined) continue;

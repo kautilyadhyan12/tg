@@ -32,9 +32,11 @@ export interface PlanAnswerInput {
  *  Parsed through the shared contract rather than handed over raw: a stored
  *  value outside the plan's rails (a height the column allows and the maths
  *  does not) fails loud here instead of producing a number nobody can explain
- *  (R1.3). Every writer of these columns goes through
- *  `patchOnboardingRequestSchema`, whose rails are the same or tighter, so this
- *  is a guard and not a routine branch. */
+ *  (R1.3). Two writers reach these columns: `patchOnboardingRequestSchema`
+ *  and the old profile form's `putFitnessProfileRequestSchema`; both carry
+ *  the plan's rails today (the age rail was raised to 16 on both, and
+ *  migration 0027 cleared the ages stored under the old 13), so this is a
+ *  guard and not a routine branch. */
 export function planAnswersFor(input: PlanAnswerInput): PlanAnswers {
   const a = input.answers;
   return planAnswersSchema.parse({

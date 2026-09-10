@@ -1,6 +1,6 @@
 // P2.7b — legacy weight {value,unit} → kg. Ports calories.py's unit conversion
-// (KG_PER_LB, :98) but NOT its 70 kg estimation fallback: users.weight_kg is
-// nullable, so a missing/invalid legacy weight migrates as NULL rather than a
+// (KG_PER_LB, :98) but NOT its 70 kg estimation fallback: a person may have no
+// weight, so a missing/invalid legacy weight migrates as NULL rather than a
 // fabricated 70 (DECISIONS 2026-07-13 — don't invent measurements).
 import { z } from "zod";
 

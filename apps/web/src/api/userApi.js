@@ -3,7 +3,7 @@
 // wrote onboarding to the legacy backend-ml PATCH /users/onboarding endpoint;
 // that storage now lives on user_fitness_profiles (onboarding-storage, PR #30):
 //   PUT   /v1/users/me/fitness-profile   full-document replace (idempotent)
-//   PATCH /v1/users/me                   weight (users.weight_kg, Part 4 §3.1)
+//   PATCH /v1/users/me                   weight (saved as a weigh-in, Part 4 §0)
 //   GET   /v1/users/me                   carries onboardingCompleted (the gate)
 // Shapes are @app/shared users.ts (putFitnessProfileRequestSchema,
 // updateProfileRequestSchema, userProfileSchema).
@@ -53,7 +53,7 @@ export function convertWeight(value, toUnit) {
  *  (putFitnessProfileRequestSchema). Renames sessionDuration→sessionDurationMin,
  *  converts height/target-weight units to metric + 2dp, and maps a blank
  *  medical note to null ("" is not "no conditions stated"). Weight is NOT here —
- *  it lives on users.weight_kg via PATCH /v1/users/me. `onboardingCompleted` is
+ *  it is a weigh-in, saved via PATCH /v1/users/me. `onboardingCompleted` is
  *  added by the caller (kept out so a future Settings edit can reuse this mapper
  *  without flipping the gate). Pure + unit-tested. */
 export function toFitnessProfilePayload(formData) {
@@ -105,6 +105,26 @@ export function mergeFitnessProfile(current, edits) {
     Object.entries(edits || {}).filter(([, v]) => v !== undefined),
   );
   return { ...base, ...defined, onboardingCompleted: current?.onboardingCompleted ?? true };
+}
+
+/** What the profile form sends to PATCH /v1/users/me: ONLY what changed.
+ *
+ *  The form loads the current weight into its box and used to send it back
+ *  with every save, even a name change. The server saves a weight it is sent
+ *  as a weigh-in marked "typed by me" (RULINGS 2026-09-10), so an echo of the
+ *  number already showing would be an entry the person never typed — and one
+ *  that outranks the weigh-in it copied, keeping a mistaken weigh-in's number
+ *  alive after that weigh-in is deleted. The server now ignores such an echo
+ *  too; this keeps the request honest at its source. A blank box sends
+ *  nothing (clearing the weight is not this form's job), and a blank name
+ *  sends nothing (the PATCH refuses an empty one). Pure + unit-tested. */
+export function profilePatchFor(profile, form) {
+  const patch = {};
+  const name = (form.fullName || '').trim();
+  if (name && name !== (profile?.displayName || '')) patch.displayName = name;
+  const wKg = weightToKg(form.weight, form.weightUnit);
+  if (wKg !== null && wKg !== (profile?.weightKg ?? null)) patch.weightKg = wKg;
+  return patch;
 }
 
 export const userService = {

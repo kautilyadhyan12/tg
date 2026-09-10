@@ -7,6 +7,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
+import { onboardingQuerySchema } from "@app/shared";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
@@ -38,13 +39,8 @@ function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyR
   return parsed.data;
 }
 
-/** The query the two onboarding routes take. `timeZone` is the DEVICE's IANA
- *  zone (RULINGS 2026-07-21); the day itself is never accepted from a client. */
-const onboardingQuerySchema = z
-  .object({ timeZone: z.string().trim().min(1).max(64).optional() })
-  .strict();
-
-/** The device's zone, refused outright when the runtime does not know it: the
+/** The device's zone (`onboardingQuerySchema`, @app/shared), refused outright
+ *  when the runtime does not know it: the
  *  alternative is `safeTimeZone`'s silent fall back to UTC, which would hand a
  *  person in Auckland a finish date a day out with nothing on screen to say so.
  *  Returns undefined when the reply has been sent. */

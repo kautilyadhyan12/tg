@@ -10,7 +10,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile } from '../api/userApi';
+import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -121,10 +121,11 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
     e.preventDefault();
     setLoading(true);
     try {
-      // name + weight → /v1/users/me; age/gender/height/target → the fitness
+      // name + weight → /v1/users/me, and ONLY when changed (profilePatchFor:
+      // a weight echoed back unchanged would become a "typed by me" weigh-in
+      // the person never typed); age/gender/height/target → the fitness
       // profile via a MERGE (preserve the fitness-prefs the other form owns +
-      // keep onboardingCompleted true). Weight/name skipped when blank so the
-      // .strict()/min(1) PATCH body never 400s on an empty field.
+      // keep onboardingCompleted true).
       // T3 F4: the PUT runs FIRST because it is the call that rejects
       // out-of-range user input — so a validation failure leaves NOTHING
       // committed, rather than half-saving name/weight and reporting failure.
@@ -135,10 +136,7 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         heightCm: heightToCm(form.height, form.heightUnit),
         targetWeightKg: weightToKg(form.targetWeight, form.weightUnit),
       }));
-      const patch = {};
-      if (form.fullName.trim()) patch.displayName = form.fullName.trim();
-      const wKg = weightToKg(form.weight, form.weightUnit);
-      if (wKg !== null) patch.weightKg = wKg;
+      const patch = profilePatchFor(profile, form);
       if (Object.keys(patch).length) await userService.updateProfile(patch);
 
       toast.success('Profile updated');
@@ -496,8 +494,8 @@ function AccountTab({ profile, onSaved }) {
     try {
       // Card 7 (Kd ruled WIPE): PUT {} is the full-clear — it wipes every
       // fitness-profile field AND sets onboarding_completed → false
-      // (DECISIONS 2026-07-15). Weight (users.weight_kg) is a separate column
-      // used elsewhere and is intentionally NOT cleared here.
+      // (DECISIONS 2026-07-15). Weight (the weigh-in history) is kept
+      // separately and is intentionally NOT cleared here.
       await userService.putFitnessProfile({});
       // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).
       // Without this refresh, opening the Fitness tab and saving would merge

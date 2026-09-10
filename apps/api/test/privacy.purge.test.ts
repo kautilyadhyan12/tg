@@ -116,8 +116,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const deletedAt = deletedDaysAgo === null ? null : new Date(Date.now() - deletedDaysAgo * DAY_MS);
     const status = deletedDaysAgo === null ? "active" : "deleted";
     const rows = await sql<{ id: string }[]>`
-      INSERT INTO users (email, display_name, weight_kg, status, deleted_at)
-      VALUES (${email}, 'Fixture Person', 72.50, ${status}, ${deletedAt})
+      INSERT INTO users (email, display_name, status, deleted_at)
+      VALUES (${email}, 'Fixture Person', ${status}, ${deletedAt})
       RETURNING id`;
     const userId = rows[0]?.id ?? "";
     madeUsers.push(userId);
@@ -381,15 +381,18 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     await run();
     const row = (
       await sql<
-        { email: string | null; display_name: string; weight_kg: string | null; status: string }[]
-      >`SELECT email, display_name, weight_kg, status FROM users WHERE id = ${u.userId}`
+        { email: string | null; display_name: string; status: string }[]
+      >`SELECT email, display_name, status FROM users WHERE id = ${u.userId}`
     )[0];
     expect(row).toEqual({
       email: null,
       display_name: "Deleted user",
-      weight_kg: null,
       status: "deleted",
     });
+    // The spec's "weight->null" is the history's job now: body weight has no
+    // users column (migration 0027) and the purge deleted every weigh-in.
+    const weighIns = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM body_measurements WHERE user_id = ${u.userId}`;
+    expect(weighIns[0]?.n).toBe(0);
   });
 
   it("tombstones TWO users in one run (multiple NULL emails)", { timeout: 60_000 }, async () => {

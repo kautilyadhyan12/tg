@@ -1,9 +1,9 @@
 // P2.7d — body_measurements stage. Transforms a legacy `body_measurements` doc
 // into a `body_measurements` row (weight + a `metrics` jsonb of the *_cm /
-// body_fat_pct fields), inserts it idempotently, and exposes the users.weight_kg
-// refresh (GAP-D: body history is the ONE source of weight, RULINGS
-// 2026-09-10; the same rule as nutrition/repo.ts refreshWeight). All values
-// are the legacy numbers — none fabricated.
+// body_fat_pct fields), inserts it idempotently, and gives the legacy PROFILE
+// weight its typed row when nothing imported carries a weight (GAP-D: the
+// history is the ONE source of weight, RULINGS 2026-09-10; there is no
+// users column). All values are the legacy numbers — none fabricated.
 import { z } from "zod";
 import type { Sql } from "postgres";
 import { uuidv5 } from "../uuid5.js";
@@ -96,48 +96,36 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
   return res.count;
 }
 
-/** GAP-D, under the one-source rule (RULINGS 2026-09-10; migration `0026`
- *  makes the same repair for rows already in Postgres): the column is a cache
- *  of the newest row that says something about weight. The users import wrote
- *  the weight the legacy profile held with no measurement behind it, so when
- *  the imported measurements carry no newer number that profile weight becomes
- *  a `self_reported` row of its own, dated after everything imported for that
- *  person — `0026`'s first backfill statement for one person, kept in step
- *  with it (no status filter there either). Then the column follows the newest
- *  weight-bearing row, as the live app does (nutrition/repo.ts refreshWeight).
- *  Idempotent: the second run finds the typed row already newest and equal to
- *  the column. */
-export async function refreshUserWeight(sql: Sql, userId: string): Promise<void> {
-  await sql`
+/** GAP-D, under the one-source rule (RULINGS 2026-09-10). The legacy profile
+ *  held a weight with no measurement behind it and no date. It becomes a
+ *  `self_reported` row ONLY for a person none of whose imported measurements
+ *  carries a weight: the history wins wherever it says anything, because an
+ *  undated profile number must never outrank a dated weigh-in. Runs AFTER the
+ *  body stage's inserts, so "nothing carries a weight" is judged on the
+ *  imported history. A person the users stage could not insert (a duplicate
+ *  email, logged there) is skipped here too, so the run goes on to the next
+ *  stages. Idempotent: the second run finds the typed row and inserts nothing. */
+export async function recordLegacyProfileWeight(sql: Sql, userId: string, weightKg: number | null): Promise<number> {
+  if (weightKg === null) return 0;
+  const res = await sql`
     INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
-    SELECT u.id,
-           GREATEST(now(), (SELECT max(measured_at) FROM body_measurements WHERE user_id = u.id) + interval '1 second'),
-           u.weight_kg, '{}'::jsonb, 'self_reported'
+    SELECT u.id, now(), ${weightKg}, '{}'::jsonb, 'self_reported'
     FROM users u
-    LEFT JOIN LATERAL (
-      SELECT weight_kg FROM body_measurements
-      WHERE user_id = u.id AND (weight_kg IS NOT NULL OR source = 'self_reported')
-      ORDER BY measured_at DESC, id DESC LIMIT 1) newest ON true
-    WHERE u.id = ${userId} AND u.weight_kg IS NOT NULL
-      AND (newest.weight_kg IS NULL OR newest.weight_kg <> u.weight_kg)`;
-  await sql`
-    UPDATE users SET weight_kg = (
-      SELECT weight_kg FROM body_measurements
-      WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
-      ORDER BY measured_at DESC, id DESC LIMIT 1)
-    WHERE id = ${userId} AND status = 'active'`;
+    WHERE u.id = ${userId}
+      AND NOT EXISTS (
+        SELECT 1 FROM body_measurements
+        WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported'))`;
+  return res.count;
 }
 
-/** The body stage's weight refresh: every user the users stage imported as
- *  well as every owner of a measurement doc — a profile weight with no
- *  measurements behind it is exactly the one that needs its row. Returns how
- *  many users were refreshed. */
-export async function refreshImportedWeights(
+/** The body stage's last step, for every user the users stage read: the
+ *  legacy profile weight of each (null for most) through the rule above.
+ *  Returns how many typed rows were written. */
+export async function recordLegacyProfileWeights(
   sql: Sql,
-  importedUsers: ReadonlySet<string>,
-  bodyUsers: ReadonlySet<string>,
+  legacyWeights: ReadonlyMap<string, number | null>,
 ): Promise<number> {
-  const users = new Set<string>([...importedUsers, ...bodyUsers]);
-  for (const userId of users) await refreshUserWeight(sql, userId);
-  return users.size;
+  let written = 0;
+  for (const [userId, weightKg] of legacyWeights) written += await recordLegacyProfileWeight(sql, userId, weightKg);
+  return written;
 }

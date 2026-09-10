@@ -73,8 +73,12 @@ describe('MeasurementsTracker history', () => {
 
     expect(screen.getByText('No values')).toBeTruthy();
     expect(screen.queryByText('Weight cleared')).toBeNull();
-    expect(screen.getByText('Sep 10, 2026')).toBeTruthy();
-    expect(screen.queryByText('Sep 11, 2026')).toBeNull();
-    expect(screen.getByText('Sep 8, 2026')).toBeTruthy();
+    // The screen formats the day in the MACHINE's zone (what the person sees),
+    // so the expected text is built the same way: a hand-written "Sep 10" is
+    // wrong from UTC+12 eastwards, where noon UTC on the 10th is already the 11th.
+    const shown = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    expect(screen.getByText(shown('2026-09-10T12:00:00.000Z'))).toBeTruthy();
+    expect(screen.queryByText(shown('2026-09-11T12:00:00.000Z'))).toBeNull();
+    expect(screen.getByText(shown('2026-09-08T12:00:00.000Z'))).toBeTruthy();
   });
 });

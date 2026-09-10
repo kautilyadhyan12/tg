@@ -14,6 +14,7 @@ export const userProfileSchema = z.object({
   locale: z.string(),
   units: z.string(),
   timezone: z.string().nullable(),
+  /** The newest weigh-in (RULINGS 2026-09-10) — the only place weight lives. */
   weightKg: z.number().nullable(),
   leaderboardOptOut: z.boolean(),
   /** Onboarding gate (v1 §6.1:442 — a users-module concern, which is why it is
@@ -31,7 +32,9 @@ export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
  *  status, plan-adjacent anything) are not writable here (R3.1). Locale/units
  *  value sets recorded in DECISIONS (P2.2): locales = the spec's EN/HI/AS
  *  (Part 2 Appendix A localization triad); units = metric|imperial.
- *  weightKg bounds mirror numeric(5,2) (Part 4 §3.1). */
+ *  weightKg bounds mirror body_measurements.weight_kg numeric(5,2) (Part 4
+ *  §3.6): a weight sent here is saved as a weigh-in marked "typed by me", and
+ *  the number the history already shows writes nothing. */
 export const updateProfileRequestSchema = z
   .object({
     displayName: z.string().trim().min(1).max(100).optional(),
@@ -113,9 +116,10 @@ export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema
 /** The stored profile. EVERY field is nullable: the wizard may be partial, and
  *  fitness_level is NULL until answered — unanswered is not 'beginner'
  *  (Kd-approved; the old Mongo model defaulted it, we deliberately do not).
- *  Weight is NOT here — it lives on users.weight_kg (Part 4 §3.1), unduplicated.
- *  Lengths/units mirror the 0006 DDL: height/target weight are metric, matching
- *  users.weight_kg and the INVENTORY.md:45 XFORM convention. */
+ *  Weight is NOT here — it lives only in the weigh-in history (RULINGS
+ *  2026-09-10) and is served on the profile as its newest entry.
+ *  Lengths/units mirror the 0006 DDL: height/target weight are metric, the
+ *  INVENTORY.md:45 XFORM convention. */
 export const fitnessProfileSchema = z.object({
   age: z.number().int().nullable(),
   gender: genderSchema.nullable(),

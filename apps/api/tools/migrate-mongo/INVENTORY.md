@@ -39,7 +39,7 @@ lastRunDate, completed_challenges, createdAt, updatedAt, __v`.
 | `email` | `users.email` (citext) | MAP |
 | `password` | `users.password_hash` + `hash_algo='bcrypt'` | MAP (bcrypt preserved) |
 | `fullName` | `users.display_name` (NOT NULL) | XFORM (fallback = email local-part if empty) |
-| `weight {value,unit}` | `users.weight_kg` | XFORM lbs→kg (`normalize_weight_kg`) |
+| `weight {value,unit}` | one `self_reported` `body_measurements` row (§6) | XFORM lbs→kg (`normalize_weight_kg`) |
 | `lastLogin` | `users.last_active_at` | MAP |
 | `streak`,`lastWorkoutDate`,`badges`,`xp`,`level`,`running_*`,`completed_challenges` | `streaks` / `user_achievements` | **RECOMPUTE** from migrated history (§7:882-884) — NOT trusted from Mongo |
 | `age,gender,height,fitnessLevel,fitnessGoals,exerciseFrequency,availableEquipment,sessionDuration,preferredWorkoutTime,medicalConditions,onboardingCompleted,targetWeight,profilePicture` | *(no columns)* | **DROP** (no target; the queued onboarding-storage gap) |
@@ -98,7 +98,9 @@ id=`UUIDv5(ns, convHex:index)` (**G-subid**).
 Real keys: `_id,user_id,measured_at,weight_kg,waist_cm,chest_cm,hips_cm,
 left_arm_cm,right_arm_cm,left_thigh_cm,right_thigh_cm,body_fat_pct,created_at`.
 `measured_at`→`measured_at`; `weight_kg`→`weight_kg`; all `*_cm`/`body_fat_pct`
-→`metrics` jsonb; `source='manual'`; latest per user also refreshes `users.weight_kg`.
+→`metrics` jsonb; `source='manual'`. The legacy PROFILE weight (§1) becomes one
+`self_reported` row for a user none of whose measurements carries a weight; the
+history is the one source of weight and there is no users column (RULINGS 2026-09-10).
 
 ## 7. `running_*` → `runs` / `saved_routes` / `run_schedules`
 - **`running_sessions` (8) → `runs`**: `started_at`; `duration_min`×60→`duration_s`;

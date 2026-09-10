@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
+
+- Built (Kd's redesign, RULINGS 2026-09-10): `0027` re-runs 0026's backfill, drops `users.weight_kg`, adds the
+  `source` CHECK, clears ages under 16; every screen reads the newest weigh-in (`currentWeightKg`); re-sending the
+  weight already showing writes nothing; the web profile form sends only what changed (the old onboarding form does not).
+- Also fixed: the Mongo import skips the profile weight of a person it could not import (it stopped the run);
+  the spec's workout-calorie rule keeps "≤ workout time"; stale "weight is on the user row" comments corrected.
+- Verified: api tsc + eslint 0; shared tsc 0; web 34 (userApi, the new Settings form render test, measurements);
+  local Postgres migrate.nutrition + db.migration + users.onboarding 62. The new import test failed first; Settings
+  forced to send the weight, and the reader made to ignore a clear, each turned a new test red.
+- Open: the re-check of these fixes, then merge. Roadmap item 10 gains a defect: a workout's calories use the
+  weight on the day it syncs, not the day it was done. Next: 4a-ii, the seven screens.
+
 ## 2026-09-10 · Onboarding v2 server half (item 4a-i), branch `onboarding-plan-server`, PR #58
 
 - Built: `GET`/`PATCH /v1/users/me/onboarding` — answers saved as you go, the live plan or the list
