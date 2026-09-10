@@ -74,10 +74,11 @@ const CORE_EIGHT = [
   "sessionMinutes",
 ];
 
-/** The golden person, hand-computed from plan/maths.ts:
+/** The golden person, hand-computed from plan/maths.ts in its whole-kcal steps:
  *    resting burn  10·70 + 6.25·165 − 5·30 − 161            = 1420.25 → 1420
- *    a session      5 MET · 70 kg · 0.75 h                   = 262.5 kcal
- *    daily burn     1420.25 · 1.2 (sitting) + 262.5·3/7      = 1816.8  → 1817
+ *    your day       1420 · 1.2 (sitting)                     = 1704
+ *    training       5 · 70 kg · (3 · 45 min) ÷ 60 ÷ 7        = 112.5   → 113
+ *    daily burn     1704 + 113                               = 1817
  *    steady         0.5 kg/week · 7700 ÷ 7                   = −550 a day
  *    eat            1817 − 550                               = 1267
  *    5 kg to lose   5 · 7700 ÷ 550                           = 70 days
@@ -201,6 +202,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(body.plan).toBeNull();
     expect([...body.missing].sort()).toEqual([...CORE_EIGHT].sort());
     expect(body.answers).toMatchObject({
+      displayName: "OB Fixture", // the account's own name, never blank
       mainGoal: null,
       age: null,
       gender: null,
@@ -255,6 +257,15 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(s6.missing).toEqual([]);
     expect(s6.plan).toMatchObject(GOLDEN_LOSE);
     expect(typeof s6.plan?.["finishDate"]).toBe("string");
+    // And the steps "How is this worked out?" prints, the golden sums above.
+    expect(s6.plan?.["workings"]).toMatchObject({
+      resting: { formula: "female", constant: -161, kcal: 1420 },
+      day: { activity: "sitting", factor: 1.2, kcal: 1704 },
+      training: { kcalPerKgHour: 5, trainingDays: 3, sessionMinutes: 45, kcal: 113 },
+      change: { pace: "steady", kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
+      beforeFloorKcal: 1267,
+      finish: { kgToMove: 5, kcalPerKg: 7700 },
+    });
 
     // Screen 7 changes nothing about the calories — equipment is the plan
     // builder's input (6a), not the maths'.
@@ -279,6 +290,29 @@ d("onboarding v2 routes (real Postgres)", () => {
       sessionMinutes: 45,
     });
     expect(await get(cookies)).toEqual(s7);
+  });
+
+  it("screen 2's name is the account's own: saved trimmed, refused blank, and read wherever the account's name is", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-name@example.com");
+    expect((await get(cookies)).answers["displayName"]).toBe("OB Fixture");
+
+    const named = await patchOk(cookies, { displayName: "  Kd  " });
+    expect(named.answers["displayName"]).toBe("Kd");
+    // A name lives on the account, so a name-only save creates no profile row.
+    expect(named.answers["updatedAt"]).toBeNull();
+    const me = await inject({ method: "GET", url: "/v1/users/me", cookies });
+    expect((JSON.parse(me.body) as { user: { displayName: string } }).user.displayName).toBe("Kd");
+
+    // Blank, cleared or too long: refused, and nothing is written.
+    for (const displayName of ["", "   ", null, "x".repeat(101)]) {
+      expect((await patch(cookies, { displayName })).statusCode, JSON.stringify(displayName)).toBe(400);
+    }
+    const rows = await sql<{ display_name: string }[]>`SELECT display_name FROM users WHERE id = ${userId}`;
+    expect(rows[0]?.display_name).toBe("Kd");
+
+    // The profile form writes the same name, and onboarding reads its change.
+    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { displayName: "Kd Renamed" }, cookies })).statusCode).toBe(200);
+    expect((await get(cookies)).answers["displayName"]).toBe("Kd Renamed");
   });
 
   it("an explicit null clears one answer, and the number honestly disappears with it", { timeout: 60_000 }, async () => {
@@ -435,6 +469,8 @@ d("onboarding v2 routes (real Postgres)", () => {
       { availableEquipment: ["none", "dumbbells"] }, // "no equipment" stands alone
       { mainGoal: "weight_loss", planGoal: "lose" }, // the direction is derived, never sent
       { targetKcal: 1200 }, // nor is any number of the plan's
+      { displayName: "" }, // a name is changed, never blanked
+      { displayName: null },
     ];
     for (const body of bad) {
       const res = await patch(cookies, body);
@@ -539,10 +575,16 @@ d("onboarding v2 routes (real Postgres)", () => {
     const a = await makeUser("ob-tenant-a@example.com");
     const b = await makeUser("ob-tenant-b@example.com");
     await completeSeven(a.cookies);
-    await patchOk(b.cookies, { mainGoal: "posture", age: 55 });
-    expect((await get(a.cookies)).answers).toMatchObject({ mainGoal: "weight_loss", age: 30 });
-    expect((await get(b.cookies)).answers).toMatchObject({ mainGoal: "posture", age: 55, pace: null });
+    await patchOk(b.cookies, { mainGoal: "posture", age: 55, displayName: "Stranger" });
+    expect((await get(a.cookies)).answers).toMatchObject({ mainGoal: "weight_loss", age: 30, displayName: "OB Fixture" });
+    expect((await get(b.cookies)).answers).toMatchObject({ mainGoal: "posture", age: 55, pace: null, displayName: "Stranger" });
     expect((await get(b.cookies)).plan).toBeNull();
+    const names = await sql<{ id: string; display_name: string }[]>`
+      SELECT id, display_name FROM users WHERE id IN (${a.userId}, ${b.userId}) ORDER BY display_name`;
+    expect(names).toEqual([
+      { id: a.userId, display_name: "OB Fixture" },
+      { id: b.userId, display_name: "Stranger" },
+    ]);
     const rows = await sql<{ user_id: string; main_goal: string | null }[]>`
       SELECT user_id, main_goal FROM user_fitness_profiles
       WHERE user_id IN (${a.userId}, ${b.userId}) ORDER BY main_goal`;
@@ -570,11 +612,13 @@ d("onboarding v2 routes (real Postgres)", () => {
     // Prove the guard has something to guard: the same call works while active.
     expect(await patchOnboarding(sql, userId, { mainGoal: "flexibility" })).not.toBeNull();
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
-    expect(await patchOnboarding(sql, userId, { mainGoal: "posture", weightKg: 99 })).toBeNull();
+    expect(await patchOnboarding(sql, userId, { mainGoal: "posture", weightKg: 99, displayName: "Ghost" })).toBeNull();
     const rows = await sql<{ main_goal: string | null }[]>`
       SELECT main_goal FROM user_fitness_profiles WHERE user_id = ${userId}`;
     expect(rows[0]?.main_goal).toBe("flexibility");
     expect(await currentWeightKg(sql, userId)).toBeNull();
+    const names = await sql<{ display_name: string }[]>`SELECT display_name FROM users WHERE id = ${userId}`;
+    expect(names[0]?.display_name).toBe("OB Fixture");
   });
 
   it("the database refuses a value the contract would have refused, for any writer that skips it", { timeout: 30_000 }, async () => {
@@ -631,11 +675,12 @@ d("onboarding v2 routes (real Postgres)", () => {
     // and the weigh-in alike. The list is read from the answers AS SENT, so
     // the goal and the weight are no longer in it.
     await refused(
-      { mainGoal: "posture", weightKg: 80, onboardingCompleted: true },
+      { mainGoal: "posture", weightKg: 80, displayName: "Not Saved", onboardingCompleted: true },
       CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"),
     );
     expect((await get(cookies)).answers["mainGoal"]).toBeNull();
     expect(await currentWeightKg(sql, userId)).toBeNull();
+    expect((await get(cookies)).answers["displayName"]).toBe("OB Fixture");
 
     // One answer short: the open one is named, and the gate stays shut.
     for (const screen of [SCREENS.goal, SCREENS.aboutYou, SCREENS.target, SCREENS.yourDay, SCREENS.yourTraining]) {

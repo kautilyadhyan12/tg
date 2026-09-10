@@ -80,7 +80,8 @@ export function useOnboardingAnswers() {
   );
 
   /** Finish: every save answered first, then the server decides. A refusal
-   *  comes back as the list of questions still open. */
+   *  comes back as the list of questions still open; success, with the
+   *  answers as stored (the name among them, for the rest of the app). */
   const finish = useCallback(
     async (extra) => {
       if (!(await queue.settled())) return { ok: false, missing: null };
@@ -93,7 +94,7 @@ export function useOnboardingAnswers() {
           missing: res.data.missing,
           edits: settleEdits(s.edits, extra),
         }));
-        return { ok: true, missing: null };
+        return { ok: true, missing: null, answers: res.data.answers };
       } catch (err) {
         const missing = refusedFinish(err);
         if (missing === null) toast.error(errorText(err, "Couldn't finish just now. Please try again."));

@@ -1,23 +1,53 @@
-// Onboarding v2, screens 1–7 (RULINGS 2026-09-07 and 2026-09-09). Every tap
-// saves at once through `save`; the typed boxes (age, height, weight, target)
-// save when the person leaves them, through `typed`. Nothing here decides a
-// number: the plan panel shows the server's.
-import { useEffect, useState } from 'react';
+// Onboarding v2, screens 1–7 (RULINGS 2026-09-07, 2026-09-09 and 2026-09-10).
+// Every tap and every wheel saves at once through `save`; the one typed box,
+// the name, saves when the person leaves it. Nothing here decides a number:
+// the plan panel shows the server's.
+import { useState } from 'react';
 import { Check } from 'lucide-react';
+import { patchOnboardingRequestSchema } from '@app/shared';
+import NumberWheel from './NumberWheel';
 import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
 import {
+  AGE_REST,
   DAYS,
   EQUIPMENT,
   GENDERS,
   GOALS,
+  HEIGHT_REST,
+  INCHES,
   LEVELS,
   PACES,
+  PLANK_REST,
+  PUSH_UPS_REST,
   SESSION_MINUTES,
+  TENTHS,
   TRAINING_DAYS,
+  WEIGHT_REST,
+  ageList,
   cleanEquipment,
+  cmFromParts,
+  heightCmList,
+  heightFeetList,
+  heightParts,
+  heightShown,
+  kgFromParts,
   paceText,
+  plankList,
+  plankShown,
+  pushUpList,
+  pushUpShown,
+  stepIn,
+  stepInches,
   toggleEquipment,
+  weightParts,
+  weightShown,
+  weightWholes,
 } from './onboardingModel';
+
+/** Whether the server takes this one answer. A wheel never saves a number the
+ *  contract refuses: a list stretched to reach an odd stored answer can hold
+ *  rows past the rails. */
+const takes = (patch) => patchOnboardingRequestSchema.safeParse(patch).success;
 
 function Choice({ selected, onSelect, icon: Icon, label, desc }) {
   return (
@@ -56,12 +86,6 @@ function Choice({ selected, onSelect, icon: Icon, label, desc }) {
 
 const Question = ({ children }) => <p className="text-sm font-semibold text-white mb-3">{children}</p>;
 
-const Unit = ({ children }) => (
-  <span className="bg-dark-100 border border-white/10 rounded-xl px-4 flex items-center text-gray-400 text-sm flex-shrink-0">
-    {children}
-  </span>
-);
-
 const FieldError = ({ children }) =>
   children ? (
     <p role="alert" className="text-2xs mt-1" style={{ color: '#f87171' }}>
@@ -69,8 +93,8 @@ const FieldError = ({ children }) =>
     </p>
   ) : null;
 
-/** Big and first on the screen (Kd, 2026-09-10): the switch decides what
- *  every box below it means, so it must be seen before anything is typed. */
+/** Big, and first among the numbers (Kd, 2026-09-10): the switch decides what
+ *  every wheel below it means. */
 function UnitSwitch({ units, onChange }) {
   const options = [
     ['metric', 'kg · cm', 'Kilograms and centimetres'],
@@ -98,72 +122,132 @@ function UnitSwitch({ units, onChange }) {
   );
 }
 
-/** One typed box. It saves when the person leaves it, not on every key. */
-function TypedField({ id, name, label, hint, unit, placeholder, typed, inputMode = 'decimal' }) {
+// ── The wheels ──────────────────────────────────────────────────────────────
+
+function AgeWheel({ age, save }) {
+  const list = ageList(age);
+  const at = age ?? AGE_REST;
+  const pick = (v) => {
+    if (v !== age && takes({ age: v })) save({ age: v });
+  };
   return (
-    <div>
-      <label htmlFor={id} className="block text-sm mb-2">
-        {label}
-      </label>
-      <div className="flex gap-2">
-        <input
-          id={id}
-          type="text"
-          inputMode={inputMode}
-          autoComplete="off"
-          className="input-field flex-1"
-          placeholder={placeholder}
-          value={typed.text(name)}
-          onChange={(e) => typed.change(name, e.target.value)}
-          onBlur={() => typed.commit(name)}
-        />
-        <Unit>{unit}</Unit>
-      </div>
-      {hint && <p className="text-gray-500 text-xs mt-1">{hint}</p>}
-      <FieldError>{typed.error(name)}</FieldError>
-    </div>
+    <NumberWheel
+      id="ob-age"
+      question="Age"
+      shown={age === null ? 'Not set' : `${age} years`}
+      isSet={age !== null}
+      unit="years"
+      stepLabel="Age"
+      onStep={(by) => pick(stepIn(list, at, by))}
+      columns={[{ label: 'Age', values: list, index: list.indexOf(at), format: String, onPick: (i) => pick(list[i]) }]}
+    />
   );
 }
 
-/** Height: one box in centimetres, or feet and inches. The pair saves once,
- *  when focus leaves the pair — not between the two boxes, which would store
- *  "5 ft 0 in" for a moment. */
-function HeightField({ typed }) {
-  const parts = typed.text('height');
-  const set = (key, value) => typed.change('height', { ...parts, [key]: value });
-  const leave = (e) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) typed.commit('height');
+function HeightWheel({ cm, units, save }) {
+  const isSet = cm !== null;
+  const set = (value) => {
+    if (value !== cm && takes({ heightCm: value })) save({ heightCm: value });
   };
-  const box = (key, label, placeholder) => (
-    <input
-      type="text"
-      inputMode="decimal"
-      autoComplete="off"
-      aria-label={label}
-      className="input-field flex-1"
-      placeholder={placeholder}
-      value={parts[key]}
-      onChange={(e) => set(key, e.target.value)}
+  if (units === 'imperial') {
+    const parts = isSet ? heightParts(cm, 'imperial') : HEIGHT_REST.imperial;
+    const feet = heightFeetList(parts.ft);
+    const pick = (next) => set(cmFromParts(next, 'imperial'));
+    return (
+      <NumberWheel
+        id="ob-height"
+        question="Height"
+        shown={isSet ? heightShown(parts, 'imperial') : 'Not set'}
+        isSet={isSet}
+        stepLabel="Height"
+        onStep={(by) => pick(stepInches(parts, by))}
+        columns={[
+          {
+            label: 'Height, feet',
+            values: feet,
+            index: feet.indexOf(parts.ft),
+            format: (v) => `${v} ft`,
+            onPick: (i) => pick({ ft: feet[i], inch: parts.inch }),
+          },
+          {
+            label: 'Height, inches',
+            values: INCHES,
+            index: parts.inch,
+            format: (v) => `${v} in`,
+            onPick: (i) => pick({ ft: parts.ft, inch: INCHES[i] }),
+          },
+        ]}
+      />
+    );
+  }
+  const at = isSet ? heightParts(cm, 'metric').cm : HEIGHT_REST.metric.cm;
+  const list = heightCmList(at);
+  return (
+    <NumberWheel
+      id="ob-height"
+      question="Height"
+      shown={isSet ? heightShown({ cm: at }, 'metric') : 'Not set'}
+      isSet={isSet}
+      unit="cm"
+      stepLabel="Height"
+      onStep={(by) => set(stepIn(list, at, by))}
+      columns={[
+        { label: 'Height in centimetres', values: list, index: list.indexOf(at), format: String, onPick: (i) => set(list[i]) },
+      ]}
     />
   );
+}
+
+/** A weight on two columns, whole kilos or pounds and tenths. While unset it
+ *  rests on `restParts`. */
+function WeightWheel({ id, question, kg, restParts, units, onPick }) {
+  const isSet = kg !== null;
+  const parts = isSet ? weightParts(kg, units) : restParts;
+  const wholes = weightWholes(units, parts.whole);
+  const pick = (next) => onPick(kgFromParts(next, units));
+  const unitWord = units === 'imperial' ? 'pound' : 'kilogram';
   return (
-    <div onBlur={leave}>
-      <p className="block text-sm mb-2">Height</p>
-      {typed.units === 'imperial' ? (
-        <div className="flex gap-2">
-          {box('ft', 'Height in feet', '5')}
-          <Unit>ft</Unit>
-          {box('inch', 'Height in inches', '9')}
-          <Unit>in</Unit>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          {box('cm', 'Height in centimetres', '170')}
-          <Unit>cm</Unit>
-        </div>
-      )}
-      <FieldError>{typed.error('height')}</FieldError>
-    </div>
+    <NumberWheel
+      id={id}
+      question={question}
+      shown={isSet ? weightShown(parts, units) : 'Not set'}
+      isSet={isSet}
+      unit={units === 'imperial' ? 'lb' : 'kg'}
+      stepLabel={question}
+      onStep={(by) => pick({ whole: stepIn(wholes, parts.whole, by), tenth: parts.tenth })}
+      columns={[
+        {
+          label: `${question} in whole ${unitWord}s`,
+          values: wholes,
+          index: wholes.indexOf(parts.whole),
+          format: String,
+          onPick: (i) => pick({ whole: wholes[i], tenth: parts.tenth }),
+        },
+        {
+          label: `${question}, tenths of a ${unitWord}`,
+          values: TENTHS,
+          index: parts.tenth,
+          format: (v) => `.${v}`,
+          onPick: (i) => pick({ whole: parts.whole, tenth: TENTHS[i] }),
+        },
+      ]}
+    />
+  );
+}
+
+function NotSure({ label, pressed, onClick }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`mt-3 px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+        pressed ? 'border-primary-500 bg-primary-500/10 text-white' : 'border-white/10 bg-dark-100 text-gray-400 hover:border-white/20'
+      }`}
+    >
+      Not sure
+    </button>
   );
 }
 
@@ -187,12 +271,29 @@ export function GoalScreen({ answers, save }) {
 }
 
 // ── Screen 2 ────────────────────────────────────────────────────────────────
-export function AboutScreen({ answers, save, typed }) {
-  const weightUnit = typed.units === 'imperial' ? 'lb' : 'kg';
+export function AboutScreen({ answers, save, units, setUnits, name }) {
+  const weightKg = answers.weightKg ?? null;
   return (
-    <div className="space-y-5">
-      <UnitSwitch units={typed.units} onChange={typed.setUnits} />
-      <TypedField id="ob-age" name="age" label="Age" unit="years" placeholder="30" inputMode="numeric" typed={typed} />
+    <div className="space-y-6">
+      {/* The one typed box (Kd, 2026-09-10): it opens the screen. */}
+      <div>
+        <label htmlFor="ob-name" className="block text-sm font-semibold text-white mb-2">
+          What should we call you?
+        </label>
+        <input
+          id="ob-name"
+          type="text"
+          autoComplete="given-name"
+          maxLength={100}
+          className="input-field w-full"
+          value={name.text}
+          onChange={(e) => name.change(e.target.value)}
+          onBlur={name.commit}
+        />
+        <FieldError>{name.error}</FieldError>
+      </div>
+      <UnitSwitch units={units} onChange={setUnits} />
+      <AgeWheel age={answers.age ?? null} save={save} />
       <div>
         <Question>Gender</Question>
         <p className="text-gray-500 text-xs -mt-2 mb-3">Used to estimate how much energy your body burns.</p>
@@ -207,36 +308,49 @@ export function AboutScreen({ answers, save, typed }) {
           ))}
         </div>
       </div>
-      <HeightField typed={typed} />
-      <TypedField
-        id="ob-weight"
-        name="weight"
-        label="Weight"
-        hint="Saved in your weigh-in history."
-        unit={weightUnit}
-        placeholder={weightUnit === 'lb' ? '154' : '70'}
-        typed={typed}
-      />
+      <HeightWheel cm={answers.heightCm ?? null} units={units} save={save} />
+      <div>
+        <WeightWheel
+          id="ob-weight"
+          question="Weight"
+          kg={weightKg}
+          restParts={{ whole: WEIGHT_REST[units], tenth: 0 }}
+          units={units}
+          onPick={(kg) => {
+            if (kg !== weightKg && takes({ weightKg: kg })) save({ weightKg: kg });
+          }}
+        />
+        <p className="text-gray-500 text-xs mt-2">Saved in your weigh-in history.</p>
+      </div>
     </div>
   );
 }
 
 // ── Screen 3 (only for a goal that moves the weight) ────────────────────────
-export function TargetScreen({ answers, save, typed, direction }) {
-  const weightUnit = typed.units === 'imperial' ? 'lb' : 'kg';
+export function TargetScreen({ answers, save, units, setUnits, direction }) {
+  const target = answers.targetWeightKg ?? null;
+  const weightKg = answers.weightKg ?? null;
+  // Unset, the wheel rests on today's weight: the person moves from there.
+  const restParts = weightKg !== null ? weightParts(weightKg, units) : { whole: WEIGHT_REST[units], tenth: 0 };
   const verb = direction === 'gain' ? 'Gain' : 'Lose';
   return (
-    <div className="space-y-5">
-      <UnitSwitch units={typed.units} onChange={typed.setUnits} />
-      <TypedField
-        id="ob-target"
-        name="target"
-        label="Target weight"
-        hint={direction === 'gain' ? 'The weight you want to build up to.' : 'The weight you want to reach.'}
-        unit={weightUnit}
-        placeholder={weightUnit === 'lb' ? '143' : '65'}
-        typed={typed}
-      />
+    <div className="space-y-6">
+      <UnitSwitch units={units} onChange={setUnits} />
+      <div>
+        <WeightWheel
+          id="ob-target"
+          question="Target weight"
+          kg={target}
+          restParts={restParts}
+          units={units}
+          onPick={(kg) => {
+            if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
+          }}
+        />
+        <p className="text-gray-500 text-xs mt-2">
+          {direction === 'gain' ? 'The weight you want to build up to.' : 'The weight you want to reach.'}
+        </p>
+      </div>
       <div>
         <Question>How fast?</Question>
         <div className="space-y-3">
@@ -246,7 +360,7 @@ export function TargetScreen({ answers, save, typed, direction }) {
               selected={answers.pace === p.value}
               onSelect={() => answers.pace !== p.value && save({ pace: p.value })}
               label={p.label}
-              desc={`${verb} ${paceText(p.value, typed.units)}`}
+              desc={`${verb} ${paceText(p.value, units)}`}
             />
           ))}
         </div>
@@ -274,80 +388,27 @@ export function DayScreen({ answers, save }) {
 }
 
 // ── Screen 5 ────────────────────────────────────────────────────────────────
-function Stepper({ label, value, unit, small, big, max, onChange }) {
-  const from = value ?? 0;
-  const set = (n) => onChange(Math.min(max, Math.max(0, n)));
-  const steps = [-big, -small, small, big];
-  return (
-    <div>
-      <p className="text-sm mb-2">{label}</p>
-      <div className="flex items-center gap-2">
-        {steps.slice(0, 2).map((s) => (
-          <button key={`${unit}-${s}`} type="button" aria-label={`${unit}: minus ${-s}`} onClick={() => set(from + s)} className="btn-secondary px-3">
-            −{-s}
-          </button>
-        ))}
-        <span aria-live="polite" className="flex-1 text-center text-white font-semibold tabular-nums">
-          {value === null ? 'Not done' : `${value} ${unit}`}
-        </span>
-        {steps.slice(2).map((s) => (
-          <button key={`${unit}-${s}`} type="button" aria-label={`${unit}: plus ${s}`} onClick={() => set(from + s)} className="btn-secondary px-3">
-            +{s}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** A stopwatch for the plank: press, hold the plank, press again. */
-function PlankTimer({ onStop }) {
-  const [startedAt, setStartedAt] = useState(null);
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (startedAt === null) return undefined;
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 250);
-    return () => clearInterval(id);
-  }, [startedAt]);
-  if (startedAt === null) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setElapsed(0);
-          setStartedAt(Date.now());
-        }}
-        className="text-xs font-semibold mt-2"
-        style={{ color: '#FF8A1F' }}
-      >
-        Time my plank
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        const seconds = Math.floor((Date.now() - startedAt) / 1000);
-        setStartedAt(null);
-        onStop(seconds);
-      }}
-      className="btn-primary mt-2"
-    >
-      Stop · {elapsed} s
-    </button>
-  );
-}
-
+/** Two plain questions, a guess is fine, and "Not sure" for either (Kd,
+ *  2026-09-10): no timer, no test. "Not sure" is this visit's word for an
+ *  empty answer — the server keeps a number or nothing, so a later visit
+ *  reads "Not set" again. */
 export function TrainingScreen({ answers, save }) {
-  const [checksOpen, setChecksOpen] = useState(true);
-  const skip = () => {
-    const clear = {};
-    if (answers.pushUpsMax !== null) clear.pushUpsMax = null;
-    if (answers.plankHoldSeconds !== null) clear.plankHoldSeconds = null;
-    if (Object.keys(clear).length > 0) save(clear);
-    setChecksOpen(false);
+  const [unsure, setUnsure] = useState({ pushUpsMax: false, plankHoldSeconds: false });
+  const pick = (key, value) => {
+    setUnsure((u) => ({ ...u, [key]: false }));
+    if (value !== answers[key] && takes({ [key]: value })) save({ [key]: value });
   };
+  const notSure = (key) => {
+    setUnsure((u) => ({ ...u, [key]: true }));
+    if (answers[key] !== null && answers[key] !== undefined) save({ [key]: null });
+  };
+  const pushUps = answers.pushUpsMax ?? null;
+  const plank = answers.plankHoldSeconds ?? null;
+  const pushRows = pushUpList(pushUps);
+  const plankRows = plankList(plank);
+  const pushAt = pushUps ?? PUSH_UPS_REST;
+  const plankAt = plank ?? PLANK_REST;
+  const empty = (key) => (unsure[key] ? 'Not sure' : 'Not set');
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -363,44 +424,54 @@ export function TrainingScreen({ answers, save }) {
           />
         ))}
       </div>
-      <div className="card-glass space-y-4">
-        <p className="text-sm font-semibold text-white">Two quick checks</p>
-        {checksOpen ? (
-          <>
-            <p className="text-gray-400 text-xs">Used to set your first week&apos;s workouts. Do them now if you can, or skip them.</p>
-            <Stepper
-              label="Push-ups in a row, with good form"
-              value={answers.pushUpsMax}
-              unit="push-ups"
-              small={1}
-              big={5}
-              max={500}
-              onChange={(n) => save({ pushUpsMax: n })}
-            />
-            <div>
-              <Stepper
-                label="Longest plank hold"
-                value={answers.plankHoldSeconds}
-                unit="seconds"
-                small={5}
-                big={30}
-                max={3600}
-                onChange={(n) => save({ plankHoldSeconds: n })}
-              />
-              <PlankTimer onStop={(s) => save({ plankHoldSeconds: Math.min(3600, s) })} />
-            </div>
-            <button type="button" onClick={skip} className="text-xs underline text-gray-400">
-              Skip these, I&apos;ll rate myself
-            </button>
-          </>
-        ) : (
-          <p className="text-gray-400 text-xs">
-            Skipped. Your rating above is enough.{' '}
-            <button type="button" onClick={() => setChecksOpen(true)} className="underline">
-              Do the checks
-            </button>
-          </p>
-        )}
+      <p className="text-gray-400 text-xs">A guess is fine. Used to set your first week&apos;s workouts.</p>
+      <div>
+        <NumberWheel
+          id="ob-push-ups"
+          question="How many push-ups can you do in a row?"
+          shown={pushUps === null ? empty('pushUpsMax') : pushUpShown(pushUps)}
+          isSet={pushUps !== null}
+          stepLabel="Push-ups"
+          onStep={(by) => pick('pushUpsMax', stepIn(pushRows, pushAt, by))}
+          columns={[
+            {
+              label: 'Push-ups in a row',
+              values: pushRows,
+              index: pushRows.indexOf(pushAt),
+              format: String,
+              onPick: (i) => pick('pushUpsMax', pushRows[i]),
+            },
+          ]}
+        />
+        <NotSure
+          label="Not sure how many push-ups"
+          pressed={pushUps === null && unsure.pushUpsMax}
+          onClick={() => notSure('pushUpsMax')}
+        />
+      </div>
+      <div>
+        <NumberWheel
+          id="ob-plank"
+          question="How long can you hold a plank?"
+          shown={plank === null ? empty('plankHoldSeconds') : plankShown(plank)}
+          isSet={plank !== null}
+          stepLabel="Plank"
+          onStep={(by) => pick('plankHoldSeconds', stepIn(plankRows, plankAt, by))}
+          columns={[
+            {
+              label: 'Plank hold',
+              values: plankRows,
+              index: plankRows.indexOf(plankAt),
+              format: plankShown,
+              onPick: (i) => pick('plankHoldSeconds', plankRows[i]),
+            },
+          ]}
+        />
+        <NotSure
+          label="Not sure how long a plank"
+          pressed={plank === null && unsure.plankHoldSeconds}
+          onClick={() => notSure('plankHoldSeconds')}
+        />
       </div>
     </div>
   );

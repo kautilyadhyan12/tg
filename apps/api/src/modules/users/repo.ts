@@ -296,15 +296,25 @@ export interface OnboardingRow {
   weightKg: number | null;
   /** users.timezone — the fallback for a client that sent none (service). */
   timezone: string | null;
+  /** users.display_name — what the app calls the person; screen 2 asks it. */
+  displayName: string;
 }
 
 /** Reads the answers. Keyed on userId; no status filter for the same reason
- *  `getSyncContext` has none — every caller is behind `authenticate`. */
+ *  `getSyncContext` has none — every caller is behind `authenticate`, so the
+ *  account row exists, and its absence fails loud rather than inventing a name. */
 export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<OnboardingRow> {
   const profile = await getFitnessProfile(sql, userId);
-  const rows = await sql<{ timezone: string | null }[]>`
-    SELECT timezone FROM users WHERE id = ${userId}`;
-  return { profile, weightKg: await currentWeightKg(sql, userId), timezone: rows[0]?.timezone ?? null };
+  const rows = await sql<{ timezone: string | null; display_name: string }[]>`
+    SELECT timezone, display_name FROM users WHERE id = ${userId}`;
+  const account = rows[0];
+  if (account === undefined) throw new Error("getOnboarding: no users row for an authenticated caller");
+  return {
+    profile,
+    weightKg: await currentWeightKg(sql, userId),
+    timezone: account.timezone,
+    displayName: account.display_name,
+  };
 }
 
 /** PATCH semantics, one transaction: a key PRESENT in the parsed body is
@@ -347,6 +357,13 @@ export async function patchOnboarding(
     const active = await tx<{ id: string }[]>`
       SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     if (active[0] === undefined) return null;
+
+    // The name lives on the account row this transaction already holds.
+    if (patch.displayName !== undefined) {
+      await tx`
+        UPDATE users SET display_name = ${patch.displayName}
+        WHERE id = ${userId} AND status = 'active'`;
+    }
 
     // Fixed field→column map. `trainingDays` and `sessionMinutes` are the
     // screens' words for columns 0006 already owns — renamed on this surface,

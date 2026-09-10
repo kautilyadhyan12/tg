@@ -2,12 +2,13 @@
 // small stand-in that stores what it is sent and answers with a plan only once
 // the eight core answers are in, as the real route does (the real route is
 // proved in apps/api/test/users.onboarding.routes.test.ts). What is pinned
-// here is the SCREEN: a tap saves at once, the number appears only when the
-// server has one, the target screen is asked only for a goal that moves the
-// weight, "No equipment" stands alone, and Finish opens the training side
-// only when the server agrees.
+// here is the SCREEN: a tap or a wheel saves at once and a wheel saves nothing
+// until it is touched, the name box saves when it is left, the number appears
+// only when the server has one and can show how it was worked out, the target
+// screen is asked only for a goal that moves the weight, "No equipment" stands
+// alone, and Finish opens the training side only when the server agrees.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { missingPlanInputSchema, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 
@@ -21,9 +22,9 @@ const toast = (await import('react-hot-toast')).default;
 const Onboarding = (await import('./Onboarding')).default;
 
 const EMPTY = {
-  mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
-  dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
-  sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
+  displayName: 'kd.test', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null,
+  targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
   ...EMPTY, mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
@@ -31,10 +32,22 @@ const ALL = {
   availableEquipment: ['dumbbells'],
 };
 
-/** The route's golden person (users.onboarding.routes.test.ts). */
+/** The route's golden person (users.onboarding.routes.test.ts), working and all. */
 const PLAN = {
   restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550, proteinG: 140,
   carbsG: 98, fatG: 35, plannedTargetKg: 65, daysToTarget: 70, finishDate: '2026-11-19', flags: [],
+  workings: {
+    resting: { formula: 'female', weightKg: 70, heightCm: 165, age: 30, constant: -161, kcal: 1420 },
+    day: { activity: 'sitting', factor: 1.2, kcal: 1704 },
+    training: { kcalPerKgHour: 5, weightKg: 70, trainingDays: 3, sessionMinutes: 45, kcal: 113 },
+    change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
+    beforeFloorKcal: 1267,
+    floorKcal: 1200,
+    protein: { gPerKg: 2, weightKg: 70, wantedG: 140 },
+    fatShare: 0.25,
+    carbsFloorG: 50,
+    finish: { kgToMove: 5, kcalPerKg: 7700 },
+  },
 };
 
 function missingOf(a) {
@@ -94,28 +107,29 @@ const button = (name) => screen.getByRole('button', { name });
 const tap = (name) => fireEvent.click(button(name));
 const pressed = (name) => button(name).getAttribute('aria-pressed');
 const panel = () => screen.getByRole('region', { name: 'Your plan' });
-const type = (label, value) => {
-  const box = screen.getByLabelText(label);
-  fireEvent.change(box, { target: { value } });
-  fireEvent.blur(box);
-};
+const spin = (name) => screen.getByRole('spinbutton', { name });
+/** Taps a number on a wheel, as a finger would. */
+const tapRow = (wheel, text) => fireEvent.click(within(spin(wheel)).getByText(text));
+const nameBox = () => screen.getByLabelText('What should we call you?');
 const saved = (body) => waitFor(() => expect(svc.patch).toHaveBeenCalledWith(body));
 /** What the server holds. Answers given while a save is out travel together
  *  in the next one (the queue), so a test that wants "it was saved" reads the
  *  server, not the shape of each request. */
 const stored = (answers) => waitFor(() => expect(server.answers).toMatchObject(answers));
+/** Longer than a wheel takes to settle after its last scroll. */
+const settleWheels = () => new Promise((resolve) => setTimeout(resolve, 250));
 const next = async (title) => {
   tap(/continue/i);
   await heading(title);
 };
 
-/** Screen 2 in kilograms and centimetres. */
+/** Screen 2 in kilograms and centimetres, each answer a tap on its wheel. */
 const aboutYou = async () => {
   tap(/kg · cm/);
-  type('Age', '30');
+  tapRow('Age', '30');
   tap(/^Female$/);
-  type('Height in centimetres', '165');
-  type('Weight', '70');
+  tapRow('Height in centimetres', '165');
+  tapRow('Weight in whole kilograms', '70');
   await stored({ age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
 };
 
@@ -144,7 +158,7 @@ describe('onboarding screens 1–7', () => {
     await aboutYou();
 
     await next('Your target');
-    type('Target weight', '65');
+    tapRow('Target weight in whole kilograms', '65');
     tap(/^Steady/);
     await stored({ targetWeightKg: 65, pace: 'steady' });
     await next('Your day');
@@ -161,6 +175,23 @@ describe('onboarding screens 1–7', () => {
     expect(panel().textContent).toContain('Reach 65 kg around Nov 19, 2026.');
     expect(panel().textContent).toContain('not medical advice');
     expect(panel().textContent).not.toContain('follow their advice');
+  });
+
+  it('opens "How is this worked out?" under the number, with the server\'s own steps', async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    expect(panel().textContent).not.toContain('Resting burn');
+    expect(button('How is this worked out?').getAttribute('aria-expanded')).toBe('false');
+    tap('How is this worked out?');
+    expect(button('How is this worked out?').getAttribute('aria-expanded')).toBe('true');
+    const text = panel().textContent;
+    expect(text).toContain('10 × 70 kg + 6.25 × 165 cm − 5 × 30 years − 161 = 1,420 kcal');
+    expect(text).toContain('1,704 + 113 = 1,817 kcal a day');
+    expect(text).toContain('1,817 − 550 = 1,267 kcal a day');
+    expect(text).toContain('Mifflin-St Jeor equation (1990)');
+    expect(text).toContain('Each step is rounded to a whole calorie or gram.');
+    expect(text).not.toContain('follow their advice');
   });
 
   it('jumps straight to any screen already reached from the step bar', async () => {
@@ -209,31 +240,104 @@ describe('onboarding screens 1–7', () => {
     expect(panel().textContent).toContain('1,267kcal a day');
   });
 
-  it('saves pounds as kilograms, and a height in feet and inches once, when the pair is left', async () => {
+  it('opens "About you" with the name the account has, and saves a new one when the box is left', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    // The name opens the screen, before the units and the numbers.
+    const box = nameBox();
+    expect(box.compareDocumentPosition(button(/kg · cm/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(box.value).toBe('kd.test');
+    fireEvent.change(box, { target: { value: '  Kd  ' } });
+    fireEvent.blur(box);
+    await saved({ displayName: 'Kd' });
+    // A name is never blank: an empty box says so and saves nothing.
+    fireEvent.change(box, { target: { value: '   ' } });
+    fireEvent.blur(box);
+    expect(await screen.findByText('Type the name we should call you.')).toBeTruthy();
+    expect(svc.patch.mock.calls.filter(([body]) => 'displayName' in body)).toHaveLength(1);
+  });
+
+  it('will not leave "About you" while the name box is blank', async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    tap('About you');
+    await heading('About you');
+    fireEvent.change(nameBox(), { target: { value: '' } });
+    tap(/continue/i);
+    expect(await screen.findByText('Type the name we should call you.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    expect(svc.patch.mock.calls.some(([body]) => 'displayName' in body)).toBe(false);
+  });
+
+  it('the wheels read "Not set" and save nothing until they are touched', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    tap(/kg · cm/);
+    for (const wheel of ['Age', 'Height in centimetres', 'Weight in whole kilograms', 'Weight, tenths of a kilogram']) {
+      expect(spin(wheel).getAttribute('aria-valuetext'), wheel).toBe('Not set');
+    }
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    // Nobody under 16 can be picked: the wheel starts there.
+    expect(within(spin('Age')).queryByText('15')).toBeNull();
+    // The first touch saves: + moves one row on from the resting 30.
+    tap('Age: one more');
+    await saved({ age: 31 });
+    expect(spin('Age').getAttribute('aria-valuetext')).toBe('31');
+  });
+
+  it('a flick saves the number the wheel settles on; a scroll the person did not make saves nothing', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    const age = spin('Age');
+    age.scrollTop = 40 * 20;
+    fireEvent.scroll(age);
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(age.scrollTop).toBe(40 * 14); // back on its resting row, 30
+    // A flick: row 20 of 16…120 is 36.
+    fireEvent.wheel(age);
+    age.scrollTop = 40 * 20;
+    fireEvent.scroll(age);
+    await saved({ age: 36 });
+  });
+
+  it('saves pounds as kilograms, and feet and inches as centimetres', async () => {
     serve({ mainGoal: 'posture' });
     draw();
     await heading('About you');
     expect(pressed(/lb · ft/)).toBe('true'); // the test browser is en-US
-    type('Weight', '154');
+    tapRow('Weight in whole pounds', '154');
     await stored({ weightKg: 69.85 });
-
-    const ft = screen.getByLabelText('Height in feet');
-    const inch = screen.getByLabelText('Height in inches');
-    fireEvent.change(ft, { target: { value: '5' } });
-    fireEvent.blur(ft, { relatedTarget: inch }); // moving between the two boxes saves nothing
-    fireEvent.change(inch, { target: { value: '9' } });
-    fireEvent.blur(inch);
+    tapRow('Height, feet', '5 ft');
+    await stored({ heightCm: 170.18 }); // 5 ft and the resting 7 in
+    tapRow('Height, inches', '9 in');
     await stored({ heightCm: 175.26 });
-    expect(svc.patch.mock.calls.filter(([body]) => 'heightCm' in body)).toHaveLength(1);
   });
 
-  it('refuses an age under 16 on the spot and saves nothing', async () => {
-    serve({ mainGoal: 'posture' });
+  it('asks screen 5 as two plain questions, and "Not sure" clears an answer', async () => {
+    serve({ ...ALL, pushUpsMax: 12, plankHoldSeconds: 45, availableEquipment: [] });
     draw();
-    await heading('About you');
-    type('Age', '15');
-    expect(await screen.findByText('This app is for people aged 16 and over.')).toBeTruthy();
-    expect(svc.patch.mock.calls.some(([body]) => 'age' in body)).toBe(false);
+    await heading('Equipment');
+    tap('Your training');
+    await heading('Your training');
+    expect(spin('Push-ups in a row').getAttribute('aria-valuetext')).toBe('12');
+    expect(spin('Plank hold').getAttribute('aria-valuetext')).toBe('45 s');
+    // No stopwatch and no test to take.
+    expect(screen.queryByText(/time my plank|quick checks|skip these/i)).toBeNull();
+
+    tap('Not sure how many push-ups');
+    await saved({ pushUpsMax: null });
+    expect(pressed('Not sure how many push-ups')).toBe('true');
+    const pushUps = screen.getByRole('group', { name: 'How many push-ups can you do in a row?' });
+    expect(within(pushUps).getByText('Not sure')).toBeTruthy();
+
+    tap('Plank: one more');
+    await saved({ plankHoldSeconds: 50 });
   });
 
   it('makes "No equipment" stand alone as you tap', async () => {
@@ -259,7 +363,8 @@ describe('onboarding screens 1–7', () => {
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
     expect(svc.patch).toHaveBeenLastCalledWith({ availableEquipment: ['dumbbells'], onboardingCompleted: true });
-    expect(auth.updateUser).toHaveBeenCalledWith({ onboardingCompleted: true });
+    // The rest of the app greets the person by the name saved here.
+    expect(auth.updateUser).toHaveBeenCalledWith({ onboardingCompleted: true, displayName: 'kd.test' });
   });
 
   it('when the server refuses Finish, names what is open and offers the way back to it', async () => {

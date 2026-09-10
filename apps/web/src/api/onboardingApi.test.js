@@ -5,7 +5,7 @@ import { onboardingParams, onboardingService, refusedFinish } from './onboarding
 import { detectTimezone } from './userApi';
 
 const EMPTY = {
-  mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
+  displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
   dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
   sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };

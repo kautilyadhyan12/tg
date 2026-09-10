@@ -27,16 +27,10 @@ import {
   defaultUnits,
   directionOf,
   firstOpenScreen,
-  heightText,
   missingText,
-  parseAge,
-  parseHeight,
-  parseWeight,
   reachableScreens,
-  sameValue,
   screenAnswered,
   visibleScreens,
-  weightText,
 } from './onboarding/onboardingModel';
 
 const ICONS = { goal: Target, about: User, target: TrendingDown, day: Sun, training: Zap, week: Clock, equipment: Dumbbell };
@@ -51,15 +45,7 @@ const SCREEN_VIEWS = {
   equipment: EquipmentScreen,
 };
 
-/** The typed boxes: the answer each one saves, how its text parses, and how a
- *  stored answer is shown in the units on screen. */
-const TYPED = {
-  age: { key: 'age', parse: (t) => parseAge(t), show: (v) => (v === null ? '' : String(v)) },
-  height: { key: 'heightCm', parse: (t, u) => parseHeight(t, u), show: (v, u) => heightText(v, u) },
-  weight: { key: 'weightKg', parse: (t, u) => parseWeight(t, u), show: (v, u) => weightText(v, u) },
-  target: { key: 'targetWeightKg', parse: (t, u) => parseWeight(t, u), show: (v, u) => weightText(v, u) },
-};
-const TYPED_ON = { about: ['age', 'height', 'weight'], target: ['target'] };
+const NAME_NEEDED = 'Type the name we should call you.';
 
 function Spinner() {
   return (
@@ -93,75 +79,50 @@ export default function Onboarding() {
 
   const ob = useOnboardingAnswers();
   const [picked, setPicked] = useState(null); // null: where the person landed
-  const [drafts, setDrafts] = useState({}); // typed text not yet saved, by box
-  const [errors, setErrors] = useState({});
+  const [nameDraft, setNameDraft] = useState(null); // the name box's text while it differs from the saved name
+  const [nameError, setNameError] = useState(null);
   const [units, setUnits] = useState(() => defaultUnits(typeof navigator === 'undefined' ? undefined : navigator.language));
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState(null); // the questions a refused finish named
 
   const answers = ob.answers;
-  // What the screen is showing: the answers, with every box that holds a
-  // valid number counted as answered before it has been saved.
-  const effective = { ...answers };
-  for (const [name, text] of Object.entries(drafts)) {
-    const parsed = TYPED[name].parse(text, units);
-    if (parsed.error === null) effective[TYPED[name].key] = parsed.value;
-  }
 
-  const commitTyped = (name) => {
-    if (!(name in drafts)) return true;
-    const { key, parse } = TYPED[name];
-    const parsed = parse(drafts[name], units);
-    if (parsed.error !== null) {
-      setErrors((e) => ({ ...e, [name]: parsed.error }));
+  /** The name box saves when the person leaves it. A name is never blank: an
+   *  empty box says so and saves nothing. */
+  const commitName = () => {
+    if (nameDraft === null) return true;
+    const trimmed = nameDraft.trim();
+    if (trimmed === '') {
+      setNameError(NAME_NEEDED);
       return false;
     }
-    setDrafts((d) => {
-      const next = { ...d };
-      delete next[name];
-      return next;
-    });
-    if (!sameValue(parsed.value, answers[key] ?? null)) ob.save({ [key]: parsed.value });
+    setNameDraft(null);
+    if (trimmed !== answers.displayName) ob.save({ displayName: trimmed });
     return true;
   };
 
-  const switchUnits = (next) => {
-    if (next === units) return;
-    // A box holding a valid number keeps it, re-expressed; one holding
-    // something that does not parse goes back to the stored answer.
-    setDrafts((d) => {
-      const out = {};
-      for (const [name, text] of Object.entries(d)) {
-        const parsed = TYPED[name].parse(text, units);
-        if (parsed.error === null) out[name] = TYPED[name].show(parsed.value, next);
-      }
-      return out;
-    });
-    setErrors({});
-    setUnits(next);
-  };
-
-  const typed = {
-    units,
-    text: (name) => drafts[name] ?? TYPED[name].show(answers[TYPED[name].key] ?? null, units),
-    error: (name) => errors[name] ?? null,
-    change: (name, value) => {
-      setDrafts((d) => ({ ...d, [name]: value }));
-      setErrors((e) => ({ ...e, [name]: null }));
+  const name = {
+    text: nameDraft ?? answers.displayName ?? '',
+    error: nameError,
+    change: (text) => {
+      setNameDraft(text);
+      setNameError(null);
     },
-    commit: commitTyped,
-    setUnits: switchUnits,
+    commit: commitName,
   };
 
   const loaded = ob.first !== null;
-  const screens = visibleScreens(effective);
+  const screens = visibleScreens(answers);
   const current = picked ?? (loaded ? firstOpenScreen(ob.first) : SCREENS[0].id);
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
   const isLast = index === screens.length - 1;
-  const direction = directionOf(effective.mainGoal);
-  const answered = screenAnswered(screen.id, effective);
-  const reachable = reachableScreens(effective);
+  const direction = directionOf(answers.mainGoal);
+  const answered = screenAnswered(screen.id, answers);
+  const reachable = reachableScreens(answers);
+
+  /** Leaving a screen forward first saves its typed box, if it has one. */
+  const leave = () => (screen.id === 'about' ? commitName() : true);
 
   const goTo = (id) => {
     setPicked(id);
@@ -169,9 +130,7 @@ export default function Onboarding() {
   };
 
   const goNext = async () => {
-    // Every box on the screen is checked, so each one shows its own message.
-    const ok = (TYPED_ON[screen.id] ?? []).map(commitTyped).every(Boolean);
-    if (!ok) return;
+    if (!leave()) return;
     setBusy(true);
     const saved = await ob.settled();
     setBusy(false);
@@ -183,12 +142,11 @@ export default function Onboarding() {
   };
 
   /** The step bar (Kd, 2026-09-10): straight back to any screen, or forward to
-   *  one already reached. Going forward checks the boxes on the screen being
-   *  left and waits for its saves, exactly as Continue does. */
+   *  one already reached. Going forward saves the screen being left and waits
+   *  for its saves, exactly as Continue does. */
   const jumpTo = async (id, target) => {
     if (target > index) {
-      const ok = (TYPED_ON[screen.id] ?? []).map(commitTyped).every(Boolean);
-      if (!ok) return;
+      if (!leave()) return;
       setBusy(true);
       const saved = await ob.settled();
       setBusy(false);
@@ -202,7 +160,8 @@ export default function Onboarding() {
     const result = await ob.finish({ availableEquipment: cleanEquipment(answers.availableEquipment) });
     setBusy(false);
     if (result.ok) {
-      updateUser({ onboardingCompleted: true });
+      // The name the rest of the app greets the person by is the one saved here.
+      updateUser({ onboardingCompleted: true, displayName: result.answers.displayName });
       toast.success("You're all set. Let's train.");
       // Everyone here came through the member door, heading for the member app.
       navigate('/dashboard');
@@ -276,7 +235,7 @@ export default function Onboarding() {
                   {screens.map((s, i) => {
                     const Icon = ICONS[s.id];
                     const here = i === index;
-                    const done = !here && screenAnswered(s.id, effective);
+                    const done = !here && screenAnswered(s.id, answers);
                     const open = reachable.has(s.id);
                     return (
                       <button
@@ -344,7 +303,14 @@ export default function Onboarding() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <View answers={answers} save={ob.save} typed={typed} direction={direction} />
+                  <View
+                    answers={answers}
+                    save={ob.save}
+                    units={units}
+                    setUnits={setUnits}
+                    name={name}
+                    direction={direction}
+                  />
                 </motion.div>
 
                 {isLast && open.length > 0 && (

@@ -147,6 +147,73 @@ export const planFlagSchema = z.discriminatedUnion("code", [
 ]);
 export type PlanFlag = z.infer<typeof planFlagSchema>;
 
+/** How the number was reached, one step per line of "How is this worked out?"
+ *  under the daily number (Kd, 2026-09-10). The server sends every figure the
+ *  steps use — only it knows the day factor, the training figure and the
+ *  protein table — and the screen adds the words and the sources. Every kcal
+ *  and gram is whole, and the sums the screen prints are checked against the
+ *  plan's own numbers by the refine on `planNumbersSchema`, so a working that
+ *  does not add up is refused on both sides of the wire. */
+export const planWorkingsSchema = z
+  .object({
+    /** Mifflin-St Jeor: 10 × weight + 6.25 × height − 5 × age + `constant`,
+     *  rounded. `formula` names the version used: the women's (−161) for a
+     *  female answer, the men's (+5) for every other answer. */
+    resting: z
+      .object({
+        formula: z.enum(["female", "male"]),
+        weightKg: z.number(),
+        heightCm: z.number(),
+        age: z.number().int(),
+        constant: z.number().int(),
+        kcal: z.number().int(),
+      })
+      .strict(),
+    /** The day outside training: resting × `factor`, rounded. */
+    day: z.object({ activity: dayActivitySchema, factor: z.number(), kcal: z.number().int() }).strict(),
+    /** Training spread over the week: kcal per kg per hour × weight × the
+     *  week's minutes ÷ 60 ÷ 7 days, rounded. */
+    training: z
+      .object({
+        kcalPerKgHour: z.number(),
+        weightKg: z.number(),
+        trainingDays: z.number().int(),
+        sessionMinutes: z.number().int(),
+        kcal: z.number().int(),
+      })
+      .strict(),
+    /** What the pace asks for a day — kg a week × kcal per kg ÷ 7, negative for
+     *  a cut — or null when the plan holds the weight (the flags say why). */
+    change: z
+      .object({ pace: planPaceSchema, kgPerWeek: z.number(), kcalPerKg: z.number().int(), kcal: z.number().int() })
+      .strict()
+      .nullable(),
+    /** Burn plus the change, before the calorie floor. */
+    beforeFloorKcal: z.number().int(),
+    floorKcal: z.number().int(),
+    /** Grams per kg for the goal × weight, rounded. `proteinG` is smaller only
+     *  when the carbohydrate floor made protein give way. */
+    protein: z.object({ gPerKg: z.number(), weightKg: z.number(), wantedG: z.number().int() }).strict(),
+    /** Fat's share of the calories, at 9 kcal a gram. */
+    fatShare: z.number(),
+    /** Carbohydrates take the rest, at 4 kcal a gram, never under this. */
+    carbsFloorG: z.number().int(),
+    /** The finish date's working: kg to move × kcal per kg ÷ the daily change,
+     *  rounded up to a whole day. Null exactly when there is no date. */
+    finish: z.object({ kgToMove: z.number(), kcalPerKg: z.number().int() }).strict().nullable(),
+  })
+  .strict();
+export type PlanWorkings = z.infer<typeof planWorkingsSchema>;
+
+/** Whole days to move `kgToMove` at `dailyChangeKcal` a day, counted in whole
+ *  hundredths of a kilo. The weights carry two decimals, and their
+ *  floating-point difference can carry a crumb (64.01 − 63.01 is
+ *  1.0000000000000142) that rounds an exact number of days UP by one. The
+ *  calculator and the check below share this one sum. */
+export function daysToMove(kgToMove: number, kcalPerKg: number, dailyChangeKcal: number): number {
+  return Math.ceil((Math.round(kgToMove * 100) * kcalPerKg) / (100 * Math.abs(dailyChangeKcal)));
+}
+
 export const planNumbersSchema = z
   .object({
     /** Resting burn (Mifflin-St Jeor), kcal a day. */
@@ -172,8 +239,29 @@ export const planNumbersSchema = z
     daysToTarget: z.number().int().nullable(),
     finishDate: calendarDaySchema.nullable(),
     flags: z.array(planFlagSchema),
+    /** How the numbers above were reached, step by step. */
+    workings: planWorkingsSchema,
   })
-  .strict();
+  .strict()
+  .refine(
+    (p) => {
+      // Every sum "How is this worked out?" prints, against the plan's own numbers.
+      const w = p.workings;
+      return (
+        w.resting.kcal === p.restingBurnKcal &&
+        w.day.kcal + w.training.kcal === p.dailyBurnKcal &&
+        w.beforeFloorKcal === p.dailyBurnKcal + (w.change?.kcal ?? 0) &&
+        p.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal) &&
+        p.dailyChangeKcal === p.targetKcal - p.dailyBurnKcal &&
+        p.proteinG <= w.protein.wantedG &&
+        p.fatG === Math.round((p.targetKcal * w.fatShare) / 9) &&
+        p.carbsG >= w.carbsFloorG &&
+        (w.finish === null) === (p.daysToTarget === null) &&
+        (w.finish === null || p.daysToTarget === daysToMove(w.finish.kgToMove, w.finish.kcalPerKg, p.dailyChangeKcal))
+      );
+    },
+    { message: "the working must add up to the plan's own numbers" },
+  );
 export type PlanNumbers = z.infer<typeof planNumbersSchema>;
 
 /** `plan` is null EXACTLY when `missing` is non-empty — enforced here so every

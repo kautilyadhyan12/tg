@@ -1,7 +1,8 @@
 // Onboarding v2, screens 1–7 (ROADMAP Stage 1 item 4a-ii): the wizard's pure
-// half. What each screen asks, when a screen counts as answered, the words the
-// plan panel uses, units, and the save queue. Every NUMBER on screen is the
-// server's (GET/PATCH /v1/users/me/onboarding); nothing here computes a plan.
+// half. What each screen asks, when a screen counts as answered, the wheels
+// and their units, the words the plan panel uses, and the save queue. Every
+// NUMBER of the plan is the server's (GET/PATCH /v1/users/me/onboarding);
+// nothing here computes a plan.
 import { PACE_KG_PER_WEEK, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
@@ -80,19 +81,19 @@ export const asksTarget = (mainGoal) => directionOf(mainGoal) !== 'maintain';
 export const visibleScreens = (answers) =>
   SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.mainGoal));
 
-const has = (v) => v !== null && v !== undefined;
+const answered = (v) => v !== null && v !== undefined;
 
 /** A screen is answered when every question it asks has an answer. Screen 5's
  *  two checks may be skipped ("I'll rate myself", RULINGS 2026-09-09), so only
  *  the self-rating counts there. */
 export function screenAnswered(id, a) {
   switch (id) {
-    case 'goal':      return has(a.mainGoal);
-    case 'about':     return has(a.age) && has(a.gender) && has(a.heightCm) && has(a.weightKg);
-    case 'target':    return !asksTarget(a.mainGoal) || (has(a.targetWeightKg) && has(a.pace));
-    case 'day':       return has(a.dayActivity);
-    case 'training':  return has(a.fitnessLevel);
-    case 'week':      return has(a.trainingDays) && has(a.sessionMinutes);
+    case 'goal':      return answered(a.mainGoal);
+    case 'about':     return answered(a.age) && answered(a.gender) && answered(a.heightCm) && answered(a.weightKg);
+    case 'target':    return !asksTarget(a.mainGoal) || (answered(a.targetWeightKg) && answered(a.pace));
+    case 'day':       return answered(a.dayActivity);
+    case 'training':  return answered(a.fitnessLevel);
+    case 'week':      return answered(a.trainingDays) && answered(a.sessionMinutes);
     case 'equipment': return Array.isArray(a.availableEquipment) && a.availableEquipment.length > 0;
     default:          return false;
   }
@@ -174,15 +175,21 @@ export function cleanEquipment(loaded) {
   return inOrder(set);
 }
 
-// ── Typed answers (age, height, weight) and units ───────────────────────────
+// ── The wheels and their units (Kd, 2026-09-10: nothing typed, nothing
+//    pre-filled) ───────────────────────────────────────────────────────────
+//
+// Each wheel lists whole steps in the units on screen. A stored answer outside
+// a list (one the old form typed) stretches the list to include it, so a
+// stored answer is never shown as a different number. Until the person
+// touches a wheel it rests on the row named `…_REST` here, display-only, and
+// reads "Not set"; nothing is saved until it is moved.
 
 const CM_PER_IN = 2.54;
 const round = (n, dp) => {
   const f = 10 ** dp;
   return Math.round(n * f) / f;
 };
-const norm = (text) => String(text ?? '').trim().replace(',', '.');
-const NUMBER = /^\d+(\.\d+)?$/;
+const has = (v) => v !== null && v !== undefined;
 
 /** Pounds and feet where the browser says the person is in the US (or one of
  *  the two other countries that weigh in pounds); kilograms and centimetres
@@ -191,71 +198,90 @@ export function defaultUnits(language) {
   return typeof language === 'string' && /-(US|LR|MM)$/i.test(language) ? 'imperial' : 'metric';
 }
 
-/** Each typed answer parses to `{ value, error }`. Empty text is `null`: the
- *  answer is cleared, never guessed. Values are rounded to the two decimals
- *  the server stores. */
-export function parseAge(text) {
-  const t = norm(text);
-  if (t === '') return { value: null, error: null };
-  if (!/^\d{1,3}$/.test(t)) return { value: null, error: 'Type your age in years, like 30.' };
-  const n = Number(t);
-  if (n < 16) return { value: null, error: 'This app is for people aged 16 and over.' };
-  if (n > 120) return { value: null, error: 'Enter an age from 16 to 120.' };
-  return { value: n, error: null };
+export function range(from, to, step = 1) {
+  const out = [];
+  for (let v = from; v <= to; v += step) out.push(v);
+  return out;
 }
 
-export function parseWeight(text, units) {
-  const t = norm(text);
-  if (t === '') return { value: null, error: null };
-  if (!NUMBER.test(t)) {
-    return { value: null, error: `Type a number, like ${units === 'imperial' ? '154' : '70'}.` };
-  }
-  const kg = round(units === 'imperial' ? Number(t) * KG_PER_LB : Number(t), 2);
-  if (kg <= 0 || kg >= 1000) return { value: null, error: 'That weight looks wrong. Check the number.' };
-  return { value: kg, error: null };
+/** `list` with `value` added in order, when it is not already on it. */
+export function including(list, value) {
+  if (!has(value) || list.includes(value)) return list;
+  return [...list, value].sort((a, b) => a - b);
 }
 
-export function parseHeight(parts, units) {
-  if (units !== 'imperial') {
-    const t = norm(parts.cm);
-    if (t === '') return { value: null, error: null };
-    if (!NUMBER.test(t)) return { value: null, error: 'Type your height in centimetres, like 170.' };
-    const cm = round(Number(t), 2);
-    return cm < 50 || cm > 300
-      ? { value: null, error: 'Enter a height from 50 to 300 cm.' }
-      : { value: cm, error: null };
-  }
-  const ft = norm(parts.ft);
-  const inch = norm(parts.inch);
-  if (ft === '' && inch === '') return { value: null, error: null };
-  if (!/^\d$/.test(ft) || (inch !== '' && !NUMBER.test(inch))) {
-    return { value: null, error: 'Type your height in feet and inches, like 5 ft 9 in.' };
-  }
-  const inches = inch === '' ? 0 : Number(inch);
-  if (inches >= 12) return { value: null, error: 'Inches must be under 12.' };
-  const cm = round((Number(ft) * 12 + inches) * CM_PER_IN, 2);
-  return cm < 50 || cm > 300
-    ? { value: null, error: 'That height looks wrong. Check the feet and inches.' }
-    : { value: cm, error: null };
+/** Whole numbers from `from` to `to`, stretched to reach `value`. */
+const stretched = (from, to, value) => (has(value) ? range(Math.min(from, value), Math.max(to, value)) : range(from, to));
+
+/** The row a − or + tap lands on: one row along `list`, never off its ends. */
+export function stepIn(list, current, by) {
+  const i = list.indexOf(current);
+  return list[Math.max(0, Math.min(list.length - 1, (i === -1 ? 0 : i) + by))];
 }
 
-/** The box's text for a stored value, in the units on screen. */
-export function weightText(kg, units) {
-  if (kg === null || kg === undefined) return '';
-  return String(units === 'imperial' ? round(kg / KG_PER_LB, 1) : round(kg, 2));
+export const AGE_REST = 30;
+/** 16 to 120: the server's rails (RULINGS 2026-09-07, 16 and over). */
+export const ageList = (age) => stretched(16, 120, age);
+
+/** Weight: whole kilograms or pounds on one column, tenths on the other. */
+export const WEIGHT_REST = { metric: 70, imperial: 154 };
+const WEIGHT_WHOLES = { metric: [30, 250], imperial: [66, 550] };
+export const TENTHS = range(0, 9);
+
+export function weightParts(kg, units) {
+  const tenths = Math.round((units === 'imperial' ? kg / KG_PER_LB : kg) * 10);
+  return { whole: Math.floor(tenths / 10), tenth: tenths % 10 };
 }
 
-export function heightText(cm, units) {
-  if (cm === null || cm === undefined) return { cm: '', ft: '', inch: '' };
-  if (units !== 'imperial') return { cm: String(round(cm, 2)), ft: '', inch: '' };
-  const totalIn = cm / CM_PER_IN;
-  let ft = Math.floor(totalIn / 12);
-  let inch = round(totalIn - ft * 12, 1);
-  if (inch >= 12) {
-    ft += 1;
-    inch = round(inch - 12, 1);
-  }
-  return { cm: '', ft: String(ft), inch: String(inch) };
+/** The kilograms a pair of rows means, to the two decimals the server stores. */
+export function kgFromParts({ whole, tenth }, units) {
+  const v = whole + tenth / 10;
+  return round(units === 'imperial' ? v * KG_PER_LB : v, 2);
+}
+
+export function weightWholes(units, whole) {
+  const [from, to] = WEIGHT_WHOLES[units === 'imperial' ? 'imperial' : 'metric'];
+  return stretched(from, to, whole);
+}
+
+export const weightShown = ({ whole, tenth }, units) => `${whole}.${tenth} ${units === 'imperial' ? 'lb' : 'kg'}`;
+
+/** Height: whole centimetres, or feet and inches. */
+export const HEIGHT_REST = { metric: { cm: 170 }, imperial: { ft: 5, inch: 7 } };
+export const INCHES = range(0, 11);
+
+export function heightParts(cm, units) {
+  if (units !== 'imperial') return { cm: Math.round(cm) };
+  const totalIn = Math.round(cm / CM_PER_IN);
+  return { ft: Math.floor(totalIn / 12), inch: totalIn % 12 };
+}
+
+export function cmFromParts(parts, units) {
+  return units === 'imperial' ? round((parts.ft * 12 + parts.inch) * CM_PER_IN, 2) : parts.cm;
+}
+
+export const heightCmList = (cm) => stretched(100, 250, cm);
+export const heightFeetList = (ft) => stretched(3, 8, ft);
+export const heightShown = (parts, units) => (units === 'imperial' ? `${parts.ft} ft ${parts.inch} in` : `${parts.cm} cm`);
+
+/** One inch along, carried into the feet. */
+export function stepInches(parts, by) {
+  const total = parts.ft * 12 + parts.inch + by;
+  return { ft: Math.floor(total / 12), inch: ((total % 12) + 12) % 12 };
+}
+
+/** Screen 5: plain questions, a guess is fine (Kd, 2026-09-10). */
+export const PUSH_UPS_REST = 10;
+export const pushUpList = (n) => stretched(0, 100, n);
+export const pushUpShown = (n) => `${n} ${n === 1 ? 'push-up' : 'push-ups'}`;
+
+export const PLANK_REST = 30;
+/** Five-second rows up to five minutes, plus any stored answer off that grid. */
+export const plankList = (s) => including(range(0, 300, 5), s);
+export function plankShown(s) {
+  if (s < 60) return `${s} s`;
+  const rest = s % 60;
+  return rest === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${rest} s`;
 }
 
 // ── The plan panel's words ──────────────────────────────────────────────────
@@ -341,6 +367,104 @@ export function flagLines(plan, direction, units) {
  *  whole disclaimer, and the tap that records it, belong to the plan screen
  *  itself (screen 12). */
 export const PLAN_NOTE = 'These numbers are general guidance, not medical advice.';
+
+// ── "How is this worked out?" (Kd, 2026-09-10) ──────────────────────────────
+// Every figure is the server's (`plan.workings`, whose sums the shared
+// contract checks against the plan's own numbers); these are only its words.
+// Each source is the one plan/maths.ts names, and where that file calls a
+// figure its own, the screen says so: "the app's own estimate".
+
+const num = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
+const sign = (n) => (n < 0 ? '−' : '+');
+
+const DAY_SOURCE = {
+  sitting: 'the standard figure for a day spent mostly sitting',
+  on_feet: "the app's own estimate for a day partly on your feet",
+  active: "the app's own estimate for a day mostly on your feet",
+  very_active: "the app's own estimate for a day of hard physical work",
+};
+
+export const WORKING_NOTE = 'Each step is rounded to a whole calorie or gram.';
+export const METRIC_NOTE = 'The formulas work in kilograms and centimetres.';
+
+/** The steps, in order, as `{ title, sum, note }`; `note` names the source. */
+export function workingSteps(plan) {
+  const w = plan.workings;
+  const r = w.resting;
+  const t = w.training;
+  const steps = [
+    {
+      title: 'Resting burn',
+      sum: `10 × ${num(r.weightKg)} kg + 6.25 × ${num(r.heightCm)} cm − 5 × ${r.age} years ${sign(r.constant)} ${num(Math.abs(r.constant))} = ${kcalText(r.kcal)} kcal`,
+      note: `The Mifflin-St Jeor equation (1990), which the Academy of Nutrition and Dietetics recommends: ${
+        r.formula === 'female' ? 'its version for women' : 'its version for men, which the app uses for every answer but Female'
+      }.`,
+    },
+    {
+      title: 'Your day',
+      sum: `${kcalText(r.kcal)} × ${num(w.day.factor)} = ${kcalText(w.day.kcal)} kcal`,
+      note: DAY_SOURCE[w.day.activity] ? `${num(w.day.factor)} is ${DAY_SOURCE[w.day.activity]}.` : null,
+    },
+    {
+      title: 'Your training',
+      sum: `${num(t.kcalPerKgHour)} × ${num(t.weightKg)} kg × ${num(t.trainingDays * t.sessionMinutes)} minutes ÷ 60 ÷ 7 days = ${kcalText(t.kcal)} kcal a day`,
+      note: `${t.trainingDays} ${t.trainingDays === 1 ? 'session' : 'sessions'} of ${t.sessionMinutes} minutes a week. A workout burns about ${num(t.kcalPerKgHour)} kcal per kilo per hour: the app's own estimate.`,
+    },
+    {
+      title: 'You burn',
+      sum: `${kcalText(w.day.kcal)} + ${kcalText(t.kcal)} = ${kcalText(plan.dailyBurnKcal)} kcal a day`,
+      note: null,
+    },
+  ];
+  if (w.change) {
+    steps.push({
+      title: 'Your pace',
+      sum: `${num(w.change.kgPerWeek)} kg a week × ${kcalText(w.change.kcalPerKg)} kcal ÷ 7 days = ${kcalText(Math.abs(w.change.kcal))} kcal a day`,
+      note: `${kcalText(w.change.kcalPerKg)} kcal per kilo is the usual planning figure (Wishnofsky). Real weight change is often slower, so the date is an estimate.`,
+    });
+  }
+  const floored = w.beforeFloorKcal < w.floorKcal;
+  const eat = w.change
+    ? `${kcalText(plan.dailyBurnKcal)} ${sign(w.change.kcal)} ${kcalText(Math.abs(w.change.kcal))} = ${kcalText(w.beforeFloorKcal)} kcal`
+    : `${kcalText(w.beforeFloorKcal)} kcal`;
+  let eatNote = null;
+  if (floored) eatNote = `The app never sets fewer than ${kcalText(w.floorKcal)} kcal a day.`;
+  else if (!w.change) eatNote = 'The same as you burn, so your weight stays where it is.';
+  steps.push({
+    title: 'To eat',
+    sum: floored ? `${eat}, under the floor, so ${kcalText(plan.targetKcal)} kcal a day` : `${eat} a day`,
+    note: eatNote,
+  });
+  const p = w.protein;
+  steps.push(
+    {
+      title: 'Protein',
+      sum:
+        plan.proteinG === p.wantedG
+          ? `${num(p.gPerKg)} g × ${num(p.weightKg)} kg = ${p.wantedG} g`
+          : `${num(p.gPerKg)} g × ${num(p.weightKg)} kg would be ${p.wantedG} g, more than the day's calories leave room for, so ${plan.proteinG} g`,
+      note: `${num(p.gPerKg)} g per kilo is the app's own figure for your goal.`,
+    },
+    {
+      title: 'Fat',
+      sum: `${num(w.fatShare * 100)}% of ${kcalText(plan.targetKcal)} kcal ÷ 9 kcal a gram = ${plan.fatG} g`,
+      note: "The app's own share.",
+    },
+    {
+      title: 'Carbohydrates',
+      sum: `The rest of the calories ÷ 4 kcal a gram = ${plan.carbsG} g`,
+      note: `Never under ${w.carbsFloorG} g a day.`,
+    },
+  );
+  if (w.finish && plan.daysToTarget !== null) {
+    steps.push({
+      title: 'Your finish date',
+      sum: `${num(w.finish.kgToMove)} kg × ${kcalText(w.finish.kcalPerKg)} kcal ÷ ${kcalText(Math.abs(plan.dailyChangeKcal))} kcal a day = ${kcalText(plan.daysToTarget)} days`,
+      note: 'Rounded up to a whole day.',
+    });
+  }
+  return steps;
+}
 
 // ── Saving as you go ────────────────────────────────────────────────────────
 

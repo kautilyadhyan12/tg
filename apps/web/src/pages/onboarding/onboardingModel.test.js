@@ -2,6 +2,8 @@
 // value the server accepts cannot be missing from a screen; every value a
 // screen can send is pinned to the server's own request contract.
 import process from 'node:process';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   CURRENT_DISCLAIMER_VERSION,
@@ -14,17 +16,18 @@ import {
   missingPlanInputSchema,
   patchOnboardingRequestSchema,
   planFlagSchema,
+  planNumbersSchema,
   planPaceSchema,
 } from '@app/shared';
 import * as m from './onboardingModel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
+import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, PullUpBar, SideStretch } from './onboardingIcons';
 
 const accepts = (body) => patchOnboardingRequestSchema.safeParse(body).success;
 const values = (table) => table.map((row) => row.value).sort();
 
 const EMPTY = {
-  mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
-  dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
+  displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
+  pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
   sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
@@ -51,6 +54,18 @@ describe('what the screens offer is exactly what the server accepts', () => {
     covered(GOAL_ICONS, fitnessGoalSchema.options);
     covered(LEVEL_ICONS, fitnessLevelSchema.options);
     covered(EQUIPMENT_ICONS, equipmentSchema.options);
+  });
+
+  it('draws its own flexibility and pull-up bar icons, in the line style of the rest (Kd, 2026-09-10)', () => {
+    expect(GOAL_ICONS.flexibility).toBe(SideStretch);
+    expect(EQUIPMENT_ICONS.pull_up_bar).toBe(PullUpBar);
+    for (const Icon of [SideStretch, PullUpBar]) {
+      const svg = renderToStaticMarkup(createElement(Icon));
+      expect(svg).toContain('viewBox="0 0 24 24"');
+      expect(svg).toContain('fill="none"');
+      expect(svg).toContain('stroke-linecap="round"');
+      expect(svg.match(/<(path|circle)\b/g)?.length ?? 0).toBeGreaterThan(3);
+    }
   });
 
   it('every day count and session length on screen 6 is one the server takes', () => {
@@ -97,7 +112,7 @@ describe('which screens a person sees, and where they land', () => {
     expect(gap.has('equipment')).toBe(false);
   });
 
-  it('counts screen 5 answered on the self-rating alone: the two checks may be skipped', () => {
+  it('counts screen 5 answered on the self-rating alone: push-ups and plank may be "Not sure"', () => {
     expect(m.screenAnswered('training', { ...EMPTY, fitnessLevel: 'beginner' })).toBe(true);
     expect(m.screenAnswered('training', { ...EMPTY, pushUpsMax: 10, plankHoldSeconds: 30 })).toBe(false);
   });
@@ -134,48 +149,76 @@ describe('"No equipment" stands alone', () => {
   });
 });
 
-describe('typed answers', () => {
-  it('age: 16 and over, whole years, empty clears', () => {
-    expect(m.parseAge('30')).toEqual({ value: 30, error: null });
-    expect(m.parseAge(' 16 ')).toEqual({ value: 16, error: null });
-    expect(m.parseAge('15').error).toBe('This app is for people aged 16 and over.');
-    expect(m.parseAge('121').value).toBeNull();
-    expect(m.parseAge('30.5').value).toBeNull();
-    expect(m.parseAge('')).toEqual({ value: null, error: null });
+describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () => {
+  it('offer ages from 16 to 120, every one an age the server takes, and nothing younger', () => {
+    const ages = m.ageList(null);
+    expect([ages[0], ages[ages.length - 1]]).toEqual([16, 120]);
+    for (const age of ages) expect(accepts({ age }), String(age)).toBe(true);
+    expect(accepts({ age: 15 })).toBe(false);
   });
 
-  it('weight: pounds become kilograms to two decimals, and a comma is a decimal point', () => {
-    expect(m.parseWeight('154', 'imperial')).toEqual({ value: 69.85, error: null });
-    expect(m.parseWeight('70,5', 'metric')).toEqual({ value: 70.5, error: null });
-    expect(m.parseWeight('seventy', 'metric').value).toBeNull();
-    expect(m.parseWeight('0', 'metric').value).toBeNull();
-    expect(m.parseWeight('1000', 'metric').value).toBeNull();
-    for (const text of ['154', '70.123', '0.01', '999.99']) {
-      const { value } = m.parseWeight(text, 'imperial');
-      if (value !== null) expect(accepts({ weightKg: value }), text).toBe(true);
+  it('weight: every pair of rows, in both units, is a weight the server takes and reads back as itself', () => {
+    const bad = [];
+    for (const units of ['metric', 'imperial']) {
+      for (const whole of m.weightWholes(units, null)) {
+        for (const tenth of m.TENTHS) {
+          const kg = m.kgFromParts({ whole, tenth }, units);
+          const back = m.weightParts(kg, units);
+          if (!accepts({ weightKg: kg }) || back.whole !== whole || back.tenth !== tenth) bad.push(`${units} ${whole}.${tenth}`);
+        }
+      }
     }
+    expect(bad).toEqual([]);
+    expect(m.kgFromParts({ whole: 154, tenth: 0 }, 'imperial')).toBe(69.85);
+    expect(m.weightParts(70, 'imperial')).toEqual({ whole: 154, tenth: 3 });
+    expect(m.weightShown({ whole: 70, tenth: 5 }, 'metric')).toBe('70.5 kg');
   });
 
-  it('height: feet and inches become centimetres the server takes', () => {
-    expect(m.parseHeight({ ft: '5', inch: '9' }, 'imperial')).toEqual({ value: 175.26, error: null });
-    expect(m.parseHeight({ ft: '6', inch: '' }, 'imperial')).toEqual({ value: 182.88, error: null });
-    expect(m.parseHeight({ ft: '5', inch: '12' }, 'imperial').error).toBe('Inches must be under 12.');
-    expect(m.parseHeight({ ft: '', inch: '9' }, 'imperial').value).toBeNull();
-    expect(m.parseHeight({ cm: '165' }, 'metric')).toEqual({ value: 165, error: null });
-    expect(m.parseHeight({ cm: '49' }, 'metric').value).toBeNull();
-    expect(accepts({ heightCm: 175.26 })).toBe(true);
-  });
-
-  it('a stored value shows in the units on screen, and reads back as itself', () => {
-    expect(m.heightText(165, 'imperial')).toEqual({ cm: '', ft: '5', inch: '5' });
-    expect(m.heightText(182.88, 'imperial')).toEqual({ cm: '', ft: '6', inch: '0' });
-    expect(m.heightText(175.26, 'metric')).toEqual({ cm: '175.26', ft: '', inch: '' });
-    expect(m.weightText(69.85, 'imperial')).toBe('154');
-    expect(m.weightText(70.25, 'metric')).toBe('70.25');
-    expect(m.weightText(null, 'metric')).toBe('');
-    for (const cm of [150, 165, 175.26, 190.5]) {
-      expect(m.parseHeight(m.heightText(cm, 'metric'), 'metric').value).toBe(cm);
+  it('height: every row, centimetres or feet and inches, is a height the server takes and reads back as itself', () => {
+    const bad = [];
+    for (const cm of m.heightCmList(null)) {
+      if (!accepts({ heightCm: cm }) || m.heightParts(cm, 'metric').cm !== cm) bad.push(`${cm} cm`);
     }
+    for (const ft of m.heightFeetList(null)) {
+      for (const inch of m.INCHES) {
+        const cm = m.cmFromParts({ ft, inch }, 'imperial');
+        const back = m.heightParts(cm, 'imperial');
+        if (!accepts({ heightCm: cm }) || back.ft !== ft || back.inch !== inch) bad.push(`${ft} ft ${inch} in`);
+      }
+    }
+    expect(bad).toEqual([]);
+    expect(m.cmFromParts({ ft: 5, inch: 9 }, 'imperial')).toBe(175.26);
+    expect(m.heightParts(165, 'imperial')).toEqual({ ft: 5, inch: 5 });
+    expect(m.heightShown({ ft: 5, inch: 9 }, 'imperial')).toBe('5 ft 9 in');
+  });
+
+  it('screen 5: every push-up count and plank time on the wheels is one the server takes', () => {
+    for (const n of m.pushUpList(null)) expect(accepts({ pushUpsMax: n }), String(n)).toBe(true);
+    for (const s of m.plankList(null)) expect(accepts({ plankHoldSeconds: s }), String(s)).toBe(true);
+    expect(m.plankShown(45)).toBe('45 s');
+    expect(m.plankShown(60)).toBe('1 min');
+    expect(m.plankShown(95)).toBe('1 min 35 s');
+    expect(m.pushUpShown(1)).toBe('1 push-up');
+    expect(m.pushUpShown(12)).toBe('12 push-ups');
+  });
+
+  it('a stored answer outside a list stretches the list to include it, so it is never shown as another number', () => {
+    expect(m.heightCmList(60)[0]).toBe(60);
+    expect(m.heightFeetList(2)[0]).toBe(2);
+    expect(m.weightWholes('metric', 20)[0]).toBe(20);
+    expect(m.pushUpList(250)).toContain(250);
+    const plank = m.plankList(47); // an old stopwatch answer, off the five-second grid
+    expect(plank.indexOf(47)).toBe(plank.indexOf(45) + 1);
+  });
+
+  it('− and + move one row and stop at the ends; an inch carries into the feet', () => {
+    const ages = m.ageList(null);
+    expect(m.stepIn(ages, 30, 1)).toBe(31);
+    expect(m.stepIn(ages, 16, -1)).toBe(16);
+    expect(m.stepIn(ages, 120, 1)).toBe(120);
+    expect(m.stepIn(m.plankList(null), 30, 1)).toBe(35);
+    expect(m.stepInches({ ft: 5, inch: 11 }, 1)).toEqual({ ft: 6, inch: 0 });
+    expect(m.stepInches({ ft: 6, inch: 0 }, -1)).toEqual({ ft: 5, inch: 11 });
   });
 
   it('starts in pounds and feet for a US browser, kilograms and centimetres elsewhere', () => {
@@ -186,14 +229,33 @@ describe('typed answers', () => {
   });
 });
 
+/** The route's golden person (users.onboarding.routes.test.ts), working and all. */
+const WORKINGS = {
+  resting: { formula: 'female', weightKg: 70, heightCm: 165, age: 30, constant: -161, kcal: 1420 },
+  day: { activity: 'sitting', factor: 1.2, kcal: 1704 },
+  training: { kcalPerKgHour: 5, weightKg: 70, trainingDays: 3, sessionMinutes: 45, kcal: 113 },
+  change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
+  beforeFloorKcal: 1267,
+  floorKcal: 1200,
+  protein: { gPerKg: 2, weightKg: 70, wantedG: 140 },
+  fatShare: 0.25,
+  carbsFloorG: 50,
+  finish: { kgToMove: 5, kcalPerKg: 7700 },
+};
+
 describe('the plan panel says what the server said', () => {
   const plan = {
     restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550,
     proteinG: 140, carbsG: 98, fatG: 35, plannedTargetKg: 65, daysToTarget: 70, finishDate: '2026-11-19', flags: [],
+    workings: WORKINGS,
   };
 
   afterEach(() => {
     process.env.TZ = 'Asia/Kolkata';
+  });
+
+  it('is a plan the shared contract accepts, working included', () => {
+    expect(planNumbersSchema.safeParse(plan).success).toBe(true);
   });
 
   it('shows the finish day as that day, even west of Greenwich', () => {
@@ -260,6 +322,75 @@ describe('the plan panel says what the server said', () => {
     const full = DISCLAIMER_WORDINGS.plan_screen[CURRENT_DISCLAIMER_VERSION.plan_screen];
     expect(full.startsWith(m.PLAN_NOTE)).toBe(true);
     expect(m.PLAN_NOTE).toBe('These numbers are general guidance, not medical advice.');
+  });
+
+  it('"How is this worked out?" prints the server\'s own steps, each sum as its numbers make it', () => {
+    const steps = m.workingSteps(plan);
+    expect(steps.map((s) => [s.title, s.sum])).toEqual([
+      ['Resting burn', '10 × 70 kg + 6.25 × 165 cm − 5 × 30 years − 161 = 1,420 kcal'],
+      ['Your day', '1,420 × 1.2 = 1,704 kcal'],
+      ['Your training', '5 × 70 kg × 135 minutes ÷ 60 ÷ 7 days = 113 kcal a day'],
+      ['You burn', '1,704 + 113 = 1,817 kcal a day'],
+      ['Your pace', '0.5 kg a week × 7,700 kcal ÷ 7 days = 550 kcal a day'],
+      ['To eat', '1,817 − 550 = 1,267 kcal a day'],
+      ['Protein', '2 g × 70 kg = 140 g'],
+      ['Fat', '25% of 1,267 kcal ÷ 9 kcal a gram = 35 g'],
+      ['Carbohydrates', 'The rest of the calories ÷ 4 kcal a gram = 98 g'],
+      ['Your finish date', '5 kg × 7,700 kcal ÷ 550 kcal a day = 70 days'],
+    ]);
+    // Each source is the one plan/maths.ts names, or the app's own said plainly.
+    const notes = Object.fromEntries(steps.map((s) => [s.title, s.note]));
+    expect(notes['Resting burn']).toBe(
+      'The Mifflin-St Jeor equation (1990), which the Academy of Nutrition and Dietetics recommends: its version for women.',
+    );
+    expect(notes['Your day']).toBe('1.2 is the standard figure for a day spent mostly sitting.');
+    expect(notes['Your training']).toMatch(/the app's own estimate\.$/);
+    expect(notes['Your pace']).toMatch(/usual planning figure \(Wishnofsky\)/);
+    expect(notes['Protein']).toBe("2 g per kilo is the app's own figure for your goal.");
+  });
+
+  it('names the men\'s formula for every answer but Female, and the day factors that are the app\'s own', () => {
+    const men = m.workingSteps({ ...plan, workings: { ...WORKINGS, resting: { ...WORKINGS.resting, formula: 'male', constant: 5 } } })[0];
+    expect(men.sum).toMatch(/− 5 × 30 years \+ 5 = /);
+    expect(men.note).toMatch(/its version for men, which the app uses for every answer but Female\.$/);
+    for (const [activity, factor] of [['on_feet', 1.3], ['active', 1.45], ['very_active', 1.6]]) {
+      const day = m.workingSteps({ ...plan, workings: { ...WORKINGS, day: { activity, factor, kcal: 0 } } })[1];
+      expect(day.note, activity).toMatch(new RegExp(`^${factor} is the app's own estimate`));
+    }
+  });
+
+  it('says so when the floor stopped the cut, when protein gave way, and when the plan holds the weight', () => {
+    const floored = {
+      ...plan,
+      targetKcal: 1200,
+      workings: { ...WORKINGS, change: { ...WORKINGS.change, pace: 'brisk', kgPerWeek: 0.75, kcal: -825 }, beforeFloorKcal: 992 },
+    };
+    expect(m.workingSteps(floored).find((s) => s.title === 'To eat')).toEqual({
+      title: 'To eat',
+      sum: '1,817 − 825 = 992 kcal, under the floor, so 1,200 kcal a day',
+      note: 'The app never sets fewer than 1,200 kcal a day.',
+    });
+
+    const gaveWay = { ...plan, proteinG: 120 };
+    expect(m.workingSteps(gaveWay).find((s) => s.title === 'Protein').sum).toBe(
+      "2 g × 70 kg would be 140 g, more than the day's calories leave room for, so 120 g",
+    );
+
+    const held = {
+      ...plan,
+      targetKcal: 1817,
+      dailyChangeKcal: 0,
+      daysToTarget: null,
+      finishDate: null,
+      workings: { ...WORKINGS, change: null, beforeFloorKcal: 1817, finish: null },
+    };
+    const steps = m.workingSteps(held);
+    expect(steps.map((s) => s.title)).not.toContain('Your pace');
+    expect(steps.map((s) => s.title)).not.toContain('Your finish date');
+    expect(steps.find((s) => s.title === 'To eat')).toMatchObject({
+      sum: '1,817 kcal a day',
+      note: 'The same as you burn, so your weight stays where it is.',
+    });
   });
 });
 

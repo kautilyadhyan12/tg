@@ -271,9 +271,14 @@ const EMPTY_ONBOARDING_ANSWERS = {
 function toOnboardingAnswers(row: repo.OnboardingRow): OnboardingAnswers {
   const p = row.profile;
   if (p === null) {
-    return onboardingAnswersSchema.parse({ ...EMPTY_ONBOARDING_ANSWERS, weightKg: row.weightKg });
+    return onboardingAnswersSchema.parse({
+      ...EMPTY_ONBOARDING_ANSWERS,
+      displayName: row.displayName,
+      weightKg: row.weightKg,
+    });
   }
   return onboardingAnswersSchema.parse({
+    displayName: row.displayName,
     mainGoal: p.mainGoal,
     age: p.age,
     gender: p.gender,
