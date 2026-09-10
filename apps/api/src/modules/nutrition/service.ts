@@ -732,7 +732,7 @@ export async function createMeasurement(
   deps: ReadDeps,
   userId: string,
   v: Parameters<typeof repo.createMeasurement>[2],
-): Promise<repo.MeasurementRow> {
+): Promise<repo.MeasurementRow | null> {
   return await repo.createMeasurement(deps.sql, userId, v);
 }
 export async function updateMeasurement(

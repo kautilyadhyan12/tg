@@ -206,7 +206,9 @@ export default function MeasurementsTracker() {
       // profile) is a row of its own, and the ruling says it is marked as such.
       // A typed row is DATED after everything the person has (a weigh-in may
       // be dated up to a day ahead of the clock), so its measuredAt can sit in
-      // tomorrow; the day it shows under is the day it was typed (createdAt).
+      // tomorrow; the day it shows under is the day the row was written
+      // (createdAt) — the day it was typed, except for a row the migration
+      // backfilled, which shows the day that ran.
       const rows = (res.data.items || []).map((m) => ({
         id: m.id,
         measured_at: m.measuredAt,

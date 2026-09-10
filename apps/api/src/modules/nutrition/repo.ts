@@ -396,7 +396,7 @@ export const TYPED_WEIGHT_SOURCE = "self_reported";
  *  newest row that SAYS SOMETHING about weight — a weigh-in that carries one,
  *  or a typed row (which may carry none: that is a clear). Nothing else ever
  *  writes the column, and every write to the history ends by running this, so
- *  the cache can never disagree with the history; migration `0027` put every
+ *  the cache can never disagree with the history; migration `0026` put every
  *  weight that existed before this rule under a typed row of its own.
  *
  *  So a deleted mis-entry falls back to the weight before it — never to the
@@ -514,11 +514,19 @@ export async function recordTypedWeight(
  *  the users row would be the opposite order, and a person saving screen 2
  *  while editing that same typed entry would deadlock (40P01 — a 500 on the
  *  save, and every answer in that transaction lost). FOR NO KEY UPDATE, not
- *  FOR UPDATE: the foreign-key check on an INSERT here takes KEY SHARE, which
- *  the stronger lock would block (users/repo.ts patchOnboarding's note).
- *  No status gate: the lock orders the writes, it does not decide them. */
-async function lockOwner(tx: TransactionSql, userId: string): Promise<void> {
-  await tx`SELECT id FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+ *  FOR UPDATE: every foreign-key check on this user elsewhere (a meal logged,
+ *  a workout synced, the v1 profile save) takes KEY SHARE, which FOR UPDATE
+ *  would make wait behind a weigh-in; NO KEY UPDATE lets them through.
+ *
+ *  And the status gate: false when the account is not active, so the write
+ *  is refused. A request that passed sign-in and then queued here behind the
+ *  account's deletion would otherwise save a row the cache never takes
+ *  (refreshWeight skips a deleted account) — and a restored account would
+ *  show one weight on the profile and another in its history. */
+async function lockOwner(tx: TransactionSql, userId: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+  return rows.length > 0;
 }
 
 export async function listMeasurements(
@@ -536,13 +544,14 @@ export async function listMeasurements(
   return rows.map(toMeasurement);
 }
 
+/** Null: the account is not active (lockOwner). */
 export async function createMeasurement(
   sql: Sql,
   userId: string,
   v: BodyMeasurementInput,
-): Promise<MeasurementRow> {
+): Promise<MeasurementRow | null> {
   return await sql.begin(async (tx) => {
-    await lockOwner(tx, userId);
+    if (!(await lockOwner(tx, userId))) return null;
     const rows = await tx<MeasurementDbRow[]>`
       INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
       VALUES (${userId}, ${new Date(v.measuredAt)}, ${v.weightKg ?? null}, ${tx.json(v.metrics)}, ${v.source})
@@ -562,7 +571,7 @@ export async function updateMeasurement(
   v: PatchBodyMeasurement,
 ): Promise<MeasurementRow | null> {
   return await sql.begin(async (tx) => {
-    await lockOwner(tx, userId);
+    if (!(await lockOwner(tx, userId))) return null;
     const rows = await tx<MeasurementDbRow[]>`
       UPDATE body_measurements SET
         measured_at = coalesce(${v.measuredAt === undefined ? null : new Date(v.measuredAt)}, measured_at),
@@ -582,7 +591,7 @@ export async function updateMeasurement(
 
 export async function deleteMeasurement(sql: Sql, userId: string, id: string): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    await lockOwner(tx, userId);
+    if (!(await lockOwner(tx, userId))) return false;
     const rows = await tx<{ id: string; weight_kg: string | null; source: string }[]>`
       DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId}
       RETURNING id, weight_kg, source`;

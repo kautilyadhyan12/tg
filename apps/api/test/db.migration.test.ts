@@ -769,30 +769,32 @@ d("0001_init on a real database", () => {
     }
   });
 
-  /** MIGRATION `0027`'s BACKFILL: every weight that existed before the
-   *  one-source rule (RULINGS 2026-09-10) gets a typed row of its own, so the
-   *  live app's first ordinary correction to that person's history — log a
-   *  weigh-in, delete it — cannot blank a number that had no row behind it.
+  /** MIGRATION `0026`'s BACKFILL (its part 2): every weight that existed
+   *  before the one-source rule (RULINGS 2026-09-10) gets a typed row of its
+   *  own, so the live app's first ordinary correction to that person's
+   *  history — log a weigh-in, delete it — cannot blank a number that had no
+   *  row behind it.
    *
    *  Same construction as `0014`'s: the legacy states are BUILT here (a fresh
    *  database has none), and the statements are run **read out of the shipped
-   *  file**. Four subjects, one per branch of the two statements plus the two
+   *  file**. The subjects, one per branch of the two statements plus those
    *  that must be left alone: a weight with no row · a weight with a newer,
    *  different row (the column was written directly after it) · an emptied
    *  column over a weighed row (a clear under the old code) · a weight whose
-   *  newest row already carries it (untouched) · a SOFT-DELETED account still
-   *  inside its undo window, which keeps its weight and must get the row like
-   *  anyone else, or restoring it restores the very state this repairs · a
-   *  purged tombstone (NULL column, no rows), untouched. Then the whole thing
-   *  again, to prove it finds nothing the second time. Rolled back. */
-  it("0027's backfill puts a typed row under every weight that had none, and only those", async () => {
-    const migration = await readFile(new URL("../drizzle/0027_typed_weight_rows.sql", import.meta.url), "utf8");
+   *  newest row already carries it (untouched) · two SOFT-DELETED accounts
+   *  still inside their undo window, one per statement — they keep their
+   *  weight and history, and restoring them must not restore the very state
+   *  this repairs · a purged tombstone (NULL column, no rows), untouched. Then
+   *  the whole thing again, to prove it finds nothing the second time. Rolled
+   *  back. */
+  it("0026's backfill puts a typed row under every weight that had none, and only those", async () => {
+    const migration = await readFile(new URL("../drizzle/0026_onboarding_plan_answers.sql", import.meta.url), "utf8");
     const statements = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
-      .filter((s) => s.includes("INSERT INTO"));
+      .filter((s) => s.includes('INSERT INTO "body_measurements"'));
     if (statements.length !== 2) {
-      throw new Error(`0027 no longer contains exactly two INSERTs (found ${String(statements.length)})`);
+      throw new Error(`0026 no longer contains exactly two backfill INSERTs (found ${String(statements.length)})`);
     }
     const runBackfill = async (tx: postgres.TransactionSql) => {
       for (const s of statements) await tx.unsafe(s);
@@ -811,16 +813,20 @@ d("0001_init on a real database", () => {
             INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
             VALUES (${userId}, ${at}, ${weight}, '{}', 'manual')`;
         };
-        const noRow = await user("zz-0027-no-row", 80);
-        const differs = await user("zz-0027-differs", 80);
+        const noRow = await user("zz-0026-no-row", 80);
+        const differs = await user("zz-0026-differs", 80);
         await weighIn(differs, 82, "2026-05-01T10:00:00Z");
-        const emptied = await user("zz-0027-emptied", null);
+        const emptied = await user("zz-0026-emptied", null);
         await weighIn(emptied, 82, "2026-05-01T10:00:00Z");
-        const agrees = await user("zz-0027-agrees", 82);
+        const agrees = await user("zz-0026-agrees", 82);
         await weighIn(agrees, 82, "2026-05-01T10:00:00Z");
-        const gone = await user("zz-0027-gone", 80, "deleted");
+        const gone = await user("zz-0026-gone", 80, "deleted");
         await tx`UPDATE users SET deleted_at = now() WHERE id = ${gone}`;
-        const purged = await user("zz-0027-purged", null, "deleted");
+        // Statement 2's soft-deleted case: cleared under the old code, then deleted.
+        const goneEmptied = await user("zz-0026-gone-emptied", null, "deleted");
+        await tx`UPDATE users SET deleted_at = now() WHERE id = ${goneEmptied}`;
+        await weighIn(goneEmptied, 82, "2026-05-01T10:00:00Z");
+        const purged = await user("zz-0026-purged", null, "deleted");
 
         const rowsOf = async (userId: string) =>
           tx<{ weight_kg: string | null; source: string; newest: boolean }[]>`
@@ -838,6 +844,7 @@ d("0001_init on a real database", () => {
           expect(await columnOf(emptied), `pass ${String(pass)}`).toBeNull();
           expect(await columnOf(agrees), `pass ${String(pass)}`).toBe("82.00");
           expect(await columnOf(gone), `pass ${String(pass)}`).toBe("80.00");
+          expect(await columnOf(goneEmptied), `pass ${String(pass)}`).toBeNull();
           expect(await columnOf(purged), `pass ${String(pass)}`).toBeNull();
           // And exactly the rows that make the one-source rule true, each the
           // newest thing in that person's history.
@@ -846,23 +853,24 @@ d("0001_init on a real database", () => {
           expect(await rowsOf(emptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
           expect(await rowsOf(agrees), `pass ${String(pass)}`).toEqual([]);
           expect(await rowsOf(gone), `pass ${String(pass)}`).toEqual([{ weight_kg: "80.00", source: "self_reported", newest: true }]);
+          expect(await rowsOf(goneEmptied), `pass ${String(pass)}`).toEqual([{ weight_kg: null, source: "self_reported", newest: true }]);
           expect(await rowsOf(purged), `pass ${String(pass)}`).toEqual([]);
         }
 
         // What the rows are FOR: from here the live rule computes the same
         // number the column held, so nothing can vanish on the first correction
         // — including for the soft-deleted person once restoreUser brings them back.
-        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"]] as const) {
+        for (const [userId, expected] of [[noRow, "80.00"], [differs, "80.00"], [emptied, null], [agrees, "82.00"], [gone, "80.00"], [goneEmptied, null]] as const) {
           const [rule] = await tx<{ weight_kg: string | null }[]>`
             SELECT weight_kg FROM body_measurements
             WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
             ORDER BY measured_at DESC, id DESC LIMIT 1`;
           expect(rule?.weight_kg ?? null).toBe(expected);
         }
-        throw new Error("ROLLBACK-0027-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0026-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0027-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0026-BACKFILL-FIXTURE") return;
         throw err;
       });
   });

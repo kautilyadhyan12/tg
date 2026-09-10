@@ -96,16 +96,17 @@ export async function insertBody(sql: Sql, r: BodyRow): Promise<number> {
   return res.count;
 }
 
-/** GAP-D, under the one-source rule (RULINGS 2026-09-10; migration `0027`
+/** GAP-D, under the one-source rule (RULINGS 2026-09-10; migration `0026`
  *  makes the same repair for rows already in Postgres): the column is a cache
  *  of the newest row that says something about weight. The users import wrote
  *  the weight the legacy profile held with no measurement behind it, so when
  *  the imported measurements carry no newer number that profile weight becomes
  *  a `self_reported` row of its own, dated after everything imported for that
- *  person — the same statement `0027` runs, kept in step with it. Then the
- *  column follows the newest weight-bearing row, as the live app does
- *  (nutrition/repo.ts refreshWeight). Idempotent: the second run finds the
- *  typed row already newest and equal to the column. */
+ *  person — `0026`'s first backfill statement for one person, kept in step
+ *  with it (no status filter there either). Then the column follows the newest
+ *  weight-bearing row, as the live app does (nutrition/repo.ts refreshWeight).
+ *  Idempotent: the second run finds the typed row already newest and equal to
+ *  the column. */
 export async function refreshUserWeight(sql: Sql, userId: string): Promise<void> {
   await sql`
     INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
@@ -117,7 +118,7 @@ export async function refreshUserWeight(sql: Sql, userId: string): Promise<void>
       SELECT weight_kg FROM body_measurements
       WHERE user_id = u.id AND (weight_kg IS NOT NULL OR source = 'self_reported')
       ORDER BY measured_at DESC, id DESC LIMIT 1) newest ON true
-    WHERE u.id = ${userId} AND u.status = 'active' AND u.weight_kg IS NOT NULL
+    WHERE u.id = ${userId} AND u.weight_kg IS NOT NULL
       AND (newest.weight_kg IS NULL OR newest.weight_kg <> u.weight_kg)`;
   await sql`
     UPDATE users SET weight_kg = (
@@ -125,4 +126,18 @@ export async function refreshUserWeight(sql: Sql, userId: string): Promise<void>
       WHERE user_id = ${userId} AND (weight_kg IS NOT NULL OR source = 'self_reported')
       ORDER BY measured_at DESC, id DESC LIMIT 1)
     WHERE id = ${userId} AND status = 'active'`;
+}
+
+/** The body stage's weight refresh: every user the users stage imported as
+ *  well as every owner of a measurement doc — a profile weight with no
+ *  measurements behind it is exactly the one that needs its row. Returns how
+ *  many users were refreshed. */
+export async function refreshImportedWeights(
+  sql: Sql,
+  importedUsers: ReadonlySet<string>,
+  bodyUsers: ReadonlySet<string>,
+): Promise<number> {
+  const users = new Set<string>([...importedUsers, ...bodyUsers]);
+  for (const userId of users) await refreshUserWeight(sql, userId);
+  return users.size;
 }

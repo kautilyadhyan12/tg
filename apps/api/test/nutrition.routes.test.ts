@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { nutritionTargetsResponseSchema } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, nutritionTargetsResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -343,7 +343,29 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   // A typed row must stay a typed row: the PATCH refuses `source` (and any
   // other key it does not know) as a 400 at the boundary, never as a silent drop.
-  it("PATCH body-measurement: source and stray keys are 400, a real edit is 200",async()=>{const created=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:75});expect(created.statusCode,created.body).toBe(201);const id=created.json<{measurement:{id:string}}>().measurement.id;expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{source:"manual"})).statusCode).toBe(400);expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,source:"self_reported"})).statusCode).toBe(400);expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,smuggled:true})).statusCode).toBe(400);const edited=await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76});expect(edited.statusCode,edited.body).toBe(200);expect(edited.json<{measurement:{weightKg:number;source:string}}>().measurement).toMatchObject({weightKg:76,source:"manual"});expect((await inject("DELETE",`/v1/nutrition/body-measurements/${id}`,cookieA)).statusCode).toBe(204);},30_000);
+  // A stranger's edit is a 404 that changes nothing, and every row the routes
+  // send matches the shared contract — createdAt included, which the web
+  // needs to date a typed row.
+  it("PATCH body-measurement: source and stray keys are 400, a stranger's edit is 404, a real edit is 200",async()=>{
+    const created=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:75});
+    expect(created.statusCode,created.body).toBe(201);
+    const id=bodyMeasurementSchema.parse(created.json<{measurement:unknown}>().measurement).id;
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{source:"manual"})).statusCode).toBe(400);
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,source:"self_reported"})).statusCode).toBe(400);
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76,smuggled:true})).statusCode).toBe(400);
+    const edited=await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{weightKg:76});
+    expect(edited.statusCode,edited.body).toBe(200);
+    expect(bodyMeasurementSchema.parse(edited.json<{measurement:unknown}>().measurement)).toMatchObject({weightKg:76,source:"manual"});
+    expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieB,{weightKg:99})).statusCode).toBe(404);
+    const [still]=await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM body_measurements WHERE id=${id}`;
+    expect(still?.weight_kg).toBe("76.00");
+    const list=await inject("GET","/v1/nutrition/body-measurements?limit=100",cookieA);
+    expect(list.statusCode).toBe(200);
+    expect(bodyMeasurementListResponseSchema.parse(list.json()).items.find((m)=>m.id===id)).toMatchObject({weightKg:76,source:"manual"});
+    const theirs=await inject("GET","/v1/nutrition/body-measurements?limit=100",cookieB);
+    expect(bodyMeasurementListResponseSchema.parse(theirs.json()).items.some((m)=>m.id===id)).toBe(false);
+    expect((await inject("DELETE",`/v1/nutrition/body-measurements/${id}`,cookieA)).statusCode).toBe(204);
+  },30_000);
 
   // Card 5c2 — dishware portions: an item's amount can be "my dish, this full"
   // instead of grams; the SERVER computes grams (volume × fill × density) at

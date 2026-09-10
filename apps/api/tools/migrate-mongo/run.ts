@@ -14,7 +14,7 @@ import { connectPg } from "./pg.js";
 import { insertUser, transformUser } from "./collections/users.js";
 import { insertWorkout, loadExerciseIds, transformWorkout } from "./collections/workouts.js";
 import { insertMeal, transformMeal } from "./collections/meals.js";
-import { insertBody, refreshUserWeight, transformBody } from "./collections/body.js";
+import { insertBody, refreshImportedWeights, transformBody } from "./collections/body.js";
 import { insertCoach, transformCoach } from "./collections/coach.js";
 import { insertRoute, insertRun, transformRoute, transformRun } from "./collections/running.js";
 import { verifyBcrypt, verifyCoachRunning, verifyNutrition, verifyParity, verifyUsersCount, verifyWorkouts } from "./verify.js";
@@ -193,11 +193,8 @@ async function main(): Promise<void> {
           }
         }
       });
-      const weightUsers = new Set<string>([...importedUsers, ...bodyUsers]);
-      if (apply) {
-        for (const userId of weightUsers) await refreshUserWeight(sql, userId);
-      }
-      console.log(`body_measurements: read=${String(read)} transformed=${String(transformed)} skipped=${String(skipped)} inserted=${String(inserted)} weight_refreshed_users=${String(apply ? weightUsers.size : 0)} errors=${String(errors)} mode=${apply ? "apply" : "dry-run"}`);
+      const weightRefreshed = apply ? await refreshImportedWeights(sql, importedUsers, bodyUsers) : 0;
+      console.log(`body_measurements: read=${String(read)} transformed=${String(transformed)} skipped=${String(skipped)} inserted=${String(inserted)} weight_refreshed_users=${String(weightRefreshed)} errors=${String(errors)} mode=${apply ? "apply" : "dry-run"}`);
       if (errors > 0) process.exitCode = 1;
     }
 

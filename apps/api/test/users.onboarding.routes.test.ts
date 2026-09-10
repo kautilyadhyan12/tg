@@ -15,7 +15,12 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
 import { patchOnboarding } from "../src/modules/users/repo.js";
-import { recordTypedWeight, updateMeasurement } from "../src/modules/nutrition/repo.js";
+import {
+  createMeasurement,
+  deleteMeasurement,
+  recordTypedWeight,
+  updateMeasurement,
+} from "../src/modules/nutrition/repo.js";
 import { planAnswersFor } from "../src/modules/plan/answers.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -989,7 +994,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(await columnOf()).toBe("70.00");
     expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 70]]);
 
-    // Drift 2: a weight with NO row under it (the pre-0027 shape). Clearing it
+    // Drift 2: a weight with NO row under it (the shape before 0026's backfill). Clearing it
     // must empty the column (RULINGS 2026-09-10) even though there is no
     // weight-bearing row to write a clear over.
     await sql`DELETE FROM body_measurements WHERE user_id = ${userId}`;
@@ -1000,46 +1005,153 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(await history(cookies)).toEqual([]);
   });
 
+  /** Resolves once another connection is queued on a lock `holderPid` holds.
+   *  A lock test must SEE the second transaction waiting before it lets the
+   *  first go on: a fixed sleep lets a slow start run the second one after the
+   *  first has committed, and then no conflict forms and a broken lock order
+   *  passes. */
+  const waitUntilQueuedBehind = async (holderPid: number): Promise<void> => {
+    for (let i = 0; i < 400; i += 1) {
+      const [row] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND ${holderPid}::int = ANY(pg_blocking_pids(pid))`;
+      if ((row?.n ?? 0) > 0) return;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 25);
+      });
+    }
+    throw new Error(`nothing queued behind backend ${String(holderPid)} within 10 s`);
+  };
+
+  /** Runs `first` in a transaction and holds it open at `hold` until `second`
+   *  is seen queued behind it, then lets it finish. Both outcomes come back,
+   *  errors included, so a deadlock reads as a failed expectation. */
+  const interleave = async <T>(
+    first: (tx: postgres.TransactionSql, hold: () => Promise<void>) => Promise<void>,
+    second: () => Promise<T>,
+  ): Promise<{ firstError: unknown; secondError: unknown; second: T | null }> => {
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reportPid: (pid: number) => void = () => undefined;
+    const pidOfFirst = new Promise<number>((resolve) => {
+      reportPid = resolve;
+    });
+    let firstError: unknown = null;
+    const firstDone = sql
+      .begin(async (tx) => {
+        await first(tx, async () => {
+          const [me] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+          reportPid(me?.pid ?? -1);
+          await held;
+        });
+      })
+      .catch((err: unknown) => {
+        firstError = err;
+      });
+    const pid = await pidOfFirst;
+    let secondError: unknown = null;
+    const secondDone = second().catch((err: unknown) => {
+      secondError = err;
+      return null;
+    });
+    await waitUntilQueuedBehind(pid);
+    release();
+    await firstDone;
+    const result = await secondDone;
+    return { firstError, secondError, second: result };
+  };
+
+  /** Screen 2's save, by shape: the users row first, then today's typed row
+   *  edited in place (users/repo.ts, nutrition/repo.ts recordTypedWeight). */
+  const screenTwoSave = (userId: string, typedId: string) =>
+    async (tx: postgres.TransactionSql, hold: () => Promise<void>) => {
+      await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+      await hold();
+      await tx`UPDATE body_measurements SET weight_kg = 71 WHERE id = ${typedId} AND user_id = ${userId}`;
+    };
+
   it("editing the typed entry while screen 2 saves it never deadlocks: the users row is taken first", { timeout: 30_000 }, async () => {
-    // The onboarding save holds the users row and then updates today's typed
-    // row in place. A history edit of that same row that took the row first
-    // and the users row second (refreshWeight) is the opposite order; the two
-    // interleaved are a deadlock, and the save — with every answer in it —
-    // is the one Postgres aborts. Reproduced before the fix: "deadlock detected".
+    // A history edit of that same row that took the row first and the users
+    // row second (refreshWeight) is the opposite order; the two interleaved
+    // are a deadlock, and the save — with every answer in it — is the one
+    // Postgres aborts. Reproduced with the lock removed: "deadlock detected".
     const { userId, cookies } = await makeUser("ob-measure-lock-order@example.com");
     await completeSeven(cookies); // one typed row, today
     const typed = (await history(cookies)).find((m) => m.source === "self_reported");
     if (typed === undefined) throw new Error("no typed row");
 
-    let release = (): void => undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let saveError: unknown = null;
-    // A: the save's shape — users row first, then the typed row.
-    const save = sql
-      .begin(async (tx) => {
-        await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
-        await held; // B is started while this lock is held
-        await tx`UPDATE body_measurements SET weight_kg = 71 WHERE id = ${typed.id} AND user_id = ${userId}`;
-      })
-      .catch((err: unknown) => {
-        saveError = err;
-      });
-    // B: the history edit of that row, through the real repo transaction.
-    const edit = updateMeasurement(sql, userId, typed.id, { weightKg: 72 });
-    // Let B reach whichever lock it takes first, then let A continue.
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 500);
-    });
-    release();
-    await save;
-    const edited = await edit;
+    const out = await interleave(screenTwoSave(userId, typed.id), () =>
+      updateMeasurement(sql, userId, typed.id, { weightKg: 72 }),
+    );
 
-    expect(saveError, "the save was aborted").toBeNull();
-    expect(edited?.weightKg).toBe(72);
-    // B ran after A committed, so its number is the one that stands.
+    expect(out.firstError, "the save was aborted").toBeNull();
+    expect(out.secondError, "the edit was aborted").toBeNull();
+    expect(out.second?.weightKg).toBe(72);
+    // The edit ran after the save committed, so its number is the one that stands.
     expect((await get(cookies)).answers["weightKg"]).toBe(72);
+  });
+
+  it("deleting the typed entry while screen 2 saves it never deadlocks either", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-lock-order-delete@example.com");
+    await completeSeven(cookies);
+    const typed = (await history(cookies)).find((m) => m.source === "self_reported");
+    if (typed === undefined) throw new Error("no typed row");
+
+    const out = await interleave(screenTwoSave(userId, typed.id), () => deleteMeasurement(sql, userId, typed.id));
+
+    expect(out.firstError, "the save was aborted").toBeNull();
+    expect(out.secondError, "the delete was aborted").toBeNull();
+    expect(out.second).toBe(true);
+    // The delete ran after the save: the entry is gone, and it was the only weight.
+    expect((await history(cookies)).filter((m) => m.source === "self_reported")).toEqual([]);
+    expect((await get(cookies)).answers["weightKg"]).toBeNull();
+  });
+
+  it("a weigh-in that waits behind the account's deletion writes nothing", { timeout: 30_000 }, async () => {
+    // It passes sign-in while the deletion is still uncommitted, then queues
+    // on the users row. Saving it after the deletion would leave a row the
+    // cache never took (refreshWeight skips a deleted account), so a restored
+    // account would show one weight on the profile and another in its history.
+    const { userId, cookies } = await makeUser("ob-measure-deleted-mid-request@example.com");
+    const out = await interleave(
+      async (tx, hold) => {
+        // softDeleteUser's first statement.
+        await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId} AND status = 'active'`;
+        await hold();
+      },
+      async () =>
+        await inject({
+          method: "POST",
+          url: "/v1/nutrition/body-measurements",
+          body: { measuredAt: new Date().toISOString(), weightKg: 70 },
+          cookies,
+        }),
+    );
+
+    expect(out.firstError).toBeNull();
+    expect(out.second?.statusCode, out.second?.body).toBe(401);
+    const [count] = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM body_measurements WHERE user_id = ${userId}`;
+    expect(count?.n).toBe("0");
+  });
+
+  it("no history write lands on an account that is not active", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-measure-gone-history@example.com");
+    const id = await measureOk(cookies, { measuredAt: new Date().toISOString(), weightKg: 70 });
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
+
+    const input = { measuredAt: new Date().toISOString(), weightKg: 71, metrics: {}, source: "manual" as const };
+    expect(await createMeasurement(sql, userId, input)).toBeNull();
+    expect(await updateMeasurement(sql, userId, id, { weightKg: 72 })).toBeNull();
+    expect(await deleteMeasurement(sql, userId, id)).toBe(false);
+
+    const rows = await sql<{ id: string; weight_kg: string | null }[]>`
+      SELECT id, weight_kg FROM body_measurements WHERE user_id = ${userId}`;
+    expect(rows).toEqual([{ id, weight_kg: "70.00" }]);
+    const [user] = await sql<{ weight_kg: string | null }[]>`SELECT weight_kg FROM users WHERE id = ${userId}`;
+    expect(user?.weight_kg).toBe("70.00");
   });
 
   it("a typed weight is never written for an account that is not active", { timeout: 30_000 }, async () => {
