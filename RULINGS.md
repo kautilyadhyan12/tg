@@ -184,3 +184,4 @@ Superseded rulings are kept and marked **SUPERSEDED**.
   fixes, on Kd's word for that round. *"no extra review needed"* (words-by-type, six Lows).
 - 2026-09-08 · Sizing the work is the chat's job, not Kd's: *"do what is best not because i am asking you to"*. One roadmap line is one chat and one pull request; a chat that finds its line too big splits it in `ROADMAP.md` before building. Stage 1 items 3–7 were split that day.
 - 2026-09-09 · A card with NO screen gets NO click-through: *"if does not have screen no click through needed"*. Server-only work is proved by its tests and checks and ticked on merge. The click-through stands for anything a user can see, and a card that builds a screen still gets one.
+- 2026-09-11 · Once work is under way the chat does not ask whether to finish; it finishes and posts short updates in plain words. *"give me updates not asking to finish"* · *"use human understanble and readble , mot essays"*
