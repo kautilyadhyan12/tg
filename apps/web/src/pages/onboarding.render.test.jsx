@@ -626,10 +626,15 @@ describe('onboarding screens 1–7', () => {
     serve();
     draw();
     await heading('Your goal');
-    // Kd, at 4a-iv's click-through: no second question; three to a row, four even rows.
+    // Kd, at 4a-iv's click-through: one heading and no second question; three
+    // to a row, four even rows. The screen's own area is the twelve tiles and
+    // nothing else, so no question or hint can sit above them in any form.
+    expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Your goal']);
     const grid = screen.getByRole('group', { name: 'Your goal' });
-    expect(within(grid).getAllByRole('button')).toHaveLength(12);
-    expect(screen.queryByText(/what else do you want/i)).toBeNull();
+    const tiles = within(grid).getAllByRole('button');
+    expect(tiles).toHaveLength(12);
+    expect(grid.parentElement.textContent).toBe(tiles.map((t) => t.textContent).join(''));
+    // The one line under the heading that every screen has, which Kd passed.
     expect(screen.getByText('Pick one from the top row, and any of the rest')).toBeTruthy();
     tap(/Build muscle/);
     await saved({ fitnessGoals: ['muscle_gain'] });

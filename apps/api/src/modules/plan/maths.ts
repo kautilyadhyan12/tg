@@ -18,8 +18,10 @@
 //                  share would shrink it during a cut, just when it keeps muscle. 2.0
 //                  on a loss is the top of the 1.4–2.0 g/kg a day the ISSN's 2017
 //                  position stand gives people who train, which asks for more during
-//                  a cut; 1.6 to keep the weight sits inside that range; 2.2 to gain,
-//                  and whatever the weight choice while Build muscle is ticked, is what
+//                  a cut; 1.6 to keep the weight sits inside that range; 2.2 to gain
+//                  is the top of the 1.6–2.2 g/kg a day Iraki and colleagues' 2019
+//                  review gives people who lift while eating more than they burn;
+//                  2.2 whatever the weight choice while Build muscle is ticked is what
 //                  Morton and colleagues' 2018 meta-analysis of 49 studies recommends
 //                  "for those seeking to maximise" the muscle training builds (its
 //                  plateau is 1.62 g/kg a day, 95 % CI 1.03 to 2.20). A body heavier

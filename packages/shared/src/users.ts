@@ -101,8 +101,8 @@ export const fitnessGoalSchema = z.enum([
   "stress_relief",
   "stay_healthy",
 ]);
-/** `gym` is "A gym (everything there)", beside the home equipment (RULINGS
- *  2026-09-10, decision B). */
+/** `gym` is "A gym", beside the home equipment (RULINGS 2026-09-10, decision
+ *  B; the label 2026-09-11). */
 export const equipmentSchema = z.enum([
   "none",
   "dumbbells",

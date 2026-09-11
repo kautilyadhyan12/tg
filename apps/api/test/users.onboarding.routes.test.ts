@@ -684,11 +684,16 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(gain.answers).toMatchObject({ fitnessGoals: ["muscle_gain"], targetWeightKg: 75, pace: "steady" });
   });
 
-  it("Reset onboarding clears every answer, the ones only the screens ask included; the name and the weigh-ins stay", { timeout: 60_000 }, async () => {
+  it("Reset onboarding clears every answer, the ones only the screens ask included; the name, the weigh-ins and the health answer stay", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-reset@example.com");
     await patchOk(cookies, { displayName: "Kd" });
     await completeSeven(cookies);
     await patchOk(cookies, { fitnessGoals: ["balance"], onboardingCompleted: true });
+    // A health yes: kept by the reset until 4b asks it in the wizard again,
+    // because it must go on holding the calorie cut.
+    expect(
+      (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst: "cleared" }, cookies })).statusCode,
+    ).toBe(200);
 
     const reset = await inject({ method: "DELETE", url: path(), cookies });
     expect(reset.statusCode, reset.body).toBe(200);
@@ -729,6 +734,13 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(JSON.parse(again.body)).toEqual(body);
     // An unknown query parameter is refused, as on the other two routes.
     expect((await inject({ method: "DELETE", url: "/v1/users/me/onboarding?tz=UTC", cookies })).statusCode).toBe(400);
+    // The health yes is still stored: the same seven answers, given again,
+    // get the plan with no calorie cut.
+    expect((await completeSeven(cookies)).plan).toMatchObject({
+      targetKcal: 1817,
+      dailyChangeKcal: 0,
+      flags: [{ code: "no_deficit", reasons: ["health_answer"] }],
+    });
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {

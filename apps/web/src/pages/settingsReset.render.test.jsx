@@ -23,29 +23,38 @@ const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 const CONFIRM =
-  'This clears your answers and takes you through setup again. Your name and your weigh-ins are kept. Continue?';
+  'This clears your answers and takes you through setup again. Your name, your weigh-ins and any health answer you gave are kept. Continue?';
 
-/** The two profile routes, for a person who finished setup: losing weight,
- *  Better balance ticked. */
+/** A person who finished setup: losing weight, Better balance ticked. */
+const ANSWERED = {
+  age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
+  fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
+  sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
+  updatedAt: null,
+};
+/** What the fitness-profile route answers once the reset has removed the row:
+ *  the server's empty profile. */
+const CLEARED = {
+  age: null, gender: null, heightCm: null, targetWeightKg: null, fitnessLevel: null,
+  fitnessGoals: [], weightGoal: null, exerciseFrequency: null, availableEquipment: [],
+  sessionDurationMin: null, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: false,
+  updatedAt: null,
+};
+
+/** The two profile routes, answering from what the server holds: ANSWERED
+ *  until the reset, CLEARED after it. */
+let held;
 function serve() {
+  held = ANSWERED;
   svc.getProfile = vi.fn(async () => ({
     data: {
       user: {
-        id: 'u1', email: 'kd@example.com', displayName: 'Kd', weightKg: 70, onboardingCompleted: true,
-        createdAt: '2026-09-01T00:00:00.000Z',
+        id: 'u1', email: 'kd@example.com', displayName: 'Kd', weightKg: 70,
+        onboardingCompleted: held.onboardingCompleted, createdAt: '2026-09-01T00:00:00.000Z',
       },
     },
   }));
-  svc.getFitnessProfile = vi.fn(async () => ({
-    data: {
-      fitnessProfile: {
-        age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
-        fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
-        sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
-        updatedAt: null,
-      },
-    },
-  }));
+  svc.getFitnessProfile = vi.fn(async () => ({ data: { fitnessProfile: held } }));
   svc.putFitnessProfile = vi.fn(async () => ({ data: {} }));
 }
 
@@ -54,7 +63,10 @@ beforeEach(() => {
   auth.updateUser.mockClear();
   toast.error.mockClear();
   onboarding.reset.mockReset();
-  onboarding.reset.mockImplementation(() => Promise.resolve({ data: {} }));
+  onboarding.reset.mockImplementation(() => {
+    held = CLEARED;
+    return Promise.resolve({ data: {} });
+  });
   serve();
 });
 afterEach(() => {
@@ -79,6 +91,19 @@ describe('Settings → Reset onboarding', () => {
     // Not the full-profile PUT {}: that one never reached the answers only the setup screens ask.
     expect(svc.putFitnessProfile).not.toHaveBeenCalled();
     await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ onboardingCompleted: false }));
+  });
+
+  it('reads the profile again after the reset, so a Fitness-tab save cannot write the cleared answers back', async () => {
+    await pressReset(true);
+    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ onboardingCompleted: false }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fitness' }));
+    fireEvent.click(await screen.findByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledTimes(1));
+    // The save starts from the cleared answers, never the copy from before the
+    // reset, which would put "setup finished" and every answer back.
+    expect(svc.putFitnessProfile.mock.calls[0][0]).toMatchObject({
+      weightGoal: null, fitnessGoals: [], age: null, targetWeightKg: null, onboardingCompleted: false,
+    });
   });
 
   it('does nothing when the person says no', async () => {

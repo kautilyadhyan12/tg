@@ -505,7 +505,8 @@ const PROTEIN_SOURCE = {
     `${g} g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).`,
   maintain: (g) =>
     `${g} g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).`,
-  gain: (g) => `${g} g per kilo, ${MORTON}.`,
+  gain: (g) =>
+    `${g} g per kilo for a weight-gain goal: the top of the 1.6 to 2.2 g per kilo a day a review recommends for people who lift weights while eating more than they burn (Iraki and colleagues, 2019).`,
 };
 /** Build muscle ticked sets the figure whatever the weight choice (RULINGS
  *  2026-09-11: building muscle is not gaining weight). */

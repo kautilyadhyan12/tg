@@ -546,8 +546,10 @@ describe('the plan panel says what the server said', () => {
     expect(protein(withProtein({ gPerKg: 1.6, wantedG: 112 }, 112), 'maintain').note).toBe(
       '1.6 g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).',
     );
+    // A weight gain is worded for the weight, never as building muscle (RULINGS
+    // 2026-09-11: building muscle is not gaining weight).
     expect(protein(withProtein({ gPerKg: 2.2, wantedG: 154 }, 154), 'gain').note).toBe(
-      '2.2 g per kilo, the amount a review of 49 studies suggests for anyone trying to build as much muscle as they can (Morton and colleagues, 2018).',
+      '2.2 g per kilo for a weight-gain goal: the top of the 1.6 to 2.2 g per kilo a day a review recommends for people who lift weights while eating more than they burn (Iraki and colleagues, 2019).',
     );
     // Build muscle ticked sets the figure whatever the weight choice, and says so.
     for (const direction of ['lose', 'maintain', 'gain']) {

@@ -32,11 +32,19 @@ ALTER TABLE "user_fitness_profiles"
 -- person (muscle grows without a surplus, and a small one mostly helps a lean,
 -- trained lifter), so they are asked. The calorie rings name the one question,
 -- and the target and pace they gave stay stored, so "gain weight" brings back
--- the plan they had. No main goal (the old five-step form never asked one)
--- stays no weight choice: the rings already ask it today.
+-- the plan they had. No main goal means the old five-step form, which never
+-- asked one: Weight Loss ticked there is the same answer as "Lose weight", and
+-- Build muscle ticked beside it no longer fights it, so it becomes lose; with
+-- no Weight Loss tick it stays no weight choice, which the rings already ask.
+-- A main goal outranks the old list, so Build muscle's people are asked even
+-- with Weight Loss still on it.
 UPDATE "user_fitness_profiles"
-SET "weight_goal" = CASE "main_goal" WHEN 'weight_loss' THEN 'lose' WHEN 'muscle_gain' THEN NULL ELSE 'maintain' END
-WHERE "main_goal" IS NOT NULL;--> statement-breakpoint
+SET "weight_goal" = CASE
+  WHEN "main_goal" = 'weight_loss' THEN 'lose'
+  WHEN "main_goal" = 'muscle_gain' THEN NULL
+  WHEN "main_goal" IS NOT NULL THEN 'maintain'
+  ELSE 'lose' END
+WHERE "main_goal" IS NOT NULL OR 'weight_loss' = ANY ("fitness_goals");--> statement-breakpoint
 -- The old main goal joins "also work on" unless it was weight loss, which
 -- leaves every list; the rest keep the order they were ticked in, and a goal
 -- already on the list is not added twice. Build muscle's people therefore find
@@ -63,8 +71,8 @@ ALTER TABLE "user_fitness_profiles"
   ADD CONSTRAINT "user_fitness_profiles_fitness_goals_check"
     CHECK ("fitness_goals" <@ ARRAY['muscle_gain', 'strength', 'general_fitness', 'endurance', 'flexibility', 'posture', 'balance', 'stress_relief', 'stay_healthy']::text[]);--> statement-breakpoint
 -- ── PART 4: "A GYM", AND "NO EQUIPMENT" STANDS ALONE ─────────────────────────
--- "A gym (everything there)" joins the home equipment (RULINGS 2026-09-10,
--- decision B). "No equipment" beside anything else is not an answer to "what
+-- "A gym" joins the home equipment (RULINGS 2026-09-10, decision B; the
+-- label 2026-09-11). "No equipment" beside anything else is not an answer to "what
 -- do you have to train with?", and both screens now make it exclusive as you
 -- tap. The old form could store the pair, so the real equipment wins, as
 -- screen 7 already loads it; then the CHECK holds the rule for every writer.
