@@ -4,20 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-11 · 4a-iii review round 1 fixed (2 High, 3 Low), branch `rings-read-the-plan`, PR #61
+## 2026-09-11 · 4a-iii review round 1 fixed, and Kd's goal ruling, branch `rings-read-the-plan`, PR #61
 
-- H1: a goal changed in Settings moves the plan and the rings again. The Settings save keeps the main goal while it is
-  ticked, takes the only goal left, and clears it when several are left without it, so the rings ask again (the chat's
-  choice over "first in the list", which would guess). Reset clears it. H2: screen 1 no longer wipes Settings' goals —
-  its goal goes first, the old main goal leaves, the rest stay. Each rule is one SQL statement against the stored row.
-- L1–L3: "Back to the app" saves the name box first and stays on a blank name; Sign out shows beside it; the lose goal's
-  protein note says "for a weight-loss goal" (the figure follows the goal, not the plan).
-- Tests red first on the old code (API 3, web 5). The web onboarding tests mount through the app's ProtectedRoute; a
-  guard redirect for finished people turns 5 red, dropping the failed-save check turns 1 red (files restored).
-- Verified: api tsc/eslint 0 · onboarding routes 37 · users+nutrition 137 · full local 980 · no-database 297 (683
-  skipped) · web onboarding 76, full 1966 (poseAssets.contract the known local red) · web eslint 0 on touched files.
-- Local: API 3000 on local Postgres, web 5173; `kd.oldform.0911@example.com` reset to three goals, no main goal, no day.
-- Open: the fresh-chat re-check of these fixes, Kd's click-through, CI, merge. Reset keeping the v2 answers is on 4a-iv.
+- Kd rejected my first H1 fix (the rings asked "your goal" again): a change takes effect at once (RULINGS 2026-09-11).
+  A Settings save now moves the calories: a ticked weight goal sets them, else the main goal while ticked, else the
+  first ticked; Weight Loss and Muscle Gain untick each other. Screen 1's goal goes first; only a goal that fights it leaves.
+- A target on the wrong side of the weight makes the rings ask for the target, not show the held weight as the goal's number.
+- L1–L3 fixed (name saved before "Back to the app"; Sign out beside it; "for a weight-loss goal"). Tests mount the page
+  through ProtectedRoute; every new test red on the old code; deliberate breaks red (guard 5, failed save 1, chip 2).
+- Verified: api tsc/eslint 0 · changed 86 · full local 978 + catalog.seed's known race (alone 7/7) · no-database 298 ·
+  web 1970 (poseAssets.contract the known local red); Settings.jsx's 4 lint errors predate this.
+- Open: fresh-chat re-check, Kd's click-through (API 3000 local, web 5173, `kd.oldform.0911`), CI, merge. Reset keeping
+  the v2 answers is on 4a-iv.
 
 ## 2026-09-11 · One daily-calories number: the rings read the plan (item 4a-iii), branch `rings-read-the-plan`
 
