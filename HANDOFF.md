@@ -4,6 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · One daily-calories number: the rings read the plan (item 4a-iii), branch `rings-read-the-plan`
+
+- Kd rejected the protein question as first framed (cap at 35 % or keep) and asked for the science. Researched
+  (ISSN 2017, ACSM/AND/DC 2016, Longland 2016, Devries 2018, Weijs 2025): grams per kilo, never a share of the calories;
+  a body over BMI 30 is counted at its BMI-30 weight (120 kg at 175 cm: 184 g, not 240). RULINGS 2026-09-11.
+- Built: `/v1/nutrition/targets` reshapes the plan from `users/service getUserPlan`, the function the onboarding routes
+  use (old −400/+300 calculator retired). Empty rings name the open questions; "Answer now" → onboarding's first open
+  screen → back to Nutrition; a finished person there gets "Back to the app", not "Sign out". The protein working
+  carries `referenceBmi`; "How is this worked out?" names each goal's source. The `fitness_goals` mirror stays (Settings).
+- Verified: shared tsc/eslint 0, 83 · api tsc/eslint 0, unit 74, local routes 84, CI-shaped 297, full local 951 + the two
+  known flakes (pass alone, 30) · web 1963 (poseAssets.contract the known local red). New tests red on the old src; 13 of
+  13 deliberate breaks red. Local: API 3000 on local Postgres, web 5173; `kd.oldform.0911@example.com` is the old-form
+  person (120 kg, 175 cm, missing goal + "your day"); the sign-in code prints in the API log.
+- Open: Kd's click-through, the fresh-chat review, CI, merge. Then 4a-iv (its line now carries the Settings-goal gap).
+
 ## 2026-09-11 · Screens 1–7: the re-check's four Lows (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
 
 - The fresh-chat re-check of round 1 found no Critical/High and four Lows; all four are fixed here. No third review (§2.6).

@@ -108,6 +108,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-24 · Meal scanner runs on Gemini 2.5 Flash Lite; nutrition arithmetic stays on our own food table; photos are resized; the prompt is not shortened. [archive :16548]
 - 2026-08-24 · Meal photos ARE stored and self-destruct after seven days. [archive :17133, :9732]
 - 2026-08-24 · Scan allowances: free 2 a day · gym member 5 a day · paid individual 20 a day · new individual: one week unlimited. *"not financially possible to give gym user 20 scans"* [archive :17366, :16702]
+- 2026-09-11 · Protein is set in grams per kilo and never capped as a share of the calories: the IOM's 10–35 % is a whole-diet guide with no upper safety limit behind it, not a ceiling for a calorie cut. 2.0 g a kilo on a loss (the top of the ISSN's 1.4–2.0 for people who train), 1.6 to keep, 2.2 to gain. A body heavier than BMI 30 for its height is counted at its BMI-30 weight (120 kg at 175 cm: 184 g a day, not 240). "How is this worked out?" names the sources. Kd rejected the first framing (cap at 35 % or keep): *"i dont think so do some research and be scientific"* · then *"go"*.
 
 ## Running
 
