@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · 4a-iii last re-check: no Critical/High; its three Lows and three weak tests fixed, PR #61
+
+- Settings reads the goal the calories follow: the fitness-profile reply carries `mainGoal`; the Profile tab judges a
+  target by it, not by the list's first weight goal, and the Fitness tab ticks it when an old list holds both.
+- The rings' wrong-side card: "Time to set a new target weight. Pick one to see your daily calories and macros." (true
+  for a reached target too); the link still says "Pick a new target". The entry below is cut to ten lines.
+- Tests: the Settings rename takes the server's spelling, a refused rename changes nothing; a Settings save of both
+  weight goals, from Flexibility and from the old form, keeps only the first.
+- Verified: shared + api tsc/eslint clean · shared 83 · api route files 49 · web changed files 51; web lint's 4 are
+  master's 4. Red on the old code: web 6. Deliberate breaks red: rename 2; server 4 (a save keeping both weight goals,
+  the contract without `mainGoal`). Full suites left to CI.
+- Open: CI, Kd's click-through (API 3000 local, web 5173, `kd.wheels.test`), merge; no review round left (§2.6).
+
 ## 2026-09-11 · 4a-iii re-check fixed (one High, four Lows), branch `rings-read-the-plan`, PR #61
 
 - High: a name changed on "About you" reaches the sidebar and the greeting at once. The onboarding page passes on the
@@ -12,11 +25,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Lows: the rings name a wrong-side target as its own case (`targetWrongSide`: "Your target weight no longer fits your
   goal" + "Pick a new target"); a Settings save keeps only the weight goal the calories follow; Settings' target box
   refuses a typed wrong-side target in screen 3's sentence (a stored one is named, the rest still saves); two comments.
-- I overwrote `settingsProfile.render.test.jsx` by mistake; its three weight tests are back beside the new ones.
-- Verified: shared + api tsc/eslint clean · api unit 19, the two route files 68, full local 961 + two sign-in files red
-  under load (alone 40/40), no-database 298 · web full 1984 (poseAssets.contract the known local red); lint adds nothing
-  (Nutrition's 7 and Settings' 4 are master's). New tests red on the old code (api 9, web 11); 2 deliberate breaks red.
-- The onboarding page tests wait longer (3 s, 15 s): alone the longest takes 2.3 s; the full run pushed two past the defaults.
+- Verified: shared + api tsc/eslint clean · api unit 19, route files 68, full local 961 + two sign-in files red under load
+  (alone 40/40), no-database 298 · web 1984 (poseAssets.contract the known local red; the onboarding page tests now wait
+  3 s/15 s, the full run pushed two past the defaults) · lint adds nothing · new tests red on old code (api 9, web 11).
 - Open: fresh-chat re-check of these fixes, Kd's click-through (API 3000 local, web 5173, `kd.wheels.test`), CI, merge.
 
 ## 2026-09-11 · 4a-iii review round 1 fixed, and Kd's goal ruling, branch `rings-read-the-plan`, PR #61
