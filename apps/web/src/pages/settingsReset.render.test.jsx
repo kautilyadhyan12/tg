@@ -2,7 +2,9 @@
 // answer). What is pinned is the SCREEN: the confirm box says what goes and
 // what stays, the reset is the onboarding route's (which clears the answers
 // only the setup screens ask, as the old full-profile PUT {} could not), and
-// the person is sent back through setup at once.
+// the person is sent back through setup at once. That what the box says is
+// true is proven on the server, by the reset test in
+// apps/api/test/users.onboarding.routes.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -23,7 +25,7 @@ const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 const CONFIRM =
-  'This clears your answers and takes you through setup again. Your name, your weigh-ins and any health answer you gave are kept. Continue?';
+  'This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any answer you gave to the health question are kept. Continue?';
 
 /** A person who finished setup: losing weight, Better balance ticked. */
 const ANSWERED = {

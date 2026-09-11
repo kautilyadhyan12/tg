@@ -220,12 +220,19 @@ d("onboarding v2 routes (real Postgres)", () => {
     return { weightGoal: rows[0]?.weight_goal ?? null, goals: rows[0]?.fitness_goals ?? null };
   };
 
+  /** What Settings' "Medical Conditions / Notes" box shows. */
+  const medicalNotes = async (cookies: Record<string, string>) => {
+    const res = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { fitnessProfile: { medicalConditions: string | null } }).fitnessProfile.medicalConditions;
+  };
+
   /** A save from Settings' fitness tab: the whole profile as the server holds
-   *  it, with only screen 1's two questions changed — what apps/web
-   *  mergeFitnessProfile sends. */
+   *  it, with only screen 1's two questions changed, and the medical notes
+   *  when given — what apps/web mergeFitnessProfile sends. */
   const settingsSave = async (
     cookies: Record<string, string>,
-    goals: { weightGoal: string | null; fitnessGoals: string[] },
+    change: { weightGoal: string | null; fitnessGoals: string[]; medicalConditions?: string },
   ) => {
     const res = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
     expect(res.statusCode).toBe(200);
@@ -239,13 +246,13 @@ d("onboarding v2 routes (real Postgres)", () => {
         heightCm: p["heightCm"],
         targetWeightKg: p["targetWeightKg"],
         fitnessLevel: p["fitnessLevel"],
-        weightGoal: goals.weightGoal,
-        fitnessGoals: goals.fitnessGoals,
+        weightGoal: change.weightGoal,
+        fitnessGoals: change.fitnessGoals,
         exerciseFrequency: p["exerciseFrequency"],
         availableEquipment: p["availableEquipment"],
         sessionDurationMin: p["sessionDurationMin"],
         preferredWorkoutTime: p["preferredWorkoutTime"],
-        medicalConditions: p["medicalConditions"],
+        medicalConditions: change.medicalConditions ?? p["medicalConditions"],
         onboardingCompleted: p["onboardingCompleted"],
       },
       cookies,
@@ -684,11 +691,15 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(gain.answers).toMatchObject({ fitnessGoals: ["muscle_gain"], targetWeightKg: 75, pace: "steady" });
   });
 
-  it("Reset onboarding clears every answer, the ones only the screens ask included; the name, the weigh-ins and the health answer stay", { timeout: 60_000 }, async () => {
+  it("Reset onboarding clears every answer, the medical notes and the ones only the screens ask included; the name, the weigh-ins and the health answer stay", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-reset@example.com");
     await patchOk(cookies, { displayName: "Kd" });
     await completeSeven(cookies);
     await patchOk(cookies, { fitnessGoals: ["balance"], onboardingCompleted: true });
+    // Notes typed in Settings → Fitness: an answer on the same row, so the
+    // reset takes them too, as its confirm box says.
+    await settingsSave(cookies, { weightGoal: "lose", fitnessGoals: ["balance"], medicalConditions: "knee injury" });
+    expect(await medicalNotes(cookies)).toBe("knee injury");
     // A health yes: kept by the reset until 4b asks it in the wizard again,
     // because it must go on holding the calorie cut.
     expect(
@@ -723,6 +734,8 @@ d("onboarding v2 routes (real Postgres)", () => {
     // The gate the training side reads is shut again.
     const me = await inject({ method: "GET", url: "/v1/users/me", cookies });
     expect((JSON.parse(me.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted).toBe(false);
+    // The medical notes went with the rest: Settings' box is empty again.
+    expect(await medicalNotes(cookies)).toBeNull();
     // No row is left, and the weight the person typed is still in the history.
     const rows = await sql<{ n: string }[]>`
       SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;

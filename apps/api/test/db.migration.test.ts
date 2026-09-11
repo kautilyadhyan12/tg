@@ -825,7 +825,7 @@ d("0001_init on a real database", () => {
    *  over the result. All of it is rolled back. One subject per branch:
    *  weight loss · build muscle, on the list, off it, and beside a Weight Loss
    *  tick (asked, never given a weight choice: RULINGS 2026-09-11) · a goal
-   *  that kept the weight, with no list · the old form (no main goal) with
+   *  that kept the weight, with no list and beside a Weight Loss tick · the old form (no main goal) with
    *  Weight Loss ticked, the same answer as "Lose weight" · a row with nothing
    *  to change · "none" beside equipment, "none" alone, and equipment alone. */
   it("0028 moves every old answer: weight loss to lose, the goals that kept the weight to maintain, Build muscle to asked", async () => {
@@ -866,6 +866,7 @@ d("0001_init on a real database", () => {
         const builderOffList = await person({ mainGoal: "muscle_gain", goals: ["posture"] });
         const builderTickedLoss = await person({ mainGoal: "muscle_gain", goals: ["weight_loss", "muscle_gain"] });
         const keeper = await person({ mainGoal: "flexibility", goals: null });
+        const keeperTickedLoss = await person({ mainGoal: "flexibility", goals: ["weight_loss"] });
         const oldForm = await person({ mainGoal: null, goals: ["weight_loss", "muscle_gain", "stress_relief"] });
         const settled = await person({ mainGoal: null, goals: ["posture"] });
         const nonePair = await person({ mainGoal: null, goals: null, equipment: ["none", "dumbbells"] });
@@ -894,6 +895,8 @@ d("0001_init on a real database", () => {
           // The main goal outranks a Weight Loss tick still on the old list.
           [builderTickedLoss, { weight_goal: null, fitness_goals: ["muscle_gain"] }],
           [keeper, { weight_goal: "maintain", fitness_goals: ["flexibility"] }],
+          // Here too the main goal outranks the old Weight Loss tick: no calorie cut.
+          [keeperTickedLoss, { weight_goal: "maintain", fitness_goals: ["flexibility"] }],
           // Weight Loss ticked on the old form is kept as "Lose weight".
           [oldForm, { weight_goal: "lose", fitness_goals: ["muscle_gain", "stress_relief"] }],
           [settled, { weight_goal: null, fitness_goals: ["posture"] }],
