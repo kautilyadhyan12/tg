@@ -18,8 +18,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   963 + 3 red (catalog.seed ×3, auth.routes' cleanup FK: the shared-database flake; alone 27/27) · web touched 155, full 1998
   (poseAssets.contract the known local red); web lint adds nothing (Settings.jsx's 4 are master's). Four deliberate breaks red.
 - The first 0028 data test altered the live table and knocked two route tests over in a combined run; it uses a temp copy now.
-- Local: API 3000 restarted on this code (local Postgres), web 5173; `kd.muscle.0911@example.com` is a Build-muscle person as
-  0028 leaves them. Open: PR and CI, Kd's click-through, the fresh-chat review, merge. 4c carries a pace note for Kd.
+- Local: API 3000 on this code (local Postgres), web 5173; `kd.muscle.0911@example.com` is a Build-muscle person as 0028
+  left them. Kd's click-through passed, all nine steps (2026-09-11). PR #62, CI green on 81a3d27. Open: the fresh-chat
+  review, its fixes, merge. 4c carries a pace note for Kd; 6a defines Stay healthy from the WHO's guidance.
 
 ## 2026-09-11 · 4a-iii merged (PR #61); Kd: building muscle is not gaining weight
 
