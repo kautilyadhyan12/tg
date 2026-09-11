@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
+import { cleanFitnessGoals, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, toggleFitnessGoal, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -121,6 +121,24 @@ describe('userService repoint (Card 6)', () => {
       expect(out.age).toBe(null);
       expect(out.fitnessGoals).toEqual([]);
       expect(out.onboardingCompleted).toBe(true);
+    });
+  });
+
+  // ── Settings' goal chips: never two that fight (RULINGS 2026-09-10) ─────────
+  describe('goal chips', () => {
+    it('ticking a weight goal unticks the other one; goals that keep the weight stack', () => {
+      expect(toggleFitnessGoal(['weight_loss', 'flexibility'], 'muscle_gain')).toEqual(['flexibility', 'muscle_gain']);
+      expect(toggleFitnessGoal(['muscle_gain'], 'weight_loss')).toEqual(['weight_loss']);
+      expect(toggleFitnessGoal(['flexibility'], 'posture')).toEqual(['flexibility', 'posture']);
+      expect(toggleFitnessGoal(['weight_loss', 'flexibility'], 'weight_loss')).toEqual(['flexibility']);
+      expect(toggleFitnessGoal([], 'muscle_gain')).toEqual(['muscle_gain']);
+    });
+
+    it('a list stored with both weight goals keeps the first of them', () => {
+      expect(cleanFitnessGoals(['flexibility', 'muscle_gain', 'posture', 'weight_loss'])).toEqual(['flexibility', 'muscle_gain', 'posture']);
+      expect(cleanFitnessGoals(['weight_loss', 'muscle_gain'])).toEqual(['weight_loss']);
+      expect(cleanFitnessGoals(['flexibility', 'posture'])).toEqual(['flexibility', 'posture']);
+      expect(cleanFitnessGoals([])).toEqual([]);
     });
   });
 

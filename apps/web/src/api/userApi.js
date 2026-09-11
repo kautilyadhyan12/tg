@@ -10,6 +10,7 @@
 //   GET   /v1/users/me                   carries onboardingCompleted (the gate)
 // Shapes are @app/shared users.ts (putFitnessProfileRequestSchema,
 // updateProfileRequestSchema, userProfileSchema).
+import { PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 import authApi from './authApi';
 
 // Height/target-weight go onto the fitness profile in CM/KG; the API's
@@ -83,6 +84,27 @@ export function mergeFitnessProfile(current, edits) {
     Object.entries(edits || {}).filter(([, v]) => v !== undefined),
   );
   return { ...base, ...defined, onboardingCompleted: current?.onboardingCompleted ?? true };
+}
+
+/** The goals that move the weight (weight loss, muscle gain), read from the
+ *  one mapping in @app/shared. A person may tick many goals but never two that
+ *  fight (RULINGS 2026-09-10), so only one of these at a time. */
+const WEIGHT_GOALS = Object.keys(PLAN_GOAL_BY_MAIN_GOAL).filter((g) => PLAN_GOAL_BY_MAIN_GOAL[g] !== 'maintain');
+
+/** Settings' goal chips: a tap ticks or unticks a goal, and ticking a goal
+ *  that moves the weight unticks the other one, so a change never leaves a
+ *  contradiction to undo by hand (Kd, 2026-09-11). Pure + unit-tested. */
+export function toggleFitnessGoal(goals, id) {
+  if (goals.includes(id)) return goals.filter((g) => g !== id);
+  const fights = (g) => WEIGHT_GOALS.includes(id) && WEIGHT_GOALS.includes(g);
+  return [...goals.filter((g) => !fights(g)), id];
+}
+
+/** A list stored before that rule may hold both weight goals: it loads with
+ *  the first of them, the one a screen-1 answer puts first. Pure + unit-tested. */
+export function cleanFitnessGoals(goals) {
+  const first = goals.find((g) => WEIGHT_GOALS.includes(g));
+  return goals.filter((g) => !WEIGHT_GOALS.includes(g) || g === first);
 }
 
 /** What the profile form sends to PATCH /v1/users/me: ONLY what changed.

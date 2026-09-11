@@ -10,7 +10,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
+import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, toggleFitnessGoal, cleanFitnessGoals } from '../api/userApi';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -241,7 +241,7 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 }
 
 // ── Fitness tab ───────────────────────────────────────────────────────────────
-function FitnessTab({ profile, onSaved }) {
+export function FitnessTab({ profile, onSaved }) {
   // Card 7: these MUST be the new-API enums (fitnessGoalSchema/equipmentSchema),
   // same set the getting-started wizard uses — the old list had values the new
   // system rejects (core_strength; barbell/machine) and old names (bands,
@@ -270,7 +270,7 @@ function FitnessTab({ profile, onSaved }) {
     // unanswered field stays NULL ("unanswered is not 'beginner'", users.ts).
     // Empty/null here → the save sends null, not an invented answer.
     fitnessLevel:         profile.fitnessLevel         || '',
-    fitnessGoals:         profile.fitnessGoals         || [],
+    fitnessGoals:         cleanFitnessGoals(profile.fitnessGoals || []),
     availableEquipment:   profile.availableEquipment   || [],
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',
@@ -280,12 +280,7 @@ function FitnessTab({ profile, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [saved,   setSaved]   = useState(false);
 
-  const toggleGoal = (id) => setForm((f) => ({
-    ...f,
-    fitnessGoals: f.fitnessGoals.includes(id)
-      ? f.fitnessGoals.filter((g) => g !== id)
-      : [...f.fitnessGoals, id],
-  }));
+  const toggleGoal = (id) => setForm((f) => ({ ...f, fitnessGoals: toggleFitnessGoal(f.fitnessGoals, id) }));
 
   const toggleEquipment = (id) => setForm((f) => ({
     ...f,
@@ -342,10 +337,11 @@ function FitnessTab({ profile, onSaved }) {
         </div>
       </Field>
 
-      <Field label="Fitness Goals" hint="Select all that apply">
+      <Field label="Fitness Goals" hint="Select all that apply. Weight Loss or Muscle Gain, not both: that one sets your calories.">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {GOALS.map((g) => (
             <button key={g.id} type="button"
+              aria-pressed={form.fitnessGoals.includes(g.id)}
               onClick={() => toggleGoal(g.id)}
               className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
               style={chipStyle(form.fitnessGoals.includes(g.id))}>
