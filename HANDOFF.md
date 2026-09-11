@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · 4a-iv merged (PR #62)
+
+- The last re-check found no Critical/High and two Lows, both fixed: Reset's box now keeps "any yes or no you gave to
+  the health question", so it cannot be read as keeping the medical notes it clears; a test comment rewrapped.
+- Verified: api tsc 0 · api eslint on the migration test 0 · web reset test 4 of 4 · gitleaks clean · web lint's 4 in
+  Settings.jsx are master's 4 at the same lines · PR #62 CI green on 1e89c47; merged, branch deleted.
+- Open: 4b is next. The hint under Settings' notes box, "Helps the AI give safer advice", is untrue while the coach is
+  off (RULINGS 2026-08-18); it goes with the box at 4b (noted on its line).
+
 ## 2026-09-12 · 4a-iv re-check fixed (one High in a fix, two weak tests), PR #62
 
 - High: Reset's box promised "any health answer you gave" is kept, but the reset deletes Settings' Medical Conditions /
