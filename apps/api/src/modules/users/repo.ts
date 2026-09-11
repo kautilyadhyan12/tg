@@ -250,7 +250,12 @@ export async function getFitnessProfile(
  *  goal ticked takes over; with no goal ticked it is cleared, as a reset
  *  (PUT {}) clears it with the rest. Decided in the statement itself, against
  *  the row as stored, so a concurrent screen-1 save cannot slip between a
- *  read and this write. */
+ *  read and this write.
+ *
+ *  The list is stored in the chips' order, and never with a goal that moves
+ *  the weight other than the one the calories follow: sent both, the other
+ *  one is dropped in the same statement, so the chips always show the goal
+ *  the rings run on, and saving what they show changes nothing. */
 export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
@@ -260,6 +265,8 @@ export async function upsertFitnessProfile(
   // The main goal when nothing stored decides it: a new row, or a stored main
   // goal that no longer fits the list.
   const firstChoice = weightGoals[0] ?? input.fitnessGoals[0] ?? null;
+  // A new row's list: the weight goal that sets the calories is the first one.
+  const newRowGoals = input.fitnessGoals.filter((g) => !WEIGHT_GOALS.includes(g) || g === firstChoice);
   const rows = await sql<FitnessProfileDbRow[]>`
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
@@ -267,7 +274,7 @@ export async function upsertFitnessProfile(
        session_duration_min, preferred_workout_time, medical_conditions,
        onboarding_completed, main_goal, updated_at)
     SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
-           ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
+           ${input.targetWeightKg}, ${input.fitnessLevel}, ${newRowGoals},
            ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
            ${input.medicalConditions}, ${input.onboardingCompleted}, ${firstChoice}, now()
@@ -278,7 +285,12 @@ export async function upsertFitnessProfile(
       height_cm = EXCLUDED.height_cm,
       target_weight_kg = EXCLUDED.target_weight_kg,
       fitness_level = EXCLUDED.fitness_level,
-      fitness_goals = EXCLUDED.fitness_goals,
+      fitness_goals = ARRAY(
+        SELECT g FROM unnest(${input.fitnessGoals}::text[]) WITH ORDINALITY AS ticked(g, i)
+        WHERE NOT (g = ANY (${weightGoals}::text[]))
+           OR g = CASE WHEN user_fitness_profiles.main_goal = ANY (${weightGoals}::text[])
+                       THEN user_fitness_profiles.main_goal ELSE EXCLUDED.main_goal END
+        ORDER BY i),
       exercise_frequency = EXCLUDED.exercise_frequency,
       available_equipment = EXCLUDED.available_equipment,
       session_duration_min = EXCLUDED.session_duration_min,

@@ -275,6 +275,7 @@ describe("nutrition targets read the plan", () => {
     expect(targetsFromPlan(resolvePlan(golden))).toEqual({
       targets: { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false },
       missing: [],
+      targetWrongSide: false,
     });
     // A gain, a hold, and a heavy body whose protein is counted at BMI 30: each
     // field is still the plan's own.
@@ -315,40 +316,50 @@ describe("nutrition targets read the plan", () => {
     }
   });
 
-  it("with the target on the wrong side of the weight, gives no number and asks for the target", () => {
+  it("with the target on the wrong side of the weight, gives no number and says so, never as a question left open", () => {
     // A loss target kept when the goal changed to Muscle Gain in Settings, or a
-    // weight that moved past its target: the plan holds the weight, and the
-    // rings do not pass that off as the goal's number (Kd, 2026-09-11).
+    // weight that reached its target: the plan holds the weight, and the rings
+    // do not pass that off as the goal's number (Kd, 2026-09-11). The person
+    // HAS a target, so it is not among the answers still missing.
     for (const answers of [
       { ...golden, targetWeightKg: 80 },
+      { ...golden, targetWeightKg: 70 },
       { ...golden, targetWeightKg: 80, age: 16 },
       { ...golden, goal: "gain", targetWeightKg: 65 },
     ] satisfies PlanAnswers[]) {
       expect(planOf(answers).flags, JSON.stringify(answers)).toContainEqual({ code: "target_wrong_direction" });
-      expect(targetsFromPlan(resolvePlan(answers)), JSON.stringify(answers)).toEqual({ targets: null, missing: ["targetWeightKg"] });
+      expect(targetsFromPlan(resolvePlan(answers)), JSON.stringify(answers)).toEqual({ targets: null, missing: [], targetWrongSide: true });
     }
   });
 
   it("with an answer missing, gives no number and the plan's own list of questions", () => {
     // What someone who finished the old form has: no one goal, no "your day".
     const oldForm: PlanAnswers = { age: 30, gender: "female", heightCm: 165, weightKg: 70, trainingDays: 3, sessionMinutes: 45, today: "2026-09-11" };
-    expect(targetsFromPlan(resolvePlan(oldForm))).toEqual({ targets: null, missing: ["goal", "dayActivity"] });
+    expect(targetsFromPlan(resolvePlan(oldForm))).toEqual({ targets: null, missing: ["goal", "dayActivity"], targetWrongSide: false });
     expect(targetsFromPlan(resolvePlan({ today: "2026-09-11" })).missing).toEqual([
       "goal", "age", "gender", "heightCm", "weightKg", "dayActivity", "trainingDays", "sessionMinutes",
     ]);
   });
 
-  // The contract's refine(), which the TYPES cannot express — both impossible
-  // pairings typecheck fine and were accepted by the bare shape (T3 round 2).
-  it("rejects both impossible target/missing pairings, and a question the plan does not ask", () => {
+  // The contract's refine(), which the TYPES cannot express: every impossible
+  // pairing below typechecks fine and would pass the bare shape.
+  it("rejects every impossible pairing of a number, the questions missing and a wrong-side target", () => {
     const t = { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false };
-    expect(nutritionTargetsResponseSchema.safeParse({ targets: t, missing: [] }).success).toBe(true);
-    expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: ["goal"] }).success).toBe(true);
-    // No targets AND nothing missing — a prompt that names no question.
-    expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: [] }).success).toBe(false);
-    // Targets beside an unanswered question — a number built from a gap.
-    expect(nutritionTargetsResponseSchema.safeParse({ targets: t, missing: ["goal"] }).success).toBe(false);
+    const ok = (body: unknown) => nutritionTargetsResponseSchema.safeParse(body).success;
+    expect(ok({ targets: t, missing: [], targetWrongSide: false })).toBe(true);
+    expect(ok({ targets: null, missing: ["goal"], targetWrongSide: false })).toBe(true);
+    expect(ok({ targets: null, missing: [], targetWrongSide: true })).toBe(true);
+    // No number and no reason for it: a prompt that names nothing.
+    expect(ok({ targets: null, missing: [], targetWrongSide: false })).toBe(false);
+    // A number beside an unanswered question: a number built from a gap.
+    expect(ok({ targets: t, missing: ["goal"], targetWrongSide: false })).toBe(false);
+    // A number beside a wrong-side target: the held weight passed off as the goal's number.
+    expect(ok({ targets: t, missing: [], targetWrongSide: true })).toBe(false);
+    // Both reasons at once: a plan still missing an answer raises no flags.
+    expect(ok({ targets: null, missing: ["goal"], targetWrongSide: true })).toBe(false);
+    // The field is always sent.
+    expect(ok({ targets: t, missing: [] })).toBe(false);
     // The old calculator's key names a question no screen asks any more.
-    expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: ["exerciseFrequency"] }).success).toBe(false);
+    expect(ok({ targets: null, missing: ["exerciseFrequency"], targetWrongSide: false })).toBe(false);
   });
 });

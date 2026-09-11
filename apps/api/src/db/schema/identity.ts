@@ -164,10 +164,12 @@ export const userFitnessProfiles = pgTable(
     // Onboarding v2 (migration 0026; ROADMAP 4a). The ONE main goal of screen 1
     // — the weight direction the plan maths works in is DERIVED from it
     // (@app/shared PLAN_GOAL_BY_MAIN_GOAL), never stored. The v1 `fitnessGoals`
-    // array above is what Settings' goal chips show: the main goal first, then
-    // any others ticked there; both save routes keep the two in step
-    // (users/repo.ts) until 4a-iv replaces them. Training days and session minutes are NOT
-    // duplicated here: they are `exerciseFrequency` and `sessionDurationMin`.
+    // array above is what Settings' goal chips show: screen 1 puts its goal
+    // first, a Settings save keeps the chips' order, and neither leaves a goal
+    // that moves the weight other than the main goal. Both save routes keep the
+    // two in step (users/repo.ts) until 4a-iv replaces them. Training days and
+    // session minutes are NOT duplicated here: they are `exerciseFrequency` and
+    // `sessionDurationMin`.
     mainGoal: text("main_goal"),
     pace: text("pace"),
     dayActivity: text("day_activity"),

@@ -10,22 +10,23 @@
 // macro split were already the plan calculator's.
 import { nutritionTargetsResponseSchema, type NutritionTargetsResponse, type PlanResponse } from "./schemas.js";
 
-/** The plan as the rings' numbers, or the plan's own list of what is still
- *  missing. Parsed through the shared contract, so "a number exactly when
- *  nothing is missing" holds for every caller.
+/** The plan as the rings' numbers, or the reason there are none: the plan's
+ *  own list of what is still missing, or a target on the wrong side of the
+ *  weight. Parsed through the shared contract, so "a number exactly when
+ *  there is no reason against one" holds for every caller.
  *
  *  A target on the wrong side of the weight (a loss target kept when the goal
- *  changed to Muscle Gain in Settings, or a weight that moved past its target)
+ *  changed to Muscle Gain in Settings, or a weight that reached its target)
  *  leaves the plan holding the weight. The rings do not pass that off as the
- *  goal's number: they ask for the target, and "Answer now" opens the target
- *  screen, which names the old one and offers only the goal's side (RULINGS
- *  2026-09-11). */
+ *  goal's number, nor call the target unanswered, since the person has one:
+ *  they say it no longer fits, and their link opens the target screen, which
+ *  names it and offers only the goal's side (RULINGS 2026-09-11). */
 export function targetsFromPlan(result: PlanResponse): NutritionTargetsResponse {
   const plan = result.plan;
-  const wrongSide = plan !== null && plan.flags.some((f) => f.code === "target_wrong_direction");
+  const targetWrongSide = plan !== null && plan.flags.some((f) => f.code === "target_wrong_direction");
   return nutritionTargetsResponseSchema.parse({
     targets:
-      plan === null || wrongSide
+      plan === null || targetWrongSide
         ? null
         : {
             bmr: plan.restingBurnKcal,
@@ -36,6 +37,7 @@ export function targetsFromPlan(result: PlanResponse): NutritionTargetsResponse 
             fatG: plan.fatG,
             noCalorieCut: plan.flags.some((f) => f.code === "no_deficit"),
           },
-    missing: wrongSide ? ["targetWeightKg"] : result.missing,
+    missing: result.missing,
+    targetWrongSide,
   });
 }

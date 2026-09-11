@@ -475,7 +475,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // A brand-new user: no number, and every core answer of the plan missing.
     const empty=await inject("GET","/v1/nutrition/targets",t.access);
     expect(empty.statusCode,empty.body).toBe(200);
-    expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"]});
+    expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"],targetWrongSide:false});
 
     // Someone who finished the OLD form: it never asked ONE goal or "your day",
     // so the rings name exactly those two, however complete the rest is. A save
@@ -487,7 +487,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     await sql`UPDATE user_fitness_profiles SET main_goal=NULL WHERE user_id=${t.userId}`;
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
     const old=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"]});
+    expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"],targetWrongSide:false});
 
     // Answered on the onboarding screens, the rings carry the plan: the golden
     // of users.onboarding.routes.test.ts, and field by field what that route says.
@@ -497,7 +497,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const planOf=async(access:string)=>(await inject("GET","/v1/users/me/onboarding",access)).json<{plan:Plan}>().plan;
     const ringsOf=(p:Plan)=>({bmr:p.restingBurnKcal,tdee:p.dailyBurnKcal,kcal:p.targetKcal,proteinG:p.proteinG,carbsG:p.carbsG,fatG:p.fatG,noCalorieCut:false});
     const done=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(done.json()).toEqual({targets:{bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false},missing:[]});
+    expect(done.json()).toEqual({targets:{bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false},missing:[],targetWrongSide:false});
     expect(done.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(t.access)));
 
     // R7.2 (T3 finding): every arm is parsed through the SHARED contract, so
@@ -511,7 +511,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const u=await session("p26a-targets2@example.com");
     expect((await inject("PATCH","/v1/users/me/onboarding",u.access,{mainGoal:"weight_loss",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
     const theirs=await inject("GET","/v1/nutrition/targets",u.access);
-    expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[]});
+    expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[],targetWrongSide:false});
     expect(theirs.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(u.access)));
     expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1267);
   },30_000);
