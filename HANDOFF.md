@@ -13,7 +13,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   the cut; a Fitness-tab save after a reset starts from the cleared answers.
 - Verified: shared + api tsc/eslint 0 · api touched files 64 · web touched files 107 · web lint's 4 are master's 4 ·
   five deliberate breaks red (the three tests, the migration's old-form row, the gain note).
-- Open: CI on the push; Kd's word on keeping the health answer through a reset until 4b (a RULINGS line); merge.
+- Kd: a reset keeps the health answer until 4b (RULINGS 2026-07-20, amended). Open: CI, the re-check or its waiver, merge.
 
 ## 2026-09-11 · Many goals, and a gym (item 4a-iv), branch `many-goals-and-a-gym`
 
