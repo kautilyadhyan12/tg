@@ -148,6 +148,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       targetWeightKg: null,
       fitnessLevel: null, // NULL until answered — deliberately not 'beginner'
       fitnessGoals: [],
+      mainGoal: null, // the goal the calories follow: none yet
       exerciseFrequency: null,
       availableEquipment: [],
       sessionDurationMin: null,
@@ -178,6 +179,21 @@ d("users fitness-profile routes (real Postgres)", () => {
 
     const read = await getProfile(cookies);
     expect(read).toMatchObject(FULL_PROFILE);
+  });
+
+  it("GET serves the goal the calories follow, whatever order the list is in", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ofp-main-goal@example.com");
+    await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: FULL_PROFILE, cookies });
+    expect(await getProfile(cookies)).toMatchObject({ mainGoal: "muscle_gain" });
+    // A list stored before the server kept one weight goal, the other one
+    // first: Settings must judge a target by the main goal, not by the list.
+    await sql`
+      UPDATE user_fitness_profiles SET fitness_goals = ARRAY['weight_loss', 'muscle_gain']
+      WHERE user_id = ${userId}`;
+    expect(await getProfile(cookies)).toMatchObject({
+      mainGoal: "muscle_gain",
+      fitnessGoals: ["weight_loss", "muscle_gain"],
+    });
   });
 
   it("PUT is idempotent — the same body twice yields the same row (R3.5)", { timeout: 30_000 }, async () => {
@@ -249,6 +265,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       targetWeightKg: null,
       fitnessLevel: null,
       fitnessGoals: [],
+      mainGoal: null, // no goal ticked, so none sets the calories
       exerciseFrequency: null,
       availableEquipment: [],
       sessionDurationMin: null,

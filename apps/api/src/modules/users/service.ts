@@ -157,6 +157,7 @@ const EMPTY_FITNESS_PROFILE: FitnessProfile = {
   targetWeightKg: null,
   fitnessLevel: null,
   fitnessGoals: [],
+  mainGoal: null,
   exerciseFrequency: null,
   availableEquipment: [],
   sessionDurationMin: null,

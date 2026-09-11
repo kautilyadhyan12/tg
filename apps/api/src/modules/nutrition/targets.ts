@@ -19,7 +19,7 @@ import { nutritionTargetsResponseSchema, type NutritionTargetsResponse, type Pla
  *  changed to Muscle Gain in Settings, or a weight that reached its target)
  *  leaves the plan holding the weight. The rings do not pass that off as the
  *  goal's number, nor call the target unanswered, since the person has one:
- *  they say it no longer fits, and their link opens the target screen, which
+ *  they ask for a new one, and their link opens the target screen, which
  *  names it and offers only the goal's side (RULINGS 2026-09-11). */
 export function targetsFromPlan(result: PlanResponse): NutritionTargetsResponse {
   const plan = result.plan;

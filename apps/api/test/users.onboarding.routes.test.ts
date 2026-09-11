@@ -611,9 +611,14 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(await goalsOf(userId)).toEqual({ mainGoal: "flexibility", goals: ["posture", "endurance", "flexibility"] });
 
     // Both weight goals at once (the screen cannot send it; an old list or
-    // another client can): the one already setting the calories keeps them,
-    // and it is the only one of the two stored, so Settings shows that one
-    // and saving what it shows leaves the calories where they are.
+    // another client can) while a goal that keeps the weight sets the
+    // calories: the first of the two takes over, and is the only one stored.
+    await settingsSave(cookies, ["weight_loss", "muscle_gain"]);
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "weight_loss", goals: ["weight_loss"] });
+
+    // Both, with one of them already setting the calories: that one keeps
+    // them, and it is the only one of the two stored, so Settings shows that
+    // one and saving what it shows leaves the calories where they are.
     await settingsSave(cookies, ["muscle_gain"]);
     await settingsSave(cookies, ["weight_loss", "muscle_gain"]);
     expect(await goalsOf(userId)).toEqual({ mainGoal: "muscle_gain", goals: ["muscle_gain"] });
@@ -699,6 +704,13 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(await goalsOf(userId)).toEqual({ mainGoal: "posture", goals: ["posture", "flexibility"] });
     await settingsSave(cookies, ["posture", "flexibility"]);
     expect((await goalsOf(userId)).mainGoal).toBe("posture");
+
+    // The old form's shape saved from Settings with both weight goals: with no
+    // main goal to keep, the first of the two sets the calories and is the
+    // only one stored.
+    await oldForm();
+    await settingsSave(cookies, ["weight_loss", "muscle_gain"]);
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "weight_loss", goals: ["weight_loss"] });
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
