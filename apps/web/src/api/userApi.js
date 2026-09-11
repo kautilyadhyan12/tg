@@ -10,7 +10,6 @@
 //   GET   /v1/users/me                   carries onboardingCompleted (the gate)
 // Shapes are @app/shared users.ts (putFitnessProfileRequestSchema,
 // updateProfileRequestSchema, userProfileSchema).
-import { PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 import authApi from './authApi';
 
 // Height/target-weight go onto the fitness profile in CM/KG; the API's
@@ -74,6 +73,7 @@ export function mergeFitnessProfile(current, edits) {
     targetWeightKg: current?.targetWeightKg ?? null,
     fitnessLevel: current?.fitnessLevel ?? null,
     fitnessGoals: current?.fitnessGoals ?? [],
+    weightGoal: current?.weightGoal ?? null,
     exerciseFrequency: current?.exerciseFrequency ?? null,
     availableEquipment: current?.availableEquipment ?? [],
     sessionDurationMin: current?.sessionDurationMin ?? null,
@@ -84,39 +84,6 @@ export function mergeFitnessProfile(current, edits) {
     Object.entries(edits || {}).filter(([, v]) => v !== undefined),
   );
   return { ...base, ...defined, onboardingCompleted: current?.onboardingCompleted ?? true };
-}
-
-/** The goals that move the weight (weight loss, muscle gain), read from the
- *  one mapping in @app/shared. A person may tick many goals but never two that
- *  fight (RULINGS 2026-09-10), so only one of these at a time. */
-const WEIGHT_GOALS = Object.keys(PLAN_GOAL_BY_MAIN_GOAL).filter((g) => PLAN_GOAL_BY_MAIN_GOAL[g] !== 'maintain');
-
-/** Settings' goal chips: a tap ticks or unticks a goal, and ticking a goal
- *  that moves the weight unticks the other one, so a change never leaves a
- *  contradiction to undo by hand (Kd, 2026-09-11). Pure + unit-tested. */
-export function toggleFitnessGoal(goals, id) {
-  if (goals.includes(id)) return goals.filter((g) => g !== id);
-  const fights = (g) => WEIGHT_GOALS.includes(id) && WEIGHT_GOALS.includes(g);
-  return [...goals.filter((g) => !fights(g)), id];
-}
-
-/** A list stored before the server kept only one weight goal may hold both.
- *  It loads with the one the calories follow (the main goal), so saving what
- *  the chips show leaves them there; with no main goal among them (the old
- *  form), with the first. Pure + unit-tested. */
-export function cleanFitnessGoals(goals, mainGoal) {
-  const kept = WEIGHT_GOALS.includes(mainGoal) && goals.includes(mainGoal)
-    ? mainGoal
-    : goals.find((g) => WEIGHT_GOALS.includes(g));
-  return goals.filter((g) => !WEIGHT_GOALS.includes(g) || g === kept);
-}
-
-/** The way the goal the calories follow moves the weight: 'lose' or 'gain',
- *  or null when it holds the weight or there is none. Read from the main goal,
- *  as the plan reads it, never from the list, whose order is the chips'.
- *  Pure + unit-tested. */
-export function goalDirection(mainGoal) {
-  return WEIGHT_GOALS.includes(mainGoal) ? PLAN_GOAL_BY_MAIN_GOAL[mainGoal] : null;
 }
 
 /** What the profile form sends to PATCH /v1/users/me: ONLY what changed.

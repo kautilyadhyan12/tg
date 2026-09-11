@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  BUILD_MUSCLE_PROTEIN_G_PER_KG,
   calendarDaySchema,
   daysToMove,
   MIFFLIN_ST_JEOR_CONSTANT,
@@ -84,6 +85,12 @@ function brokenFacts(body: PlanInputs): string[] {
   check("working: a change exactly when the weight moves", (w.change === null) === (plan.daysToTarget === null));
   check("working: eat is burn + change, floored", w.beforeFloorKcal === plan.dailyBurnKcal + (w.change?.kcal ?? 0) && plan.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal));
   check("working: protein asked is the table's", w.protein.wantedG === Math.round(w.protein.weightKg * w.protein.gPerKg) && plan.proteinG <= w.protein.wantedG);
+  check(
+    "working: protein is the weight choice's figure, raised to Build muscle's while it is ticked",
+    w.protein.buildMuscle === body.buildMuscle &&
+      w.protein.gPerKg ===
+        (body.buildMuscle ? Math.max(PROTEIN_G_PER_KG[body.goal], BUILD_MUSCLE_PROTEIN_G_PER_KG) : PROTEIN_G_PER_KG[body.goal]),
+  );
   // Restated here, not called: the body's weight, or its BMI-30 weight when it is heavier.
   const m = body.heightCm / 100;
   const bmi30Kg = Math.round(30 * m * m * 100) / 100;
@@ -129,6 +136,7 @@ const sample: PlanInputs = {
   trainingDays: 3,
   sessionMinutes: 45,
   health: { hasCondition: false, safeMode: false },
+  buildMuscle: false,
   today: "2026-09-08",
 };
 
@@ -146,6 +154,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(PACE_KG_PER_WEEK).toEqual({ gentle: 0.25, steady: 0.5, brisk: 0.75 });
     expect(DAY_FACTOR).toEqual({ sitting: 1.2, on_feet: 1.3, active: 1.45, very_active: 1.6 });
     expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // grams per kilo, never a share (Kd, 2026-09-11)
+    expect(BUILD_MUSCLE_PROTEIN_G_PER_KG).toBe(2.2); // Morton and colleagues, 2018: "~2.2 g protein/kg/d" to maximise
     expect(PROTEIN_REFERENCE_BMI).toBe(30);
     expect(MIFFLIN_ST_JEOR_CONSTANT).toEqual({ female: -161, male: 5 });
   });
@@ -190,7 +199,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
         change: { pace: "steady", kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
         beforeFloorKcal: 1705,
         floorKcal: 1200,
-        protein: { gPerKg: 2, weightKg: 82, referenceBmi: null, wantedG: 164 },
+        protein: { gPerKg: 2, weightKg: 82, referenceBmi: null, wantedG: 164, buildMuscle: false },
         fatShare: 0.25,
         carbsFloorG: 50,
         finish: { kgToMove: 7, kcalPerKg: 7700 },
@@ -210,7 +219,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     // is still his whole body's; only protein is counted differently.
     const heavy = computePlan({ ...sample, age: 35, weightKg: 120, targetWeightKg: 90 });
     expect(heavy).toMatchObject({ restingBurnKcal: 2124, dailyBurnKcal: 2742, targetKcal: 2192, proteinG: 184, carbsG: 227, fatG: 61 });
-    expect(heavy.workings.protein).toEqual({ gPerKg: 2, weightKg: 91.88, referenceBmi: 30, wantedG: 184 });
+    expect(heavy.workings.protein).toEqual({ gPerKg: 2, weightKg: 91.88, referenceBmi: 30, wantedG: 184, buildMuscle: false });
     expect(heavy.workings.resting.weightKg).toBe(120);
     expect(heavy.workings.training.weightKg).toBe(120);
     // Every goal counts the same weight: 1.6 × 91.88 and 2.2 × 91.88.
@@ -218,7 +227,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(computePlan({ ...sample, age: 35, weightKg: 120, goal: "gain", targetWeightKg: 125 }).proteinG).toBe(202);
     // A body under the line is counted as it is: the golden woman keeps her 140 g.
     const golden = computePlan({ ...sample, gender: "female", heightCm: 165, weightKg: 70, targetWeightKg: 65 });
-    expect(golden.workings.protein).toEqual({ gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 });
+    expect(golden.workings.protein).toEqual({ gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140, buildMuscle: false });
   });
 
   it("sets protein in grams per kilo, never as a share of the calories (Kd, 2026-09-11)", () => {
@@ -268,7 +277,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
   it("protein that gave way to the carbohydrate floor keeps the grams the table asked for beside it", () => {
     // 200 cm: BMI 30 is 120 kg, so protein asks 2 × 120 = 240 g of a 1,322 kcal day.
     const plan = computePlan({ ...sample, gender: "female", age: 120, heightCm: 200, weightKg: 130, targetWeightKg: 120, trainingDays: 0, pace: "brisk" });
-    expect(plan.workings.protein).toEqual({ gPerKg: 2, weightKg: 120, referenceBmi: 30, wantedG: 240 });
+    expect(plan.workings.protein).toEqual({ gPerKg: 2, weightKg: 120, referenceBmi: 30, wantedG: 240, buildMuscle: false });
     expect(plan.proteinG).toBe(198);
   });
 
@@ -303,6 +312,8 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       { ...w, training: { ...w.training, sessionMinutes: 60 } },
       { ...w, change: { ...change, kgPerWeek: 0.75 } },
       { ...w, protein: { ...w.protein, gPerKg: 2.5 } },
+      // Build muscle claimed on a figure under its own.
+      { ...w, protein: { ...w.protein, buildMuscle: true } },
       // Each sum.
       { ...w, day: { ...w.day, kcal: w.day.kcal + 1 } },
       { ...w, training: { ...w.training, kcal: w.training.kcal - 1 } },
@@ -403,8 +414,9 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     const unaccepted: PlanInputs[] = [];
     const failures: { body: PlanInputs; broken: string[] }[] = [];
     for (const goal of goals) for (const gender of genders) for (const age of ages) for (const heightCm of heights)
-      for (const weightKg of weights) for (const dayActivity of days) for (const week of weeks) for (const health of healths) {
-        const base = { goal, gender, age, heightCm, weightKg, dayActivity, ...week, health, today: "2026-09-08" };
+      for (const weightKg of weights) for (const dayActivity of days) for (const week of weeks) for (const health of healths)
+      for (const buildMuscle of [false, true]) {
+        const base = { goal, gender, age, heightCm, weightKg, dayActivity, ...week, health, buildMuscle, today: "2026-09-08" };
         const variants: PlanInputs[] = goal === "maintain"
           ? [{ ...base, targetWeightKg: null, pace: null }]
           : targetOf(weightKg).flatMap((targetWeightKg) => paces.map((pace) => ({ ...base, targetWeightKg, pace })));
@@ -448,6 +460,26 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(plan.daysToTarget).toBe(Math.ceil((5 * 7700) / 550)); // 70
     expect(plan.finishDate).toBe(addDays("2026-09-08", 70));
     expect(plan.flags).toEqual([]);
+  });
+
+  it("Build muscle ticked sets protein to 2.2 g per kilo whatever the weight choice, and moves no calorie (RULINGS 2026-09-11)", () => {
+    const bodies: PlanInputs[] = [
+      sample, // lose
+      { ...sample, goal: "maintain", targetWeightKg: null, pace: null },
+      { ...sample, goal: "gain", weightKg: 70, targetWeightKg: 75 },
+    ];
+    for (const body of bodies) {
+      const plain = computePlan(body);
+      const muscle = computePlan({ ...body, buildMuscle: true });
+      expect(muscle.workings.protein, body.goal).toMatchObject({ gPerKg: 2.2, buildMuscle: true });
+      // Every number but protein and carbohydrates is the same plan's.
+      const same = ["restingBurnKcal", "dailyBurnKcal", "targetKcal", "dailyChangeKcal", "fatG", "plannedTargetKg", "daysToTarget", "finishDate", "flags"] as const;
+      for (const key of same) expect(muscle[key], `${body.goal} ${key}`).toEqual(plain[key]);
+      expectSanePlan({ ...body, buildMuscle: true });
+    }
+    // The sample man losing weight: 2.2 × 82 = 180 g, not the loss figure's
+    // 164, and the carbohydrates give way to it: (1705 − 721.6 − 426.25) ÷ 4.
+    expect(computePlan({ ...sample, buildMuscle: true })).toMatchObject({ targetKcal: 1705, proteinG: 180, carbsG: 139, fatG: 47 });
   });
 
   it("carbohydrates never drop below 50 g: protein gives way so the grams still make the calories", () => {
@@ -807,6 +839,8 @@ describe("plan maths — missing answers", () => {
     expect([...missingPlanInputSchema.options].sort()).toEqual([...CALCULATOR_INPUTS].sort());
     expect(CALCULATOR_INPUTS).not.toContain("today");
     expect(CALCULATOR_INPUTS).not.toContain("health");
+    // A goal left unticked is an answer, never a gap in the plan.
+    expect(CALCULATOR_INPUTS).not.toContain("buildMuscle");
   });
 });
 

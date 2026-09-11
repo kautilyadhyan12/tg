@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { patchOnboardingRequestSchema } from '@app/shared';
 import NumberWheel from './NumberWheel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
+import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
   AGE_REST,
   DAYS,
@@ -22,6 +22,7 @@ import {
   SESSION_MINUTES,
   TENTHS,
   TRAINING_DAYS,
+  WEIGHT_GOALS,
   WEIGHT_REST,
   ageList,
   clampTarget,
@@ -45,6 +46,7 @@ import {
   targetWholes,
   targetWrongSide,
   toggleEquipment,
+  toggleGoal,
   weightParts,
   weightShown,
   weightWholes,
@@ -62,6 +64,23 @@ const takes = (patch) => patchOnboardingRequestSchema.safeParse(patch).success;
  *  made (RULINGS 2026-09-10). */
 const sameRows = (a, b) => a.whole === b.whole && a.tenth === b.tenth;
 
+/** A card's icon, in its rounded square: lit when the card is picked. */
+function IconBadge({ icon: Icon, selected }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+      style={
+        selected
+          ? { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 14px rgba(255,138,31,0.35)' }
+          : { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }
+      }
+    >
+      <Icon className="w-5 h-5" strokeWidth={1.75} style={{ color: selected ? '#FFFFFF' : '#FFB347' }} />
+    </span>
+  );
+}
+
 function Choice({ selected, onSelect, icon: Icon, label, desc }) {
   return (
     <button
@@ -71,19 +90,7 @@ function Choice({ selected, onSelect, icon: Icon, label, desc }) {
       className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 text-left w-full
                  ${selected ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
     >
-      {Icon && (
-        <span
-          aria-hidden="true"
-          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
-          style={
-            selected
-              ? { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 14px rgba(255,138,31,0.35)' }
-              : { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }
-          }
-        >
-          <Icon className="w-5 h-5" strokeWidth={1.75} style={{ color: selected ? '#FFFFFF' : '#FFB347' }} />
-        </span>
-      )}
+      {Icon && <IconBadge icon={Icon} selected={selected} />}
       <span className="flex-1 min-w-0">
         <span className={`block font-medium text-sm ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
         {desc && <span className="block text-gray-500 text-xs mt-0.5">{desc}</span>}
@@ -315,16 +322,52 @@ function NotSure({ label, pressed, onClick }) {
 }
 
 // ── Screen 1 ────────────────────────────────────────────────────────────────
-export function GoalScreen({ answers, save }) {
+/** A card for a grid three to a row: the icon above its label. */
+function Tile({ selected, onSelect, icon, label }) {
   return (
-    <div className="space-y-3">
-      <Question>What is your main goal?</Question>
-      <p className="text-gray-400 text-xs">Pick one. You can change it later.</p>
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`relative flex flex-col items-center gap-2 px-2 py-3 rounded-2xl border-2 transition-all duration-200 text-center
+                 ${selected ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
+    >
+      {icon && <IconBadge icon={icon} selected={selected} />}
+      <span className={`block text-xs font-medium leading-snug ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
+      {selected && (
+        <span aria-hidden="true" className="absolute top-1.5 right-1.5 w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+          <Check className="w-2.5 h-2.5 text-white" />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** One grid, three to a row, under the screen's one heading, "Your goal"
+ *  (Kd, at 4a-iv's click-through: "no seperate things needed all together").
+ *  The top row is the ONE weight choice, which alone sets the calories
+ *  (RULINGS 2026-09-10): a tap there picks it and lets the other two go.
+ *  Below it, any number of goals, none of which moves the calories —
+ *  building muscle is not gaining weight (RULINGS 2026-09-11): a tap ticks or
+ *  unticks one. Nothing fights anything else, so no tap undoes another. */
+export function GoalScreen({ answers, save }) {
+  const also = Array.isArray(answers.fitnessGoals) ? answers.fitnessGoals : [];
+  return (
+    <div role="group" aria-label="Your goal" className="grid grid-cols-3 gap-2">
+      {WEIGHT_GOALS.map((g) => (
+        <Tile
+          key={`weight-${g.value}`}
+          selected={answers.weightGoal === g.value}
+          onSelect={() => answers.weightGoal !== g.value && save({ weightGoal: g.value })}
+          icon={WEIGHT_GOAL_ICONS[g.value]}
+          label={g.label}
+        />
+      ))}
       {GOALS.map((g) => (
-        <Choice
+        <Tile
           key={`goal-${g.value}`}
-          selected={answers.mainGoal === g.value}
-          onSelect={() => answers.mainGoal !== g.value && save({ mainGoal: g.value })}
+          selected={also.includes(g.value)}
+          onSelect={() => save({ fitnessGoals: toggleGoal(also, g.value) })}
           icon={GOAL_ICONS[g.value]}
           label={g.label}
         />

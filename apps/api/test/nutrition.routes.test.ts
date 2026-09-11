@@ -477,21 +477,18 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(empty.statusCode,empty.body).toBe(200);
     expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"],targetWrongSide:false});
 
-    // Someone who finished the OLD form: it never asked ONE goal or "your day",
-    // so the rings name exactly those two, however complete the rest is. A save
-    // on today's Settings sets the goal (users/repo.ts), so the old form's row
-    // (goals ticked, no main goal: migration 0026 filled none in) is written as
-    // it stands. The weight lives in the weigh-in history, so this read spans
+    // Someone who finished the OLD form: it never asked the weight choice or
+    // "your day", so the rings name exactly those two, however complete the
+    // rest is. The weight lives in the weigh-in history, so this read spans
     // both tables.
-    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["weight_loss","flexibility"],onboardingCompleted:true})).statusCode).toBe(200);
-    await sql`UPDATE user_fitness_profiles SET main_goal=NULL WHERE user_id=${t.userId}`;
+    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["flexibility"],onboardingCompleted:true})).statusCode).toBe(200);
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
     const old=await inject("GET","/v1/nutrition/targets",t.access);
     expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"],targetWrongSide:false});
 
     // Answered on the onboarding screens, the rings carry the plan: the golden
     // of users.onboarding.routes.test.ts, and field by field what that route says.
-    for(const answers of [{mainGoal:"weight_loss"},{targetWeightKg:65,pace:"steady"},{dayActivity:"sitting"}])
+    for(const answers of [{weightGoal:"lose"},{targetWeightKg:65,pace:"steady"},{dayActivity:"sitting"}])
       expect((await inject("PATCH","/v1/users/me/onboarding",t.access,answers)).statusCode).toBe(200);
     type Plan={restingBurnKcal:number;dailyBurnKcal:number;targetKcal:number;proteinG:number;carbsG:number;fatG:number};
     const planOf=async(access:string)=>(await inject("GET","/v1/users/me/onboarding",access)).json<{plan:Plan}>().plan;
@@ -509,7 +506,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // THEIR plan and neither leaks into the other. Their body is heavy (120 kg
     // at 175 cm), so their protein is counted on the BMI-30 weight, 91.88 kg.
     const u=await session("p26a-targets2@example.com");
-    expect((await inject("PATCH","/v1/users/me/onboarding",u.access,{mainGoal:"weight_loss",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    expect((await inject("PATCH","/v1/users/me/onboarding",u.access,{weightGoal:"lose",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
     const theirs=await inject("GET","/v1/nutrition/targets",u.access);
     expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[],targetWrongSide:false});
     expect(theirs.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(u.access)));

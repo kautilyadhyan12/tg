@@ -60,6 +60,7 @@ const FULL_PROFILE = {
   targetWeightKg: 61.25,
   fitnessLevel: "intermediate",
   fitnessGoals: ["muscle_gain", "endurance"],
+  weightGoal: "maintain",
   exerciseFrequency: 4,
   availableEquipment: ["dumbbells", "resistance_bands"],
   sessionDurationMin: 45,
@@ -148,7 +149,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       targetWeightKg: null,
       fitnessLevel: null, // NULL until answered — deliberately not 'beginner'
       fitnessGoals: [],
-      mainGoal: null, // the goal the calories follow: none yet
+      weightGoal: null, // the weight choice that sets the calories: none yet
       exerciseFrequency: null,
       availableEquipment: [],
       sessionDurationMin: null,
@@ -181,19 +182,17 @@ d("users fitness-profile routes (real Postgres)", () => {
     expect(read).toMatchObject(FULL_PROFILE);
   });
 
-  it("GET serves the goal the calories follow, whatever order the list is in", { timeout: 30_000 }, async () => {
-    const { userId, cookies } = await makeUser("ofp-main-goal@example.com");
-    await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: FULL_PROFILE, cookies });
-    expect(await getProfile(cookies)).toMatchObject({ mainGoal: "muscle_gain" });
-    // A list stored before the server kept one weight goal, the other one
-    // first: Settings must judge a target by the main goal, not by the list.
-    await sql`
-      UPDATE user_fitness_profiles SET fitness_goals = ARRAY['weight_loss', 'muscle_gain']
-      WHERE user_id = ${userId}`;
-    expect(await getProfile(cookies)).toMatchObject({
-      mainGoal: "muscle_gain",
-      fitnessGoals: ["weight_loss", "muscle_gain"],
-    });
+  it("stores the weight choice and the goals beside it as two answers, each as sent (4a-iv)", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ofp-two-answers@example.com");
+    // Building muscle while losing weight is allowed: building muscle is not
+    // gaining weight (RULINGS 2026-09-11).
+    const body = { ...FULL_PROFILE, weightGoal: "lose", fitnessGoals: ["muscle_gain", "balance", "strength"] };
+    expect((await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies })).statusCode).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ weightGoal: "lose", fitnessGoals: ["muscle_gain", "balance", "strength"] });
+    // No weight choice sent is none stored, as for every field this form carries.
+    const without = { ...FULL_PROFILE, weightGoal: undefined };
+    expect((await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: without, cookies })).statusCode).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ weightGoal: null, fitnessGoals: FULL_PROFILE.fitnessGoals });
   });
 
   it("PUT is idempotent — the same body twice yields the same row (R3.5)", { timeout: 30_000 }, async () => {
@@ -265,7 +264,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       targetWeightKg: null,
       fitnessLevel: null,
       fitnessGoals: [],
-      mainGoal: null, // no goal ticked, so none sets the calories
+      weightGoal: null, // no weight choice sent, so none is stored
       exerciseFrequency: null,
       availableEquipment: [],
       sessionDurationMin: null,
@@ -282,8 +281,12 @@ d("users fitness-profile routes (real Postgres)", () => {
       { gender: "yes" }, // outside the ported enum
       { fitnessLevel: "expert" }, // outside the ported enum
       { preferredWorkoutTime: "midnight" }, // outside the ported enum
-      { fitnessGoals: ["weight_loss", "weight_loss"] }, // set rule: no duplicates
-      { availableEquipment: ["barbell"] }, // outside the ported enum
+      { fitnessGoals: ["posture", "posture"] }, // set rule: no duplicates
+      { fitnessGoals: ["weight_loss"] }, // a weight choice since 4a-iv, never a goal beside one
+      { weightGoal: "keep" }, // the screen's word; the stored value is "maintain"
+      { mainGoal: "posture" }, // the old one-goal field is gone
+      { availableEquipment: ["barbell"] }, // outside the enum
+      { availableEquipment: ["none", "gym"] }, // "no equipment" stands alone
       { age: 15 }, // below the floor of 16 (RULINGS 2026-09-07: the app is for 16 and over)
       { age: 121 }, // above the ceiling of 120
       { exerciseFrequency: 8 }, // > 7 days in a week

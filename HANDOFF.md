@@ -4,6 +4,40 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · 4a-iv re-check fixed (one High in a fix, two weak tests), PR #62
+
+- High: Reset's box promised "any health answer you gave" is kept, but the reset deletes Settings' Medical Conditions /
+  Notes text with the row, and the web has never asked the yes/no health question. The box now says the notes are
+  cleared and any answer to the health question is kept.
+- Tests: the reset test saves notes as Settings does and checks the box is empty after; `0028`'s test adds a Flexibility
+  person with an old Weight Loss tick (stays on "maintain", no cut).
+- Verified: api tsc/eslint 0 · api touched files 64 · web reset file 4 · web lint's 4 are master's 4, same rules · two
+  deliberate breaks (0028 reading the tick first; a reset keeping the notes) green on the old tests, red on the new.
+- Open: CI, one re-check of these fixes (a High was open, CLAUDE.md §2.6), merge.
+
+## 2026-09-12 · 4a-iv review fixed (no Critical/High; six Lows, three weak tests), PR #62
+
+- Lows: screen 1's ruling says what Kd passed (the one line under the heading stays); Reset's confirm box names the
+  health answer it keeps; `0028` keeps an old-form Weight Loss tick as "Lose weight" (a main goal still outranks it);
+  Gain weight's protein note cites Iraki 2019 (1.6–2.2 g/kg in a surplus), Build muscle keeps Morton; two stale labels.
+- Tests: screen 1 is one heading over its twelve tiles and nothing else; a health yes survives a reset and still holds
+  the cut; a Fitness-tab save after a reset starts from the cleared answers.
+- Verified: shared + api tsc/eslint 0 · api touched files 64 · web touched files 107 · web lint's 4 are master's 4 ·
+  five deliberate breaks red (the three tests, the migration's old-form row, the gain note).
+- Kd: a reset keeps the health answer until 4b (RULINGS 2026-07-20, amended). Open: CI, the re-check or its waiver, merge.
+
+## 2026-09-11 · Many goals, and a gym (item 4a-iv), branch `many-goals-and-a-gym`
+
+- Kd ruled: people who already chose Build muscle are asked their weight choice, never given one (RULINGS 2026-09-11).
+  His click-through: screen 1 as one grid three to a row under "Your goal"; a ninth goal, Stay healthy; "A gym".
+- Built: screen 1 asks the weight choice (lose · keep · gain) and any of nine goals; Build muscle sets protein to 2.2 g/kg
+  (Morton 2018). `0028`: `weight_goal` replaces `main_goal`, goals and equipment CHECKed, "none" alone. Settings asks the
+  same questions; Reset = `DELETE /v1/users/me/onboarding` (the name, weigh-ins and health answer stay).
+- Verified: shared + api tsc/eslint 0 · api touched files and CI-shaped green, full local 963 + the shared-database flake ·
+  web full 1998 (poseAssets.contract the known local red) · four deliberate breaks red.
+- Local: API 3000 (local Postgres), web 5173; `kd.muscle.0911@example.com` is a Build-muscle person as 0028 left them.
+  Kd's click-through passed (2026-09-11); PR #62. 4c carries a pace note for Kd; 6a defines Stay healthy (WHO).
+
 ## 2026-09-11 · 4a-iii merged (PR #61); Kd: building muscle is not gaining weight
 
 - Kd's click-through passed (the test account ended on Weight Loss, target 68 kg, renamed; no server errors). Merged as

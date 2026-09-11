@@ -57,7 +57,7 @@ vi.mock('../api/onboardingApi', () => ({
       Promise.resolve({
         data: {
           answers: {
-            displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
+            displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
             pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
             trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false,
             updatedAt: null,

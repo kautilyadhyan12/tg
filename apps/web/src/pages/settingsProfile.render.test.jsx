@@ -22,8 +22,7 @@ const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 /** A small stand-in for the two profile routes: it stores what it is sent and
- *  reads it back, as the real ones do. Weight Loss ticked and setting the
- *  calories (the main goal), 70 kg, target 65. */
+ *  reads it back, as the real ones do. Losing weight, 70 kg, target 65. */
 let server;
 function serve({ me = {}, fitness = {} } = {}) {
   server = {
@@ -33,7 +32,7 @@ function serve({ me = {}, fitness = {} } = {}) {
     },
     fitness: {
       age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
-      fitnessGoals: ['weight_loss'], mainGoal: 'weight_loss', exerciseFrequency: 3, availableEquipment: [],
+      fitnessGoals: [], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
       sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
       updatedAt: null, ...fitness,
     },
@@ -128,8 +127,8 @@ describe('Settings → Profile', () => {
   });
 
   it('names a stored target left on the wrong side, and still saves the rest of the form', async () => {
-    // A loss target kept when the goal changed to Muscle Gain on the Fitness tab.
-    serve({ fitness: { fitnessGoals: ['flexibility', 'muscle_gain'], mainGoal: 'muscle_gain' } });
+    // A loss target kept when the weight choice changed to Gain weight on the Fitness tab.
+    serve({ fitness: { fitnessGoals: ['flexibility'], weightGoal: 'gain' } });
     render(<Settings />);
     await loaded();
     expect(screen.getByText('65.0 kg is not above your current 70.0 kg. Pick a weight above it.')).toBeTruthy();
@@ -140,8 +139,8 @@ describe('Settings → Profile', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("saves a target on the goal's side, and any target when no goal that moves the weight is ticked", async () => {
-    serve({ fitness: { fitnessGoals: ['muscle_gain'], mainGoal: 'muscle_gain' } });
+  it("saves a target on the weight choice's side, and any target when the choice keeps the weight or is not made", async () => {
+    serve({ fitness: { weightGoal: 'gain' } });
     render(<Settings />);
     await loaded();
     type('65', '75');
@@ -150,27 +149,27 @@ describe('Settings → Profile', () => {
     await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 75 })));
     cleanup();
 
-    serve({ fitness: { fitnessGoals: ['posture'], mainGoal: 'posture' } });
+    serve({ fitness: { fitnessGoals: ['posture'], weightGoal: 'maintain' } });
     render(<Settings />);
     await loaded();
     type('65', '83');
     expect(screen.queryByText(/is not (above|below)/)).toBeNull();
     save();
     await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 83 })));
-  });
+    cleanup();
 
-  it('judges the target by the goal the calories follow, not by the first weight goal in the list', async () => {
-    // A list stored before the server kept one weight goal holds both, Weight
-    // Loss first, while Muscle Gain sets the calories: the target goes above.
-    serve({ fitness: { fitnessGoals: ['weight_loss', 'muscle_gain'], mainGoal: 'muscle_gain' } });
+    // Building muscle is not gaining weight (RULINGS 2026-09-11): ticked with no
+    // weight choice made, it holds a target to neither side, and the save keeps
+    // the choice unmade.
+    serve({ fitness: { fitnessGoals: ['muscle_gain'], weightGoal: null } });
     render(<Settings />);
     await loaded();
-    expect(screen.getByText('65.0 kg is not above your current 70.0 kg. Pick a weight above it.')).toBeTruthy();
-    type('65', '75');
+    type('65', '83');
     expect(screen.queryByText(/is not (above|below)/)).toBeNull();
     save();
-    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 75 })));
-    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 83, weightGoal: null })),
+    );
   });
 });
 
@@ -182,7 +181,7 @@ describe('the Settings profile form sends only what changed', () => {
   /** Draws the page, replaces each box showing `from` with `to`, presses Save,
    *  and waits for the save to finish (the page reloads the profile when it does). */
   const saveWith = async (edits) => {
-    serve({ me: { weightKg: 90 }, fitness: { targetWeightKg: 80, fitnessGoals: [], mainGoal: null } });
+    serve({ me: { weightKg: 90 }, fitness: { targetWeightKg: 80, fitnessGoals: [], weightGoal: null } });
     render(<Settings />);
     for (const [from, to] of edits) {
       fireEvent.change(await screen.findByDisplayValue(from), { target: { value: to } });

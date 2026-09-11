@@ -3,7 +3,9 @@
 // every key to its enum, so a new goal or kind of equipment cannot reach a
 // screen without an icon.
 import {
+  Apple,
   BicepsFlexed,
+  Building2,
   createLucideIcon,
   Dumbbell,
   Footprints,
@@ -11,6 +13,7 @@ import {
   House,
   Infinity as InfinityIcon,
   Leaf,
+  MoveRight,
   PersonStanding,
   Rocket,
   Sprout,
@@ -19,10 +22,10 @@ import {
   Weight,
 } from 'lucide-react';
 
-// Two drawn here, in the library's own 24-unit line style, because it has no
-// icon that means either (Kd, 2026-09-10: its wheelchair read as flexibility
-// and its arrow as a pull-up bar): a person in a side stretch, and a person
-// hanging from a bar.
+// Drawn here, in the library's own 24-unit line style, where it has no icon
+// that means the thing (Kd, 2026-09-10: its wheelchair read as flexibility and
+// its arrow as a pull-up bar): a person in a side stretch, a person hanging
+// from a bar, a barbell, and a person balancing on one leg.
 export const SideStretch = createLucideIcon('side-stretch', [
   ['path', { d: 'm8 21 3-6 3 6', key: 'legs' }],
   ['path', { d: 'M11 15c0-2.5 1-4.5 3-6', key: 'body' }],
@@ -41,14 +44,39 @@ export const PullUpBar = createLucideIcon('pull-up-bar', [
   ['path', { d: 'm9 21 3-7 3 7', key: 'legs' }],
 ]);
 
+export const Barbell = createLucideIcon('barbell', [
+  ['path', { d: 'M2 12h2', key: 'sleeve-left' }],
+  ['rect', { x: '4', y: '6', width: '4', height: '12', rx: '1', key: 'plate-left' }],
+  ['path', { d: 'M8 12h8', key: 'bar' }],
+  ['rect', { x: '16', y: '6', width: '4', height: '12', rx: '1', key: 'plate-right' }],
+  ['path', { d: 'M20 12h2', key: 'sleeve-right' }],
+]);
+
+export const OneLegBalance = createLucideIcon('one-leg-balance', [
+  ['circle', { cx: '12', cy: '5', r: '1', key: 'head' }],
+  ['path', { d: 'm6 7 6 3 6-3', key: 'arms' }],
+  ['path', { d: 'M12 10v4', key: 'body' }],
+  ['path', { d: 'M12 14v6', key: 'leg-standing' }],
+  ['path', { d: 'm12 14 3.5 1.5-2.5 2.5', key: 'leg-raised' }],
+]);
+
+/** Screen 1's weight choice: down, level, up. */
+export const WEIGHT_GOAL_ICONS = {
+  lose: TrendingDown,
+  maintain: MoveRight,
+  gain: TrendingUp,
+};
+
 export const GOAL_ICONS = {
-  weight_loss: TrendingDown,
   muscle_gain: BicepsFlexed,
+  strength: Barbell,
   general_fitness: HeartPulse,
-  flexibility: SideStretch,
   endurance: Footprints,
+  flexibility: SideStretch,
   posture: PersonStanding,
+  balance: OneLegBalance,
   stress_relief: Leaf,
+  stay_healthy: Apple,
 };
 
 export const LEVEL_ICONS = {
@@ -63,4 +91,5 @@ export const EQUIPMENT_ICONS = {
   resistance_bands: InfinityIcon,
   kettlebells: Weight,
   pull_up_bar: PullUpBar,
+  gym: Building2,
 };

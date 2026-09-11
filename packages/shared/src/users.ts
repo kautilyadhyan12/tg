@@ -66,33 +66,56 @@ export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 // v1 §6.1:442 puts onboarding data in the users module; Part 4 defines no
 // storage, so P2.7 DROPped these fields (INVENTORY.md:45) and Part 2B §4.1:358's
 // scorer (goal 40 · difficulty 20 · equipment 20 · duration 10) has nothing to
-// read. Every value set below is PORTED VERBATIM from the salvage source
-// backend-auth/src/models/User.js:44-98 — none re-derived (R0.2). The numeric
-// BOUNDS are not in that model and not in the spec: they are Kd-approved
-// (DECISIONS 2026-07-15) sanity rails, not spec values.
+// read. The gender, level and workout-time sets are PORTED VERBATIM from the
+// salvage source backend-auth/src/models/User.js:44-98 (R0.2). The goals and
+// the equipment have since been changed by Kd (RULINGS 2026-09-10): one weight
+// choice beside a list of goals, and "a gym" beside the home equipment. The
+// numeric BOUNDS are not in that model and not in the spec: they are
+// Kd-approved (DECISIONS 2026-07-15) sanity rails, not spec values.
 
 export const genderSchema = z.enum(["male", "female", "other", "prefer_not_to_say"]);
 export const fitnessLevelSchema = z.enum(["beginner", "intermediate", "advanced"]);
+
+/** Screen 1's ONE weight choice (RULINGS 2026-09-10): lose weight · keep my
+ *  weight · gain weight. It alone sets the calories, and it is stored as the
+ *  direction the plan maths works in, never derived from another goal:
+ *  "maintain" is what the screens call "Keep my weight". */
+export const weightGoalSchema = z.enum(["lose", "maintain", "gain"]);
+
+/** Screen 1's "also work on", any number of them (RULINGS 2026-09-10). None of
+ *  them moves the calories: building muscle is not gaining weight (RULINGS
+ *  2026-09-11), and only its protein reads the list. Weight loss is not here,
+ *  because it is a weight choice. `strength` (get stronger) and `balance`
+ *  (better balance) are the two the goals ruling added, and `stay_healthy`
+ *  the one Kd added at 4a-iv's click-through; the other six keep the old
+ *  list's values, so no stored answer changes meaning. In the order the
+ *  screens show them. */
 export const fitnessGoalSchema = z.enum([
-  "weight_loss",
   "muscle_gain",
+  "strength",
   "general_fitness",
-  "flexibility",
   "endurance",
+  "flexibility",
   "posture",
+  "balance",
   "stress_relief",
+  "stay_healthy",
 ]);
+/** `gym` is "A gym", beside the home equipment (RULINGS 2026-09-10, decision
+ *  B; the label 2026-09-11). */
 export const equipmentSchema = z.enum([
   "none",
   "dumbbells",
   "resistance_bands",
   "kettlebells",
   "pull_up_bar",
+  "gym",
 ]);
 export const workoutTimeSchema = z.enum(["morning", "afternoon", "evening"]);
 
 export type Gender = z.infer<typeof genderSchema>;
 export type FitnessLevel = z.infer<typeof fitnessLevelSchema>;
+export type WeightGoal = z.infer<typeof weightGoalSchema>;
 export type FitnessGoal = z.infer<typeof fitnessGoalSchema>;
 export type Equipment = z.infer<typeof equipmentSchema>;
 export type WorkoutTime = z.infer<typeof workoutTimeSchema>;
@@ -106,16 +129,30 @@ const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
     .max(max)
     .refine((a) => new Set(a).size === a.length, { message: "duplicate values are not allowed" });
 
+/** THE goals rail, one object, used by both surfaces that write
+ *  `fitness_goals` (Settings' PUT and screen 1's PATCH), for the reason the
+ *  equipment rail below gives. Its cap is the number of goals there are. */
+export const fitnessGoalsArraySchema = uniqueArray(fitnessGoalSchema, fitnessGoalSchema.options.length);
+
 /** THE equipment rail, one object, used by every surface that writes
- *  `available_equipment` (this form's PUT and onboarding v2's screen 7). Not a
- *  second call with the same arguments: two calls are two caps, and two caps can
+ *  `available_equipment` (Settings' PUT and screen 7's PATCH). Not a second
+ *  call with the same arguments: two calls are two caps, and two caps can
  *  drift until the same answer is taken on one screen and refused on the other.
  *
  *  The cap IS the number of kinds there are, read from the enum rather than
- *  typed again, so adding a sixth kind raises both surfaces in the same edit.
- *  With duplicates already refused it can never fire on its own; it stays as a
- *  bound on the size of the payload. */
-export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema.options.length);
+ *  typed again, so adding a kind raises both surfaces in the same edit. With
+ *  duplicates already refused it can never fire on its own; it stays as a
+ *  bound on the size of the payload.
+ *
+ *  "No equipment" stands alone: "none and dumbbells" (or "none and a gym") is
+ *  not an answer to "what do you have to train with?", and the plan builder
+ *  (6a) would have to guess which half to believe. Both screens make it
+ *  exclusive as you tap, and migration 0028 took "none" out of every pair the
+ *  old form had stored, so ONE rail serves both surfaces. */
+export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema.options.length).refine(
+  (a) => !a.includes("none") || a.length === 1,
+  { message: "'none' cannot be combined with equipment" },
+);
 
 /** The stored profile. EVERY field is nullable: the wizard may be partial, and
  *  fitness_level is NULL until answered — unanswered is not 'beginner'
@@ -130,11 +167,11 @@ export const fitnessProfileSchema = z.object({
   heightCm: z.number().nullable(),
   targetWeightKg: z.number().nullable(),
   fitnessLevel: fitnessLevelSchema.nullable(),
+  /** Screen 1's "also work on". */
   fitnessGoals: z.array(fitnessGoalSchema),
-  /** The goal the calories follow (screen 1's, kept in step by a Settings
-   *  save). The list keeps the chips' order, so its first weight goal is not
-   *  always this one: Settings reads the plan's side from here. */
-  mainGoal: fitnessGoalSchema.nullable(),
+  /** Screen 1's weight choice, the one answer that sets the calories: the side
+   *  a target weight must be on is read from here. */
+  weightGoal: weightGoalSchema.nullable(),
   exerciseFrequency: z.number().int().nullable(), // days per week
   availableEquipment: z.array(equipmentSchema),
   sessionDurationMin: z.number().int().nullable(), // minutes
@@ -165,7 +202,8 @@ export const putFitnessProfileRequestSchema = z
     heightCm: z.number().min(50).max(300).multipleOf(0.01).nullable().optional(),
     targetWeightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
     fitnessLevel: fitnessLevelSchema.nullable().optional(),
-    fitnessGoals: uniqueArray(fitnessGoalSchema, 7).optional(),
+    fitnessGoals: fitnessGoalsArraySchema.optional(),
+    weightGoal: weightGoalSchema.nullable().optional(),
     exerciseFrequency: z.number().int().min(1).max(7).nullable().optional(),
     availableEquipment: equipmentArraySchema.optional(),
     sessionDurationMin: z.number().int().min(5).max(240).nullable().optional(),

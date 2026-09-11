@@ -10,7 +10,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { missingPlanInputSchema, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
+import { missingPlanInputSchema } from '@app/shared';
 
 // These tests walk the wizard save by save. Alone, the longest takes about
 // two seconds; in the full suite, with every other file running at once, a
@@ -32,12 +32,12 @@ const Onboarding = (await import('./Onboarding')).default;
 const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 
 const EMPTY = {
-  displayName: 'kd.test', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null,
+  displayName: 'kd.test', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
   trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
-  ...EMPTY, mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
+  ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
   availableEquipment: ['dumbbells'],
 };
@@ -53,7 +53,7 @@ const PLAN = {
     change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
     beforeFloorKcal: 1267,
     floorKcal: 1200,
-    protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 },
+    protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140, buildMuscle: false },
     fatShare: 0.25,
     carbsFloorG: 50,
     finish: { kgToMove: 5, kcalPerKg: 7700 },
@@ -61,9 +61,9 @@ const PLAN = {
 };
 
 function missingOf(a) {
-  const moves = a.mainGoal !== null && PLAN_GOAL_BY_MAIN_GOAL[a.mainGoal] !== 'maintain';
+  const moves = a.weightGoal === 'lose' || a.weightGoal === 'gain';
   const present = {
-    goal: a.mainGoal !== null, age: a.age !== null, gender: a.gender !== null, heightCm: a.heightCm !== null,
+    goal: a.weightGoal !== null, age: a.age !== null, gender: a.gender !== null, heightCm: a.heightCm !== null,
     weightKg: a.weightKg !== null, targetWeightKg: !moves || a.targetWeightKg !== null,
     pace: !moves || a.pace !== null, dayActivity: a.dayActivity !== null,
     trainingDays: a.trainingDays !== null, sessionMinutes: a.sessionMinutes !== null,
@@ -179,7 +179,7 @@ describe('onboarding screens 1–7', () => {
     draw();
     await heading('Your goal');
     tap(/Lose weight/);
-    await saved({ mainGoal: 'weight_loss' });
+    await saved({ weightGoal: 'lose' });
     await next('About you');
     await aboutYou();
 
@@ -231,7 +231,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('never lets the step bar skip a question', async () => {
-    serve({ mainGoal: 'weight_loss' });
+    serve({ weightGoal: 'lose' });
     draw();
     await heading('About you');
     expect(button('Your goal').disabled).toBe(false);
@@ -239,12 +239,15 @@ describe('onboarding screens 1–7', () => {
     expect(button('Equipment').disabled).toBe(true);
   });
 
-  it('does not ask for a target when the goal keeps the weight', async () => {
+  it('does not ask for a target when the weight choice keeps the weight, Build muscle ticked or not', async () => {
+    // Building muscle is not gaining weight (RULINGS 2026-09-11).
     serve();
     draw();
     await heading('Your goal');
-    tap(/Get fitter/);
-    await saved({ mainGoal: 'general_fitness' });
+    tap(/Build muscle/);
+    await saved({ fitnessGoals: ['muscle_gain'] });
+    tap(/Keep my weight/);
+    await stored({ weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] });
     await next('About you');
     expect(screen.getByText('Step 2 of 6')).toBeTruthy();
     await aboutYou();
@@ -254,7 +257,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('brings a returning person back to the first screen they have not answered', async () => {
-    serve({ mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
+    serve({ weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
     draw();
     await heading('Your target');
   });
@@ -267,7 +270,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('opens "About you" with the name the account has, and saves a new one when the box is left', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     // The name opens the screen, before the units and the numbers.
@@ -298,7 +301,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('the wheels read "Not set" and save nothing until they are touched', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     tap(/kg · cm/);
@@ -316,7 +319,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('a flick saves the number the wheel settles on; a scroll the person did not make saves nothing', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     const age = spin('Age');
@@ -337,7 +340,7 @@ describe('onboarding screens 1–7', () => {
     // Screen 2 is taller than a laptop or a phone and its wheels are full
     // width: a wheel that took every scroll over it would set the age, or
     // write a weigh-in, while the person was only scrolling down the page.
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     const age = spin('Age');
@@ -385,7 +388,7 @@ describe('onboarding screens 1–7', () => {
       fireEvent.pointerCancel(el);
     }],
   ])('%s ends the gesture, so a later scroll the code makes picks nothing', async (_, gesture) => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     const age = spin('Age');
@@ -400,7 +403,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('Tab away lets a wheel go, so a mouse wheel over it afterwards moves nothing', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     const age = spin('Age');
@@ -417,7 +420,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('a slow drag that rests and goes on saves where the finger lifts, not where it rested', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     const age = spin('Age');
@@ -443,7 +446,7 @@ describe('onboarding screens 1–7', () => {
     // 70 kg reads 154.3 lb and 175 cm reads 5 ft 9 in. Picked back, those rows
     // mean 69.99 kg and 175.26 cm: a "typed by me" weigh-in and a height the
     // person never changed (RULINGS 2026-09-10).
-    serve({ mainGoal: 'posture', age: 30, gender: 'female', heightCm: 175, weightKg: 70 });
+    serve({ weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 175, weightKg: 70 });
     draw();
     await heading('Your day');
     tap('About you');
@@ -463,7 +466,7 @@ describe('onboarding screens 1–7', () => {
 
   it('re-picking in kilograms and centimetres a weight and height stored from pounds and inches saves nothing', async () => {
     // 154.0 lb is stored as 69.85 kg and 5 ft 9 in as 175.26 cm.
-    serve({ mainGoal: 'posture', age: 30, gender: 'female', heightCm: 175.26, weightKg: 69.85 });
+    serve({ weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 175.26, weightKg: 69.85 });
     draw();
     await heading('Your day');
     tap('About you');
@@ -501,7 +504,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('a stored target past the ends of the target wheel is still on it', async () => {
-    serve({ ...ALL, mainGoal: 'muscle_gain', weightKg: 240, targetWeightKg: 260 });
+    serve({ ...ALL, weightGoal: 'gain', weightKg: 240, targetWeightKg: 260 });
     draw();
     await heading('Equipment');
     tap('Your target');
@@ -513,7 +516,7 @@ describe('onboarding screens 1–7', () => {
 
   it('the target wheel cannot be set on the wrong side of the weight', async () => {
     // Kd, 2026-09-11: "Lose weight", 70 kg, target 83 was accepted without a word.
-    serve({ mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
+    serve({ weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
     draw();
     await heading('Your target');
     tap(/kg · cm/);
@@ -529,11 +532,11 @@ describe('onboarding screens 1–7', () => {
     tapRow('Target weight in whole kilograms', '65');
     await stored({ targetWeightKg: 65 });
 
-    // Build muscle: the same wheel offers only weights above.
+    // Gain weight: the same wheel offers only weights above.
     tap('Your goal');
     await heading('Your goal');
-    tap(/Build muscle/);
-    await stored({ mainGoal: 'muscle_gain' });
+    tap(/Gain weight/);
+    await stored({ weightGoal: 'gain' });
     await next('About you');
     await next('Your target');
     const gainWholes = spin('Target weight in whole kilograms');
@@ -559,7 +562,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('saves pounds as kilograms, and feet and inches as centimetres', async () => {
-    serve({ mainGoal: 'posture' });
+    serve({ weightGoal: 'maintain' });
     draw();
     await heading('About you');
     expect(pressed(/lb · ft/)).toBe('true'); // the test browser is en-US
@@ -604,6 +607,65 @@ describe('onboarding screens 1–7', () => {
     tap(/Kettlebells/);
     await saved({ availableEquipment: ['kettlebells'] });
     expect(pressed(/No equipment/)).toBe('false');
+  });
+
+  it('offers a gym beside the home equipment, and "No equipment" still stands alone', async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    tap(/A gym/);
+    await saved({ availableEquipment: ['gym'] });
+    tap(/Dumbbells/);
+    await stored({ availableEquipment: ['dumbbells', 'gym'] });
+    tap(/No equipment/);
+    await stored({ availableEquipment: ['none'] });
+    expect(pressed(/A gym/)).toBe('false');
+  });
+
+  it('asks screen 1 as one grid under one heading, the weight choice on top: a goal tap never touches the weight choice', async () => {
+    serve();
+    draw();
+    await heading('Your goal');
+    // Kd, at 4a-iv's click-through: one heading and no second question; three
+    // to a row, four even rows. The screen's own area is the twelve tiles and
+    // nothing else, so no question or hint can sit above them in any form.
+    expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Your goal']);
+    const grid = screen.getByRole('group', { name: 'Your goal' });
+    const tiles = within(grid).getAllByRole('button');
+    expect(tiles).toHaveLength(12);
+    expect(grid.parentElement.textContent).toBe(tiles.map((t) => t.textContent).join(''));
+    // The one line under the heading that every screen has, which Kd passed.
+    expect(screen.getByText('Pick one from the top row, and any of the rest')).toBeTruthy();
+    tap(/Build muscle/);
+    await saved({ fitnessGoals: ['muscle_gain'] });
+    tap(/Better balance/);
+    await stored({ fitnessGoals: ['muscle_gain', 'balance'] });
+    // Goals alone do not answer the screen: the weight choice does.
+    expect(button(/continue/i).disabled).toBe(true);
+    tap(/Lose weight/);
+    await stored({ weightGoal: 'lose', fitnessGoals: ['muscle_gain', 'balance'] });
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
+    // Building muscle while losing weight: both stay picked, and unticking a
+    // goal leaves the weight choice alone.
+    tap(/Build muscle/);
+    await stored({ weightGoal: 'lose', fitnessGoals: ['balance'] });
+    expect(pressed(/Lose weight/)).toBe('true');
+    expect(pressed(/Build muscle/)).toBe('false');
+    expect(svc.patch.mock.calls.every(([body]) => !('mainGoal' in body))).toBe(true);
+  });
+
+  it('someone who picked Build muscle before the split lands on screen 1 with it ticked, and one tap on Gain weight brings the number back', async () => {
+    // Where migration 0028 leaves them (RULINGS 2026-09-11).
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, weightGoal: null, fitnessGoals: ['muscle_gain'], targetWeightKg: 75 });
+    draw(FROM_RINGS);
+    await heading('Your goal');
+    expect(pressed(/Build muscle/)).toBe('true');
+    for (const choice of [/Lose weight/, /Keep my weight/, /Gain weight/]) expect(pressed(choice)).toBe('false');
+    expect(screen.queryByRole('region', { name: 'Your plan' })).toBeNull();
+    tap(/Gain weight/);
+    await saved({ weightGoal: 'gain' });
+    await waitFor(() => expect(panel().textContent).toContain('kcal a day'));
   });
 
   it('loads an old answer of "none" beside equipment without the "none", and finishes with that', async () => {

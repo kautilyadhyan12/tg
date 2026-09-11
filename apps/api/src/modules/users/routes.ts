@@ -136,6 +136,17 @@ export function registerUserRoutes(
     return reply.status(200).send(result);
   });
 
+  // Settings' "Reset onboarding" (RULINGS 2026-07-20: it wipes every answer),
+  // the answers only the screens ask included, which the old PUT {} could not
+  // reach. DELETE is idempotent — a second reset finds nothing and answers the
+  // same — so no Idempotency-Key. Same tenancy argument: no id param exists.
+  app.delete("/v1/users/me/onboarding", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const timeZone = parseTimeZone(req, reply);
+    if (timeZone === undefined) return;
+    const result = await service.resetOnboarding(usersDeps, authedUserId(req), timeZone);
+    return reply.status(200).send(result);
+  });
+
   // Health screening and Safe mode (ROADMAP 3b). Same tenancy argument as the
   // fitness profile: no id param, so only the signed-in person's own row.
   app.get("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {

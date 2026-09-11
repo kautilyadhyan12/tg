@@ -154,23 +154,21 @@ export const userFitnessProfiles = pgTable(
     heightCm: numeric("height_cm", { precision: 5, scale: 2 }),
     targetWeightKg: numeric("target_weight_kg", { precision: 5, scale: 2 }),
     fitnessLevel: text("fitness_level"), // NULL until answered — unanswered is not 'beginner' (Kd-approved)
-    fitnessGoals: text("fitness_goals").array(), // value set enforced in Zod, per the catalog.ts equipment/muscles precedent
+    fitnessGoals: text("fitness_goals").array(), // screen 1's "also work on"; value set CHECKed since 0028
     exerciseFrequency: integer("exercise_frequency"), // days per week
-    availableEquipment: text("available_equipment").array(), // value set enforced in Zod
+    availableEquipment: text("available_equipment").array(), // value set CHECKed since 0028, "none" alone
     sessionDurationMin: integer("session_duration_min"), // minutes
     preferredWorkoutTime: text("preferred_workout_time"),
     medicalConditions: text("medical_conditions"), // health data — see the DPDP note above
     onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
-    // Onboarding v2 (migration 0026; ROADMAP 4a). The ONE main goal of screen 1
-    // — the weight direction the plan maths works in is DERIVED from it
-    // (@app/shared PLAN_GOAL_BY_MAIN_GOAL), never stored. The v1 `fitnessGoals`
-    // array above is what Settings' goal chips show: screen 1 puts its goal
-    // first, a Settings save keeps the chips' order, and neither leaves a goal
-    // that moves the weight other than the main goal. Both save routes keep the
-    // two in step (users/repo.ts) until 4a-iv replaces them. Training days and
-    // session minutes are NOT duplicated here: they are `exerciseFrequency` and
-    // `sessionDurationMin`.
-    mainGoal: text("main_goal"),
+    // Onboarding v2 (migrations 0026 and 0028; ROADMAP 4a). Screen 1's ONE
+    // weight choice, stored as the direction the plan maths works in (lose ·
+    // maintain · gain) and never derived from another goal (RULINGS
+    // 2026-09-10); `fitnessGoals` above is the "also work on" list beside it.
+    // Settings asks the same two questions and writes the same two columns.
+    // Training days and session minutes are NOT duplicated here: they are
+    // `exerciseFrequency` and `sessionDurationMin`.
+    weightGoal: text("weight_goal"),
     pace: text("pace"),
     dayActivity: text("day_activity"),
     // Screen 5's two checks; NULL when skipped ("I'll rate myself"). Never an
@@ -189,9 +187,14 @@ export const userFitnessProfiles = pgTable(
       "user_fitness_profiles_preferred_workout_time_check",
       sql`${t.preferredWorkoutTime} IN ('morning','afternoon','evening')`,
     ),
+    check("user_fitness_profiles_weight_goal_check", sql`${t.weightGoal} IN ('lose','maintain','gain')`),
     check(
-      "user_fitness_profiles_main_goal_check",
-      sql`${t.mainGoal} IN ('weight_loss','muscle_gain','general_fitness','flexibility','endurance','posture','stress_relief')`,
+      "user_fitness_profiles_fitness_goals_check",
+      sql`${t.fitnessGoals} <@ ARRAY['muscle_gain','strength','general_fitness','endurance','flexibility','posture','balance','stress_relief','stay_healthy']::text[]`,
+    ),
+    check(
+      "user_fitness_profiles_available_equipment_check",
+      sql`${t.availableEquipment} <@ ARRAY['none','dumbbells','resistance_bands','kettlebells','pull_up_bar','gym']::text[] AND NOT ('none' = ANY (${t.availableEquipment}) AND cardinality(${t.availableEquipment}) > 1)`,
     ),
     check("user_fitness_profiles_pace_check", sql`${t.pace} IN ('gentle','steady','brisk')`),
     check(

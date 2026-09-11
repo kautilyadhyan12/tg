@@ -5,7 +5,7 @@ import { onboardingParams, onboardingService, refusedFinish } from './onboarding
 import { detectTimezone } from './userApi';
 
 const EMPTY = {
-  displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
+  displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
   dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
   sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };
@@ -28,7 +28,8 @@ describe('onboardingService', () => {
   it('reads and saves with the device zone, and never sends a day', async () => {
     const seen = answerWith({ answers: EMPTY, plan: null, missing: CORE });
     await onboardingService.get();
-    await onboardingService.patch({ mainGoal: 'posture' });
+    await onboardingService.patch({ weightGoal: 'maintain' });
+    await onboardingService.reset();
     // Whatever the browser reports, word for word (ICU may name the pinned
     // Asia/Kolkata by its older name, which the server knows too).
     const zone = detectTimezone();
@@ -36,8 +37,11 @@ describe('onboardingService', () => {
     expect(seen.map((r) => [r.method, r.url, r.params])).toEqual([
       ['get', '/v1/users/me/onboarding', { timeZone: zone }],
       ['patch', '/v1/users/me/onboarding', { timeZone: zone }],
+      ['delete', '/v1/users/me/onboarding', { timeZone: zone }],
     ]);
-    expect(JSON.parse(seen[1].data)).toEqual({ mainGoal: 'posture' });
+    expect(JSON.parse(seen[1].data)).toEqual({ weightGoal: 'maintain' });
+    // A reset sends no body: it clears every answer.
+    expect(seen[2].data).toBeUndefined();
   });
 
   it('sends no zone at all when the browser cannot say one', () => {

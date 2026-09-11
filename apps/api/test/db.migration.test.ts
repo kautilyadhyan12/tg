@@ -7,7 +7,16 @@ import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
 import { currentWeightKg } from "../src/modules/nutrition/repo.js";
-import { GYM_CHEER_PRESETS, GYM_NUDGE_PRESETS, ORG_PRIVILEGES, consentPurposeSchema, fitnessGoalSchema, orgTypeSchema } from "@app/shared";
+import {
+  GYM_CHEER_PRESETS,
+  GYM_NUDGE_PRESETS,
+  ORG_PRIVILEGES,
+  consentPurposeSchema,
+  equipmentSchema,
+  fitnessGoalSchema,
+  orgTypeSchema,
+  weightGoalSchema,
+} from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -721,19 +730,11 @@ d("0001_init on a real database", () => {
     }
   });
 
-  /** `0026`'s FIVE ONBOARDING v2 COLUMNS, read back off the deployed catalogue.
-   *
-   *  The MAIN GOAL CHECK carries the `0024` guard for the same reason: a `.sql`
-   *  file the journal does not name is applied silently and reports success,
-   *  and both directions of a drift fail far from the edit. A goal in the enum
-   *  without the migration 400s nothing and 500s the save on an unmapped 23514;
-   *  a goal in the CHECK without the enum is the direction only this test
-   *  covers — a row written with it is refused on the way OUT, at the service's
-   *  `onboardingAnswersSchema.parse`, turning that person's every onboarding
-   *  read into a 500.
-   *
-   *  The other four are proven by CAUSING them, and NULL is proven to pass all
-   *  five: a half-finished wizard is the normal state of this table. */
+  /** `0026`'s ONBOARDING v2 COLUMNS, read back off the deployed catalogue: the
+   *  four left after 0028 dropped `main_goal` (0028's own tests below cover
+   *  the weight choice that replaced it). Each CHECK is proven by CAUSING it,
+   *  and NULL is proven to pass all four: a half-finished wizard is the normal
+   *  state of this table. */
   it("0026's onboarding answer columns exist on the deployed database, with their CHECKs", async () => {
     const owner = await sql<{ id: string }[]>`
       INSERT INTO users (email, display_name) VALUES ('zz-0026@example.com', 'zz 0026')
@@ -742,32 +743,180 @@ d("0001_init on a real database", () => {
     const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
     try {
       await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${ownerId}) ON CONFLICT DO NOTHING`;
-      // Every one of the five is NULLable — the wizard saves as it goes.
+      // Every one of the four is NULLable — the wizard saves as it goes.
       const nulls = await sql<{ n: string }[]>`
         SELECT count(*)::text AS n FROM user_fitness_profiles
-        WHERE user_id = ${ownerId} AND main_goal IS NULL AND pace IS NULL
+        WHERE user_id = ${ownerId} AND pace IS NULL
           AND day_activity IS NULL AND push_ups_max IS NULL AND plank_hold_seconds IS NULL`;
       expect(nulls[0]?.n).toBe("1");
 
-      await refused(sql`UPDATE user_fitness_profiles SET main_goal = 'get_ripped' WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET pace = 'extreme' WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET day_activity = 'lying_down' WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = -1 WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = 501 WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = -1 WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET plank_hold_seconds = 3601 WHERE user_id = ${ownerId}`);
-
-      const [defRow] = await sql<{ def: string }[]>`
-        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
-        WHERE conrelid = 'user_fitness_profiles'::regclass
-          AND conname = 'user_fitness_profiles_main_goal_check'`;
-      const def = defRow?.def;
-      if (def === undefined) throw new Error("user_fitness_profiles_main_goal_check is not on the table");
-      const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
-      expect(inCheck).toEqual([...fitnessGoalSchema.options].sort());
     } finally {
       await sql`DELETE FROM users WHERE id = ${ownerId}`;
     }
+  });
+
+  /** MIGRATION `0028`: screen 1's weight choice is stored, `main_goal` is gone,
+   *  and the goals and the equipment are CHECKed, read back off the deployed
+   *  catalogue.
+   *
+   *  Each value set carries the `0024` guard for the same reason: a `.sql`
+   *  file the journal does not name is applied silently and reports success,
+   *  and both directions of a drift fail far from the edit. A value in the
+   *  enum without the migration 400s nothing and 500s the save on an unmapped
+   *  23514; a value in the CHECK without the enum is the direction only this
+   *  test covers — a row written with it is refused on the way OUT, at the
+   *  service's parse, turning that person's every onboarding read into a 500.
+   *  Each CHECK is also proven by CAUSING it, and NULL passes all three. */
+  it("0028 stores the weight choice, drops main_goal, and checks the goals and the equipment", async () => {
+    const [col] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_name = 'user_fitness_profiles' AND column_name = 'main_goal'`;
+    expect(col?.n, "user_fitness_profiles.main_goal still exists").toBe(0);
+    const valuesIn = async (name: string) => {
+      const [row] = await sql<{ def: string }[]>`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = 'user_fitness_profiles'::regclass AND conname = ${name}`;
+      if (row === undefined) throw new Error(`${name} is not on the table`);
+      return [...new Set([...row.def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]))].sort();
+    };
+    expect(await valuesIn("user_fitness_profiles_weight_goal_check")).toEqual([...weightGoalSchema.options].sort());
+    expect(await valuesIn("user_fitness_profiles_fitness_goals_check")).toEqual([...fitnessGoalSchema.options].sort());
+    expect(await valuesIn("user_fitness_profiles_available_equipment_check")).toEqual([...equipmentSchema.options].sort());
+
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0028@example.com', 'zz 0028')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const ownerId = owner[0]?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${ownerId}) ON CONFLICT DO NOTHING`;
+      const nulls = await sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM user_fitness_profiles
+        WHERE user_id = ${ownerId} AND weight_goal IS NULL AND fitness_goals IS NULL AND available_equipment IS NULL`;
+      expect(nulls[0]?.n).toBe("1");
+      await refused(sql`UPDATE user_fitness_profiles SET weight_goal = 'keep' WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET fitness_goals = ARRAY['weight_loss'] WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['barbell'] WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none', 'gym'] WHERE user_id = ${ownerId}`);
+      // What the screens send is taken.
+      await sql`
+        UPDATE user_fitness_profiles
+        SET weight_goal = 'maintain', fitness_goals = ARRAY['muscle_gain', 'balance'], available_equipment = ARRAY['gym', 'dumbbells']
+        WHERE user_id = ${ownerId}`;
+      await sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none'] WHERE user_id = ${ownerId}`;
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${ownerId}`;
+    }
+  });
+
+  /** MIGRATION `0028`'s DATA STATEMENTS, read out of the shipped file and run
+   *  on the old shapes they exist for — on a TEMPORARY copy of the table, so
+   *  this test never locks or alters the live one that other suites are
+   *  writing to at the same moment. The copy carries the old `main_goal`
+   *  column and none of 0028's CHECKs; its weight-choice CHECK goes on, the
+   *  old rows are built, and the three statements run — twice, to prove the
+   *  second run finds nothing to do. Then the file's own two list CHECKs go on
+   *  over the result. All of it is rolled back. One subject per branch:
+   *  weight loss · build muscle, on the list, off it, and beside a Weight Loss
+   *  tick (asked, never given a weight choice: RULINGS 2026-09-11) · a goal
+   *  that kept the weight, with no list, and beside a Weight Loss tick · the
+   *  old form (no main goal) with Weight Loss ticked, the same answer as
+   *  "Lose weight" · a row with nothing to change · "none" beside equipment,
+   *  "none" alone, and equipment alone. */
+  it("0028 moves every old answer: weight loss to lose, the goals that kept the weight to maintain, Build muscle to asked", async () => {
+    const migration = await readFile(new URL("../drizzle/0028_many_goals_and_a_gym.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    const onCopy = (s: string) => s.replaceAll('"user_fitness_profiles"', '"ufp_0028"');
+    const moves = chunks.filter((s) => s.includes('UPDATE "user_fitness_profiles"')).map(onCopy);
+    if (moves.length !== 3) throw new Error(`0028 no longer holds exactly three data statements (found ${String(moves.length)})`);
+    const checks = chunks
+      .filter((s) => /ADD CONSTRAINT "user_fitness_profiles_(weight_goal|fitness_goals|available_equipment)_check"/.test(s))
+      .map(onCopy);
+    const [weightCheck, ...listChecks] = checks;
+    if (weightCheck === undefined || listChecks.length !== 2) {
+      throw new Error(`0028 no longer adds its three CHECKs (found ${String(checks.length)})`);
+    }
+
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE ufp_0028 (LIKE user_fitness_profiles INCLUDING DEFAULTS) ON COMMIT DROP`;
+        await tx`ALTER TABLE ufp_0028 ADD COLUMN main_goal text`;
+        await tx.unsafe(weightCheck);
+        const person = async (row: {
+          mainGoal: string | null;
+          goals: string[] | null;
+          equipment?: string[];
+          target?: number;
+          pace?: string;
+        }): Promise<string> => {
+          const [r] = await tx<{ user_id: string }[]>`
+            INSERT INTO ufp_0028 (user_id, main_goal, fitness_goals, available_equipment, target_weight_kg, pace)
+            VALUES (gen_random_uuid(), ${row.mainGoal}, ${row.goals}, ${row.equipment ?? null}, ${row.target ?? null}, ${row.pace ?? null})
+            RETURNING user_id`;
+          if (r === undefined) throw new Error("fixture insert failed");
+          return r.user_id;
+        };
+        const loser = await person({ mainGoal: "weight_loss", goals: ["weight_loss", "flexibility"], target: 65, pace: "steady" });
+        const builder = await person({ mainGoal: "muscle_gain", goals: ["muscle_gain", "posture"], target: 75, pace: "steady" });
+        const builderOffList = await person({ mainGoal: "muscle_gain", goals: ["posture"] });
+        const builderTickedLoss = await person({ mainGoal: "muscle_gain", goals: ["weight_loss", "muscle_gain"] });
+        const keeper = await person({ mainGoal: "flexibility", goals: null });
+        const keeperTickedLoss = await person({ mainGoal: "flexibility", goals: ["weight_loss"] });
+        const oldForm = await person({ mainGoal: null, goals: ["weight_loss", "muscle_gain", "stress_relief"] });
+        const settled = await person({ mainGoal: null, goals: ["posture"] });
+        const nonePair = await person({ mainGoal: null, goals: null, equipment: ["none", "dumbbells"] });
+        const noneAlone = await person({ mainGoal: null, goals: null, equipment: ["none"] });
+        const kit = await person({ mainGoal: null, goals: null, equipment: ["dumbbells", "kettlebells"] });
+
+        const stateOf = async (userId: string) => {
+          const [r] = await tx<
+            {
+              weight_goal: string | null;
+              fitness_goals: string[] | null;
+              available_equipment: string[] | null;
+              target_weight_kg: string | null;
+              pace: string | null;
+            }[]
+          >`
+            SELECT weight_goal, fitness_goals, available_equipment, target_weight_kg, pace
+            FROM ufp_0028 WHERE user_id = ${userId}`;
+          return r;
+        };
+        const expected: [string, Record<string, unknown>][] = [
+          [loser, { weight_goal: "lose", fitness_goals: ["flexibility"], target_weight_kg: "65.00", pace: "steady" }],
+          // Asked, never given a weight choice; the target and pace stay.
+          [builder, { weight_goal: null, fitness_goals: ["muscle_gain", "posture"], target_weight_kg: "75.00", pace: "steady" }],
+          [builderOffList, { weight_goal: null, fitness_goals: ["muscle_gain", "posture"] }],
+          // The main goal outranks a Weight Loss tick still on the old list.
+          [builderTickedLoss, { weight_goal: null, fitness_goals: ["muscle_gain"] }],
+          [keeper, { weight_goal: "maintain", fitness_goals: ["flexibility"] }],
+          // Here too the main goal outranks the old Weight Loss tick: no calorie cut.
+          [keeperTickedLoss, { weight_goal: "maintain", fitness_goals: ["flexibility"] }],
+          // Weight Loss ticked on the old form is kept as "Lose weight".
+          [oldForm, { weight_goal: "lose", fitness_goals: ["muscle_gain", "stress_relief"] }],
+          [settled, { weight_goal: null, fitness_goals: ["posture"] }],
+          [nonePair, { available_equipment: ["dumbbells"] }],
+          [noneAlone, { available_equipment: ["none"] }],
+          [kit, { available_equipment: ["dumbbells", "kettlebells"] }],
+        ];
+        for (let run = 1; run <= 2; run += 1) {
+          for (const statement of moves) await tx.unsafe(statement);
+          for (const [userId, state] of expected) expect(await stateOf(userId), `run ${String(run)}: ${userId}`).toMatchObject(state);
+        }
+        // The two list CHECKs 0028 adds hold over everything its statements left.
+        for (const statement of listChecks) await tx.unsafe(statement);
+        throw new Error("ROLLBACK-0028-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0028-BACKFILL-FIXTURE") return;
+        throw err;
+      });
   });
 
   /** MIGRATION `0027`: BODY WEIGHT HAS NO COPY. `users.weight_kg` is gone, the
