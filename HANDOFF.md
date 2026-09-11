@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · 4a-iii merged (PR #61); Kd: building muscle is not gaining weight
+
+- Kd's click-through passed (the test account ended on Weight Loss, target 68 kg, renamed; no server errors). Merged as
+  de6814b, a merge commit like #60's; CI green on 55ceb9f; branch deleted.
+- Kd: Muscle Gain is not weight gain, so choosing it must never ask a target weight (RULINGS 2026-09-11). That is what
+  4a-iv's goal split builds (RULINGS 2026-09-10). Its roadmap line no longer assumes "build muscle → gain" for people who
+  already chose it: the 4a-iv plan asks Kd keep or gain, with the science.
+- The first sheet's steps 5–6 never showed: Kd fixed the target at step 4 (80 kg, above 73). Right behaviour; a step
+  that is only for looking must say "don't change it yet".
+- Local: API 3000 on local Postgres and web 5173 still running from this chat.
+- Open: 4a-iv, plan first (ten lines to Kd), starting with where Build muscle's people land.
+
 ## 2026-09-11 · 4a-iii last re-check: no Critical/High; its three Lows and three weak tests fixed, PR #61
 
 - Settings reads the goal the calories follow: the fitness-profile reply carries `mainGoal`; the Profile tab judges a
