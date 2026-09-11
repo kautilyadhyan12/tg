@@ -10,9 +10,10 @@
 //   arithmetic (2B anti-hallucination rule; DECISIONS 2026-07-12 P2.6a).
 //
 // The D2 interim is CLOSED: getTargets was the file's last old-backend call
-// and now rides the new GET /v1/nutrition/targets (PR #42, the Mifflin-St Jeor
-// port). nutritionApi runs entirely on the new API — no mlApi import remains,
-// pinned by the usage-guard test.
+// and now rides the new GET /v1/nutrition/targets (PR #42), which since
+// ROADMAP 4a-iii answers with the person's own onboarding plan. nutritionApi
+// runs entirely on the new API — no mlApi import remains, pinned by the
+// usage-guard test.
 import authApi from './authApi';
 
 /** The Nutrition page's left column WAITS on the targets request (its spinner
@@ -208,10 +209,12 @@ export const nutritionService = {
   updateDishware: (id, patch) => authApi.patch(`/v1/nutrition/dishware/${id}`, patch),
   deleteDishware: (id) => authApi.delete(`/v1/nutrition/dishware/${id}`), // 204
 
-  /** Daily calorie + macro targets, computed SERVER-side from the stored
-   *  profile. Bounded by TARGETS_TIMEOUT_MS. Returns {targets, missing[]} — `targets` is null exactly when
-   *  `missing` is non-empty, because the server refuses to invent a goal for
-   *  an incomplete profile (Kd ruling). Map with toDisplayTargets below. */
+  /** The macro rings' daily calories and macros: the person's own plan, worked
+   *  out SERVER-side from their onboarding answers — the number the onboarding
+   *  screens show. Bounded by TARGETS_TIMEOUT_MS. Returns {targets, missing[]}
+   *  — `targets` is null exactly when `missing` names a question the plan still
+   *  needs, because the server refuses to invent a goal (Kd ruling). Map with
+   *  toDisplayTargets below. */
   getTargets: () => authApi.get('/v1/nutrition/targets', { timeout: TARGETS_TIMEOUT_MS }),
 };
 
@@ -249,19 +252,12 @@ export function toDisplayTargets(response) {
     : undefined;
 }
 
-/** Field names the user would recognise. An unknown key passes through rather
- *  than being dropped — naming fewer fields than are actually required would
- *  send someone to Settings to fix the wrong thing. */
-const TARGET_INPUT_LABELS = {
-  age: 'age',
-  gender: 'gender',
-  heightCm: 'height',
-  weightKg: 'weight',
-  exerciseFrequency: 'workouts per week',
-};
-export function missingTargetLabels(missing) {
+/** The questions the SERVER says the plan still needs, as it sent them (the
+ *  plan's own keys: goal, dayActivity, …); MacroRings says them in words and
+ *  opens onboarding on them. */
+export function missingAnswers(missing) {
   // Array.isArray, not `?? []` (T3 F5): a non-array threw, and the throw landed
   // AFTER the caller had already stored good targets — so the catch discarded
   // real numbers and showed the prompt instead.
-  return (Array.isArray(missing) ? missing : []).map((key) => TARGET_INPUT_LABELS[key] ?? key);
+  return Array.isArray(missing) ? missing.filter((key) => typeof key === 'string') : [];
 }

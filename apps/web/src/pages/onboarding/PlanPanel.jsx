@@ -58,7 +58,7 @@ export default function PlanPanel({ plan, direction, units }) {
       </button>
       {open && (
         <ol id="plan-working" aria-label="How your number is worked out" className="mt-2 space-y-2.5">
-          {workingSteps(plan).map((s) => (
+          {workingSteps(plan, direction).map((s) => (
             <li key={`working-${s.title}`} className="text-xs">
               <span className="block font-semibold text-white">{s.title}</span>
               <span className="block tabular-nums">{s.sum}</span>

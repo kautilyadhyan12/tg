@@ -131,6 +131,10 @@ export const fitnessProfileSchema = z.object({
   targetWeightKg: z.number().nullable(),
   fitnessLevel: fitnessLevelSchema.nullable(),
   fitnessGoals: z.array(fitnessGoalSchema),
+  /** The goal the calories follow (screen 1's, kept in step by a Settings
+   *  save). The list keeps the chips' order, so its first weight goal is not
+   *  always this one: Settings reads the plan's side from here. */
+  mainGoal: fitnessGoalSchema.nullable(),
   exerciseFrequency: z.number().int().nullable(), // days per week
   availableEquipment: z.array(equipmentSchema),
   sessionDurationMin: z.number().int().nullable(), // minutes

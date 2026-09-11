@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { missingText } from '../../pages/onboarding/onboardingModel';
 
 // ── Single animated ring ──────────────────────────────────────────────────────
 function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, target }) {
@@ -59,14 +60,18 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
 
 // ── Honest empty state ───────────────────────────────────────────────────────
 // Kd's exact-data rule: a target we cannot compute is not shown as a number.
-// It names the fields the SERVER said are missing, so the user knows exactly
-// what to add rather than hunting through Settings.
-function NoTargets({ missingInputs }) {
-  const list = missingInputs.length > 0
-    ? missingInputs.length === 1
-      ? missingInputs[0]
-      : `${missingInputs.slice(0, -1).join(', ')} and ${missingInputs[missingInputs.length - 1]}`
-    : null;
+// It names the questions the SERVER said the plan still needs, in the
+// onboarding screens' own words, and "Answer now" opens onboarding, which
+// starts on the first of them and comes back here (ROADMAP 4a-iii). A target
+// on the wrong side of the weight is not a question left open, since the
+// person has one: the card asks for a new one, in words that fit whether the
+// goal changed or the target was reached, and the link opens the target
+// screen, which shows it and offers only the goal's side (RULINGS 2026-09-11).
+function NoTargets({ missingInputs, targetWrongSide }) {
+  const list = missingInputs.length > 0 ? missingText(missingInputs) : null;
+  let text = 'Finish setting up to see your daily calories and macros.';
+  if (targetWrongSide) text = 'Time to set a new target weight. Pick one to see your daily calories and macros.';
+  else if (list !== null) text = `To see your daily calories and macros, answer ${list}.`;
   return (
     <div className="card-glass">
       <h3 className="text-sm font-semibold mb-3"
@@ -75,16 +80,15 @@ function NoTargets({ missingInputs }) {
       </h3>
       <p className="text-xs leading-relaxed mb-4"
          style={{ color: 'rgba(255,255,255,0.55)' }}>
-        {list === null
-          ? 'Add your profile details to see your daily calorie and macro targets.'
-          : `Add your ${list} to see your daily calorie and macro targets.`}
+        {text}
       </p>
       <Link
-        to="/settings"
+        to="/onboarding"
+        state={{ returnTo: '/nutrition' }}
         className="inline-block text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
         style={{ color: '#FF8A1F', backgroundColor: 'rgba(255,138,31,0.12)' }}
       >
-        Go to Settings
+        {targetWrongSide ? 'Pick a new target' : 'Answer now'}
       </Link>
     </div>
   );
@@ -111,7 +115,7 @@ function TargetsUnavailable() {
 }
 
 // ── Full macro rings panel ────────────────────────────────────────────────────
-export default function MacroRings({ totals, targets, missingInputs = [] }) {
+export default function MacroRings({ totals, targets, missingInputs = [], targetWrongSide = false }) {
   const safeTotals = totals || {};
 
   // THREE states, and they must NOT collapse (T3 F1 — the first version used
@@ -129,7 +133,7 @@ export default function MacroRings({ totals, targets, missingInputs = [] }) {
   // dark for everyone; with one live they would fire ONLY for the
   // incomplete-profile user — precisely the person who must not be shown a
   // stranger's calorie goal rendered identically to their own.
-  if (targets === null) return <NoTargets missingInputs={missingInputs} />;
+  if (targets === null) return <NoTargets missingInputs={missingInputs} targetWrongSide={targetWrongSide} />;
   if (targets === undefined) return <TargetsUnavailable />;
 
   const kcalTarget    = targets.kcal;

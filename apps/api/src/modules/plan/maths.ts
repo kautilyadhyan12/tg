@@ -14,9 +14,17 @@
 //                  weight falls (Hall, NIH), so every finish date is an estimate.
 //   paces          0.25 / 0.5 / 0.75 kg a week, inside the 0.5–1 kg a week the CDC and
 //                  the NHS call a safe rate of loss.
-//   the 1 200 floor, the protein table, the 25 % fat share and the 50 g carbohydrate
-//                  floor are the constants nutrition/targets.ts already used; that file
-//                  now reads them from here so the two calculators cannot drift.
+//   protein        grams per kilo, never a share of the calories (Kd, 2026-09-11): a
+//                  share would shrink it during a cut, just when it keeps muscle. 2.0
+//                  on a loss is the top of the 1.4–2.0 g/kg a day the ISSN's 2017
+//                  position stand gives people who train, which asks for more during
+//                  a cut; 1.6 to keep the weight sits inside that range; 2.2 to gain
+//                  is the app's own, above the 1.62 past which extra protein added no
+//                  muscle in Morton and colleagues' 2018 meta-analysis. A body heavier
+//                  than BMI 30 for its height is counted at its BMI-30 weight
+//                  (@app/shared `proteinWeight`; Weijs, 2025).
+//   the 1 200 floor, the 25 % fat share and the 50 g carbohydrate floor are the
+//                  constants of the app's first nutrition calculator, carried over.
 //   BMI 18.5       the WHO underweight line.
 // Engineering choices of this file, not textbook tables: the no-exercise day
 // factors (1.2 is the standard sedentary figure; 1.3 / 1.45 / 1.6 are ours, with
@@ -33,6 +41,7 @@ import {
   PACE_KG_PER_WEEK,
   planInputsSchema,
   planResponseSchema,
+  proteinWeight,
   type DayActivity,
   type Gender,
   type MissingPlanInput,
@@ -84,7 +93,8 @@ export const DAY_FACTOR: Readonly<Record<DayActivity, number>> = {
 /** A training session burns MET × kg × hours; 5 is moderate calisthenics. */
 export const TRAINING_MET = 5;
 
-/** Grams of protein per kilo of body weight, by goal. */
+/** Grams of protein per kilo, by goal (each figure's source is in the header),
+ *  of the weight `proteinWeight` counts. */
 export const PROTEIN_G_PER_KG: Readonly<Record<PlanGoal, number>> = {
   lose: 2.0,
   gain: 2.2,
@@ -141,14 +151,15 @@ export interface Macros {
 }
 
 /** The macro split for a day's calories. Fat takes its share; protein asks for
- *  its grams per kilo; carbohydrates take the rest but never less than the floor,
- *  and when the floor bites it is protein that gives way — so the three always
- *  add up to the calories (a heavy body at 2 g/kg would otherwise be handed more
- *  protein and fat than the whole day holds). */
-export function macrosFor(kcal: number, weightKg: number, proteinPerKg: number): Macros {
+ *  its grams per kilo of the weight it is counted on; carbohydrates take the
+ *  rest but never less than the floor, and when the floor bites it is protein
+ *  that gives way — so the three always add up to the calories (a tall, heavy
+ *  body on a low day would otherwise be handed more protein and fat than the
+ *  whole day holds). */
+export function macrosFor(kcal: number, proteinWeightKg: number, proteinPerKg: number): Macros {
   const fatG = (kcal * FAT_SHARE) / 9;
   const proteinCeilingG = (kcal - CARBS_FLOOR_G * 4 - fatG * 9) / 4;
-  const proteinG = Math.min(weightKg * proteinPerKg, proteinCeilingG);
+  const proteinG = Math.min(proteinWeightKg * proteinPerKg, proteinCeilingG);
   const carbsG = (kcal - proteinG * 4 - fatG * 9) / 4;
   return { proteinG: Math.round(proteinG), carbsG: Math.round(carbsG), fatG: Math.round(fatG) };
 }
@@ -252,13 +263,14 @@ export function computePlan(input: PlanInputs): PlanNumbers {
   if (outOfReach) flags.push({ code: "target_out_of_reach" });
 
   const proteinPerKg = PROTEIN_G_PER_KG[input.goal];
+  const protein = proteinWeight(input.weightKg, input.heightCm);
   const formula = formulaFor(input.gender);
   return {
     restingBurnKcal: steps.restingKcal,
     dailyBurnKcal: burn,
     targetKcal: eat.targetKcal,
     dailyChangeKcal: eat.targetKcal - burn,
-    ...macrosFor(eat.targetKcal, input.weightKg, proteinPerKg),
+    ...macrosFor(eat.targetKcal, protein.kg, proteinPerKg),
     plannedTargetKg: plannedTarget ?? input.weightKg,
     daysToTarget: days,
     finishDate: days === null ? null : addDays(input.today, days),
@@ -286,7 +298,12 @@ export function computePlan(input: PlanInputs): PlanNumbers {
           : { pace: input.pace, kgPerWeek: PACE_KG_PER_WEEK[input.pace], kcalPerKg: KCAL_PER_KG, kcal: change },
       beforeFloorKcal: burn + change,
       floorKcal: CALORIE_FLOOR_KCAL,
-      protein: { gPerKg: proteinPerKg, weightKg: input.weightKg, wantedG: Math.round(input.weightKg * proteinPerKg) },
+      protein: {
+        gPerKg: proteinPerKg,
+        weightKg: protein.kg,
+        referenceBmi: protein.referenceBmi,
+        wantedG: Math.round(protein.kg * proteinPerKg),
+      },
       fatShare: FAT_SHARE,
       carbsFloorG: CARBS_FLOOR_G,
       finish: days === null ? null : { kgToMove: kg, kcalPerKg: KCAL_PER_KG },

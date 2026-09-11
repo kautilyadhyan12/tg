@@ -265,6 +265,14 @@ export function targetWrongSide(direction, targetKg, weightKg) {
   return direction === 'gain' ? targetKg <= weightKg : targetKg >= weightKg;
 }
 
+/** Screen 3's words for such a target, in the units on show. Settings' target
+ *  box says the same, so the two never explain it differently. */
+export function wrongSideText(direction, targetKg, weightKg, units) {
+  const side = direction === 'gain' ? 'above' : 'below';
+  const shown = (kg) => weightShown(weightParts(kg, units), units);
+  return `${shown(targetKg)} is not ${side} your current ${shown(weightKg)}. Pick a weight ${side} it.`;
+}
+
 const tenthsOf = ({ whole, tenth }) => whole * 10 + tenth;
 const partsOf = (tenths) => ({ whole: Math.floor(tenths / 10), tenth: tenths % 10 });
 
@@ -456,8 +464,23 @@ const DAY_SOURCE = {
 export const WORKING_NOTE = 'Each step is rounded to a whole calorie or gram.';
 export const METRIC_NOTE = 'The formulas work in kilograms and centimetres.';
 
-/** The steps, in order, as `{ title, sum, note }`; `note` names the source. */
-export function workingSteps(plan) {
+/** Where each goal's protein figure comes from: the sources plan/maths.ts names
+ *  for its table. Grams per kilo, never a share of the calories (Kd, 2026-09-11).
+ *  Worded for the goal, not the plan: the figure is the goal's even when the
+ *  plan holds the weight (under 18, a health yes, a target out of reach). */
+const PROTEIN_SOURCE = {
+  lose: (g) =>
+    `${g} g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).`,
+  maintain: (g) =>
+    `${g} g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).`,
+  gain: (g) =>
+    `${g} g per kilo is the app's own figure for building muscle, above the 1.6 g per kilo a day past which extra protein added no more muscle in a review of 49 trials (Morton and colleagues, 2018).`,
+};
+
+/** The steps, in order, as `{ title, sum, note }`; `note` names the source.
+ *  `direction` (lose · gain · maintain) picks the source of the protein
+ *  figure; every number is the plan's own. */
+export function workingSteps(plan, direction) {
   const w = plan.workings;
   const r = w.resting;
   const t = w.training;
@@ -505,6 +528,14 @@ export function workingSteps(plan) {
     note: eatNote,
   });
   const p = w.protein;
+  const source = PROTEIN_SOURCE[direction];
+  // A body heavier than the reference BMI is counted at that BMI's weight
+  // (Kd, 2026-09-11), and the step says so rather than print a weight the
+  // person does not recognise.
+  const counted =
+    p.referenceBmi === null || p.referenceBmi === undefined
+      ? ''
+      : `Counted on ${num(p.weightKg)} kg, the weight at a BMI of ${num(p.referenceBmi)} for your height, rather than your ${num(r.weightKg)} kg, as protein guidance for heavier bodies does (Weijs, 2025). `;
   steps.push(
     {
       title: 'Protein',
@@ -512,7 +543,7 @@ export function workingSteps(plan) {
         plan.proteinG === p.wantedG
           ? `${num(p.gPerKg)} g × ${num(p.weightKg)} kg = ${p.wantedG} g`
           : `${num(p.gPerKg)} g × ${num(p.weightKg)} kg would be ${p.wantedG} g, more than the day's calories leave room for, so ${plan.proteinG} g`,
-      note: `${num(p.gPerKg)} g per kilo is the app's own figure for your goal.`,
+      note: `${counted}${source ? source(num(p.gPerKg)) : `${num(p.gPerKg)} g per kilo is the app's own figure for your goal.`}`,
     },
     {
       title: 'Fat',

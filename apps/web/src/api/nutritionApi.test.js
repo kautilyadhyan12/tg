@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { composeAddIngredient, dataUrlToBase64, missingTargetLabels, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
+import { composeAddIngredient, dataUrlToBase64, missingAnswers, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -400,19 +400,19 @@ describe('nutritionService repoint (Card 5a)', () => {
   // T3 F5: `(missing ?? []).map` threw on a non-array, and the throw landed
   // AFTER setTargets had already stored good targets — so the catch discarded
   // real numbers and showed the prompt instead.
-  it('missingTargetLabels survives a non-array without throwing', () => {
-    for (const bad of [null, undefined, 'age', 42, {}]) {
-      expect(() => missingTargetLabels(bad)).not.toThrow();
-      expect(missingTargetLabels(bad)).toEqual([]);
+  it('missingAnswers survives a non-array without throwing', () => {
+    for (const bad of [null, undefined, 'goal', 42, {}]) {
+      expect(() => missingAnswers(bad)).not.toThrow();
+      expect(missingAnswers(bad)).toEqual([]);
     }
   });
 
-  it('missingTargetLabels renders plain English, never raw field names', () => {
-    expect(missingTargetLabels(['age', 'gender', 'heightCm', 'weightKg', 'exerciseFrequency']))
-      .toEqual(['age', 'gender', 'height', 'weight', 'workouts per week']);
-    expect(missingTargetLabels([])).toEqual([]);
-    // An unknown key (a future sixth input) is passed through rather than
-    // dropped — silently omitting it would name fewer fields than are needed.
-    expect(missingTargetLabels(['somethingNew'])).toEqual(['somethingNew']);
+  it("missingAnswers keeps the server's own question keys, in its order, for the rings to word", () => {
+    expect(missingAnswers(['goal', 'dayActivity'])).toEqual(['goal', 'dayActivity']);
+    expect(missingAnswers([])).toEqual([]);
+    // A key this screen does not know yet is kept, never dropped: naming fewer
+    // questions than the plan needs would send the person to the wrong one.
+    expect(missingAnswers(['somethingNew'])).toEqual(['somethingNew']);
+    expect(missingAnswers(['goal', 7, null])).toEqual(['goal']);
   });
 });

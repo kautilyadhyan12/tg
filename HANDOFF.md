@@ -4,6 +4,60 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · 4a-iii last re-check: no Critical/High; its three Lows and three weak tests fixed, PR #61
+
+- Settings reads the goal the calories follow: the fitness-profile reply carries `mainGoal`; the Profile tab judges a
+  target by it, not by the list's first weight goal, and the Fitness tab ticks it when an old list holds both.
+- The rings' wrong-side card: "Time to set a new target weight. Pick one to see your daily calories and macros." (true
+  for a reached target too); the link still says "Pick a new target". The entry below is cut to ten lines.
+- Tests: the Settings rename takes the server's spelling, a refused rename changes nothing; a Settings save of both
+  weight goals, from Flexibility and from the old form, keeps only the first.
+- Verified: shared + api tsc/eslint clean · shared 83 · api route files 49 · web changed files 51; web lint's 4 are
+  master's 4. Red on the old code: web 6. Deliberate breaks red: rename 2; server 4 (a save keeping both weight goals,
+  the contract without `mainGoal`). Full suites left to CI.
+- Open: CI, Kd's click-through (API 3000 local, web 5173, `kd.wheels.test`), merge; no review round left (§2.6).
+
+## 2026-09-11 · 4a-iii re-check fixed (one High, four Lows), branch `rings-read-the-plan`, PR #61
+
+- High: a name changed on "About you" reaches the sidebar and the greeting at once. The onboarding page passes on the
+  name the server holds after every save that lands, not only at Finish; a Settings rename does the same, and Settings'
+  header and Account tab show the name again (they read `fullName`, which the profile never had).
+- Lows: the rings name a wrong-side target as its own case (`targetWrongSide`: "Your target weight no longer fits your
+  goal" + "Pick a new target"); a Settings save keeps only the weight goal the calories follow; Settings' target box
+  refuses a typed wrong-side target in screen 3's sentence (a stored one is named, the rest still saves); two comments.
+- Verified: shared + api tsc/eslint clean · api unit 19, route files 68, full local 961 + two sign-in files red under load
+  (alone 40/40), no-database 298 · web 1984 (poseAssets.contract the known local red; the onboarding page tests now wait
+  3 s/15 s, the full run pushed two past the defaults) · lint adds nothing · new tests red on old code (api 9, web 11).
+- Open: fresh-chat re-check of these fixes, Kd's click-through (API 3000 local, web 5173, `kd.wheels.test`), CI, merge.
+
+## 2026-09-11 · 4a-iii review round 1 fixed, and Kd's goal ruling, branch `rings-read-the-plan`, PR #61
+
+- Kd rejected my first H1 fix (the rings asked "your goal" again): a change takes effect at once (RULINGS 2026-09-11).
+  A Settings save now moves the calories: a ticked weight goal sets them, else the main goal while ticked, else the
+  first ticked; Weight Loss and Muscle Gain untick each other. Screen 1's goal goes first; only a goal that fights it leaves.
+- A target on the wrong side of the weight makes the rings ask for the target, not show the held weight as the goal's number.
+- L1–L3 fixed (name saved before "Back to the app"; Sign out beside it; "for a weight-loss goal"). Tests mount the page
+  through ProtectedRoute; every new test red on the old code; deliberate breaks red (guard 5, failed save 1, chip 2).
+- Verified: api tsc/eslint 0 · changed 86 · full local 978 + catalog.seed's known race (alone 7/7) · no-database 298 ·
+  web 1970 (poseAssets.contract the known local red); Settings.jsx's 4 lint errors predate this.
+- Open: fresh-chat re-check, Kd's click-through (API 3000 local, web 5173, `kd.oldform.0911`), CI, merge. Reset keeping
+  the v2 answers is on 4a-iv.
+
+## 2026-09-11 · One daily-calories number: the rings read the plan (item 4a-iii), branch `rings-read-the-plan`
+
+- Kd rejected the protein question as first framed (cap at 35 % or keep) and asked for the science. Researched
+  (ISSN 2017, ACSM/AND/DC 2016, Longland 2016, Devries 2018, Weijs 2025): grams per kilo, never a share of the calories;
+  a body over BMI 30 is counted at its BMI-30 weight (120 kg at 175 cm: 184 g, not 240). RULINGS 2026-09-11.
+- Built: `/v1/nutrition/targets` reshapes the plan from `users/service getUserPlan`, the function the onboarding routes
+  use (old −400/+300 calculator retired). Empty rings name the open questions; "Answer now" → onboarding's first open
+  screen → back to Nutrition; a finished person there gets "Back to the app", not "Sign out". The protein working
+  carries `referenceBmi`; "How is this worked out?" names each goal's source. The `fitness_goals` mirror stays (Settings).
+- Verified: shared tsc/eslint 0, 83 · api tsc/eslint 0, unit 74, local routes 84, CI-shaped 297, full local 951 + the two
+  known flakes (pass alone, 30) · web 1963 (poseAssets.contract the known local red). New tests red on the old src; 13 of
+  13 deliberate breaks red. Local: API 3000 on local Postgres, web 5173; `kd.oldform.0911@example.com` is the old-form
+  person (120 kg, 175 cm, missing goal + "your day"); the sign-in code prints in the API log.
+- Open: Kd's click-through, the fresh-chat review, CI, merge. Then 4a-iv (its line now carries the Settings-goal gap).
+
 ## 2026-09-11 · Screens 1–7: the re-check's four Lows (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
 
 - The fresh-chat re-check of round 1 found no Critical/High and four Lows; all four are fixed here. No third review (§2.6).

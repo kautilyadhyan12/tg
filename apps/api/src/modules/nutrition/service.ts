@@ -9,8 +9,8 @@ import { z } from "zod";
 import type { ChosenItem, Meal, MealItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
-import { getUserSyncContext, getUserTargetContext } from "../users/service.js";
-import { resolveTargets } from "./targets.js";
+import { getUserPlan, getUserSyncContext } from "../users/service.js";
+import { targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
@@ -288,10 +288,11 @@ const totals = (items: readonly MealItem[]) => ({
  *  server-side from stored profile data, never from anything the client sends).
  *  Returns targets OR the list of details still missing — never a default. */
 export async function getTargets(deps: NutritionDeps, userId: string): Promise<NutritionTargetsResponse> {
-  // resolveTargets parses its own output through the shared contract (the P2.2
-  // catalog precedent), so the null-exactly-when-missing refine() — a rule the
-  // TYPES cannot express — holds for every caller, not just this one.
-  return resolveTargets(await getUserTargetContext(deps.sql, userId));
+  // The rings' numbers ARE the plan's (ROADMAP 4a-iii). No time zone is sent:
+  // it only dates the finish, which the rings do not show, so the stored zone
+  // serves. targetsFromPlan parses through the shared contract, so the
+  // null-exactly-when-missing refine() holds for every caller.
+  return targetsFromPlan(await getUserPlan(deps.sql, userId, null));
 }
 
 /** Shared badge hook: failure degrades with a warn — a meal save must never

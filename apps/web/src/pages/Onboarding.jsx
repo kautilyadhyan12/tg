@@ -4,10 +4,10 @@
 // server's plan number sits on every screen from the moment it exists.
 // Screens 8–12 (health, food, running, code, your plan) follow in 4b and 4c.
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Check, ChevronLeft, ChevronRight, Clock, Dumbbell, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PlanPanel from './onboarding/PlanPanel';
 import {
@@ -47,6 +47,11 @@ const SCREEN_VIEWS = {
 
 const NAME_NEEDED = 'Type the name we should call you.';
 
+/** Where a person sent here from elsewhere in the app goes back to (the macro
+ *  rings' "Answer now", ROADMAP 4a-iii). Anything else is the dashboard: a
+ *  value in the page's state is never followed as an address. */
+const RETURN_TO = new Set(['/nutrition']);
+
 function Spinner() {
   return (
     <div className="flex justify-center py-16">
@@ -59,14 +64,22 @@ function Spinner() {
 }
 
 export default function Onboarding() {
-  const navigate               = useNavigate();
-  const { updateUser, logout } = useAuth();
+  const navigate                     = useNavigate();
+  const location                     = useLocation();
+  const { user, updateUser, logout } = useAuth();
 
-  // THE ONLY WAY OUT OF THIS SCREEN WITHOUT FINISHING IT (Kd, 2026-08-19).
-  // `ProtectedRoute` sends every un-onboarded account here and the wizard has
-  // no sidebar, so a person who picked the wrong door, or wants to stop, needs
-  // this. It is NOT a skip: it ends the session and returns to the login page,
-  // so the gate is untouched. A separate flag from the wizard's own `busy`,
+  // Someone who already finished setup, sent back here to answer a question
+  // the plan still needs, is not locked in until they finish again: "Back to
+  // the app" sits beside Sign out for them.
+  const finished = user?.onboardingCompleted === true;
+  const returnTo = RETURN_TO.has(location.state?.returnTo) ? location.state.returnTo : '/dashboard';
+
+  // Sign out, for everyone, and THE ONLY WAY OUT OF THIS SCREEN WITHOUT
+  // FINISHING IT for someone who has not (Kd, 2026-08-19). `ProtectedRoute`
+  // sends every un-onboarded account here and the wizard has no sidebar, so a
+  // person who picked the wrong door, or wants to stop, needs this. It is NOT
+  // a skip: it ends the session and returns to the login page, so the gate is
+  // untouched. A separate flag from the wizard's own `busy`,
   // because the two waits mean opposite things: one is saving the answers,
   // the other is leaving them.
   const [signingOut, setSigningOut] = useState(false);
@@ -77,7 +90,16 @@ export default function Onboarding() {
     navigate('/login');
   };
 
-  const ob = useOnboardingAnswers();
+  // The rest of the app (the sidebar, the dashboard's greeting) calls the
+  // person by the name the server holds, so a name saved here reaches it the
+  // moment its save lands, whichever way they then leave this page.
+  const ob = useOnboardingAnswers({
+    onSaved: (saved) => {
+      if (typeof saved.displayName === 'string' && saved.displayName !== user?.displayName) {
+        updateUser({ displayName: saved.displayName });
+      }
+    },
+  });
   const [picked, setPicked] = useState(null); // null: where the person landed
   const [nameDraft, setNameDraft] = useState(null); // the name box's text while it differs from the saved name
   const [nameError, setNameError] = useState(null);
@@ -141,6 +163,17 @@ export default function Onboarding() {
     if (index > 0) goTo(screens[index - 1].id);
   };
 
+  /** Back to the app for someone who already finished: the name box is saved
+   *  as leaving a screen saves it, then every save is waited for. A blank name
+   *  or a save that failed keeps them here, where its message is. */
+  const backToApp = async () => {
+    if (!leave()) return;
+    setBusy(true);
+    const saved = await ob.settled();
+    setBusy(false);
+    if (saved) navigate(returnTo);
+  };
+
   /** The step bar (Kd, 2026-09-10): straight back to any screen, or forward to
    *  one already reached. Going forward saves the screen being left and waits
    *  for its saves, exactly as Continue does. */
@@ -163,8 +196,9 @@ export default function Onboarding() {
       // The name the rest of the app greets the person by is the one saved here.
       updateUser({ onboardingCompleted: true, displayName: result.answers.displayName });
       toast.success("You're all set. Let's train.");
-      // Everyone here came through the member door, heading for the member app.
-      navigate('/dashboard');
+      // Everyone here came through the member door, heading for the member
+      // app — or back to the screen in it that sent them here.
+      navigate(returnTo);
       return;
     }
     if (result.missing) setRefused(result.missing);
@@ -206,7 +240,18 @@ export default function Onboarding() {
           style={{ background: 'rgba(13,12,11,0.55)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' }}
         >
           <div className="max-w-lg mx-auto">
-            <div className="flex justify-end mb-2">
+            <div className="flex justify-end gap-4 mb-2">
+              {finished && (
+                <button
+                  type="button"
+                  onClick={backToApp}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Back to the app
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleSignOut}

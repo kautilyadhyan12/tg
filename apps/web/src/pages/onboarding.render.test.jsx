@@ -8,11 +8,20 @@
 // screen is asked only for a goal that moves the weight, "No equipment" stands
 // alone, and Finish opens the training side only when the server agrees.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { missingPlanInputSchema, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 
-const auth = { updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
+// These tests walk the wizard save by save. Alone, the longest takes about
+// two seconds; in the full suite, with every other file running at once, a
+// save and the page change after it can take longer than the one second the
+// library waits and the five seconds a test is given. The waits are longer
+// here, not the checks weaker: a screen that never comes still fails.
+configure({ asyncUtilTimeout: 3000 });
+vi.setConfig({ testTimeout: 15_000 });
+
+// One auth state serves both the page and the app's own route guard.
+const auth = { user: null, loading: false, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -20,6 +29,7 @@ vi.mock('../api/onboardingApi', async (importOriginal) => ({ ...(await importOri
 
 const toast = (await import('react-hot-toast')).default;
 const Onboarding = (await import('./Onboarding')).default;
+const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 
 const EMPTY = {
   displayName: 'kd.test', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null,
@@ -43,7 +53,7 @@ const PLAN = {
     change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
     beforeFloorKcal: 1267,
     floorKcal: 1200,
-    protein: { gPerKg: 2, weightKg: 70, wantedG: 140 },
+    protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 },
     fatShare: 0.25,
     carbsFloorG: 50,
     finish: { kgToMove: 5, kcalPerKg: 7700 },
@@ -92,15 +102,28 @@ function serve(initial = {}) {
   });
 }
 
-const draw = () =>
+/** Onboarding behind the guard App.jsx puts it behind, so a redirect added to
+ *  that guard would show here. */
+const draw = (entry = '/onboarding') =>
   render(
-    <MemoryRouter initialEntries={['/onboarding']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route path="/onboarding" element={<Onboarding />} />
+        <Route
+          path="/onboarding"
+          element={
+            <ProtectedRoute requireOnboarding={false}>
+              <Onboarding />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/login" element={<p>LOGIN</p>} />
         <Route path="/dashboard" element={<p>MEMBER APP</p>} />
+        <Route path="/nutrition" element={<p>NUTRITION</p>} />
       </Routes>
     </MemoryRouter>,
   );
+/** Arriving from the macro rings' "Answer now". */
+const FROM_RINGS = { pathname: '/onboarding', state: { returnTo: '/nutrition' } };
 
 const heading = (name) => screen.findByRole('heading', { name });
 const button = (name) => screen.getByRole('button', { name });
@@ -134,7 +157,10 @@ const aboutYou = async () => {
 };
 
 beforeEach(() => {
+  // Signed in, setup not finished; the app and the server agree on the name.
+  auth.user = { onboardingCompleted: false, displayName: 'kd.test' };
   auth.updateUser.mockClear();
+  auth.logout.mockClear();
   toast.error.mockClear();
 });
 afterEach(() => cleanup());
@@ -605,6 +631,109 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
     tap('Go to Your day');
     await heading('Your day');
+  });
+
+  it('a person who already finished setup can go back to the app, and can still sign out', async () => {
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, dayActivity: null }); // the one question the plan still needs
+    draw(FROM_RINGS);
+    await heading('Your day'); // it opens on that question
+    expect(button(/sign out/i)).toBeTruthy();
+    tap(/back to the app/i);
+    await screen.findByText('NUTRITION');
+    expect(auth.logout).not.toHaveBeenCalled();
+  });
+
+  it('Back to the app saves the name box first, and stays while it is blank', async () => {
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, age: null }); // "About you" is the open screen
+    draw(FROM_RINGS);
+    await heading('About you');
+    fireEvent.change(nameBox(), { target: { value: '   ' } });
+    tap(/back to the app/i);
+    expect(await screen.findByText('Type the name we should call you.')).toBeTruthy();
+    expect(screen.queryByText('NUTRITION')).toBeNull();
+    fireEvent.change(nameBox(), { target: { value: 'Kd' } });
+    tap(/back to the app/i);
+    await screen.findByText('NUTRITION');
+    expect(server.answers.displayName).toBe('Kd');
+    // …and the app they go back to calls them by it (the sidebar, the dashboard's greeting).
+    expect(auth.updateUser).toHaveBeenCalledWith({ displayName: 'Kd' });
+  });
+
+  it('a name saved on the way forward reaches the rest of the app at once, not only at Finish', async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    tap('About you');
+    await heading('About you');
+    fireEvent.change(nameBox(), { target: { value: '  Kd  ' } });
+    tap(/continue/i);
+    await heading('Your target');
+    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ displayName: 'Kd' }));
+  });
+
+  it("a name the server did not take leaves the app's name as it was", async () => {
+    serve({ ...ALL, availableEquipment: [] });
+    draw();
+    await heading('Equipment');
+    tap('About you');
+    await heading('About you');
+    server.failNext = new Error('Network Error');
+    fireEvent.change(nameBox(), { target: { value: 'Kd' } });
+    tap(/continue/i);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't reach the server. Check your connection and try again."));
+    // Every save answered, the read-back of what the server holds among them.
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
+    expect(svc.patch).toHaveBeenLastCalledWith({});
+    expect(auth.updateUser).not.toHaveBeenCalledWith({ displayName: 'Kd' });
+    expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+  });
+
+  it('Back to the app waits for the saves, and a save that failed keeps them here with its message', async () => {
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, dayActivity: null });
+    draw(FROM_RINGS);
+    await heading('Your day');
+    server.failNext = new Error('Network Error');
+    tap(/Mostly sitting/);
+    tap(/back to the app/i);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't reach the server. Check your connection and try again."));
+    await waitFor(() => expect(button(/back to the app/i).disabled).toBe(false));
+    expect(screen.queryByText('NUTRITION')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Your day' })).toBeTruthy();
+  });
+
+  it('answering the open question and finishing brings them back to the rings', async () => {
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, dayActivity: null });
+    draw(FROM_RINGS);
+    await heading('Your day');
+    tap(/Mostly sitting/);
+    await stored({ dayActivity: 'sitting' });
+    await next('Your training');
+    await next('Your week');
+    await next('Equipment');
+    tap(/finish setup/i);
+    await screen.findByText('NUTRITION');
+  });
+
+  it('goes to the dashboard for any other address in the page state', async () => {
+    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    serve({ ...ALL, dayActivity: null });
+    draw({ pathname: '/onboarding', state: { returnTo: 'https://example.com/' } });
+    await heading('Your day');
+    tap(/back to the app/i);
+    await screen.findByText('MEMBER APP');
+  });
+
+  it('someone who has not finished setup keeps Sign out, and no way back without finishing', async () => {
+    serve();
+    draw(FROM_RINGS);
+    await heading('Your goal');
+    expect(screen.queryByRole('button', { name: /back to the app/i })).toBeNull();
+    tap(/sign out/i);
+    await waitFor(() => expect(auth.logout).toHaveBeenCalled());
   });
 
   it('puts a tap back and says so when its save fails, then reads what the server holds', async () => {

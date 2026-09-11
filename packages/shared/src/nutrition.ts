@@ -1,5 +1,6 @@
 // P2.6a — Nutrition & body contracts (Part 2B §3; Part 4 §3.6).
 import { z } from "zod";
+import { missingPlanInputSchema } from "./plan.js";
 
 export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "default", "legacy"]);
 export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts"]);
@@ -160,34 +161,50 @@ export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();
 
-// ── Daily calorie + macro targets (the nutrition.py Mifflin-St Jeor port) ────
-// `targets` is null EXACTLY when `missing` is non-empty: the server refuses to
-// invent a number from defaults (Kd ruling; the Card-7 F2 precedent), so the
-// client renders an honest "add your details" prompt naming what is missing
-// rather than a generic goal indistinguishable from a real one.
-export const missingTargetInputSchema = z.enum(["age", "gender", "heightCm", "weightKg", "exerciseFrequency"]);
+// ── Daily calorie + macro targets: the macro rings' numbers ─────────────────
+// These ARE the plan's numbers (plan.ts; ROADMAP 4a-iii): the same stored
+// answers, read by the same calculator as the onboarding screens, so the rings
+// and "your daily number" can never disagree. `targets` is null EXACTLY when
+// `missing` is non-empty or `targetWrongSide` is true: the server refuses to
+// invent a number from defaults (RULINGS 2026-07-15), `missing` names the
+// plan's own unanswered questions, so the rings can send the person to them,
+// and `targetWrongSide` says the one answer that is there no longer fits.
 export const nutritionTargetsSchema = z.object({
+  /** The plan's resting burn (Mifflin-St Jeor), kcal a day. */
   bmr: z.number().int(),
+  /** The plan's daily burn: the day plus the week's training. */
   tdee: z.number().int(),
+  /** The plan's calories to eat a day. */
   kcal: z.number().int(),
   proteinG: z.number().int(),
   carbsG: z.number().int(),
   fatG: z.number().int(),
-  /** True when a yes on the health question, or an age under 18, held the
-   *  weight-loss cut back (RULINGS 2026-09-07/09): `kcal` is then the daily
-   *  burn, not burn − 400. */
+  /** True when a rule held a weight-loss cut back — a yes on the health
+   *  question or an age under 18 (RULINGS 2026-09-07/09), the plan's
+   *  `no_deficit` flag: `kcal` is then the daily burn. */
   noCalorieCut: z.boolean(),
 }).strict();
-// The EXACTLY is enforced, not merely asserted (T3 round 2): both impossible
-// states — targets with an unmet input, and no targets with nothing missing —
-// were accepted by the bare shape. The second is the dangerous one: a client
-// would render an "add your details" prompt naming no details.
+// The EXACTLY is enforced, not merely asserted: every impossible state (a
+// number beside an unmet input or a wrong-side target, no number with no
+// reason given, both reasons at once) passes the bare shape. No number with no
+// reason is the dangerous one: a client would render an "add your details"
+// prompt naming no details.
 export const nutritionTargetsResponseSchema = z.object({
   targets: nutritionTargetsSchema.nullable(),
-  missing: z.array(missingTargetInputSchema),
-}).strict().refine((r) => (r.targets === null) === (r.missing.length > 0), {
-  message: "targets must be null exactly when missing is non-empty",
-});
-export type MissingTargetInput = z.infer<typeof missingTargetInputSchema>;
+  missing: z.array(missingPlanInputSchema),
+  /** The stored target is on the wrong side of the weight for the goal: a
+   *  loss target kept when Settings switched the goal to Muscle Gain, or a
+   *  weight that has reached its target. The plan then holds the weight, and
+   *  the rings do not pass that off as the goal's number; they say the target
+   *  no longer fits, never that it is unanswered (RULINGS 2026-09-11). */
+  targetWrongSide: z.boolean(),
+}).strict()
+  .refine((r) => (r.targets === null) === (r.missing.length > 0 || r.targetWrongSide), {
+    message: "targets must be null exactly when an answer is missing or the target is on the wrong side",
+  })
+  // A plan still missing an answer has no flags to raise.
+  .refine((r) => !(r.targetWrongSide && r.missing.length > 0), {
+    message: "a wrong-side target is never reported beside a missing answer",
+  });
 export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
 export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;

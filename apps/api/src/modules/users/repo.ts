@@ -10,7 +10,14 @@
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { currentWeightKg, recordTypedWeight } from "../nutrition/repo.js";
-import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
+import { PLAN_GOAL_BY_MAIN_GOAL, type PatchOnboardingRequest, type UpdateProfileRequest } from "./schemas.js";
+
+/** The goals that move the weight on purpose (weight loss, muscle gain), read
+ *  from the one mapping in @app/shared. Whenever one is among a person's goals
+ *  it is the one that sets the calories; two never stand together on a screen. */
+const WEIGHT_GOALS: string[] = Object.entries(PLAN_GOAL_BY_MAIN_GOAL)
+  .filter(([, direction]) => direction !== "maintain")
+  .map(([goal]) => goal);
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
  *  TransactionSql are siblings, not sub/supertypes — neither is assignable to
@@ -228,27 +235,49 @@ export async function getFitnessProfile(
  *  against a concurrent account deletion. The FK guarantees the user EXISTS but
  *  says nothing about status, since §5.2 soft-deletes.
  *
- *  THE ONBOARDING v2 COLUMNS (0026) ARE DELIBERATELY ABSENT from both the
- *  INSERT list and the DO UPDATE SET: this is the v1 screen's route, which has
- *  no way to ask for a pace or a push-up count, so writing NULL over them would
- *  throw away an answer this form never offered. "Full document" means the
- *  fields THIS contract carries. `patchOnboarding` below owns the rest. */
+ *  THE ONBOARDING v2 COLUMNS (0026) ARE LEFT ALONE, all but one: this is the
+ *  v1 screen's route, which has no way to ask for a pace or a push-up count,
+ *  so writing NULL over them would throw away an answer this form never
+ *  offered. "Full document" means the fields THIS contract carries.
+ *  `patchOnboarding` below owns the rest.
+ *
+ *  THE ONE KEPT IN STEP IS `main_goal`: this form asks the goals (Settings'
+ *  chips), and the plan, so the macro rings, reads `main_goal`. A change here
+ *  takes effect at once, with nothing asked again (Kd, 2026-09-11: "it should
+ *  automatically update according to change"): a ticked goal that moves the
+ *  weight sets the calories (the one already setting them, if both are sent);
+ *  with neither ticked, the main goal stays while it is ticked, else the first
+ *  goal ticked takes over; with no goal ticked it is cleared, as a reset
+ *  (PUT {}) clears it with the rest. Decided in the statement itself, against
+ *  the row as stored, so a concurrent screen-1 save cannot slip between a
+ *  read and this write.
+ *
+ *  The list is stored in the chips' order, and never with a goal that moves
+ *  the weight other than the one the calories follow: sent both, the other
+ *  one is dropped in the same statement, so the chips always show the goal
+ *  the rings run on, and saving what they show changes nothing. */
 export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
   input: FitnessProfileWrite,
 ): Promise<FitnessProfileRow | null> {
+  const weightGoals = input.fitnessGoals.filter((g) => WEIGHT_GOALS.includes(g));
+  // The main goal when nothing stored decides it: a new row, or a stored main
+  // goal that no longer fits the list.
+  const firstChoice = weightGoals[0] ?? input.fitnessGoals[0] ?? null;
+  // A new row's list: the weight goal that sets the calories is the first one.
+  const newRowGoals = input.fitnessGoals.filter((g) => !WEIGHT_GOALS.includes(g) || g === firstChoice);
   const rows = await sql<FitnessProfileDbRow[]>`
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
        fitness_goals, exercise_frequency, available_equipment,
        session_duration_min, preferred_workout_time, medical_conditions,
-       onboarding_completed, updated_at)
+       onboarding_completed, main_goal, updated_at)
     SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
-           ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
+           ${input.targetWeightKg}, ${input.fitnessLevel}, ${newRowGoals},
            ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
-           ${input.medicalConditions}, ${input.onboardingCompleted}, now()
+           ${input.medicalConditions}, ${input.onboardingCompleted}, ${firstChoice}, now()
     FROM users u WHERE u.id = ${userId} AND u.status = 'active'
     ON CONFLICT (user_id) DO UPDATE SET
       age = EXCLUDED.age,
@@ -256,13 +285,24 @@ export async function upsertFitnessProfile(
       height_cm = EXCLUDED.height_cm,
       target_weight_kg = EXCLUDED.target_weight_kg,
       fitness_level = EXCLUDED.fitness_level,
-      fitness_goals = EXCLUDED.fitness_goals,
+      fitness_goals = ARRAY(
+        SELECT g FROM unnest(${input.fitnessGoals}::text[]) WITH ORDINALITY AS ticked(g, i)
+        WHERE NOT (g = ANY (${weightGoals}::text[]))
+           OR g = CASE WHEN user_fitness_profiles.main_goal = ANY (${weightGoals}::text[])
+                       THEN user_fitness_profiles.main_goal ELSE EXCLUDED.main_goal END
+        ORDER BY i),
       exercise_frequency = EXCLUDED.exercise_frequency,
       available_equipment = EXCLUDED.available_equipment,
       session_duration_min = EXCLUDED.session_duration_min,
       preferred_workout_time = EXCLUDED.preferred_workout_time,
       medical_conditions = EXCLUDED.medical_conditions,
       onboarding_completed = EXCLUDED.onboarding_completed,
+      main_goal = CASE
+        WHEN user_fitness_profiles.main_goal = ANY (${weightGoals}::text[]) THEN user_fitness_profiles.main_goal
+        WHEN cardinality(${weightGoals}::text[]) = 0
+         AND user_fitness_profiles.main_goal = ANY (EXCLUDED.fitness_goals) THEN user_fitness_profiles.main_goal
+        ELSE EXCLUDED.main_goal
+      END,
       updated_at = now()
     RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
   return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
@@ -382,31 +422,45 @@ export async function patchOnboarding(
     if (patch.sessionMinutes !== undefined) cols["session_duration_min"] = patch.sessionMinutes;
     if (patch.availableEquipment !== undefined) cols["available_equipment"] = patch.availableEquipment;
     if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;
-    if (patch.mainGoal !== undefined) {
-      cols["main_goal"] = patch.mainGoal;
-      // THE MIRROR, and it is temporary. The live macro rings still read the
-      // v1 `fitness_goals` ARRAY (nutrition/targets.ts), so a person who picks
-      // "lose weight" on the new screen 1 must not read as having no goal
-      // there. Written in the same statement as `main_goal`, so a save on THIS
-      // route can never leave the two disagreeing.
-      //
-      // That guarantee is ONE-WAY, and only this way: `upsertFitnessProfile`
-      // (the v1 PUT, still the live web form) replaces `fitness_goals` and does
-      // not touch `main_goal` — it has no such question to ask. After one of
-      // those the rings follow the list that form just wrote, which is what
-      // that person asked for, while `main_goal` holds the answer screen 1 was
-      // given. Nothing puts `main_goal` on a screen yet, so nothing false is
-      // shown; item 4a-ii moves the rings onto these answers and ends the
-      // mirror and that divergence together (migration 0026's note).
-      cols["fitness_goals"] = patch.mainGoal === null ? [] : [patch.mainGoal];
-    }
 
-    if (Object.keys(cols).length > 0) {
+    if (Object.keys(cols).length > 0 || patch.mainGoal !== undefined) {
       await tx`
         INSERT INTO user_fitness_profiles (user_id) VALUES (${userId})
         ON CONFLICT (user_id) DO NOTHING`;
+    }
+    if (Object.keys(cols).length > 0) {
       await tx`
         UPDATE user_fitness_profiles SET ${tx(cols)}, updated_at = now()
+        WHERE user_id = ${userId}`;
+    }
+    // Screen 1's goal, and with it the v1 `fitness_goals` list that Settings'
+    // goal chips show, in one statement, so this route never leaves the two
+    // disagreeing. The list keeps what was ticked in Settings: the new main
+    // goal goes first; a goal that moves the weight, and so would fight it,
+    // leaves (left ticked, it would take the calories back at the next
+    // Settings save, `upsertFitnessProfile`); the rest stay. Clearing the goal
+    // removes the main goal and nothing else. The SET reads the row as it
+    // stood before this statement (so `main_goal` is still the old one there),
+    // which leaves no gap between a read and this write for a Settings save
+    // to fall into. 4a-iv gives Settings screen 1's own questions.
+    if (patch.mainGoal === null) {
+      await tx`
+        UPDATE user_fitness_profiles
+        SET fitness_goals = array_remove(coalesce(fitness_goals, '{}'), main_goal),
+            main_goal = NULL,
+            updated_at = now()
+        WHERE user_id = ${userId}`;
+    } else if (patch.mainGoal !== undefined) {
+      await tx`
+        UPDATE user_fitness_profiles
+        SET fitness_goals = array_prepend(
+              ${patch.mainGoal}::text,
+              ARRAY(
+                SELECT g FROM unnest(coalesce(fitness_goals, '{}')) WITH ORDINALITY AS kept(g, i)
+                WHERE g <> ${patch.mainGoal}::text AND NOT (g = ANY (${WEIGHT_GOALS}::text[]))
+                ORDER BY i)),
+            main_goal = ${patch.mainGoal},
+            updated_at = now()
         WHERE user_id = ${userId}`;
     }
     // Screen 2's weight is a row of the history, the only place weight lives

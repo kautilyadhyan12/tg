@@ -48,6 +48,7 @@ import {
   weightParts,
   weightShown,
   weightWholes,
+  wrongSideText,
 } from './onboardingModel';
 
 /** Whether the server takes this one answer. A wheel never saves a number the
@@ -272,7 +273,6 @@ function TargetWheel({ target, weightKg, direction, units, save }) {
     if (targetWrongSide(direction, kg, weightKg)) return;
     if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
   };
-  const side = direction === 'gain' ? 'above' : 'below';
   return (
     <div>
       <WeightWheel
@@ -287,9 +287,7 @@ function TargetWheel({ target, weightKg, direction, units, save }) {
         onPick={pick}
       />
       {wrong ? (
-        <FieldError>
-          {`${weightShown(weightParts(target, units), units)} is not ${side} your current ${weightShown(weight, units)}. Pick a weight ${side} it.`}
-        </FieldError>
+        <FieldError>{wrongSideText(direction, target, weightKg, units)}</FieldError>
       ) : (
         <p className="text-gray-500 text-xs mt-2">
           {direction === 'gain' ? 'The weight you want to build up to.' : 'The weight you want to reach.'} You weigh{' '}
