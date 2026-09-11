@@ -25,7 +25,7 @@ const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 const CONFIRM =
-  'This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any answer you gave to the health question are kept. Continue?';
+  'This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any yes or no you gave to the health question are kept. Continue?';
 
 /** A person who finished setup: losing weight, Better balance ticked. */
 const ANSWERED = {

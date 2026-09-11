@@ -513,13 +513,13 @@ function AccountTab({ profile, onSaved }) {
   };
 
   const handleResetOnboarding = async () => {
-    if (!window.confirm('This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any answer you gave to the health question are kept. Continue?')) return;
+    if (!window.confirm('This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any yes or no you gave to the health question are kept. Continue?')) return;
     setResetLoading(true);
     try {
       // Every answer goes, the medical notes and the ones only the setup
       // screens ask included (RULINGS 2026-07-20: reset wipes every answer),
       // and the gate shuts. The name and the weigh-in history are not answers
-      // on that row, and stay; so does the answer to the health question,
+      // on that row, and stay; so does the yes or no to the health question,
       // until 4b asks it in setup.
       await onboardingService.reset();
       // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).

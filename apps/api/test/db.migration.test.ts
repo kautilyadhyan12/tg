@@ -825,9 +825,10 @@ d("0001_init on a real database", () => {
    *  over the result. All of it is rolled back. One subject per branch:
    *  weight loss · build muscle, on the list, off it, and beside a Weight Loss
    *  tick (asked, never given a weight choice: RULINGS 2026-09-11) · a goal
-   *  that kept the weight, with no list and beside a Weight Loss tick · the old form (no main goal) with
-   *  Weight Loss ticked, the same answer as "Lose weight" · a row with nothing
-   *  to change · "none" beside equipment, "none" alone, and equipment alone. */
+   *  that kept the weight, with no list, and beside a Weight Loss tick · the
+   *  old form (no main goal) with Weight Loss ticked, the same answer as
+   *  "Lose weight" · a row with nothing to change · "none" beside equipment,
+   *  "none" alone, and equipment alone. */
   it("0028 moves every old answer: weight loss to lose, the goals that kept the weight to maintain, Build muscle to asked", async () => {
     const migration = await readFile(new URL("../drizzle/0028_many_goals_and_a_gym.sql", import.meta.url), "utf8");
     const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
