@@ -4,6 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · 4a-iii re-check fixed (one High, four Lows), branch `rings-read-the-plan`, PR #61
+
+- High: a name changed on "About you" reaches the sidebar and the greeting at once. The onboarding page passes on the
+  name the server holds after every save that lands, not only at Finish; a Settings rename does the same, and Settings'
+  header and Account tab show the name again (they read `fullName`, which the profile never had).
+- Lows: the rings name a wrong-side target as its own case (`targetWrongSide`: "Your target weight no longer fits your
+  goal" + "Pick a new target"); a Settings save keeps only the weight goal the calories follow; Settings' target box
+  refuses a typed wrong-side target in screen 3's sentence (a stored one is named, the rest still saves); two comments.
+- I overwrote `settingsProfile.render.test.jsx` by mistake; its three weight tests are back beside the new ones.
+- Verified: shared + api tsc/eslint clean · api unit 19, the two route files 68, full local 961 + two sign-in files red
+  under load (alone 40/40), no-database 298 · web full 1984 (poseAssets.contract the known local red); lint adds nothing
+  (Nutrition's 7 and Settings' 4 are master's). New tests red on the old code (api 9, web 11); 2 deliberate breaks red.
+- The onboarding page tests wait longer (3 s, 15 s): alone the longest takes 2.3 s; the full run pushed two past the defaults.
+- Open: fresh-chat re-check of these fixes, Kd's click-through (API 3000 local, web 5173, `kd.wheels.test`), CI, merge.
+
 ## 2026-09-11 · 4a-iii review round 1 fixed, and Kd's goal ruling, branch `rings-read-the-plan`, PR #61
 
 - Kd rejected my first H1 fix (the rings asked "your goal" again): a change takes effect at once (RULINGS 2026-09-11).
