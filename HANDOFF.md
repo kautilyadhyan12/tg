@@ -4,6 +4,22 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · Screens 1–7: the re-check's four Lows (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
+
+- The fresh-chat re-check of round 1 found no Critical/High and four Lows; all four are fixed here. No third review (§2.6).
+- Wheels: a slow drag that rests and goes on saves where the finger lifts, not where it rested (a gesture never settles
+  while a finger is down; a touch that is cancelled ends it too).
+- Plan check: besides each line's own sum, every figure the plan panel prints twice must agree — the weight, the formula's
+  constant, the pace's kg a week, kcal per kilo, kg to move, and the two floors the flags name. The Mifflin-St Jeor
+  constants and the kg-between sum moved to `@app/shared`, so the calculator and the check share them.
+- Tests: the gesture test is split (a press let go, a mouse wheel, a finger lifting, a touch or a press the browser
+  cancels), plus Tab away and the slow drag; two contract tests. Each of the 8 wheel handlers and 9 new checks, removed
+  in turn by hand, turns a test red (17 of 17); files restored.
+- Verified: shared tsc/eslint 0, 83 · api tsc/eslint 0, plan.unit 53, CI-shaped 306, local onboarding routes 34 · web
+  eslint 0 (touched files), onboarding 68, full 1954 (poseAssets.contract is the known local encoding red).
+- Open: Kd's click-through of the wheels — it includes the scroll fix's cost (on a phone a wheel is tapped before it is
+  flicked, and that tap picks the row tapped) — CI, merge. Then 4a-iii → 4a-iv → 4b.
+
 ## 2026-09-11 · Screens 1–7: Kd's second look and review round 1 (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
 
 - Built Kd's second look (RULINGS 2026-09-10/11): flick wheels with − and +, the name first, plain push-up and plank
