@@ -27,7 +27,7 @@ describe("screen 1: one weight choice, and any number of goals beside it (RULING
     expect([...weightGoalSchema.options].sort()).toEqual(["gain", "lose", "maintain"]);
   });
 
-  it("offers the goals the ruling names: weight loss is a weight choice, not a goal, and two goals are new", () => {
+  it("offers the goals the rulings name: weight loss is a weight choice, not a goal, and three goals are new", () => {
     expect([...fitnessGoalSchema.options]).toEqual([
       "muscle_gain",
       "strength",
@@ -37,6 +37,7 @@ describe("screen 1: one weight choice, and any number of goals beside it (RULING
       "posture",
       "balance",
       "stress_relief",
+      "stay_healthy",
     ]);
     expect(fitnessGoalSchema.safeParse("weight_loss").success).toBe(false);
   });

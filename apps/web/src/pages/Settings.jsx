@@ -351,39 +351,26 @@ export function FitnessTab({ profile, onSaved }) {
         </div>
       </Field>
 
-      <Field label="Your Weight" hint="Pick one. It sets your daily calories.">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {WEIGHT_GOALS.map((g) => {
-            const Icon = WEIGHT_GOAL_ICONS[g.value];
-            const on = form.weightGoal === g.value;
-            return (
-              <button key={g.value} type="button"
-                aria-pressed={on}
-                onClick={() => pickWeightGoal(g.value)}
-                className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-                style={chipStyle(on)}>
-                <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{g.label}
-              </button>
-            );
-          })}
-        </div>
-      </Field>
-
-      <Field label="Also Work On" hint="Pick any, or none.">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {GOALS.map((g) => {
-            const Icon = GOAL_ICONS[g.value];
-            const on = form.fitnessGoals.includes(g.value);
-            return (
-              <button key={g.value} type="button"
-                aria-pressed={on}
-                onClick={() => tickGoal(g.value)}
-                className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-                style={chipStyle(on)}>
-                <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{g.label}
-              </button>
-            );
-          })}
+      {/* Screen 1's one grid, three to a row: the weight choice is the top row
+          (pick one), the goals below (any of them). */}
+      <Field label="Your Goal" hint="Pick one from the top row, and any of the rest.">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            ...WEIGHT_GOALS.map((g) => ({
+              ...g, Icon: WEIGHT_GOAL_ICONS[g.value], on: form.weightGoal === g.value, tap: () => pickWeightGoal(g.value),
+            })),
+            ...GOALS.map((g) => ({
+              ...g, Icon: GOAL_ICONS[g.value], on: form.fitnessGoals.includes(g.value), tap: () => tickGoal(g.value),
+            })),
+          ].map(({ value, label, Icon, on, tap }) => (
+            <button key={value} type="button"
+              aria-pressed={on}
+              onClick={tap}
+              className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 text-left"
+              style={chipStyle(on)}>
+              <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{label}
+            </button>
+          ))}
         </div>
       </Field>
 

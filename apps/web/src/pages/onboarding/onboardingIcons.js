@@ -3,6 +3,7 @@
 // every key to its enum, so a new goal or kind of equipment cannot reach a
 // screen without an icon.
 import {
+  Apple,
   BicepsFlexed,
   Building2,
   createLucideIcon,
@@ -75,6 +76,7 @@ export const GOAL_ICONS = {
   posture: PersonStanding,
   balance: OneLegBalance,
   stress_relief: Leaf,
+  stay_healthy: Apple,
 };
 
 export const LEVEL_ICONS = {

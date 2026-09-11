@@ -13,10 +13,11 @@
 -- direction the plan maths works in (`weight_goal`), and "also work on", any
 -- number of goals, none of which moves the calories (`fitness_goals`, the list
 -- 0006 already owns). Weight loss leaves that list, because it is a weight
--- choice; two goals join it, get stronger (`strength`) and better balance
--- (`balance`). Building muscle stays on it: it is not gaining weight (RULINGS
--- 2026-09-11). Settings asks the same two questions and writes the same two
--- columns, so there is nothing left to keep in step.
+-- choice; three goals join it: get stronger (`strength`), better balance
+-- (`balance`) and stay healthy (`stay_healthy`, Kd at the click-through).
+-- Building muscle stays on it: it is not gaining weight (RULINGS 2026-09-11).
+-- Settings asks the same two questions and writes the same two columns, so
+-- there is nothing left to keep in step.
 --
 -- ── PART 1: THE WEIGHT CHOICE ────────────────────────────────────────────────
 ALTER TABLE "user_fitness_profiles" ADD COLUMN "weight_goal" text;--> statement-breakpoint
@@ -60,7 +61,7 @@ WHERE "main_goal" IS NOT NULL OR 'weight_loss' = ANY ("fitness_goals");--> state
 ALTER TABLE "user_fitness_profiles" DROP COLUMN "main_goal";--> statement-breakpoint
 ALTER TABLE "user_fitness_profiles"
   ADD CONSTRAINT "user_fitness_profiles_fitness_goals_check"
-    CHECK ("fitness_goals" <@ ARRAY['muscle_gain', 'strength', 'general_fitness', 'endurance', 'flexibility', 'posture', 'balance', 'stress_relief']::text[]);--> statement-breakpoint
+    CHECK ("fitness_goals" <@ ARRAY['muscle_gain', 'strength', 'general_fitness', 'endurance', 'flexibility', 'posture', 'balance', 'stress_relief', 'stay_healthy']::text[]);--> statement-breakpoint
 -- ── PART 4: "A GYM", AND "NO EQUIPMENT" STANDS ALONE ─────────────────────────
 -- "A gym (everything there)" joins the home equipment (RULINGS 2026-09-10,
 -- decision B). "No equipment" beside anything else is not an answer to "what

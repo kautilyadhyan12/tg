@@ -26,6 +26,7 @@ export const GOALS = [
   { value: 'posture',         label: 'Posture' },
   { value: 'balance',         label: 'Better balance' },
   { value: 'stress_relief',   label: 'Stress relief' },
+  { value: 'stay_healthy',    label: 'Stay healthy' },
 ];
 
 export const GENDERS = [
@@ -63,13 +64,13 @@ export const EQUIPMENT = [
   { value: 'resistance_bands', label: 'Resistance bands' },
   { value: 'kettlebells',      label: 'Kettlebells' },
   { value: 'pull_up_bar',      label: 'Pull-up bar' },
-  { value: 'gym',              label: 'A gym (everything there)' },
+  { value: 'gym',              label: 'A gym' },
 ];
 
 // ── The screens, and which of them a person still has to answer ─────────────
 
 export const SCREENS = [
-  { id: 'goal',      title: 'Your goal',     desc: 'Your weight, and what else to work on' },
+  { id: 'goal',      title: 'Your goal',     desc: 'Pick one from the top row, and any of the rest' },
   { id: 'about',     title: 'About you',     desc: 'The numbers your plan is built on' },
   { id: 'target',    title: 'Your target',   desc: 'Where you are heading, and how fast' },
   { id: 'day',       title: 'Your day',      desc: 'How active you are outside workouts' },

@@ -190,7 +190,7 @@ export const userFitnessProfiles = pgTable(
     check("user_fitness_profiles_weight_goal_check", sql`${t.weightGoal} IN ('lose','maintain','gain')`),
     check(
       "user_fitness_profiles_fitness_goals_check",
-      sql`${t.fitnessGoals} <@ ARRAY['muscle_gain','strength','general_fitness','endurance','flexibility','posture','balance','stress_relief']::text[]`,
+      sql`${t.fitnessGoals} <@ ARRAY['muscle_gain','strength','general_fitness','endurance','flexibility','posture','balance','stress_relief','stay_healthy']::text[]`,
     ),
     check(
       "user_fitness_profiles_available_equipment_check",

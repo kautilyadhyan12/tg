@@ -64,6 +64,23 @@ const takes = (patch) => patchOnboardingRequestSchema.safeParse(patch).success;
  *  made (RULINGS 2026-09-10). */
 const sameRows = (a, b) => a.whole === b.whole && a.tenth === b.tenth;
 
+/** A card's icon, in its rounded square: lit when the card is picked. */
+function IconBadge({ icon: Icon, selected }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+      style={
+        selected
+          ? { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 14px rgba(255,138,31,0.35)' }
+          : { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }
+      }
+    >
+      <Icon className="w-5 h-5" strokeWidth={1.75} style={{ color: selected ? '#FFFFFF' : '#FFB347' }} />
+    </span>
+  );
+}
+
 function Choice({ selected, onSelect, icon: Icon, label, desc }) {
   return (
     <button
@@ -73,19 +90,7 @@ function Choice({ selected, onSelect, icon: Icon, label, desc }) {
       className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all duration-200 text-left w-full
                  ${selected ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
     >
-      {Icon && (
-        <span
-          aria-hidden="true"
-          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
-          style={
-            selected
-              ? { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 14px rgba(255,138,31,0.35)' }
-              : { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }
-          }
-        >
-          <Icon className="w-5 h-5" strokeWidth={1.75} style={{ color: selected ? '#FFFFFF' : '#FFB347' }} />
-        </span>
-      )}
+      {Icon && <IconBadge icon={Icon} selected={selected} />}
       <span className="flex-1 min-w-0">
         <span className={`block font-medium text-sm ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
         {desc && <span className="block text-gray-500 text-xs mt-0.5">{desc}</span>}
@@ -317,40 +322,56 @@ function NotSure({ label, pressed, onClick }) {
 }
 
 // ── Screen 1 ────────────────────────────────────────────────────────────────
-/** Two questions (RULINGS 2026-09-10): ONE weight choice, which alone sets the
- *  calories, and any number of goals to work on beside it, none of which moves
- *  them — building muscle is not gaining weight (RULINGS 2026-09-11). Nothing
- *  on either list fights anything else, so no tap ever has to undo another. */
+/** A card for a grid three to a row: the icon above its label. */
+function Tile({ selected, onSelect, icon, label }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`relative flex flex-col items-center gap-2 px-2 py-3 rounded-2xl border-2 transition-all duration-200 text-center
+                 ${selected ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-100 hover:border-white/20'}`}
+    >
+      {icon && <IconBadge icon={icon} selected={selected} />}
+      <span className={`block text-xs font-medium leading-snug ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
+      {selected && (
+        <span aria-hidden="true" className="absolute top-1.5 right-1.5 w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+          <Check className="w-2.5 h-2.5 text-white" />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** One grid, three to a row, under the screen's one heading, "Your goal"
+ *  (Kd, at 4a-iv's click-through: "no seperate things needed all together").
+ *  The top row is the ONE weight choice, which alone sets the calories
+ *  (RULINGS 2026-09-10): a tap there picks it and lets the other two go.
+ *  Below it, any number of goals, none of which moves the calories —
+ *  building muscle is not gaining weight (RULINGS 2026-09-11): a tap ticks or
+ *  unticks one. Nothing fights anything else, so no tap undoes another. */
 export function GoalScreen({ answers, save }) {
   const also = Array.isArray(answers.fitnessGoals) ? answers.fitnessGoals : [];
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <Question>What do you want your weight to do?</Question>
-        <p className="text-gray-400 text-xs">Pick one. It sets your daily calories.</p>
-        {WEIGHT_GOALS.map((g) => (
-          <Choice
-            key={`weight-${g.value}`}
-            selected={answers.weightGoal === g.value}
-            onSelect={() => answers.weightGoal !== g.value && save({ weightGoal: g.value })}
-            icon={WEIGHT_GOAL_ICONS[g.value]}
-            label={g.label}
-          />
-        ))}
-      </div>
-      <div className="space-y-3">
-        <Question>What else do you want to work on?</Question>
-        <p className="text-gray-400 text-xs">Pick any, or none. You can change these later.</p>
-        {GOALS.map((g) => (
-          <Choice
-            key={`goal-${g.value}`}
-            selected={also.includes(g.value)}
-            onSelect={() => save({ fitnessGoals: toggleGoal(also, g.value) })}
-            icon={GOAL_ICONS[g.value]}
-            label={g.label}
-          />
-        ))}
-      </div>
+    <div role="group" aria-label="Your goal" className="grid grid-cols-3 gap-2">
+      {WEIGHT_GOALS.map((g) => (
+        <Tile
+          key={`weight-${g.value}`}
+          selected={answers.weightGoal === g.value}
+          onSelect={() => answers.weightGoal !== g.value && save({ weightGoal: g.value })}
+          icon={WEIGHT_GOAL_ICONS[g.value]}
+          label={g.label}
+        />
+      ))}
+      {GOALS.map((g) => (
+        <Tile
+          key={`goal-${g.value}`}
+          selected={also.includes(g.value)}
+          onSelect={() => save({ fitnessGoals: toggleGoal(also, g.value) })}
+          icon={GOAL_ICONS[g.value]}
+          label={g.label}
+        />
+      ))}
     </div>
   );
 }

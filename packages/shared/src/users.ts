@@ -86,8 +86,9 @@ export const weightGoalSchema = z.enum(["lose", "maintain", "gain"]);
  *  them moves the calories: building muscle is not gaining weight (RULINGS
  *  2026-09-11), and only its protein reads the list. Weight loss is not here,
  *  because it is a weight choice. `strength` (get stronger) and `balance`
- *  (better balance) are the two the goals ruling added; the other six keep the
- *  old list's values, so no stored answer changes meaning. In the order the
+ *  (better balance) are the two the goals ruling added, and `stay_healthy`
+ *  the one Kd added at 4a-iv's click-through; the other six keep the old
+ *  list's values, so no stored answer changes meaning. In the order the
  *  screens show them. */
 export const fitnessGoalSchema = z.enum([
   "muscle_gain",
@@ -98,6 +99,7 @@ export const fitnessGoalSchema = z.enum([
   "posture",
   "balance",
   "stress_relief",
+  "stay_healthy",
 ]);
 /** `gym` is "A gym (everything there)", beside the home equipment (RULINGS
  *  2026-09-10, decision B). */

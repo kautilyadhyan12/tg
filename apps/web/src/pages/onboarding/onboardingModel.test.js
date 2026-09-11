@@ -68,8 +68,10 @@ describe('what the screens offer is exactly what the server accepts', () => {
       'Posture',
       'Better balance',
       'Stress relief',
+      'Stay healthy',
     ]);
-    expect(m.EQUIPMENT.at(-1)).toEqual({ value: 'gym', label: 'A gym (everything there)' });
+    // Kd, at 4a-iv's click-through: "the bracket everything there not needed".
+    expect(m.EQUIPMENT.at(-1)).toEqual({ value: 'gym', label: 'A gym' });
   });
 
   it('every weight choice, goal, level and kind of equipment has a line icon, and nothing else does', () => {

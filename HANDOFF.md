@@ -7,8 +7,10 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 ## 2026-09-11 · Many goals, and a gym (item 4a-iv), branch `many-goals-and-a-gym`
 
 - Kd ruled: the people who already chose Build muscle are asked their weight choice, never given one (RULINGS 2026-09-11).
-- Built: screen 1 asks the weight choice (lose · keep · gain) and "also work on" (8 goals; get stronger and better balance new,
-  with drawn icons); Build muscle ticked sets protein to 2.2 g/kg whatever the choice (Morton 2018; the roadmap said 2.0).
+- Kd's click-through asked for (RULINGS 2026-09-11): screen 1 as ONE grid three to a row under "Your goal", weight choices
+  the top row; a ninth goal, Stay healthy (apple icon); "A gym" without "(everything there)". Settings' goal block matches.
+- Built: screen 1 asks the weight choice (lose · keep · gain) and the goals beside it (9; get stronger, better balance and
+  stay healthy new); Build muscle ticked sets protein to 2.2 g/kg whatever the choice (Morton 2018; the roadmap said 2.0).
   `0028`: `weight_goal` + CHECK moved over from `main_goal` (Build muscle → asked), `main_goal` dropped, goals and equipment
   lists CHECKed, "none" alone on both routes. Settings asks the same questions with the screens' tables and icons; the
   4a-iii sync is gone. "A gym" on screen 7 and Settings. Reset = `DELETE /v1/users/me/onboarding` (name, weigh-ins, health stay).

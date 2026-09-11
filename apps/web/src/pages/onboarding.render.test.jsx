@@ -622,10 +622,15 @@ describe('onboarding screens 1–7', () => {
     expect(pressed(/A gym/)).toBe('false');
   });
 
-  it('asks the weight choice and the goals beside it on screen 1: a goal tap saves the list, and never touches the weight choice', async () => {
+  it('asks screen 1 as one grid under one heading, the weight choice on top: a goal tap never touches the weight choice', async () => {
     serve();
     draw();
     await heading('Your goal');
+    // Kd, at 4a-iv's click-through: no second question; three to a row, four even rows.
+    const grid = screen.getByRole('group', { name: 'Your goal' });
+    expect(within(grid).getAllByRole('button')).toHaveLength(12);
+    expect(screen.queryByText(/what else do you want/i)).toBeNull();
+    expect(screen.getByText('Pick one from the top row, and any of the rest')).toBeTruthy();
     tap(/Build muscle/);
     await saved({ fitnessGoals: ['muscle_gain'] });
     tap(/Better balance/);
