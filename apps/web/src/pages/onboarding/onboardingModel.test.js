@@ -446,7 +446,23 @@ describe('the plan panel says what the server said', () => {
     expect(notes['Your training']).toMatch(/the app's own estimate\.$/);
     expect(notes['Your pace']).toMatch(/usual planning figure \(Wishnofsky\)/);
     expect(notes['Protein']).toBe(
-      '2 g per kilo while losing weight: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+      '2 g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+    );
+  });
+
+  it('never says "while losing weight" under a plan that holds the weight', () => {
+    // A "Lose weight" goal whose plan has no cut (under 18, a health yes, or a
+    // target out of reach): the protein figure is still the goal's, but nobody is losing.
+    const held = {
+      ...plan,
+      targetKcal: 1817,
+      dailyChangeKcal: 0,
+      workings: { ...WORKINGS, change: null, beforeFloorKcal: 1817, finish: null },
+    };
+    const note = m.workingSteps(held, 'lose').find((s) => s.title === 'Protein').note;
+    expect(note).not.toMatch(/while losing weight/);
+    expect(note).toBe(
+      '2 g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
     );
   });
 
@@ -474,7 +490,7 @@ describe('the plan panel says what the server said', () => {
       sum: '2 g × 81.68 kg = 163 g',
       note:
         'Counted on 81.68 kg, the weight at a BMI of 30 for your height, rather than your 100 kg, as protein guidance for heavier bodies does (Weijs, 2025). ' +
-        '2 g per kilo while losing weight: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+        '2 g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
     });
     // Without a goal to name, the figure is still said, as the app's own.
     expect(protein(plan).note).toBe("2 g per kilo is the app's own figure for your goal.");

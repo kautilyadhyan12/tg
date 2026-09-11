@@ -12,7 +12,8 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { missingPlanInputSchema, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 
-const auth = { user: null, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
+// One auth state serves both the page and the app's own route guard.
+const auth = { user: null, loading: false, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -20,6 +21,7 @@ vi.mock('../api/onboardingApi', async (importOriginal) => ({ ...(await importOri
 
 const toast = (await import('react-hot-toast')).default;
 const Onboarding = (await import('./Onboarding')).default;
+const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 
 const EMPTY = {
   displayName: 'kd.test', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null,
@@ -92,11 +94,21 @@ function serve(initial = {}) {
   });
 }
 
+/** Onboarding behind the guard App.jsx puts it behind, so a redirect added to
+ *  that guard would show here. */
 const draw = (entry = '/onboarding') =>
   render(
     <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route path="/onboarding" element={<Onboarding />} />
+        <Route
+          path="/onboarding"
+          element={
+            <ProtectedRoute requireOnboarding={false}>
+              <Onboarding />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/login" element={<p>LOGIN</p>} />
         <Route path="/dashboard" element={<p>MEMBER APP</p>} />
         <Route path="/nutrition" element={<p>NUTRITION</p>} />
       </Routes>
@@ -137,7 +149,7 @@ const aboutYou = async () => {
 };
 
 beforeEach(() => {
-  auth.user = null;
+  auth.user = { onboardingCompleted: false }; // signed in, setup not finished
   auth.updateUser.mockClear();
   auth.logout.mockClear();
   toast.error.mockClear();
@@ -612,15 +624,44 @@ describe('onboarding screens 1–7', () => {
     await heading('Your day');
   });
 
-  it('a person who already finished setup goes back to the app, never signed out', async () => {
+  it('a person who already finished setup can go back to the app, and can still sign out', async () => {
     auth.user = { onboardingCompleted: true };
     serve({ ...ALL, dayActivity: null }); // the one question the plan still needs
     draw(FROM_RINGS);
     await heading('Your day'); // it opens on that question
-    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+    expect(button(/sign out/i)).toBeTruthy();
     tap(/back to the app/i);
     await screen.findByText('NUTRITION');
     expect(auth.logout).not.toHaveBeenCalled();
+  });
+
+  it('Back to the app saves the name box first, and stays while it is blank', async () => {
+    auth.user = { onboardingCompleted: true };
+    serve({ ...ALL, age: null }); // "About you" is the open screen
+    draw(FROM_RINGS);
+    await heading('About you');
+    fireEvent.change(nameBox(), { target: { value: '   ' } });
+    tap(/back to the app/i);
+    expect(await screen.findByText('Type the name we should call you.')).toBeTruthy();
+    expect(screen.queryByText('NUTRITION')).toBeNull();
+    fireEvent.change(nameBox(), { target: { value: 'Kd' } });
+    tap(/back to the app/i);
+    await screen.findByText('NUTRITION');
+    expect(server.answers.displayName).toBe('Kd');
+  });
+
+  it('Back to the app waits for the saves, and a save that failed keeps them here with its message', async () => {
+    auth.user = { onboardingCompleted: true };
+    serve({ ...ALL, dayActivity: null });
+    draw(FROM_RINGS);
+    await heading('Your day');
+    server.failNext = new Error('Network Error');
+    tap(/Mostly sitting/);
+    tap(/back to the app/i);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't reach the server. Check your connection and try again."));
+    await waitFor(() => expect(button(/back to the app/i).disabled).toBe(false));
+    expect(screen.queryByText('NUTRITION')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Your day' })).toBeTruthy();
   });
 
   it('answering the open question and finishing brings them back to the rings', async () => {

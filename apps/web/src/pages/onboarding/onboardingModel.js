@@ -457,10 +457,12 @@ export const WORKING_NOTE = 'Each step is rounded to a whole calorie or gram.';
 export const METRIC_NOTE = 'The formulas work in kilograms and centimetres.';
 
 /** Where each goal's protein figure comes from: the sources plan/maths.ts names
- *  for its table. Grams per kilo, never a share of the calories (Kd, 2026-09-11). */
+ *  for its table. Grams per kilo, never a share of the calories (Kd, 2026-09-11).
+ *  Worded for the goal, not the plan: the figure is the goal's even when the
+ *  plan holds the weight (under 18, a health yes, a target out of reach). */
 const PROTEIN_SOURCE = {
   lose: (g) =>
-    `${g} g per kilo while losing weight: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).`,
+    `${g} g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).`,
   maintain: (g) =>
     `${g} g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).`,
   gain: (g) =>

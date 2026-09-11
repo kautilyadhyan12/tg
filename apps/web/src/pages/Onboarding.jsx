@@ -69,16 +69,17 @@ export default function Onboarding() {
   const { user, updateUser, logout } = useAuth();
 
   // Someone who already finished setup, sent back here to answer a question
-  // the plan still needs, is not locked in until they finish again: their way
-  // out is back to the app, never a sign-out.
+  // the plan still needs, is not locked in until they finish again: "Back to
+  // the app" sits beside Sign out for them.
   const finished = user?.onboardingCompleted === true;
   const returnTo = RETURN_TO.has(location.state?.returnTo) ? location.state.returnTo : '/dashboard';
 
-  // THE ONLY WAY OUT OF THIS SCREEN WITHOUT FINISHING IT (Kd, 2026-08-19).
-  // `ProtectedRoute` sends every un-onboarded account here and the wizard has
-  // no sidebar, so a person who picked the wrong door, or wants to stop, needs
-  // this. It is NOT a skip: it ends the session and returns to the login page,
-  // so the gate is untouched. A separate flag from the wizard's own `busy`,
+  // Sign out, for everyone, and THE ONLY WAY OUT OF THIS SCREEN WITHOUT
+  // FINISHING IT for someone who has not (Kd, 2026-08-19). `ProtectedRoute`
+  // sends every un-onboarded account here and the wizard has no sidebar, so a
+  // person who picked the wrong door, or wants to stop, needs this. It is NOT
+  // a skip: it ends the session and returns to the login page, so the gate is
+  // untouched. A separate flag from the wizard's own `busy`,
   // because the two waits mean opposite things: one is saving the answers,
   // the other is leaving them.
   const [signingOut, setSigningOut] = useState(false);
@@ -153,10 +154,11 @@ export default function Onboarding() {
     if (index > 0) goTo(screens[index - 1].id);
   };
 
-  /** Back to the app for someone who already finished: every answer given is
-   *  saved first (leaving the name box saves it), and a save that failed keeps
-   *  them here, where its message is. */
+  /** Back to the app for someone who already finished: the name box is saved
+   *  as leaving a screen saves it, then every save is waited for. A blank name
+   *  or a save that failed keeps them here, where its message is. */
   const backToApp = async () => {
+    if (!leave()) return;
     setBusy(true);
     const saved = await ob.settled();
     setBusy(false);
@@ -229,8 +231,8 @@ export default function Onboarding() {
           style={{ background: 'rgba(13,12,11,0.55)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' }}
         >
           <div className="max-w-lg mx-auto">
-            <div className="flex justify-end mb-2">
-              {finished ? (
+            <div className="flex justify-end gap-4 mb-2">
+              {finished && (
                 <button
                   type="button"
                   onClick={backToApp}
@@ -240,17 +242,16 @@ export default function Onboarding() {
                   <ArrowLeft className="w-3.5 h-3.5" />
                   Back to the app
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={signingOut}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  {signingOut ? 'Signing out…' : 'Sign out'}
-                </button>
               )}
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
             </div>
             {loaded && (
               <>
