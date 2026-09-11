@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · 4a-iv re-check fixed (one High in a fix, two weak tests), PR #62
+
+- High: Reset's box promised "any health answer you gave" is kept, but the reset deletes Settings' Medical Conditions /
+  Notes text with the row, and the web has never asked the yes/no health question. The box now says the notes are
+  cleared and any answer to the health question is kept.
+- Tests: the reset test saves notes as Settings does and checks the box is empty after; `0028`'s test adds a Flexibility
+  person with an old Weight Loss tick (stays on "maintain", no cut).
+- Verified: api tsc/eslint 0 · api touched files 64 · web reset file 4 · web lint's 4 are master's 4, same rules · two
+  deliberate breaks (0028 reading the tick first; a reset keeping the notes) green on the old tests, red on the new.
+- Open: CI, one re-check of these fixes (a High was open, CLAUDE.md §2.6), merge.
+
 ## 2026-09-12 · 4a-iv review fixed (no Critical/High; six Lows, three weak tests), PR #62
 
 - Lows: screen 1's ruling says what Kd passed (the one line under the heading stays); Reset's confirm box names the
