@@ -21,8 +21,16 @@
 // Engineering choices of this file, not textbook tables: the no-exercise day
 // factors (1.2 is the standard sedentary figure; 1.3 / 1.45 / 1.6 are ours, with
 // training added on top at 5 MET), and the ten-year horizon.
+//
+// Every step the plan screen prints ("How is this worked out?", Kd 2026-09-10)
+// is rounded to a whole kcal before the next step reads it, so each sum on that
+// screen holds exactly; `workings` on the plan carries those steps.
 import {
+  daysToMove,
+  kgBetween,
+  MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
+  PACE_KG_PER_WEEK,
   planInputsSchema,
   planResponseSchema,
   type DayActivity,
@@ -58,12 +66,9 @@ export const ONE_YEAR_DAYS = 365;
  *  calendar the contract accepts. */
 export const MAX_PLAN_DAYS = 10 * ONE_YEAR_DAYS;
 
-/** How fast each pace moves the weight. The same table serves losing and gaining. */
-export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
-  gentle: 0.25,
-  steady: 0.5,
-  brisk: 0.75,
-};
+/** How fast each pace moves the weight: the shared table, so the screen that
+ *  offers the paces and this file cannot disagree. */
+export { PACE_KG_PER_WEEK };
 const PACES: readonly PlanPace[] = ["gentle", "steady", "brisk"];
 
 /** Resting burn × this = the day's burn WITHOUT training (training is added from
@@ -97,14 +102,31 @@ export function addDays(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
+/** Mifflin-St Jeor has two versions: the women's for a female answer, and the
+ *  men's for every other answer. */
+const formulaFor = (gender: Gender): "female" | "male" => (gender === "female" ? "female" : "male");
+
 /** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. */
 export function restingBurn(input: { age: number; gender: Gender; heightCm: number; weightKg: number }): number {
-  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + (input.gender === "female" ? -161 : 5);
+  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[formulaFor(input.gender)];
 }
 
-export function dailyBurn(input: PlanInputs): number {
-  const perSession = TRAINING_MET * input.weightKg * (input.sessionMinutes / 60);
-  return restingBurn(input) * DAY_FACTOR[input.dayActivity] + (perSession * input.trainingDays) / 7;
+export interface BurnSteps {
+  restingKcal: number;
+  dayKcal: number;
+  trainingKcal: number;
+  burnKcal: number;
+}
+
+/** The day's burn in the whole-kcal steps the plan screen prints: resting burn,
+ *  rounded; × the day's factor, rounded; plus the week's training spread over
+ *  seven days, rounded. The burn IS the sum of the last two. */
+export function burnSteps(input: PlanInputs): BurnSteps {
+  const restingKcal = Math.round(restingBurn(input));
+  const dayKcal = Math.round(restingKcal * DAY_FACTOR[input.dayActivity]);
+  const weekHours = (input.sessionMinutes * input.trainingDays) / 60;
+  const trainingKcal = Math.round((TRAINING_MET * input.weightKg * weekHours) / 7);
+  return { restingKcal, dayKcal, trainingKcal, burnKcal: dayKcal + trainingKcal };
 }
 
 export function healthyWeightFloorKg(heightCm: number): number {
@@ -143,33 +165,34 @@ export function noDeficitReasons(input: Pick<PlanInputs, "age" | "health">): NoD
   return reasons;
 }
 
-/** Calories to eat (whole kcal) for a daily change of `wanted` against a whole
- *  `burn`, never below the floor; `floored` says whether the floor changed it. */
-function eatFor(burn: number, wanted: number): { targetKcal: number; floored: boolean } {
-  const raw = Math.round(burn + wanted);
+/** Calories to eat for a whole daily `change` against a whole `burn`, never
+ *  below the floor; `floored` says whether the floor changed it. */
+function eatFor(burn: number, change: number): { targetKcal: number; floored: boolean } {
+  const raw = burn + change;
   const targetKcal = Math.max(raw, CALORIE_FLOOR_KCAL);
   return { targetKcal, floored: targetKcal !== raw };
 }
 
-/** The daily change a pace asks for: negative for a cut, positive for a gain. */
+/** The whole daily change a pace asks for: negative for a cut, positive for a gain. */
 function wantedDailyChange(goal: PlanGoal, pace: PlanPace): number {
-  const size = (PACE_KG_PER_WEEK[pace] * KCAL_PER_KG) / 7;
+  const size = Math.round((PACE_KG_PER_WEEK[pace] * KCAL_PER_KG) / 7);
   return goal === "gain" ? size : -size;
 }
 
-/** Whole days to move `kgToMove` at `dailyChange` kcal a day (the whole number the
- *  screen shows, so the date can be re-derived from it). Null when the change does
- *  not point the way the goal needs — the floor can turn a cut into nothing or into
- *  a surplus — or when the target is beyond the horizon. */
+/** Whole days to move `kgToMove` at `dailyChange` kcal a day — the whole number
+ *  the screen shows, re-derivable from it (`daysToMove`, in whole hundredths of
+ *  a kilo). Null when the change does not point the way the goal needs — the
+ *  floor can turn a cut into nothing or into a surplus — or when the target is
+ *  beyond the horizon. */
 function daysFor(goal: PlanGoal, kgToMove: number, dailyChange: number): number | null {
   if (goal === "lose" ? dailyChange >= 0 : dailyChange <= 0) return null;
-  const days = Math.ceil((kgToMove * KCAL_PER_KG) / Math.abs(dailyChange));
+  const days = daysToMove(kgToMove, KCAL_PER_KG, dailyChange);
   return days > MAX_PLAN_DAYS ? null : days;
 }
 
 export function computePlan(input: PlanInputs): PlanNumbers {
-  const bmr = restingBurn(input);
-  const burn = Math.round(dailyBurn(input));
+  const steps = burnSteps(input);
+  const burn = steps.burnKcal;
   const flags: PlanFlag[] = [];
 
   // Where the plan runs to. `null` means the weight is not moved.
@@ -200,18 +223,21 @@ export function computePlan(input: PlanInputs): PlanNumbers {
     else plannedTarget = input.targetWeightKg;
   }
 
-  let eat = eatFor(burn, plannedTarget !== null && input.pace !== null ? wantedDailyChange(input.goal, input.pace) : 0);
+  // The daily change the pace asks for; nothing while the weight is not moved.
+  let change = plannedTarget !== null && input.pace !== null ? wantedDailyChange(input.goal, input.pace) : 0;
+  let eat = eatFor(burn, change);
   let days: number | null = null;
   let outOfReach = false;
   let kg = 0;
   if (plannedTarget !== null) {
-    kg = Math.abs(plannedTarget - input.weightKg);
+    kg = kgBetween(plannedTarget, input.weightKg);
     days = daysFor(input.goal, kg, eat.targetKcal - burn);
     if (days === null) {
       // The floor left no cut (a "lose" plan), or the move is beyond the
       // horizon: the plan holds the weight instead of promising a date.
       outOfReach = true;
       plannedTarget = null;
+      change = 0;
       eat = eatFor(burn, 0);
     }
   }
@@ -225,16 +251,46 @@ export function computePlan(input: PlanInputs): PlanNumbers {
   }
   if (outOfReach) flags.push({ code: "target_out_of_reach" });
 
+  const proteinPerKg = PROTEIN_G_PER_KG[input.goal];
+  const formula = formulaFor(input.gender);
   return {
-    restingBurnKcal: Math.round(bmr),
+    restingBurnKcal: steps.restingKcal,
     dailyBurnKcal: burn,
     targetKcal: eat.targetKcal,
     dailyChangeKcal: eat.targetKcal - burn,
-    ...macrosFor(eat.targetKcal, input.weightKg, PROTEIN_G_PER_KG[input.goal]),
+    ...macrosFor(eat.targetKcal, input.weightKg, proteinPerKg),
     plannedTargetKg: plannedTarget ?? input.weightKg,
     daysToTarget: days,
     finishDate: days === null ? null : addDays(input.today, days),
     flags,
+    workings: {
+      resting: {
+        formula,
+        weightKg: input.weightKg,
+        heightCm: input.heightCm,
+        age: input.age,
+        constant: MIFFLIN_ST_JEOR_CONSTANT[formula],
+        kcal: steps.restingKcal,
+      },
+      day: { activity: input.dayActivity, factor: DAY_FACTOR[input.dayActivity], kcal: steps.dayKcal },
+      training: {
+        kcalPerKgHour: TRAINING_MET,
+        weightKg: input.weightKg,
+        trainingDays: input.trainingDays,
+        sessionMinutes: input.sessionMinutes,
+        kcal: steps.trainingKcal,
+      },
+      change:
+        change === 0 || input.pace === null
+          ? null
+          : { pace: input.pace, kgPerWeek: PACE_KG_PER_WEEK[input.pace], kcalPerKg: KCAL_PER_KG, kcal: change },
+      beforeFloorKcal: burn + change,
+      floorKcal: CALORIE_FLOOR_KCAL,
+      protein: { gPerKg: proteinPerKg, weightKg: input.weightKg, wantedG: Math.round(input.weightKg * proteinPerKg) },
+      fatShare: FAT_SHARE,
+      carbsFloorG: CARBS_FLOOR_G,
+      finish: days === null ? null : { kgToMove: kg, kcalPerKg: KCAL_PER_KG },
+    },
   };
 }
 

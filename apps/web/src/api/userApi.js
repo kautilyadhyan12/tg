@@ -1,3 +1,6 @@
+// Onboarding v2's own calls are in onboardingApi.js; this file keeps the
+// profile and the fitness profile the Settings forms edit.
+//
 // P2.8 web repoint (Card 6) — user profile + onboarding on the NEW /v1 API via
 // the Card-1 cookie client (httpOnly session; no tokens in JS). The old wizard
 // wrote onboarding to the legacy backend-ml PATCH /users/onboarding endpoint;
@@ -12,7 +15,7 @@ import authApi from './authApi';
 // Height/target-weight go onto the fitness profile in CM/KG; the API's
 // heightCm/targetWeightKg are `multipleOf(0.01)`, so every converted value MUST
 // round to 2dp or the .strict() body 400s (the Card-3 f.1 class of bug).
-const KG_PER_LB = 0.453592; // ported constant (DECISIONS 2026-07-13 P2.7b weight.ts)
+export const KG_PER_LB = 0.453592; // ported constant (DECISIONS 2026-07-13 P2.7b weight.ts)
 const CM_PER_FT = 30.48;
 const round2 = (n) => Math.round(n * 100) / 100;
 const num = (v) => {
@@ -47,31 +50,6 @@ export function convertWeight(value, toUnit) {
   const v = num(value);
   if (v === null) return value;
   return String(round2(toUnit === 'lbs' ? v / KG_PER_LB : v * KG_PER_LB));
-}
-
-/** The wizard's flat formData → the PUT /v1/users/me/fitness-profile body
- *  (putFitnessProfileRequestSchema). Renames sessionDuration→sessionDurationMin,
- *  converts height/target-weight units to metric + 2dp, and maps a blank
- *  medical note to null ("" is not "no conditions stated"). Weight is NOT here —
- *  it is a weigh-in, saved via PATCH /v1/users/me. `onboardingCompleted` is
- *  added by the caller (kept out so a future Settings edit can reuse this mapper
- *  without flipping the gate). Pure + unit-tested. */
-export function toFitnessProfilePayload(formData) {
-  const age = parseInt(formData.age, 10);
-  const med = (formData.medicalConditions || '').trim();
-  return {
-    age: Number.isFinite(age) ? age : null,
-    gender: formData.gender || null,
-    heightCm: heightToCm(formData.heightValue, formData.heightUnit),
-    targetWeightKg: weightToKg(formData.targetWeightValue, formData.weightUnit),
-    fitnessLevel: formData.fitnessLevel || null,
-    fitnessGoals: formData.fitnessGoals || [],
-    exerciseFrequency: Number.isFinite(formData.exerciseFrequency) ? formData.exerciseFrequency : null,
-    availableEquipment: formData.availableEquipment || [],
-    sessionDurationMin: Number.isFinite(formData.sessionDuration) ? formData.sessionDuration : null,
-    preferredWorkoutTime: formData.preferredWorkoutTime || null,
-    medicalConditions: med === '' ? null : med,
-  };
 }
 
 /** Card 7 (Settings): the fitness-profile PUT is a FULL replace, and the two

@@ -4,6 +4,72 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · Screens 1–7: the re-check's four Lows (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
+
+- The fresh-chat re-check of round 1 found no Critical/High and four Lows; all four are fixed here. No third review (§2.6).
+- Wheels: a slow drag that rests and goes on saves where the finger lifts, not where it rested (a gesture never settles
+  while a finger is down; a touch that is cancelled ends it too).
+- Plan check: besides each line's own sum, every figure the plan panel prints twice must agree — the weight, the formula's
+  constant, the pace's kg a week, kcal per kilo, kg to move, and the two floors the flags name. The Mifflin-St Jeor
+  constants and the kg-between sum moved to `@app/shared`, so the calculator and the check share them.
+- Tests: the gesture test is split (a press let go, a mouse wheel, a finger lifting, a touch or a press the browser
+  cancels), plus Tab away and the slow drag; two contract tests. Each of the 8 wheel handlers and 9 new checks, removed
+  in turn by hand, turns a test red (17 of 17); files restored.
+- Verified: shared tsc/eslint 0, 83 · api tsc/eslint 0, plan.unit 53, CI-shaped 306, local onboarding routes 34 · web
+  eslint 0 (touched files), onboarding 68, full 1954 (poseAssets.contract is the known local encoding red).
+- Open: Kd's click-through of the wheels — it includes the scroll fix's cost (on a phone a wheel is tapped before it is
+  flicked, and that tap picks the row tapped) — CI, merge. Then 4a-iii → 4a-iv → 4b.
+
+## 2026-09-11 · Screens 1–7: Kd's second look and review round 1 (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
+
+- Built Kd's second look (RULINGS 2026-09-10/11): flick wheels with − and +, the name first, plain push-up and plank
+  questions, "How is this worked out?", two drawn icons, a target wheel that offers only the goal's side.
+- Review round 1: 3 High, 6 Low, all fixed. Re-picking the rows on show saves nothing (rows, not kg: 70 kg reads 154.3 lb
+  = 69.99 kg); a wheel turns only once tapped or focused, so scrolling the page never sets an answer; the target shows on a
+  row it offers in either unit; the contract checks the working's products as well as its sums.
+- CORRECTED: Kd was told the macros sit inside the IOM ranges. They don't: the golden loss plan is 44.2 % protein and
+  30.9 % carbs (IOM 10–35 % and 45–65 %). He has been told; the choice is the first question of 4a-iii (ROADMAP).
+- Verified: shared 83 · api plan.unit 52, CI-shaped 305, local onboarding routes 34 · web 1948 · tsc/eslint 0 · burn within
+  2 kcal of 3a's. Headless Edge, mouse and touch: the old wheel saved age 35 under a page scroll; the new one scrolls the page.
+- Open: the fresh-chat re-check of the fixes, Kd's click-through of the wheels, CI, merge. Then 4a-iii → 4a-iv → 4b.
+
+## 2026-09-10 · Onboarding screens 1–7 (item 4a-ii), branch `onboarding-screens-1-7`
+
+- Built: seven screens replace the old five-step form (`pages/Onboarding.jsx` + `pages/onboarding/`): one goal · about you
+  (typed, kg·cm or lb·ft) · target (lose/gain only) · your day · your training (checks skippable, plank timer) · your week ·
+  equipment ("No equipment" exclusive; an old "none"+equipment answer loads without "none"). Taps save through one queue;
+  the server's number and its flags in words on every screen once it exists; a returning person lands on the first gap.
+- Server: PATCH refuses `onboardingCompleted: true` while the plan lacks an answer (409 with the list, inside the save's
+  transaction, so a refused body writes nothing). The pace table moved to `@app/shared`. Rings' move split out as 4a-iii.
+- Verified: shared tsc + 81; api tsc + eslint 0; local Postgres plan.unit + users.onboarding 79; web eslint 0 (touched
+  files); web 1921 passed (poseAssets.contract is the known local encoding red). Run red first: finish rule off (409→200),
+  date formatter without UTC (Los Angeles showed Nov 18), and the wizard's sign-out mutants D16/D17 by hand.
+- Found: `mutate-login-door.mjs` aborts at D9 (anchor is the "I run a gym" label renamed 2026-09-07); not re-anchored.
+  CI's first run failed `xpDisplay` "non-array recommendations" (reads the message without waiting; 3/3 locally): item 10.
+- Kd clicked through: passed. His look changes, built the same day (RULINGS 2026-09-10): line icons for emoji, a big units
+  switch first, a clickable step bar, no number box before the number, the disclaimer's first sentence only under it.
+  Pushed as 7508a3d; all five CI jobs green.
+- FIVE FIXES REMAIN on this branch before the review, from his second look (build them first, plan first, tests alongside):
+  (1) Flexibility and Pull-up bar icons drawn by hand in lucide's line style — the library's wheelchair and arrow are
+  wrong; (2) age, height, weight and target become flick wheels with + and − buttons — nothing typed, nothing pre-filled
+  (RULINGS: tap-only screens; "Not set" until touched, as Settings' slider does); (3) "About you" opens with "What should
+  we call you?", the one typed box that stays, saved as `displayName` (a code sign-in names the account after the email's
+  local part today; Settings can change it); (4) screen 5 asks "How many push-ups can you do in a row?" and "How long can
+  you hold a plank?" as plain questions with a "Not sure" tap — no timer, no test wording; nothing reads the two numbers
+  until 6a; (5) "How is this worked out?" under the number: the SERVER sends the steps (it alone knows the day factor,
+  the MET and the protein table), the screen prints each with Kd's own numbers and the source named in maths.ts's header.
+- Then: tests, Kd's click-through again, the fresh-chat review, merge. After merge: 4a-iii (rings, small) → 4a-iv (goals
+  and gym) → 4b (health). Kd builds the rest with a different model; his goals ruling is in RULINGS and its design in 4a-iv/6a.
+- OPEN DECISIONS, to ask in the next plan: B "A gym" on screen 7 (recommended yes) · C the health question gains "or take
+  any medicine, including for weight loss" (recommended yes) · D "follow their advice over the app's" stays on sign-up,
+  the health step and the plan screen for the lawyer to reword (recommended yes). Kd has not answered these.
+- Local servers (memory `run-api-locally-env-file`): API on local Postgres, web on 5173; the sign-in code prints in the
+  API log. `kd.onboarding.test@example.com` has finished onboarding on the local database — use a fresh address, or
+  Settings → Reset onboarding. Until 4a-iii the Nutrition rings can show a different daily number.
+- Two more asks from Kd, both for 4b, NOT this branch (each needs a column): veg / non-veg on the food screen, and a
+  running question for everyone on screen 5 plus the runner's own on screen 10 — ruled and specified in RULINGS
+  2026-09-10 and ROADMAP 4b / 7b.
+
 ## 2026-09-10 · Weight has one source and no copy (item 4a-i-b), branch `weight-one-source`, PR #59
 
 - Built (Kd's redesign, RULINGS 2026-09-10): `0027` re-runs 0026's backfill, drops `users.weight_kg`, adds the

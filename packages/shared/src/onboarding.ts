@@ -23,6 +23,7 @@ import {
   type PlanGoal,
 } from "./plan.js";
 import {
+  displayNameSchema,
   equipmentArraySchema,
   equipmentSchema,
   fitnessGoalSchema,
@@ -71,6 +72,10 @@ const sessionMinutesSchema = z.number().int().min(5).max(240);
  *  is typed there is saved as a weigh-in marked "typed by me". */
 export const onboardingAnswersSchema = z
   .object({
+    /** What the app calls the person — the account's own name, which screen 2
+     *  asks first (Kd, 2026-09-10). Never empty: a code sign-in starts it at
+     *  the email's first part, Google at the Google name. */
+    displayName: z.string(),
     mainGoal: mainGoalSchema.nullable(),
     age: z.number().int().nullable(),
     gender: genderSchema.nullable(),
@@ -125,6 +130,8 @@ export type OnboardingQuery = z.infer<typeof onboardingQuerySchema>;
  *  parameter), so a client cannot move its own finish date. */
 export const patchOnboardingRequestSchema = z
   .object({
+    /** The profile form's own rail. A name is changed, never cleared: no null. */
+    displayName: displayNameSchema.optional(),
     mainGoal: mainGoalSchema.nullable().optional(),
     age: z.number().int().min(16).max(120).nullable().optional(),
     gender: genderSchema.nullable().optional(),
@@ -159,3 +166,16 @@ export const onboardingResponseSchema = z
     message: "plan must be null exactly when missing is non-empty",
   });
 export type OnboardingResponse = z.infer<typeof onboardingResponseSchema>;
+
+/** The 409 a finish gets while the plan still lacks an answer: onboarding
+ *  comes before the training side (RULINGS 2026-07-19). `missing` names the
+ *  questions still open, so the screen can send the person to them. */
+export const onboardingIncompleteBodySchema = z
+  .object({
+    error: z.literal("onboarding_incomplete"),
+    message: z.string(),
+    requestId: z.string(),
+    missing: z.array(missingPlanInputSchema).min(1),
+  })
+  .strict();
+export type OnboardingIncompleteBody = z.infer<typeof onboardingIncompleteBodySchema>;

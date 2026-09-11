@@ -4,7 +4,7 @@
 // numbers or an honest list of what is still missing — never both, and never a
 // number built from a default (RULINGS 2026-07-15: unanswered is not "beginner").
 // So the number first exists once the eight core answers are in — after "your
-// week" (screen 6); screens 1–5 show what is still needed, in plain words. From
+// week" (screen 6); before that the screens show no number box (Kd, 2026-09-10). From
 // screen 6 on, every answer changes the number (RULINGS 2026-09-07).
 // The calculator itself lives in apps/api/src/modules/plan/maths.ts and is pure:
 // it reads no clock, so "today" is an input — the route (item 4a) derives it from
@@ -19,6 +19,15 @@ export type PlanGoal = z.infer<typeof planGoalSchema>;
 /** How fast, in the person's words; the kg-a-week behind each is in the calculator. */
 export const planPaceSchema = z.enum(["gentle", "steady", "brisk"]);
 export type PlanPace = z.infer<typeof planPaceSchema>;
+
+/** How fast each pace moves the weight, in kg a week: one table, read by the
+ *  plan maths and by the screen that offers the choice. The same table serves
+ *  losing and gaining. */
+export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
+  gentle: 0.25,
+  steady: 0.5,
+  brisk: 0.75,
+};
 
 /** Screen 4 ("your day"): what the day looks like OUTSIDE training. Training is
  *  added on top from the week's answers, so these factors are the no-exercise ones. */
@@ -138,6 +147,89 @@ export const planFlagSchema = z.discriminatedUnion("code", [
 ]);
 export type PlanFlag = z.infer<typeof planFlagSchema>;
 
+/** Mifflin-St Jeor's constant in each version of the formula: one table, read
+ *  by the calculator and by the check on its working below. */
+export const MIFFLIN_ST_JEOR_CONSTANT: Readonly<Record<"female" | "male", number>> = {
+  female: -161,
+  male: 5,
+};
+
+/** How the number was reached, one step per line of "How is this worked out?"
+ *  under the daily number (Kd, 2026-09-10). The server sends every figure the
+ *  steps use — only it knows the day factor, the training figure and the
+ *  protein table — and the screen adds the words and the sources. Every kcal
+ *  and gram is whole. The refine on `planNumbersSchema` checks each line's own
+ *  product and sum against the plan's numbers, and each figure the plan panel
+ *  prints on more than one line against its twin: the weight, the formula's
+ *  constant, the pace's kilos a week, the kcal per kilo, the kilos to move and
+ *  the two floors the flags name. So a working that does not multiply out, add
+ *  up or agree with itself is refused on both sides of the wire. */
+export const planWorkingsSchema = z
+  .object({
+    /** Mifflin-St Jeor: 10 × weight + 6.25 × height − 5 × age + `constant`,
+     *  rounded. `formula` names the version used: the women's (−161) for a
+     *  female answer, the men's (+5) for every other answer. */
+    resting: z
+      .object({
+        formula: z.enum(["female", "male"]),
+        weightKg: z.number(),
+        heightCm: z.number(),
+        age: z.number().int(),
+        constant: z.number().int(),
+        kcal: z.number().int(),
+      })
+      .strict(),
+    /** The day outside training: resting × `factor`, rounded. */
+    day: z.object({ activity: dayActivitySchema, factor: z.number(), kcal: z.number().int() }).strict(),
+    /** Training spread over the week: kcal per kg per hour × weight × the
+     *  week's minutes ÷ 60 ÷ 7 days, rounded. */
+    training: z
+      .object({
+        kcalPerKgHour: z.number(),
+        weightKg: z.number(),
+        trainingDays: z.number().int(),
+        sessionMinutes: z.number().int(),
+        kcal: z.number().int(),
+      })
+      .strict(),
+    /** What the pace asks for a day — kg a week × kcal per kg ÷ 7, negative for
+     *  a cut — or null when the plan holds the weight (the flags say why). */
+    change: z
+      .object({ pace: planPaceSchema, kgPerWeek: z.number(), kcalPerKg: z.number().int(), kcal: z.number().int() })
+      .strict()
+      .nullable(),
+    /** Burn plus the change, before the calorie floor. */
+    beforeFloorKcal: z.number().int(),
+    floorKcal: z.number().int(),
+    /** Grams per kg for the goal × weight, rounded. `proteinG` is smaller only
+     *  when the carbohydrate floor made protein give way. */
+    protein: z.object({ gPerKg: z.number(), weightKg: z.number(), wantedG: z.number().int() }).strict(),
+    /** Fat's share of the calories, at 9 kcal a gram. */
+    fatShare: z.number(),
+    /** Carbohydrates take the rest, at 4 kcal a gram, never under this. */
+    carbsFloorG: z.number().int(),
+    /** The finish date's working: kg to move × kcal per kg ÷ the daily change,
+     *  rounded up to a whole day. Null exactly when there is no date. */
+    finish: z.object({ kgToMove: z.number(), kcalPerKg: z.number().int() }).strict().nullable(),
+  })
+  .strict();
+export type PlanWorkings = z.infer<typeof planWorkingsSchema>;
+
+/** Whole days to move `kgToMove` at `dailyChangeKcal` a day, counted in whole
+ *  hundredths of a kilo. The weights carry two decimals, and their
+ *  floating-point difference can carry a crumb (64.01 − 63.01 is
+ *  1.0000000000000142) that rounds an exact number of days UP by one. The
+ *  calculator and the check below share this one sum. */
+export function daysToMove(kgToMove: number, kcalPerKg: number, dailyChangeKcal: number): number {
+  return Math.ceil((Math.round(kgToMove * 100) * kcalPerKg) / (100 * Math.abs(dailyChangeKcal)));
+}
+
+/** The kilos between two weights. Both carry two decimals, so the distance is
+ *  kept to two as well. The calculator and the check below share this one sum. */
+export function kgBetween(aKg: number, bKg: number): number {
+  return Math.round(Math.abs(aKg - bKg) * 100) / 100;
+}
+
 export const planNumbersSchema = z
   .object({
     /** Resting burn (Mifflin-St Jeor), kcal a day. */
@@ -163,8 +255,59 @@ export const planNumbersSchema = z
     daysToTarget: z.number().int().nullable(),
     finishDate: calendarDaySchema.nullable(),
     flags: z.array(planFlagSchema),
+    /** How the numbers above were reached, step by step. */
+    workings: planWorkingsSchema,
   })
-  .strict();
+  .strict()
+  .refine(
+    (p) => {
+      // Every line "How is this worked out?" prints: each product as the
+      // calculator rounds it (the same expressions, so the same floating
+      // point), then each sum against the plan's own numbers, then each figure
+      // the panel prints on two lines against its twin.
+      const w = p.workings;
+      const r = w.resting;
+      const t = w.training;
+      return (
+        r.kcal === Math.round(10 * r.weightKg + 6.25 * r.heightCm - 5 * r.age + r.constant) &&
+        w.day.kcal === Math.round(r.kcal * w.day.factor) &&
+        t.kcal === Math.round((t.kcalPerKgHour * t.weightKg * ((t.sessionMinutes * t.trainingDays) / 60)) / 7) &&
+        (w.change === null || Math.abs(w.change.kcal) === Math.round((w.change.kgPerWeek * w.change.kcalPerKg) / 7)) &&
+        w.protein.wantedG === Math.round(w.protein.weightKg * w.protein.gPerKg) &&
+        r.kcal === p.restingBurnKcal &&
+        w.day.kcal + w.training.kcal === p.dailyBurnKcal &&
+        w.beforeFloorKcal === p.dailyBurnKcal + (w.change?.kcal ?? 0) &&
+        p.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal) &&
+        p.dailyChangeKcal === p.targetKcal - p.dailyBurnKcal &&
+        p.proteinG <= w.protein.wantedG &&
+        p.fatG === Math.round((p.targetKcal * w.fatShare) / 9) &&
+        p.carbsG >= w.carbsFloorG &&
+        (w.finish === null) === (p.daysToTarget === null) &&
+        (w.finish === null || p.daysToTarget === daysToMove(w.finish.kgToMove, w.finish.kcalPerKg, p.dailyChangeKcal)) &&
+        // The weight on the resting, training and protein lines, and in
+        // "Keeps your weight at …" when the plan holds it.
+        t.weightKg === r.weightKg &&
+        w.protein.weightKg === r.weightKg &&
+        (p.daysToTarget !== null || p.plannedTargetKg === r.weightKg) &&
+        // The version of the formula the resting line names, and its constant.
+        r.constant === MIFFLIN_ST_JEOR_CONSTANT[r.formula] &&
+        // The pace line's kilos a week, as screen 3 offers that pace.
+        (w.change === null || w.change.kgPerWeek === PACE_KG_PER_WEEK[w.change.pace]) &&
+        // The finish line: the kilos between the weight and "Reach …", and the
+        // pace line's kcal per kilo.
+        (w.finish === null || w.finish.kgToMove === kgBetween(p.plannedTargetKg, r.weightKg)) &&
+        (w.finish === null || w.change === null || w.finish.kcalPerKg === w.change.kcalPerKg) &&
+        // The flags' figures: the floor "To eat" names, and the healthy weight
+        // a dated plan runs to.
+        p.flags.every(
+          (flag) =>
+            (flag.code !== "calorie_floor_applied" || flag.floorKcal === w.floorKcal) &&
+            (flag.code !== "target_below_healthy_weight" || p.daysToTarget === null || flag.floorKg === p.plannedTargetKg),
+        )
+      );
+    },
+    { message: "the working must add up to the plan's own numbers" },
+  );
 export type PlanNumbers = z.infer<typeof planNumbersSchema>;
 
 /** `plan` is null EXACTLY when `missing` is non-empty — enforced here so every

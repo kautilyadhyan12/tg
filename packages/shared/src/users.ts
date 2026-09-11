@@ -28,6 +28,10 @@ export type UserProfile = z.infer<typeof userProfileSchema>;
 export const userProfileResponseSchema = z.object({ user: userProfileSchema });
 export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
 
+/** The name the app calls a person. One rail for every surface that writes
+ *  it: the profile form, and onboarding's "What should we call you?". */
+export const displayNameSchema = z.string().trim().min(1).max(100);
+
 /** PATCH body: preference/display fields ONLY — server-owned fields (email,
  *  status, plan-adjacent anything) are not writable here (R3.1). Locale/units
  *  value sets recorded in DECISIONS (P2.2): locales = the spec's EN/HI/AS
@@ -37,7 +41,7 @@ export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
  *  the number the history already shows writes nothing. */
 export const updateProfileRequestSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(100).optional(),
+    displayName: displayNameSchema.optional(),
     locale: z.enum(["en", "hi", "as"]).optional(),
     units: z.enum(["metric", "imperial"]).optional(),
     timezone: z.string().trim().min(1).max(64).nullable().optional(),

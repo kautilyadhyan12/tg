@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calendarDaySchema,
+  daysToMove,
+  MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
   planAnswersSchema,
   planHealthSchema,
   planInputsSchema,
+  planNumbersSchema,
   planResponseSchema,
   planStartDaySchema,
   type PlanAnswers,
@@ -25,8 +28,8 @@ import {
   PROTEIN_G_PER_KG,
   TRAINING_MET,
   addDays,
+  burnSteps,
   computePlan,
-  dailyBurn,
   healthyWeightFloorKg,
   macrosFor,
   missingPlanInputs,
@@ -35,14 +38,16 @@ import {
   restingBurn,
 } from "../src/modules/plan/maths.js";
 
-// The worked example every golden below is hand-computed from:
-//   resting burn  = 10·82 + 6.25·175 − 5·30 + 5            = 1768.75
-//   training      = 5 MET · 82 kg · 0.75 h · 3 days / 7    = 131.7857…
-//   daily burn    = 1768.75 · 1.2 + 131.7857               = 2254.2857… → 2254 (whole kcal from here on)
+// The worked example every golden below is hand-computed from, in the whole-kcal
+// steps the plan screen prints ("How is this worked out?"):
+//   resting burn  = 10·82 + 6.25·175 − 5·30 + 5            = 1768.75 → 1769
+//   your day      = 1769 · 1.2 (sitting)                   = 2122.8  → 2123
+//   training      = 5 · 82 kg · (3 · 45 min) ÷ 60 ÷ 7      = 131.79  → 132
+//   daily burn    = 2123 + 132                             = 2255
 //   steady cut    = 0.5 kg/wk · 7700 / 7                   = 550 a day
-//   eat           = 2254 − 550                             = 1704
+//   eat           = 2255 − 550                             = 1705
 //   days          = ⌈7 kg · 7700 / 550⌉                    = 98 → 2026-12-15
-//   protein 82·2 = 164 · fat 1704·0.25/9 = 47.33 → 47 · carbs (1704 − 656 − 426)/4 = 155.5 → 156
+//   protein 82·2 = 164 · fat 1705·0.25/9 = 47.36 → 47 · carbs (1705 − 656 − 426.25)/4 = 155.69 → 156
 /** The facts every plan must hold, whatever the body: the screen's numbers
  *  subtract and add up, the floors hold, the date is re-derivable from what is
  *  shown, an unmoved plan holds the current weight (and says why), and the
@@ -64,9 +69,23 @@ function brokenFacts(body: PlanInputs): string[] {
   check("date exactly when days", (plan.finishDate === null) === (plan.daysToTarget === null));
   const codes = plan.flags.map((f) => f.code);
   check("no flag twice", new Set(codes).size === codes.length);
+  // The working "How is this worked out?" prints: every line holds on its own
+  // numbers, and its sums hold on the plan's.
+  const w = plan.workings;
+  const rest = w.resting;
+  const train = w.training;
+  check("working: resting is the equation", rest.kcal === Math.round(10 * rest.weightKg + 6.25 * rest.heightCm - 5 * rest.age + rest.constant));
+  check("working: day is resting × factor", w.day.kcal === Math.round(rest.kcal * w.day.factor));
+  check("working: training is its product", train.kcal === Math.round((train.kcalPerKgHour * train.weightKg * ((train.sessionMinutes * train.trainingDays) / 60)) / 7));
+  check("working: burn is day + training", w.day.kcal + train.kcal === plan.dailyBurnKcal);
+  check("working: the change is the pace's", w.change === null || Math.abs(w.change.kcal) === Math.round((w.change.kgPerWeek * w.change.kcalPerKg) / 7));
+  check("working: a change exactly when the weight moves", (w.change === null) === (plan.daysToTarget === null));
+  check("working: eat is burn + change, floored", w.beforeFloorKcal === plan.dailyBurnKcal + (w.change?.kcal ?? 0) && plan.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal));
+  check("working: protein asked is the table's", w.protein.wantedG === Math.round(w.protein.weightKg * w.protein.gPerKg) && plan.proteinG <= w.protein.wantedG);
+  check("the contract accepts it", planNumbersSchema.safeParse(plan).success);
   if (plan.daysToTarget !== null) {
     check("inside the horizon", plan.daysToTarget <= MAX_PLAN_DAYS);
-    check("days re-derivable", plan.daysToTarget === Math.ceil((Math.abs(plan.plannedTargetKg - body.weightKg) * KCAL_PER_KG) / Math.abs(plan.dailyChangeKcal)));
+    check("days re-derivable", plan.daysToTarget === daysToMove(Math.abs(plan.plannedTargetKg - body.weightKg), KCAL_PER_KG, plan.dailyChangeKcal));
     check("date = today + days", plan.finishDate === addDays(body.today, plan.daysToTarget));
     check("a dated plan is not out of reach", !codes.includes("target_out_of_reach"));
     check("a dated plan has a deficit allowed", !codes.includes("no_deficit"));
@@ -118,6 +137,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(PACE_KG_PER_WEEK).toEqual({ gentle: 0.25, steady: 0.5, brisk: 0.75 });
     expect(DAY_FACTOR).toEqual({ sitting: 1.2, on_feet: 1.3, active: 1.45, very_active: 1.6 });
     expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // targets.ts:174
+    expect(MIFFLIN_ST_JEOR_CONSTANT).toEqual({ female: -161, male: 5 });
   });
 
   it("resting burn is Mifflin-St Jeor; only 'female' takes −161", () => {
@@ -127,22 +147,24 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(restingBurn({ ...sample, gender: "prefer_not_to_say" })).toBeCloseTo(1768.75, 6);
   });
 
-  it("daily burn = resting × the day's factor + the week's training spread over 7 days", () => {
-    expect(dailyBurn(sample)).toBeCloseTo(2254.2857, 3);
+  it("daily burn = resting × the day's factor + the week's training over 7 days, each step in whole kcal", () => {
+    expect(burnSteps(sample)).toEqual({ restingKcal: 1769, dayKcal: 2123, trainingKcal: 132, burnKcal: 2255 });
     // No training: the day's factor alone.
-    expect(dailyBurn({ ...sample, trainingDays: 0 })).toBeCloseTo(1768.75 * 1.2, 6);
-    expect(dailyBurn({ ...sample, trainingDays: 3, sessionMinutes: 0 })).toBeCloseTo(1768.75 * 1.2, 6);
-    // Three 45-minute sessions add 131.79 a day; a very active day lifts the base.
-    expect(dailyBurn(sample) - dailyBurn({ ...sample, trainingDays: 0 })).toBeCloseTo(131.7857, 3);
-    expect(dailyBurn({ ...sample, dayActivity: "very_active", trainingDays: 0 })).toBeCloseTo(1768.75 * 1.6, 6);
+    expect(burnSteps({ ...sample, trainingDays: 0 })).toMatchObject({ trainingKcal: 0, burnKcal: 2123 });
+    expect(burnSteps({ ...sample, trainingDays: 3, sessionMinutes: 0 })).toMatchObject({ trainingKcal: 0, burnKcal: 2123 });
+    // A very active day lifts the base: 1769 × 1.6 = 2830.4.
+    expect(burnSteps({ ...sample, dayActivity: "very_active", trainingDays: 0 }).burnKcal).toBe(2830);
+    // The day's step reads the ROUNDED resting burn, so the line the screen
+    // prints (1769 × 1.2 = 2123) is the one the number came from.
+    expect(burnSteps(sample).dayKcal).toBe(Math.round(1769 * 1.2));
   });
 
-  it("the worked example: calories, macros, change, finish date", () => {
+  it("the worked example: calories, macros, change, finish date, and the working behind them", () => {
     const plan = computePlan(sample);
     expect(plan).toEqual({
       restingBurnKcal: 1769,
-      dailyBurnKcal: 2254,
-      targetKcal: 1704,
+      dailyBurnKcal: 2255,
+      targetKcal: 1705,
       dailyChangeKcal: -550,
       proteinG: 164,
       carbsG: 156,
@@ -151,7 +173,119 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       daysToTarget: 98,
       finishDate: "2026-12-15",
       flags: [],
+      workings: {
+        resting: { formula: "male", weightKg: 82, heightCm: 175, age: 30, constant: 5, kcal: 1769 },
+        day: { activity: "sitting", factor: 1.2, kcal: 2123 },
+        training: { kcalPerKgHour: 5, weightKg: 82, trainingDays: 3, sessionMinutes: 45, kcal: 132 },
+        change: { pace: "steady", kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
+        beforeFloorKcal: 1705,
+        floorKcal: 1200,
+        protein: { gPerKg: 2, weightKg: 82, wantedG: 164 },
+        fatShare: 0.25,
+        carbsFloorG: 50,
+        finish: { kgToMove: 7, kcalPerKg: 7700 },
+      },
     });
+  });
+
+  it("the working names the women's formula only for a female answer", () => {
+    expect(computePlan({ ...sample, gender: "female" }).workings.resting).toMatchObject({
+      formula: "female",
+      constant: -161,
+      kcal: Math.round(1768.75 - 166),
+    });
+    for (const gender of ["male", "other", "prefer_not_to_say"] as const) {
+      expect(computePlan({ ...sample, gender }).workings.resting, gender).toMatchObject({ formula: "male", constant: 5, kcal: 1769 });
+    }
+  });
+
+  it("a plan that holds the weight has no change and no finish in its working", () => {
+    const held = [
+      computePlan({ ...sample, goal: "maintain", targetWeightKg: null, pace: null }),
+      computePlan({ ...sample, age: 17 }), // no cut under 18
+      computePlan({ ...sample, targetWeightKg: 90 }), // a "lose" target above the weight
+    ];
+    for (const plan of held) {
+      expect(plan.workings.change).toBeNull();
+      expect(plan.workings.finish).toBeNull();
+      expect(plan.workings.beforeFloorKcal).toBe(plan.dailyBurnKcal);
+      expect(plan.targetKcal).toBe(plan.dailyBurnKcal);
+    }
+  });
+
+  it("the working shows the cut the pace asked for, and the floor that stopped it", () => {
+    // female 25 · 155 cm · 50 kg · sitting · no training: burn 1420 (the floor test below).
+    const plan = computePlan({ ...sample, gender: "female", age: 25, heightCm: 155, weightKg: 50, targetWeightKg: 45, trainingDays: 0, pace: "brisk" });
+    expect(plan.workings.change).toEqual({ pace: "brisk", kgPerWeek: 0.75, kcalPerKg: 7700, kcal: -825 });
+    expect(plan.workings.beforeFloorKcal).toBe(1420 - 825);
+    expect(plan.targetKcal).toBe(1200);
+    expect(plan.workings.finish).toEqual({ kgToMove: 5, kcalPerKg: 7700 });
+  });
+
+  it("protein that gave way to the carbohydrate floor keeps the grams the table asked for beside it", () => {
+    const plan = computePlan({ ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" });
+    expect(plan.workings.protein).toEqual({ gPerKg: 2, weightKg: 150, wantedG: 300 });
+    expect(plan.proteinG).toBe(204);
+  });
+
+  it("the contract refuses a working that does not add up or multiply out, whichever line breaks", () => {
+    const plan = computePlan(sample);
+    expect(planNumbersSchema.safeParse(plan).success).toBe(true);
+    const w = plan.workings;
+    const change = w.change;
+    if (change === null) throw new Error("the sample is a cut, so its working has a change");
+    const broken = [
+      // Each multiplication the screen prints, broken with its kcal left alone:
+      // "1,769 × 1.3 = 2,123 kcal" would be false on screen.
+      { ...w, day: { ...w.day, factor: 1.3 } },
+      { ...w, resting: { ...w.resting, age: 40 } },
+      { ...w, training: { ...w.training, sessionMinutes: 60 } },
+      { ...w, change: { ...change, kgPerWeek: 0.75 } },
+      { ...w, protein: { ...w.protein, gPerKg: 2.5 } },
+      // Each sum.
+      { ...w, day: { ...w.day, kcal: w.day.kcal + 1 } },
+      { ...w, training: { ...w.training, kcal: w.training.kcal - 1 } },
+      { ...w, resting: { ...w.resting, kcal: w.resting.kcal + 1 } },
+      { ...w, change: null },
+      { ...w, beforeFloorKcal: w.beforeFloorKcal + 1 },
+      { ...w, protein: { ...w.protein, wantedG: plan.proteinG - 1 } },
+      { ...w, fatShare: 0.3 },
+      { ...w, finish: null },
+      { ...w, finish: { kgToMove: 8, kcalPerKg: 7700 } },
+      // Each figure printed on two lines, changed on one line only, with every
+      // product and sum still holding.
+      { ...w, training: { ...w.training, weightKg: 82.3 } }, // still 132 kcal
+      { ...w, protein: { ...w.protein, weightKg: 82.2 } }, // still 164 g
+      { ...w, resting: { ...w.resting, formula: "female" } }, // with the men's +5
+      { ...w, change: { ...change, pace: "brisk" } }, // with steady's 0.5 kg a week
+      { ...w, finish: { kgToMove: 6.95, kcalPerKg: 7700 } }, // still 98 days, but 82 − 75 is 7
+      { ...w, finish: { kgToMove: 7, kcalPerKg: 7650 } }, // still 98 days, but the pace line says 7,700
+    ];
+    for (const workings of broken) {
+      expect(planNumbersSchema.safeParse({ ...plan, workings }).success, JSON.stringify(workings)).toBe(false);
+    }
+  });
+
+  it("the contract refuses a figure that reads one way on one line of the panel and another way on the next", () => {
+    // Held: "Keeps your weight at …" is the resting line's weight.
+    const held = computePlan({ ...sample, goal: "maintain", targetWeightKg: null, pace: null });
+    // Floored: "Calories never go below …" is the floor "To eat" names.
+    const floored = computePlan({ ...sample, gender: "female", age: 25, heightCm: 155, weightKg: 50, targetWeightKg: 45, trainingDays: 0, pace: "brisk" });
+    // Under the healthy weight and dated: the flag's weight is the one "Reach …" names.
+    const below = computePlan({ ...sample, gender: "female", age: 20, heightCm: 155, weightKg: 44.6, targetWeightKg: 40 });
+    for (const plan of [held, floored, below]) expect(planNumbersSchema.safeParse(plan).success).toBe(true);
+    expect(held.daysToTarget).toBeNull();
+    expect(floored.flags.map((f) => f.code)).toContain("calorie_floor_applied");
+    expect(below.flags.map((f) => f.code)).toContain("target_below_healthy_weight");
+    expect(below.daysToTarget).not.toBeNull();
+    const broken = [
+      { ...held, plannedTargetKg: 80 },
+      { ...floored, flags: floored.flags.map((f) => (f.code === "calorie_floor_applied" ? { ...f, floorKcal: 1300 } : f)) },
+      { ...below, flags: below.flags.map((f) => (f.code === "target_below_healthy_weight" ? { ...f, floorKg: 44.3 } : f)) },
+    ];
+    for (const plan of broken) {
+      expect(planNumbersSchema.safeParse(plan).success, JSON.stringify(plan.flags)).toBe(false);
+    }
   });
 
   describe("reads no clock", () => {
@@ -226,7 +360,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
   });
 
   it("dailyChangeKcal is the difference of the two rounded numbers, not a rounded raw difference", () => {
-    // female 20 · 155 cm · 44.6 kg · no training: resting 1153.75, burn 1384.5 → 1385; eat 1200.
+    // female 20 · 155 cm · 44.6 kg · no training: resting 1153.75 → 1154, burn 1154 · 1.2 = 1384.8 → 1385; eat 1200.
     // The raw difference −184.5 rounds to −184 (the review's finding); the screen subtracts −185.
     const plan = computePlan({ ...sample, gender: "female", age: 20, heightCm: 155, weightKg: 44.6, targetWeightKg: 40, trainingDays: 0 });
     expect(plan.dailyBurnKcal).toBe(1385);
@@ -236,7 +370,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
 
   it("maintain: eat what you burn, no finish date, 1.6 g protein per kilo", () => {
     const plan = computePlan({ ...sample, goal: "maintain", targetWeightKg: null, pace: null });
-    expect(plan.targetKcal).toBe(2254);
+    expect(plan.targetKcal).toBe(2255);
     expect(plan.dailyChangeKcal).toBe(0);
     expect(plan.daysToTarget).toBeNull();
     expect(plan.finishDate).toBeNull();
@@ -268,6 +402,15 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - 1352)).toBeLessThanOrEqual(9);
     // A body the table fits keeps its full protein and carbs above the floor.
     expect(macrosFor(1704, 82, 2)).toEqual({ proteinG: 164, carbsG: 156, fatG: 47 });
+  });
+
+  it("counts the days in whole hundredths of a kilo, so a floating-point crumb never adds a day", () => {
+    // 64.01 → 63.01 is exactly 1 kg, and 1 × 7700 ÷ 275 is exactly 28 days. In
+    // floating point 64.01 − 63.01 is 1.0000000000000142, which rounded UP to
+    // 29 — a date one day later than the sum the plan screen prints.
+    const plan = computePlan({ ...sample, weightKg: 64.01, targetWeightKg: 63.01, pace: "gentle" });
+    expect(plan.daysToTarget).toBe(28);
+    expect(plan.finishDate).toBe(addDays(sample.today, 28));
   });
 
   it("addDays walks the calendar, month ends and leap days included", () => {
@@ -348,9 +491,9 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("the suggested pace respects the calorie floor: a pace the floor blocks is never suggested", () => {
-    // female 25 · 150 cm · 60 kg · sitting · no training: resting 1251.5, burn 1501.8,
-    // so only 301.8 a day sits above the floor. 15 kg at gentle (275) = 420 days;
-    // steady and brisk are both cut to 301.8 a day = 383 days — over a year at
+    // female 25 · 150 cm · 60 kg · sitting · no training: resting 1251.5 → 1252, burn
+    // 1252 · 1.2 = 1502.4 → 1502, so only 302 a day sits above the floor. 15 kg at gentle
+    // (275) = 420 days; steady and brisk are both cut to 302 a day = 383 days — over a year at
     // EVERY pace, so no pace can be suggested.
     const person = { ...sample, gender: "female" as const, age: 25, heightCm: 150, weightKg: 60, targetWeightKg: 45, trainingDays: 0 };
     const gentle = computePlan({ ...person, pace: "gentle" });
@@ -365,8 +508,8 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("calorie floor: the cut stops at 1200 and the finish date moves out", () => {
-    // female 25 · 155 cm · 50 kg · sitting · no training: resting 1182.75, burn 1419.3.
-    // brisk asks 825 a day; only 219.3 is above the floor.
+    // female 25 · 155 cm · 50 kg · sitting · no training: resting 1182.75 → 1183, burn
+    // 1183 · 1.2 = 1419.6 → 1420. brisk asks 825 a day; only 220 is above the floor.
     const plan = computePlan({
       ...sample,
       gender: "female",
@@ -377,17 +520,17 @@ describe("plan maths — the sanity rules", () => {
       trainingDays: 0,
       pace: "brisk",
     });
-    expect(plan.dailyBurnKcal).toBe(1419);
+    expect(plan.dailyBurnKcal).toBe(1420);
     expect(plan.targetKcal).toBe(1200);
-    expect(plan.dailyChangeKcal).toBe(1200 - 1419);
+    expect(plan.dailyChangeKcal).toBe(1200 - 1420);
     expect(plan.flags).toContainEqual({ code: "calorie_floor_applied", floorKcal: 1200 });
-    // 5 kg at 219.3 a day = 175.6 → 176 days, not the 47 brisk would have promised.
-    expect(plan.daysToTarget).toBe(176);
-    expect(plan.finishDate).toBe(addDays("2026-09-08", 176));
+    // 5 kg at 220 a day = exactly 175 days, not the 47 brisk would have promised.
+    expect(plan.daysToTarget).toBe(175);
+    expect(plan.finishDate).toBe(addDays("2026-09-08", 175));
   });
 
   it("calorie floor: a burn already under 1200 eats 1200, and a cut is impossible", () => {
-    // female 60 · 130 cm · 35 kg · sitting · no training: resting 701.5, burn 841.8.
+    // female 60 · 130 cm · 35 kg · sitting · no training: resting 701.5 → 702, burn 702 · 1.2 = 842.4 → 842.
     // The healthy floor for 130 cm is 31.27 kg, so 30 clamps to it — still under 35.
     const plan = computePlan({
       ...sample,
@@ -413,7 +556,7 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("the floor leaves a cut of exactly nothing: no date in the year 4417, the target is out of reach", () => {
-    // female 60 · 140 cm · 58.61 kg · sitting · no training: resting 1000.1, burn 1200.12 → 1200.
+    // female 60 · 140 cm · 58.61 kg · sitting · no training: resting 1000.1 → 1000, burn 1000 · 1.2 = 1200.
     // gentle asks 275; the floor gives back 1200; the change is 0 and nothing moves.
     const plan = computePlan({ ...sample, gender: "female", age: 60, heightCm: 140, weightKg: 58.61, targetWeightKg: 45, pace: "gentle", trainingDays: 0 });
     expect(plan.dailyBurnKcal).toBe(1200);
@@ -426,8 +569,8 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("a 'lose' plan the floor turns into a surplus says so, instead of a cut flag beside a plus number", () => {
-    // female 60 · 150 cm · 45 kg → 42 (above the 41.6 floor) · sitting · no training: resting 926.5,
-    // burn 1111.8 → 1112; 1200 is 88 above it. The plan holds the weight and says why.
+    // female 60 · 150 cm · 45 kg → 42 (above the 41.6 floor) · sitting · no training: resting 926.5
+    // → 927, burn 927 · 1.2 = 1112.4 → 1112; 1200 is 88 above it. The plan holds the weight and says why.
     const plan = computePlan({ ...sample, gender: "female", age: 60, heightCm: 150, weightKg: 45, targetWeightKg: 42, pace: "gentle", trainingDays: 0 });
     expect(plan.dailyBurnKcal).toBe(1112);
     expect(plan.targetKcal).toBe(1200);
@@ -441,7 +584,7 @@ describe("plan maths — the sanity rules", () => {
   });
 
   it("a target more than ten years away is out of reach, and the calories then hold the weight", () => {
-    // male 30 · 175 cm · 60 kg gaining at brisk (825 a day): burn 1954.9 → 1955.
+    // male 30 · 175 cm · 60 kg gaining at brisk (825 a day): resting 1548.75 → 1549, day 1859, training 96: burn 1955.
     const kgOnTheHorizon = (MAX_PLAN_DAYS * 825) / KCAL_PER_KG - 0.01;
     const just = computePlan({ ...sample, goal: "gain", weightKg: 60, targetWeightKg: 60 + kgOnTheHorizon, pace: "brisk" });
     expect(just.daysToTarget).toBe(MAX_PLAN_DAYS);

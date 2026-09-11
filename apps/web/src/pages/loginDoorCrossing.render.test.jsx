@@ -50,6 +50,28 @@ vi.mock('../api/orgsApi', () => ({
   errorText: (_err, fallback) => fallback,
 }));
 
+// The questionnaire reads its saved answers on arrival; a person with none.
+vi.mock('../api/onboardingApi', () => ({
+  onboardingService: {
+    get: vi.fn(() =>
+      Promise.resolve({
+        data: {
+          answers: {
+            displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
+            pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
+            trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false,
+            updatedAt: null,
+          },
+          plan: null,
+          missing: ['goal', 'age', 'gender', 'heightCm', 'weightKg', 'dayActivity', 'trainingDays', 'sessionMinutes'],
+        },
+      }),
+    ),
+    patch: vi.fn(),
+  },
+  refusedFinish: () => null,
+}));
+
 const ConsoleLayout = (await import('../components/console/ConsoleLayout')).default;
 const Sidebar = (await import('../components/common/Sidebar')).default;
 const Onboarding = (await import('./Onboarding')).default;
@@ -242,8 +264,8 @@ describe('the setup questionnaire', () => {
     // the click.
     drawOnboarding();
     // Non-vacuity first: the wizard really is what is on screen before the
-    // press. ("Basic Info" is both the step chip and the heading, hence All.)
-    expect(screen.getAllByText('Basic Info').length).toBeGreaterThan(0);
+    // press. ("Your goal" is both the step chip and the heading, hence All.)
+    expect((await screen.findAllByText('Your goal')).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
 

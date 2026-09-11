@@ -11,6 +11,7 @@ import {
   planGoalSchema,
   putFitnessProfileRequestSchema,
   PLAN_GOAL_BY_MAIN_GOAL,
+  updateProfileRequestSchema,
 } from "../src/index.js";
 
 describe("the one main goal", () => {
@@ -124,6 +125,16 @@ describe("one screen's save", () => {
     expect(bothTakeEquipment(["barbell"])).toBe(false);
   });
 
+  it("takes screen 2's name on the profile form's own rail: trimmed, 1 to 100 characters, never cleared", () => {
+    expect(patchOnboardingRequestSchema.parse({ displayName: "  Kd  " })).toEqual({ displayName: "Kd" });
+    expect(patchOnboardingRequestSchema.safeParse({ displayName: "x".repeat(100) }).success).toBe(true);
+    // The two surfaces write one column, so they refuse the same names.
+    for (const displayName of ["", "   ", "x".repeat(101), null]) {
+      expect(patchOnboardingRequestSchema.safeParse({ displayName }).success, JSON.stringify(displayName)).toBe(false);
+      expect(updateProfileRequestSchema.safeParse({ displayName }).success, JSON.stringify(displayName)).toBe(false);
+    }
+  });
+
   it("refuses 'no equipment' beside real equipment — the one rail v2 holds tighter", () => {
     // Screen 7 asks one question and takes one answer: "none and dumbbells"
     // would reach the plan builder (6a) as two contradictory ones.
@@ -139,6 +150,7 @@ describe("one screen's save", () => {
 
 describe("what the server answers with", () => {
   const answers = onboardingAnswersSchema.parse({
+    displayName: "Kd",
     mainGoal: null,
     age: null,
     gender: null,
@@ -166,5 +178,11 @@ describe("what the server answers with", () => {
 
   it("refuses an answer the contract does not name", () => {
     expect(onboardingAnswersSchema.safeParse({ ...answers, medicalConditions: "none" }).success).toBe(false);
+  });
+
+  it("always carries the name the app calls the person", () => {
+    const nameless = Object.fromEntries(Object.entries(answers).filter(([key]) => key !== "displayName"));
+    expect(Object.keys(nameless)).not.toContain("displayName");
+    expect(onboardingAnswersSchema.safeParse(nameless).success).toBe(false);
   });
 });
