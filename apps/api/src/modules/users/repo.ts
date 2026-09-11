@@ -228,27 +228,37 @@ export async function getFitnessProfile(
  *  against a concurrent account deletion. The FK guarantees the user EXISTS but
  *  says nothing about status, since §5.2 soft-deletes.
  *
- *  THE ONBOARDING v2 COLUMNS (0026) ARE DELIBERATELY ABSENT from both the
- *  INSERT list and the DO UPDATE SET: this is the v1 screen's route, which has
- *  no way to ask for a pace or a push-up count, so writing NULL over them would
- *  throw away an answer this form never offered. "Full document" means the
- *  fields THIS contract carries. `patchOnboarding` below owns the rest. */
+ *  THE ONBOARDING v2 COLUMNS (0026) ARE LEFT ALONE, all but one: this is the
+ *  v1 screen's route, which has no way to ask for a pace or a push-up count,
+ *  so writing NULL over them would throw away an answer this form never
+ *  offered. "Full document" means the fields THIS contract carries.
+ *  `patchOnboarding` below owns the rest.
+ *
+ *  THE ONE KEPT IN STEP IS `main_goal`: this form asks the goals (Settings'
+ *  chips), and the plan, so the macro rings, reads `main_goal`. It stays while
+ *  it is still ticked; when it is not, the only goal left becomes it; with no
+ *  goal left, or several and none of them the main one, it is cleared, so the
+ *  plan names the goal question rather than guess which goal sets the
+ *  calories (RULINGS 2026-07-15). A reset (PUT {}) clears it with the rest.
+ *  Decided in the statement itself, against the row as stored, so a
+ *  concurrent screen-1 save cannot slip between a read and this write. */
 export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
   input: FitnessProfileWrite,
 ): Promise<FitnessProfileRow | null> {
+  const onlyGoal = input.fitnessGoals.length === 1 ? (input.fitnessGoals[0] ?? null) : null;
   const rows = await sql<FitnessProfileDbRow[]>`
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
        fitness_goals, exercise_frequency, available_equipment,
        session_duration_min, preferred_workout_time, medical_conditions,
-       onboarding_completed, updated_at)
+       onboarding_completed, main_goal, updated_at)
     SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
            ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
            ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
-           ${input.medicalConditions}, ${input.onboardingCompleted}, now()
+           ${input.medicalConditions}, ${input.onboardingCompleted}, ${onlyGoal}, now()
     FROM users u WHERE u.id = ${userId} AND u.status = 'active'
     ON CONFLICT (user_id) DO UPDATE SET
       age = EXCLUDED.age,
@@ -263,6 +273,10 @@ export async function upsertFitnessProfile(
       preferred_workout_time = EXCLUDED.preferred_workout_time,
       medical_conditions = EXCLUDED.medical_conditions,
       onboarding_completed = EXCLUDED.onboarding_completed,
+      main_goal = CASE
+        WHEN user_fitness_profiles.main_goal = ANY (EXCLUDED.fitness_goals) THEN user_fitness_profiles.main_goal
+        ELSE EXCLUDED.main_goal
+      END,
       updated_at = now()
     RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
   return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
@@ -382,30 +396,41 @@ export async function patchOnboarding(
     if (patch.sessionMinutes !== undefined) cols["session_duration_min"] = patch.sessionMinutes;
     if (patch.availableEquipment !== undefined) cols["available_equipment"] = patch.availableEquipment;
     if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;
-    if (patch.mainGoal !== undefined) {
-      cols["main_goal"] = patch.mainGoal;
-      // THE MIRROR, and it is temporary. Settings' goal chips still show the
-      // v1 `fitness_goals` ARRAY, so a person who picks "lose weight" on
-      // screen 1 must not find no goal ticked there. Written in the same
-      // statement as `main_goal`, so a save on THIS route can never leave the
-      // two disagreeing. The macro rings no longer read the array: since 4a-iii
-      // they read the plan, which reads `main_goal`.
-      //
-      // That guarantee is ONE-WAY, and only this way: `upsertFitnessProfile`
-      // (the v1 PUT, which Settings writes) replaces `fitness_goals` and does
-      // not touch `main_goal` — it has no such question to ask — so a goal
-      // changed in Settings moves neither the plan nor the rings. Item 4a-iv
-      // gives Settings the same two goal questions as screen 1 and ends the
-      // mirror and that gap together.
-      cols["fitness_goals"] = patch.mainGoal === null ? [] : [patch.mainGoal];
-    }
 
-    if (Object.keys(cols).length > 0) {
+    if (Object.keys(cols).length > 0 || patch.mainGoal !== undefined) {
       await tx`
         INSERT INTO user_fitness_profiles (user_id) VALUES (${userId})
         ON CONFLICT (user_id) DO NOTHING`;
+    }
+    if (Object.keys(cols).length > 0) {
       await tx`
         UPDATE user_fitness_profiles SET ${tx(cols)}, updated_at = now()
+        WHERE user_id = ${userId}`;
+    }
+    // Screen 1's goal, and with it the v1 `fitness_goals` list that Settings'
+    // goal chips show, in one statement, so this route never leaves the two
+    // disagreeing. The list keeps what was ticked in Settings: the new main
+    // goal goes first, the old main goal leaves, the rest stay; clearing the
+    // goal removes the main goal and nothing else. The SET reads the row as it
+    // stood before this statement (so `main_goal` is still the old one there),
+    // which leaves no gap between a read and this write for a Settings save to
+    // fall into. `upsertFitnessProfile` keeps `main_goal` in step from the
+    // Settings side; 4a-iv gives Settings screen 1's own questions.
+    if (patch.mainGoal === null) {
+      await tx`
+        UPDATE user_fitness_profiles
+        SET fitness_goals = array_remove(coalesce(fitness_goals, '{}'), main_goal),
+            main_goal = NULL,
+            updated_at = now()
+        WHERE user_id = ${userId}`;
+    } else if (patch.mainGoal !== undefined) {
+      await tx`
+        UPDATE user_fitness_profiles
+        SET fitness_goals = array_prepend(
+              ${patch.mainGoal}::text,
+              array_remove(array_remove(coalesce(fitness_goals, '{}'), main_goal), ${patch.mainGoal}::text)),
+            main_goal = ${patch.mainGoal},
+            updated_at = now()
         WHERE user_id = ${userId}`;
     }
     // Screen 2's weight is a row of the history, the only place weight lives

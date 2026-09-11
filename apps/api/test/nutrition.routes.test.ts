@@ -477,10 +477,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(empty.statusCode,empty.body).toBe(200);
     expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"]});
 
-    // Someone who finished the OLD form: it never asked one goal or "your day",
-    // so the rings name exactly those two, however complete the rest is. The
-    // weight lives in the weigh-in history, so this read spans both tables.
-    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["weight_loss"],onboardingCompleted:true})).statusCode).toBe(200);
+    // Someone who finished the OLD form, which let them tick several goals: it
+    // never asked ONE goal or "your day", so the rings name exactly those two,
+    // however complete the rest is. The weight lives in the weigh-in history,
+    // so this read spans both tables.
+    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["weight_loss","flexibility"],onboardingCompleted:true})).statusCode).toBe(200);
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
     const old=await inject("GET","/v1/nutrition/targets",t.access);
     expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"]});
