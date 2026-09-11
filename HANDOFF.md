@@ -17,8 +17,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   in turn by hand, turns a test red (17 of 17); files restored.
 - Verified: shared tsc/eslint 0, 83 · api tsc/eslint 0, plan.unit 53, CI-shaped 306, local onboarding routes 34 · web
   eslint 0 (touched files), onboarding 68, full 1954 (poseAssets.contract is the known local encoding red).
-- Open: Kd's click-through of the wheels — it includes the scroll fix's cost (on a phone a wheel is tapped before it is
-  flicked, and that tap picks the row tapped) — CI, merge. Then 4a-iii → 4a-iv → 4b.
+- Kd's click-through of the wheels passed, the scroll fix's cost included (on a phone a wheel is tapped before it is
+  flicked; kept, RULINGS 2026-09-11). All five CI jobs green on 697995f; merged 2026-09-11 as PR #60, branch deleted.
+- Next: 4a-iii, which opens by asking Kd the protein question in its ROADMAP line. Then 4a-iv → 4b.
 
 ## 2026-09-11 · Screens 1–7: Kd's second look and review round 1 (item 4a-ii), branch `onboarding-screens-1-7`, PR #60
 
