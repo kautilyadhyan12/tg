@@ -10,7 +10,14 @@
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { currentWeightKg, recordTypedWeight } from "../nutrition/repo.js";
-import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
+import { PLAN_GOAL_BY_MAIN_GOAL, type PatchOnboardingRequest, type UpdateProfileRequest } from "./schemas.js";
+
+/** The goals that move the weight on purpose (weight loss, muscle gain), read
+ *  from the one mapping in @app/shared. Whenever one is among a person's goals
+ *  it is the one that sets the calories; two never stand together on a screen. */
+const WEIGHT_GOALS: string[] = Object.entries(PLAN_GOAL_BY_MAIN_GOAL)
+  .filter(([, direction]) => direction !== "maintain")
+  .map(([goal]) => goal);
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
  *  TransactionSql are siblings, not sub/supertypes — neither is assignable to
@@ -235,19 +242,24 @@ export async function getFitnessProfile(
  *  `patchOnboarding` below owns the rest.
  *
  *  THE ONE KEPT IN STEP IS `main_goal`: this form asks the goals (Settings'
- *  chips), and the plan, so the macro rings, reads `main_goal`. It stays while
- *  it is still ticked; when it is not, the only goal left becomes it; with no
- *  goal left, or several and none of them the main one, it is cleared, so the
- *  plan names the goal question rather than guess which goal sets the
- *  calories (RULINGS 2026-07-15). A reset (PUT {}) clears it with the rest.
- *  Decided in the statement itself, against the row as stored, so a
- *  concurrent screen-1 save cannot slip between a read and this write. */
+ *  chips), and the plan, so the macro rings, reads `main_goal`. A change here
+ *  takes effect at once, with nothing asked again (Kd, 2026-09-11: "it should
+ *  automatically update according to change"): a ticked goal that moves the
+ *  weight sets the calories (the one already setting them, if both are sent);
+ *  with neither ticked, the main goal stays while it is ticked, else the first
+ *  goal ticked takes over; with no goal ticked it is cleared, as a reset
+ *  (PUT {}) clears it with the rest. Decided in the statement itself, against
+ *  the row as stored, so a concurrent screen-1 save cannot slip between a
+ *  read and this write. */
 export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
   input: FitnessProfileWrite,
 ): Promise<FitnessProfileRow | null> {
-  const onlyGoal = input.fitnessGoals.length === 1 ? (input.fitnessGoals[0] ?? null) : null;
+  const weightGoals = input.fitnessGoals.filter((g) => WEIGHT_GOALS.includes(g));
+  // The main goal when nothing stored decides it: a new row, or a stored main
+  // goal that no longer fits the list.
+  const firstChoice = weightGoals[0] ?? input.fitnessGoals[0] ?? null;
   const rows = await sql<FitnessProfileDbRow[]>`
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
@@ -258,7 +270,7 @@ export async function upsertFitnessProfile(
            ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
            ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
-           ${input.medicalConditions}, ${input.onboardingCompleted}, ${onlyGoal}, now()
+           ${input.medicalConditions}, ${input.onboardingCompleted}, ${firstChoice}, now()
     FROM users u WHERE u.id = ${userId} AND u.status = 'active'
     ON CONFLICT (user_id) DO UPDATE SET
       age = EXCLUDED.age,
@@ -274,7 +286,9 @@ export async function upsertFitnessProfile(
       medical_conditions = EXCLUDED.medical_conditions,
       onboarding_completed = EXCLUDED.onboarding_completed,
       main_goal = CASE
-        WHEN user_fitness_profiles.main_goal = ANY (EXCLUDED.fitness_goals) THEN user_fitness_profiles.main_goal
+        WHEN user_fitness_profiles.main_goal = ANY (${weightGoals}::text[]) THEN user_fitness_profiles.main_goal
+        WHEN cardinality(${weightGoals}::text[]) = 0
+         AND user_fitness_profiles.main_goal = ANY (EXCLUDED.fitness_goals) THEN user_fitness_profiles.main_goal
         ELSE EXCLUDED.main_goal
       END,
       updated_at = now()
@@ -410,12 +424,13 @@ export async function patchOnboarding(
     // Screen 1's goal, and with it the v1 `fitness_goals` list that Settings'
     // goal chips show, in one statement, so this route never leaves the two
     // disagreeing. The list keeps what was ticked in Settings: the new main
-    // goal goes first, the old main goal leaves, the rest stay; clearing the
-    // goal removes the main goal and nothing else. The SET reads the row as it
+    // goal goes first; a goal that moves the weight, and so would fight it,
+    // leaves (left ticked, it would take the calories back at the next
+    // Settings save, `upsertFitnessProfile`); the rest stay. Clearing the goal
+    // removes the main goal and nothing else. The SET reads the row as it
     // stood before this statement (so `main_goal` is still the old one there),
-    // which leaves no gap between a read and this write for a Settings save to
-    // fall into. `upsertFitnessProfile` keeps `main_goal` in step from the
-    // Settings side; 4a-iv gives Settings screen 1's own questions.
+    // which leaves no gap between a read and this write for a Settings save
+    // to fall into. 4a-iv gives Settings screen 1's own questions.
     if (patch.mainGoal === null) {
       await tx`
         UPDATE user_fitness_profiles
@@ -428,7 +443,10 @@ export async function patchOnboarding(
         UPDATE user_fitness_profiles
         SET fitness_goals = array_prepend(
               ${patch.mainGoal}::text,
-              array_remove(array_remove(coalesce(fitness_goals, '{}'), main_goal), ${patch.mainGoal}::text)),
+              ARRAY(
+                SELECT g FROM unnest(coalesce(fitness_goals, '{}')) WITH ORDINALITY AS kept(g, i)
+                WHERE g <> ${patch.mainGoal}::text AND NOT (g = ANY (${WEIGHT_GOALS}::text[]))
+                ORDER BY i)),
             main_goal = ${patch.mainGoal},
             updated_at = now()
         WHERE user_id = ${userId}`;

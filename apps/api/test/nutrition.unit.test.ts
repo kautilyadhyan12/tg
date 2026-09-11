@@ -306,14 +306,26 @@ describe("nutrition targets read the plan", () => {
       expect(targets, JSON.stringify(answers)).toMatchObject({ noCalorieCut: true });
       expect(targets?.kcal, JSON.stringify(answers)).toBe(targets?.tdee);
     }
-    // No cut asked for is no cut held back: a hold, a gain under 18, and a
-    // "lose" target above the weight under 18.
+    // No cut asked for is no cut held back: a hold, and a gain under 18.
     for (const answers of [
       { ...golden, goal: "maintain" },
       { ...golden, goal: "gain", targetWeightKg: 75, age: 16 },
-      { ...golden, targetWeightKg: 80, age: 16 },
     ] satisfies PlanAnswers[]) {
       expect(targetsFromPlan(resolvePlan(answers)).targets?.noCalorieCut, JSON.stringify(answers)).toBe(false);
+    }
+  });
+
+  it("with the target on the wrong side of the weight, gives no number and asks for the target", () => {
+    // A loss target kept when the goal changed to Muscle Gain in Settings, or a
+    // weight that moved past its target: the plan holds the weight, and the
+    // rings do not pass that off as the goal's number (Kd, 2026-09-11).
+    for (const answers of [
+      { ...golden, targetWeightKg: 80 },
+      { ...golden, targetWeightKg: 80, age: 16 },
+      { ...golden, goal: "gain", targetWeightKg: 65 },
+    ] satisfies PlanAnswers[]) {
+      expect(planOf(answers).flags, JSON.stringify(answers)).toContainEqual({ code: "target_wrong_direction" });
+      expect(targetsFromPlan(resolvePlan(answers)), JSON.stringify(answers)).toEqual({ targets: null, missing: ["targetWeightKg"] });
     }
   });
 

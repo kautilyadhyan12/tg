@@ -177,14 +177,20 @@ d("onboarding v2 routes (real Postgres)", () => {
   };
 
   /** The rings (GET /v1/nutrition/targets) against the plan the screens show,
-   *  field by field. Returns the rings' kcal, or null when neither has one. */
+   *  field by field. Returns the rings' kcal, or null when they show none: no
+   *  plan, or a target on the wrong side of the weight, which the rings ask
+   *  for again rather than show the weight held as the goal's number. */
   const rings = async (cookies: Record<string, string>) => {
     const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { targets: Record<string, unknown> | null; missing: string[] };
     const { plan, missing } = await get(cookies);
-    expect(body.missing).toEqual(missing);
-    if (plan === null) {
+    const flags: unknown = plan?.["flags"];
+    const wrongSide =
+      Array.isArray(flags) &&
+      flags.some((f: unknown) => typeof f === "object" && f !== null && "code" in f && f.code === "target_wrong_direction");
+    expect(body.missing).toEqual(wrongSide ? ["targetWeightKg"] : missing);
+    if (plan === null || wrongSide) {
       expect(body.targets).toBeNull();
       return null;
     }
@@ -565,71 +571,101 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(await goals()).toEqual([]);
   });
 
-  it("a goal changed in Settings moves the plan and the rings, and several goals without the main one ask it again", { timeout: 60_000 }, async () => {
+  it("a goal changed in Settings takes effect at once: the goal that moves the weight sets the calories, and nothing is asked again", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-settings-goal@example.com");
     await completeSeven(cookies);
     expect(await rings(cookies)).toBe(GOLDEN_LOSE.targetKcal);
+    const ringsBody = async () =>
+      JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies })).body) as unknown;
 
-    // Another goal ticked beside it: the main goal is still ticked, so it stays.
+    // Another goal ticked beside it: Weight Loss still sets the calories.
     await settingsSave(cookies, ["weight_loss", "flexibility"]);
     expect(await goalsOf(userId)).toEqual({ mainGoal: "weight_loss", goals: ["weight_loss", "flexibility"] });
     expect(await rings(cookies)).toBe(GOLDEN_LOSE.targetKcal);
 
-    // Weight loss unticked and one goal left: that one is the main goal now,
-    // and the rings follow it (a goal that keeps the weight eats what it burns).
-    await settingsSave(cookies, ["general_fitness"]);
-    expect(await goalsOf(userId)).toEqual({ mainGoal: "general_fitness", goals: ["general_fitness"] });
-    expect(await rings(cookies)).toBe(GOLDEN_LOSE.dailyBurnKcal);
-
-    // The main goal unticked and two others ticked: which of them sets the
-    // calories is not the app's to guess, so the goal question opens again.
+    // Weight Loss swapped for Muscle Gain (Kd, 2026-09-11: "it should
+    // automatically update according to change"): Muscle Gain sets the
+    // calories at once. The 65 kg target was a loss target, below the 70 kg
+    // weight, so the rings ask for a target above it, and only that.
     await settingsSave(cookies, ["flexibility", "muscle_gain"]);
-    expect(await goalsOf(userId)).toEqual({ mainGoal: null, goals: ["flexibility", "muscle_gain"] });
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "muscle_gain", goals: ["flexibility", "muscle_gain"] });
+    expect(await ringsBody()).toEqual({ targets: null, missing: ["targetWeightKg"] });
     expect(await rings(cookies)).toBeNull();
-    expect((await get(cookies)).missing).toEqual(["goal"]);
+    // A target above the weight, as the target screen saves it: the gain plan.
+    await patchOk(cookies, { targetWeightKg: 75 });
+    expect(await rings(cookies)).toBe(GOLDEN_LOSE.dailyBurnKcal + 550);
+
+    // Muscle Gain unticked, two goals that keep the weight left: the first of
+    // them sets the calories, which is eating what you burn.
+    await settingsSave(cookies, ["flexibility", "posture"]);
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "flexibility", goals: ["flexibility", "posture"] });
+    expect(await rings(cookies)).toBe(GOLDEN_LOSE.dailyBurnKcal);
+    // A goal that keeps the weight stays the main goal while it is ticked, wherever it sits.
+    await settingsSave(cookies, ["posture", "endurance", "flexibility"]);
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "flexibility", goals: ["posture", "endurance", "flexibility"] });
+
+    // Both weight goals at once (the screen cannot send it; an old list or
+    // another client can): the one already setting the calories keeps them.
+    await settingsSave(cookies, ["muscle_gain"]);
+    await settingsSave(cookies, ["weight_loss", "muscle_gain"]);
+    expect((await goalsOf(userId)).mainGoal).toBe("muscle_gain");
 
     // Settings' "Reset onboarding" (PUT {}) leaves no goal, so no main goal.
-    await settingsSave(cookies, ["posture"]);
-    expect(await goalsOf(userId)).toEqual({ mainGoal: "posture", goals: ["posture"] });
     const reset = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: {}, cookies });
     expect(reset.statusCode).toBe(200);
     expect(await goalsOf(userId)).toEqual({ mainGoal: null, goals: [] });
   });
 
-  it("screen 1 replaces only its own goal: the other goals ticked in Settings stay", { timeout: 60_000 }, async () => {
+  it("screen 1 changes only the goal that sets the calories: Settings' other goals stay, bar one that would fight it", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-goal-merge@example.com");
     await completeSeven(cookies);
     await settingsSave(cookies, ["weight_loss", "flexibility", "posture"]);
 
-    // A new main goal goes first; the old main goal goes; the rest stay.
+    // A new main goal goes first; Weight Loss, which it fights, goes; the rest stay.
     await patchOk(cookies, { mainGoal: "muscle_gain", targetWeightKg: 75 });
     expect(await goalsOf(userId)).toEqual({ mainGoal: "muscle_gain", goals: ["muscle_gain", "flexibility", "posture"] });
 
-    // A goal already ticked becomes the main one: moved first, never listed twice.
+    // A goal that keeps the weight as the main one: moved first, never listed
+    // twice, and Muscle Gain, which would fight it, goes.
     await patchOk(cookies, { mainGoal: "posture" });
     expect(await goalsOf(userId)).toEqual({ mainGoal: "posture", goals: ["posture", "flexibility"] });
     await patchOk(cookies, { mainGoal: "posture" });
     expect(await goalsOf(userId)).toEqual({ mainGoal: "posture", goals: ["posture", "flexibility"] });
+
+    // Another goal that keeps the weight: the one it replaces stays ticked,
+    // since nothing fights it.
+    await patchOk(cookies, { mainGoal: "flexibility" });
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "flexibility", goals: ["flexibility", "posture"] });
 
     // Clearing it takes away the main goal and nothing else.
     await patchOk(cookies, { mainGoal: null });
-    expect(await goalsOf(userId)).toEqual({ mainGoal: null, goals: ["flexibility"] });
+    expect(await goalsOf(userId)).toEqual({ mainGoal: null, goals: ["posture"] });
   });
 
-  it("someone who finished the old form keeps every goal they ticked when they answer screen 1", { timeout: 60_000 }, async () => {
+  it("someone who finished the old form keeps the goals they ticked when they answer screen 1, bar one that would fight it", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-old-form-goals@example.com");
     await completeSeven(cookies);
     // The old form's shape: several goals and no main goal (migration 0026 filled none in).
-    await sql`
+    const oldForm = () => sql`
       UPDATE user_fitness_profiles
       SET main_goal = NULL, fitness_goals = ARRAY['flexibility', 'weight_loss', 'posture']
       WHERE user_id = ${userId}`;
+    await oldForm();
     expect(await rings(cookies)).toBeNull();
     expect((await get(cookies)).missing).toEqual(["goal"]);
 
     await patchOk(cookies, { mainGoal: "weight_loss" });
     expect(await goalsOf(userId)).toEqual({ mainGoal: "weight_loss", goals: ["weight_loss", "flexibility", "posture"] });
     expect(await rings(cookies)).toBe(GOLDEN_LOSE.targetKcal);
+
+    // The same list answered with a goal that keeps the weight: Weight Loss,
+    // which would fight it, goes and the others stay. Left ticked, it would
+    // take the calories back at the next Settings save.
+    await oldForm();
+    await patchOk(cookies, { mainGoal: "posture" });
+    expect(await goalsOf(userId)).toEqual({ mainGoal: "posture", goals: ["posture", "flexibility"] });
+    await settingsSave(cookies, ["posture", "flexibility"]);
+    expect((await goalsOf(userId)).mainGoal).toBe("posture");
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
