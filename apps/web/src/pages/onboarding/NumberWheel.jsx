@@ -28,6 +28,9 @@ function WheelColumn({ label, values, index, active, format, onPick }) {
   // by code, so a scroll the code makes (a units switch) picks nothing.
   const gesture = useRef(false);
   const moved = useRef(false); // a scroll arrived during that gesture
+  // A finger is on the column. A slow drag can rest for longer than SETTLE_MS
+  // and then go on, so a gesture never settles while a finger is down.
+  const down = useRef(false);
   const timer = useRef(null);
   const [engaged, setEngaged] = useState(false);
   const last = values.length - 1;
@@ -53,14 +56,14 @@ function WheelColumn({ label, values, index, active, format, onPick }) {
     return () => document.removeEventListener('pointerdown', away, true);
   }, [engaged]);
 
-  /** Runs once the column has been still for SETTLE_MS: a gesture that
-   *  scrolled picks the row it stopped on, a gesture that did not simply
-   *  ends, and any other scroll goes back to its row. */
+  /** Runs once the column has been still for SETTLE_MS with no finger on it:
+   *  a gesture that scrolled picks the row it stopped on, a gesture that did
+   *  not simply ends, and any other scroll goes back to its row. */
   const settle = () => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const el = ref.current;
-      if (!el) return;
+      if (!el || down.current) return;
       const at = Math.max(0, Math.min(last, Math.round(el.scrollTop / ROW_PX)));
       const flicked = gesture.current && moved.current;
       gesture.current = false;
@@ -71,6 +74,17 @@ function WheelColumn({ label, values, index, active, format, onPick }) {
   };
   const begin = () => {
     if (engaged) gesture.current = true;
+  };
+  // Touch events, not pointer events, say when the finger lifts: once the
+  // browser takes a drag over to scroll it cancels the pointer at the start,
+  // but the touch runs on to the lift.
+  const touch = () => {
+    down.current = true;
+    begin();
+  };
+  const lift = () => {
+    down.current = false;
+    settle();
   };
 
   return (
@@ -104,9 +118,10 @@ function WheelColumn({ label, values, index, active, format, onPick }) {
           begin();
           settle(); // a wheel that scrolls nothing (at an end) still ends the gesture
         }}
-        onTouchStart={begin}
+        onTouchStart={touch}
         onPointerDown={begin}
-        onTouchEnd={settle}
+        onTouchEnd={lift}
+        onTouchCancel={lift}
         onPointerUp={settle}
         onPointerCancel={settle}
         onKeyDown={(e) => {

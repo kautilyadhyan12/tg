@@ -337,25 +337,80 @@ describe('onboarding screens 1–7', () => {
     expect(spin('Age').className).toContain('overflow-y-hidden');
   });
 
-  it('a press or a mouse wheel that moves nothing leaves nothing behind for a later scroll to pick', async () => {
+  // Each way a gesture on a touched wheel can end without scrolling. Each must
+  // end it on its own, or the next scroll the code makes (switching the units
+  // makes one) would pick a row the person never chose.
+  it.each([
+    ['a press that is let go (a right-click, a press above the first row)', (el) => {
+      fireEvent.pointerDown(el, { button: 2 });
+      fireEvent.pointerUp(el, { button: 2 });
+    }],
+    ['a mouse wheel at an end of the column', (el) => fireEvent.wheel(el)],
+    ['a finger that lifts', (el) => {
+      fireEvent.touchStart(el);
+      fireEvent.touchEnd(el);
+    }],
+    ['a touch the browser cancels', (el) => {
+      fireEvent.touchStart(el);
+      fireEvent.touchCancel(el);
+    }],
+    ['a press the browser cancels', (el) => {
+      fireEvent.pointerDown(el);
+      fireEvent.pointerCancel(el);
+    }],
+  ])('%s ends the gesture, so a later scroll the code makes picks nothing', async (_, gesture) => {
     serve({ mainGoal: 'posture' });
     draw();
     await heading('About you');
     const age = spin('Age');
     fireEvent.focus(age);
-    // A right-click, a press on the space above the first row, a mouse wheel
-    // at an end of the column: the gesture ends and nothing scrolls.
-    fireEvent.pointerDown(age, { button: 2 });
-    fireEvent.pointerUp(age, { button: 2 });
-    fireEvent.wheel(age);
+    gesture(age);
     await settleWheels();
-    // Then a scroll the code makes (switching the units makes one). It is
-    // not the person's, so it picks nothing.
+    age.scrollTop = 40 * 20;
+    fireEvent.scroll(age);
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(age.scrollTop).toBe(40 * 14); // back on its resting row, 30
+  });
+
+  it('Tab away lets a wheel go, so a mouse wheel over it afterwards moves nothing', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    const age = spin('Age');
+    fireEvent.focus(age);
+    expect(age.className).toContain('overflow-y-scroll');
+    fireEvent.blur(age); // Tab moves the focus on
+    expect(age.className).toContain('overflow-y-hidden');
+    fireEvent.wheel(age);
     age.scrollTop = 40 * 20;
     fireEvent.scroll(age);
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
     expect(age.scrollTop).toBe(40 * 14);
+  });
+
+  it('a slow drag that rests and goes on saves where the finger lifts, not where it rested', async () => {
+    serve({ mainGoal: 'posture' });
+    draw();
+    await heading('About you');
+    const age = spin('Age');
+    fireEvent.focus(age);
+    // A finger on a phone: the browser takes the drag over to scroll, which
+    // cancels the pointer at once, while the touch runs on to the lift.
+    fireEvent.pointerDown(age);
+    fireEvent.touchStart(age);
+    fireEvent.pointerCancel(age);
+    age.scrollTop = 40 * 20; // resting on 36…
+    fireEvent.scroll(age);
+    await settleWheels(); // …for longer than a wheel takes to settle
+    expect(svc.patch).not.toHaveBeenCalled();
+    expect(age.scrollTop).toBe(40 * 20); // still under the finger
+    age.scrollTop = 40 * 29; // on to 45, then the finger lifts
+    fireEvent.scroll(age);
+    fireEvent.touchEnd(age);
+    await saved({ age: 45 });
+    expect(svc.patch).toHaveBeenCalledTimes(1);
   });
 
   it('re-picking the weight and height on show saves nothing, though they were stored in kilograms and centimetres', async () => {
