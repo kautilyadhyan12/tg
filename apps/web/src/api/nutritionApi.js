@@ -10,9 +10,10 @@
 //   arithmetic (2B anti-hallucination rule; DECISIONS 2026-07-12 P2.6a).
 //
 // The D2 interim is CLOSED: getTargets was the file's last old-backend call
-// and now rides the new GET /v1/nutrition/targets (PR #42, the Mifflin-St Jeor
-// port). nutritionApi runs entirely on the new API — no mlApi import remains,
-// pinned by the usage-guard test.
+// and now rides the new GET /v1/nutrition/targets (PR #42), which since
+// ROADMAP 4a-iii answers with the person's own onboarding plan. nutritionApi
+// runs entirely on the new API — no mlApi import remains, pinned by the
+// usage-guard test.
 import authApi from './authApi';
 
 /** The Nutrition page's left column WAITS on the targets request (its spinner
