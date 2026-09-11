@@ -10,6 +10,8 @@ import {
   planNumbersSchema,
   planResponseSchema,
   planStartDaySchema,
+  PROTEIN_REFERENCE_BMI,
+  proteinWeight,
   type PlanAnswers,
   type PlanInputs,
 } from "@app/shared";
@@ -82,6 +84,13 @@ function brokenFacts(body: PlanInputs): string[] {
   check("working: a change exactly when the weight moves", (w.change === null) === (plan.daysToTarget === null));
   check("working: eat is burn + change, floored", w.beforeFloorKcal === plan.dailyBurnKcal + (w.change?.kcal ?? 0) && plan.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal));
   check("working: protein asked is the table's", w.protein.wantedG === Math.round(w.protein.weightKg * w.protein.gPerKg) && plan.proteinG <= w.protein.wantedG);
+  // Restated here, not called: the body's weight, or its BMI-30 weight when it is heavier.
+  const m = body.heightCm / 100;
+  const bmi30Kg = Math.round(30 * m * m * 100) / 100;
+  check(
+    "working: protein is counted on the weight, never past BMI 30 for the height",
+    w.protein.weightKg === Math.min(body.weightKg, bmi30Kg) && w.protein.referenceBmi === (body.weightKg > bmi30Kg ? 30 : null),
+  );
   check("the contract accepts it", planNumbersSchema.safeParse(plan).success);
   if (plan.daysToTarget !== null) {
     check("inside the horizon", plan.daysToTarget <= MAX_PLAN_DAYS);
@@ -126,7 +135,7 @@ const sample: PlanInputs = {
 describe("plan maths — the numbers (Stage 1 item 3a)", () => {
   it("pins the tables the numbers come from", () => {
     expect(KCAL_PER_KG).toBe(7700);
-    expect(CALORIE_FLOOR_KCAL).toBe(1200); // nutrition/targets.ts:167
+    expect(CALORIE_FLOOR_KCAL).toBe(1200); // "the floor already in the code" (RULINGS 2026-09-07)
     expect(ADULT_AGE).toBe(18);
     expect(HEALTHY_BMI_FLOOR).toBe(18.5);
     expect(ONE_YEAR_DAYS).toBe(365);
@@ -136,7 +145,8 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(CARBS_FLOOR_G).toBe(50);
     expect(PACE_KG_PER_WEEK).toEqual({ gentle: 0.25, steady: 0.5, brisk: 0.75 });
     expect(DAY_FACTOR).toEqual({ sitting: 1.2, on_feet: 1.3, active: 1.45, very_active: 1.6 });
-    expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // targets.ts:174
+    expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // grams per kilo, never a share (Kd, 2026-09-11)
+    expect(PROTEIN_REFERENCE_BMI).toBe(30);
     expect(MIFFLIN_ST_JEOR_CONSTANT).toEqual({ female: -161, male: 5 });
   });
 
@@ -180,12 +190,45 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
         change: { pace: "steady", kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
         beforeFloorKcal: 1705,
         floorKcal: 1200,
-        protein: { gPerKg: 2, weightKg: 82, wantedG: 164 },
+        protein: { gPerKg: 2, weightKg: 82, referenceBmi: null, wantedG: 164 },
         fatShare: 0.25,
         carbsFloorG: 50,
         finish: { kgToMove: 7, kcalPerKg: 7700 },
       },
     });
+  });
+
+  it("counts protein on the weight, never on more than the weight at BMI 30 for the height (Kd, 2026-09-11)", () => {
+    // At 175 cm, BMI 30 is 30 × 1.75² = 91.875 → 91.88 kg.
+    expect(proteinWeight(70, 165)).toEqual({ kg: 70, referenceBmi: null });
+    expect(proteinWeight(91.88, 175)).toEqual({ kg: 91.88, referenceBmi: null }); // on the line: the body itself
+    expect(proteinWeight(91.89, 175)).toEqual({ kg: 91.88, referenceBmi: 30 });
+    expect(proteinWeight(120, 175)).toEqual({ kg: 91.88, referenceBmi: 30 });
+    expect(proteinWeight(100, 160)).toEqual({ kg: 76.8, referenceBmi: 30 });
+
+    // The heavy man Kd was shown: 240 g a day counted whole, 184 g now. His burn
+    // is still his whole body's; only protein is counted differently.
+    const heavy = computePlan({ ...sample, age: 35, weightKg: 120, targetWeightKg: 90 });
+    expect(heavy).toMatchObject({ restingBurnKcal: 2124, dailyBurnKcal: 2742, targetKcal: 2192, proteinG: 184, carbsG: 227, fatG: 61 });
+    expect(heavy.workings.protein).toEqual({ gPerKg: 2, weightKg: 91.88, referenceBmi: 30, wantedG: 184 });
+    expect(heavy.workings.resting.weightKg).toBe(120);
+    expect(heavy.workings.training.weightKg).toBe(120);
+    // Every goal counts the same weight: 1.6 × 91.88 and 2.2 × 91.88.
+    expect(computePlan({ ...sample, age: 35, weightKg: 120, goal: "maintain", targetWeightKg: null, pace: null }).proteinG).toBe(147);
+    expect(computePlan({ ...sample, age: 35, weightKg: 120, goal: "gain", targetWeightKg: 125 }).proteinG).toBe(202);
+    // A body under the line is counted as it is: the golden woman keeps her 140 g.
+    const golden = computePlan({ ...sample, gender: "female", heightCm: 165, weightKg: 70, targetWeightKg: 65 });
+    expect(golden.workings.protein).toEqual({ gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 });
+  });
+
+  it("sets protein in grams per kilo, never as a share of the calories (Kd, 2026-09-11)", () => {
+    // On a cut the grams stay while the calories fall, so their share rises:
+    // the golden woman's 140 g are 44 % of her 1,267 kcal, past the 35 % top of
+    // the IOM's whole-diet range, and that is the plan working, not a fault.
+    const golden = computePlan({ ...sample, gender: "female", heightCm: 165, weightKg: 70, targetWeightKg: 65 });
+    expect(golden.targetKcal).toBe(1267);
+    expect(golden.proteinG).toBe(140);
+    expect((golden.proteinG * 4) / golden.targetKcal).toBeGreaterThan(0.35);
   });
 
   it("the working names the women's formula only for a female answer", () => {
@@ -223,9 +266,27 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
   });
 
   it("protein that gave way to the carbohydrate floor keeps the grams the table asked for beside it", () => {
-    const plan = computePlan({ ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" });
-    expect(plan.workings.protein).toEqual({ gPerKg: 2, weightKg: 150, wantedG: 300 });
-    expect(plan.proteinG).toBe(204);
+    // 200 cm: BMI 30 is 120 kg, so protein asks 2 × 120 = 240 g of a 1,322 kcal day.
+    const plan = computePlan({ ...sample, gender: "female", age: 120, heightCm: 200, weightKg: 130, targetWeightKg: 120, trainingDays: 0, pace: "brisk" });
+    expect(plan.workings.protein).toEqual({ gPerKg: 2, weightKg: 120, referenceBmi: 30, wantedG: 240 });
+    expect(plan.proteinG).toBe(198);
+  });
+
+  it("the contract refuses a protein line that counts a heavier body whole, or names a reference it did not use", () => {
+    const heavy = computePlan({ ...sample, age: 35, weightKg: 120, targetWeightKg: 90 });
+    expect(planNumbersSchema.safeParse(heavy).success).toBe(true);
+    const p = heavy.workings.protein;
+    for (const protein of [
+      { ...p, weightKg: 120, referenceBmi: null, wantedG: 240 }, // the whole body, multiplied out
+      { ...p, referenceBmi: null }, // the BMI-30 weight, unnamed
+      { ...p, referenceBmi: 25 }, // a reference the rule does not use
+    ]) {
+      expect(planNumbersSchema.safeParse({ ...heavy, workings: { ...heavy.workings, protein } }).success, JSON.stringify(protein)).toBe(false);
+    }
+    // And a body under the line may not claim the cap.
+    const light = computePlan(sample);
+    const named = { ...light.workings.protein, referenceBmi: 30 };
+    expect(planNumbersSchema.safeParse({ ...light, workings: { ...light.workings, protein: named } }).success).toBe(false);
   });
 
   it("the contract refuses a working that does not add up or multiply out, whichever line breaks", () => {
@@ -390,16 +451,17 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
   });
 
   it("carbohydrates never drop below 50 g: protein gives way so the grams still make the calories", () => {
-    // female 80 · 140 cm · 150 kg · sitting · no training: resting 1814, burn 2176.8 → 2177;
-    // brisk −825 = 1352. 2 g/kg would be 300 g protein (1200 kcal) + 37.6 g fat (338) — more
-    // than the day holds. Fat keeps its share, carbs take the floor, protein takes the rest.
-    const plan = computePlan({ ...sample, gender: "female", age: 80, heightCm: 140, weightKg: 150, targetWeightKg: 140, trainingDays: 0, pace: "brisk" });
-    expect(plan.targetKcal).toBe(1352);
-    expect(plan.fatG).toBe(Math.round((1352 * 0.25) / 9)); // 38
+    // female 120 · 200 cm · 130 kg · sitting · no training: resting 1789, burn 2146.8 → 2147;
+    // brisk −825 = 1322. Counted on 120 kg (BMI 30 at 200 cm), 2 g/kg would be 240 g protein
+    // (960 kcal) + 36.7 g fat (330.5) — more than the day holds. Fat keeps its share, carbs
+    // take the floor, protein takes the rest.
+    const plan = computePlan({ ...sample, gender: "female", age: 120, heightCm: 200, weightKg: 130, targetWeightKg: 120, trainingDays: 0, pace: "brisk" });
+    expect(plan.targetKcal).toBe(1322);
+    expect(plan.fatG).toBe(Math.round((1322 * 0.25) / 9)); // 37
     expect(plan.carbsG).toBe(50);
-    expect(plan.proteinG).toBe(Math.round((1352 - 200 - 1352 * 0.25) / 4)); // 204, not 300
+    expect(plan.proteinG).toBe(Math.round((1322 - 200 - 1322 * 0.25) / 4)); // 198, not 240
     // Three roundings can drift the sum by at most 2 + 2 + 4.5 kcal.
-    expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - 1352)).toBeLessThanOrEqual(9);
+    expect(Math.abs(plan.proteinG * 4 + plan.carbsG * 4 + plan.fatG * 9 - 1322)).toBeLessThanOrEqual(9);
     // A body the table fits keeps its full protein and carbs above the floor.
     expect(macrosFor(1704, 82, 2)).toEqual({ proteinG: 164, carbsG: 156, fatG: 47 });
   });

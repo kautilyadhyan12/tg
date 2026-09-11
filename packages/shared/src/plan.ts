@@ -154,13 +154,30 @@ export const MIFFLIN_ST_JEOR_CONSTANT: Readonly<Record<"female" | "male", number
   male: 5,
 };
 
+/** Protein is counted on the body weight, but never on more than the weight at
+ *  this BMI for the height (Kd, 2026-09-11). Protein needs follow muscle more
+ *  than body weight, so a heavy body counted whole is handed a target nobody
+ *  eats (240 g a day for 120 kg at 175 cm); guidance for heavier bodies counts
+ *  them "with a maximum weight of BMI 30" (Weijs, 2025). */
+export const PROTEIN_REFERENCE_BMI = 30;
+
+/** The weight protein is counted on, to two decimals as weights are stored, and
+ *  the reference BMI when that cap is what was counted (null when it is the body
+ *  weight itself). The calculator and the check on its working share this sum. */
+export function proteinWeight(weightKg: number, heightCm: number): { kg: number; referenceBmi: number | null } {
+  const m = heightCm / 100;
+  const capKg = Math.round(PROTEIN_REFERENCE_BMI * m * m * 100) / 100;
+  return weightKg > capKg ? { kg: capKg, referenceBmi: PROTEIN_REFERENCE_BMI } : { kg: weightKg, referenceBmi: null };
+}
+
 /** How the number was reached, one step per line of "How is this worked out?"
  *  under the daily number (Kd, 2026-09-10). The server sends every figure the
  *  steps use — only it knows the day factor, the training figure and the
  *  protein table — and the screen adds the words and the sources. Every kcal
  *  and gram is whole. The refine on `planNumbersSchema` checks each line's own
  *  product and sum against the plan's numbers, and each figure the plan panel
- *  prints on more than one line against its twin: the weight, the formula's
+ *  prints on more than one line against its twin: the weight (and the weight
+ *  protein is counted on, which follows from it and the height), the formula's
  *  constant, the pace's kilos a week, the kcal per kilo, the kilos to move and
  *  the two floors the flags name. So a working that does not multiply out, add
  *  up or agree with itself is refused on both sides of the wire. */
@@ -201,9 +218,14 @@ export const planWorkingsSchema = z
     /** Burn plus the change, before the calorie floor. */
     beforeFloorKcal: z.number().int(),
     floorKcal: z.number().int(),
-    /** Grams per kg for the goal × weight, rounded. `proteinG` is smaller only
+    /** Grams per kg for the goal × the weight protein is counted on, rounded:
+     *  the body weight, or for a body heavier than `referenceBmi` for its
+     *  height the weight at that BMI (`proteinWeight`); `referenceBmi` is null
+     *  when the body weight is what was counted. `proteinG` is smaller only
      *  when the carbohydrate floor made protein give way. */
-    protein: z.object({ gPerKg: z.number(), weightKg: z.number(), wantedG: z.number().int() }).strict(),
+    protein: z
+      .object({ gPerKg: z.number(), weightKg: z.number(), referenceBmi: z.number().nullable(), wantedG: z.number().int() })
+      .strict(),
     /** Fat's share of the calories, at 9 kcal a gram. */
     fatShare: z.number(),
     /** Carbohydrates take the rest, at 4 kcal a gram, never under this. */
@@ -268,6 +290,7 @@ export const planNumbersSchema = z
       const w = p.workings;
       const r = w.resting;
       const t = w.training;
+      const counted = proteinWeight(r.weightKg, r.heightCm);
       return (
         r.kcal === Math.round(10 * r.weightKg + 6.25 * r.heightCm - 5 * r.age + r.constant) &&
         w.day.kcal === Math.round(r.kcal * w.day.factor) &&
@@ -284,11 +307,14 @@ export const planNumbersSchema = z
         p.carbsG >= w.carbsFloorG &&
         (w.finish === null) === (p.daysToTarget === null) &&
         (w.finish === null || p.daysToTarget === daysToMove(w.finish.kgToMove, w.finish.kcalPerKg, p.dailyChangeKcal)) &&
-        // The weight on the resting, training and protein lines, and in
-        // "Keeps your weight at …" when the plan holds it.
+        // The weight on the resting and training lines, and in "Keeps your
+        // weight at …" when the plan holds it.
         t.weightKg === r.weightKg &&
-        w.protein.weightKg === r.weightKg &&
         (p.daysToTarget !== null || p.plannedTargetKg === r.weightKg) &&
+        // The protein line's weight: the resting line's, or the weight at the
+        // reference BMI for its height when the body is heavier.
+        w.protein.weightKg === counted.kg &&
+        w.protein.referenceBmi === counted.referenceBmi &&
         // The version of the formula the resting line names, and its constant.
         r.constant === MIFFLIN_ST_JEOR_CONSTANT[r.formula] &&
         // The pace line's kilos a week, as screen 3 offers that pace.

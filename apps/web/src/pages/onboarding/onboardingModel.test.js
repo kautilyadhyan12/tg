@@ -336,7 +336,7 @@ const WORKINGS = {
   change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
   beforeFloorKcal: 1267,
   floorKcal: 1200,
-  protein: { gPerKg: 2, weightKg: 70, wantedG: 140 },
+  protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 },
   fatShare: 0.25,
   carbsFloorG: 50,
   finish: { kgToMove: 5, kcalPerKg: 7700 },
@@ -424,7 +424,7 @@ describe('the plan panel says what the server said', () => {
   });
 
   it('"How is this worked out?" prints the server\'s own steps, each sum as its numbers make it', () => {
-    const steps = m.workingSteps(plan);
+    const steps = m.workingSteps(plan, 'lose');
     expect(steps.map((s) => [s.title, s.sum])).toEqual([
       ['Resting burn', '10 × 70 kg + 6.25 × 165 cm − 5 × 30 years − 161 = 1,420 kcal'],
       ['Your day', '1,420 × 1.2 = 1,704 kcal'],
@@ -445,7 +445,39 @@ describe('the plan panel says what the server said', () => {
     expect(notes['Your day']).toBe('1.2 is the standard figure for a day spent mostly sitting.');
     expect(notes['Your training']).toMatch(/the app's own estimate\.$/);
     expect(notes['Your pace']).toMatch(/usual planning figure \(Wishnofsky\)/);
-    expect(notes['Protein']).toBe("2 g per kilo is the app's own figure for your goal.");
+    expect(notes['Protein']).toBe(
+      '2 g per kilo while losing weight: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+    );
+  });
+
+  it("names the source of each goal's protein figure, and the weight a heavier body is counted on", () => {
+    const protein = (p, direction) => m.workingSteps(p, direction).find((s) => s.title === 'Protein');
+    const withProtein = (figures, proteinG) => ({ ...plan, proteinG, workings: { ...WORKINGS, protein: { ...WORKINGS.protein, ...figures } } });
+    expect(protein(withProtein({ gPerKg: 1.6, wantedG: 112 }, 112), 'maintain').note).toBe(
+      '1.6 g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).',
+    );
+    expect(protein(withProtein({ gPerKg: 2.2, wantedG: 154 }, 154), 'gain').note).toBe(
+      "2.2 g per kilo is the app's own figure for building muscle, above the 1.6 g per kilo a day past which extra protein added no more muscle in a review of 49 trials (Morton and colleagues, 2018).",
+    );
+    // The golden woman at 100 kg: BMI 30 at 165 cm is 81.68 kg (Kd, 2026-09-11).
+    const heavy = {
+      ...plan,
+      proteinG: 163,
+      workings: {
+        ...WORKINGS,
+        resting: { ...WORKINGS.resting, weightKg: 100 },
+        protein: { gPerKg: 2, weightKg: 81.68, referenceBmi: 30, wantedG: 163 },
+      },
+    };
+    expect(protein(heavy, 'lose')).toEqual({
+      title: 'Protein',
+      sum: '2 g × 81.68 kg = 163 g',
+      note:
+        'Counted on 81.68 kg, the weight at a BMI of 30 for your height, rather than your 100 kg, as protein guidance for heavier bodies does (Weijs, 2025). ' +
+        '2 g per kilo while losing weight: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+    });
+    // Without a goal to name, the figure is still said, as the app's own.
+    expect(protein(plan).note).toBe("2 g per kilo is the app's own figure for your goal.");
   });
 
   it('names the men\'s formula for every answer but Female, and the day factors that are the app\'s own', () => {
