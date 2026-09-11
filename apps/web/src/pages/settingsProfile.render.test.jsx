@@ -1,48 +1,160 @@
-// The Settings profile form, rendered: a save sends the weight only when the
-// person changed it. The form loads the current weight into its box, and the
-// server saves any weight it is sent as a "typed by me" weigh-in, so the
-// number already showing must never be sent back with a name change.
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+// Settings → Profile, drawn as the whole Settings page. What is pinned is the
+// SCREEN: the page shows the person's name, a new name reaches the rest of the
+// app once the server has it (the sidebar and the dashboard's greeting read the
+// app's copy, not this page's), and the target box never takes a weight on the
+// wrong side of the current one for the goal ticked (RULINGS 2026-09-11),
+// saying why in screen 3's own words.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const svc = {};
-vi.mock('../api/userApi', async (importOriginal) => ({ ...(await importOriginal()), userService: svc }));
+const auth = { user: { displayName: 'Kd' }, updateUser: vi.fn(), logout: vi.fn() };
+vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
+vi.mock('../context/TransitionContext', () => ({ useTransition: () => ({ triggerTransition: vi.fn() }) }));
+vi.mock('../hooks/useMyGyms', () => ({ useMyGyms: () => ({ gyms: [] }) }));
 vi.mock('../api/mlApi', () => ({
   default: { get: vi.fn(() => Promise.reject(new Error('old backend down'))), patch: vi.fn() },
 }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ logout: vi.fn() }) }));
-vi.mock('../context/TransitionContext', () => ({ useTransition: () => ({ triggerTransition: vi.fn() }) }));
-vi.mock('../hooks/useMyGyms', () => ({ useMyGyms: () => ({ gyms: [] }) }));
+vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
+const svc = {};
+vi.mock('../api/userApi', async (importOriginal) => ({ ...(await importOriginal()), userService: svc }));
 
+const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
-const user = { id: 'u-1', email: 'kd@example.com', displayName: 'Kd', weightKg: 90, onboardingCompleted: true };
-const fitnessProfile = {
-  age: 30, gender: 'male', heightCm: 175, targetWeightKg: 80, fitnessLevel: 'beginner',
-  fitnessGoals: [], exerciseFrequency: 3, availableEquipment: [], sessionDurationMin: 30,
-  preferredWorkoutTime: 'morning', medicalConditions: null, onboardingCompleted: true,
-};
+/** A small stand-in for the two profile routes: it stores what it is sent and
+ *  reads it back, as the real ones do. Weight Loss ticked, 70 kg, target 65. */
+let server;
+function serve({ me = {}, fitness = {} } = {}) {
+  server = {
+    me: {
+      id: 'u1', email: 'kd@example.com', displayName: 'Kd', weightKg: 70, onboardingCompleted: true,
+      createdAt: '2026-09-01T00:00:00.000Z', ...me,
+    },
+    fitness: {
+      age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
+      fitnessGoals: ['weight_loss'], exerciseFrequency: 3, availableEquipment: [], sessionDurationMin: 45,
+      preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true, updatedAt: null, ...fitness,
+    },
+  };
+  svc.getProfile = vi.fn(async () => ({ data: { user: { ...server.me } } }));
+  svc.getFitnessProfile = vi.fn(async () => ({ data: { fitnessProfile: { ...server.fitness } } }));
+  svc.updateProfile = vi.fn(async (patch) => {
+    Object.assign(server.me, patch);
+    return { data: { user: { ...server.me } } };
+  });
+  svc.putFitnessProfile = vi.fn(async (body) => {
+    Object.assign(server.fitness, body);
+    return { data: { fitnessProfile: { ...server.fitness } } };
+  });
+}
+
+const type = (shown, text) => fireEvent.change(screen.getByDisplayValue(shown), { target: { value: text } });
+const save = () => fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+const loaded = () => screen.findByDisplayValue('Kd');
 
 beforeEach(() => {
-  svc.getProfile = vi.fn().mockResolvedValue({ data: { user } });
-  svc.getFitnessProfile = vi.fn().mockResolvedValue({ data: { fitnessProfile } });
-  svc.putFitnessProfile = vi.fn().mockResolvedValue({ data: { fitnessProfile } });
-  svc.updateProfile = vi.fn().mockResolvedValue({ data: { user } });
+  auth.updateUser.mockClear();
+  toast.error.mockClear();
 });
 afterEach(() => cleanup());
 
-/** Draws the page, replaces each box showing `from` with `to`, presses Save,
- *  and waits for the save to finish (the page reloads the profile when it does). */
-const saveWith = async (edits) => {
-  render(<Settings />);
-  for (const [from, to] of edits) {
-    fireEvent.change(await screen.findByDisplayValue(from), { target: { value: to } });
-  }
-  fireEvent.click(await screen.findByRole('button', { name: /save changes/i }));
-  await waitFor(() => expect(svc.getProfile).toHaveBeenCalledTimes(2));
-};
+describe('Settings → Profile', () => {
+  it('shows the name, and a new name reaches the rest of the app once the server has it', async () => {
+    serve();
+    render(<Settings />);
+    expect(await screen.findByText('Kd')).toBeTruthy(); // the page's own header
+    type('Kd', 'Kd Renamed');
+    save();
+    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ displayName: 'Kd Renamed' }));
+    expect(svc.updateProfile).toHaveBeenCalledWith({ displayName: 'Kd Renamed' });
+    // The header reads the name back from the server.
+    expect(await screen.findByText('Kd Renamed')).toBeTruthy();
+  });
 
-describe('the Settings profile form', () => {
+  it('shows the name on the Account tab', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    await waitFor(() => expect(screen.getAllByText('Kd')).toHaveLength(2)); // the header and the Name row
+  });
+
+  it("refuses a target typed on the wrong side of the weight, in screen 3's words, and sends nothing", async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    type('65', '83');
+    const why = '83.0 kg is not below your current 70.0 kg. Pick a weight below it.';
+    expect(screen.getByText(why)).toBeTruthy();
+    save();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(why));
+    expect(svc.putFitnessProfile).not.toHaveBeenCalled();
+    expect(svc.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('holds the target to the weight typed beside it', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    type('70', '64');
+    type('65', '66'); // below the stored 70, but not below the 64 being saved
+    const why = '66.0 kg is not below your current 64.0 kg. Pick a weight below it.';
+    expect(screen.getByText(why)).toBeTruthy();
+    save();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(why));
+    expect(svc.putFitnessProfile).not.toHaveBeenCalled();
+  });
+
+  it('names a stored target left on the wrong side, and still saves the rest of the form', async () => {
+    // A loss target kept when the goal changed to Muscle Gain on the Fitness tab.
+    serve({ fitness: { fitnessGoals: ['flexibility', 'muscle_gain'] } });
+    render(<Settings />);
+    await loaded();
+    expect(screen.getByText('65.0 kg is not above your current 70.0 kg. Pick a weight above it.')).toBeTruthy();
+    type('Kd', 'Kd Renamed');
+    save();
+    await waitFor(() => expect(svc.updateProfile).toHaveBeenCalledWith({ displayName: 'Kd Renamed' }));
+    expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 65 }));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("saves a target on the goal's side, and any target when no goal that moves the weight is ticked", async () => {
+    serve({ fitness: { fitnessGoals: ['muscle_gain'] } });
+    render(<Settings />);
+    await loaded();
+    type('65', '75');
+    expect(screen.queryByText(/is not above/)).toBeNull();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 75 })));
+    cleanup();
+
+    serve({ fitness: { fitnessGoals: ['posture'] } });
+    render(<Settings />);
+    await loaded();
+    type('65', '83');
+    expect(screen.queryByText(/is not (above|below)/)).toBeNull();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 83 })));
+  });
+});
+
+// A save sends the weight only when the person changed it. The form loads the
+// current weight into its box, and the server saves any weight it is sent as a
+// "typed by me" weigh-in, so the number already showing must never be sent
+// back with a name change.
+describe('the Settings profile form sends only what changed', () => {
+  /** Draws the page, replaces each box showing `from` with `to`, presses Save,
+   *  and waits for the save to finish (the page reloads the profile when it does). */
+  const saveWith = async (edits) => {
+    serve({ me: { weightKg: 90 }, fitness: { targetWeightKg: 80, fitnessGoals: [] } });
+    render(<Settings />);
+    for (const [from, to] of edits) {
+      fireEvent.change(await screen.findByDisplayValue(from), { target: { value: to } });
+    }
+    fireEvent.click(await screen.findByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(svc.getProfile).toHaveBeenCalledTimes(2));
+  };
+
   it('a name change alone sends the name, not the weight the form loaded', async () => {
     await saveWith([['Kd', 'Kd Renamed']]);
     expect(svc.updateProfile).toHaveBeenCalledTimes(1);

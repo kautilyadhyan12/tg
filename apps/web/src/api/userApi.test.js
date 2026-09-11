@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { cleanFitnessGoals, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, toggleFitnessGoal, userService } from './userApi';
+import { cleanFitnessGoals, goalDirection, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, resetTimezoneSync, syncTimezone, timezoneUpdate, toggleFitnessGoal, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -139,6 +139,14 @@ describe('userService repoint (Card 6)', () => {
       expect(cleanFitnessGoals(['weight_loss', 'muscle_gain'])).toEqual(['weight_loss']);
       expect(cleanFitnessGoals(['flexibility', 'posture'])).toEqual(['flexibility', 'posture']);
       expect(cleanFitnessGoals([])).toEqual([]);
+    });
+
+    it('reads the way the ticked goals move the weight from the one weight goal among them', () => {
+      expect(goalDirection(['flexibility', 'weight_loss'])).toBe('lose');
+      expect(goalDirection(['muscle_gain', 'posture'])).toBe('gain');
+      expect(goalDirection(['flexibility', 'posture'])).toBeNull();
+      expect(goalDirection([])).toBeNull();
+      expect(goalDirection(undefined)).toBeNull();
     });
   });
 

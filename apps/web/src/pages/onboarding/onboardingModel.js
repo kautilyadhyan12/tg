@@ -265,6 +265,14 @@ export function targetWrongSide(direction, targetKg, weightKg) {
   return direction === 'gain' ? targetKg <= weightKg : targetKg >= weightKg;
 }
 
+/** Screen 3's words for such a target, in the units on show. Settings' target
+ *  box says the same, so the two never explain it differently. */
+export function wrongSideText(direction, targetKg, weightKg, units) {
+  const side = direction === 'gain' ? 'above' : 'below';
+  const shown = (kg) => weightShown(weightParts(kg, units), units);
+  return `${shown(targetKg)} is not ${side} your current ${shown(weightKg)}. Pick a weight ${side} it.`;
+}
+
 const tenthsOf = ({ whole, tenth }) => whole * 10 + tenth;
 const partsOf = (tenths) => ({ whole: Math.floor(tenths / 10), tenth: tenths % 10 });
 

@@ -261,6 +261,12 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
     expect(rows).toBeGreaterThan(100_000);
   });
 
+  it("names a target on the wrong side in screen 3's words, in the units on show", () => {
+    expect(m.wrongSideText('lose', 83, 70, 'metric')).toBe('83.0 kg is not below your current 70.0 kg. Pick a weight below it.');
+    expect(m.wrongSideText('gain', 65, 70, 'metric')).toBe('65.0 kg is not above your current 70.0 kg. Pick a weight above it.');
+    expect(m.wrongSideText('gain', 65, 70, 'imperial')).toBe('143.3 lb is not above your current 154.3 lb. Pick a weight above it.');
+  });
+
   it('a target at or past the weight is the wrong side; the screen then stays unanswered', () => {
     expect(m.targetWrongSide('lose', 83, 70)).toBe(true);
     expect(m.targetWrongSide('lose', 70, 70)).toBe(true);

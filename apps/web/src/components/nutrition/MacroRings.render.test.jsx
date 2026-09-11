@@ -52,4 +52,14 @@ describe('the macro rings', () => {
     for (const text of ['/ 1267', '/ 140g', '/ 98g', '/ 35g']) expect(screen.getByText(text), text).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Answer now' })).toBeNull();
   });
+
+  it('with the target on the wrong side of the weight, says it no longer fits, never that it is unanswered', () => {
+    draw({ targets: null, missingInputs: [], targetWrongSide: true });
+    expect(
+      screen.getByText('Your target weight no longer fits your goal. Pick a new one to see your daily calories and macros.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/answer/i)).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Pick a new target' }));
+    expect(screen.getByText('AT /onboarding, BACK TO /nutrition')).toBeTruthy();
+  });
 });

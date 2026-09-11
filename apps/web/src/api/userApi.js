@@ -100,11 +100,22 @@ export function toggleFitnessGoal(goals, id) {
   return [...goals.filter((g) => !fights(g)), id];
 }
 
-/** A list stored before that rule may hold both weight goals: it loads with
- *  the first of them, the one a screen-1 answer puts first. Pure + unit-tested. */
+/** A list stored before the server kept only one weight goal may hold both:
+ *  it loads with the first of them in the list. That is not always the one
+ *  setting the calories (a Settings save keeps the chips' order), which this
+ *  read does not carry; the next save makes the one shown the one they
+ *  follow. Pure + unit-tested. */
 export function cleanFitnessGoals(goals) {
   const first = goals.find((g) => WEIGHT_GOALS.includes(g));
   return goals.filter((g) => !WEIGHT_GOALS.includes(g) || g === first);
+}
+
+/** The way the ticked goals move the weight: 'lose' or 'gain' for the one
+ *  weight goal among them, the goal the calories follow; null when none is
+ *  ticked. Pure + unit-tested. */
+export function goalDirection(goals) {
+  const goal = (goals ?? []).find((g) => WEIGHT_GOALS.includes(g));
+  return goal === undefined ? null : PLAN_GOAL_BY_MAIN_GOAL[goal];
 }
 
 /** What the profile form sends to PATCH /v1/users/me: ONLY what changed.

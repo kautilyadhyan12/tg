@@ -2,7 +2,7 @@
 // their way laid over the top. Every save goes through ONE queue, so the last
 // tap is always the answer stored; the plan and the missing list are always
 // the server's reply to the newest save that landed.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { errorText } from '../../api/orgsApi';
 import { onboardingService, refusedFinish } from '../../api/onboardingApi';
@@ -10,7 +10,9 @@ import { createSaveQueue, settleEdits } from './onboardingModel';
 
 const LOAD_FAILED = "Couldn't load your answers. Check your connection and try again.";
 
-export function useOnboardingAnswers() {
+/** `onSaved`, if given, hears the answers as the server holds them each time
+ *  a save lands: the page's moment to pass one on to the rest of the app. */
+export function useOnboardingAnswers({ onSaved } = {}) {
   const [state, setState] = useState({
     status: 'loading',
     first: null, // the answers as they stood on arrival: where the person lands
@@ -21,17 +23,25 @@ export function useOnboardingAnswers() {
     error: null,
   });
 
+  // The newest `onSaved`, for a queue made once.
+  const heard = useRef(onSaved);
+  useEffect(() => {
+    heard.current = onSaved;
+  });
+
   const [queue] = useState(() => {
     const q = createSaveQueue({
       send: async (patch) => (await onboardingService.patch(patch)).data,
-      onSaved: (data, sent) =>
+      onSaved: (data, sent) => {
         setState((s) => ({
           ...s,
           server: data.answers,
           plan: data.plan,
           missing: data.missing,
           edits: settleEdits(s.edits, sent),
-        })),
+        }));
+        heard.current?.(data.answers);
+      },
       onFailed: (err, sent) => {
         // The tap goes back to what the server last said…
         setState((s) => ({ ...s, edits: settleEdits(s.edits, sent) }));

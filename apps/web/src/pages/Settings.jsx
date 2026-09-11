@@ -10,7 +10,8 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, toggleFitnessGoal, cleanFitnessGoals } from '../api/userApi';
+import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, toggleFitnessGoal, cleanFitnessGoals, goalDirection } from '../api/userApi';
+import { targetWrongSide, wrongSideText } from './onboarding/onboardingModel';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -117,8 +118,26 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
     setForm((f) => (f.weightUnit === u ? f
       : { ...f, weightUnit: u, weight: convertWeight(f.weight, u), targetWeight: convertWeight(f.targetWeight, u) }));
 
+  const { updateUser } = useAuth();
+
+  // A target on the wrong side of the weight for the goal ticked cannot be
+  // typed in, and is named in screen 3's own words (RULINGS 2026-09-11). The
+  // weight is the one this save leaves: the box's, else the newest weigh-in.
+  // A stored one is only named, so the rest of the form still saves.
+  const direction = goalDirection(profile.fitnessGoals);
+  const weightKgNow = weightToKg(form.weight, form.weightUnit) ?? profile.weightKg ?? null;
+  const targetKg = weightToKg(form.targetWeight, form.weightUnit);
+  const wrongSide = direction !== null && targetWrongSide(direction, targetKg, weightKgNow)
+    ? wrongSideText(direction, targetKg, weightKgNow, form.weightUnit === 'lbs' ? 'imperial' : 'metric')
+    : null;
+  const targetTyped = targetKg !== (profile.targetWeightKg ?? null);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (wrongSide !== null && targetTyped) {
+      toast.error(wrongSide);
+      return;
+    }
     setLoading(true);
     try {
       // name + weight → /v1/users/me, and ONLY when changed (profilePatchFor:
@@ -137,7 +156,13 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         targetWeightKg: weightToKg(form.targetWeight, form.weightUnit),
       }));
       const patch = profilePatchFor(profile, form);
-      if (Object.keys(patch).length) await userService.updateProfile(patch);
+      if (Object.keys(patch).length) {
+        const res = await userService.updateProfile(patch);
+        // The rest of the app (the sidebar, the dashboard's greeting) calls
+        // the person by the name the server now holds.
+        const name = res?.data?.user?.displayName;
+        if (typeof name === 'string') updateUser({ displayName: name });
+      }
 
       toast.success('Profile updated');
       setSaved(true);
@@ -230,6 +255,9 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
               {form.weightUnit}
             </span>
           </div>
+          {wrongSide && (
+            <p role="alert" className="text-2xs" style={{ color: '#f87171' }}>{wrongSide}</p>
+          )}
         </Field>
       </div>
 
@@ -532,7 +560,7 @@ function AccountTab({ profile, onSaved }) {
         <h3 className="text-sm font-bold text-white mb-3">Account Info</h3>
         <div className="space-y-2">
           {[
-            { label: 'Name',         value: profile.fullName },
+            { label: 'Name',         value: profile.displayName },
             { label: 'Email',        value: profile.email },
             { label: 'Sign-in',      value: 'Email code or Google' },
             { label: 'Member since', value: new Date(profile.createdAt || Date.now())
@@ -873,7 +901,7 @@ export default function Settings() {
                 <div className="text-right">
                   <p className="text-sm font-bold text-white leading-tight"
                      style={{ textShadow: '0 0 12px rgba(255,138,31,0.60)' }}>
-                    {profile?.fullName}
+                    {profile?.displayName}
                   </p>
                   <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
                     {profile?.email}
@@ -896,7 +924,7 @@ export default function Settings() {
                   >
                     {avatar
                       ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
-                      : (profile?.fullName?.[0] || 'U').toUpperCase()
+                      : (profile?.displayName?.[0] || 'U').toUpperCase()
                     }
                   </div>
                   <button

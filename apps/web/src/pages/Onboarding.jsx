@@ -90,7 +90,16 @@ export default function Onboarding() {
     navigate('/login');
   };
 
-  const ob = useOnboardingAnswers();
+  // The rest of the app (the sidebar, the dashboard's greeting) calls the
+  // person by the name the server holds, so a name saved here reaches it the
+  // moment its save lands, whichever way they then leave this page.
+  const ob = useOnboardingAnswers({
+    onSaved: (saved) => {
+      if (typeof saved.displayName === 'string' && saved.displayName !== user?.displayName) {
+        updateUser({ displayName: saved.displayName });
+      }
+    },
+  });
   const [picked, setPicked] = useState(null); // null: where the person landed
   const [nameDraft, setNameDraft] = useState(null); // the name box's text while it differs from the saved name
   const [nameError, setNameError] = useState(null);
