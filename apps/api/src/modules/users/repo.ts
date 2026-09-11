@@ -384,20 +384,19 @@ export async function patchOnboarding(
     if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;
     if (patch.mainGoal !== undefined) {
       cols["main_goal"] = patch.mainGoal;
-      // THE MIRROR, and it is temporary. The live macro rings still read the
-      // v1 `fitness_goals` ARRAY (nutrition/targets.ts), so a person who picks
-      // "lose weight" on the new screen 1 must not read as having no goal
-      // there. Written in the same statement as `main_goal`, so a save on THIS
-      // route can never leave the two disagreeing.
+      // THE MIRROR, and it is temporary. Settings' goal chips still show the
+      // v1 `fitness_goals` ARRAY, so a person who picks "lose weight" on
+      // screen 1 must not find no goal ticked there. Written in the same
+      // statement as `main_goal`, so a save on THIS route can never leave the
+      // two disagreeing. The macro rings no longer read the array: since 4a-iii
+      // they read the plan, which reads `main_goal`.
       //
       // That guarantee is ONE-WAY, and only this way: `upsertFitnessProfile`
-      // (the v1 PUT, still the live web form) replaces `fitness_goals` and does
-      // not touch `main_goal` — it has no such question to ask. After one of
-      // those the rings follow the list that form just wrote, which is what
-      // that person asked for, while `main_goal` holds the answer screen 1 was
-      // given. Nothing puts `main_goal` on a screen yet, so nothing false is
-      // shown; item 4a-ii moves the rings onto these answers and ends the
-      // mirror and that divergence together (migration 0026's note).
+      // (the v1 PUT, which Settings writes) replaces `fitness_goals` and does
+      // not touch `main_goal` — it has no such question to ask — so a goal
+      // changed in Settings moves neither the plan nor the rings. Item 4a-iv
+      // gives Settings the same two goal questions as screen 1 and ends the
+      // mirror and that gap together.
       cols["fitness_goals"] = patch.mainGoal === null ? [] : [patch.mainGoal];
     }
 

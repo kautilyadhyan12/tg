@@ -465,42 +465,50 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await a.close();}
   },30_000);
 
-  // Nutrition targets (this card): the nutrition.py Mifflin-St Jeor port,
-  // computed from the user's OWN stored profile. Kd ruled no fabricated
-  // defaults — an incomplete profile yields NO targets plus an honest list of
-  // what is missing, so the page can ask for it instead of inventing 2000.
-  it("serves targets from the stored profile, withholds them when inputs are missing, and never crosses users",async()=>{
+  // The macro rings (ROADMAP 4a-iii): the person's own PLAN — the number the
+  // onboarding screens show, from the same stored answers — or the plan's own
+  // list of the questions still open. Never a number built from a default.
+  it("serves the plan's own numbers, names the questions still open, and never crosses users",async()=>{
     const t=await session("p26a-targets@example.com");
     expect((await inject("GET","/v1/nutrition/targets","")).statusCode).toBe(401);
 
-    // A brand-new user has no fitness-profile row and no weight: all five missing.
+    // A brand-new user: no number, and every core answer of the plan missing.
     const empty=await inject("GET","/v1/nutrition/targets",t.access);
     expect(empty.statusCode,empty.body).toBe(200);
-    expect(empty.json()).toEqual({targets:null,missing:["age","gender","heightCm","weightKg","exerciseFrequency"]});
+    expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"]});
 
-    // Fill the profile but NOT the weight — weight lives in the weigh-in history,
-    // a different table, so this pins that the read spans both.
-    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:4,fitnessGoals:["weight_loss"],onboardingCompleted:true})).statusCode).toBe(200);
-    expect((await inject("GET","/v1/nutrition/targets",t.access)).json()).toEqual({targets:null,missing:["weightKg"]});
+    // Someone who finished the OLD form: it never asked one goal or "your day",
+    // so the rings name exactly those two, however complete the rest is. The
+    // weight lives in the weigh-in history, so this read spans both tables.
+    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["weight_loss"],onboardingCompleted:true})).statusCode).toBe(200);
+    expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
+    const old=await inject("GET","/v1/nutrition/targets",t.access);
+    expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"]});
 
-    // Complete: the SAME golden the unit test hand-computes, now end-to-end
-    // through real storage (a contract mismatch would show here, not there).
-    expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:60})).statusCode).toBe(200);
+    // Answered on the onboarding screens, the rings carry the plan: the golden
+    // of users.onboarding.routes.test.ts, and field by field what that route says.
+    for(const answers of [{mainGoal:"weight_loss"},{targetWeightKg:65,pace:"steady"},{dayActivity:"sitting"}])
+      expect((await inject("PATCH","/v1/users/me/onboarding",t.access,answers)).statusCode).toBe(200);
+    type Plan={restingBurnKcal:number;dailyBurnKcal:number;targetKcal:number;proteinG:number;carbsG:number;fatG:number};
+    const planOf=async(access:string)=>(await inject("GET","/v1/users/me/onboarding",access)).json<{plan:Plan}>().plan;
+    const ringsOf=(p:Plan)=>({bmr:p.restingBurnKcal,tdee:p.dailyBurnKcal,kcal:p.targetKcal,proteinG:p.proteinG,carbsG:p.carbsG,fatG:p.fatG,noCalorieCut:false});
     const done=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(done.json()).toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46,noCalorieCut:false},missing:[]});
+    expect(done.json()).toEqual({targets:{bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false},missing:[]});
+    expect(done.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(t.access)));
 
-    // R7.2 (T3 finding): both arms are parsed through the SHARED contract, so
+    // R7.2 (T3 finding): every arm is parsed through the SHARED contract, so
     // the route's shape and the client's types cannot drift apart silently.
     // .strict() means an extra key here would fail, not be quietly carried.
-    expect(nutritionTargetsResponseSchema.safeParse(done.json()).success).toBe(true);
-    expect(nutritionTargetsResponseSchema.safeParse(empty.json()).success).toBe(true);
+    for(const res of [done,old,empty])expect(nutritionTargetsResponseSchema.safeParse(res.json()).success).toBe(true);
 
-    // Tenancy: this route takes no id, so the proof is that a second user with
-    // a different profile gets THEIR numbers and neither leaks into the other.
+    // Tenancy: this route takes no id, so the proof is that a second person gets
+    // THEIR plan and neither leaks into the other. Their body is heavy (120 kg
+    // at 175 cm), so their protein is counted on the BMI-30 weight, 91.88 kg.
     const u=await session("p26a-targets2@example.com");
-    expect((await inject("PUT","/v1/users/me/fitness-profile",u.access,{age:25,gender:"male",heightCm:180,exerciseFrequency:6,fitnessGoals:["muscle_gain"],onboardingCompleted:true})).statusCode).toBe(200);
-    expect((await inject("PATCH","/v1/users/me",u.access,{weightKg:75})).statusCode).toBe(200);
-    expect((await inject("GET","/v1/nutrition/targets",u.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(3327);
-    expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1646);
+    expect((await inject("PATCH","/v1/users/me/onboarding",u.access,{mainGoal:"weight_loss",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    const theirs=await inject("GET","/v1/nutrition/targets",u.access);
+    expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[]});
+    expect(theirs.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(u.access)));
+    expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1267);
   },30_000);
 });

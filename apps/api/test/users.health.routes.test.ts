@@ -50,14 +50,19 @@ const nextIp = () => `10.8.${String(Math.floor(ipCounter / 250))}.${String((ipCo
 const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
-/** A profile that yields the weight-loss golden of nutrition.unit.test.ts. */
-const LOSING_PROFILE = {
+/** The golden person of users.onboarding.routes.test.ts as one onboarding
+ *  save: a plan that burns 1,817 kcal a day and cuts 550 of them (eat 1,267). */
+const LOSING_ANSWERS = {
+  mainGoal: "weight_loss",
   age: 30,
   gender: "female",
   heightCm: 165,
-  fitnessGoals: ["weight_loss"],
-  exerciseFrequency: 4,
-  onboardingCompleted: true,
+  weightKg: 70,
+  targetWeightKg: 65,
+  pace: "steady",
+  dayActivity: "sitting",
+  trainingDays: 3,
+  sessionMinutes: 45,
 };
 
 const UNANSWERED = {
@@ -271,41 +276,40 @@ d("health screening + consent routes (real Postgres)", () => {
 
   it("the macro rings' number stops cutting calories for a yes — the live screen honours the rule today", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("hs-targets@example.com");
-    expect((await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: LOSING_PROFILE, cookies })).statusCode).toBe(200);
-    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { weightKg: 60 }, cookies })).statusCode).toBe(200);
+    expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: LOSING_ANSWERS, cookies })).statusCode).toBe(200);
     const targets = async () => {
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       expect(res.statusCode).toBe(200);
       return (JSON.parse(res.body) as { targets: { tdee: number; kcal: number; noCalorieCut: boolean } }).targets;
     };
-    // Before the screen: the ported −400 cut (the unit golden).
-    expect(await targets()).toMatchObject({ tdee: 2046, kcal: 1646, noCalorieCut: false });
+    // Before the screen: the plan's 550 cut.
+    expect(await targets()).toMatchObject({ tdee: 1817, kcal: 1267, noCalorieCut: false });
     // A yes, cleared: no cut — eat the daily burn.
     expect((await putScreening(cookies, { hasCondition: true, checkFirst: "cleared" })).statusCode).toBe(200);
-    expect(await targets()).toMatchObject({ tdee: 2046, kcal: 2046, noCalorieCut: true });
+    expect(await targets()).toMatchObject({ tdee: 1817, kcal: 1817, noCalorieCut: true });
     // A yes, not yet: the same.
     expect((await putScreening(cookies, { hasCondition: true, checkFirst: "not_yet" })).statusCode).toBe(200);
-    expect(await targets()).toMatchObject({ kcal: 2046, noCalorieCut: true });
+    expect(await targets()).toMatchObject({ kcal: 1817, noCalorieCut: true });
     // Back to no: the cut returns.
     expect((await putScreening(cookies, { hasCondition: false })).statusCode).toBe(200);
-    expect(await targets()).toMatchObject({ kcal: 1646, noCalorieCut: false });
+    expect(await targets()).toMatchObject({ kcal: 1267, noCalorieCut: false });
   });
 
   it("the macro rings' number never cuts calories under 18, with a NO on the health screen (RULINGS 2026-09-07)", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("hs-teen@example.com");
-    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { weightKg: 60 }, cookies })).statusCode).toBe(200);
     expect((await putScreening(cookies, { hasCondition: false })).statusCode).toBe(200);
     const targetsAt = async (age: number) => {
-      expect((await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: { ...LOSING_PROFILE, age }, cookies })).statusCode).toBe(200);
+      expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { ...LOSING_ANSWERS, age }, cookies })).statusCode).toBe(200);
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       expect(res.statusCode).toBe(200);
       return (JSON.parse(res.body) as { targets: { tdee: number; kcal: number; noCalorieCut: boolean } }).targets;
     };
-    // 16: bmr 1390.25 × 1.55 = 2154.89 → the whole daily burn, no −400, and it says so.
-    expect(await targetsAt(16)).toEqual(expect.objectContaining({ tdee: 2155, kcal: 2155, noCalorieCut: true }));
-    expect(await targetsAt(17)).toMatchObject({ tdee: 2147, kcal: 2147, noCalorieCut: true });
-    // 18 is an adult for this rule: the cut runs.
-    expect(await targetsAt(18)).toMatchObject({ tdee: 2139, kcal: 1739, noCalorieCut: false });
+    // 16: resting 10·70 + 6.25·165 − 5·16 − 161 = 1490.25 → 1490; × 1.2 = 1788;
+    // + 113 training = 1901 — the whole daily burn, no cut, and it says so.
+    expect(await targetsAt(16)).toEqual(expect.objectContaining({ tdee: 1901, kcal: 1901, noCalorieCut: true }));
+    expect(await targetsAt(17)).toMatchObject({ tdee: 1895, kcal: 1895, noCalorieCut: true });
+    // 18 is an adult for this rule: the cut runs (1889 − 550).
+    expect(await targetsAt(18)).toMatchObject({ tdee: 1889, kcal: 1339, noCalorieCut: false });
   });
 
   it("a soft-deleted person's session is refused before any write (401), and the tables stay empty", { timeout: 30_000 }, async () => {

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { missingText } from '../../pages/onboarding/onboardingModel';
 
 // ── Single animated ring ──────────────────────────────────────────────────────
 function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, target }) {
@@ -59,14 +60,11 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
 
 // ── Honest empty state ───────────────────────────────────────────────────────
 // Kd's exact-data rule: a target we cannot compute is not shown as a number.
-// It names the fields the SERVER said are missing, so the user knows exactly
-// what to add rather than hunting through Settings.
+// It names the questions the SERVER said the plan still needs, in the
+// onboarding screens' own words, and "Answer now" opens onboarding, which
+// starts on the first of them and comes back here (ROADMAP 4a-iii).
 function NoTargets({ missingInputs }) {
-  const list = missingInputs.length > 0
-    ? missingInputs.length === 1
-      ? missingInputs[0]
-      : `${missingInputs.slice(0, -1).join(', ')} and ${missingInputs[missingInputs.length - 1]}`
-    : null;
+  const list = missingInputs.length > 0 ? missingText(missingInputs) : null;
   return (
     <div className="card-glass">
       <h3 className="text-sm font-semibold mb-3"
@@ -76,15 +74,16 @@ function NoTargets({ missingInputs }) {
       <p className="text-xs leading-relaxed mb-4"
          style={{ color: 'rgba(255,255,255,0.55)' }}>
         {list === null
-          ? 'Add your profile details to see your daily calorie and macro targets.'
-          : `Add your ${list} to see your daily calorie and macro targets.`}
+          ? 'Finish setting up to see your daily calories and macros.'
+          : `To see your daily calories and macros, answer ${list}.`}
       </p>
       <Link
-        to="/settings"
+        to="/onboarding"
+        state={{ returnTo: '/nutrition' }}
         className="inline-block text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
         style={{ color: '#FF8A1F', backgroundColor: 'rgba(255,138,31,0.12)' }}
       >
-        Go to Settings
+        Answer now
       </Link>
     </div>
   );

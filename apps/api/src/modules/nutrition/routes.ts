@@ -174,11 +174,12 @@ export function registerNutritionRoutes(
     },
   );
 
-  /** Daily calorie + macro targets, computed server-side from the user's own
-   *  stored profile (R3.1). No input to parse — the identity is the request's
-   *  own session, so there is no id to tamper with. Responds
-   *  { targets: null, missing: [...] } when the profile is incomplete: the
-   *  server never fabricates a target (Kd ruling, this card). */
+  /** The macro rings' daily calories and macros: the person's own plan, from
+   *  their stored onboarding answers (R3.1; ROADMAP 4a-iii) — the same number
+   *  the onboarding screens show. No input to parse — the identity is the
+   *  request's own session, so there is no id to tamper with. Responds
+   *  { targets: null, missing: [...] } while the plan still lacks an answer:
+   *  the server never fabricates a target (RULINGS 2026-07-15). */
   app.get("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getTargets(nutritionDeps, authedUserId(req)));
   });

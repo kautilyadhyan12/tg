@@ -482,44 +482,53 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["mainGoal"]).toBeNull();
   });
 
-  it("keeps the macro rings honest: the one main goal moves the rings' own number", { timeout: 60_000 }, async () => {
+  it("the macro rings read the plan: the screens' own number, whatever the goal, and the goal still mirrored for Settings", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-mirror@example.com");
     await completeSeven(cookies);
     const goals = async () =>
       (await sql<{ fitness_goals: string[] | null }[]>`
         SELECT fitness_goals FROM user_fitness_profiles WHERE user_id = ${userId}`)[0]?.fitness_goals;
-    // The rings' kcal, not merely "a number exists": `fitnessGoals` is not one
-    // of the five inputs the targets route requires, so it answers with a
-    // number whatever the mirror says. Only the SIZE of that number can show
-    // the mirror working — the goal is worth −400 on a cut and +300 on a gain
-    // (nutrition/targets.ts), and those are the differences asserted below.
-    const kcal = async () => {
+    /** The rings (GET /v1/nutrition/targets) against the plan the screens show,
+     *  field by field. Returns the rings' kcal, or null when neither has one. */
+    const rings = async () => {
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.body) as { targets: { kcal: number } | null; missing: string[] };
-      expect(body.missing).toEqual([]);
-      if (body.targets === null) throw new Error("the rings answered with no number");
-      return body.targets.kcal;
+      const body = JSON.parse(res.body) as { targets: Record<string, unknown> | null; missing: string[] };
+      const { plan, missing } = await get(cookies);
+      expect(body.missing).toEqual(missing);
+      if (plan === null) {
+        expect(body.targets).toBeNull();
+        return null;
+      }
+      expect(body.targets).toEqual({
+        bmr: plan["restingBurnKcal"],
+        tdee: plan["dailyBurnKcal"],
+        kcal: plan["targetKcal"],
+        proteinG: plan["proteinG"],
+        carbsG: plan["carbsG"],
+        fatG: plan["fatG"],
+        noCalorieCut: false,
+      });
+      return body.targets?.["kcal"] ?? null;
     };
 
+    expect(await rings()).toBe(GOLDEN_LOSE.targetKcal);
     expect(await goals()).toEqual(["weight_loss"]);
-    const lose = await kcal();
 
-    await patchOk(cookies, { mainGoal: "muscle_gain" });
+    // A gain to a target above the weight: the same pace's 550 on top of the burn.
+    await patchOk(cookies, { mainGoal: "muscle_gain", targetWeightKg: 75 });
+    expect(await rings()).toBe(GOLDEN_LOSE.dailyBurnKcal + 550);
     expect(await goals()).toEqual(["muscle_gain"]);
-    const gain = await kcal();
 
     await patchOk(cookies, { mainGoal: "general_fitness" });
+    expect(await rings()).toBe(GOLDEN_LOSE.dailyBurnKcal);
     expect(await goals()).toEqual(["general_fitness"]);
-    const hold = await kcal();
-    expect(lose, "the rings did not follow the goal onto a cut").toBe(hold - 400);
-    expect(gain, "the rings did not follow the goal onto a surplus").toBe(hold + 300);
 
-    // Clearing the goal clears the mirror — it can never outlive its source —
-    // and the rings fall back to holding the weight, with no goal to read.
+    // Clearing the goal: no number on either, the same question named on
+    // both, and the mirror cleared with it — it never outlives its source.
     await patchOk(cookies, { mainGoal: null });
+    expect(await rings()).toBeNull();
     expect(await goals()).toEqual([]);
-    expect(await kcal()).toBe(hold);
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
@@ -559,10 +568,10 @@ d("onboarding v2 routes (real Postgres)", () => {
     // not touch `main_goal` — it has no such question to ask — so the mirror
     // the v2 save writes is only guaranteed in one direction: a v2 save keeps
     // the two in step, a v1 save can move the array out from under the stored
-    // main goal. The rings then follow the array the form just wrote, which is
-    // what that person asked for; `main_goal` stands until screen 1 is answered
-    // again, and nothing shows it yet. Item 4a-ii moves the rings onto these
-    // answers, which ends the mirror and this divergence with it.
+    // main goal. Since 4a-iii the rings read the plan, which reads `main_goal`,
+    // so a goal changed on the v1 form (Settings) moves neither the plan nor
+    // the rings; item 4a-iv gives Settings screen 1's two questions and ends
+    // the mirror and this gap together.
     expect(after.answers["mainGoal"]).toBe("weight_loss");
     const goals = (
       await sql<{ fitness_goals: string[] | null }[]>`

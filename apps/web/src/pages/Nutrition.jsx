@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { nutritionService, composeAddIngredient, missingTargetLabels, toDisplayTargets } from '../api/nutritionApi';
+import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 
 // Quoted from @app/shared nutrition.ts chosenItemsSchema — the contract's own
@@ -1527,8 +1527,9 @@ function parseDateInput(v) {
 // ── Main Nutrition page ───────────────────────────────────────────────────────
 export default function Nutrition() {
   const [meals,          setMeals]           = useState([]);
-  // Which profile fields the server says are still needed (plain English),
-  // plus whether the targets request has come back at all — the page spinner
+  // Which onboarding answers the server says the plan still needs (its own
+  // keys; MacroRings says them in words), plus whether the targets request
+  // has come back at all — the page spinner
   // is owned by the MEALS fetch, so without this the honest prompt would
   // flash at everyone while targets are still in flight.
   const [missingInputs,  setMissingInputs]   = useState([]);
@@ -1586,9 +1587,10 @@ export default function Nutrition() {
     loadData(d);
   };
 
-  // Targets are SERVER-computed (GET /v1/nutrition/targets, the Mifflin-St
-  // Jeor port). The server returns targets:null + missing[] for a profile it
-  // cannot compute from, and we keep that distinct from "not loaded yet" —
+  // Targets are SERVER-computed (GET /v1/nutrition/targets: the person's own
+  // plan, the number onboarding shows). The server returns targets:null +
+  // missing[] while the plan still needs an answer, and we keep that distinct
+  // from "not loaded yet" —
   // collapsing them is what the deleted 2000/150/250/65 fallbacks used to
   // hide. A failed request degrades to undefined (show nothing), never null
   // (which would wrongly tell the user their profile is incomplete).
@@ -1596,7 +1598,7 @@ export default function Nutrition() {
     try {
       const res = await nutritionService.getTargets();
       setTargets(toDisplayTargets(res.data));
-      setMissingInputs(missingTargetLabels(res.data?.missing));
+      setMissingInputs(missingAnswers(res.data?.missing));
     } catch (err) {
       // Never `null` here — that would blame the user's profile for our own
       // failure. `undefined` renders MacroRings' "couldn't load" state.

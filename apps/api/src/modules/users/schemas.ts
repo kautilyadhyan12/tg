@@ -38,6 +38,7 @@ export type {
   OnboardingResponse,
   PatchOnboardingRequest,
   PlanAnswers,
+  PlanResponse,
   PutFitnessProfileRequest,
   RestoreAccountRequest,
   UpdateProfileRequest,

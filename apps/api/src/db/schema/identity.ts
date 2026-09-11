@@ -164,8 +164,8 @@ export const userFitnessProfiles = pgTable(
     // Onboarding v2 (migration 0026; ROADMAP 4a). The ONE main goal of screen 1
     // — the weight direction the plan maths works in is DERIVED from it
     // (@app/shared PLAN_GOAL_BY_MAIN_GOAL), never stored. The v1 `fitnessGoals`
-    // array above is kept as a one-element mirror while the macro rings still
-    // read it (4a-ii moves them). Training days and session minutes are NOT
+    // array above is kept as a one-element mirror while Settings' goal chips
+    // still show it (4a-iv moves them). Training days and session minutes are NOT
     // duplicated here: they are `exerciseFrequency` and `sessionDurationMin`.
     mainGoal: text("main_goal"),
     pace: text("pace"),

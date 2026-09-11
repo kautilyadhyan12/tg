@@ -43,6 +43,7 @@ import type {
   PatchOnboardingRequest,
   MissingPlanInput,
   PlanHealth,
+  PlanResponse,
   PutFitnessProfileRequest,
   PutHealthScreeningRequest,
   RecordConsentRequest,
@@ -59,43 +60,14 @@ export async function getUserSyncContext(
   return await repo.getSyncContext(sql, userId);
 }
 
-/** The stored answers the nutrition targets calculator reads (Mifflin-St Jeor,
- *  nutrition.py:98). Structurally the calculator's `TargetInputs`, but declared
- *  here so the users module never imports a nutrition type.
- *
- *  Same sql-only shape as getUserSyncContext above, and for the same reason:
- *  getProfile/getFitnessProfile take UsersDeps (redis + emailSender + log),
- *  which NutritionDeps cannot supply. Two PK lookups rather than a join —
- *  reusing the tested repo reads keeps the DB access in repo.ts (R4.6) and
- *  costs one extra indexed lookup on a once-per-page-load endpoint. */
-export interface UserTargetContext {
-  age: number | null;
-  gender: string | null;
-  heightCm: number | null;
-  weightKg: number | null;
-  exerciseFrequency: number | null;
-  fitnessGoals: string[];
-  noCalorieCut: boolean;
-}
-
-export async function getUserTargetContext(sql: Sql, userId: string): Promise<UserTargetContext> {
-  const [sync, fitness, health] = await Promise.all([
-    repo.getSyncContext(sql, userId),
-    repo.getFitnessProfile(sql, userId),
-    getPlanHealth(sql, userId),
-  ]);
-  // No profile row = the user has not onboarded; every field reads as missing
-  // rather than defaulting (the whole point of the honest-empty-state ruling).
-  return {
-    age: fitness?.age ?? null,
-    gender: fitness?.gender ?? null,
-    heightCm: fitness?.heightCm ?? null,
-    weightKg: sync.weightKg,
-    exerciseFrequency: fitness?.exerciseFrequency ?? null,
-    fitnessGoals: fitness?.fitnessGoals ?? [],
-    // An unanswered screen applies no rule yet (as the plan calculator's null).
-    noCalorieCut: health?.hasCondition ?? false,
-  };
+/** THE plan for one person, from their stored answers: the one function the
+ *  onboarding routes and the macro rings (GET /v1/nutrition/targets) both
+ *  read, so the rings and the screens can never show two daily numbers
+ *  (ROADMAP 4a-iii). sql-only like getUserSyncContext above, and for the same
+ *  reason: NutritionDeps cannot supply UsersDeps. `requestedTimeZone` only
+ *  dates the finish; null falls back to the zone the person has stored. */
+export async function getUserPlan(sql: Sql, userId: string, requestedTimeZone: string | null): Promise<PlanResponse> {
+  return await planOf(sql, userId, await repo.getOnboarding(sql, userId), requestedTimeZone);
 }
 
 /** THE flag every plan route reads (ROADMAP 3b): the stored screening as the
@@ -319,18 +291,26 @@ function missingOnboardingAnswers(row: repo.OnboardingRow, requestedTimeZone: st
 /** THE plan, from the stored answers. "Today" is the SERVER's clock read in the
  *  person's own time zone — a client sends where it is, never what day it is,
  *  so a finish date cannot be moved by a request body (ROADMAP 4a). */
+async function planOf(
+  sql: Sql,
+  userId: string,
+  row: repo.OnboardingRow,
+  requestedTimeZone: string | null,
+): Promise<PlanResponse> {
+  const health = await getPlanHealth(sql, userId);
+  const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
+  return resolvePlan(planAnswersFor({ answers: toOnboardingAnswers(row), health, today }));
+}
+
 async function toOnboardingResponse(
   sql: Sql,
   userId: string,
   row: repo.OnboardingRow,
   requestedTimeZone: string | null,
 ): Promise<OnboardingResponse> {
-  const answers = toOnboardingAnswers(row);
-  const health = await getPlanHealth(sql, userId);
-  const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
   return onboardingResponseSchema.parse({
-    answers,
-    ...resolvePlan(planAnswersFor({ answers, health, today })),
+    answers: toOnboardingAnswers(row),
+    ...(await planOf(sql, userId, row, requestedTimeZone)),
   });
 }
 

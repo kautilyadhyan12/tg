@@ -12,7 +12,7 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { missingPlanInputSchema, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
 
-const auth = { updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
+const auth = { user: null, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -43,7 +43,7 @@ const PLAN = {
     change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
     beforeFloorKcal: 1267,
     floorKcal: 1200,
-    protein: { gPerKg: 2, weightKg: 70, wantedG: 140 },
+    protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 },
     fatShare: 0.25,
     carbsFloorG: 50,
     finish: { kgToMove: 5, kcalPerKg: 7700 },
@@ -92,15 +92,18 @@ function serve(initial = {}) {
   });
 }
 
-const draw = () =>
+const draw = (entry = '/onboarding') =>
   render(
-    <MemoryRouter initialEntries={['/onboarding']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/dashboard" element={<p>MEMBER APP</p>} />
+        <Route path="/nutrition" element={<p>NUTRITION</p>} />
       </Routes>
     </MemoryRouter>,
   );
+/** Arriving from the macro rings' "Answer now". */
+const FROM_RINGS = { pathname: '/onboarding', state: { returnTo: '/nutrition' } };
 
 const heading = (name) => screen.findByRole('heading', { name });
 const button = (name) => screen.getByRole('button', { name });
@@ -134,7 +137,9 @@ const aboutYou = async () => {
 };
 
 beforeEach(() => {
+  auth.user = null;
   auth.updateUser.mockClear();
+  auth.logout.mockClear();
   toast.error.mockClear();
 });
 afterEach(() => cleanup());
@@ -605,6 +610,49 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
     tap('Go to Your day');
     await heading('Your day');
+  });
+
+  it('a person who already finished setup goes back to the app, never signed out', async () => {
+    auth.user = { onboardingCompleted: true };
+    serve({ ...ALL, dayActivity: null }); // the one question the plan still needs
+    draw(FROM_RINGS);
+    await heading('Your day'); // it opens on that question
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+    tap(/back to the app/i);
+    await screen.findByText('NUTRITION');
+    expect(auth.logout).not.toHaveBeenCalled();
+  });
+
+  it('answering the open question and finishing brings them back to the rings', async () => {
+    auth.user = { onboardingCompleted: true };
+    serve({ ...ALL, dayActivity: null });
+    draw(FROM_RINGS);
+    await heading('Your day');
+    tap(/Mostly sitting/);
+    await stored({ dayActivity: 'sitting' });
+    await next('Your training');
+    await next('Your week');
+    await next('Equipment');
+    tap(/finish setup/i);
+    await screen.findByText('NUTRITION');
+  });
+
+  it('goes to the dashboard for any other address in the page state', async () => {
+    auth.user = { onboardingCompleted: true };
+    serve({ ...ALL, dayActivity: null });
+    draw({ pathname: '/onboarding', state: { returnTo: 'https://example.com/' } });
+    await heading('Your day');
+    tap(/back to the app/i);
+    await screen.findByText('MEMBER APP');
+  });
+
+  it('someone who has not finished setup keeps Sign out, and no way back without finishing', async () => {
+    serve();
+    draw(FROM_RINGS);
+    await heading('Your goal');
+    expect(screen.queryByRole('button', { name: /back to the app/i })).toBeNull();
+    tap(/sign out/i);
+    await waitFor(() => expect(auth.logout).toHaveBeenCalled());
   });
 
   it('puts a tap back and says so when its save fails, then reads what the server holds', async () => {
