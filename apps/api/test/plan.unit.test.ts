@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calendarDaySchema,
   daysToMove,
+  MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
   planAnswersSchema,
   planHealthSchema,
@@ -136,6 +137,7 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(PACE_KG_PER_WEEK).toEqual({ gentle: 0.25, steady: 0.5, brisk: 0.75 });
     expect(DAY_FACTOR).toEqual({ sitting: 1.2, on_feet: 1.3, active: 1.45, very_active: 1.6 });
     expect(PROTEIN_G_PER_KG).toEqual({ lose: 2.0, gain: 2.2, maintain: 1.6 }); // targets.ts:174
+    expect(MIFFLIN_ST_JEOR_CONSTANT).toEqual({ female: -161, male: 5 });
   });
 
   it("resting burn is Mifflin-St Jeor; only 'female' takes −161", () => {
@@ -250,9 +252,39 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       { ...w, fatShare: 0.3 },
       { ...w, finish: null },
       { ...w, finish: { kgToMove: 8, kcalPerKg: 7700 } },
+      // Each figure printed on two lines, changed on one line only, with every
+      // product and sum still holding.
+      { ...w, training: { ...w.training, weightKg: 82.3 } }, // still 132 kcal
+      { ...w, protein: { ...w.protein, weightKg: 82.2 } }, // still 164 g
+      { ...w, resting: { ...w.resting, formula: "female" } }, // with the men's +5
+      { ...w, change: { ...change, pace: "brisk" } }, // with steady's 0.5 kg a week
+      { ...w, finish: { kgToMove: 6.95, kcalPerKg: 7700 } }, // still 98 days, but 82 − 75 is 7
+      { ...w, finish: { kgToMove: 7, kcalPerKg: 7650 } }, // still 98 days, but the pace line says 7,700
     ];
     for (const workings of broken) {
       expect(planNumbersSchema.safeParse({ ...plan, workings }).success, JSON.stringify(workings)).toBe(false);
+    }
+  });
+
+  it("the contract refuses a figure that reads one way on one line of the panel and another way on the next", () => {
+    // Held: "Keeps your weight at …" is the resting line's weight.
+    const held = computePlan({ ...sample, goal: "maintain", targetWeightKg: null, pace: null });
+    // Floored: "Calories never go below …" is the floor "To eat" names.
+    const floored = computePlan({ ...sample, gender: "female", age: 25, heightCm: 155, weightKg: 50, targetWeightKg: 45, trainingDays: 0, pace: "brisk" });
+    // Under the healthy weight and dated: the flag's weight is the one "Reach …" names.
+    const below = computePlan({ ...sample, gender: "female", age: 20, heightCm: 155, weightKg: 44.6, targetWeightKg: 40 });
+    for (const plan of [held, floored, below]) expect(planNumbersSchema.safeParse(plan).success).toBe(true);
+    expect(held.daysToTarget).toBeNull();
+    expect(floored.flags.map((f) => f.code)).toContain("calorie_floor_applied");
+    expect(below.flags.map((f) => f.code)).toContain("target_below_healthy_weight");
+    expect(below.daysToTarget).not.toBeNull();
+    const broken = [
+      { ...held, plannedTargetKg: 80 },
+      { ...floored, flags: floored.flags.map((f) => (f.code === "calorie_floor_applied" ? { ...f, floorKcal: 1300 } : f)) },
+      { ...below, flags: below.flags.map((f) => (f.code === "target_below_healthy_weight" ? { ...f, floorKg: 44.3 } : f)) },
+    ];
+    for (const plan of broken) {
+      expect(planNumbersSchema.safeParse(plan).success, JSON.stringify(plan.flags)).toBe(false);
     }
   });
 

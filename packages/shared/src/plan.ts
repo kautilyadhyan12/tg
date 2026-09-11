@@ -147,14 +147,23 @@ export const planFlagSchema = z.discriminatedUnion("code", [
 ]);
 export type PlanFlag = z.infer<typeof planFlagSchema>;
 
+/** Mifflin-St Jeor's constant in each version of the formula: one table, read
+ *  by the calculator and by the check on its working below. */
+export const MIFFLIN_ST_JEOR_CONSTANT: Readonly<Record<"female" | "male", number>> = {
+  female: -161,
+  male: 5,
+};
+
 /** How the number was reached, one step per line of "How is this worked out?"
  *  under the daily number (Kd, 2026-09-10). The server sends every figure the
  *  steps use — only it knows the day factor, the training figure and the
  *  protein table — and the screen adds the words and the sources. Every kcal
- *  and gram is whole, and every line the screen prints, each product and each
- *  sum, is checked by the refine on `planNumbersSchema` against the plan's own
- *  numbers, so a working that does not multiply out or add up is refused on
- *  both sides of the wire. */
+ *  and gram is whole. The refine on `planNumbersSchema` checks each line's own
+ *  product and sum against the plan's numbers, and each figure the plan panel
+ *  prints on more than one line against its twin: the weight, the formula's
+ *  constant, the pace's kilos a week, the kcal per kilo, the kilos to move and
+ *  the two floors the flags name. So a working that does not multiply out, add
+ *  up or agree with itself is refused on both sides of the wire. */
 export const planWorkingsSchema = z
   .object({
     /** Mifflin-St Jeor: 10 × weight + 6.25 × height − 5 × age + `constant`,
@@ -215,6 +224,12 @@ export function daysToMove(kgToMove: number, kcalPerKg: number, dailyChangeKcal:
   return Math.ceil((Math.round(kgToMove * 100) * kcalPerKg) / (100 * Math.abs(dailyChangeKcal)));
 }
 
+/** The kilos between two weights. Both carry two decimals, so the distance is
+ *  kept to two as well. The calculator and the check below share this one sum. */
+export function kgBetween(aKg: number, bKg: number): number {
+  return Math.round(Math.abs(aKg - bKg) * 100) / 100;
+}
+
 export const planNumbersSchema = z
   .object({
     /** Resting burn (Mifflin-St Jeor), kcal a day. */
@@ -248,7 +263,8 @@ export const planNumbersSchema = z
     (p) => {
       // Every line "How is this worked out?" prints: each product as the
       // calculator rounds it (the same expressions, so the same floating
-      // point), then each sum against the plan's own numbers.
+      // point), then each sum against the plan's own numbers, then each figure
+      // the panel prints on two lines against its twin.
       const w = p.workings;
       const r = w.resting;
       const t = w.training;
@@ -267,7 +283,27 @@ export const planNumbersSchema = z
         p.fatG === Math.round((p.targetKcal * w.fatShare) / 9) &&
         p.carbsG >= w.carbsFloorG &&
         (w.finish === null) === (p.daysToTarget === null) &&
-        (w.finish === null || p.daysToTarget === daysToMove(w.finish.kgToMove, w.finish.kcalPerKg, p.dailyChangeKcal))
+        (w.finish === null || p.daysToTarget === daysToMove(w.finish.kgToMove, w.finish.kcalPerKg, p.dailyChangeKcal)) &&
+        // The weight on the resting, training and protein lines, and in
+        // "Keeps your weight at …" when the plan holds it.
+        t.weightKg === r.weightKg &&
+        w.protein.weightKg === r.weightKg &&
+        (p.daysToTarget !== null || p.plannedTargetKg === r.weightKg) &&
+        // The version of the formula the resting line names, and its constant.
+        r.constant === MIFFLIN_ST_JEOR_CONSTANT[r.formula] &&
+        // The pace line's kilos a week, as screen 3 offers that pace.
+        (w.change === null || w.change.kgPerWeek === PACE_KG_PER_WEEK[w.change.pace]) &&
+        // The finish line: the kilos between the weight and "Reach …", and the
+        // pace line's kcal per kilo.
+        (w.finish === null || w.finish.kgToMove === kgBetween(p.plannedTargetKg, r.weightKg)) &&
+        (w.finish === null || w.change === null || w.finish.kcalPerKg === w.change.kcalPerKg) &&
+        // The flags' figures: the floor "To eat" names, and the healthy weight
+        // a dated plan runs to.
+        p.flags.every(
+          (flag) =>
+            (flag.code !== "calorie_floor_applied" || flag.floorKcal === w.floorKcal) &&
+            (flag.code !== "target_below_healthy_weight" || p.daysToTarget === null || flag.floorKg === p.plannedTargetKg),
+        )
       );
     },
     { message: "the working must add up to the plan's own numbers" },

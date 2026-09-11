@@ -27,6 +27,8 @@
 // screen holds exactly; `workings` on the plan carries those steps.
 import {
   daysToMove,
+  kgBetween,
+  MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
   PACE_KG_PER_WEEK,
   planInputsSchema,
@@ -103,11 +105,10 @@ export function addDays(day: string, days: number): string {
 /** Mifflin-St Jeor has two versions: the women's for a female answer, and the
  *  men's for every other answer. */
 const formulaFor = (gender: Gender): "female" | "male" => (gender === "female" ? "female" : "male");
-const MSJ_CONSTANT: Readonly<Record<"female" | "male", number>> = { female: -161, male: 5 };
 
 /** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. */
 export function restingBurn(input: { age: number; gender: Gender; heightCm: number; weightKg: number }): number {
-  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MSJ_CONSTANT[formulaFor(input.gender)];
+  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[formulaFor(input.gender)];
 }
 
 export interface BurnSteps {
@@ -229,8 +230,7 @@ export function computePlan(input: PlanInputs): PlanNumbers {
   let outOfReach = false;
   let kg = 0;
   if (plannedTarget !== null) {
-    // Both weights carry two decimals, so the distance does too.
-    kg = Math.round(Math.abs(plannedTarget - input.weightKg) * 100) / 100;
+    kg = kgBetween(plannedTarget, input.weightKg);
     days = daysFor(input.goal, kg, eat.targetKcal - burn);
     if (days === null) {
       // The floor left no cut (a "lose" plan), or the move is beyond the
@@ -269,7 +269,7 @@ export function computePlan(input: PlanInputs): PlanNumbers {
         weightKg: input.weightKg,
         heightCm: input.heightCm,
         age: input.age,
-        constant: MSJ_CONSTANT[formula],
+        constant: MIFFLIN_ST_JEOR_CONSTANT[formula],
         kcal: steps.restingKcal,
       },
       day: { activity: input.dayActivity, factor: DAY_FACTOR[input.dayActivity], kcal: steps.dayKcal },
