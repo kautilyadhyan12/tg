@@ -53,10 +53,10 @@ describe('the macro rings', () => {
     expect(screen.queryByRole('link', { name: 'Answer now' })).toBeNull();
   });
 
-  it('with the target on the wrong side of the weight, says it no longer fits, never that it is unanswered', () => {
+  it('with the target on the wrong side of the weight (a goal changed, or the target reached), asks for a new one, never says it is unanswered', () => {
     draw({ targets: null, missingInputs: [], targetWrongSide: true });
     expect(
-      screen.getByText('Your target weight no longer fits your goal. Pick a new one to see your daily calories and macros.'),
+      screen.getByText('Time to set a new target weight. Pick one to see your daily calories and macros.'),
     ).toBeTruthy();
     expect(screen.queryByText(/answer/i)).toBeNull();
     fireEvent.click(screen.getByRole('link', { name: 'Pick a new target' }));

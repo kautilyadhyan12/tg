@@ -100,22 +100,23 @@ export function toggleFitnessGoal(goals, id) {
   return [...goals.filter((g) => !fights(g)), id];
 }
 
-/** A list stored before the server kept only one weight goal may hold both:
- *  it loads with the first of them in the list. That is not always the one
- *  setting the calories (a Settings save keeps the chips' order), which this
- *  read does not carry; the next save makes the one shown the one they
- *  follow. Pure + unit-tested. */
-export function cleanFitnessGoals(goals) {
-  const first = goals.find((g) => WEIGHT_GOALS.includes(g));
-  return goals.filter((g) => !WEIGHT_GOALS.includes(g) || g === first);
+/** A list stored before the server kept only one weight goal may hold both.
+ *  It loads with the one the calories follow (the main goal), so saving what
+ *  the chips show leaves them there; with no main goal among them (the old
+ *  form), with the first. Pure + unit-tested. */
+export function cleanFitnessGoals(goals, mainGoal) {
+  const kept = WEIGHT_GOALS.includes(mainGoal) && goals.includes(mainGoal)
+    ? mainGoal
+    : goals.find((g) => WEIGHT_GOALS.includes(g));
+  return goals.filter((g) => !WEIGHT_GOALS.includes(g) || g === kept);
 }
 
-/** The way the ticked goals move the weight: 'lose' or 'gain' for the one
- *  weight goal among them, the goal the calories follow; null when none is
- *  ticked. Pure + unit-tested. */
-export function goalDirection(goals) {
-  const goal = (goals ?? []).find((g) => WEIGHT_GOALS.includes(g));
-  return goal === undefined ? null : PLAN_GOAL_BY_MAIN_GOAL[goal];
+/** The way the goal the calories follow moves the weight: 'lose' or 'gain',
+ *  or null when it holds the weight or there is none. Read from the main goal,
+ *  as the plan reads it, never from the list, whose order is the chips'.
+ *  Pure + unit-tested. */
+export function goalDirection(mainGoal) {
+  return WEIGHT_GOALS.includes(mainGoal) ? PLAN_GOAL_BY_MAIN_GOAL[mainGoal] : null;
 }
 
 /** What the profile form sends to PATCH /v1/users/me: ONLY what changed.

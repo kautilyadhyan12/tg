@@ -2,7 +2,8 @@
 // two that fight (RULINGS 2026-09-10), and ticking Muscle Gain must not leave
 // Weight Loss ticked to be undone by hand (Kd, 2026-09-11). What is pinned is
 // the SCREEN: a tap unticks the goal it fights, the save sends the goals the
-// chips show, and a list stored before the rule loads without its contradiction.
+// chips show, and a list stored before the rule loads without its contradiction,
+// showing the goal the calories follow.
 // What the server does with the list is proved in
 // apps/api/test/users.onboarding.routes.test.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,8 +15,8 @@ vi.mock('../api/userApi', async (importOriginal) => ({ ...(await importOriginal(
 
 const { FitnessTab } = await import('./Settings');
 
-const draw = (fitnessGoals) =>
-  render(<FitnessTab profile={{ fitnessGoals, availableEquipment: [], onboardingCompleted: true }} onSaved={vi.fn()} />);
+const draw = (fitnessGoals, mainGoal) =>
+  render(<FitnessTab profile={{ fitnessGoals, mainGoal, availableEquipment: [], onboardingCompleted: true }} onSaved={vi.fn()} />);
 const chip = (name) => screen.getByRole('button', { name });
 const pressed = (name) => chip(name).getAttribute('aria-pressed');
 
@@ -26,7 +27,7 @@ afterEach(() => {
 
 describe('Settings → Fitness goal chips', () => {
   it('ticking one weight goal unticks the other, and the save sends the goals the chips show', async () => {
-    draw(['weight_loss', 'flexibility']);
+    draw(['weight_loss', 'flexibility'], 'weight_loss');
     fireEvent.click(chip(/Muscle Gain/));
     expect(pressed(/Muscle Gain/)).toBe('true');
     expect(pressed(/Weight Loss/)).toBe('false');
@@ -43,8 +44,15 @@ describe('Settings → Fitness goal chips', () => {
     );
   });
 
-  it('loads a list stored with both weight goals showing only the first of them', () => {
-    draw(['muscle_gain', 'posture', 'weight_loss']);
+  it('loads a list stored with both weight goals showing the one the calories follow', () => {
+    draw(['weight_loss', 'posture', 'muscle_gain'], 'muscle_gain');
+    expect(pressed(/Muscle Gain/)).toBe('true');
+    expect(pressed(/Weight Loss/)).toBe('false');
+    expect(pressed(/Posture/)).toBe('true');
+  });
+
+  it('with no main goal among them (the old form), showing the first of them', () => {
+    draw(['muscle_gain', 'posture', 'weight_loss'], null);
     expect(pressed(/Muscle Gain/)).toBe('true');
     expect(pressed(/Weight Loss/)).toBe('false');
     expect(pressed(/Posture/)).toBe('true');

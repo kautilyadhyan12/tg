@@ -33,7 +33,7 @@ describe("the Nutrition page hands the rings the server's answer", () => {
     serve({ targets: null, missing: [], targetWrongSide: true });
     draw();
     expect(
-      await screen.findByText('Your target weight no longer fits your goal. Pick a new one to see your daily calories and macros.'),
+      await screen.findByText('Time to set a new target weight. Pick one to see your daily calories and macros.'),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Pick a new target' })).toBeTruthy();
   });
@@ -42,7 +42,7 @@ describe("the Nutrition page hands the rings the server's answer", () => {
     serve({ targets: null, missing: ['goal', 'dayActivity'], targetWrongSide: false });
     draw();
     expect(await screen.findByText('To see your daily calories and macros, answer your goal and your day.')).toBeTruthy();
-    expect(screen.queryByText(/no longer fits/)).toBeNull();
+    expect(screen.queryByText(/new target weight/)).toBeNull();
   });
 
   it("the plan's numbers", async () => {

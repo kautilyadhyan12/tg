@@ -120,11 +120,12 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 
   const { updateUser } = useAuth();
 
-  // A target on the wrong side of the weight for the goal ticked cannot be
-  // typed in, and is named in screen 3's own words (RULINGS 2026-09-11). The
-  // weight is the one this save leaves: the box's, else the newest weigh-in.
-  // A stored one is only named, so the rest of the form still saves.
-  const direction = goalDirection(profile.fitnessGoals);
+  // A target on the wrong side of the weight for the goal the calories follow
+  // cannot be typed in, and is named in screen 3's own words (RULINGS
+  // 2026-09-11). That goal is the main one, as the rings read it, not the
+  // chips' first. The weight is the one this save leaves: the box's, else the
+  // newest weigh-in. A stored one is only named, so the rest still saves.
+  const direction = goalDirection(profile.mainGoal);
   const weightKgNow = weightToKg(form.weight, form.weightUnit) ?? profile.weightKg ?? null;
   const targetKg = weightToKg(form.targetWeight, form.weightUnit);
   const wrongSide = direction !== null && targetWrongSide(direction, targetKg, weightKgNow)
@@ -298,7 +299,7 @@ export function FitnessTab({ profile, onSaved }) {
     // unanswered field stays NULL ("unanswered is not 'beginner'", users.ts).
     // Empty/null here → the save sends null, not an invented answer.
     fitnessLevel:         profile.fitnessLevel         || '',
-    fitnessGoals:         cleanFitnessGoals(profile.fitnessGoals || []),
+    fitnessGoals:         cleanFitnessGoals(profile.fitnessGoals || [], profile.mainGoal),
     availableEquipment:   profile.availableEquipment   || [],
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',

@@ -64,13 +64,13 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
 // onboarding screens' own words, and "Answer now" opens onboarding, which
 // starts on the first of them and comes back here (ROADMAP 4a-iii). A target
 // on the wrong side of the weight is not a question left open, since the
-// person has one: it is named as no longer fitting, and the link opens the
-// target screen, which shows it and offers only the goal's side (RULINGS
-// 2026-09-11).
+// person has one: the card asks for a new one, in words that fit whether the
+// goal changed or the target was reached, and the link opens the target
+// screen, which shows it and offers only the goal's side (RULINGS 2026-09-11).
 function NoTargets({ missingInputs, targetWrongSide }) {
   const list = missingInputs.length > 0 ? missingText(missingInputs) : null;
   let text = 'Finish setting up to see your daily calories and macros.';
-  if (targetWrongSide) text = 'Your target weight no longer fits your goal. Pick a new one to see your daily calories and macros.';
+  if (targetWrongSide) text = 'Time to set a new target weight. Pick one to see your daily calories and macros.';
   else if (list !== null) text = `To see your daily calories and macros, answer ${list}.`;
   return (
     <div className="card-glass">

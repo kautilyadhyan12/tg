@@ -1,9 +1,9 @@
 // Settings → Profile, drawn as the whole Settings page. What is pinned is the
 // SCREEN: the page shows the person's name, a new name reaches the rest of the
-// app once the server has it (the sidebar and the dashboard's greeting read the
+// app as the server holds it (the sidebar and the dashboard's greeting read the
 // app's copy, not this page's), and the target box never takes a weight on the
-// wrong side of the current one for the goal ticked (RULINGS 2026-09-11),
-// saying why in screen 3's own words.
+// wrong side of the current one for the goal the calories follow (RULINGS
+// 2026-09-11), saying why in screen 3's own words.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -22,7 +22,8 @@ const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 /** A small stand-in for the two profile routes: it stores what it is sent and
- *  reads it back, as the real ones do. Weight Loss ticked, 70 kg, target 65. */
+ *  reads it back, as the real ones do. Weight Loss ticked and setting the
+ *  calories (the main goal), 70 kg, target 65. */
 let server;
 function serve({ me = {}, fitness = {} } = {}) {
   server = {
@@ -32,8 +33,9 @@ function serve({ me = {}, fitness = {} } = {}) {
     },
     fitness: {
       age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
-      fitnessGoals: ['weight_loss'], exerciseFrequency: 3, availableEquipment: [], sessionDurationMin: 45,
-      preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true, updatedAt: null, ...fitness,
+      fitnessGoals: ['weight_loss'], mainGoal: 'weight_loss', exerciseFrequency: 3, availableEquipment: [],
+      sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
+      updatedAt: null, ...fitness,
     },
   };
   svc.getProfile = vi.fn(async () => ({ data: { user: { ...server.me } } }));
@@ -59,16 +61,36 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('Settings → Profile', () => {
-  it('shows the name, and a new name reaches the rest of the app once the server has it', async () => {
+  it('shows the name, and a new name reaches the rest of the app as the server holds it', async () => {
     serve();
+    // This server keeps its own spelling of a new name, so the app must pass
+    // on the one it sends back, not the one typed.
+    svc.updateProfile = vi.fn(async () => {
+      server.me.displayName = 'Kd R.';
+      return { data: { user: { ...server.me } } };
+    });
     render(<Settings />);
     expect(await screen.findByText('Kd')).toBeTruthy(); // the page's own header
     type('Kd', 'Kd Renamed');
     save();
-    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ displayName: 'Kd Renamed' }));
+    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ displayName: 'Kd R.' }));
     expect(svc.updateProfile).toHaveBeenCalledWith({ displayName: 'Kd Renamed' });
     // The header reads the name back from the server.
-    expect(await screen.findByText('Kd Renamed')).toBeTruthy();
+    expect(await screen.findByText('Kd R.')).toBeTruthy();
+  });
+
+  it('a rename the server refuses leaves the name the app shows as it was', async () => {
+    serve();
+    svc.updateProfile = vi.fn(async () => {
+      throw Object.assign(new Error('server down'), { response: { status: 500 } });
+    });
+    render(<Settings />);
+    await loaded();
+    type('Kd', 'Kd Renamed');
+    save();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update profile'));
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    expect(screen.getByText('Kd')).toBeTruthy(); // the page's own header
   });
 
   it('shows the name on the Account tab', async () => {
@@ -107,7 +129,7 @@ describe('Settings → Profile', () => {
 
   it('names a stored target left on the wrong side, and still saves the rest of the form', async () => {
     // A loss target kept when the goal changed to Muscle Gain on the Fitness tab.
-    serve({ fitness: { fitnessGoals: ['flexibility', 'muscle_gain'] } });
+    serve({ fitness: { fitnessGoals: ['flexibility', 'muscle_gain'], mainGoal: 'muscle_gain' } });
     render(<Settings />);
     await loaded();
     expect(screen.getByText('65.0 kg is not above your current 70.0 kg. Pick a weight above it.')).toBeTruthy();
@@ -119,7 +141,7 @@ describe('Settings → Profile', () => {
   });
 
   it("saves a target on the goal's side, and any target when no goal that moves the weight is ticked", async () => {
-    serve({ fitness: { fitnessGoals: ['muscle_gain'] } });
+    serve({ fitness: { fitnessGoals: ['muscle_gain'], mainGoal: 'muscle_gain' } });
     render(<Settings />);
     await loaded();
     type('65', '75');
@@ -128,13 +150,27 @@ describe('Settings → Profile', () => {
     await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 75 })));
     cleanup();
 
-    serve({ fitness: { fitnessGoals: ['posture'] } });
+    serve({ fitness: { fitnessGoals: ['posture'], mainGoal: 'posture' } });
     render(<Settings />);
     await loaded();
     type('65', '83');
     expect(screen.queryByText(/is not (above|below)/)).toBeNull();
     save();
     await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 83 })));
+  });
+
+  it('judges the target by the goal the calories follow, not by the first weight goal in the list', async () => {
+    // A list stored before the server kept one weight goal holds both, Weight
+    // Loss first, while Muscle Gain sets the calories: the target goes above.
+    serve({ fitness: { fitnessGoals: ['weight_loss', 'muscle_gain'], mainGoal: 'muscle_gain' } });
+    render(<Settings />);
+    await loaded();
+    expect(screen.getByText('65.0 kg is not above your current 70.0 kg. Pick a weight above it.')).toBeTruthy();
+    type('65', '75');
+    expect(screen.queryByText(/is not (above|below)/)).toBeNull();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 75 })));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
 
@@ -146,7 +182,7 @@ describe('the Settings profile form sends only what changed', () => {
   /** Draws the page, replaces each box showing `from` with `to`, presses Save,
    *  and waits for the save to finish (the page reloads the profile when it does). */
   const saveWith = async (edits) => {
-    serve({ me: { weightKg: 90 }, fitness: { targetWeightKg: 80, fitnessGoals: [] } });
+    serve({ me: { weightKg: 90 }, fitness: { targetWeightKg: 80, fitnessGoals: [], mainGoal: null } });
     render(<Settings />);
     for (const [from, to] of edits) {
       fireEvent.change(await screen.findByDisplayValue(from), { target: { value: to } });

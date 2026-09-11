@@ -134,18 +134,21 @@ describe('userService repoint (Card 6)', () => {
       expect(toggleFitnessGoal([], 'muscle_gain')).toEqual(['muscle_gain']);
     });
 
-    it('a list stored with both weight goals keeps the first of them', () => {
-      expect(cleanFitnessGoals(['flexibility', 'muscle_gain', 'posture', 'weight_loss'])).toEqual(['flexibility', 'muscle_gain', 'posture']);
-      expect(cleanFitnessGoals(['weight_loss', 'muscle_gain'])).toEqual(['weight_loss']);
-      expect(cleanFitnessGoals(['flexibility', 'posture'])).toEqual(['flexibility', 'posture']);
-      expect(cleanFitnessGoals([])).toEqual([]);
+    it('a list stored with both weight goals keeps the one the calories follow', () => {
+      expect(cleanFitnessGoals(['weight_loss', 'muscle_gain'], 'muscle_gain')).toEqual(['muscle_gain']);
+      expect(cleanFitnessGoals(['flexibility', 'muscle_gain', 'posture', 'weight_loss'], 'weight_loss')).toEqual(['flexibility', 'posture', 'weight_loss']);
+      // No main goal (the old form), or one that keeps the weight: the first of them.
+      expect(cleanFitnessGoals(['flexibility', 'muscle_gain', 'posture', 'weight_loss'], null)).toEqual(['flexibility', 'muscle_gain', 'posture']);
+      expect(cleanFitnessGoals(['weight_loss', 'muscle_gain'], 'flexibility')).toEqual(['weight_loss']);
+      expect(cleanFitnessGoals(['flexibility', 'posture'], 'flexibility')).toEqual(['flexibility', 'posture']);
+      expect(cleanFitnessGoals([], null)).toEqual([]);
     });
 
-    it('reads the way the ticked goals move the weight from the one weight goal among them', () => {
-      expect(goalDirection(['flexibility', 'weight_loss'])).toBe('lose');
-      expect(goalDirection(['muscle_gain', 'posture'])).toBe('gain');
-      expect(goalDirection(['flexibility', 'posture'])).toBeNull();
-      expect(goalDirection([])).toBeNull();
+    it('reads the way the weight moves from the goal the calories follow, never from the list', () => {
+      expect(goalDirection('weight_loss')).toBe('lose');
+      expect(goalDirection('muscle_gain')).toBe('gain');
+      expect(goalDirection('flexibility')).toBeNull();
+      expect(goalDirection(null)).toBeNull();
       expect(goalDirection(undefined)).toBeNull();
     });
   });
