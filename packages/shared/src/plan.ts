@@ -10,11 +10,13 @@
 // it reads no clock, so "today" is an input — the route (item 4a) derives it from
 // the device's time zone and the server clock, never from a body field.
 import { z } from "zod";
-import { genderSchema } from "./users.js";
+import { genderSchema, weightGoalSchema, type WeightGoal } from "./users.js";
 
-/** What the person wants their weight to do. Screen 1 ("goal") maps to this. */
-export const planGoalSchema = z.enum(["lose", "gain", "maintain"]);
-export type PlanGoal = z.infer<typeof planGoalSchema>;
+/** What the person wants their weight to do: screen 1's weight choice, stored
+ *  as it is asked (RULINGS 2026-09-10), so the screens and the maths share one
+ *  enum and nothing maps one to the other. */
+export const planGoalSchema = weightGoalSchema;
+export type PlanGoal = WeightGoal;
 
 /** How fast, in the person's words; the kg-a-week behind each is in the calculator. */
 export const planPaceSchema = z.enum(["gentle", "steady", "brisk"]);
@@ -85,6 +87,11 @@ export const planInputsSchema = z
     trainingDays: z.number().int().min(0).max(7),
     sessionMinutes: z.number().int().min(0).max(240),
     health: planHealthSchema.nullable(),
+    /** Build muscle is among screen 1's "also work on" goals. It raises protein
+     *  to BUILD_MUSCLE_PROTEIN_G_PER_KG whatever the weight choice, and it is
+     *  the only goal on that list the maths reads (RULINGS 2026-09-11:
+     *  building muscle is not gaining weight). */
+    buildMuscle: z.boolean(),
     today: planStartDaySchema,
   })
   .strict();
@@ -170,6 +177,12 @@ export function proteinWeight(weightKg: number, heightCm: number): { kg: number;
   return weightKg > capKg ? { kg: capKg, referenceBmi: PROTEIN_REFERENCE_BMI } : { kg: weightKg, referenceBmi: null };
 }
 
+/** Grams of protein per kilo, at the least, while Build muscle is ticked,
+ *  whatever the weight choice (the gain figure is the same): "~2.2 g
+ *  protein/kg/d for those seeking to maximise resistance training-induced
+ *  gains in FFM" (Morton and colleagues, 2018, a meta-analysis of 49 studies). */
+export const BUILD_MUSCLE_PROTEIN_G_PER_KG = 2.2;
+
 /** How the number was reached, one step per line of "How is this worked out?"
  *  under the daily number (Kd, 2026-09-10). The server sends every figure the
  *  steps use — only it knows the day factor, the training figure and the
@@ -221,10 +234,19 @@ export const planWorkingsSchema = z
     /** Grams per kg for the goal × the weight protein is counted on, rounded:
      *  the body weight, or for a body heavier than `referenceBmi` for its
      *  height the weight at that BMI (`proteinWeight`); `referenceBmi` is null
-     *  when the body weight is what was counted. `proteinG` is smaller only
-     *  when the carbohydrate floor made protein give way. */
+     *  when the body weight is what was counted. `buildMuscle` is true while
+     *  Build muscle is ticked, which raises the figure to at least
+     *  BUILD_MUSCLE_PROTEIN_G_PER_KG, so the screen can name that source.
+     *  `proteinG` is smaller only when the carbohydrate floor made protein
+     *  give way. */
     protein: z
-      .object({ gPerKg: z.number(), weightKg: z.number(), referenceBmi: z.number().nullable(), wantedG: z.number().int() })
+      .object({
+        gPerKg: z.number(),
+        weightKg: z.number(),
+        referenceBmi: z.number().nullable(),
+        wantedG: z.number().int(),
+        buildMuscle: z.boolean(),
+      })
       .strict(),
     /** Fat's share of the calories, at 9 kcal a gram. */
     fatShare: z.number(),
@@ -315,6 +337,8 @@ export const planNumbersSchema = z
         // reference BMI for its height when the body is heavier.
         w.protein.weightKg === counted.kg &&
         w.protein.referenceBmi === counted.referenceBmi &&
+        // With Build muscle ticked, never under its figure.
+        (!w.protein.buildMuscle || w.protein.gPerKg >= BUILD_MUSCLE_PROTEIN_G_PER_KG) &&
         // The version of the formula the resting line names, and its constant.
         r.constant === MIFFLIN_ST_JEOR_CONSTANT[r.formula] &&
         // The pace line's kilos a week, as screen 3 offers that pace.

@@ -139,7 +139,7 @@ export default function Onboarding() {
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
   const isLast = index === screens.length - 1;
-  const direction = directionOf(answers.mainGoal);
+  const direction = directionOf(answers.weightGoal);
   const answered = screenAnswered(screen.id, answers);
   const reachable = reachableScreens(answers);
 

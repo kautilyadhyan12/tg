@@ -1,6 +1,6 @@
-// Onboarding v2 contracts (ROADMAP Stage 1 item 4a): the one main goal and the
-// direction derived from it, the save-as-you-go body, and the promise the
-// response makes about when a number exists.
+// Onboarding v2 contracts (ROADMAP Stage 1 items 4a and 4a-iv): screen 1's
+// weight choice and the goals beside it, the save-as-you-go body, and the
+// promise the response makes about when a number exists.
 import { describe, expect, it } from "vitest";
 import {
   equipmentSchema,
@@ -10,29 +10,58 @@ import {
   patchOnboardingRequestSchema,
   planGoalSchema,
   putFitnessProfileRequestSchema,
-  PLAN_GOAL_BY_MAIN_GOAL,
   updateProfileRequestSchema,
+  weightGoalSchema,
 } from "../src/index.js";
 
-describe("the one main goal", () => {
-  it("offers exactly the seven goals the app already offered — nothing was taken away", () => {
-    expect(Object.keys(PLAN_GOAL_BY_MAIN_GOAL).sort()).toEqual([...fitnessGoalSchema.options].sort());
+/** Every subset of `options`, the empty one and the whole set included. */
+function subsets<T>(options: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let mask = 0; mask < 1 << options.length; mask++) out.push(options.filter((_, i) => (mask & (1 << i)) !== 0));
+  return out;
+}
+
+describe("screen 1: one weight choice, and any number of goals beside it (RULINGS 2026-09-10)", () => {
+  it("stores the weight choice as the direction the maths works in: one enum, nothing mapped between them", () => {
+    expect(planGoalSchema).toBe(weightGoalSchema);
+    expect([...weightGoalSchema.options].sort()).toEqual(["gain", "lose", "maintain"]);
   });
 
-  it("maps every goal to a direction the maths knows", () => {
-    for (const [goal, direction] of Object.entries(PLAN_GOAL_BY_MAIN_GOAL)) {
-      expect(planGoalSchema.safeParse(direction).success, goal).toBe(true);
+  it("offers the goals the ruling names: weight loss is a weight choice, not a goal, and two goals are new", () => {
+    expect([...fitnessGoalSchema.options]).toEqual([
+      "muscle_gain",
+      "strength",
+      "general_fitness",
+      "endurance",
+      "flexibility",
+      "posture",
+      "balance",
+      "stress_relief",
+    ]);
+    expect(fitnessGoalSchema.safeParse("weight_loss").success).toBe(false);
+  });
+
+  it("takes any goals beside any weight choice, on both surfaces: building muscle while losing weight included", () => {
+    for (const weightGoal of weightGoalSchema.options) {
+      for (const fitnessGoals of subsets(fitnessGoalSchema.options)) {
+        const body = { weightGoal, fitnessGoals };
+        expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
+        expect(putFitnessProfileRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
+      }
     }
   });
 
-  it("moves the weight on purpose for exactly two of them (Kd, 2026-09-09)", () => {
-    const moving = Object.entries(PLAN_GOAL_BY_MAIN_GOAL)
-      .filter(([, direction]) => direction !== "maintain")
-      .map(([goal]) => goal)
-      .sort();
-    expect(moving).toEqual(["muscle_gain", "weight_loss"]);
-    expect(PLAN_GOAL_BY_MAIN_GOAL.weight_loss).toBe("lose");
-    expect(PLAN_GOAL_BY_MAIN_GOAL.muscle_gain).toBe("gain");
+  it("refuses the old one-goal field, weight loss as a goal, a goal twice, and a word that is not a choice, on both surfaces", () => {
+    for (const body of [
+      { mainGoal: "weight_loss" },
+      { fitnessGoals: ["weight_loss"] },
+      { fitnessGoals: ["posture", "posture"] },
+      { weightGoal: "keep" }, // the screen's word; the stored value is "maintain"
+      { weightGoal: "muscle_gain" }, // building muscle is not a weight choice
+    ]) {
+      expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+    }
   });
 });
 
@@ -40,13 +69,13 @@ describe("one screen's save", () => {
   it("takes any one screen on its own, and an empty body", () => {
     for (const body of [
       {},
-      { mainGoal: "weight_loss" },
+      { weightGoal: "lose", fitnessGoals: ["flexibility"] },
       { age: 30, gender: "female", heightCm: 165, weightKg: 70 },
       { targetWeightKg: 65, pace: "steady" },
       { dayActivity: "sitting" },
       { fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 },
       { trainingDays: 3, sessionMinutes: 45 },
-      { availableEquipment: ["dumbbells"] },
+      { availableEquipment: ["dumbbells", "gym"] },
       { onboardingCompleted: true },
     ]) {
       expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
@@ -55,28 +84,28 @@ describe("one screen's save", () => {
 
   it("lets a screen 5 answer be skipped, and told apart from never asked", () => {
     // An explicit null CLEARS; an absent key leaves the answer alone. Both are
-    // accepted, and the two are different bodies — that is what "skip, I'll
-    // rate myself" needs in order not to overwrite yesterday's answer.
+    // accepted, and the two are different bodies — that is what "Not sure"
+    // needs in order not to overwrite yesterday's answer.
     expect(patchOnboardingRequestSchema.parse({ pushUpsMax: null })).toEqual({ pushUpsMax: null });
     expect(patchOnboardingRequestSchema.parse({})).toEqual({});
   });
 
-  it("never accepts the derived direction, the day, or a plan number from a client", () => {
+  it("never accepts the plan's own word for the direction, the day, or a plan number from a client", () => {
     for (const body of [
       { goal: "lose" },
       { planGoal: "lose" },
       { today: "2030-01-01" },
       { targetKcal: 1200 },
       { safeMode: false },
-      { mainGoal: "get_ripped" },
+      { weightGoal: "get_ripped" },
       { availableEquipment: ["dumbbells", "dumbbells"] },
     ]) {
       expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
     }
   });
 
-  /** THE POINT OF THIS TEST is that three of these answers are ONE column asked
-   *  by two screens (migration 0026's note: `trainingDays` IS
+  /** THE POINT OF THIS TEST is that several of these answers are ONE column
+   *  asked by two screens (migration 0026's note: `trainingDays` IS
    *  `exercise_frequency`, `sessionMinutes` IS `session_duration_min`). If the
    *  two contracts' rails ever drift, the same person's answer becomes
    *  acceptable on one screen and refused on the other — so the rails are
@@ -103,26 +132,20 @@ describe("one screen's save", () => {
     // Equipment is one column asked by two screens as well. Its CAP is not
     // pinned here and cannot be: the two surfaces share one rail object
     // (`equipmentArraySchema`), whose cap is the number of kinds the enum has,
-    // so no surface can raise it alone and no array of unique kinds can reach
-    // it. What a person could see is the two screens taking different answers,
-    // and that is asked of EVERY combination there is below.
-    const bothTakeEquipment = (value: string[]) => {
-      const a = putFitnessProfileRequestSchema.safeParse({ availableEquipment: value }).success;
-      const b = patchOnboardingRequestSchema.safeParse({ availableEquipment: value }).success;
-      const differsOnlyByTheNoneRule = a && !b && value.includes("none") && value.length > 1;
-      expect(differsOnlyByTheNoneRule || b === a, `availableEquipment ${JSON.stringify(value)} disagrees`).toBe(
-        true,
-      );
-      return a;
-    };
-    // All 32 subsets of the five kinds, in every size, including the whole set.
-    const kinds = [...equipmentSchema.options];
-    for (let mask = 0; mask < 1 << kinds.length; mask++) {
-      const subset = kinds.filter((_, i) => (mask & (1 << i)) !== 0);
-      expect(bothTakeEquipment(subset), `the v1 profile refused ${JSON.stringify(subset)}`).toBe(true);
+    // so no surface can raise it alone and no set of unique kinds can reach
+    // it. What a person could see is the two screens taking different
+    // answers, and that is asked of EVERY combination there is below.
+    for (const availableEquipment of subsets(equipmentSchema.options)) {
+      const a = putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success;
+      const b = patchOnboardingRequestSchema.safeParse({ availableEquipment }).success;
+      expect(b, `availableEquipment ${JSON.stringify(availableEquipment)} disagrees`).toBe(a);
+      // Every set is taken but "no equipment" beside something else.
+      expect(a, JSON.stringify(availableEquipment)).toBe(!availableEquipment.includes("none") || availableEquipment.length === 1);
     }
-    expect(bothTakeEquipment(["dumbbells", "dumbbells"])).toBe(false);
-    expect(bothTakeEquipment(["barbell"])).toBe(false);
+    for (const availableEquipment of [["dumbbells", "dumbbells"], ["barbell"]]) {
+      expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
+      expect(patchOnboardingRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
+    }
   });
 
   it("takes screen 2's name on the profile form's own rail: trimmed, 1 to 100 characters, never cleared", () => {
@@ -135,23 +158,26 @@ describe("one screen's save", () => {
     }
   });
 
-  it("refuses 'no equipment' beside real equipment — the one rail v2 holds tighter", () => {
-    // Screen 7 asks one question and takes one answer: "none and dumbbells"
-    // would reach the plan builder (6a) as two contradictory ones.
-    expect(patchOnboardingRequestSchema.safeParse({ availableEquipment: ["none"] }).success).toBe(true);
-    expect(patchOnboardingRequestSchema.safeParse({ availableEquipment: ["none", "dumbbells"] }).success).toBe(false);
-    // The v1 profile is deliberately left as it was: its live web form is a
-    // free multi-select that can still send that pair, and refusing it there
-    // would be a save the person cannot complete. That is the ONE place the two
-    // rails differ, and it is pinned so it cannot spread by accident.
-    expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment: ["none", "dumbbells"] }).success).toBe(true);
+  it("refuses 'no equipment' beside anything else, a gym included, on both surfaces: one rail", () => {
+    // "What do you have to train with?" takes one answer: "none and dumbbells"
+    // would reach the plan builder (6a) as two contradictory ones. Both
+    // screens make "No equipment" exclusive as you tap.
+    for (const availableEquipment of [["none", "dumbbells"], ["none", "gym"]]) {
+      expect(patchOnboardingRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
+    }
+    for (const availableEquipment of [["none"], ["gym"], ["gym", "dumbbells"]]) {
+      expect(patchOnboardingRequestSchema.safeParse({ availableEquipment }).success).toBe(true);
+      expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success).toBe(true);
+    }
   });
 });
 
 describe("what the server answers with", () => {
   const answers = onboardingAnswersSchema.parse({
     displayName: "Kd",
-    mainGoal: null,
+    weightGoal: null,
+    fitnessGoals: [],
     age: null,
     gender: null,
     heightCm: null,
@@ -178,6 +204,7 @@ describe("what the server answers with", () => {
 
   it("refuses an answer the contract does not name", () => {
     expect(onboardingAnswersSchema.safeParse({ ...answers, medicalConditions: "none" }).success).toBe(false);
+    expect(onboardingAnswersSchema.safeParse({ ...answers, mainGoal: null }).success).toBe(false);
   });
 
   it("always carries the name the app calls the person", () => {

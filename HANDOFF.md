@@ -4,6 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-11 · Many goals, and a gym (item 4a-iv), branch `many-goals-and-a-gym`
+
+- Kd ruled: the people who already chose Build muscle are asked their weight choice, never given one (RULINGS 2026-09-11).
+- Built: screen 1 asks the weight choice (lose · keep · gain) and "also work on" (8 goals; get stronger and better balance new,
+  with drawn icons); Build muscle ticked sets protein to 2.2 g/kg whatever the choice (Morton 2018; the roadmap said 2.0).
+  `0028`: `weight_goal` + CHECK moved over from `main_goal` (Build muscle → asked), `main_goal` dropped, goals and equipment
+  lists CHECKed, "none" alone on both routes. Settings asks the same questions with the screens' tables and icons; the
+  4a-iii sync is gone. "A gym" on screen 7 and Settings. Reset = `DELETE /v1/users/me/onboarding` (name, weigh-ins, health stay).
+- Verified: shared tsc/eslint 0, 84 · api tsc/eslint 0, plan.unit 57, local 38 + 87 (touched files), CI-shaped 299, full local
+  963 + 3 red (catalog.seed ×3, auth.routes' cleanup FK: the shared-database flake; alone 27/27) · web touched 155, full 1998
+  (poseAssets.contract the known local red); web lint adds nothing (Settings.jsx's 4 are master's). Four deliberate breaks red.
+- The first 0028 data test altered the live table and knocked two route tests over in a combined run; it uses a temp copy now.
+- Local: API 3000 restarted on this code (local Postgres), web 5173; `kd.muscle.0911@example.com` is a Build-muscle person as
+  0028 leaves them. Open: PR and CI, Kd's click-through, the fresh-chat review, merge. 4c carries a pace note for Kd.
+
 ## 2026-09-11 · 4a-iii merged (PR #61); Kd: building muscle is not gaining weight
 
 - Kd's click-through passed (the test account ended on Weight Loss, target 68 kg, renamed; no server errors). Merged as

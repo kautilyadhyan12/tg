@@ -30,7 +30,7 @@ describe('the macro rings', () => {
   it('with no number, names the questions the plan still needs, in the screens\' words', () => {
     // What someone who finished the old form is missing.
     draw({ targets: null, missingInputs: ['goal', 'dayActivity'] });
-    expect(screen.getByText('To see your daily calories and macros, answer your goal and your day.')).toBeTruthy();
+    expect(screen.getByText('To see your daily calories and macros, answer your weight goal and your day.')).toBeTruthy();
     expect(screen.queryByText(/Settings/)).toBeNull();
   });
 

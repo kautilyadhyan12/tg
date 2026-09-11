@@ -3,19 +3,28 @@
 // and their units, the words the plan panel uses, and the save queue. Every
 // NUMBER of the plan is the server's (GET/PATCH /v1/users/me/onboarding);
 // nothing here computes a plan.
-import { PACE_KG_PER_WEEK, PLAN_GOAL_BY_MAIN_GOAL } from '@app/shared';
+import { PACE_KG_PER_WEEK } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
 //    by the test so a value added on the server cannot go missing here) ──────
 
+/** Screen 1's weight choice: the one answer that sets the calories. */
+export const WEIGHT_GOALS = [
+  { value: 'lose',     label: 'Lose weight' },
+  { value: 'maintain', label: 'Keep my weight' },
+  { value: 'gain',     label: 'Gain weight' },
+];
+
+/** Screen 1's "also work on": any number, none of which moves the calories. */
 export const GOALS = [
-  { value: 'weight_loss',     label: 'Lose weight' },
   { value: 'muscle_gain',     label: 'Build muscle' },
+  { value: 'strength',        label: 'Get stronger' },
   { value: 'general_fitness', label: 'Get fitter' },
-  { value: 'flexibility',     label: 'Flexibility' },
   { value: 'endurance',       label: 'Endurance and running' },
+  { value: 'flexibility',     label: 'Flexibility' },
   { value: 'posture',         label: 'Posture' },
+  { value: 'balance',         label: 'Better balance' },
   { value: 'stress_relief',   label: 'Stress relief' },
 ];
 
@@ -54,12 +63,13 @@ export const EQUIPMENT = [
   { value: 'resistance_bands', label: 'Resistance bands' },
   { value: 'kettlebells',      label: 'Kettlebells' },
   { value: 'pull_up_bar',      label: 'Pull-up bar' },
+  { value: 'gym',              label: 'A gym (everything there)' },
 ];
 
 // ── The screens, and which of them a person still has to answer ─────────────
 
 export const SCREENS = [
-  { id: 'goal',      title: 'Your goal',     desc: 'The one thing you want most' },
+  { id: 'goal',      title: 'Your goal',     desc: 'Your weight, and what else to work on' },
   { id: 'about',     title: 'About you',     desc: 'The numbers your plan is built on' },
   { id: 'target',    title: 'Your target',   desc: 'Where you are heading, and how fast' },
   { id: 'day',       title: 'Your day',      desc: 'How active you are outside workouts' },
@@ -68,34 +78,39 @@ export const SCREENS = [
   { id: 'equipment', title: 'Equipment',     desc: 'What you have to train with' },
 ];
 
-/** The direction the calorie maths works in — the shared table, never derived
- *  again here. Null until a goal is picked. */
-export const directionOf = (mainGoal) =>
-  mainGoal === null || mainGoal === undefined ? null : PLAN_GOAL_BY_MAIN_GOAL[mainGoal] ?? null;
+/** The direction the calorie maths works in: the weight choice itself, which
+ *  is stored as that direction (RULINGS 2026-09-10). Null until it is picked. */
+export const directionOf = (weightGoal) =>
+  weightGoal === 'lose' || weightGoal === 'maintain' || weightGoal === 'gain' ? weightGoal : null;
 
-/** Only a goal that moves the weight asks for a target and a pace. Before a
- *  goal is picked the target screen stays in the list, so the step count does
- *  not jump when "Lose weight" is chosen. */
-export const asksTarget = (mainGoal) => directionOf(mainGoal) !== 'maintain';
+/** The side a target weight must be on: 'lose' or 'gain', or null when the
+ *  weight choice holds the weight or is not made yet. */
+export const targetDirection = (weightGoal) => (weightGoal === 'lose' || weightGoal === 'gain' ? weightGoal : null);
+
+/** Only a weight choice that moves the weight asks for a target and a pace.
+ *  Before one is picked the target screen stays in the list, so the step
+ *  count does not jump when "Lose weight" is chosen. */
+export const asksTarget = (weightGoal) => directionOf(weightGoal) !== 'maintain';
 
 export const visibleScreens = (answers) =>
-  SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.mainGoal));
+  SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.weightGoal));
 
 const answered = (v) => v !== null && v !== undefined;
 
-/** A screen is answered when every question it asks has an answer. Screen 5's
- *  two checks may be skipped ("I'll rate myself", RULINGS 2026-09-09), so only
- *  the self-rating counts there. */
+/** A screen is answered when every question it asks has an answer. Screen 1's
+ *  goals may be none (any number, RULINGS 2026-09-10) and screen 5's push-ups
+ *  and plank may be "Not sure", so there only the weight choice and the
+ *  self-rating count. */
 export function screenAnswered(id, a) {
   switch (id) {
-    case 'goal':      return answered(a.mainGoal);
+    case 'goal':      return answered(a.weightGoal);
     case 'about':     return answered(a.age) && answered(a.gender) && answered(a.heightCm) && answered(a.weightKg);
     case 'target':
       return (
-        !asksTarget(a.mainGoal) ||
+        !asksTarget(a.weightGoal) ||
         (answered(a.targetWeightKg) &&
           answered(a.pace) &&
-          !targetWrongSide(directionOf(a.mainGoal), a.targetWeightKg, a.weightKg))
+          !targetWrongSide(directionOf(a.weightGoal), a.targetWeightKg, a.weightKg))
       );
     case 'day':       return answered(a.dayActivity);
     case 'training':  return answered(a.fitnessLevel);
@@ -135,7 +150,7 @@ export const SCREEN_OF_MISSING = {
 };
 
 export const MISSING_LABELS = {
-  goal: 'your goal',
+  goal: 'your weight goal',
   age: 'your age',
   gender: 'your gender',
   heightCm: 'your height',
@@ -179,6 +194,20 @@ export function cleanEquipment(loaded) {
   const set = new Set(Array.isArray(loaded) ? loaded : []);
   if (set.has('none') && set.size > 1) set.delete('none');
   return inOrder(set);
+}
+
+// ── Screen 1's goals: any number, and nothing to untick ─────────────────────
+
+const GOAL_ORDER = GOALS.map((g) => g.value);
+
+/** One tap on "also work on": the goal is ticked or unticked, and the list
+ *  keeps the screen's order. Nothing on it fights anything else (RULINGS
+ *  2026-09-10), so no tap ever unticks another goal. */
+export function toggleGoal(current, value) {
+  const next = new Set(Array.isArray(current) ? current : []);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return GOAL_ORDER.filter((v) => next.has(v));
 }
 
 // ── The wheels and their units (Kd, 2026-09-10: nothing typed, nothing
@@ -464,18 +493,22 @@ const DAY_SOURCE = {
 export const WORKING_NOTE = 'Each step is rounded to a whole calorie or gram.';
 export const METRIC_NOTE = 'The formulas work in kilograms and centimetres.';
 
-/** Where each goal's protein figure comes from: the sources plan/maths.ts names
- *  for its table. Grams per kilo, never a share of the calories (Kd, 2026-09-11).
- *  Worded for the goal, not the plan: the figure is the goal's even when the
- *  plan holds the weight (under 18, a health yes, a target out of reach). */
+/** Where each figure comes from: the sources plan/maths.ts names for its table.
+ *  Grams per kilo, never a share of the calories (Kd, 2026-09-11). Worded for
+ *  the goal, not the plan: the figure is the goal's even when the plan holds
+ *  the weight (under 18, a health yes, a target out of reach). */
+const MORTON =
+  'the amount a review of 49 studies suggests for anyone trying to build as much muscle as they can (Morton and colleagues, 2018)';
 const PROTEIN_SOURCE = {
   lose: (g) =>
     `${g} g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).`,
   maintain: (g) =>
     `${g} g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).`,
-  gain: (g) =>
-    `${g} g per kilo is the app's own figure for building muscle, above the 1.6 g per kilo a day past which extra protein added no more muscle in a review of 49 trials (Morton and colleagues, 2018).`,
+  gain: (g) => `${g} g per kilo, ${MORTON}.`,
 };
+/** Build muscle ticked sets the figure whatever the weight choice (RULINGS
+ *  2026-09-11: building muscle is not gaining weight). */
+const BUILD_MUSCLE_SOURCE = (g) => `${g} g per kilo because you are building muscle: ${MORTON}.`;
 
 /** The steps, in order, as `{ title, sum, note }`; `note` names the source.
  *  `direction` (lose · gain · maintain) picks the source of the protein
@@ -528,7 +561,7 @@ export function workingSteps(plan, direction) {
     note: eatNote,
   });
   const p = w.protein;
-  const source = PROTEIN_SOURCE[direction];
+  const source = p.buildMuscle ? BUILD_MUSCLE_SOURCE : PROTEIN_SOURCE[direction];
   // A body heavier than the reference BMI is counted at that BMI's weight
   // (Kd, 2026-09-11), and the step says so rather than print a weight the
   // person does not recognise.

@@ -18,26 +18,37 @@ import {
   planFlagSchema,
   planNumbersSchema,
   planPaceSchema,
+  weightGoalSchema,
 } from '@app/shared';
 import * as m from './onboardingModel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, PullUpBar, SideStretch } from './onboardingIcons';
+import {
+  Barbell,
+  EQUIPMENT_ICONS,
+  GOAL_ICONS,
+  LEVEL_ICONS,
+  OneLegBalance,
+  PullUpBar,
+  SideStretch,
+  WEIGHT_GOAL_ICONS,
+} from './onboardingIcons';
 
 const accepts = (body) => patchOnboardingRequestSchema.safeParse(body).success;
 const values = (table) => table.map((row) => row.value).sort();
 
 const EMPTY = {
-  displayName: 'Kd', mainGoal: null, age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
-  pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
-  sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
+  displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
+  targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
-  ...EMPTY, mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
+  ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
   availableEquipment: ['dumbbells'],
 };
 
 describe('what the screens offer is exactly what the server accepts', () => {
   it('every choice table holds the shared enum, no more and no less', () => {
+    expect(values(m.WEIGHT_GOALS)).toEqual([...weightGoalSchema.options].sort());
     expect(values(m.GOALS)).toEqual([...fitnessGoalSchema.options].sort());
     expect(values(m.GENDERS)).toEqual([...genderSchema.options].sort());
     expect(values(m.PACES)).toEqual([...planPaceSchema.options].sort());
@@ -46,25 +57,43 @@ describe('what the screens offer is exactly what the server accepts', () => {
     expect(values(m.EQUIPMENT)).toEqual([...equipmentSchema.options].sort());
   });
 
-  it('every goal, level and kind of equipment has a line icon, and nothing else does', () => {
+  it("screen 1 words the two questions as the goals ruling does, and screen 7 offers a gym (RULINGS 2026-09-10)", () => {
+    expect(m.WEIGHT_GOALS.map((g) => g.label)).toEqual(['Lose weight', 'Keep my weight', 'Gain weight']);
+    expect(m.GOALS.map((g) => g.label)).toEqual([
+      'Build muscle',
+      'Get stronger',
+      'Get fitter',
+      'Endurance and running',
+      'Flexibility',
+      'Posture',
+      'Better balance',
+      'Stress relief',
+    ]);
+    expect(m.EQUIPMENT.at(-1)).toEqual({ value: 'gym', label: 'A gym (everything there)' });
+  });
+
+  it('every weight choice, goal, level and kind of equipment has a line icon, and nothing else does', () => {
     const covered = (icons, options) => {
       expect(Object.keys(icons).sort()).toEqual([...options].sort());
       for (const icon of Object.values(icons)) expect(icon).toBeTruthy();
     };
+    covered(WEIGHT_GOAL_ICONS, weightGoalSchema.options);
     covered(GOAL_ICONS, fitnessGoalSchema.options);
     covered(LEVEL_ICONS, fitnessLevelSchema.options);
     covered(EQUIPMENT_ICONS, equipmentSchema.options);
   });
 
-  it('draws its own flexibility and pull-up bar icons, in the line style of the rest (Kd, 2026-09-10)', () => {
+  it('draws its own icons where the library has none that fits, in the line style of the rest (Kd, 2026-09-10)', () => {
     expect(GOAL_ICONS.flexibility).toBe(SideStretch);
     expect(EQUIPMENT_ICONS.pull_up_bar).toBe(PullUpBar);
-    for (const Icon of [SideStretch, PullUpBar]) {
+    expect(GOAL_ICONS.strength).toBe(Barbell);
+    expect(GOAL_ICONS.balance).toBe(OneLegBalance);
+    for (const Icon of [SideStretch, PullUpBar, Barbell, OneLegBalance]) {
       const svg = renderToStaticMarkup(createElement(Icon));
       expect(svg).toContain('viewBox="0 0 24 24"');
       expect(svg).toContain('fill="none"');
       expect(svg).toContain('stroke-linecap="round"');
-      expect(svg.match(/<(path|circle)\b/g)?.length ?? 0).toBeGreaterThan(3);
+      expect(svg.match(/<(path|circle|rect)\b/g)?.length ?? 0).toBeGreaterThan(3);
     }
   });
 
@@ -83,28 +112,37 @@ describe('what the screens offer is exactly what the server accepts', () => {
 });
 
 describe('which screens a person sees, and where they land', () => {
-  it('asks for a target and a pace only when the goal moves the weight', () => {
+  it('asks for a target and a pace only when the weight choice moves the weight, whatever goals are ticked', () => {
     const ids = (a) => m.visibleScreens(a).map((s) => s.id);
-    expect(ids({ ...EMPTY, mainGoal: 'weight_loss' })).toContain('target');
-    expect(ids({ ...EMPTY, mainGoal: 'muscle_gain' })).toContain('target');
-    for (const goal of ['general_fitness', 'flexibility', 'endurance', 'posture', 'stress_relief']) {
-      expect(ids({ ...EMPTY, mainGoal: goal }), goal).not.toContain('target');
-    }
-    // Before a goal is picked the step count does not jump when one is.
+    expect(ids({ ...EMPTY, weightGoal: 'lose' })).toContain('target');
+    expect(ids({ ...EMPTY, weightGoal: 'gain' })).toContain('target');
+    expect(ids({ ...EMPTY, weightGoal: 'maintain' })).not.toContain('target');
+    // Building muscle is not gaining weight (RULINGS 2026-09-11): ticked beside
+    // keeping the weight, it asks for no target.
+    expect(ids({ ...EMPTY, weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] })).not.toContain('target');
+    // Before the weight choice is made the step count does not jump when it is.
     expect(ids(EMPTY)).toHaveLength(7);
+    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(7);
+  });
+
+  it('counts screen 1 answered on the weight choice alone: the goals beside it may be none', () => {
+    expect(m.screenAnswered('goal', { ...EMPTY, weightGoal: 'maintain' })).toBe(true);
+    expect(m.screenAnswered('goal', { ...EMPTY, fitnessGoals: ['muscle_gain', 'strength'] })).toBe(false);
   });
 
   it('lands on the first screen still unanswered, and on the last once all are', () => {
     expect(m.firstOpenScreen(EMPTY)).toBe('goal');
-    expect(m.firstOpenScreen({ ...EMPTY, mainGoal: 'weight_loss', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('target');
-    expect(m.firstOpenScreen({ ...EMPTY, mainGoal: 'posture', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
+    // Where the people who picked Build muscle before 4a-iv land (RULINGS 2026-09-11).
+    expect(m.firstOpenScreen({ ...ALL, weightGoal: null, fitnessGoals: ['muscle_gain'] })).toBe('goal');
+    expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('target');
+    expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
     expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('equipment');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] })).toBe('equipment');
   });
 
   it('lets the step bar reach every screen up to the first unanswered one, and none past it', () => {
     expect([...m.reachableScreens(EMPTY)]).toEqual(['goal']);
-    expect([...m.reachableScreens({ ...EMPTY, mainGoal: 'posture' })]).toEqual(['goal', 'about']);
+    expect([...m.reachableScreens({ ...EMPTY, weightGoal: 'maintain' })]).toEqual(['goal', 'about']);
     expect([...m.reachableScreens(ALL)]).toEqual(m.visibleScreens(ALL).map((s) => s.id));
     const gap = m.reachableScreens({ ...ALL, dayActivity: null });
     expect(gap.has('day')).toBe(true);
@@ -125,17 +163,21 @@ describe('which screens a person sees, and where they land', () => {
 });
 
 describe('"No equipment" stands alone', () => {
-  it('clears the rest when tapped, and is cleared by anything else', () => {
+  it('clears the rest when tapped, a gym included, and is cleared by anything else', () => {
     expect(m.toggleEquipment(['dumbbells', 'kettlebells'], 'none')).toEqual(['none']);
+    expect(m.toggleEquipment(['gym', 'dumbbells'], 'none')).toEqual(['none']);
     expect(m.toggleEquipment(['none'], 'dumbbells')).toEqual(['dumbbells']);
+    expect(m.toggleEquipment(['none'], 'gym')).toEqual(['gym']);
     expect(m.toggleEquipment(['none'], 'none')).toEqual([]);
     expect(m.toggleEquipment(['pull_up_bar'], 'dumbbells')).toEqual(['dumbbells', 'pull_up_bar']);
+    // A gym beside home equipment: both are real answers.
+    expect(m.toggleEquipment(['dumbbells'], 'gym')).toEqual(['dumbbells', 'gym']);
     expect(m.toggleEquipment(['dumbbells', 'pull_up_bar'], 'dumbbells')).toEqual(['pull_up_bar']);
   });
 
   it('never produces a set the server refuses, whatever the taps', () => {
     let set = [];
-    for (const tap of ['dumbbells', 'none', 'kettlebells', 'pull_up_bar', 'none', 'none', 'resistance_bands', 'dumbbells']) {
+    for (const tap of ['dumbbells', 'none', 'gym', 'kettlebells', 'pull_up_bar', 'none', 'none', 'resistance_bands', 'gym', 'dumbbells']) {
       set = m.toggleEquipment(set, tap);
       expect(accepts({ availableEquipment: set }), JSON.stringify(set)).toBe(true);
     }
@@ -146,6 +188,30 @@ describe('"No equipment" stands alone', () => {
     expect(m.cleanEquipment(['none', 'dumbbells'])).toEqual(['dumbbells']);
     expect(m.cleanEquipment(['none'])).toEqual(['none']);
     expect(m.cleanEquipment([])).toEqual([]);
+  });
+});
+
+describe("screen 1's goals: any number, and no tap unticks another (RULINGS 2026-09-10)", () => {
+  it("ticks and unticks one goal at a time, in the screen's order", () => {
+    expect(m.toggleGoal([], 'balance')).toEqual(['balance']);
+    expect(m.toggleGoal(['balance'], 'muscle_gain')).toEqual(['muscle_gain', 'balance']);
+    expect(m.toggleGoal(['muscle_gain', 'balance'], 'muscle_gain')).toEqual(['balance']);
+    expect(m.toggleGoal(undefined, 'strength')).toEqual(['strength']);
+  });
+
+  it('never produces a list the server refuses, whatever the taps', () => {
+    const every = m.GOALS.map((g) => g.value);
+    let list = [];
+    for (const tap of [...every, 'muscle_gain', 'posture', 'muscle_gain', ...every]) {
+      list = m.toggleGoal(list, tap);
+      expect(accepts({ fitnessGoals: list }), JSON.stringify(list)).toBe(true);
+    }
+  });
+
+  it('takes any of the three weight choices whatever goals are ticked: no contradiction can be picked', () => {
+    for (const weightGoal of weightGoalSchema.options) {
+      expect(accepts({ weightGoal, fitnessGoals: m.GOALS.map((g) => g.value) }), weightGoal).toBe(true);
+    }
   });
 });
 
@@ -275,7 +341,7 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
     expect(m.targetWrongSide('gain', 70.1, 70)).toBe(false);
     expect(m.targetWrongSide('lose', null, 70)).toBe(false);
     expect(m.screenAnswered('target', { ...ALL, targetWeightKg: 83 })).toBe(false);
-    expect(m.screenAnswered('target', { ...ALL, mainGoal: 'muscle_gain', targetWeightKg: 83 })).toBe(true);
+    expect(m.screenAnswered('target', { ...ALL, weightGoal: 'gain', targetWeightKg: 83 })).toBe(true);
     expect(m.screenAnswered('target', ALL)).toBe(true);
     // A weight changed on screen 2 after the target was set re-opens screen 3.
     expect(m.firstOpenScreen({ ...ALL, weightKg: 60 })).toBe('target');
@@ -342,7 +408,7 @@ const WORKINGS = {
   change: { pace: 'steady', kgPerWeek: 0.5, kcalPerKg: 7700, kcal: -550 },
   beforeFloorKcal: 1267,
   floorKcal: 1200,
-  protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140 },
+  protein: { gPerKg: 2, weightKg: 70, referenceBmi: null, wantedG: 140, buildMuscle: false },
   fatShare: 0.25,
   carbsFloorG: 50,
   finish: { kgToMove: 5, kcalPerKg: 7700 },
@@ -479,8 +545,14 @@ describe('the plan panel says what the server said', () => {
       '1.6 g per kilo, inside the 1.4 to 2.0 g per kilo a day sports nutrition recommends for people who train (ISSN, 2017).',
     );
     expect(protein(withProtein({ gPerKg: 2.2, wantedG: 154 }, 154), 'gain').note).toBe(
-      "2.2 g per kilo is the app's own figure for building muscle, above the 1.6 g per kilo a day past which extra protein added no more muscle in a review of 49 trials (Morton and colleagues, 2018).",
+      '2.2 g per kilo, the amount a review of 49 studies suggests for anyone trying to build as much muscle as they can (Morton and colleagues, 2018).',
     );
+    // Build muscle ticked sets the figure whatever the weight choice, and says so.
+    for (const direction of ['lose', 'maintain', 'gain']) {
+      expect(protein(withProtein({ gPerKg: 2.2, wantedG: 154, buildMuscle: true }, 154), direction).note, direction).toBe(
+        '2.2 g per kilo because you are building muscle: the amount a review of 49 studies suggests for anyone trying to build as much muscle as they can (Morton and colleagues, 2018).',
+      );
+    }
     // The golden woman at 100 kg: BMI 30 at 165 cm is 81.68 kg (Kd, 2026-09-11).
     const heavy = {
       ...plan,
@@ -582,11 +654,11 @@ describe('saving as you go', () => {
       onSaved: vi.fn(),
       onFailed,
     });
-    q.save({ mainGoal: 'posture' });
+    q.save({ weightGoal: 'maintain' });
     expect(await q.settled()).toBe(false);
-    expect(onFailed).toHaveBeenCalledWith(expect.any(Error), { mainGoal: 'posture' });
+    expect(onFailed).toHaveBeenCalledWith(expect.any(Error), { weightGoal: 'maintain' });
     fail = false;
-    q.save({ mainGoal: 'posture' });
+    q.save({ weightGoal: 'maintain' });
     expect(await q.settled()).toBe(true);
   });
 

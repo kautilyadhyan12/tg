@@ -18,9 +18,11 @@
 //                  share would shrink it during a cut, just when it keeps muscle. 2.0
 //                  on a loss is the top of the 1.4–2.0 g/kg a day the ISSN's 2017
 //                  position stand gives people who train, which asks for more during
-//                  a cut; 1.6 to keep the weight sits inside that range; 2.2 to gain
-//                  is the app's own, above the 1.62 past which extra protein added no
-//                  muscle in Morton and colleagues' 2018 meta-analysis. A body heavier
+//                  a cut; 1.6 to keep the weight sits inside that range; 2.2 to gain,
+//                  and whatever the weight choice while Build muscle is ticked, is what
+//                  Morton and colleagues' 2018 meta-analysis of 49 studies recommends
+//                  "for those seeking to maximise" the muscle training builds (its
+//                  plateau is 1.62 g/kg a day, 95 % CI 1.03 to 2.20). A body heavier
 //                  than BMI 30 for its height is counted at its BMI-30 weight
 //                  (@app/shared `proteinWeight`; Weijs, 2025).
 //   the 1 200 floor, the 25 % fat share and the 50 g carbohydrate floor are the
@@ -34,6 +36,7 @@
 // is rounded to a whole kcal before the next step reads it, so each sum on that
 // screen holds exactly; `workings` on the plan carries those steps.
 import {
+  BUILD_MUSCLE_PROTEIN_G_PER_KG,
   daysToMove,
   kgBetween,
   MIFFLIN_ST_JEOR_CONSTANT,
@@ -262,7 +265,11 @@ export function computePlan(input: PlanInputs): PlanNumbers {
   }
   if (outOfReach) flags.push({ code: "target_out_of_reach" });
 
-  const proteinPerKg = PROTEIN_G_PER_KG[input.goal];
+  // Build muscle ticked raises protein, whatever the weight choice, and moves
+  // no calorie (RULINGS 2026-09-11: building muscle is not gaining weight).
+  const proteinPerKg = input.buildMuscle
+    ? Math.max(PROTEIN_G_PER_KG[input.goal], BUILD_MUSCLE_PROTEIN_G_PER_KG)
+    : PROTEIN_G_PER_KG[input.goal];
   const protein = proteinWeight(input.weightKg, input.heightCm);
   const formula = formulaFor(input.gender);
   return {
@@ -303,6 +310,7 @@ export function computePlan(input: PlanInputs): PlanNumbers {
         weightKg: protein.kg,
         referenceBmi: protein.referenceBmi,
         wantedG: Math.round(protein.kg * proteinPerKg),
+        buildMuscle: input.buildMuscle,
       },
       fatShare: FAT_SHARE,
       carbsFloorG: CARBS_FLOOR_G,
@@ -312,9 +320,10 @@ export function computePlan(input: PlanInputs): PlanNumbers {
 }
 
 /** Every calculator input that can be missing: everything but `today` (always
- *  sent) and `health` (an unanswered health screen applies no condition rule yet). */
+ *  sent), `health` (an unanswered health screen applies no condition rule yet)
+ *  and `buildMuscle` (a goal left unticked is an answer, not a gap). */
 export const CALCULATOR_INPUTS: readonly string[] = Object.keys(planInputsSchema.shape).filter(
-  (k) => k !== "today" && k !== "health",
+  (k) => k !== "today" && k !== "health" && k !== "buildMuscle",
 );
 
 /** Which answers are still needed. The target and pace are asked only once the
@@ -375,6 +384,8 @@ function resolvePlanUnchecked(answers: PlanAnswers): PlanResponse {
       trainingDays,
       sessionMinutes,
       health: answers.health ?? null,
+      // Nothing ticked is an answer too: no Build muscle, no raise.
+      buildMuscle: answers.buildMuscle ?? false,
       today: answers.today,
     }),
     missing,

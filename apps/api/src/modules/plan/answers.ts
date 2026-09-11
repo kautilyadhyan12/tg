@@ -6,17 +6,10 @@
 // place a clock is read.
 //
 // Two shapes, one direction. What the screens save is `OnboardingAnswers`, where
-// an unanswered question is `null` and the goal is the person's own words
-// ("build muscle"). What the calculator takes is `PlanAnswers`, where an
-// unanswered question is absent and the goal is a direction ("gain"). This file
-// is the only crossing.
-import {
-  PLAN_GOAL_BY_MAIN_GOAL,
-  planAnswersSchema,
-  type OnboardingAnswers,
-  type PlanAnswers,
-  type PlanHealth,
-} from "@app/shared";
+// an unanswered question is `null` and screen 1's goals are a list. What the
+// calculator takes is `PlanAnswers`, where an unanswered question is absent and
+// the one goal it reads is a yes or a no. This file is the only crossing.
+import { planAnswersSchema, type OnboardingAnswers, type PlanAnswers, type PlanHealth } from "@app/shared";
 
 export interface PlanAnswerInput {
   answers: OnboardingAnswers;
@@ -40,10 +33,9 @@ export interface PlanAnswerInput {
 export function planAnswersFor(input: PlanAnswerInput): PlanAnswers {
   const a = input.answers;
   return planAnswersSchema.parse({
-    // The weight direction is DERIVED from the ONE main goal (Kd, 2026-09-09),
-    // through the shared table — so the screen's words and the server's maths
-    // can never mean different things.
-    goal: a.mainGoal === null ? undefined : PLAN_GOAL_BY_MAIN_GOAL[a.mainGoal],
+    // The weight choice IS the direction the maths works in (RULINGS
+    // 2026-09-10): stored as it was asked, never derived from another goal.
+    goal: a.weightGoal ?? undefined,
     age: a.age ?? undefined,
     gender: a.gender ?? undefined,
     heightCm: a.heightCm ?? undefined,
@@ -53,6 +45,9 @@ export function planAnswersFor(input: PlanAnswerInput): PlanAnswers {
     dayActivity: a.dayActivity ?? undefined,
     trainingDays: a.trainingDays ?? undefined,
     sessionMinutes: a.sessionMinutes ?? undefined,
+    // The one "also work on" goal the maths reads, and only for protein:
+    // building muscle is not gaining weight (RULINGS 2026-09-11).
+    buildMuscle: a.fitnessGoals.includes("muscle_gain"),
     health: input.health ?? undefined,
     today: input.today,
   });

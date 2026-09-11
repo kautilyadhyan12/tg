@@ -53,7 +53,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 /** The golden person of users.onboarding.routes.test.ts as one onboarding
  *  save: a plan that burns 1,817 kcal a day and cuts 550 of them (eat 1,267). */
 const LOSING_ANSWERS = {
-  mainGoal: "weight_loss",
+  weightGoal: "lose",
   age: 30,
   gender: "female",
   heightCm: 165,

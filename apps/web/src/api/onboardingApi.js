@@ -3,7 +3,9 @@
 //   GET   /v1/users/me/onboarding   the answers and the plan, or what is missing
 //   PATCH /v1/users/me/onboarding   one screen's answers: a key left out is left
 //                                   alone, null clears it, {} simply re-reads
-// Both carry the DEVICE's time zone, so the finish date is counted in the
+//   DELETE /v1/users/me/onboarding  every answer cleared (Settings' "Reset
+//                                   onboarding"); the name and weigh-ins stay
+// Each carries the DEVICE's time zone, so the finish date is counted in the
 // person's own day (RULINGS 2026-07-21); the day itself is never sent. Every
 // answer is parsed through the shared contract, the same object the server
 // parses its reply through, so a malformed body can never become a number on
@@ -36,6 +38,9 @@ async function readThrough(request) {
 export const onboardingService = {
   get: () => readThrough(authApi.get(PATH, { params: onboardingParams() })),
   patch: (body) => readThrough(authApi.patch(PATH, body, { params: onboardingParams() })),
+  /** Settings' "Reset onboarding": every answer cleared, the ones only these
+   *  screens ask included; the name and the weigh-ins stay. */
+  reset: () => readThrough(authApi.delete(PATH, { params: onboardingParams() })),
 };
 
 /** The questions a refused finish names (the server's 409), or null when the

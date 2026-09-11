@@ -15,8 +15,8 @@ import { nutritionTargetsResponseSchema, type NutritionTargetsResponse, type Pla
  *  weight. Parsed through the shared contract, so "a number exactly when
  *  there is no reason against one" holds for every caller.
  *
- *  A target on the wrong side of the weight (a loss target kept when the goal
- *  changed to Muscle Gain in Settings, or a weight that reached its target)
+ *  A target on the wrong side of the weight (a loss target kept when the
+ *  weight choice changed to Gain weight, or a weight that reached its target)
  *  leaves the plan holding the weight. The rings do not pass that off as the
  *  goal's number, nor call the target unanswered, since the person has one:
  *  they ask for a new one, and their link opens the target screen, which

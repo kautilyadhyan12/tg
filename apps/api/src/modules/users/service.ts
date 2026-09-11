@@ -157,7 +157,7 @@ const EMPTY_FITNESS_PROFILE: FitnessProfile = {
   targetWeightKg: null,
   fitnessLevel: null,
   fitnessGoals: [],
-  mainGoal: null,
+  weightGoal: null,
   exerciseFrequency: null,
   availableEquipment: [],
   sessionDurationMin: null,
@@ -198,6 +198,7 @@ export async function putFitnessProfile(
     targetWeightKg: body.targetWeightKg ?? null,
     fitnessLevel: body.fitnessLevel ?? null,
     fitnessGoals: body.fitnessGoals ?? [],
+    weightGoal: body.weightGoal ?? null,
     exerciseFrequency: body.exerciseFrequency ?? null,
     availableEquipment: body.availableEquipment ?? [],
     sessionDurationMin: body.sessionDurationMin ?? null,
@@ -215,7 +216,8 @@ export async function putFitnessProfile(
 /** The answers of a person who has saved nothing yet. Every question reads as
  *  unanswered — no defaults anywhere (RULINGS 2026-07-15). */
 const EMPTY_ONBOARDING_ANSWERS = {
-  mainGoal: null,
+  weightGoal: null,
+  fitnessGoals: [],
   age: null,
   gender: null,
   heightCm: null,
@@ -252,7 +254,8 @@ function toOnboardingAnswers(row: repo.OnboardingRow): OnboardingAnswers {
   }
   return onboardingAnswersSchema.parse({
     displayName: row.displayName,
-    mainGoal: p.mainGoal,
+    weightGoal: p.weightGoal,
+    fitnessGoals: p.fitnessGoals,
     age: p.age,
     gender: p.gender,
     heightCm: p.heightCm,
@@ -348,6 +351,20 @@ export async function patchOnboarding(
   const row = await repo.patchOnboarding(deps.sql, userId, body, verify);
   // No row = the user stopped being active mid-request (the write is
   // active-only), the same answer every other write on this surface gives.
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  return await toOnboardingResponse(deps.sql, userId, row, requestedTimeZone);
+}
+
+/** Settings' "Reset onboarding" (RULINGS 2026-07-20: it wipes every answer).
+ *  The reply is the empty wizard's: every question open again, bar the weight,
+ *  which lives in the weigh-in history and stays, as the name does (repo
+ *  `deleteOnboarding` says why). */
+export async function resetOnboarding(
+  deps: UsersDeps,
+  userId: string,
+  requestedTimeZone: string | null,
+): Promise<OnboardingResponse> {
+  const row = await repo.deleteOnboarding(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return await toOnboardingResponse(deps.sql, userId, row, requestedTimeZone);
 }

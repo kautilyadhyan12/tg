@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { patchOnboardingRequestSchema } from '@app/shared';
 import NumberWheel from './NumberWheel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS } from './onboardingIcons';
+import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
   AGE_REST,
   DAYS,
@@ -22,6 +22,7 @@ import {
   SESSION_MINUTES,
   TENTHS,
   TRAINING_DAYS,
+  WEIGHT_GOALS,
   WEIGHT_REST,
   ageList,
   clampTarget,
@@ -45,6 +46,7 @@ import {
   targetWholes,
   targetWrongSide,
   toggleEquipment,
+  toggleGoal,
   weightParts,
   weightShown,
   weightWholes,
@@ -315,20 +317,40 @@ function NotSure({ label, pressed, onClick }) {
 }
 
 // ── Screen 1 ────────────────────────────────────────────────────────────────
+/** Two questions (RULINGS 2026-09-10): ONE weight choice, which alone sets the
+ *  calories, and any number of goals to work on beside it, none of which moves
+ *  them — building muscle is not gaining weight (RULINGS 2026-09-11). Nothing
+ *  on either list fights anything else, so no tap ever has to undo another. */
 export function GoalScreen({ answers, save }) {
+  const also = Array.isArray(answers.fitnessGoals) ? answers.fitnessGoals : [];
   return (
-    <div className="space-y-3">
-      <Question>What is your main goal?</Question>
-      <p className="text-gray-400 text-xs">Pick one. You can change it later.</p>
-      {GOALS.map((g) => (
-        <Choice
-          key={`goal-${g.value}`}
-          selected={answers.mainGoal === g.value}
-          onSelect={() => answers.mainGoal !== g.value && save({ mainGoal: g.value })}
-          icon={GOAL_ICONS[g.value]}
-          label={g.label}
-        />
-      ))}
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <Question>What do you want your weight to do?</Question>
+        <p className="text-gray-400 text-xs">Pick one. It sets your daily calories.</p>
+        {WEIGHT_GOALS.map((g) => (
+          <Choice
+            key={`weight-${g.value}`}
+            selected={answers.weightGoal === g.value}
+            onSelect={() => answers.weightGoal !== g.value && save({ weightGoal: g.value })}
+            icon={WEIGHT_GOAL_ICONS[g.value]}
+            label={g.label}
+          />
+        ))}
+      </div>
+      <div className="space-y-3">
+        <Question>What else do you want to work on?</Question>
+        <p className="text-gray-400 text-xs">Pick any, or none. You can change these later.</p>
+        {GOALS.map((g) => (
+          <Choice
+            key={`goal-${g.value}`}
+            selected={also.includes(g.value)}
+            onSelect={() => save({ fitnessGoals: toggleGoal(also, g.value) })}
+            icon={GOAL_ICONS[g.value]}
+            label={g.label}
+          />
+        ))}
+      </div>
     </div>
   );
 }

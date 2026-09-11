@@ -41,7 +41,7 @@ describe("the Nutrition page hands the rings the server's answer", () => {
   it('the questions still open', async () => {
     serve({ targets: null, missing: ['goal', 'dayActivity'], targetWrongSide: false });
     draw();
-    expect(await screen.findByText('To see your daily calories and macros, answer your goal and your day.')).toBeTruthy();
+    expect(await screen.findByText('To see your daily calories and macros, answer your weight goal and your day.')).toBeTruthy();
     expect(screen.queryByText(/new target weight/)).toBeNull();
   });
 

@@ -10,8 +10,12 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor, toggleFitnessGoal, cleanFitnessGoals, goalDirection } from '../api/userApi';
-import { targetWrongSide, wrongSideText } from './onboarding/onboardingModel';
+import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
+import { onboardingService } from '../api/onboardingApi';
+import {
+  EQUIPMENT, GOALS, WEIGHT_GOALS, cleanEquipment, targetDirection, targetWrongSide, toggleEquipment, toggleGoal, wrongSideText,
+} from './onboarding/onboardingModel';
+import { EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -120,12 +124,11 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 
   const { updateUser } = useAuth();
 
-  // A target on the wrong side of the weight for the goal the calories follow
-  // cannot be typed in, and is named in screen 3's own words (RULINGS
-  // 2026-09-11). That goal is the main one, as the rings read it, not the
-  // chips' first. The weight is the one this save leaves: the box's, else the
-  // newest weigh-in. A stored one is only named, so the rest still saves.
-  const direction = goalDirection(profile.mainGoal);
+  // A target on the wrong side of the weight for the weight choice cannot be
+  // typed in, and is named in screen 3's own words (RULINGS 2026-09-11). The
+  // weight is the one this save leaves: the box's, else the newest weigh-in.
+  // A stored one is only named, so the rest still saves.
+  const direction = targetDirection(profile.weightGoal);
   const weightKgNow = weightToKg(form.weight, form.weightUnit) ?? profile.weightKg ?? null;
   const targetKg = weightToKg(form.targetWeight, form.weightUnit);
   const wrongSide = direction !== null && targetWrongSide(direction, targetKg, weightKgNow)
@@ -271,27 +274,11 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 
 // ── Fitness tab ───────────────────────────────────────────────────────────────
 export function FitnessTab({ profile, onSaved }) {
-  // Card 7: these MUST be the new-API enums (fitnessGoalSchema/equipmentSchema),
-  // same set the getting-started wizard uses — the old list had values the new
-  // system rejects (core_strength; barbell/machine) and old names (bands,
-  // pullup_bar) that would 400 on save. Kd ruled: align to the supported set.
-  const GOALS = [
-    { id: 'weight_loss',    label: 'Weight Loss',     icon: '🔥' },
-    { id: 'muscle_gain',    label: 'Muscle Gain',     icon: '💪' },
-    { id: 'flexibility',    label: 'Flexibility',     icon: '🧘' },
-    { id: 'endurance',      label: 'Endurance',       icon: '🏃' },
-    { id: 'stress_relief',  label: 'Stress Relief',   icon: '😌' },
-    { id: 'general_fitness',label: 'General Fitness', icon: '⚡' },
-    { id: 'posture',        label: 'Posture',         icon: '🎯' },
-  ];
-
-  const EQUIPMENT = [
-    { id: 'none',             label: 'No Equipment'     },
-    { id: 'dumbbells',        label: 'Dumbbells'        },
-    { id: 'resistance_bands', label: 'Resistance Bands' },
-    { id: 'kettlebells',      label: 'Kettlebells'      },
-    { id: 'pull_up_bar',      label: 'Pull-up Bar'      },
-  ];
+  // Screen 1's two questions and screen 7's equipment, in the screens' own
+  // words, line icons and tables (4a-iv), so the two can never offer
+  // different answers: ONE weight choice, which alone sets the calories, and
+  // any number of goals to work on beside it; "No equipment" stands alone. A
+  // change takes effect on save, and nothing is asked again (RULINGS 2026-09-11).
 
   // Card 7: init from the new-API shape (sessionDurationMin).
   const [form, setForm] = useState({
@@ -299,8 +286,10 @@ export function FitnessTab({ profile, onSaved }) {
     // unanswered field stays NULL ("unanswered is not 'beginner'", users.ts).
     // Empty/null here → the save sends null, not an invented answer.
     fitnessLevel:         profile.fitnessLevel         || '',
-    fitnessGoals:         cleanFitnessGoals(profile.fitnessGoals || [], profile.mainGoal),
-    availableEquipment:   profile.availableEquipment   || [],
+    weightGoal:           profile.weightGoal           ?? null,
+    fitnessGoals:         profile.fitnessGoals         || [],
+    // An old "none" beside equipment loads as the equipment, as screen 7 does.
+    availableEquipment:   cleanEquipment(profile.availableEquipment),
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',
     exerciseFrequency:    profile.exerciseFrequency    ?? null,
@@ -309,14 +298,9 @@ export function FitnessTab({ profile, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [saved,   setSaved]   = useState(false);
 
-  const toggleGoal = (id) => setForm((f) => ({ ...f, fitnessGoals: toggleFitnessGoal(f.fitnessGoals, id) }));
-
-  const toggleEquipment = (id) => setForm((f) => ({
-    ...f,
-    availableEquipment: f.availableEquipment.includes(id)
-      ? f.availableEquipment.filter((e) => e !== id)
-      : [...f.availableEquipment, id],
-  }));
+  const pickWeightGoal = (value) => setForm((f) => ({ ...f, weightGoal: value }));
+  const tickGoal = (value) => setForm((f) => ({ ...f, fitnessGoals: toggleGoal(f.fitnessGoals, value) }));
+  const tickEquipment = (value) => setForm((f) => ({ ...f, availableEquipment: toggleEquipment(f.availableEquipment, value) }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -327,6 +311,7 @@ export function FitnessTab({ profile, onSaved }) {
       const med = (form.medicalConditions || '').trim();
       await userService.putFitnessProfile(mergeFitnessProfile(profile, {
         fitnessLevel:         form.fitnessLevel || null,
+        weightGoal:           form.weightGoal,
         fitnessGoals:         form.fitnessGoals,
         availableEquipment:   form.availableEquipment,
         sessionDurationMin:   Number.isFinite(form.sessionDuration) ? form.sessionDuration : null,
@@ -366,30 +351,57 @@ export function FitnessTab({ profile, onSaved }) {
         </div>
       </Field>
 
-      <Field label="Fitness Goals" hint="Select all that apply. Weight Loss or Muscle Gain, not both: that one sets your calories.">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {GOALS.map((g) => (
-            <button key={g.id} type="button"
-              aria-pressed={form.fitnessGoals.includes(g.id)}
-              onClick={() => toggleGoal(g.id)}
-              className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-              style={chipStyle(form.fitnessGoals.includes(g.id))}>
-              <span>{g.icon}</span>{g.label}
-            </button>
-          ))}
+      <Field label="Your Weight" hint="Pick one. It sets your daily calories.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {WEIGHT_GOALS.map((g) => {
+            const Icon = WEIGHT_GOAL_ICONS[g.value];
+            const on = form.weightGoal === g.value;
+            return (
+              <button key={g.value} type="button"
+                aria-pressed={on}
+                onClick={() => pickWeightGoal(g.value)}
+                className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                style={chipStyle(on)}>
+                <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{g.label}
+              </button>
+            );
+          })}
         </div>
       </Field>
 
-      <Field label="Available Equipment">
+      <Field label="Also Work On" hint="Pick any, or none.">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {GOALS.map((g) => {
+            const Icon = GOAL_ICONS[g.value];
+            const on = form.fitnessGoals.includes(g.value);
+            return (
+              <button key={g.value} type="button"
+                aria-pressed={on}
+                onClick={() => tickGoal(g.value)}
+                className="py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                style={chipStyle(on)}>
+                <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{g.label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <Field label="Available Equipment" hint="Pick all that apply, or No equipment.">
         <div className="flex flex-wrap gap-2">
-          {EQUIPMENT.map((eq) => (
-            <button key={eq.id} type="button"
-              onClick={() => toggleEquipment(eq.id)}
-              className="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all"
-              style={chipStyle(form.availableEquipment.includes(eq.id))}>
-              {eq.label}
-            </button>
-          ))}
+          {EQUIPMENT.map((eq) => {
+            const Icon = EQUIPMENT_ICONS[eq.value];
+            const on = form.availableEquipment.includes(eq.value);
+            return (
+              <button key={eq.value} type="button"
+                aria-pressed={on}
+                onClick={() => tickEquipment(eq.value)}
+                className="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                style={chipStyle(on)}>
+                <Icon aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />{eq.label}
+              </button>
+            );
+          })}
         </div>
       </Field>
 
@@ -514,14 +526,13 @@ function AccountTab({ profile, onSaved }) {
   };
 
   const handleResetOnboarding = async () => {
-    if (!window.confirm('This clears your fitness profile and sends you through the getting-started wizard again (blank). Continue?')) return;
+    if (!window.confirm('This clears your answers and takes you through setup again. Your name and your weigh-ins are kept. Continue?')) return;
     setResetLoading(true);
     try {
-      // Card 7 (Kd ruled WIPE): PUT {} is the full-clear — it wipes every
-      // fitness-profile field AND sets onboarding_completed → false
-      // (DECISIONS 2026-07-15). Weight (the weigh-in history) is kept
-      // separately and is intentionally NOT cleared here.
-      await userService.putFitnessProfile({});
+      // Every answer goes, the ones only the setup screens ask included
+      // (RULINGS 2026-07-20: reset wipes every answer), and the gate shuts.
+      // The name and the weigh-in history are not answers on that row, and stay.
+      await onboardingService.reset();
       // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).
       // Without this refresh, opening the Fitness tab and saving would merge
       // against the stale copy and silently re-write every wiped field —

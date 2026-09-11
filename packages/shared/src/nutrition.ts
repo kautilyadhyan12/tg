@@ -192,8 +192,8 @@ export const nutritionTargetsSchema = z.object({
 export const nutritionTargetsResponseSchema = z.object({
   targets: nutritionTargetsSchema.nullable(),
   missing: z.array(missingPlanInputSchema),
-  /** The stored target is on the wrong side of the weight for the goal: a
-   *  loss target kept when Settings switched the goal to Muscle Gain, or a
+  /** The stored target is on the wrong side of the weight for the weight
+   *  choice: a loss target kept when it switched to Gain weight, or a
    *  weight that has reached its target. The plan then holds the weight, and
    *  the rings do not pass that off as the goal's number; they say the target
    *  no longer fits, never that it is unanswered (RULINGS 2026-09-11). */
