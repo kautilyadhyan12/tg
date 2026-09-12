@@ -134,6 +134,29 @@ describe('Settings → Fitness → Health', () => {
     await waitFor(() => expect(pressed('No')).toBe('true'));
   });
 
+  it('writes nothing when the answer tapped is the one already stored', async () => {
+    serve(screeningOf({ hasCondition: false }));
+    await openFitness();
+    fireEvent.click(button('No'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(health.put).not.toHaveBeenCalled();
+    expect(pressed('No')).toBe('true');
+  });
+
+  it('says so when the health answer cannot be read, and Try again reads it again', async () => {
+    const failed = vi.fn(() => Promise.reject(new Error('down')));
+    health.get = failed;
+    render(<Settings />);
+    await screen.findByDisplayValue('Kd');
+    fireEvent.click(screen.getByRole('button', { name: 'Fitness' }));
+    const retry = await screen.findByRole('button', { name: /try again/i });
+    expect(screen.queryByText(HEALTH_QUESTION)).toBeNull();
+    health.get = vi.fn(async () => ({ data: { healthScreening: server.health } }));
+    fireEvent.click(retry);
+    expect(await screen.findByText(HEALTH_QUESTION)).toBeTruthy();
+    expect(failed).toHaveBeenCalledTimes(1);
+  });
+
   it('says so when a save fails, and puts the stored answer back', async () => {
     serve(screeningOf({ hasCondition: false }));
     await openFitness();

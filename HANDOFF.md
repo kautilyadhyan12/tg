@@ -4,6 +4,25 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · 4b-i review round 1 fixed (one High, three Lows, four weak tests), PR #63
+
+- Kd's click-through passed. Review round 1: one High — the line under the question said "We only keep this yes or
+  no … never store it" while the app also stores the "Check first" choice picked right under it. It now names both
+  stored facts, which is the ruling's own sentence (RULINGS 2026-09-09).
+- Lows: Finish waits for the health save to land (`hs.saving`), so a finish pressed straight after the tap cannot
+  overtake it and come back "answer the health question"; Settings' health card moved ABOVE the fitness form, so it
+  is not read as part of that form's Save; a comment rewrapped and a stray blank line dropped.
+- Tests the review asked for: `healthApi.test.js` is new — the consent body (purpose, the version that becomes the
+  row's legal proof, the build clipped to 40 characters) was never executed, every screen mocking it wholesale; the
+  two-load gate and both retries; the SERVER's 409 naming health (the client-side path was all that was covered);
+  and the two "already stored" guards, which were silently re-writing nothing.
+- The health PUT still has no per-route limiter, and the route now says why: it upserts ONE row per person, so the
+  app-wide 300/minute bounds it; the consent log is append-only, which is what earns its own.
+- Verified: shared tsc/eslint 0, 90 · api tsc/eslint 0 · local onboarding + fitness + migration 76 · web 2023
+  (poseAssets.contract the known local red) · web lint's 4 in Settings.jsx are master's 4 · every fix run red first
+  (the note, the race, the gate, the retry alone, both guards, the consent version).
+- Open: CI, one re-check of these fixes (a High was open, CLAUDE.md §2.6), merge.
+
 ## 2026-09-12 · The health question (item 4b-i), branch `health-question`
 
 - Kd ruled cuisine out entirely — not at sign-up, not in meal suggestions (RULINGS 2026-09-12). 4b split into 4b-i

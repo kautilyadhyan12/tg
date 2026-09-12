@@ -788,7 +788,7 @@ describe('onboarding screens 1–7', () => {
     await screen.findByText('MEMBER APP');
   });
 
-  it('names the health question when the server refuses Finish for it, and keeps the gate shut', async () => {
+  it('keeps Finish shut while the health question is open, and names it', async () => {
     serve(ALL); // every other answer in, the health one open
     draw();
     await heading('Health');
@@ -797,6 +797,93 @@ describe('onboarding screens 1–7', () => {
     expect(screen.getByText('Before you finish, answer the health question.')).toBeTruthy();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
     expect(auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('names it again when the SERVER is the one that refuses, not the screen', async () => {
+    // The screen believes the question is answered; the server knows better —
+    // a reset on another device clears it (4b-i). The 409 must reach the person
+    // as the same sentence, not as a failure they cannot read.
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Health');
+    await agree();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    server.health = UNANSWERED_HEALTH;
+    tap(/finish setup/i);
+    expect(await screen.findByText('Before you finish, answer the health question.')).toBeTruthy();
+    expect(screen.queryByText('MEMBER APP')).toBeNull();
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
+  });
+
+  it('will not let Finish race the health answer it was just given', async () => {
+    // The answer shows the moment it is tapped, but Finish waits for the server
+    // to hold it: otherwise the finish can overtake the save and come back
+    // "answer the health question" to somebody who just answered it.
+    serve(ALL);
+    draw();
+    await heading('Health');
+    await agree();
+    let land;
+    health.put = vi.fn(
+      (body) =>
+        new Promise((resolve) => {
+          land = () => {
+            server.health = screeningOf(body);
+            resolve({ data: { healthScreening: server.health } });
+          };
+        }),
+    );
+    tap('No');
+    await waitFor(() => expect(pressed('No')).toBe('true'));
+    expect(button(/finish setup/i).disabled).toBe(true);
+    land();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+  });
+
+  it('waits for the health answer as well as the others before it puts anybody on a screen', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    let land;
+    health.get = vi.fn(
+      () => new Promise((resolve) => { land = () => resolve({ data: { healthScreening: server.health } }); }),
+    );
+    draw();
+    await waitFor(() => expect(svc.get).toHaveBeenCalled());
+    // Where a person lands is "the first screen still unanswered", which cannot
+    // be worked out while one of the answers is still unknown.
+    expect(screen.queryByRole('heading', { name: 'Health' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Your goal' })).toBeNull();
+    land();
+    await heading('Health');
+  });
+
+  it('says so when the health answer cannot be read, and Try again retries the read that failed', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    const failed = vi.fn(() => Promise.reject(new Error('down')));
+    health.get = failed;
+    draw();
+    const retry = await screen.findByRole('button', { name: /try again/i });
+    expect(screen.queryByRole('heading', { name: 'Health' })).toBeNull();
+    // The other read landed, so a retry aimed at THAT one would leave the
+    // person on this message for ever.
+    const answersRead = svc.get.mock.calls.length;
+    health.get = vi.fn(async () => ({ data: { healthScreening: server.health } }));
+    fireEvent.click(retry);
+    await heading('Health');
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(svc.get.mock.calls.length).toBe(answersRead);
+  });
+
+  it('writes nothing when the answer tapped is the one already stored', async () => {
+    serve(ALL, screeningOf({ hasCondition: true, checkFirst: 'not_yet' }));
+    draw();
+    await heading('Health');
+    tap('Yes');
+    tap(/^Not yet/);
+    await settleWheels();
+    expect(health.put).not.toHaveBeenCalled();
+    expect(button(/^Not yet/).getAttribute('aria-pressed')).toBe('true');
+    expect(pressed('Yes')).toBe('true');
   });
 
   it('puts the stored answer back when a save fails, so the screen never keeps one the server refused', async () => {

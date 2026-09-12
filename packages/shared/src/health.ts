@@ -32,10 +32,13 @@ export type CheckFirst = z.infer<typeof checkFirstSchema>;
 export const HEALTH_QUESTION =
   "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?";
 
-/** Why it is asked, and what is kept: nothing specific is ever asked or stored
- *  (RULINGS 2026-09-09), which is worth saying on the screen that asks. */
+/** What is kept, on the screen that asks it. BOTH stored facts are named: the
+ *  yes or no, and on a yes the "Check first" choice — the ruling's own words
+ *  are "the server stores only the yes/no and the choice" (RULINGS
+ *  2026-09-09), and the choice is picked directly under this line, so a note
+ *  that promised only the first would be untrue where it is read. */
 export const HEALTH_QUESTION_NOTE =
-  "We only keep this yes or no. We never ask what it is, and never store it.";
+  "We keep only your answer, and — if it is yes — whether a professional has cleared you. We never ask what it is.";
 
 /** The two answers to "Check first", with what each one changes. Any yes stops
  *  the calorie cut, cleared or not — the app cannot know what the yes is — so

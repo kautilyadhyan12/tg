@@ -434,7 +434,6 @@ export function FitnessTab({ profile, onSaved }) {
             ]}
           />
         </Field>
-
       </div>
 
       <div className="flex justify-end">
@@ -1024,11 +1023,13 @@ export default function Settings() {
                   )}
                   {tab === 'fitness'       && (
                     <div className="space-y-6">
-                      <FitnessTab profile={profile} onSaved={loadProfile} />
-                      {/* Its own card, and its own save: the health answer is
-                          its own row behind its own route, and a tap on it
-                          takes effect at once (RULINGS 2026-09-09). */}
+                      {/* ABOVE the form, and deliberately: the health answer
+                          saves on the tap, with no Save button of its own, so
+                          sitting under the form's one would invite the person
+                          to think it needs saving (RULINGS 2026-09-09: a change
+                          takes effect at once). */}
                       <HealthCard />
+                      <FitnessTab profile={profile} onSaved={loadProfile} />
                     </div>
                   )}
                   {tab === 'gym'           && <GymTab />}

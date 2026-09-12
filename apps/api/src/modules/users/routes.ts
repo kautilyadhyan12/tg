@@ -149,6 +149,13 @@ export function registerUserRoutes(
 
   // Health screening and Safe mode (ROADMAP 3b). Same tenancy argument as the
   // fitness profile: no id param, so only the signed-in person's own row.
+  //
+  // NO PER-ROUTE LIMIT, deliberately, and the difference from the consent log
+  // below is the point: this PUT upserts ONE row per person, so hammering it
+  // grows nothing and costs nothing but the write — the app-wide 300/minute
+  // (app.ts) is the bound it needs. The consent log is append-only, so a run of
+  // taps there leaves rows behind for ever, which is what earns it a limiter of
+  // its own. Revisit only if this row ever gains a history.
   app.get("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
     const healthScreening = await service.getHealthScreening(usersDeps, authedUserId(req));
     return reply.status(200).send({ healthScreening });

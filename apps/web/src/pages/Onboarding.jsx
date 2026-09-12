@@ -261,8 +261,12 @@ export default function Onboarding() {
   const open = screenAnswered('health', answers) ? serverOpen : [...serverOpen.filter((k) => k !== 'health'), 'health'];
   const openScreens = [...new Set(open.map((k) => SCREEN_OF_MISSING[k]).filter(Boolean))];
   // The disclaimer tap is the person's own act on this screen, not an answer
-  // the server holds, so it gates Finish here.
-  const canFinish = answered && open.length === 0 && agreed && !busy;
+  // the server holds, so it gates Finish here. `hs.saving` is waited for as
+  // `busy` waits for the answers' queue: a health answer shows the moment it is
+  // tapped, so without it a Finish pressed straight after the tap can reach the
+  // server before the answer does and come back "answer the health question"
+  // to somebody who just did.
+  const canFinish = answered && open.length === 0 && agreed && !busy && !hs.saving;
 
   const View = SCREEN_VIEWS[screen.id];
   const StepIcon = ICONS[screen.id];

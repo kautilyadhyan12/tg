@@ -62,7 +62,19 @@ describe("the words both screens show (4b-i)", () => {
       "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?",
     );
     expect(HEALTH_QUESTION.match(/\?/g)).toHaveLength(1);
-    expect(HEALTH_QUESTION_NOTE.toLowerCase()).toContain("never");
+  });
+
+  it("says what is kept, and that is BOTH stored facts, not just the yes or no", () => {
+    // The screening stores two things (RULINGS 2026-09-09: "the server stores
+    // only the yes/no and the choice"), and the choice is picked directly under
+    // this line. A note promising only the first would be untrue exactly where
+    // a person reads it — on the screen where they have just made the second.
+    const lower = HEALTH_QUESTION_NOTE.toLowerCase();
+    expect(lower).toContain("cleared");
+    expect(lower).toContain("never ask");
+    expect(lower).not.toMatch(/only (this|your) yes or no/);
+    // And it never promises the app forgets an answer it keeps.
+    expect(lower).not.toContain("never store");
   });
 
   it("offers exactly the two answers to 'Check first', and both say the calorie cut is off", () => {
