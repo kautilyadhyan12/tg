@@ -165,6 +165,8 @@ const EMPTY_FITNESS_PROFILE: FitnessProfile = {
   availableEquipment: [],
   sessionDurationMin: null,
   preferredWorkoutTime: null,
+  diet: null,
+  mealsPerDay: null,
   onboardingCompleted: false,
   updatedAt: null,
 };
@@ -205,6 +207,8 @@ export async function putFitnessProfile(
     availableEquipment: body.availableEquipment ?? [],
     sessionDurationMin: body.sessionDurationMin ?? null,
     preferredWorkoutTime: body.preferredWorkoutTime ?? null,
+    diet: body.diet ?? null,
+    mealsPerDay: body.mealsPerDay ?? null,
     onboardingCompleted: body.onboardingCompleted ?? false,
   });
   // No row = the user was deleted mid-request (the upsert is active-only).
@@ -232,6 +236,8 @@ const EMPTY_ONBOARDING_ANSWERS = {
   trainingDays: null,
   sessionMinutes: null,
   availableEquipment: [],
+  diet: null,
+  mealsPerDay: null,
   onboardingCompleted: false,
   updatedAt: null,
 };
@@ -270,6 +276,8 @@ function toOnboardingAnswers(row: repo.OnboardingRow): OnboardingAnswers {
     trainingDays: p.exerciseFrequency,
     sessionMinutes: p.sessionDurationMin,
     availableEquipment: p.availableEquipment,
+    diet: p.diet,
+    mealsPerDay: p.mealsPerDay,
     onboardingCompleted: p.onboardingCompleted,
     updatedAt: p.updatedAt.toISOString(),
   });
@@ -293,12 +301,19 @@ function missingOnboardingAnswers(row: repo.OnboardingRow, requestedTimeZone: st
   return missingPlanInputs(planAnswersFor({ answers: toOnboardingAnswers(row), health: null, today }));
 }
 
-/** What SETUP still needs: the plan's own inputs, and the health question on
- *  screen 8 (4b-i). The plan works without that answer — unanswered simply
- *  applies no condition rule — but finishing must not: a yes turns off the
- *  calorie cut and may turn on Safe mode, so the training side never opens
- *  without it. Read in the caller's transaction, so the check sees exactly the
- *  rows the save is about to commit. */
+/** What SETUP still needs: the plan's own inputs, the health question on
+ *  screen 8 (4b-i), and screen 9's two food answers (4b-ii). The plan works
+ *  without all three — an unanswered screening simply applies no condition
+ *  rule, and no meal answer moves a calorie — but finishing must not: a health
+ *  yes turns off the calorie cut and may turn on Safe mode, and a guessed diet
+ *  would put meat in front of a vegetarian. The training side never opens on a
+ *  guess about any of them.
+ *
+ *  The health row is read in the caller's transaction, so the check sees
+ *  exactly the rows the save is about to commit; the food answers are on the
+ *  profile row this save has just written, and are read from it.
+ *
+ *  Screen 11's gym code is not here: most people have no code (contract). */
 async function missingSetupAnswers(
   sql: repo.SqlOrTx,
   userId: string,
@@ -307,6 +322,9 @@ async function missingSetupAnswers(
 ): Promise<MissingSetupAnswer[]> {
   const missing: MissingSetupAnswer[] = missingOnboardingAnswers(row, requestedTimeZone);
   if ((await repo.getHealthScreening(sql, userId)) === null) missing.push("health");
+  const answers = toOnboardingAnswers(row);
+  if (answers.diet === null) missing.push("diet");
+  if (answers.mealsPerDay === null) missing.push("mealsPerDay");
   return missing;
 }
 

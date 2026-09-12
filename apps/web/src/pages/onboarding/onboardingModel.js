@@ -3,7 +3,7 @@
 // and their units, the words the plan panel uses, and the save queue. Every
 // NUMBER of the plan is the server's (GET/PATCH /v1/users/me/onboarding);
 // nothing here computes a plan.
-import { PACE_KG_PER_WEEK } from '@app/shared';
+import { ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
@@ -67,6 +67,20 @@ export const EQUIPMENT = [
   { value: 'gym',              label: 'A gym' },
 ];
 
+/** Screen 9's diet, in the order RULINGS 2026-09-10 names them. Each line says
+ *  what the meal suggestions may offer, because that is the whole of what this
+ *  answer does — nothing here changes a calorie. */
+export const DIETS = [
+  { value: 'vegetarian',     label: 'Vegetarian',            desc: 'No meat or fish. Milk and dairy are fine' },
+  { value: 'vegetarian_eggs', label: 'Vegetarian with eggs', desc: 'No meat or fish. Eggs and dairy are fine' },
+  { value: 'non_vegetarian', label: 'Non-vegetarian',        desc: 'Anything — meat, fish, eggs and dairy' },
+  { value: 'vegan',          label: 'Vegan',                 desc: 'No animal food at all' },
+];
+
+/** How many sittings the day's food is split across. Two is a real answer and
+ *  six is as many as a day is ever planned in (the shared rail). */
+export const MEALS_PER_DAY = [2, 3, 4, 5, 6];
+
 // ── The screens, and which of them a person still has to answer ─────────────
 
 export const SCREENS = [
@@ -78,6 +92,8 @@ export const SCREENS = [
   { id: 'week',      title: 'Your week',     desc: 'How often, and for how long' },
   { id: 'equipment', title: 'Equipment',     desc: 'What you have to train with' },
   { id: 'health',    title: 'Health',        desc: 'One question, so your plan is careful' },
+  { id: 'food',      title: 'Food',          desc: 'What you eat, so meals can be suggested' },
+  { id: 'code',      title: 'Your code',     desc: `Only if a ${ORG_TYPES_PHRASE} gave you one` },
 ];
 
 /** The direction the calorie maths works in: the weight choice itself, which
@@ -108,7 +124,13 @@ const answered = (v) => v !== null && v !== undefined;
  *  is its own table behind its own route (3b), so the page lays what it holds
  *  onto this object as `health`. `answered` there is the server's own word for
  *  "this person has saved the screening once" — a yes with no "Check first"
- *  chosen is never stored, so it can never read as answered. */
+ *  chosen is never stored, so it can never read as answered.
+ *
+ *  Screen 11, the gym code, asks nothing that can be left open: most people
+ *  have no code, and a person who has one may apply now, later in Settings, or
+ *  never. So it is always answered — Continue and Finish are never held by it —
+ *  and the server's finish check has no word for it either (`@app/shared`
+ *  `missingSetupAnswerSchema`). It is a screen, not a question. */
 export function screenAnswered(id, a) {
   switch (id) {
     case 'goal':      return answered(a.weightGoal);
@@ -125,6 +147,8 @@ export function screenAnswered(id, a) {
     case 'week':      return answered(a.trainingDays) && answered(a.sessionMinutes);
     case 'equipment': return Array.isArray(a.availableEquipment) && a.availableEquipment.length > 0;
     case 'health':    return a.health?.answered === true;
+    case 'food':      return answered(a.diet) && answered(a.mealsPerDay);
+    case 'code':      return true;
     default:          return false;
   }
 }
@@ -157,6 +181,8 @@ export const SCREEN_OF_MISSING = {
   trainingDays: 'week',
   sessionMinutes: 'week',
   health: 'health',
+  diet: 'food',
+  mealsPerDay: 'food',
 };
 
 export const MISSING_LABELS = {
@@ -171,7 +197,28 @@ export const MISSING_LABELS = {
   trainingDays: 'training days a week',
   sessionMinutes: 'session length',
   health: 'the health question',
+  diet: 'your diet',
+  mealsPerDay: 'how many meals a day',
 };
+
+/** The answers SETUP needs that the PLAN's own missing list can never carry, in
+ *  screen order: the health question (screen 8, its own table behind its own
+ *  route) and screen 9's two food answers. A plan is a number, and it is
+ *  worked out without all three — so a save's `missing` never names them, and
+ *  only a refused finish does (`missingSetupAnswerSchema`, @app/shared). */
+export const SETUP_ONLY_ANSWERS = ['health', 'diet', 'mealsPerDay'];
+
+const setupOnlyAnswered = (key, a) => (key === 'health' ? screenAnswered('health', a) : answered(a[key]));
+
+/** What still stands between this person and Finish: what the server said the
+ *  PLAN is missing, plus whichever of the three above this screen can see are
+ *  still open. Any of the three the server named are dropped from its list
+ *  first and re-added only while they are unanswered, so one answered since a
+ *  refusal stops being named the moment it is given. */
+export function openSetupAnswers(serverOpen, answers) {
+  const fromPlan = serverOpen.filter((k) => !SETUP_ONLY_ANSWERS.includes(k));
+  return [...fromPlan, ...SETUP_ONLY_ANSWERS.filter((k) => !setupOnlyAnswered(k, answers))];
+}
 
 export function listText(items) {
   if (items.length <= 1) return items[0] ?? '';

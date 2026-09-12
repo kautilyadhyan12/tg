@@ -4,6 +4,28 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · Screen 9 (food) and screen 11 (the gym code), item 4b-ii, branch `food-and-gym-code`
+
+- Kd asked for two NEW things and ruled the order (RULINGS 2026-09-12): the food list grows to about 300 and is
+  not vegetarian-first (the market is Western), and a person may build their own diet plan beside the app's —
+  both before launch, after the setup screens. New roadmap lines 7a-i and 7c; nothing else re-ordered.
+- He also asked what a meal scan does when the food is not in our list. Answered from the code: our table, then
+  foods a search already pulled in, then Open Food Facts; no match means the item is dropped from the totals and
+  named ("Couldn't identify: …"), or, if nothing matched, "we couldn't match it to our nutrition data" plus
+  "Add an ingredient". It never invents a number (RULINGS 2026-08-24) — which is what 7a-i is for.
+- Built: screen 9 asks the diet (four choices, Kd's order) and meals a day (2–6), saved as you go; screen 11 is
+  the join door's own two components, the ones Settings' Gym tab draws. Migration `0030` adds both columns with
+  their CHECKs and no backfill. Both food answers gate the finish beside `health`; the code never can.
+- Finish moved to the LAST screen with them, so the disclaimer tap (screen 8) is named and reachable from there,
+  and Back is now held while a finish is out — the step bar already was, and that gap was found by its own test.
+- Verified: shared tsc/eslint 0, 94 · api tsc/eslint 0, CI-shaped 299, FULL local suite 989/989 (the
+  `workouts.sync` flake passed this run too) · web 2041 (poseAssets.contract is the known local encoding red,
+  confirmed untouched by this branch) · web lint's 4 in Settings.jsx are master's 4, checked line by line
+  against HEAD's own file · gitleaks clean · six deliberate breaks, each turning a different new test red.
+- Open: Kd's click-through, the fresh-chat review, CI, merge. Worth his word: the diets are listed in the order
+  his ruling names them (vegetarian first) — a Western audience may want Non-vegetarian first.
+- Next: 4b-iii (running), then 4c, then 7a-i (the bigger food list), then 7c (your own diet plan).
+
 ## 2026-09-12 · 4b-i's last round: three Lows and two weak tests, merged as PR #63
 
 - No Critical/High in the last review, so this is the end of the round (RULINGS 2026-09-08). Kd: *"fix and merge"*.

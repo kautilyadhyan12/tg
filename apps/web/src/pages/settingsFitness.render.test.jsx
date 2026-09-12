@@ -94,3 +94,55 @@ describe('Settings → Fitness: equipment', () => {
     expect(await save()).toMatchObject({ availableEquipment: ['dumbbells'] });
   });
 });
+
+describe("Settings → Fitness: screen 9's two food answers (4b-ii)", () => {
+  it('shows the diet the person gave and changes it on a tap: one choice, never two', async () => {
+    draw({ diet: 'vegetarian', mealsPerDay: 3 });
+    expect(pressed(/^Vegetarian$/)).toBe('true');
+    fireEvent.click(chip(/^Vegan$/));
+    expect(pressed(/^Vegan$/)).toBe('true');
+    expect(pressed(/^Vegetarian$/)).toBe('false');
+    expect(await save()).toMatchObject({ diet: 'vegan', mealsPerDay: 3 });
+  });
+
+  it('changes how many meals a day, and offers every count the server takes', async () => {
+    draw({ diet: 'non_vegetarian', mealsPerDay: 3 });
+    expect(chip('Meals a day').textContent).toContain('3 meals a day');
+    fireEvent.click(chip('Meals a day'));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Not set', '2 meals a day', '3 meals a day', '4 meals a day', '5 meals a day', '6 meals a day',
+    ]);
+    fireEvent.click(screen.getByRole('option', { name: '5 meals a day' }));
+    expect(await save()).toMatchObject({ diet: 'non_vegetarian', mealsPerDay: 5 });
+  });
+
+  it('shows an unanswered person nothing picked, and saves nothing invented', async () => {
+    // Nobody was ever asked before 4b-ii, so this is what everyone who finished
+    // setup before it looks like. No default is shown and none is sent.
+    draw({ diet: null, mealsPerDay: null });
+    for (const name of [/^Vegetarian$/, /^Vegetarian with eggs$/, /^Non-vegetarian$/, /^Vegan$/]) {
+      expect(pressed(name), String(name)).toBe('false');
+    }
+    expect(chip('Meals a day').textContent).toContain('Not set');
+    expect(await save()).toMatchObject({ diet: null, mealsPerDay: null });
+  });
+
+  it('keeps the answers it did not ask about: a save carries the whole document', async () => {
+    // The route is a full-document PUT, so a field this form leaves out is
+    // cleared. The diet and the meals ride along with everything else.
+    draw({ diet: 'vegan', mealsPerDay: 4, weightGoal: 'lose', availableEquipment: ['dumbbells'] });
+    fireEvent.click(chip(/Better balance/));
+    expect(await save()).toMatchObject({
+      diet: 'vegan',
+      mealsPerDay: 4,
+      weightGoal: 'lose',
+      availableEquipment: ['dumbbells'],
+      fitnessGoals: ['balance'],
+    });
+  });
+
+  it('asks no cuisine question (RULINGS 2026-09-12)', () => {
+    draw({ diet: 'vegan' });
+    expect(screen.queryByText(/cuisine/i)).toBeNull();
+  });
+});

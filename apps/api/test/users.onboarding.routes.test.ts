@@ -10,7 +10,13 @@
 // health and age rules still hold the cut.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { fitnessGoalSchema, onboardingAnswersSchema, onboardingIncompleteBodySchema, weightGoalSchema } from "@app/shared";
+import {
+  dietSchema,
+  fitnessGoalSchema,
+  onboardingAnswersSchema,
+  onboardingIncompleteBodySchema,
+  weightGoalSchema,
+} from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -75,6 +81,11 @@ const CORE_EIGHT = [
   "sessionMinutes",
 ];
 
+/** The three answers setup needs that the PLAN never does: the health question
+ *  (screen 8) and screen 9's two. Every one of them is missing from a finish
+ *  until it is given, and none of them is ever in the plan's own `missing`. */
+const SETUP_ONLY = ["health", "diet", "mealsPerDay"];
+
 /** The golden person, hand-computed from plan/maths.ts in its whole-kcal steps:
  *    resting burn  10·70 + 6.25·165 − 5·30 − 161            = 1420.25 → 1420
  *    your day       1420 · 1.2 (sitting)                     = 1704
@@ -107,6 +118,10 @@ const SCREENS = {
   yourTraining: { fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 },
   yourWeek: { trainingDays: 3, sessionMinutes: 45 },
   equipment: { availableEquipment: ["dumbbells", "pull_up_bar"] },
+  // Screen 9 (4b-ii). Neither answer moves a calorie — every plan number in
+  // this file is the same with them and without — and setup does not end
+  // without them. Screen 11, the gym code, saves nothing here at all.
+  food: { diet: "non_vegetarian", mealsPerDay: 3 },
 } as const;
 
 interface PlanBody {
@@ -170,7 +185,7 @@ d("onboarding v2 routes (real Postgres)", () => {
   };
 
   /** The whole wizard, through the routes, in screen order. */
-  const completeSeven = async (cookies: Record<string, string>) => {
+  const completeScreens = async (cookies: Record<string, string>) => {
     let last: PlanBody | undefined;
     for (const screen of Object.values(SCREENS)) last = await patchOk(cookies, screen);
     if (last === undefined) throw new Error("no screens");
@@ -311,6 +326,8 @@ d("onboarding v2 routes (real Postgres)", () => {
       trainingDays: null,
       sessionMinutes: null,
       availableEquipment: [],
+      diet: null,
+      mealsPerDay: null,
       onboardingCompleted: false,
       updatedAt: null,
     });
@@ -411,7 +428,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("an explicit null clears one answer, and the number honestly disappears with it", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-clear@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     const cleared = await patchOk(cookies, { dayActivity: null });
     expect(cleared.plan).toBeNull();
     expect(cleared.missing).toEqual(["dayActivity"]);
@@ -424,7 +441,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("an empty save is a no-op that re-reads the plan, and never a 400", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ob-noop@example.com");
-    const done = await completeSeven(cookies);
+    const done = await completeScreens(cookies);
     const noop = await patchOk(cookies, {});
     expect(noop.plan).toEqual(done.plan);
     expect(noop.answers["updatedAt"]).toBe(done.answers["updatedAt"]);
@@ -432,7 +449,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("the weight choice alone sets the calories; the goals beside it move none, bar Build muscle's protein", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-goals@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
 
     // Gain weight → a surplus of the same size, to a target above the weight.
     const gain = await patchOk(cookies, { weightGoal: "gain", targetWeightKg: 75 });
@@ -483,7 +500,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("holds the calorie cut for a YES on the health question, and says why", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-health@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     expect(
       (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst: "cleared" }, cookies })).statusCode,
     ).toBe(200);
@@ -510,7 +527,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("never cuts calories under 18, with no health answer at all", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ob-teen@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     const teen = await patchOk(cookies, { age: 17 });
     // resting 10·70 + 6.25·165 − 5·17 − 161 = 1485.25; burn 1485.25·1.2 + 112.5 = 1894.8
     expect(teen.plan).toMatchObject({
@@ -525,7 +542,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("takes the day from the DEVICE's zone and the server clock — never from the body", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-tz@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     // 26 hours apart, so their calendar days can never be the same instant's day.
     const east = await get(cookies, "Etc/GMT-14");
     const west = await get(cookies, "Etc/GMT+12");
@@ -544,7 +561,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("falls back to the person's stored zone when a client sends none", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ob-tz-stored@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { timezone: "Etc/GMT-14" }, cookies })).statusCode).toBe(200);
     const stored = await get(cookies);
     expect(stored.plan?.["finishDate"]).toBe((await get(cookies, "Etc/GMT-14")).plan?.["finishDate"]);
@@ -554,7 +571,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("the route's numbers are the pure calculator's, and its answers are the published contract", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ob-parity@example.com");
-    const body = await completeSeven(cookies);
+    const body = await completeScreens(cookies);
     // The response parses as the contract — so this comparison is against the
     // published shape, not against whatever the route happened to send.
     const answers = onboardingAnswersSchema.parse(body.answers);
@@ -614,7 +631,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("the macro rings read the plan: the screens' own number, whatever the weight choice", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-rings@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     expect(await rings(cookies)).toBe(GOLDEN_LOSE.targetKcal);
 
     // A gain to a target above the weight: the same pace's 550 on top of the burn.
@@ -633,7 +650,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("Settings writes screen 1's two answers: a weight choice changed there takes effect at once, and nothing is asked again", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-settings-goal@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     const ringsBody = async () =>
       JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies })).body) as unknown;
 
@@ -666,7 +683,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("screen 1's two answers are saved one at a time, each leaving the other as it was", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-goal-merge@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     await patchOk(cookies, { fitnessGoals: ["muscle_gain", "balance"] });
     expect(await goalsOf(userId)).toEqual({ weightGoal: "lose", goals: ["muscle_gain", "balance"] });
     await patchOk(cookies, { weightGoal: "maintain" });
@@ -684,7 +701,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // Where migration 0028 leaves them (RULINGS 2026-09-11): no weight choice,
     // Build muscle ticked, and the target and pace the old screen asked kept.
     const { userId, cookies } = await makeUser("ob-build-muscle@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     await patchOk(cookies, { targetWeightKg: 75 });
     await sql`
       UPDATE user_fitness_profiles SET weight_goal = NULL, fitness_goals = ARRAY['muscle_gain']
@@ -702,7 +719,7 @@ d("onboarding v2 routes (real Postgres)", () => {
   it("Reset onboarding clears every answer, the health one and the ones only the screens ask included; the name and the weigh-ins stay", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-reset@example.com");
     await patchOk(cookies, { displayName: "Kd" });
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     await answerHealth(cookies, { hasCondition: true, checkFirst: "cleared" });
     await patchOk(cookies, { fitnessGoals: ["balance"], onboardingCompleted: true });
     await settingsSave(cookies, { weightGoal: "lose", fitnessGoals: ["balance"] });
@@ -729,6 +746,8 @@ d("onboarding v2 routes (real Postgres)", () => {
       trainingDays: null,
       sessionMinutes: null,
       availableEquipment: [],
+      diet: null,
+      mealsPerDay: null,
       onboardingCompleted: false,
       updatedAt: null,
     });
@@ -751,12 +770,51 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await inject({ method: "DELETE", url: "/v1/users/me/onboarding?tz=UTC", cookies })).statusCode).toBe(400);
     // The health yes is gone with it: the same seven answers, given again, get
     // the plan WITH its calorie cut, because there is no yes left to hold it.
-    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    expect((await completeScreens(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+  });
+
+  it("screen 9 stores the diet and the meals, changes neither number, and refuses what is not a diet", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("ob-food@example.com");
+    // The plan before any food answer, and after each one: identical. Nothing
+    // on this screen is an input to the calorie maths (4b-ii) — if it ever
+    // became one, every figure below would move.
+    const before = await completeScreens(cookies);
+    expect(before.answers).toMatchObject({ diet: "non_vegetarian", mealsPerDay: 3 });
+
+    for (const diet of dietSchema.options) {
+      const body = await patchOk(cookies, { diet });
+      expect(body.answers["diet"], diet).toBe(diet);
+      expect(body.plan, diet).toMatchObject(GOLDEN_LOSE);
+    }
+    for (const mealsPerDay of [2, 3, 4, 5, 6]) {
+      const body = await patchOk(cookies, { mealsPerDay });
+      expect(body.answers["mealsPerDay"]).toBe(mealsPerDay);
+      expect(body.plan).toMatchObject(GOLDEN_LOSE);
+    }
+    // Saved as you go: one answer never touches the other, nor any other screen.
+    const one = await patchOk(cookies, { diet: "vegan" });
+    expect(one.answers).toMatchObject({ diet: "vegan", mealsPerDay: 6, weightGoal: "lose", trainingDays: 3 });
+
+    // A word that is not one of the four, and a meal count outside the rail,
+    // are refused by the contract — the screen cannot send them, and the
+    // database has the same rule if a writer ever skips it.
+    for (const body of [
+      { diet: "pescatarian" },
+      { diet: "" },
+      { mealsPerDay: 1 },
+      { mealsPerDay: 7 },
+      { mealsPerDay: 3.5 },
+      { cuisine: "indian" }, // there is no cuisine question (RULINGS 2026-09-12)
+    ]) {
+      const res = await patch(cookies, body);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+    }
+    expect((await get(cookies)).answers).toMatchObject({ diet: "vegan", mealsPerDay: 6 });
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-v1-put@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     const put = await inject({
       method: "PUT",
       url: "/v1/users/me/fitness-profile",
@@ -797,6 +855,11 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(after.answers["heightCm"]).toBeNull();
     expect(after.answers["targetWeightKg"]).toBeNull();
     expect([...after.missing].sort()).toEqual(["heightCm", "targetWeightKg"]);
+    // Screen 9's two joined that reach at 4b-ii, because Settings asks them:
+    // omitted, they clear like every other shared column. The PLAN's missing
+    // list still never names them — no meal answer is an input to a number.
+    expect(after.answers["diet"]).toBeNull();
+    expect(after.answers["mealsPerDay"]).toBeNull();
     // The pace, though, is only the screens': the target went and the pace stayed.
     expect(after.answers["pace"]).toBe("steady");
     expect(await goalsOf(userId)).toEqual({ weightGoal: "lose", goals: ["endurance"] });
@@ -805,7 +868,7 @@ d("onboarding v2 routes (real Postgres)", () => {
   it("isolates users: A's answers are invisible to B and untouched by B's writes, B's reset included", { timeout: 60_000 }, async () => {
     const a = await makeUser("ob-tenant-a@example.com");
     const b = await makeUser("ob-tenant-b@example.com");
-    await completeSeven(a.cookies);
+    await completeScreens(a.cookies);
     await patchOk(b.cookies, { weightGoal: "maintain", fitnessGoals: ["posture"], age: 55, displayName: "Stranger" });
     expect((await get(a.cookies)).answers).toMatchObject({ weightGoal: "lose", fitnessGoals: [], age: 30, displayName: "OB Fixture" });
     expect((await get(b.cookies)).answers).toMatchObject({
@@ -881,7 +944,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("every weight choice moves the calories its own way, and every goal beside it is storable and moves none", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-every-goal@example.com");
-    const base = await completeSeven(cookies);
+    const base = await completeScreens(cookies);
     for (const weightGoal of weightGoalSchema.options) {
       // A target on the right side of 70 kg for the choice.
       const targetWeightKg = weightGoal === "gain" ? 75 : 65;
@@ -917,9 +980,9 @@ d("onboarding v2 routes (real Postgres)", () => {
       expect([...parsed.missing].sort()).toEqual([...missing].sort());
     };
 
-    // Nothing answered: refused, naming all eight and the health question,
-    // and not even a row is made.
-    await refused({ onboardingCompleted: true }, [...CORE_EIGHT, "health"]);
+    // Nothing answered: refused, naming all eight, the health question and
+    // screen 9's two, and not even a row is made.
+    await refused({ onboardingCompleted: true }, [...CORE_EIGHT, ...SETUP_ONLY]);
     expect(await completed()).toBe(false);
     const rows = await sql<{ n: string }[]>`
       SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
@@ -930,7 +993,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // the goal and the weight are no longer in it.
     await refused(
       { weightGoal: "maintain", weightKg: 80, displayName: "Not Saved", onboardingCompleted: true },
-      [...CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"), "health"],
+      [...CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"), ...SETUP_ONLY],
     );
     expect((await get(cookies)).answers["weightGoal"]).toBeNull();
     expect(await currentWeightKg(sql, userId)).toBeNull();
@@ -941,17 +1004,33 @@ d("onboarding v2 routes (real Postgres)", () => {
       await patchOk(cookies, screen);
     }
     await patchOk(cookies, { trainingDays: 3 });
-    await refused({ onboardingCompleted: true }, ["sessionMinutes", "health"]);
+    await refused({ onboardingCompleted: true }, ["sessionMinutes", ...SETUP_ONLY]);
     expect(await completed()).toBe(false);
 
     // EVERYTHING THE PLAN NEEDS, AND STILL REFUSED: the health question is
-    // screen 8's own and setup does not end without it (4b-i). The plan itself
-    // is complete — an unanswered screening applies no condition rule — so the
-    // number is on screen while the finish is refused, naming only that one.
+    // screen 8's own and screen 9's two are the food answers (4b-i, 4b-ii),
+    // and setup does not end without any of the three. The plan itself is
+    // complete — an unanswered screening applies no condition rule, and no
+    // meal answer moves a calorie — so the number is on screen while the
+    // finish is refused, naming only those.
     await patchOk(cookies, { sessionMinutes: 45 });
     expect((await get(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    await refused({ onboardingCompleted: true }, SETUP_ONLY);
+    expect(await completed()).toBe(false);
+
+    // One food answer at a time: each one given stops being named, and the
+    // other still holds the finish. Neither moves the number.
+    expect((await patchOk(cookies, { diet: "vegan" })).plan).toMatchObject(GOLDEN_LOSE);
+    await refused({ onboardingCompleted: true }, ["health", "mealsPerDay"]);
+    expect((await patchOk(cookies, { mealsPerDay: 3 })).plan).toMatchObject(GOLDEN_LOSE);
     await refused({ onboardingCompleted: true }, ["health"]);
     expect(await completed()).toBe(false);
+
+    // A food answer cleared afterwards holds the finish again, exactly as an
+    // answer never given does.
+    await patchOk(cookies, { diet: null });
+    await refused({ onboardingCompleted: true }, ["health", "diet"]);
+    await patchOk(cookies, { diet: "non_vegetarian" });
 
     // Answered on its own route, and the finish is taken.
     await answerHealth(cookies, { hasCondition: false });
@@ -1003,7 +1082,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("a stored answer outside the plan's rails fails loud — it never becomes a number", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-past-rails@example.com");
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     expect((await get(cookies)).plan).not.toBeNull();
     // The column is numeric(5,2) with no CHECK; the plan's rail is 50–300 cm.
     // Only a writer that skipped the contract could store this, which is what
@@ -1063,7 +1142,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("a body measurement that carries no weight leaves the typed weight, the plan and the rings alone", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-measure@example.com");
-    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    expect((await completeScreens(cookies)).plan).toMatchObject(GOLDEN_LOSE);
     const measure = (body: unknown) =>
       inject({ method: "POST", url: "/v1/nutrition/body-measurements", body, cookies });
     const ringsAnswer = () => ringsMissing(cookies);
@@ -1148,7 +1227,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("a deleted or cleared mis-entry falls back to the weight before it, never to itself and never to a blank", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("ob-measure-gone@example.com");
-    const typed = await completeSeven(cookies);
+    const typed = await completeScreens(cookies);
     expect(typed.plan).toMatchObject(GOLDEN_LOSE);
     const at = (s: number) => afterTyped(cookies, s);
     const measure = (body: unknown) => measureOk(cookies, body);
@@ -1229,7 +1308,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["weightKg"]).toBe(85);
 
     // Screen 2 types 70. The screen reads back 70 and the plan is built from 70.
-    const done = await completeSeven(cookies);
+    const done = await completeScreens(cookies);
     expect(done.answers["weightKg"]).toBe(70);
     expect(done.plan).toMatchObject(GOLDEN_LOSE);
     expect(await ringsMissing(cookies)).toEqual([]);
@@ -1268,7 +1347,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // Screen 2 types the same 70. The history already says 70, so nothing is
     // written: a "typed by me" copy of a weigh-in would outrank it, and
     // deleting that weigh-in as a mistake would then keep the mistake alive.
-    await completeSeven(cookies);
+    await completeScreens(cookies);
     expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["manual", 70]]);
 
     // 71 → 72 on a save-as-you-go screen is ONE typed entry that ends at 72,
@@ -1302,7 +1381,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
   it("a weight the person cleared stays cleared, whatever happens to older entries", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-measure-cleared@example.com");
-    await completeSeven(cookies); // types 70
+    await completeScreens(cookies); // types 70
     await ageTypedRows(userId);
     expect((await patchOk(cookies, { weightKg: 73 })).answers["weightKg"]).toBe(73);
     expect((await history(cookies)).map((m) => [m.source, m.weightKg])).toEqual([["self_reported", 73], ["self_reported", 70]]);
@@ -1345,7 +1424,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // recorded as "typed by me" it would outrank the weigh-in it copied, and
     // deleting that weigh-in as a mistake would keep the mistake on screen.
     const { cookies } = await makeUser("ob-measure-echo@example.com");
-    await completeSeven(cookies); // types 70
+    await completeScreens(cookies); // types 70
     const mistake = await measureOk(cookies, { measuredAt: await afterTyped(cookies, 1), weightKg: 90 });
     expect((await get(cookies)).answers["weightKg"]).toBe(90);
 
@@ -1455,7 +1534,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // opposite order, and interleaved with any of the others a deadlock
     // (40P01 — a 500 on a save that was perfectly fine).
     const { userId, cookies } = await makeUser("ob-measure-lock-order@example.com");
-    await completeSeven(cookies); // one typed row, today
+    await completeScreens(cookies); // one typed row, today
     const typed = (await history(cookies)).find((m) => m.source === "self_reported");
     if (typed === undefined) throw new Error("no typed row");
     const input = { measuredAt: new Date().toISOString(), weightKg: 69, metrics: {}, source: "manual" as const };
@@ -1533,7 +1612,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // TODAY, so the path a forgetful caller would reach is the in-place edit
     // — the one statement with no check of its own.
     const { userId, cookies } = await makeUser("ob-measure-gone-account@example.com");
-    await completeSeven(cookies); // types 70 today
+    await completeScreens(cookies); // types 70 today
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${userId}`;
     await sql.begin(async (tx) => {
       await recordTypedWeight(tx, userId, 71);

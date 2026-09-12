@@ -65,6 +65,10 @@ const FULL_PROFILE = {
   availableEquipment: ["dumbbells", "resistance_bands"],
   sessionDurationMin: 45,
   preferredWorkoutTime: "morning",
+  // Screen 9's two answers (4b-ii). Settings asks them, so this route writes
+  // them, and a body that omits them clears them like any other field here.
+  diet: "vegetarian_eggs",
+  mealsPerDay: 4,
   onboardingCompleted: true,
 };
 
@@ -153,6 +157,8 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
+      diet: null, // screen 9's two, never guessed: a diet nobody gave is no diet
+      mealsPerDay: null,
       onboardingCompleted: false,
       updatedAt: null, // never written — a synthesized timestamp would be a lie
     });
@@ -266,6 +272,8 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
+      diet: null,
+      mealsPerDay: null,
       onboardingCompleted: false,
     });
   });
@@ -289,6 +297,10 @@ d("users fitness-profile routes (real Postgres)", () => {
       { sessionDurationMin: 4 }, // below the 5-minute floor
       { heightCm: 301 }, // above the 300 ceiling
       { medicalConditions: "knee injury" }, // the free-text notes box is gone (0029); .strict() refuses it
+      { diet: "pescatarian" }, // outside the four Kd ruled (RULINGS 2026-09-10)
+      { cuisine: "indian" }, // there is no cuisine question anywhere (RULINGS 2026-09-12)
+      { mealsPerDay: 1 }, // below the floor of 2
+      { mealsPerDay: 7 }, // above the ceiling of 6
     ];
     for (const body of bad) {
       const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });

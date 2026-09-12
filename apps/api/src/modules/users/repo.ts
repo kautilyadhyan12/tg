@@ -130,12 +130,14 @@ export interface FitnessProfileRow {
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
   onboardingCompleted: boolean;
-  // Onboarding v2 (migrations 0026 and 0028).
+  // Onboarding v2 (migrations 0026, 0028 and 0030).
   weightGoal: string | null;
   pace: string | null;
   dayActivity: string | null;
   pushUpsMax: number | null;
   plankHoldSeconds: number | null;
+  diet: string | null;
+  mealsPerDay: number | null;
   updatedAt: Date;
 }
 
@@ -156,6 +158,8 @@ interface FitnessProfileDbRow {
   day_activity: string | null;
   push_ups_max: number | null;
   plank_hold_seconds: number | null;
+  diet: string | null;
+  meals_per_day: number | null;
   updated_at: Date;
 }
 
@@ -176,6 +180,8 @@ const toFitnessProfile = (r: FitnessProfileDbRow): FitnessProfileRow => ({
   dayActivity: r.day_activity,
   pushUpsMax: r.push_ups_max,
   plankHoldSeconds: r.plank_hold_seconds,
+  diet: r.diet,
+  mealsPerDay: r.meals_per_day,
   updatedAt: r.updated_at,
 });
 
@@ -199,6 +205,8 @@ const FITNESS_PROFILE_COLUMNS = [
   "day_activity",
   "push_ups_max",
   "plank_hold_seconds",
+  "diet",
+  "meals_per_day",
   "updated_at",
 ] as const;
 
@@ -242,12 +250,13 @@ export async function upsertFitnessProfile(
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
        fitness_goals, weight_goal, exercise_frequency, available_equipment,
-       session_duration_min, preferred_workout_time,
+       session_duration_min, preferred_workout_time, diet, meals_per_day,
        onboarding_completed, updated_at)
     SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
            ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
            ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
+           ${input.diet}, ${input.mealsPerDay},
            ${input.onboardingCompleted}, now()
     FROM users u WHERE u.id = ${userId} AND u.status = 'active'
     ON CONFLICT (user_id) DO UPDATE SET
@@ -262,6 +271,8 @@ export async function upsertFitnessProfile(
       available_equipment = EXCLUDED.available_equipment,
       session_duration_min = EXCLUDED.session_duration_min,
       preferred_workout_time = EXCLUDED.preferred_workout_time,
+      diet = EXCLUDED.diet,
+      meals_per_day = EXCLUDED.meals_per_day,
       onboarding_completed = EXCLUDED.onboarding_completed,
       updated_at = now()
     RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
@@ -282,6 +293,8 @@ export interface FitnessProfileWrite {
   availableEquipment: string[];
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
+  diet: string | null;
+  mealsPerDay: number | null;
   onboardingCompleted: boolean;
 }
 
@@ -387,6 +400,8 @@ export async function patchOnboarding(
     if (patch.trainingDays !== undefined) cols["exercise_frequency"] = patch.trainingDays;
     if (patch.sessionMinutes !== undefined) cols["session_duration_min"] = patch.sessionMinutes;
     if (patch.availableEquipment !== undefined) cols["available_equipment"] = patch.availableEquipment;
+    if (patch.diet !== undefined) cols["diet"] = patch.diet;
+    if (patch.mealsPerDay !== undefined) cols["meals_per_day"] = patch.mealsPerDay;
     if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;
 
     if (Object.keys(cols).length > 0) {
