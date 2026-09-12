@@ -36,9 +36,11 @@ export const HEALTH_QUESTION =
  *  yes or no, and on a yes the "Check first" choice — the ruling's own words
  *  are "the server stores only the yes/no and the choice" (RULINGS
  *  2026-09-09), and the choice is picked directly under this line, so a note
- *  that promised only the first would be untrue where it is read. */
+ *  that promised only the first would be untrue where it is read. The last
+ *  sentence names the condition rather than saying "it": two clauses stand
+ *  between, and the nearest thing an "it" could point at is the clearance. */
 export const HEALTH_QUESTION_NOTE =
-  "We keep only your answer, and — if it is yes — whether a professional has cleared you. We never ask what it is.";
+  "We keep only your answer, and — if it is yes — whether a professional has cleared you. We never ask what the condition is.";
 
 /** The two answers to "Check first", with what each one changes. Any yes stops
  *  the calorie cut, cleared or not — the app cannot know what the yes is — so

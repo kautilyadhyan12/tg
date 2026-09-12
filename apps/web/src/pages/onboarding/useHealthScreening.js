@@ -17,6 +17,18 @@ import { healthService } from '../../api/healthApi';
 const LOAD_FAILED = "Couldn't load your health answer. Check your connection and try again.";
 const SAVE_FAILED = "Couldn't save that answer. Please try again.";
 
+/** The screening with nothing in it: what the server answers with before this
+ *  person has ever saved one, and therefore what a refusal naming the health
+ *  question means. */
+const UNANSWERED = {
+  answered: false,
+  hasCondition: null,
+  checkFirst: null,
+  safeMode: false,
+  noCalorieCut: false,
+  updatedAt: null,
+};
+
 export function useHealthScreening() {
   const [state, setState] = useState({
     status: 'loading',
@@ -74,6 +86,17 @@ export function useHealthScreening() {
     }
   }, []);
 
+  /** The SERVER has just said it holds no answer — a finish refused with the
+   *  health question among what is missing, which is what a reset on another
+   *  device looks like from here. What this screen holds is therefore wrong:
+   *  it goes, so the question is asked again with nothing chosen and the next
+   *  tap, even the same answer as before, is a real save rather than one the
+   *  "already stored" guard swallows. */
+  const forget = useCallback(() => {
+    stored.current = UNANSWERED;
+    setState((s) => ({ ...s, screening: UNANSWERED }));
+  }, []);
+
   return {
     status: state.status,
     error: state.error,
@@ -81,6 +104,7 @@ export function useHealthScreening() {
     screening: state.screening,
     saving: state.saving,
     save,
+    forget,
     retry: () => {
       setState((s) => ({ ...s, status: 'loading', error: null }));
       void load();

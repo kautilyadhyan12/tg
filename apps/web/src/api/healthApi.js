@@ -17,11 +17,19 @@ import authApi from './authApi';
 
 const PATH = '/v1/users/me/health-screening';
 
-/** The build that showed the words, stored on every consent row. Set at build
- *  time; until the deploy sets `VITE_APP_VERSION` (roadmap Stage 4 item 1) a
- *  build honestly says it is a development one rather than claiming a version
- *  nobody released. Clipped to the 40 characters the contract allows. */
-export const APP_VERSION = String(import.meta.env?.VITE_APP_VERSION ?? 'web-dev').slice(0, 40);
+/** The build that showed the words, stored on every consent row, made to fit
+ *  the contract whatever the build sets: clipped to the 40 characters allowed,
+ *  and a variable set to nothing (or to spaces) falls back exactly as an unset
+ *  one does — the contract asks for at least one character, so a blank would
+ *  be a 400 on the tap that records the person's agreement, and nobody could
+ *  finish setup. Until the deploy sets `VITE_APP_VERSION` (roadmap Stage 4
+ *  item 1) a build honestly says it is a development one rather than claiming
+ *  a version nobody released. */
+export function clipVersion(raw) {
+  return String(raw ?? '').trim().slice(0, 40) || 'web-dev';
+}
+
+export const APP_VERSION = clipVersion(import.meta.env?.VITE_APP_VERSION);
 
 async function readThrough(request, schema) {
   const res = await request;

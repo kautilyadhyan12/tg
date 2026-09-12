@@ -12,7 +12,7 @@
 // server, by the 0029 test in apps/api/test/db.migration.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { CHECK_FIRST_OPTIONS, HEALTH_QUESTION } from '@app/shared';
+import { CHECK_FIRST_OPTIONS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE } from '@app/shared';
 
 const auth = { user: { displayName: 'Kd' }, updateUser: vi.fn(), logout: vi.fn() };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
@@ -94,6 +94,10 @@ describe('Settings → Fitness → Health', () => {
   it('asks the one question in the shared words, and no longer offers the free-text notes box', async () => {
     await openFitness();
     expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
+    // The privacy line is part of the question, not decoration: it is the only
+    // place a person is told what the app keeps of this answer, so it is
+    // checked ON THE SCREEN and not only in the shared words' own test.
+    expect(screen.getByText(HEALTH_QUESTION_NOTE)).toBeTruthy();
     // The box, its label and its untrue hint are all gone.
     expect(screen.queryByText('Medical Conditions / Notes')).toBeNull();
     expect(screen.queryByText('Optional. Helps the AI give safer advice.')).toBeNull();
@@ -101,6 +105,16 @@ describe('Settings → Fitness → Health', () => {
     // Nothing is pre-answered: unanswered is never a default (RULINGS 2026-07-15).
     expect(pressed('Yes')).toBe('false');
     expect(pressed('No')).toBe('false');
+  });
+
+  it('asks it ABOVE the fitness form, so its Save button cannot be read as storing the answer', async () => {
+    await openFitness();
+    const heading = screen.getByRole('heading', { name: 'Health' });
+    const save = screen.getByRole('button', { name: /save changes/i });
+    // The health answer is stored on the tap and has no Save button of its
+    // own; under the form's one it would look like something still to save
+    // (RULINGS 2026-09-09: the change takes effect at once).
+    expect(heading.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('stores a no on the tap, through the health route and not the profile PUT', async () => {

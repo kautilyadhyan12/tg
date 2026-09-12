@@ -10,7 +10,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { DISCLAIMER_WORDINGS, HEALTH_QUESTION, missingPlanInputSchema } from '@app/shared';
+import { DISCLAIMER_WORDINGS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE, missingPlanInputSchema } from '@app/shared';
 
 // These tests walk the wizard save by save. Alone, the longest takes about
 // two seconds; in the full suite, with every other file running at once, a
@@ -747,6 +747,9 @@ describe('onboarding screens 1–7', () => {
     draw();
     await heading('Health'); // the only screen without an answer
     expect(screen.getByText(HEALTH_QUESTION)).toBeTruthy();
+    // What the app keeps of this answer is told where the answer is given, so
+    // the line is checked on the screen, not only in the shared words' test.
+    expect(screen.getByText(HEALTH_QUESTION_NOTE)).toBeTruthy();
     expect(button(/finish setup/i).disabled).toBe(true);
 
     tap('No');
@@ -814,6 +817,24 @@ describe('onboarding screens 1–7', () => {
     expect(screen.queryByText('MEMBER APP')).toBeNull();
     expect(auth.updateUser).not.toHaveBeenCalled();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
+
+    // …and the person can DO what the sentence asks, standing where they are.
+    // The question is on this very screen, so there is no "Go to" button to
+    // send them anywhere; the answer the screen shows must therefore be the
+    // server's, which holds none. Showing the old answer as chosen would make
+    // the only way out "answer something you can see you already answered" —
+    // and the tap would be swallowed as one already stored.
+    expect(screen.queryByRole('button', { name: /^Go to/ })).toBeNull();
+    expect(pressed('No')).toBe('false');
+    expect(pressed('Yes')).toBe('false');
+    tap('No');
+    await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: false }));
+    // The sentence goes when the question is answered, rather than standing
+    // over a question the person has just answered, and Finish finishes.
+    await waitFor(() => expect(screen.queryByText('Before you finish, answer the health question.')).toBeNull());
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    tap(/finish setup/i);
+    await screen.findByText('MEMBER APP');
   });
 
   it('will not let Finish race the health answer it was just given', async () => {

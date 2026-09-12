@@ -71,7 +71,10 @@ describe("the words both screens show (4b-i)", () => {
     // a person reads it — on the screen where they have just made the second.
     const lower = HEALTH_QUESTION_NOTE.toLowerCase();
     expect(lower).toContain("cleared");
-    expect(lower).toContain("never ask");
+    // "We never ask what it is" is the last of three clauses, and the nearest
+    // thing an "it" can point back at is the clearance: the thing not asked
+    // for is NAMED.
+    expect(lower).toContain("never ask what the condition is");
     expect(lower).not.toMatch(/only (this|your) yes or no/);
     // And it never promises the app forgets an answer it keeps.
     expect(lower).not.toContain("never store");

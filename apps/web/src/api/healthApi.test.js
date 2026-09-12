@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CURRENT_DISCLAIMER_VERSION, consentPurposeSchema, recordConsentRequestSchema } from '@app/shared';
 import authApi from './authApi';
-import { APP_VERSION, consentService, healthService } from './healthApi';
+import { APP_VERSION, clipVersion, consentService, healthService } from './healthApi';
 
 const ANSWERED = {
   answered: true, hasCondition: true, checkFirst: 'not_yet', safeMode: true, noCalorieCut: true,
@@ -85,12 +85,25 @@ describe('consentService', () => {
     }
   });
 
-  it('sends a build the contract can hold: never empty, never over its 40 characters', () => {
-    // The version comes from the build (`VITE_APP_VERSION`), which nobody here
-    // controls, so it is clipped rather than trusted: a longer one would be a
-    // 400 on the tap that records the person's agreement.
-    expect(APP_VERSION.length).toBeGreaterThan(0);
-    expect(APP_VERSION.length).toBeLessThanOrEqual(40);
+  it('sends a build the contract can hold, whatever the build set it to', () => {
+    // The version comes from `VITE_APP_VERSION`, which nobody here controls, so
+    // it is made to fit rather than trusted. THE TEST RUNS THE RULE, not the
+    // one value this environment happens to produce: under vitest the variable
+    // is unset, so asserting on `APP_VERSION` alone would pass with the clip
+    // and the fallback both deleted.
+    expect(clipVersion('1.4.2')).toBe('1.4.2');
+    expect(clipVersion('x'.repeat(60))).toBe('x'.repeat(40));
+    // A deploy that sets the variable to nothing is the same as not setting it:
+    // the contract asks for at least one character, so a blank would be a 400
+    // on the tap that records agreement and nobody could finish setup.
+    expect(clipVersion('')).toBe('web-dev');
+    expect(clipVersion('   ')).toBe('web-dev');
+    expect(clipVersion(undefined)).toBe('web-dev');
+    for (const raw of ['1.4.2', 'x'.repeat(60), '', '   ', undefined]) {
+      const body = { purpose: 'health_step', wordingVersion: 'v2', appVersion: clipVersion(raw) };
+      expect(recordConsentRequestSchema.safeParse(body).success, String(raw)).toBe(true);
+    }
+    // And what this build actually ships is one of them.
     expect(recordConsentRequestSchema.safeParse({
       purpose: 'health_step', wordingVersion: 'v2', appVersion: APP_VERSION,
     }).success).toBe(true);

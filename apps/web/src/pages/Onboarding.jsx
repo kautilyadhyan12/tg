@@ -126,9 +126,13 @@ export default function Onboarding() {
     agreeing,
     /** A health answer moves the daily number (any yes stops the calorie cut),
      *  so the plan is re-read the moment one lands — through the same save
-     *  queue the taps use, whose empty body simply re-reads it. */
+     *  queue the taps use, whose empty body simply re-reads it. A refusal that
+     *  named this question has just been answered, so its name goes with the
+     *  answer; anything else that refusal named still stands. */
     answer: async (body) => {
-      if (await hs.save(body)) ob.save({});
+      if (!(await hs.save(body))) return;
+      setRefused((named) => (named === null ? null : named.filter((k) => k !== 'health')));
+      ob.save({});
     },
     agree: async () => {
       setAgreeing(true);
@@ -250,7 +254,15 @@ export default function Onboarding() {
       navigate(returnTo);
       return;
     }
-    if (result.missing) setRefused(result.missing);
+    if (result.missing) {
+      setRefused(result.missing);
+      // The server holds no health answer, whatever this screen believes it
+      // holds: the screen's copy is stale (a reset on another device), so it
+      // goes with the refusal. Without this the question shows the old answer
+      // as chosen and tapping it again saves nothing — the screen would ask
+      // for something it will not let the person give.
+      if (result.missing.includes('health')) hs.forget();
+    }
   };
 
   // What still stands between the person and Finish, in the server's words.
