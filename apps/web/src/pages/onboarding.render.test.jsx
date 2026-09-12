@@ -862,6 +862,40 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
   });
 
+  it('takes no health answer while a finish is out, so a refusal cannot forget one the server took', async () => {
+    // A finish refused over this question forgets the answer the screen holds,
+    // because the server has just said it holds none. An answer tapped WHILE
+    // the finish is in flight can reach the server first and be stored — and
+    // then the (rightly stale) refusal would forget it, leaving the question
+    // with nothing chosen over an answer the server now has, and the sentence
+    // asking for something already given. So nothing is answerable in that window.
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Health');
+    await agree();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+
+    let refuse;
+    const patch = svc.patch;
+    svc.patch = vi.fn((body) =>
+      body.onboardingCompleted === true
+        ? new Promise((_resolve, reject) => {
+            refuse = () => reject(refusal(['health']));
+          })
+        : patch(body),
+    );
+    tap(/finish setup/i);
+    await waitFor(() => expect(button('Yes').disabled).toBe(true));
+    expect(button('No').disabled).toBe(true);
+
+    refuse();
+    // The refusal lands, the question is asked again with nothing chosen, and
+    // NOW it can be answered.
+    await waitFor(() => expect(pressed('No')).toBe('false'));
+    expect(button('No').disabled).toBe(false);
+    expect(health.put).not.toHaveBeenCalled();
+  });
+
   it('waits for the health answer as well as the others before it puts anybody on a screen', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     let land;

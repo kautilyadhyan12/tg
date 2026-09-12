@@ -121,7 +121,12 @@ export default function Onboarding() {
 
   const health = {
     screening: hs.screening,
-    saving: hs.saving,
+    // No health answer while one is already on its way — AND none while a
+    // finish is out (`busy`). A finish the server refuses over this question
+    // forgets what the screen holds, because the server has just said it holds
+    // nothing; an answer given in that window would be saved and then
+    // forgotten, leaving nothing chosen over an answer the server now has.
+    saving: hs.saving || busy,
     agreed,
     agreeing,
     /** A health answer moves the daily number (any yes stops the calorie cut),

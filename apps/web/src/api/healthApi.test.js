@@ -5,7 +5,7 @@
 // the version named here (RULINGS 2026-09-07). Every screen mocks this module
 // wholesale, so without this file the line that names the version, and the clip
 // that keeps the build inside the contract's 40 characters, are never run.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_DISCLAIMER_VERSION, consentPurposeSchema, recordConsentRequestSchema } from '@app/shared';
 import authApi from './authApi';
 import { APP_VERSION, clipVersion, consentService, healthService } from './healthApi';
@@ -30,6 +30,7 @@ function answerWith(body) {
 
 afterEach(() => {
   authApi.defaults.adapter = undefined;
+  vi.unstubAllEnvs();
 });
 
 describe('healthService', () => {
@@ -107,5 +108,24 @@ describe('consentService', () => {
     expect(recordConsentRequestSchema.safeParse({
       purpose: 'health_step', wordingVersion: 'v2', appVersion: APP_VERSION,
     }).success).toBe(true);
+  });
+
+  it('puts the BUILD through that rule, not just anything handed to the rule', async () => {
+    // The test above runs `clipVersion`; this one runs the WIRING. With the
+    // variable unset under vitest, `APP_VERSION` reads 'web-dev' whether the
+    // clip is there or not — so the module is re-imported with the variable
+    // set, which is the only way a deploy's own value (roadmap Stage 4 item 1)
+    // is ever seen here. Without the clip, an over-long or blank
+    // `VITE_APP_VERSION` would 400 every disclaimer tap and nobody on that
+    // build could finish setup.
+    const built = async (raw) => {
+      vi.stubEnv('VITE_APP_VERSION', raw);
+      vi.resetModules();
+      return (await import('./healthApi')).APP_VERSION;
+    };
+    expect(await built('1.4.2')).toBe('1.4.2');
+    expect(await built('x'.repeat(60))).toBe('x'.repeat(40));
+    expect(await built('')).toBe('web-dev');
+    expect(await built('   ')).toBe('web-dev');
   });
 });

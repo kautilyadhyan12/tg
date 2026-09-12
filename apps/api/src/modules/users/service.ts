@@ -32,6 +32,7 @@ import {
   healthScreeningSchema,
   onboardingAnswersSchema,
   onboardingResponseSchema,
+  UNANSWERED_HEALTH_SCREENING,
 } from "./schemas.js";
 import type {
   ConsentListResponse,
@@ -398,21 +399,14 @@ function checkFirstOf(raw: string | null): "cleared" | "not_yet" | null {
   throw new Error(`user_health_screenings.check_first outside the enum: ${raw}`);
 }
 
-const UNANSWERED_SCREENING: HealthScreening = {
-  answered: false,
-  hasCondition: null,
-  checkFirst: null,
-  safeMode: false,
-  noCalorieCut: false,
-  updatedAt: null,
-};
-
 /** The response is built from the STORED answer through the one rule
  *  (`deriveHealthFlags`) and re-parsed through the contract, whose refines pin
  *  the derived flags to the answer — so a response that says Safe mode is off
- *  for a "not yet" cannot leave the server. */
+ *  for a "not yet" cannot leave the server. No row is the shared unanswered
+ *  shape (`@app/shared`), which the screens fall back to as well, so the two
+ *  can never disagree about what "no answer yet" looks like. */
 function toHealthScreening(row: repo.HealthScreeningRow | null): HealthScreening {
-  if (row === null) return UNANSWERED_SCREENING;
+  if (row === null) return UNANSWERED_HEALTH_SCREENING;
   const stored = { hasCondition: row.hasCondition, checkFirst: checkFirstOf(row.checkFirst) };
   return healthScreeningSchema.parse({
     answered: true,

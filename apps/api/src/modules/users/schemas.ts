@@ -9,6 +9,7 @@ export {
   healthScreeningSchema,
   putHealthScreeningRequestSchema,
   recordConsentRequestSchema,
+  UNANSWERED_HEALTH_SCREENING,
   deleteAccountRequestSchema,
   fitnessProfileResponseSchema,
   fitnessProfileSchema,

@@ -37,10 +37,12 @@ export const HEALTH_QUESTION =
  *  are "the server stores only the yes/no and the choice" (RULINGS
  *  2026-09-09), and the choice is picked directly under this line, so a note
  *  that promised only the first would be untrue where it is read. The last
- *  sentence names the condition rather than saying "it": two clauses stand
- *  between, and the nearest thing an "it" could point at is the clearance. */
+ *  sentence promises no detail AT ALL, which is the ruling ("nothing specific
+ *  is ever asked or kept"): the question above asks about a condition, an
+ *  injury, pregnancy and medicine, so a promise about "the condition" alone
+ *  would be narrower than the truth and leave the rest an open question. */
 export const HEALTH_QUESTION_NOTE =
-  "We keep only your answer, and — if it is yes — whether a professional has cleared you. We never ask what the condition is.";
+  "We keep only your answer, and — if it is yes — whether a professional has cleared you. We never ask for any detail.";
 
 /** The two answers to "Check first", with what each one changes. Any yes stops
  *  the calorie cut, cleared or not — the app cannot know what the yes is — so
@@ -111,6 +113,26 @@ export type HealthScreening = z.infer<typeof healthScreeningSchema>;
 
 export const healthScreeningResponseSchema = z.object({ healthScreening: healthScreeningSchema }).strict();
 export type HealthScreeningResponse = z.infer<typeof healthScreeningResponseSchema>;
+
+/** The screening with NOTHING in it: what the server answers with before this
+ *  person has ever saved one, and therefore what a refused finish naming the
+ *  health question means to a screen holding a stale answer.
+ *
+ *  It lives here, once, and crosses the contract like every real reply does —
+ *  the two screens and the server all read this object, so no hand-written copy
+ *  can drift from the shape the schema allows (a copy missing a field the
+ *  contract later gains would be a screening no reply could ever be). Frozen,
+ *  because it is shared: nothing may edit the one copy. */
+export const UNANSWERED_HEALTH_SCREENING: HealthScreening = Object.freeze(
+  healthScreeningSchema.parse({
+    answered: false,
+    hasCondition: null,
+    checkFirst: null,
+    safeMode: false,
+    noCalorieCut: false,
+    updatedAt: null,
+  }),
+);
 
 /** The two derived facts, from the two stored ones — the ONE place the rule
  *  lives, used by the server to build a response and by the plan maths' input. */

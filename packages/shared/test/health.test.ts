@@ -6,6 +6,7 @@ import {
   DISCLAIMER_WORDINGS,
   HEALTH_QUESTION,
   HEALTH_QUESTION_NOTE,
+  UNANSWERED_HEALTH_SCREENING,
   checkFirstSchema,
   consentListResponseSchema,
   consentPurposeSchema,
@@ -51,6 +52,26 @@ describe("health screening contract", () => {
     expect(ok({ answered: false, hasCondition: true, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null })).toBe(false);
     expect(ok({ answered: true, hasCondition: false, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null })).toBe(false);
   });
+
+  it("the unanswered screening is the contract's own shape, and the one copy of it", () => {
+    // The server answers with it before anything is saved, and both screens
+    // fall back to it when a refused finish says the server holds no answer.
+    // It is a reply like any other, so it must satisfy the schema every real
+    // reply is parsed through — a hand-written copy that lost a field, or
+    // carried a flag an unanswered screening cannot carry, would be a screening
+    // no server could ever send.
+    expect(healthScreeningSchema.safeParse(UNANSWERED_HEALTH_SCREENING).success).toBe(true);
+    expect(UNANSWERED_HEALTH_SCREENING).toEqual({
+      answered: false,
+      hasCondition: null,
+      checkFirst: null,
+      safeMode: false,
+      noCalorieCut: false,
+      updatedAt: null,
+    });
+    // Shared, so nothing may edit it for everyone else.
+    expect(Object.isFrozen(UNANSWERED_HEALTH_SCREENING)).toBe(true);
+  });
 });
 
 describe("the words both screens show (4b-i)", () => {
@@ -71,10 +92,15 @@ describe("the words both screens show (4b-i)", () => {
     // a person reads it — on the screen where they have just made the second.
     const lower = HEALTH_QUESTION_NOTE.toLowerCase();
     expect(lower).toContain("cleared");
-    // "We never ask what it is" is the last of three clauses, and the nearest
-    // thing an "it" can point back at is the clearance: the thing not asked
-    // for is NAMED.
-    expect(lower).toContain("never ask what the condition is");
+    // Nothing specific is ever asked (RULINGS 2026-09-09), so the promise is
+    // "no detail", full stop. The question above asks about four things — a
+    // condition, an injury, pregnancy, medicine — and a promise naming only one
+    // of them is narrower than the truth: it leaves a person wondering whether
+    // the medicine is asked about.
+    expect(lower).toContain("never ask for any detail");
+    for (const named of ["condition", "injury", "pregnan", "medicine"]) {
+      expect(lower, named).not.toMatch(new RegExp(`never ask [^.]*${named}`));
+    }
     expect(lower).not.toMatch(/only (this|your) yes or no/);
     // And it never promises the app forgets an answer it keeps.
     expect(lower).not.toContain("never store");

@@ -10,24 +10,12 @@
 // stored answer back, so the screen never keeps a yes the server refused.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { deriveHealthFlags } from '@app/shared';
+import { UNANSWERED_HEALTH_SCREENING, deriveHealthFlags } from '@app/shared';
 import { errorText } from '../../api/orgsApi';
 import { healthService } from '../../api/healthApi';
 
 const LOAD_FAILED = "Couldn't load your health answer. Check your connection and try again.";
 const SAVE_FAILED = "Couldn't save that answer. Please try again.";
-
-/** The screening with nothing in it: what the server answers with before this
- *  person has ever saved one, and therefore what a refusal naming the health
- *  question means. */
-const UNANSWERED = {
-  answered: false,
-  hasCondition: null,
-  checkFirst: null,
-  safeMode: false,
-  noCalorieCut: false,
-  updatedAt: null,
-};
 
 export function useHealthScreening() {
   const [state, setState] = useState({
@@ -91,10 +79,15 @@ export function useHealthScreening() {
    *  device looks like from here. What this screen holds is therefore wrong:
    *  it goes, so the question is asked again with nothing chosen and the next
    *  tap, even the same answer as before, is a real save rather than one the
-   *  "already stored" guard swallows. */
+   *  "already stored" guard swallows. The shape it goes back to is the
+   *  contract's own unanswered screening, the one the server itself answers
+   *  with — never a copy written out here. The CALLER must take no answer while
+   *  the finish that could call this is out (`Onboarding.jsx`), or an answer the
+   *  server has just taken would be forgotten by the refusal of a finish that
+   *  raced it. */
   const forget = useCallback(() => {
-    stored.current = UNANSWERED;
-    setState((s) => ({ ...s, screening: UNANSWERED }));
+    stored.current = UNANSWERED_HEALTH_SCREENING;
+    setState((s) => ({ ...s, screening: UNANSWERED_HEALTH_SCREENING }));
   }, []);
 
   return {

@@ -111,10 +111,16 @@ describe('Settings → Fitness → Health', () => {
     await openFitness();
     const heading = screen.getByRole('heading', { name: 'Health' });
     const save = screen.getByRole('button', { name: /save changes/i });
+    const form = save.closest('form');
+    expect(form).toBeTruthy();
     // The health answer is stored on the tap and has no Save button of its
     // own; under the form's one it would look like something still to save
-    // (RULINGS 2026-09-09: the change takes effect at once).
-    expect(heading.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // (RULINGS 2026-09-09: the change takes effect at once). The WHOLE FORM
+    // must come after the question, not merely that one button: a card put
+    // inside the form, directly above its Save, is exactly what this forbids
+    // and would still leave the button "after" the heading in the document.
+    // A heading inside the form returns CONTAINS|PRECEDING, never FOLLOWING.
+    expect(heading.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('stores a no on the tap, through the health route and not the profile PUT', async () => {
