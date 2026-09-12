@@ -178,6 +178,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-09-07 · Recorded consent at sign-up; see Onboarding for the health screening, Safe mode and disclaimers.
 - 2026-09-09 · The consent log outlives account deletion (proof of the tap; no name or health fact on the row) and is removed six years after the deletion date — the market's standard practice that fits US, EU, Indian and Canadian law. *"do the standard practise"*
 - 2026-09-09 · The old free-text "medical conditions" box on the fitness profile is switched off when the v2 health screen (4b) lands, and the stored text is wiped then. *"follow your recommendation"* **AMENDED 2026-09-10**: the onboarding copy went with the old form at 4a-ii; the Settings copy stays until 4b.
+- 2026-09-13 · The "What {gym} can see" sheet (the join door, screen 11 and Settings) changes, from Kd's click-through of 4b-ii. Three lines leave the flat "Never": meals and nutrition, weight and body measurements, and run routes — *"it will show if user choose to share"*, which is the opt-in of 2026-08-18 said on the screen. Two lines go entirely: the AI-coach conversations (the coach is dropped, RULINGS 2026-08-18) and "anything from before you joined, or after you leave" — *"these lines not needed"*. A knowing deviation from spec Part 3 §2.4's "exactly this list", recorded here as the email row of 2026-09-03 was. Built as its own line, ROADMAP Stage 1 item 8a.
 
 ## How work is done (the process Kd chose on 2026-09-07)
 

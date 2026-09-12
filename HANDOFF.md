@@ -22,9 +22,18 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   `workouts.sync` flake passed this run too) · web 2041 (poseAssets.contract is the known local encoding red,
   confirmed untouched by this branch) · web lint's 4 in Settings.jsx are master's 4, checked line by line
   against HEAD's own file · gitleaks clean · six deliberate breaks, each turning a different new test red.
-- Open: Kd's click-through, the fresh-chat review, CI, merge. Worth his word: the diets are listed in the order
-  his ruling names them (vegetarian first) — a Western audience may want Non-vegetarian first.
-- Next: 4b-iii (running), then 4c, then 7a-i (the bigger food list), then 7c (your own diet plan).
+- Kd's click-through PASSED on 2026-09-13 (*"the testes passed"*), with copy changes he asked for on the way —
+  the "What {gym} can see" sheet, now RULINGS 2026-09-13 and ROADMAP 8a, NOT built on this branch.
+- Open: the fresh-chat review of PR #64 (CI is green on 9687895, all five jobs), then merge. Then 8a, whose plan
+  must raise two things with Kd: "if you choose to share" describes a control that does not exist yet, and he
+  quoted the join panel's front-desk sentence without saying what should change — one line, never a guess.
+- Local: API 3000 on the LOCAL Postgres and web 5173, both started this session (two stale servers from the
+  2026-09-12 chat were killed first — the one on 3000 was answering with master's code). The click-through
+  account is `kd.food.0912@example.com`, seeded through screens 1–8 so it lands on Food; the sign-in code
+  prints in the API log. Live join code on the local database: `2LY3BZ` (Step 22b Gym 075154).
+- Next: 4b-iii (running), then 4c, then 7a-i (the bigger food list), then 7c (your own diet plan). Worth Kd's
+  word at some point: the diets are listed vegetarian-first, as his ruling names them; a Western audience may
+  want Non-vegetarian first.
 
 ## 2026-09-12 · 4b-i's last round: three Lows and two weak tests, merged as PR #63
 
