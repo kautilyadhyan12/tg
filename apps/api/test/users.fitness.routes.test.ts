@@ -65,7 +65,6 @@ const FULL_PROFILE = {
   availableEquipment: ["dumbbells", "resistance_bands"],
   sessionDurationMin: 45,
   preferredWorkoutTime: "morning",
-  medicalConditions: "none",
   onboardingCompleted: true,
 };
 
@@ -154,7 +153,6 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
-      medicalConditions: null,
       onboardingCompleted: false,
       updatedAt: null, // never written — a synthesized timestamp would be a lie
     });
@@ -236,7 +234,6 @@ d("users fitness-profile routes (real Postgres)", () => {
       fitnessLevel: null,
       fitnessGoals: [],
       availableEquipment: [],
-      medicalConditions: null,
       onboardingCompleted: false, // omitted → false: a partial save cannot satisfy the gate
     });
   });
@@ -269,7 +266,6 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
-      medicalConditions: null,
       onboardingCompleted: false,
     });
   });
@@ -292,7 +288,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       { exerciseFrequency: 8 }, // > 7 days in a week
       { sessionDurationMin: 4 }, // below the 5-minute floor
       { heightCm: 301 }, // above the 300 ceiling
-      { medicalConditions: "x".repeat(2001) }, // above the 2000-char cap
+      { medicalConditions: "knee injury" }, // the free-text notes box is gone (0029); .strict() refuses it
     ];
     for (const body of bad) {
       const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });
@@ -309,22 +305,22 @@ d("users fitness-profile routes (real Postgres)", () => {
     await inject({
       method: "PUT",
       url: "/v1/users/me/fitness-profile",
-      body: { ...FULL_PROFILE, age: 30, medicalConditions: "A-only private note" },
+      body: { ...FULL_PROFILE, age: 30, preferredWorkoutTime: "evening" },
       cookies: a.cookies,
     });
     await inject({
       method: "PUT",
       url: "/v1/users/me/fitness-profile",
-      body: { ...FULL_PROFILE, age: 55, medicalConditions: null },
+      body: { ...FULL_PROFILE, age: 55, preferredWorkoutTime: null },
       cookies: b.cookies,
     });
 
     // Each reads only their own row; B's write never reached A's.
     expect(await getProfile(a.cookies)).toMatchObject({
       age: 30,
-      medicalConditions: "A-only private note",
+      preferredWorkoutTime: "evening",
     });
-    expect(await getProfile(b.cookies)).toMatchObject({ age: 55, medicalConditions: null });
+    expect(await getProfile(b.cookies)).toMatchObject({ age: 55, preferredWorkoutTime: null });
 
     // And the rows are keyed to the right owners in the DB.
     const rows = await sql<{ user_id: string; age: number }[]>`

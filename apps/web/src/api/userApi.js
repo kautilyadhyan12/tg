@@ -78,7 +78,6 @@ export function mergeFitnessProfile(current, edits) {
     availableEquipment: current?.availableEquipment ?? [],
     sessionDurationMin: current?.sessionDurationMin ?? null,
     preferredWorkoutTime: current?.preferredWorkoutTime ?? null,
-    medicalConditions: current?.medicalConditions ?? null,
   };
   const defined = Object.fromEntries(
     Object.entries(edits || {}).filter(([, v]) => v !== undefined),

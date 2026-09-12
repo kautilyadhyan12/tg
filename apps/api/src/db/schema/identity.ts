@@ -137,8 +137,11 @@ export const refreshTokens = pgTable(
 // §5.2 ANONYMIZES the users row to a tombstone rather than deleting it, so this
 // cascade never fires on account deletion. This table MUST be added to the
 // §5.2 Day-14 explicit DELETE list and to the JSON-export list — both owned by
-// the queued Day-14/export worker card (DECISIONS 2026-07-11). It holds
-// medical_conditions (health data, sensitive under DPDP).
+// the queued Day-14/export worker card (DECISIONS 2026-07-11). It holds age,
+// gender and height, which are health data, sensitive under DPDP. It no longer
+// holds free-text medical notes: `medical_conditions` was dropped with
+// everything typed in it by migration 0029 (RULINGS 2026-09-09 — the app asks
+// ONE yes-or-no health question and stores nothing else, `user_health_screenings`).
 //
 // Units are normalized to metric at the boundary (the INVENTORY.md:45 XFORM
 // convention); users.units drives display. Body weight is NOT here: it lives
@@ -159,7 +162,6 @@ export const userFitnessProfiles = pgTable(
     availableEquipment: text("available_equipment").array(), // value set CHECKed since 0028, "none" alone
     sessionDurationMin: integer("session_duration_min"), // minutes
     preferredWorkoutTime: text("preferred_workout_time"),
-    medicalConditions: text("medical_conditions"), // health data — see the DPDP note above
     onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
     // Onboarding v2 (migrations 0026 and 0028; ROADMAP 4a). Screen 1's ONE
     // weight choice, stored as the direction the plan maths works in (lose ·

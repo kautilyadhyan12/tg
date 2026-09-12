@@ -1,0 +1,29 @@
+-- THE HEALTH QUESTION IS THE ONLY ONE (ROADMAP Stage 1 item 4b-i; RULINGS
+-- 2026-09-09, "Privacy and legal"). Forward-only, one statement.
+--
+-- Hand-written, for the recorded reason `0016`-`0028` were: `drizzle/meta/`
+-- stops at `0012_snapshot.json`, so `drizzle-kit generate` re-emits everything
+-- since. Its journal entry is part of this commit.
+--
+-- WHAT CHANGES. The old five-step form had a free-text "Medical Conditions /
+-- Notes" box, and whatever was typed in it was stored on the fitness profile.
+-- Kd ruled on 2026-09-09 that the app never asks for a named condition — *"i
+-- dont want to withhold any medical data … it is a fitness application only"* —
+-- and that this box is switched off and its stored text WIPED when the v2
+-- health screen lands. That screen is this card, so the column goes here, with
+-- everything ever typed in it.
+--
+-- DROPPED, NOT EMPTIED. Emptying it would leave a column nothing may write and
+-- nothing reads — one careless save away from holding health free text again,
+-- and still a column an export or a log could pick up. The one health answer
+-- the app now keeps is `user_health_screenings` (0025): a yes or no, plus
+-- "cleared" or "not yet", and nothing else.
+--
+-- IRREVERSIBLE ON PURPOSE, and there is no backfill to write: the point of the
+-- ruling is that the text stops existing. Nothing outside the dropped column
+-- held a copy — the API's only readers were the profile read and its full
+-- replace (both updated in this commit), the Day-14 purge, which deletes the
+-- whole row, and the export, which takes the row as it stands. The chat coach's
+-- prompt names the field in a comment only, and the coach is off (RULINGS
+-- 2026-08-18).
+ALTER TABLE "user_fitness_profiles" DROP COLUMN "medical_conditions";

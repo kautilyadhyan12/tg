@@ -220,19 +220,28 @@ d("onboarding v2 routes (real Postgres)", () => {
     return { weightGoal: rows[0]?.weight_goal ?? null, goals: rows[0]?.fitness_goals ?? null };
   };
 
-  /** What Settings' "Medical Conditions / Notes" box shows. */
-  const medicalNotes = async (cookies: Record<string, string>) => {
-    const res = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
+  /** Screen 8's answer, on 3b's own route (the wizard saves it there, not
+   *  through PATCH /onboarding: the screening is its own table). */
+  const answerHealth = async (
+    cookies: Record<string, string>,
+    body: { hasCondition: boolean; checkFirst?: string | null },
+  ) => {
+    const res = await inject({ method: "PUT", url: "/v1/users/me/health-screening", body, cookies });
+    expect(res.statusCode, res.body).toBe(200);
+  };
+
+  const healthScreening = async (cookies: Record<string, string>) => {
+    const res = await inject({ method: "GET", url: "/v1/users/me/health-screening", cookies });
     expect(res.statusCode).toBe(200);
-    return (JSON.parse(res.body) as { fitnessProfile: { medicalConditions: string | null } }).fitnessProfile.medicalConditions;
+    return (JSON.parse(res.body) as { healthScreening: Record<string, unknown> }).healthScreening;
   };
 
   /** A save from Settings' fitness tab: the whole profile as the server holds
-   *  it, with only screen 1's two questions changed, and the medical notes
-   *  when given — what apps/web mergeFitnessProfile sends. */
+   *  it, with only screen 1's two questions changed — what apps/web
+   *  mergeFitnessProfile sends. */
   const settingsSave = async (
     cookies: Record<string, string>,
-    change: { weightGoal: string | null; fitnessGoals: string[]; medicalConditions?: string },
+    change: { weightGoal: string | null; fitnessGoals: string[] },
   ) => {
     const res = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
     expect(res.statusCode).toBe(200);
@@ -252,7 +261,6 @@ d("onboarding v2 routes (real Postgres)", () => {
         availableEquipment: p["availableEquipment"],
         sessionDurationMin: p["sessionDurationMin"],
         preferredWorkoutTime: p["preferredWorkoutTime"],
-        medicalConditions: change.medicalConditions ?? p["medicalConditions"],
         onboardingCompleted: p["onboardingCompleted"],
       },
       cookies,
@@ -691,20 +699,13 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(gain.answers).toMatchObject({ fitnessGoals: ["muscle_gain"], targetWeightKg: 75, pace: "steady" });
   });
 
-  it("Reset onboarding clears every answer, the medical notes and the ones only the screens ask included; the name, the weigh-ins and the health answer stay", { timeout: 60_000 }, async () => {
+  it("Reset onboarding clears every answer, the health one and the ones only the screens ask included; the name and the weigh-ins stay", { timeout: 60_000 }, async () => {
     const { userId, cookies } = await makeUser("ob-reset@example.com");
     await patchOk(cookies, { displayName: "Kd" });
     await completeSeven(cookies);
+    await answerHealth(cookies, { hasCondition: true, checkFirst: "cleared" });
     await patchOk(cookies, { fitnessGoals: ["balance"], onboardingCompleted: true });
-    // Notes typed in Settings → Fitness: an answer on the same row, so the
-    // reset takes them too, as its confirm box says.
-    await settingsSave(cookies, { weightGoal: "lose", fitnessGoals: ["balance"], medicalConditions: "knee injury" });
-    expect(await medicalNotes(cookies)).toBe("knee injury");
-    // A health yes: kept by the reset until 4b asks it in the wizard again,
-    // because it must go on holding the calorie cut.
-    expect(
-      (await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst: "cleared" }, cookies })).statusCode,
-    ).toBe(200);
+    await settingsSave(cookies, { weightGoal: "lose", fitnessGoals: ["balance"] });
 
     const reset = await inject({ method: "DELETE", url: path(), cookies });
     expect(reset.statusCode, reset.body).toBe(200);
@@ -734,8 +735,9 @@ d("onboarding v2 routes (real Postgres)", () => {
     // The gate the training side reads is shut again.
     const me = await inject({ method: "GET", url: "/v1/users/me", cookies });
     expect((JSON.parse(me.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted).toBe(false);
-    // The medical notes went with the rest: Settings' box is empty again.
-    expect(await medicalNotes(cookies)).toBeNull();
+    // The health answer went with the rest (4b-i): the wizard asks it again on
+    // screen 8, and until it does, the screening reads unanswered.
+    expect(await healthScreening(cookies)).toMatchObject({ answered: false, hasCondition: null, noCalorieCut: false });
     // No row is left, and the weight the person typed is still in the history.
     const rows = await sql<{ n: string }[]>`
       SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
@@ -747,13 +749,9 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(JSON.parse(again.body)).toEqual(body);
     // An unknown query parameter is refused, as on the other two routes.
     expect((await inject({ method: "DELETE", url: "/v1/users/me/onboarding?tz=UTC", cookies })).statusCode).toBe(400);
-    // The health yes is still stored: the same seven answers, given again,
-    // get the plan with no calorie cut.
-    expect((await completeSeven(cookies)).plan).toMatchObject({
-      targetKcal: 1817,
-      dailyChangeKcal: 0,
-      flags: [{ code: "no_deficit", reasons: ["health_answer"] }],
-    });
+    // The health yes is gone with it: the same seven answers, given again, get
+    // the plan WITH its calorie cut, because there is no yes left to hold it.
+    expect((await completeSeven(cookies)).plan).toMatchObject(GOLDEN_LOSE);
   });
 
   it("the v1 fitness-profile PUT does not wipe the v2 answers it cannot ask about", { timeout: 30_000 }, async () => {
@@ -919,8 +917,9 @@ d("onboarding v2 routes (real Postgres)", () => {
       expect([...parsed.missing].sort()).toEqual([...missing].sort());
     };
 
-    // Nothing answered: refused, naming all eight, and not even a row is made.
-    await refused({ onboardingCompleted: true }, CORE_EIGHT);
+    // Nothing answered: refused, naming all eight and the health question,
+    // and not even a row is made.
+    await refused({ onboardingCompleted: true }, [...CORE_EIGHT, "health"]);
     expect(await completed()).toBe(false);
     const rows = await sql<{ n: string }[]>`
       SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
@@ -931,7 +930,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     // the goal and the weight are no longer in it.
     await refused(
       { weightGoal: "maintain", weightKg: 80, displayName: "Not Saved", onboardingCompleted: true },
-      CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"),
+      [...CORE_EIGHT.filter((k) => k !== "goal" && k !== "weightKg"), "health"],
     );
     expect((await get(cookies)).answers["weightGoal"]).toBeNull();
     expect(await currentWeightKg(sql, userId)).toBeNull();
@@ -942,11 +941,21 @@ d("onboarding v2 routes (real Postgres)", () => {
       await patchOk(cookies, screen);
     }
     await patchOk(cookies, { trainingDays: 3 });
-    await refused({ onboardingCompleted: true }, ["sessionMinutes"]);
+    await refused({ onboardingCompleted: true }, ["sessionMinutes", "health"]);
     expect(await completed()).toBe(false);
 
-    // The save that brings the last answer may finish in the same body.
-    const done = await patchOk(cookies, { sessionMinutes: 45, onboardingCompleted: true });
+    // EVERYTHING THE PLAN NEEDS, AND STILL REFUSED: the health question is
+    // screen 8's own and setup does not end without it (4b-i). The plan itself
+    // is complete — an unanswered screening applies no condition rule — so the
+    // number is on screen while the finish is refused, naming only that one.
+    await patchOk(cookies, { sessionMinutes: 45 });
+    expect((await get(cookies)).plan).toMatchObject(GOLDEN_LOSE);
+    await refused({ onboardingCompleted: true }, ["health"]);
+    expect(await completed()).toBe(false);
+
+    // Answered on its own route, and the finish is taken.
+    await answerHealth(cookies, { hasCondition: false });
+    const done = await patchOk(cookies, { onboardingCompleted: true });
     expect(done.answers["onboardingCompleted"]).toBe(true);
     expect(done.plan).toMatchObject(GOLDEN_LOSE);
     expect(await completed()).toBe(true);
@@ -957,6 +966,9 @@ d("onboarding v2 routes (real Postgres)", () => {
     // …but finishing again reads the answers, not the flag's history, and a
     // refusal leaves the stored flag as it was.
     await refused({ onboardingCompleted: true }, ["dayActivity"]);
+    expect(await completed()).toBe(true);
+    // The save that brings the last answer back may finish in the same body.
+    expect((await patchOk(cookies, { dayActivity: "sitting", onboardingCompleted: true })).answers["onboardingCompleted"]).toBe(true);
     expect(await completed()).toBe(true);
 
     // Going back to "not finished" is always allowed.

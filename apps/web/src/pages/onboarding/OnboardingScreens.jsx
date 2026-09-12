@@ -1,10 +1,11 @@
-// Onboarding v2, screens 1–7 (RULINGS 2026-09-07, 2026-09-09 and 2026-09-10).
+// Onboarding v2, screens 1–8 (RULINGS 2026-09-07, 2026-09-09 and 2026-09-10).
 // Every tap and every wheel saves at once through `save`; the one typed box,
 // the name, saves when the person leaves it. Nothing here decides a number:
 // the plan panel shows the server's.
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-import { patchOnboardingRequestSchema } from '@app/shared';
+import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, patchOnboardingRequestSchema } from '@app/shared';
+import HealthQuestion from './HealthQuestion';
 import NumberWheel from './NumberWheel';
 import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
@@ -646,6 +647,46 @@ export function EquipmentScreen({ answers, save }) {
           label={e.label}
         />
       ))}
+    </div>
+  );
+}
+
+// ── Screen 8 ─────────────────────────────────────────────────────────
+// The one health question, and the disclaimer tap that goes with it (RULINGS
+// 2026-09-07: one explicit tap, stored with the time, the build and the words).
+// The question itself is the component Settings uses, so the two ask it in the
+// same words; the tap belongs to this step alone.
+export function HealthScreen({ health }) {
+  const wording = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
+  return (
+    <div className="space-y-6">
+      <HealthQuestion screening={health.screening} onAnswer={health.answer} busy={health.saving} />
+
+      <div className="card-glass space-y-3">
+        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.70)' }}>{wording}</p>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={health.agreed}
+          disabled={health.agreed || health.agreeing}
+          onClick={health.agree}
+          className="flex items-center gap-3 text-left w-full disabled:cursor-default"
+        >
+          <span
+            aria-hidden="true"
+            className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border-2 transition-all
+                       ${health.agreed ? 'bg-primary-500 border-primary-500' : 'border-white/25'}`}
+          >
+            {health.agreed && <Check className="w-3 h-3 text-white" />}
+          </span>
+          <span className={`text-sm ${health.agreed ? 'text-white' : 'text-gray-300'}`}>I have read and understood this</span>
+        </button>
+        {!health.agreed && (
+          <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Tick this to finish setup.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

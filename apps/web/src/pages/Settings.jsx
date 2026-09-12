@@ -16,6 +16,9 @@ import {
   EQUIPMENT, GOALS, WEIGHT_GOALS, cleanEquipment, targetDirection, targetWrongSide, toggleEquipment, toggleGoal, wrongSideText,
 } from './onboarding/onboardingModel';
 import { EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
+import HealthQuestion from './onboarding/HealthQuestion';
+import { useHealthScreening } from './onboarding/useHealthScreening';
+import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -293,7 +296,6 @@ export function FitnessTab({ profile, onSaved }) {
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',
     exerciseFrequency:    profile.exerciseFrequency    ?? null,
-    medicalConditions:    profile.medicalConditions    || '',
   });
   const [loading, setLoading] = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -308,7 +310,6 @@ export function FitnessTab({ profile, onSaved }) {
     try {
       // MERGE: preserve the basic-info fields the other form owns (age/gender/
       // height/target) + keep onboardingCompleted true; override only the prefs.
-      const med = (form.medicalConditions || '').trim();
       await userService.putFitnessProfile(mergeFitnessProfile(profile, {
         fitnessLevel:         form.fitnessLevel || null,
         weightGoal:           form.weightGoal,
@@ -317,7 +318,6 @@ export function FitnessTab({ profile, onSaved }) {
         sessionDurationMin:   Number.isFinite(form.sessionDuration) ? form.sessionDuration : null,
         preferredWorkoutTime: form.preferredWorkoutTime || null,
         exerciseFrequency:    Number.isFinite(form.exerciseFrequency) ? form.exerciseFrequency : null,
-        medicalConditions:    med === '' ? null : med,
       }));
       toast.success('Fitness preferences updated');
       setSaved(true);
@@ -434,21 +434,50 @@ export function FitnessTab({ profile, onSaved }) {
             ]}
           />
         </Field>
-
-        <Field label="Medical Conditions / Notes"
-               hint="Optional. Helps the AI give safer advice.">
-          <textarea value={form.medicalConditions}
-            onChange={(e) => setForm((f) => ({ ...f, medicalConditions: e.target.value }))}
-            rows={3} placeholder="e.g. lower back pain, knee injury"
-            maxLength={2000}
-            className="input-field resize-none" style={inputStyle} />
-        </Field>
       </div>
 
       <div className="flex justify-end">
         <SaveBtn loading={loading} saved={saved} />
       </div>
     </form>
+  );
+}
+
+// ── The health question, in Settings ────────────────────────────────────
+//
+// Kd ruled the answer changeable once signed in, with everything that reads it
+// updating at once (RULINGS 2026-09-09) — so it is here, asked by the SAME
+// component screen 8 uses, saving on the tap through its own route. Nothing is
+// stored but the yes or no and the "Check first" choice.
+//
+// THE FREE-TEXT "MEDICAL CONDITIONS / NOTES" BOX THAT STOOD HERE IS GONE, and
+// every note ever typed in it was dropped with its column (migration 0029,
+// RULINGS 2026-09-09). Its hint said the notes helped the AI give safer advice,
+// which has not been true since the chat coach was switched off (RULINGS
+// 2026-08-18). This question is what the app asks instead.
+//
+// The disclaimer is shown, not tapped: the tap belongs to the health step in
+// setup, where it is recorded. Changing an answer later is not a new agreement.
+function HealthCard() {
+  const health = useHealthScreening();
+  const wording = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
+  return (
+    <div className="card-glass space-y-4">
+      <h3 className="text-sm font-bold text-white">Health</h3>
+      {health.status === 'failed' ? (
+        <div className="space-y-3">
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.70)' }}>{health.error}</p>
+          <button type="button" onClick={health.retry} className="btn-secondary">Try again</button>
+        </div>
+      ) : health.screening === null ? (
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.50)' }}>Loading…</p>
+      ) : (
+        <>
+          <HealthQuestion screening={health.screening} onAnswer={health.save} busy={health.saving} />
+          <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.45)' }}>{wording}</p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -513,14 +542,14 @@ function AccountTab({ profile, onSaved }) {
   };
 
   const handleResetOnboarding = async () => {
-    if (!window.confirm('This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any yes or no you gave to the health question are kept. Continue?')) return;
+    if (!window.confirm('This clears every setup answer, your health answer included, and takes you through setup again. Your name and your weigh-ins are kept. Continue?')) return;
     setResetLoading(true);
     try {
-      // Every answer goes, the medical notes and the ones only the setup
-      // screens ask included (RULINGS 2026-07-20: reset wipes every answer),
-      // and the gate shuts. The name and the weigh-in history are not answers
-      // on that row, and stay; so does the yes or no to the health question,
-      // until 4b asks it in setup.
+      // Every answer goes, the health one and the ones only the setup screens
+      // ask included (RULINGS 2026-07-20: reset wipes every answer), and the
+      // gate shuts — setup asks the health question again on screen 8 and will
+      // not end without it (4b-i). The name and the weigh-in history are not
+      // answers, and stay.
       await onboardingService.reset();
       // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).
       // Without this refresh, opening the Fitness tab and saving would merge
@@ -992,7 +1021,17 @@ export default function Settings() {
                       handleAvatar={handleAvatar}
                     />
                   )}
-                  {tab === 'fitness'       && <FitnessTab       profile={profile} onSaved={loadProfile} />}
+                  {tab === 'fitness'       && (
+                    <div className="space-y-6">
+                      {/* ABOVE the form, and deliberately: the health answer
+                          saves on the tap, with no Save button of its own, so
+                          sitting under the form's one would invite the person
+                          to think it needs saving (RULINGS 2026-09-09: a change
+                          takes effect at once). */}
+                      <HealthCard />
+                      <FitnessTab profile={profile} onSaved={loadProfile} />
+                    </div>
+                  )}
                   {tab === 'gym'           && <GymTab />}
                   {tab === 'account'       && <AccountTab       profile={profile} onSaved={loadProfile} />}
                   {tab === 'notifications' && <NotificationsTab />}

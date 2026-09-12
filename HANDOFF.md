@@ -4,6 +4,55 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · 4b-i's last round: three Lows and two weak tests, merged as PR #63
+
+- No Critical/High in the last review, so this is the end of the round (RULINGS 2026-09-08). Kd: *"fix and merge"*.
+- The health question takes no answer while a finish is out. A finish the server refuses over it forgets what the
+  screen holds; an answer tapped in that window could be stored and then forgotten, leaving nothing chosen over an
+  answer the server has. The buttons now wait for the finish, as they already waited for a health save.
+- The note under the question promises no detail AT ALL, not "we never ask what the condition is" — the question
+  also asks about medicine, an injury and pregnancy, so naming one of the four was narrower than the truth.
+- The unanswered screening is ONE shared constant (`UNANSWERED_HEALTH_SCREENING`), parsed through the contract where
+  it is defined and read by the server and both screens; the two hand-written copies are gone.
+- Two tests that could not fail now can: the build's own `VITE_APP_VERSION` goes through the clip (the rule was
+  tested, the wiring was not — a blank or over-long one 400s every disclaimer tap), and "above the fitness form"
+  pins the whole form, not just its Save button (a card inside the form passed before).
+- Verified: shared tsc/eslint 0, 91 · api tsc/eslint 0, CI-shaped 299, local db health + onboarding routes 58 ·
+  web 2026 (poseAssets.contract the known local encoding red, red on master too) · eslint 0 on the five touched
+  web files · gitleaks clean · five deliberate breaks red, one per fix, each restored.
+- Kd's click-through of screen 8 passed on 2026-09-12 (*"smoke passed"*), so the roadmap line is ticked.
+- Next: 4b-ii (screen 9, food, and screen 11, the gym code, applied first).
+
+## 2026-09-12 · 4b-i's review fixed (two rounds), PR #63
+
+- A finish the SERVER refuses over the health question now forgets the answer this screen was holding, so the
+  question comes back with nothing chosen and the next tap really saves, and answering it clears the sentence.
+  Before, a reset on another device left "answer the health question" standing over an answer shown as given.
+- The note under it names BOTH stored facts and says what is never asked — "what the condition is", since the
+  "it" three clauses back could be read as the clearance. Finish also waits for the health save to land.
+- A blank `VITE_APP_VERSION` now falls back like an unset one, so a build that set it empty cannot 400 the tap.
+- Verified: shared tsc/eslint 0, 90 · onboarding 53 · health + settings 14 · full web 2024 (poseAssets.contract the
+  known local red) · lint 0 on the touched files · all six fixes red first · four tests strengthened — but two of
+  those four still could not fail for what they claimed, which the next round found and fixed (entry above).
+
+## 2026-09-12 · The health question (item 4b-i), branch `health-question`
+
+- Kd ruled cuisine out entirely — not at sign-up, not in meal suggestions (RULINGS 2026-09-12). 4b split into 4b-i
+  (health), 4b-ii (food + the gym code) and 4b-iii (running) in `ROADMAP.md`; this card is 4b-i.
+- Built: screen 8 asks the ONE question with the medicine clause, "Check first" and the disclaimer tap (recorded on
+  the 3b consent route); Settings' Fitness tab asks it with the SAME component and saves on the tap. Finishing is
+  refused while it is unanswered (`missing: ["health"]`, its own shared enum — the PLAN's list never carries it).
+- `0029` DROPS `user_fitness_profiles.medical_conditions` with everything typed in it; the notes box and its untrue
+  "Helps the AI give safer advice" hint go with it; the profile PUT now refuses the field. Reset clears the health
+  answer with the rest, in one transaction; the consent log is never touched. Disclaimers gain v2 (the comparison
+  with the app goes, "follow their advice" stays). A yes saves nothing until "Check first" is answered.
+- Verified: shared tsc/eslint 0, 89 · api tsc/eslint 0 · CI-shaped (no DATABASE_URL) 299 · local db.migration 27,
+  users.onboarding + users.fitness 49, privacy/health/users 67, full local 979 + the 8 `workouts.sync` are item 10's
+  shared-database flake (23/23 alone) · web 2011 (poseAssets.contract the known local red) · web lint's 4 in
+  Settings.jsx are master's 4 · seven deliberate breaks each turned a new test red.
+- Open: Kd's click-through, the fresh-chat review, CI, merge. Worth his word at the click-through: the disclaimer tap
+  is asked once per visit to the wizard, so someone the rings send back to answer one question ticks it again.
+
 ## 2026-09-12 · 4a-iv merged (PR #62)
 
 - The last re-check found no Critical/High and two Lows, both fixed: Reset's box now keeps "any yes or no you gave to

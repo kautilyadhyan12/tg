@@ -129,8 +129,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
               VALUES (${email}, 'sign_in', ${"h-" + userId}, now() + interval '10 minutes')`;
     await sql`INSERT INTO auth_identities (user_id, provider, subject)
               VALUES (${userId}, 'google', ${"sub-" + userId})`;
-    await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, medical_conditions)
-              VALUES (${userId}, 31, 'female', 165, 'fixture: asthma')`;
+    await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, preferred_workout_time)
+              VALUES (${userId}, 31, 'female', 165, 'morning')`;
     await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
               VALUES (${userId}, true, 'not_yet')`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.

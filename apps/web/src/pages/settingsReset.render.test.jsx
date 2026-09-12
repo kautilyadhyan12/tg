@@ -20,18 +20,29 @@ const svc = {};
 vi.mock('../api/userApi', async (importOriginal) => ({ ...(await importOriginal()), userService: svc }));
 const onboarding = { reset: vi.fn() };
 vi.mock('../api/onboardingApi', async (importOriginal) => ({ ...(await importOriginal()), onboardingService: onboarding }));
+// The Fitness tab carries the health question since 4b-i; this suite only
+// needs it to load without reaching the network.
+const health = {
+  get: vi.fn(async () => ({
+    data: {
+      healthScreening: { answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null },
+    },
+  })),
+  put: vi.fn(),
+};
+vi.mock('../api/healthApi', async (importOriginal) => ({ ...(await importOriginal()), healthService: health }));
 
 const toast = (await import('react-hot-toast')).default;
 const Settings = (await import('./Settings')).default;
 
 const CONFIRM =
-  'This clears your answers, including your medical notes, and takes you through setup again. Your name, your weigh-ins and any yes or no you gave to the health question are kept. Continue?';
+  'This clears every setup answer, your health answer included, and takes you through setup again. Your name and your weigh-ins are kept. Continue?';
 
 /** A person who finished setup: losing weight, Better balance ticked. */
 const ANSWERED = {
   age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
   fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
-  sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
+  sessionDurationMin: 45, preferredWorkoutTime: null, onboardingCompleted: true,
   updatedAt: null,
 };
 /** What the fitness-profile route answers once the reset has removed the row:
@@ -39,7 +50,7 @@ const ANSWERED = {
 const CLEARED = {
   age: null, gender: null, heightCm: null, targetWeightKg: null, fitnessLevel: null,
   fitnessGoals: [], weightGoal: null, exerciseFrequency: null, availableEquipment: [],
-  sessionDurationMin: null, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: false,
+  sessionDurationMin: null, preferredWorkoutTime: null, onboardingCompleted: false,
   updatedAt: null,
 };
 
