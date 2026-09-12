@@ -77,6 +77,7 @@ export const SCREENS = [
   { id: 'training',  title: 'Your training', desc: 'Where you are starting from' },
   { id: 'week',      title: 'Your week',     desc: 'How often, and for how long' },
   { id: 'equipment', title: 'Equipment',     desc: 'What you have to train with' },
+  { id: 'health',    title: 'Health',        desc: 'One question, so your plan is careful' },
 ];
 
 /** The direction the calorie maths works in: the weight choice itself, which
@@ -101,7 +102,13 @@ const answered = (v) => v !== null && v !== undefined;
 /** A screen is answered when every question it asks has an answer. Screen 1's
  *  goals may be none (any number, RULINGS 2026-09-10) and screen 5's push-ups
  *  and plank may be "Not sure", so there only the weight choice and the
- *  self-rating count. */
+ *  self-rating count.
+ *
+ *  Screen 8's answer is NOT one of the wizard's answers: the health screening
+ *  is its own table behind its own route (3b), so the page lays what it holds
+ *  onto this object as `health`. `answered` there is the server's own word for
+ *  "this person has saved the screening once" — a yes with no "Check first"
+ *  chosen is never stored, so it can never read as answered. */
 export function screenAnswered(id, a) {
   switch (id) {
     case 'goal':      return answered(a.weightGoal);
@@ -117,6 +124,7 @@ export function screenAnswered(id, a) {
     case 'training':  return answered(a.fitnessLevel);
     case 'week':      return answered(a.trainingDays) && answered(a.sessionMinutes);
     case 'equipment': return Array.isArray(a.availableEquipment) && a.availableEquipment.length > 0;
+    case 'health':    return a.health?.answered === true;
     default:          return false;
   }
 }
@@ -148,6 +156,7 @@ export const SCREEN_OF_MISSING = {
   dayActivity: 'day',
   trainingDays: 'week',
   sessionMinutes: 'week',
+  health: 'health',
 };
 
 export const MISSING_LABELS = {
@@ -161,6 +170,7 @@ export const MISSING_LABELS = {
   dayActivity: 'your day',
   trainingDays: 'training days a week',
   sessionMinutes: 'session length',
+  health: 'the health question',
 };
 
 export function listText(items) {

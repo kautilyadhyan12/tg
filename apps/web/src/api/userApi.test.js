@@ -62,7 +62,7 @@ describe('userService repoint (Card 6)', () => {
       age: 25, gender: 'male', heightCm: 175, targetWeightKg: 70,
       fitnessLevel: 'beginner', fitnessGoals: ['muscle_gain'], exerciseFrequency: 3,
       availableEquipment: ['dumbbells'], sessionDurationMin: 30,
-      preferredWorkoutTime: 'morning', medicalConditions: null,
+      preferredWorkoutTime: 'morning',
     };
 
     it('overrides ONLY the edited fields and preserves everything else (no wipe)', () => {
@@ -80,7 +80,7 @@ describe('userService repoint (Card 6)', () => {
     it('ALWAYS carries onboardingCompleted explicitly (the un-onboard trap)', () => {
       // the server sets it false when OMITTED (service.ts:142) → a Settings save
       // would kick the user to the wizard. Every merge must carry the flag.
-      expect(mergeFitnessProfile({ ...current, onboardingCompleted: true }, { medicalConditions: 'asthma' })
+      expect(mergeFitnessProfile({ ...current, onboardingCompleted: true }, { fitnessLevel: 'advanced' })
         .onboardingCompleted).toBe(true);
       expect(mergeFitnessProfile(null, {}).onboardingCompleted).toBe(true); // unknown → safe default
     });
@@ -105,7 +105,7 @@ describe('userService repoint (Card 6)', () => {
       expect(mergeFitnessProfile(null, {}).weightGoal).toBe(null);
     });
 
-    it('emits ONLY the 13 contract keys, even from the flat-merged profile (.strict() guard)', () => {
+    it('emits ONLY the 12 contract keys, even from the flat-merged profile (.strict() guard)', () => {
       // Production passes {...fitnessProfile, ...user} — which carries id, email,
       // displayName, weightKg, updatedAt … A naive {...current, ...edits} would
       // forward those into the .strict() PUT body and 400. This pins the key set
@@ -116,9 +116,12 @@ describe('userService repoint (Card 6)', () => {
         locale: 'en', units: 'metric', timezone: 'UTC', weightKg: 72,
         leaderboardOptOut: false, onboardingCompleted: true, updatedAt: '2026-07-19T00:00:00.000Z',
       };
+      // `medicalConditions` is NOT among them since 4b-i dropped the free-text
+      // notes box and its column (migration 0029): the PUT is .strict(), so a
+      // merge that still sent it would 400 every Settings save.
       expect(Object.keys(mergeFitnessProfile(flatMerged, {})).sort()).toEqual([
         'age', 'availableEquipment', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
-        'gender', 'heightCm', 'medicalConditions', 'onboardingCompleted',
+        'gender', 'heightCm', 'onboardingCompleted',
         'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'weightGoal',
       ]);
     });

@@ -91,8 +91,8 @@ d("DPDP data export (real Postgres)", () => {
 
     await sql`INSERT INTO auth_identities (user_id, provider, subject)
               VALUES (${userId}, 'google', ${"sub-" + userId})`;
-    await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, medical_conditions)
-              VALUES (${userId}, 31, 'female', 165, ${`asthma-${label}`})`;
+    await sql`INSERT INTO user_fitness_profiles (user_id, age, gender, height_cm, preferred_workout_time)
+              VALUES (${userId}, 31, 'female', 165, 'morning')`;
     await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
               VALUES (${userId}, true, 'cleared')`;
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)

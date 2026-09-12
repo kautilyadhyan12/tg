@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   equipmentSchema,
   fitnessGoalSchema,
+  missingPlanInputSchema,
+  missingSetupAnswerSchema,
   onboardingAnswersSchema,
+  onboardingIncompleteBodySchema,
   onboardingResponseSchema,
   patchOnboardingRequestSchema,
   planGoalSchema,
@@ -206,6 +209,22 @@ describe("what the server answers with", () => {
   it("refuses an answer the contract does not name", () => {
     expect(onboardingAnswersSchema.safeParse({ ...answers, medicalConditions: "none" }).success).toBe(false);
     expect(onboardingAnswersSchema.safeParse({ ...answers, mainGoal: null }).success).toBe(false);
+  });
+
+  it("names the health question among what setup is still missing, and every answer the plan itself needs", () => {
+    // The plan can do without the health answer — unanswered simply applies no
+    // condition rule — but setup cannot (4b-i). So the finish's list is the
+    // plan's inputs PLUS `health`, and an input added to the plan cannot go
+    // missing here without this failing.
+    expect([...missingSetupAnswerSchema.options].sort()).toEqual([...missingPlanInputSchema.options, "health"].sort());
+    // The PLAN's own list never carries it: a plan is a number, not a gate.
+    expect(missingPlanInputSchema.safeParse("health").success).toBe(false);
+
+    const body = { error: "onboarding_incomplete", message: "m", requestId: "r" };
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["health"] }).success).toBe(true);
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["age", "health"] }).success).toBe(true);
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: [] }).success).toBe(false);
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["medicalConditions"] }).success).toBe(false);
   });
 
   it("always carries the name the app calls the person", () => {

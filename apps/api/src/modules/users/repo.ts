@@ -14,8 +14,9 @@ import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js"
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
  *  TransactionSql are siblings, not sub/supertypes — neither is assignable to
- *  the other — so a shared read helper must accept the union. */
-type SqlOrTx = Sql | TransactionSql;
+ *  the other — so a shared read helper must accept the union. Exported for the
+ *  service's finish check, which runs inside `patchOnboarding`'s transaction. */
+export type SqlOrTx = Sql | TransactionSql;
 
 export interface ProfileRow {
   id: string;
@@ -128,7 +129,6 @@ export interface FitnessProfileRow {
   availableEquipment: string[];
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
-  medicalConditions: string | null;
   onboardingCompleted: boolean;
   // Onboarding v2 (migrations 0026 and 0028).
   weightGoal: string | null;
@@ -150,7 +150,6 @@ interface FitnessProfileDbRow {
   available_equipment: string[] | null;
   session_duration_min: number | null;
   preferred_workout_time: string | null;
-  medical_conditions: string | null;
   onboarding_completed: boolean;
   weight_goal: string | null;
   pace: string | null;
@@ -171,7 +170,6 @@ const toFitnessProfile = (r: FitnessProfileDbRow): FitnessProfileRow => ({
   availableEquipment: r.available_equipment ?? [],
   sessionDurationMin: r.session_duration_min,
   preferredWorkoutTime: r.preferred_workout_time,
-  medicalConditions: r.medical_conditions,
   onboardingCompleted: r.onboarding_completed,
   weightGoal: r.weight_goal,
   pace: r.pace,
@@ -195,7 +193,6 @@ const FITNESS_PROFILE_COLUMNS = [
   "available_equipment",
   "session_duration_min",
   "preferred_workout_time",
-  "medical_conditions",
   "onboarding_completed",
   "weight_goal",
   "pace",
@@ -245,13 +242,13 @@ export async function upsertFitnessProfile(
     INSERT INTO user_fitness_profiles
       (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
        fitness_goals, weight_goal, exercise_frequency, available_equipment,
-       session_duration_min, preferred_workout_time, medical_conditions,
+       session_duration_min, preferred_workout_time,
        onboarding_completed, updated_at)
     SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
            ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
            ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment},
            ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
-           ${input.medicalConditions}, ${input.onboardingCompleted}, now()
+           ${input.onboardingCompleted}, now()
     FROM users u WHERE u.id = ${userId} AND u.status = 'active'
     ON CONFLICT (user_id) DO UPDATE SET
       age = EXCLUDED.age,
@@ -265,7 +262,6 @@ export async function upsertFitnessProfile(
       available_equipment = EXCLUDED.available_equipment,
       session_duration_min = EXCLUDED.session_duration_min,
       preferred_workout_time = EXCLUDED.preferred_workout_time,
-      medical_conditions = EXCLUDED.medical_conditions,
       onboarding_completed = EXCLUDED.onboarding_completed,
       updated_at = now()
     RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
@@ -286,7 +282,6 @@ export interface FitnessProfileWrite {
   availableEquipment: string[];
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
-  medicalConditions: string | null;
   onboardingCompleted: boolean;
 }
 
@@ -350,13 +345,15 @@ export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<Onboa
  *  that FK check through, so neither route ever waits on the other's second
  *  lock. Pinned by a test that holds exactly that key-share lock.
  *
- *  `verify` sees the answers as saved, before the commit; it throws to refuse
- *  the save, and then nothing of it is written. */
+ *  `verify` sees the answers as saved, before the commit, and the transaction
+ *  they were saved in — so a check can read a row this one does not touch (the
+ *  health screening, which finishing setup needs, 4b-i) and still see the same
+ *  moment. It throws to refuse the save, and then nothing of it is written. */
 export async function patchOnboarding(
   sql: Sql,
   userId: string,
   patch: PatchOnboardingRequest,
-  verify?: (saved: OnboardingRow) => void,
+  verify?: (saved: OnboardingRow, tx: SqlOrTx) => Promise<void> | void,
 ): Promise<OnboardingRow | null> {
   return await sql.begin(async (tx) => {
     const active = await tx<{ id: string }[]>`
@@ -406,19 +403,27 @@ export async function patchOnboarding(
     const saved = await getOnboarding(tx, userId);
     // A check that throws here rolls the whole save back, so a refused save
     // writes nothing at all.
-    verify?.(saved);
+    await verify?.(saved, tx);
     return saved;
   });
 }
 
 /** "Reset onboarding" (RULINGS 2026-07-20: it wipes every answer): the
  *  profile row goes, and every answer on it with it, the ones only the screens
- *  ask included; with no row, the gate reads "not finished". What is not an
- *  answer on that row stays: the name is the account's, and the weight is the
- *  weigh-in history's (RULINGS 2026-09-10). The health screening stays too,
- *  in its own table, until 4b puts its question back in the wizard: cleared
- *  now, a "yes" would stop holding the calorie cut with no screen to answer
- *  it again on.
+ *  ask included; with no row, the gate reads "not finished".
+ *
+ *  THE HEALTH ANSWER GOES WITH IT (4b-i), in its own table: the wizard asks the
+ *  question again on screen 8, and finishing is refused until it is answered,
+ *  so a reset can no longer leave a yes holding the calorie cut with no screen
+ *  to answer it on — the reason 4a-iv had to keep it. Both rows go in ONE
+ *  transaction, so a reset can never clear one and keep the other.
+ *
+ *  The consent log is NOT touched: it is append-only proof of a tap that did
+ *  happen (RULINGS 2026-09-09, kept six years past deletion), and a reset is
+ *  not a claim that the tap never happened.
+ *
+ *  What is not an answer stays: the name is the account's, and the weight is
+ *  the weigh-in history's (RULINGS 2026-09-10).
  *
  *  Active-only, with the users row locked first, as `patchOnboarding` takes it
  *  and for its reasons: a concurrent deletion waits, and NO KEY lets the v1
@@ -430,6 +435,7 @@ export async function deleteOnboarding(sql: Sql, userId: string): Promise<Onboar
       SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     if (active[0] === undefined) return null;
     await tx`DELETE FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    await tx`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
     return await getOnboarding(tx, userId);
   });
 }

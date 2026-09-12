@@ -42,6 +42,7 @@ import type {
   OnboardingResponse,
   PatchOnboardingRequest,
   MissingPlanInput,
+  MissingSetupAnswer,
   PlanHealth,
   PlanResponse,
   PutFitnessProfileRequest,
@@ -93,12 +94,13 @@ export class UsersError extends Error {
   }
 }
 
-/** Finishing onboarding while the plan still lacks an answer (RULINGS
- *  2026-07-19: the questions come before the training side). Carries the list
- *  so the screen can send the person to the question that is open. */
+/** Finishing onboarding while setup still lacks an answer (RULINGS 2026-07-19:
+ *  the questions come before the training side). Carries the list so the screen
+ *  can send the person to the question that is open — the plan's own inputs,
+ *  and `health`, the question on screen 8 (4b-i). */
 export class OnboardingIncompleteError extends UsersError {
-  readonly missing: readonly MissingPlanInput[];
-  constructor(missing: readonly MissingPlanInput[]) {
+  readonly missing: readonly MissingSetupAnswer[];
+  constructor(missing: readonly MissingSetupAnswer[]) {
     super(409, "onboarding_incomplete", "Answer every question before you finish.");
     this.name = "OnboardingIncompleteError";
     this.missing = missing;
@@ -162,7 +164,6 @@ const EMPTY_FITNESS_PROFILE: FitnessProfile = {
   availableEquipment: [],
   sessionDurationMin: null,
   preferredWorkoutTime: null,
-  medicalConditions: null,
   onboardingCompleted: false,
   updatedAt: null,
 };
@@ -203,7 +204,6 @@ export async function putFitnessProfile(
     availableEquipment: body.availableEquipment ?? [],
     sessionDurationMin: body.sessionDurationMin ?? null,
     preferredWorkoutTime: body.preferredWorkoutTime ?? null,
-    medicalConditions: body.medicalConditions ?? null,
     onboardingCompleted: body.onboardingCompleted ?? false,
   });
   // No row = the user was deleted mid-request (the upsert is active-only).
@@ -284,12 +284,29 @@ function resolveTimeZone(requested: string | null, stored: string | null): strin
   return safeTimeZone(requested ?? stored);
 }
 
-/** What the plan still needs, from the answers as saved. The health screening
+/** What the PLAN still needs, from the answers as saved. The health screening
  *  is not read: an unanswered health screen is never missing (plan.ts), so it
  *  cannot change this list. */
 function missingOnboardingAnswers(row: repo.OnboardingRow, requestedTimeZone: string | null): MissingPlanInput[] {
   const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
   return missingPlanInputs(planAnswersFor({ answers: toOnboardingAnswers(row), health: null, today }));
+}
+
+/** What SETUP still needs: the plan's own inputs, and the health question on
+ *  screen 8 (4b-i). The plan works without that answer — unanswered simply
+ *  applies no condition rule — but finishing must not: a yes turns off the
+ *  calorie cut and may turn on Safe mode, so the training side never opens
+ *  without it. Read in the caller's transaction, so the check sees exactly the
+ *  rows the save is about to commit. */
+async function missingSetupAnswers(
+  sql: repo.SqlOrTx,
+  userId: string,
+  row: repo.OnboardingRow,
+  requestedTimeZone: string | null,
+): Promise<MissingSetupAnswer[]> {
+  const missing: MissingSetupAnswer[] = missingOnboardingAnswers(row, requestedTimeZone);
+  if ((await repo.getHealthScreening(sql, userId)) === null) missing.push("health");
+  return missing;
 }
 
 /** THE plan, from the stored answers. "Today" is the SERVER's clock read in the
@@ -337,14 +354,15 @@ export async function patchOnboarding(
   body: PatchOnboardingRequest,
   requestedTimeZone: string | null,
 ): Promise<OnboardingResponse> {
-  // Finishing opens the training side, so it is refused while the plan still
-  // lacks an answer (RULINGS 2026-07-19). Checked on the answers AS SAVED,
-  // inside the save's own transaction: a body that brings the last answer and
-  // finishes is accepted, and a refused one writes nothing at all.
+  // Finishing opens the training side, so it is refused while setup still
+  // lacks an answer (RULINGS 2026-07-19) — the plan's inputs, and the health
+  // question (4b-i). Checked on the answers AS SAVED, inside the save's own
+  // transaction: a body that brings the last answer and finishes is accepted,
+  // and a refused one writes nothing at all.
   const verify =
     body.onboardingCompleted === true
-      ? (saved: repo.OnboardingRow): void => {
-          const missing = missingOnboardingAnswers(saved, requestedTimeZone);
+      ? async (saved: repo.OnboardingRow, tx: repo.SqlOrTx): Promise<void> => {
+          const missing = await missingSetupAnswers(tx, userId, saved, requestedTimeZone);
           if (missing.length > 0) throw new OnboardingIncompleteError(missing);
         }
       : undefined;
@@ -356,9 +374,10 @@ export async function patchOnboarding(
 }
 
 /** Settings' "Reset onboarding" (RULINGS 2026-07-20: it wipes every answer).
- *  The reply is the empty wizard's: every question open again, bar the weight,
- *  which lives in the weigh-in history and stays, as the name does (repo
- *  `deleteOnboarding` says why). */
+ *  The reply is the empty wizard's: every question open again, the health one
+ *  included since 4b-i put it back on screen 8, bar the weight, which lives in
+ *  the weigh-in history and stays, as the name does (repo `deleteOnboarding`
+ *  says why, and why the consent log is not touched). */
 export async function resetOnboarding(
   deps: UsersDeps,
   userId: string,

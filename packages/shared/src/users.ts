@@ -176,7 +176,6 @@ export const fitnessProfileSchema = z.object({
   availableEquipment: z.array(equipmentSchema),
   sessionDurationMin: z.number().int().nullable(), // minutes
   preferredWorkoutTime: workoutTimeSchema.nullable(),
-  medicalConditions: z.string().nullable(),
   onboardingCompleted: z.boolean(),
   /** NULL for a user who has never saved onboarding (no row): the GET returns
    *  the empty profile rather than a 404, so the wizard renders blank instead of
@@ -194,7 +193,13 @@ export type FitnessProfileResponse = z.infer<typeof fitnessProfileResponseSchema
  *  Bounds are the Kd-approved rails; heightCm/targetWeightKg additionally mirror
  *  numeric(5,2) (2dp, < 1000) exactly as updateProfileRequestSchema does for
  *  weightKg. onboardingCompleted defaults false so a partial save cannot
- *  accidentally satisfy the gate. */
+ *  accidentally satisfy the gate.
+ *
+ *  `medicalConditions` is GONE (4b-i): the free-text notes box was switched off
+ *  and its column dropped with everything ever typed in it (RULINGS 2026-09-09).
+ *  The app's one health question is the screening in health.ts, which stores a
+ *  yes or no and nothing else; being `.strict()`, this body now refuses the old
+ *  field rather than quietly dropping it. */
 export const putFitnessProfileRequestSchema = z
   .object({
     age: z.number().int().min(16).max(120).nullable().optional(), // the app is for 16 and over (RULINGS 2026-09-07)
@@ -208,7 +213,6 @@ export const putFitnessProfileRequestSchema = z
     availableEquipment: equipmentArraySchema.optional(),
     sessionDurationMin: z.number().int().min(5).max(240).nullable().optional(),
     preferredWorkoutTime: workoutTimeSchema.nullable().optional(),
-    medicalConditions: z.string().trim().max(2000).nullable().optional(),
     onboardingCompleted: z.boolean().optional(),
   })
   .strict();

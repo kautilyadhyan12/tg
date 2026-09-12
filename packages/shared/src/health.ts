@@ -6,11 +6,11 @@
 // "Do you have a medical condition, an injury, or are you pregnant, or
 // anything else that could affect exercise or eating?" A yes opens "Check
 // first": either a professional has cleared the person, or not yet. THIS
-// screening stores exactly those two facts and derives the rest. (The older
-// free-text "medical conditions" box on the fitness profile still exists and
-// still stores what is typed; Kd ruled on 2026-09-09 that it is switched off
-// and the stored text wiped when the v2 health screen lands at 4b —
-// RULINGS.md, "Privacy and legal".)
+// screening stores exactly those two facts and derives the rest. It is the ONLY
+// health question the app has: the older free-text "medical conditions" box on
+// the fitness profile was switched off and its column dropped with its stored
+// text when this screen landed (4b-i, migration 0029 — Kd ruled it on
+// 2026-09-09, RULINGS.md "Privacy and legal").
 //   · any yes  → no calorie cut, cleared or not (the app cannot know what the
 //                yes is, so it treats every yes the careful way);
 //   · not yet  → Safe mode: no workout or run plans, no intensity progression;
@@ -22,6 +22,36 @@ import { z } from "zod";
 /** The person's answer to "Check first" after a yes. */
 export const checkFirstSchema = z.enum(["cleared", "not_yet"]);
 export type CheckFirst = z.infer<typeof checkFirstSchema>;
+
+// ── The words both screens show (ROADMAP 4b-i) ──────────────────────────────
+// The wizard's health step and Settings ask the SAME question and offer the
+// same two answers, so the words live here once rather than twice on two
+// screens that could drift apart. RULINGS 2026-09-09 is the question's own
+// sentence; Kd's decision C (2026-09-10) added the medicine clause to it.
+
+export const HEALTH_QUESTION =
+  "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?";
+
+/** Why it is asked, and what is kept: nothing specific is ever asked or stored
+ *  (RULINGS 2026-09-09), which is worth saying on the screen that asks. */
+export const HEALTH_QUESTION_NOTE =
+  "We only keep this yes or no. We never ask what it is, and never store it.";
+
+/** The two answers to "Check first", with what each one changes. Any yes stops
+ *  the calorie cut, cleared or not — the app cannot know what the yes is — so
+ *  both say so (RULINGS 2026-09-09). */
+export const CHECK_FIRST_HEADING = "Check first";
+export const CHECK_FIRST_OPTIONS: Readonly<Record<CheckFirst, { label: string; detail: string }>> = {
+  cleared: {
+    label: "A professional has cleared me",
+    detail: "You get the whole app. Your plan has no calorie cut, and you follow your professional's advice.",
+  },
+  not_yet: {
+    label: "Not yet",
+    detail:
+      "Safe mode: no workout or run plans and no calorie cut until a professional clears you. Meals, the exercise library, gym check-in and consistency goals still work.",
+  },
+};
 
 /** The whole screening, replaced as one (PUT). `checkFirst` is required
  *  exactly when the answer is yes and must be absent (or null) on a no — a
@@ -101,24 +131,34 @@ export type ConsentPurpose = z.infer<typeof consentPurposeSchema>;
 
 /** Every wording ever shown, by screen and version. NEVER edit a version in
  *  place — add the next one. The words "safe for you", "treats" and "cures"
- *  never appear (RULINGS 2026-09-07); the shared test checks every entry. */
+ *  never appear (RULINGS 2026-09-07); the shared test checks every entry.
+ *
+ *  v2 is v1 with ONE change, and only where it appears: the comparison with the
+ *  app goes, "follow their advice" stays (Kd, 2026-09-10, decision D — *"follow
+ *  their advice should be kept but over the app should not be there"*). It is a
+ *  new version rather than an edit so the consent log keeps the words each
+ *  person actually agreed to. v1 stays exactly as it was, for the rows that
+ *  carry it. */
 export const DISCLAIMER_WORDINGS: Readonly<Record<ConsentPurpose, Readonly<Record<string, string>>>> = {
   sign_up: {
     v1: "This app gives general fitness and eating information. It is not medical advice and does not diagnose anything. Talk to a doctor or another qualified professional before you start, and follow their advice over anything this app says.",
+    v2: "This app gives general fitness and eating information. It is not medical advice and does not diagnose anything. Talk to a doctor or another qualified professional before you start, and follow their advice.",
   },
   health_step: {
     v1: "Your answer here only makes the app more careful. It is not a diagnosis and not medical advice. If you have a medical condition, an injury, or are pregnant, ask a professional before you train or change how you eat, and follow their advice over the app's.",
+    v2: "Your answer here only makes the app more careful. It is not a diagnosis and not medical advice. If you have a medical condition, an injury, or are pregnant, ask a professional before you train or change how you eat, and follow their advice.",
   },
   plan_screen: {
     v1: "These numbers are general guidance, not medical advice. Check them with a doctor or another qualified professional before you follow them, and follow their advice over the app's.",
+    v2: "These numbers are general guidance, not medical advice. Check them with a doctor or another qualified professional before you follow them, and follow their advice.",
   },
 };
 
 /** The version a screen shows today, per purpose — the newest entry. */
 export const CURRENT_DISCLAIMER_VERSION: Readonly<Record<ConsentPurpose, string>> = {
-  sign_up: "v1",
-  health_step: "v1",
-  plan_screen: "v1",
+  sign_up: "v2",
+  health_step: "v2",
+  plan_screen: "v2",
 };
 
 export const recordConsentRequestSchema = z

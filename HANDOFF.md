@@ -4,6 +4,24 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-12 · The health question (item 4b-i), branch `health-question`
+
+- Kd ruled cuisine out entirely — not at sign-up, not in meal suggestions (RULINGS 2026-09-12). 4b split into 4b-i
+  (health), 4b-ii (food + the gym code) and 4b-iii (running) in `ROADMAP.md`; this card is 4b-i.
+- Built: screen 8 asks the ONE question with the medicine clause, "Check first" and the disclaimer tap (recorded on
+  the 3b consent route); Settings' Fitness tab asks it with the SAME component and saves on the tap. Finishing is
+  refused while it is unanswered (`missing: ["health"]`, its own shared enum — the PLAN's list never carries it).
+- `0029` DROPS `user_fitness_profiles.medical_conditions` with everything typed in it; the notes box and its untrue
+  "Helps the AI give safer advice" hint go with it; the profile PUT now refuses the field. Reset clears the health
+  answer with the rest, in one transaction; the consent log is never touched. Disclaimers gain v2 (the comparison
+  with the app goes, "follow their advice" stays). A yes saves nothing until "Check first" is answered.
+- Verified: shared tsc/eslint 0, 89 · api tsc/eslint 0 · CI-shaped (no DATABASE_URL) 299 · local db.migration 27,
+  users.onboarding + users.fitness 49, privacy/health/users 67, full local 979 + the 8 `workouts.sync` are item 10's
+  shared-database flake (23/23 alone) · web 2011 (poseAssets.contract the known local red) · web lint's 4 in
+  Settings.jsx are master's 4 · seven deliberate breaks each turned a new test red.
+- Open: Kd's click-through, the fresh-chat review, CI, merge. Worth his word at the click-through: the disclaimer tap
+  is asked once per visit to the wizard, so someone the rings send back to answer one question ticks it again.
+
 ## 2026-09-12 · 4a-iv merged (PR #62)
 
 - The last re-check found no Critical/High and two Lows, both fixed: Reset's box now keeps "any yes or no you gave to

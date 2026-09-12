@@ -1638,4 +1638,37 @@ d("0001_init on a real database", () => {
         )`;
     expect(invented[0]?.n).toBe(0);
   });
+
+  /** MIGRATION `0029`: THE FREE-TEXT MEDICAL NOTES ARE GONE. Kd ruled the app
+   *  never asks for a named condition and that the old box's stored text is
+   *  wiped when the v2 health screen lands (RULINGS 2026-09-09); it landed at
+   *  4b-i, so the column goes with everything in it. Read off the deployed
+   *  catalogue, as 0027's drop is. */
+  it("0029 dropped user_fitness_profiles.medical_conditions, and nothing may write it back", async () => {
+    const [col] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_name = 'user_fitness_profiles' AND column_name = 'medical_conditions'`;
+    expect(col?.n, "user_fitness_profiles.medical_conditions still exists").toBe(0);
+
+    // A write to it is an error from the database itself (42703, undefined
+    // column), not a value quietly dropped: there is nowhere left to put it.
+    const [u] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0029@example.com', 'zz 0029')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    if (u === undefined) throw new Error("fixture user insert failed");
+    try {
+      await expect(
+        sql`INSERT INTO user_fitness_profiles (user_id, medical_conditions) VALUES (${u.id}, 'knee injury')`,
+      ).rejects.toMatchObject({ code: "42703" });
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${u.id}`;
+    }
+
+    // The one health answer the app keeps is the screening's two columns, and
+    // nothing on it is free text (RULINGS 2026-09-09).
+    const columns = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'user_health_screenings' ORDER BY column_name`;
+    expect(columns.map((r) => r.column_name)).toEqual(["check_first", "created_at", "has_condition", "updated_at", "user_id"]);
+  });
 });

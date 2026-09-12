@@ -130,15 +130,39 @@ export const onboardingResponseSchema = z
   });
 export type OnboardingResponse = z.infer<typeof onboardingResponseSchema>;
 
-/** The 409 a finish gets while the plan still lacks an answer: onboarding
- *  comes before the training side (RULINGS 2026-07-19). `missing` names the
- *  questions still open, so the screen can send the person to them. */
+/** What still stands between a person and the end of setup: everything the PLAN
+ *  needs, plus `health` — the one question on screen 8, which the plan can do
+ *  without (an unanswered screening simply applies no condition rule, plan.ts)
+ *  but setup cannot: it decides Safe mode and the calorie cut, so the training
+ *  side never opens on a guess about it.
+ *
+ *  Written out rather than spread from `missingPlanInputSchema` so the enum
+ *  stays a plain list; the shared test pins it to that schema's options plus
+ *  the one extra, so an input added to the plan cannot go missing here. */
+export const missingSetupAnswerSchema = z.enum([
+  "goal",
+  "age",
+  "gender",
+  "heightCm",
+  "weightKg",
+  "targetWeightKg",
+  "pace",
+  "dayActivity",
+  "trainingDays",
+  "sessionMinutes",
+  "health",
+]);
+export type MissingSetupAnswer = z.infer<typeof missingSetupAnswerSchema>;
+
+/** The 409 a finish gets while setup still lacks an answer: onboarding comes
+ *  before the training side (RULINGS 2026-07-19). `missing` names the questions
+ *  still open, so the screen can send the person to them. */
 export const onboardingIncompleteBodySchema = z
   .object({
     error: z.literal("onboarding_incomplete"),
     message: z.string(),
     requestId: z.string(),
-    missing: z.array(missingPlanInputSchema).min(1),
+    missing: z.array(missingSetupAnswerSchema).min(1),
   })
   .strict();
 export type OnboardingIncompleteBody = z.infer<typeof onboardingIncompleteBodySchema>;

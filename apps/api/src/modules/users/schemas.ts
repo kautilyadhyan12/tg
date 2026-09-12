@@ -32,6 +32,7 @@ export type {
   FitnessProfile,
   FitnessProfileResponse,
   MissingPlanInput,
+  MissingSetupAnswer,
   OnboardingAnswers,
   OnboardingResponse,
   PatchOnboardingRequest,

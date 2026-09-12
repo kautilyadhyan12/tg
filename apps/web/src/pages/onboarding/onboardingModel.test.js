@@ -14,6 +14,7 @@ import {
   fitnessLevelSchema,
   genderSchema,
   missingPlanInputSchema,
+  missingSetupAnswerSchema,
   patchOnboardingRequestSchema,
   planFlagSchema,
   planNumbersSchema,
@@ -35,15 +36,21 @@ import {
 const accepts = (body) => patchOnboardingRequestSchema.safeParse(body).success;
 const values = (table) => table.map((row) => row.value).sort();
 
+/** Screen 8's answer is not one of the wizard's own: the page lays the health
+ *  screening beside them as `health` (4b-i), so these fixtures carry it too. */
+const NO_HEALTH_ANSWER = { answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null };
+const HEALTH_ANSWERED = { answered: true, hasCondition: false, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: '2026-09-12T09:00:00.000Z' };
+
 const EMPTY = {
   displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
   trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
+  health: NO_HEALTH_ANSWER,
 };
 const ALL = {
   ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
-  availableEquipment: ['dumbbells'],
+  availableEquipment: ['dumbbells'], health: HEALTH_ANSWERED,
 };
 
 describe('what the screens offer is exactly what the server accepts', () => {
@@ -104,8 +111,15 @@ describe('what the screens offer is exactly what the server accepts', () => {
     for (const n of m.SESSION_MINUTES) expect(accepts({ sessionMinutes: n }), String(n)).toBe(true);
   });
 
-  it('every answer the plan can be missing has words and a screen that asks it', () => {
-    const keys = [...missingPlanInputSchema.options].sort();
+  it('every answer a refused finish can name has words and a screen that asks it', () => {
+    // The finish's list, not the plan's: it carries the health question too
+    // (4b-i), and a key the screen cannot put a name or a screen to would send
+    // the person looking for something that is not there.
+    const keys = [...missingSetupAnswerSchema.options].sort();
+    // Which is the plan's own list plus the health question, and not the other
+    // way round: the plan itself is never missing it.
+    expect([...missingPlanInputSchema.options]).not.toContain('health');
+    expect(keys).toEqual([...missingPlanInputSchema.options, 'health'].sort());
     expect(Object.keys(m.MISSING_LABELS).sort()).toEqual(keys);
     expect(Object.keys(m.SCREEN_OF_MISSING).sort()).toEqual(keys);
     const ids = m.SCREENS.map((s) => s.id);
@@ -123,8 +137,8 @@ describe('which screens a person sees, and where they land', () => {
     // keeping the weight, it asks for no target.
     expect(ids({ ...EMPTY, weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] })).not.toContain('target');
     // Before the weight choice is made the step count does not jump when it is.
-    expect(ids(EMPTY)).toHaveLength(7);
-    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(7);
+    expect(ids(EMPTY)).toHaveLength(8);
+    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(8);
   });
 
   it('counts screen 1 answered on the weight choice alone: the goals beside it may be none', () => {
@@ -138,8 +152,20 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.firstOpenScreen({ ...ALL, weightGoal: null, fitnessGoals: ['muscle_gain'] })).toBe('goal');
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('target');
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
-    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('equipment');
+    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('health');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] })).toBe('equipment');
+    // Screen 8 is a screen like any other to the landing rule: unanswered, it
+    // is where a person with everything else in lands.
+    expect(m.firstOpenScreen({ ...ALL, health: NO_HEALTH_ANSWER })).toBe('health');
+  });
+
+  it('counts screen 8 answered only once the server has stored the answer', () => {
+    // A yes with no "Check first" is never stored, so it can never read as
+    // answered: the contract refuses it (RULINGS 2026-09-09).
+    expect(m.screenAnswered('health', { ...ALL, health: HEALTH_ANSWERED })).toBe(true);
+    expect(m.screenAnswered('health', { ...ALL, health: NO_HEALTH_ANSWER })).toBe(false);
+    expect(m.screenAnswered('health', { ...ALL, health: null })).toBe(false);
+    expect(m.screenAnswered('health', ALL)).toBe(true);
   });
 
   it('lets the step bar reach every screen up to the first unanswered one, and none past it', () => {
@@ -158,6 +184,7 @@ describe('which screens a person sees, and where they land', () => {
   });
 
   it('names what is missing in words, and passes an unknown key through rather than dropping it', () => {
+    expect(m.missingText(['health'])).toBe('the health question');
     expect(m.missingText(['dayActivity'])).toBe('your day');
     expect(m.missingText(['trainingDays', 'sessionMinutes'])).toBe('training days a week and session length');
     expect(m.missingText(['age', 'gender', 'somethingNew'])).toBe('your age, your gender and somethingNew');

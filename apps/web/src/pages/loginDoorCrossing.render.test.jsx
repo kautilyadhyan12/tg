@@ -50,6 +50,23 @@ vi.mock('../api/orgsApi', () => ({
   errorText: (_err, fallback) => fallback,
 }));
 
+// Screen 8's answer is read on arrival too (4b-i), from its own route.
+vi.mock('../api/healthApi', () => ({
+  healthService: {
+    get: vi.fn(() =>
+      Promise.resolve({
+        data: {
+          healthScreening: {
+            answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null,
+          },
+        },
+      }),
+    ),
+    put: vi.fn(),
+  },
+  consentService: { record: vi.fn() },
+}));
+
 // The questionnaire reads its saved answers on arrival; a person with none.
 vi.mock('../api/onboardingApi', () => ({
   onboardingService: {

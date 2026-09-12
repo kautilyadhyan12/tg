@@ -1,24 +1,28 @@
-// Onboarding v2, screens 1–7 (ROADMAP Stage 1 item 4a-ii; RULINGS 2026-09-07
-// and 2026-09-09): goal · about you · target · your day · your training ·
-// your week · equipment. Every answer is saved the moment it is given, and the
-// server's plan number sits on every screen from the moment it exists.
-// Screens 8–12 (health, food, running, code, your plan) follow in 4b and 4c.
+// Onboarding v2, screens 1–8 (ROADMAP Stage 1 items 4a-ii and 4b-i; RULINGS
+// 2026-09-07 and 2026-09-09): goal · about you · target · your day · your
+// training · your week · equipment · health. Every answer is saved the moment
+// it is given, and the server's plan number sits on every screen from the
+// moment it exists. Screens 9–12 (food, running, code, your plan) follow.
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, HeartPulse, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { consentService } from '../api/healthApi';
+import { errorText } from '../api/orgsApi';
 import PlanPanel from './onboarding/PlanPanel';
 import {
   AboutScreen,
   DayScreen,
   EquipmentScreen,
   GoalScreen,
+  HealthScreen,
   TargetScreen,
   TrainingScreen,
   WeekScreen,
 } from './onboarding/OnboardingScreens';
+import { useHealthScreening } from './onboarding/useHealthScreening';
 import { useOnboardingAnswers } from './onboarding/useOnboardingAnswers';
 import {
   SCREENS,
@@ -33,7 +37,7 @@ import {
   visibleScreens,
 } from './onboarding/onboardingModel';
 
-const ICONS = { goal: Target, about: User, target: TrendingDown, day: Sun, training: Zap, week: Clock, equipment: Dumbbell };
+const ICONS = { goal: Target, about: User, target: TrendingDown, day: Sun, training: Zap, week: Clock, equipment: Dumbbell, health: HeartPulse };
 
 const SCREEN_VIEWS = {
   goal: GoalScreen,
@@ -43,6 +47,7 @@ const SCREEN_VIEWS = {
   training: TrainingScreen,
   week: WeekScreen,
   equipment: EquipmentScreen,
+  health: HealthScreen,
 };
 
 const NAME_NEEDED = 'Type the name we should call you.';
@@ -107,7 +112,41 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState(null); // the questions a refused finish named
 
-  const answers = ob.answers;
+  // Screen 8's answer, on its own route (4b-i), and the disclaimer tap that
+  // goes with it. The tap is recorded the moment it is made, so the consent log
+  // holds it whether or not the person goes on to finish.
+  const hs = useHealthScreening();
+  const [agreed, setAgreed] = useState(false);
+  const [agreeing, setAgreeing] = useState(false);
+
+  const health = {
+    screening: hs.screening,
+    saving: hs.saving,
+    agreed,
+    agreeing,
+    /** A health answer moves the daily number (any yes stops the calorie cut),
+     *  so the plan is re-read the moment one lands — through the same save
+     *  queue the taps use, whose empty body simply re-reads it. */
+    answer: async (body) => {
+      if (await hs.save(body)) ob.save({});
+    },
+    agree: async () => {
+      setAgreeing(true);
+      try {
+        await consentService.record('health_step');
+        setAgreed(true);
+      } catch (err) {
+        toast.error(errorText(err, "Couldn't record that just now. Please try again."));
+      } finally {
+        setAgreeing(false);
+      }
+    },
+  };
+
+  // The wizard's answers with the health one laid beside them: screen 8 is a
+  // step like any other to the step bar, the landing rule and the finish rule,
+  // and only this page knows the two come from two routes.
+  const answers = { ...ob.answers, health: hs.screening };
 
   /** The name box saves when the person leaves it. A name is never blank: an
    *  empty box says so and saves nothing. */
@@ -133,9 +172,19 @@ export default function Onboarding() {
     commit: commitName,
   };
 
-  const loaded = ob.first !== null;
+  // Both loads have to land before the person is put on a screen: landing on
+  // the first open one means nothing while half the answers are still unknown.
+  // Either one failing is the same to the person — the page cannot be shown,
+  // and "Try again" retries the one that failed.
+  const loaded = ob.first !== null && hs.first !== null;
+  const failure =
+    ob.status === 'failed'
+      ? { text: ob.error, retry: ob.retry }
+      : hs.status === 'failed'
+        ? { text: hs.error, retry: hs.retry }
+        : null;
   const screens = visibleScreens(answers);
-  const current = picked ?? (loaded ? firstOpenScreen(ob.first) : SCREENS[0].id);
+  const current = picked ?? (loaded ? firstOpenScreen({ ...ob.first, health: hs.first }) : SCREENS[0].id);
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
   const isLast = index === screens.length - 1;
@@ -205,9 +254,15 @@ export default function Onboarding() {
   };
 
   // What still stands between the person and Finish, in the server's words.
-  const open = refused ?? (ob.plan === null ? ob.missing : []);
+  // The plan's own list never names the health question — the plan works
+  // without it — so an unanswered screening is added here, in the word the
+  // server's refusal would use.
+  const serverOpen = refused ?? (ob.plan === null ? ob.missing : []);
+  const open = screenAnswered('health', answers) ? serverOpen : [...serverOpen.filter((k) => k !== 'health'), 'health'];
   const openScreens = [...new Set(open.map((k) => SCREEN_OF_MISSING[k]).filter(Boolean))];
-  const canFinish = answered && open.length === 0 && !busy;
+  // The disclaimer tap is the person's own act on this screen, not an answer
+  // the server holds, so it gates Finish here.
+  const canFinish = answered && open.length === 0 && agreed && !busy;
 
   const View = SCREEN_VIEWS[screen.id];
   const StepIcon = ICONS[screen.id];
@@ -317,15 +372,15 @@ export default function Onboarding() {
         {/* ── Content ─────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-lg mx-auto px-6 py-8">
-            {!loaded && ob.status === 'failed' && (
+            {!loaded && failure !== null && (
               <div className="card-glass text-center space-y-4">
-                <p className="text-sm">{ob.error}</p>
-                <button type="button" onClick={ob.retry} className="btn-primary">
+                <p className="text-sm">{failure.text}</p>
+                <button type="button" onClick={failure.retry} className="btn-primary">
                   Try again
                 </button>
               </div>
             )}
-            {!loaded && ob.status !== 'failed' && <Spinner />}
+            {!loaded && failure === null && <Spinner />}
             {loaded && (
               <>
                 <div className="flex items-center gap-3 mb-6">
@@ -355,6 +410,7 @@ export default function Onboarding() {
                     setUnits={setUnits}
                     name={name}
                     direction={direction}
+                    health={health}
                   />
                 </motion.div>
 
@@ -362,11 +418,13 @@ export default function Onboarding() {
                   <div role="status" className="card-glass mt-6 space-y-3">
                     <p className="text-sm">Before you finish, answer {missingText(open)}.</p>
                     <div className="flex flex-wrap gap-2">
-                      {openScreens.map((id) => (
-                        <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
-                          Go to {SCREENS.find((s) => s.id === id)?.title}
-                        </button>
-                      ))}
+                      {openScreens
+                        .filter((id) => id !== screen.id)
+                        .map((id) => (
+                          <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
+                            Go to {SCREENS.find((s) => s.id === id)?.title}
+                          </button>
+                        ))}
                     </div>
                   </div>
                 )}

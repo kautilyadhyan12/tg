@@ -33,7 +33,7 @@ function serve({ me = {}, fitness = {} } = {}) {
     fitness: {
       age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
       fitnessGoals: [], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
-      sessionDurationMin: 45, preferredWorkoutTime: null, medicalConditions: null, onboardingCompleted: true,
+      sessionDurationMin: 45, preferredWorkoutTime: null, onboardingCompleted: true,
       updatedAt: null, ...fitness,
     },
   };

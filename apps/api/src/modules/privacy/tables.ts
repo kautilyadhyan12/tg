@@ -63,8 +63,8 @@ export const DIRECT_DELETE_TABLES = [
 
 // user_fitness_profiles is REQUIRED here and is not in §5.2's own sentence:
 // the table postdates the spec (migration 0006, PR #30) and holds age,
-// gender, height and `medical_conditions` — HEALTH DATA, sensitive under
-// DPDP. DECISIONS 2026-07-15 records that it must be added to BOTH §5.2
+// gender and height — HEALTH DATA, sensitive under DPDP. (It held free-text
+// medical notes too until 0029 dropped that column, RULINGS 2026-09-09.) DECISIONS 2026-07-15 records that it must be added to BOTH §5.2
 // lists, and the onboarding-storage card was merged on exactly that
 // condition (DECISIONS 2026-07-16, "THE PROMOTION IS THE PRICE OF THE
 // ACCEPT"). Its FK to users is ON DELETE CASCADE, which is defence in depth

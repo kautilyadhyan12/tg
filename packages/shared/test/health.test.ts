@@ -1,8 +1,12 @@
 // The health screening and consent contracts (ROADMAP Stage 1 item 3b).
 import { describe, expect, it } from "vitest";
 import {
+  CHECK_FIRST_OPTIONS,
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
+  HEALTH_QUESTION,
+  HEALTH_QUESTION_NOTE,
+  checkFirstSchema,
   consentListResponseSchema,
   consentPurposeSchema,
   deriveHealthFlags,
@@ -49,6 +53,41 @@ describe("health screening contract", () => {
   });
 });
 
+describe("the words both screens show (4b-i)", () => {
+  it("asks ONE question, and it carries the medicine clause Kd added", () => {
+    // RULINGS 2026-09-09's own sentence, plus decision C (2026-09-10). No
+    // condition is ever NAMED as a thing to tick: the words list examples
+    // inside one question, and the answer is a yes or a no.
+    expect(HEALTH_QUESTION).toBe(
+      "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?",
+    );
+    expect(HEALTH_QUESTION.match(/\?/g)).toHaveLength(1);
+    expect(HEALTH_QUESTION_NOTE.toLowerCase()).toContain("never");
+  });
+
+  it("offers exactly the two answers to 'Check first', and both say the calorie cut is off", () => {
+    expect(Object.keys(CHECK_FIRST_OPTIONS).sort()).toEqual([...checkFirstSchema.options].sort());
+    // ANY yes stops the cut, cleared or not (RULINGS 2026-09-09) — a person
+    // reading either card is told so, rather than finding out from the number.
+    for (const option of Object.values(CHECK_FIRST_OPTIONS)) {
+      expect(option.label.length).toBeGreaterThan(0);
+      expect(option.detail.toLowerCase()).toContain("no calorie cut");
+    }
+    // Only "not yet" turns Safe mode on, and only its card says so.
+    expect(CHECK_FIRST_OPTIONS.not_yet.detail).toContain("Safe mode");
+    expect(CHECK_FIRST_OPTIONS.cleared.detail).not.toContain("Safe mode");
+  });
+
+  it("never claims anything is safe for the person, treated or cured", () => {
+    for (const text of [HEALTH_QUESTION, HEALTH_QUESTION_NOTE, ...Object.values(CHECK_FIRST_OPTIONS).flatMap((o) => [o.label, o.detail])]) {
+      const lower = text.toLowerCase();
+      expect(lower).not.toContain("safe for you");
+      expect(lower).not.toMatch(/treats?/);
+      expect(lower).not.toMatch(/cures?/);
+    }
+  });
+});
+
 describe("consent contract", () => {
   it("every purpose has a current version whose wording exists", () => {
     for (const purpose of consentPurposeSchema.options) {
@@ -67,6 +106,26 @@ describe("consent contract", () => {
         expect(lower, `${purpose} ${version}`).toContain("not medical advice");
         expect(lower, `${purpose} ${version}`).toContain("professional");
       }
+    }
+  });
+
+  it("v2 keeps 'follow their advice' and drops the comparison with the app, on all three screens (Kd, 2026-09-10)", () => {
+    for (const purpose of consentPurposeSchema.options) {
+      // v2 is what a screen shows today…
+      expect(CURRENT_DISCLAIMER_VERSION[purpose]).toBe("v2");
+      const v1 = DISCLAIMER_WORDINGS[purpose]["v1"] ?? "";
+      const v2 = DISCLAIMER_WORDINGS[purpose]["v2"] ?? "";
+      expect(v1, purpose).not.toBe("");
+      // …the advice stays…
+      expect(v2, purpose).toContain("follow their advice");
+      // …and the comparison goes, in either spelling v1 used.
+      expect(v2, purpose).not.toContain("over the app");
+      expect(v2, purpose).not.toContain("over anything this app says");
+      expect(v1, purpose).toMatch(/over the app's|over anything this app says/);
+      // v2 IS v1 with that clause removed — nothing else was reworded, and the
+      // old version is untouched, so the consent log keeps what each person
+      // agreed to.
+      expect(v2, purpose).toBe(v1.replace(/ over the app's| over anything this app says/, ""));
     }
   });
 
