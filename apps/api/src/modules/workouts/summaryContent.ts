@@ -52,7 +52,7 @@ interface MealIdea {
 const HIGH_BAND: readonly MealIdea[] = [
   { meal: "Protein shake + banana", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake + banana" },
   { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Grilled tofu + potatoes + vegetables" },
-  { meal: "Greek yogurt with berries", timing: "Later today", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
+  { meal: "Greek yogurt with berries", timing: "In 3–4 hours", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
 ];
 const MIDDLE_BAND: readonly MealIdea[] = [
   { meal: "Protein shake or chocolate milk", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake or soy chocolate milk" },

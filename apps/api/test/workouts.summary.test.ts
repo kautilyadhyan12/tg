@@ -355,7 +355,7 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(hotBody.mealSuggestions).toEqual([
       { meal: "Protein shake + banana", timing: "Within 30 mins" },
       { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours" },
-      { meal: "Greek yogurt with berries", timing: "Later today" },
+      { meal: "Greek yogurt with berries", timing: "In 3–4 hours" },
     ]);
 
     // Another person's diet reaches nobody else's ideas.

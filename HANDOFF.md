@@ -4,11 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii's last fixes: "In 3–4 hours", a reset cannot slip past a finish, tidier records, PR #64
+
+- Kd picked "In 3–4 hours" for the yogurt idea's timing ("Later today" did not count from the workout; RULINGS
+  2026-08-06, amended again). Changed in `summaryContent.ts`, both summary tests and ROADMAP 4b-ii.
+- New test: a profile PUT that finishes setup while a reset holds the account is refused (409, health named),
+  never finished with no health answer. Moving the "already finished" read outside the lock turns it red (200).
+- HANDOFF's 2144cda entry cut to ten lines; the no-diet rule labelled the chat's choice; schema comment rewritten.
+- Verified: api tsc 0 · eslint 0 · the four touched test files 93/93 · full local suite 999/999 · gitleaks clean.
+- Open: CI on PR #64, merge; then 4b-ii-b. The re-check round is closed (no Critical/High).
+
 ## 2026-09-13 · The post-workout meal ideas in the market's words (4b-ii), branch `food-and-gym-code`, PR #64
 
 - Commit ce4420e: the seven meal-idea lines on ROADMAP 4b-ii, in `summaryContent.ts` and its two tests — potatoes for
   rice, "Later today" for "1 hour before bed", chickpeas in the vegetarian and vegan salad. Bands, thresholds and
-  diet swaps unchanged. A word swap: no mutation sweep, no review round of its own.
+  diet swaps unchanged.
 - Verified locally: shared tsc 0 · eslint 0; api tsc 0 · eslint 0; `test:local` on the two summary files 39/39;
   gitleaks on the staged files, no leaks.
 - Open: CI on PR #64, Kd's fresh-chat re-check of 2144cda + ce4420e, merge; then 4b-ii-b.
@@ -35,26 +45,18 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Next: an Opus chat on this branch — the wording change, checks, push, then it hands Kd the re-check prompt;
   a fresh chat re-checks 2144cda + that commit; merge; then 4b-ii-b, 4b-iii, 4c, 7a-i, 7a, 7a-ii, 7c.
 
-## 2026-09-13 · 4b-ii's review fixed (two High, four Low, five weak tests), branch `food-and-gym-code`, PR #64
+## 2026-09-13 · 4b-ii: the finish gate on the profile PUT, meal ideas that follow the diet (2144cda), PR #64
 
-- Kd ruled the clash between "ported word for word" and "every meal suggestion respects the diet": the meal ideas
-  after a workout follow the diet (RULINGS 2026-08-06, amended). Vegan: tofu for the chicken, soy yogurt; no diet
-  answer gets the ideas every diet can eat; non-vegetarians see the ported words. The card carries the food-allergy
-  caution (RULINGS 2026-09-09), whose words are now `FOOD_ALLERGY_CAUTION` in `@app/shared`.
-- High: `PUT /v1/users/me/fitness-profile {"onboardingCompleted": true}` finished setup with nothing answered. It
-  now refuses a false→true finish while setup lacks an answer (the PATCH's 409 and list), in one transaction with
-  the users row locked first; a finish already stored is kept, so Settings saves still work.
-- Lows: screen 9's meals hint promises nothing ("Snacks count."); Settings offers "Not set" for meals only while
-  none is stored; screen 11's "Try again" puts the cursor in the code box instead of looping into setup.
-- "Code applied first" means, in Kd's 2026-09-07 words, applied before setup "so they are joined even if they stop
-  halfway". A poster link loses its code at sign-in and at the setup redirect; that goes through the sign-in door,
-  so it is split out as ROADMAP 4b-ii-b, next in line.
-- Verified: shared tsc/eslint 0, 95 · api tsc/eslint 0, CI-shaped 305, full local 981/998 (the 17 are
-  `workouts.sync` logged out mid-run, item 10's shared-database flake; 23/23 alone) · web touched files 283, full
-  2046/2047 (poseAssets.contract the known local red) · web lint on the touched files identical to the committed
-  files · 19 deliberate breaks, each red for its own reason. The one web red, Settings' health "Try again" test,
-  fails the same way on the committed code without these fixes (2040/2041): a load flake, now on item 10.
-- Open: CI, the fresh-chat re-check of these fixes only, Kd's click-through of what changed, merge.
+- Meal ideas after a workout follow the diet (Kd, RULINGS 2026-08-06 amended): a vegan gets tofu and soy yogurt.
+  No diet answer gets the ideas every diet can eat — the chat's choice, from RULINGS 2026-07-15, not Kd's ruling.
+  The card carries the food-allergy caution, its words now `FOOD_ALLERGY_CAUTION` in `@app/shared`.
+- The profile PUT no longer finishes setup with answers open: the PATCH's 409 and list, the users row locked
+  first; a finish already stored is kept, so Settings saves still work.
+- Screen 9's meals hint promises nothing; Settings offers "Not set" for meals only while none is stored; screen
+  11's "Try again" goes to the code box. A poster link's code is split out as ROADMAP 4b-ii-b.
+- Verified: api tsc/eslint 0, full local 981/998 (17 = item 10's `workouts.sync` flake, 23/23 alone); web full
+  2046/2047 (poseAssets.contract, the known local red); 19 deliberate breaks, each red for its own reason.
+- Open: CI, merge.
 
 ## 2026-09-12 · Screen 9 (food) and screen 11 (the gym code), item 4b-ii, branch `food-and-gym-code`
 

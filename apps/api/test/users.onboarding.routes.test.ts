@@ -1583,6 +1583,40 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers).toMatchObject({ age: 31, diet: "vegan" });
   });
 
+  it("a profile PUT that finishes setup behind a reset is checked on the reset's empty answers, never waved through", { timeout: 60_000 }, async () => {
+    // The PUT skips the finish check for an account ALREADY finished, so
+    // where it reads that decides this. Read before the users row is locked,
+    // it sees the finish the reset is deleting, skips the check, and writes a
+    // finished account with no health answer. Read under the lock, it sees
+    // what the reset left — nothing — and refuses.
+    const { userId, cookies } = await makeUser("ob-put-finish-behind-reset@example.com");
+    await completeScreens(cookies);
+    await answerHealth(cookies, { hasCondition: false });
+    expect((await patchOk(cookies, { onboardingCompleted: true })).answers["onboardingCompleted"]).toBe(true);
+
+    const settingsSave = {
+      age: 30, gender: "female", heightCm: 165, targetWeightKg: 65, fitnessLevel: "beginner", fitnessGoals: [],
+      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], sessionDurationMin: 45,
+      preferredWorkoutTime: null, diet: "non_vegetarian", mealsPerDay: 3, onboardingCompleted: true,
+    };
+    const out = await interleave(
+      async (tx, hold) => {
+        // deleteOnboarding's statements, in its order.
+        await tx`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+        await tx`DELETE FROM user_fitness_profiles WHERE user_id = ${userId}`;
+        await tx`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
+        await hold();
+      },
+      () => inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: settingsSave, cookies }),
+    );
+    expect(out.firstError).toBeNull();
+    expect(out.secondError).toBeNull();
+    expect(out.second?.statusCode, out.second?.body).toBe(409);
+    expect(onboardingIncompleteBodySchema.parse(JSON.parse(out.second?.body ?? "{}")).missing).toContain("health");
+    expect(await healthScreening(cookies)).toMatchObject({ answered: false, hasCondition: null });
+    expect((await get(cookies)).answers["onboardingCompleted"]).toBe(false);
+  });
+
   it("a history write that waits behind the account's deletion is refused with the same 401, whichever write it is", { timeout: 60_000 }, async () => {
     // It passes sign-in while the deletion is still uncommitted, then queues
     // on the users row. All three writes answer as sign-in does for every

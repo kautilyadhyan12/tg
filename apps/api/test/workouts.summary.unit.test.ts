@@ -22,7 +22,7 @@ describe("meal suggestions for a non-vegetarian (workouts.py:600-615's bands; th
     expect(mealSuggestionsFor(401, "non_vegetarian")).toEqual([
       { meal: "Protein shake + banana", timing: "Within 30 mins" },
       { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours" },
-      { meal: "Greek yogurt with berries", timing: "Later today" },
+      { meal: "Greek yogurt with berries", timing: "In 3–4 hours" },
     ]);
     // Python is `if calories > 400`, so 400 itself falls to the middle band.
     // A `>=` port would be invisible on every other input.
