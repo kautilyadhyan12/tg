@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   never finished with no health answer. Moving the "already finished" read outside the lock turns it red (200).
 - HANDOFF's 2144cda entry cut to ten lines; the no-diet rule labelled the chat's choice; schema comment rewritten.
 - Verified: api tsc 0 · eslint 0 · the four touched test files 93/93 · full local suite 999/999 · gitleaks clean.
-- Open: CI on PR #64, merge; then 4b-ii-b. The re-check round is closed (no Critical/High).
+- Kd's click-through passed (*"all passed merge"*); CI green on 04eab8e, all five jobs; merged 2026-09-13 (PR #64).
+- Next: 4b-ii-b (a poster's code survives sign-in and setup). API 3000 on the LOCAL Postgres and web 5173 running.
 
 ## 2026-09-13 · The post-workout meal ideas in the market's words (4b-ii), branch `food-and-gym-code`, PR #64
 
