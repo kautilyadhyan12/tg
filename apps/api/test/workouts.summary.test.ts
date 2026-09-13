@@ -347,21 +347,24 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
       expect(res.statusCode, res.body).toBe(200);
     };
 
-    // A non-vegetarian reads the ported words (RULINGS 2026-08-06).
+    // A non-vegetarian reads the ideas unswapped, in the market's words
+    // (RULINGS 2026-08-06 as amended 2026-09-13).
     await eat(cookieA, "non_vegetarian");
     const hotBody = workoutSummarySchema.parse((await summary(hot, cookieA)).json());
     expect(hotBody.caloriesBurned ?? 0).toBeGreaterThan(400);
-    expect(hotBody.mealSuggestions).toHaveLength(3);
-    expect(hotBody.mealSuggestions[0]?.meal).toBe("Protein shake + banana");
-    expect(hotBody.mealSuggestions[1]?.meal).toBe("Grilled chicken + rice + vegetables");
+    expect(hotBody.mealSuggestions).toEqual([
+      { meal: "Protein shake + banana", timing: "Within 30 mins" },
+      { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours" },
+      { meal: "Greek yogurt with berries", timing: "Later today" },
+    ]);
 
     // Another person's diet reaches nobody else's ideas.
     await eat(cookieB, "vegan");
-    expect(await ideas(cookieA)).toContain("Grilled chicken + rice + vegetables");
+    expect(await ideas(cookieA)).toContain("Grilled chicken + potatoes + vegetables");
 
     // A vegan is never offered the chicken (RULINGS 2026-09-13), and a diet
     // changed since the workout is the one the ideas follow.
-    const plant = ["Plant protein shake + banana", "Grilled tofu + rice + vegetables", "Soy yogurt with berries"];
+    const plant = ["Plant protein shake + banana", "Grilled tofu + potatoes + vegetables", "Soy yogurt with berries"];
     await eat(cookieA, "vegan");
     expect(await ideas(cookieA)).toEqual(plant);
     // No answer is never a guess at meat: the ideas every diet can eat.

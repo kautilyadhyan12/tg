@@ -1,22 +1,22 @@
 // The post-workout summary's WORDS — meal ideas, stretch suggestions and
 // personal-record labels.
 //
-// A VERBATIM PORT of `backend-ml/app/routers/workouts.py:598-639`, the old
-// backend's `get_workout_summary`. Kd approved porting it as-is on 2026-08-06,
-// having been told the spec names no home for either feature: a grep over
-// `docs/spec` for "meal suggestion", "stretch" and "post-workout" returns MET
-// values and a share-card flow, and nothing that specifies this. Under R0.2 the
-// options were "port what exists" or "invent"; under the no-removal rule
-// dropping it was never one. So: nothing here is authored, re-worded or
-// improved. The bands, the thresholds, the muscle names and the strings are the
-// Python file's, in the Python file's order.
+// Ported from `backend-ml/app/routers/workouts.py:598-639`, the old backend's
+// `get_workout_summary`. Kd approved porting it as-is on 2026-08-06, having
+// been told the spec names no home for either feature: a grep over `docs/spec`
+// for "meal suggestion", "stretch" and "post-workout" returns MET values and a
+// share-card flow, and nothing that specifies this. The stretches, the record
+// labels, the muscle names, the calorie bands and their thresholds are still
+// the Python file's, in the Python file's order.
 //
-// ONE AMENDMENT, KD'S (RULINGS 2026-09-13): THE MEAL IDEAS FOLLOW THE DIET.
-// Screen 9 stores a diet and every meal suggestion respects it (RULINGS
-// 2026-09-10), so a vegan is never offered the chicken. The bands, thresholds
-// and timings stay the Python file's; where a diet rules an idea's food out,
-// that food alone is swapped for one it allows, and a non-vegetarian reads the
-// ported words exactly. The stretches and the record labels are untouched.
+// THE MEAL IDEAS ARE NO LONGER A VERBATIM PORT (RULINGS 2026-08-06, amended
+// 2026-09-13). They follow the diet screen 9 stores (RULINGS 2026-09-10), so a
+// vegan is never offered the chicken: where a diet rules an idea's food out,
+// that food alone is swapped for one it allows. And their words are the
+// market's: every timing counts from the workout (never "before bed" on a
+// post-workout card), and the foods are what the US, Canada and Europe eat,
+// never rice first. The seven lines and their swaps are written out on ROADMAP
+// 4b-ii.
 //
 // WHY STRINGS AND NOT MESSAGE KEYS. v1 §14 wants message keys so hi/as is a
 // translation task. These are English strings because that is what ships today
@@ -36,9 +36,9 @@ import { EXERCISE_CONTENT, type Diet, type MealSuggestion } from "@app/shared";
  *  fish. */
 const DIET_LADDER: Record<Diet, number> = { vegan: 0, vegetarian: 1, vegetarian_eggs: 2, non_vegetarian: 3 };
 
-/** One meal idea. `meal` is the ported words, eaten as they are by `fitsFrom`
- *  and every diet above it; `swap` is the same idea for the diets below, with
- *  only the food they rule out changed. An idea every diet can eat has none. */
+/** One meal idea. `meal` is eaten as it is by `fitsFrom` and every diet above
+ *  it; `swap` is the same idea for the diets below, with only the food they
+ *  rule out changed. An idea every diet can eat has none. */
 interface MealIdea {
   meal: string;
   timing: string;
@@ -46,12 +46,13 @@ interface MealIdea {
   swap: string | null;
 }
 
-/** workouts.py:600-615 — three calorie bands, in the source's order. The
- *  thresholds are `> 400` and `> 200` on the workout's kcal figure. */
+/** Three calorie bands, as workouts.py:600-615 had them. The thresholds are
+ *  `> 400` and `> 200` on the workout's kcal figure; the words are RULINGS
+ *  2026-09-13's. */
 const HIGH_BAND: readonly MealIdea[] = [
   { meal: "Protein shake + banana", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake + banana" },
-  { meal: "Grilled chicken + rice + vegetables", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Grilled tofu + rice + vegetables" },
-  { meal: "Greek yogurt with berries", timing: "1 hour before bed", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
+  { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Grilled tofu + potatoes + vegetables" },
+  { meal: "Greek yogurt with berries", timing: "Later today", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
 ];
 const MIDDLE_BAND: readonly MealIdea[] = [
   { meal: "Protein shake or chocolate milk", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake or soy chocolate milk" },
@@ -59,7 +60,7 @@ const MIDDLE_BAND: readonly MealIdea[] = [
 ];
 const LOW_BAND: readonly MealIdea[] = [
   { meal: "Banana + peanut butter", timing: "Within 30 mins", fitsFrom: "vegan", swap: null },
-  { meal: "Light salad with grilled protein", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Light salad with grilled tofu" },
+  { meal: "Light salad with grilled protein", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Light salad with chickpeas" },
 ];
 
 /** Every idea, for the test that holds each to the ladder. */
@@ -78,7 +79,7 @@ export function mealSuggestionsFor(caloriesBurned: number | null, diet: Diet | n
   const level = diet === null ? 0 : DIET_LADDER[diet];
   return band.map((idea) => {
     if (level >= DIET_LADDER[idea.fitsFrom]) return { meal: idea.meal, timing: idea.timing };
-    // Never the ported words in place of a missing swap: that fallback is the
+    // Never the idea's own words in place of a missing swap: that fallback is the
     // chicken offered to a vegan this function exists to prevent.
     if (idea.swap === null) throw new Error(`meal idea "${idea.meal}" has no swap for a diet below ${idea.fitsFrom}`);
     return { meal: idea.swap, timing: idea.timing };
