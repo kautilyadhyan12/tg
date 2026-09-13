@@ -17,6 +17,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - He asked for options on the dashboard's Recommended box — Exercise · Food · Running — each showing its kind
   (RULINGS 2026-09-13): ROADMAP 7a-ii, built with 7a's engine; Exercise joins at 6b, Running at 7b. Two questions
   for him sit on that line (the design as read; whether the web shows the week's runs). Asked in chat, unanswered.
+- Kd then asked whether the post-workout ideas repeat every day (today: yes — seven fixed lines; from 7a they vary,
+  drawn from the food list) and said a non-vegetarian can eat veg too (RULINGS 2026-09-13: the diet is a ceiling,
+  never a demand; 7a includes veg dishes for non-vegetarians). Whether he wants variety BEFORE 7a: asked, unanswered.
 - Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat. Accounts: `kd.meals.0913@example.com`
   (finished, vegan, one 560 kcal workout, id `f45b13f5-2316-4fe9-a77c-26112c01bd3e`) and `kd.code.0913@example.com`
   (setup unfinished, a refused request to join `2LY3BZ`); the sign-in code prints in the API log.
