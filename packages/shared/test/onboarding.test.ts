@@ -3,8 +3,10 @@
 // promise the response makes about when a number exists.
 import { describe, expect, it } from "vitest";
 import {
+  dietSchema,
   equipmentSchema,
   fitnessGoalSchema,
+  mealsPerDaySchema,
   missingPlanInputSchema,
   missingSetupAnswerSchema,
   onboardingAnswersSchema,
@@ -23,6 +25,30 @@ function subsets<T>(options: readonly T[]): T[][] {
   for (let mask = 0; mask < 1 << options.length; mask++) out.push(options.filter((_, i) => (mask & (1 << i)) !== 0));
   return out;
 }
+
+/** A person who has answered nothing, as the server would send them. */
+const answersFixture = onboardingAnswersSchema.parse({
+  displayName: "Kd",
+  weightGoal: null,
+  fitnessGoals: [],
+  age: null,
+  gender: null,
+  heightCm: null,
+  weightKg: null,
+  targetWeightKg: null,
+  pace: null,
+  dayActivity: null,
+  fitnessLevel: null,
+  pushUpsMax: null,
+  plankHoldSeconds: null,
+  trainingDays: null,
+  sessionMinutes: null,
+  availableEquipment: [],
+  diet: null,
+  mealsPerDay: null,
+  onboardingCompleted: false,
+  updatedAt: null,
+});
 
 describe("screen 1: one weight choice, and any number of goals beside it (RULINGS 2026-09-10)", () => {
   it("stores the weight choice as the direction the maths works in: one enum, nothing mapped between them", () => {
@@ -80,6 +106,7 @@ describe("one screen's save", () => {
       { fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 },
       { trainingDays: 3, sessionMinutes: 45 },
       { availableEquipment: ["dumbbells", "gym"] },
+      { diet: "vegan", mealsPerDay: 3 },
       { onboardingCompleted: true },
     ]) {
       expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
@@ -152,6 +179,47 @@ describe("one screen's save", () => {
     }
   });
 
+  it("takes screen 9's four diets and no fifth, on both surfaces: one answer asked twice", () => {
+    // Kd's four (RULINGS 2026-09-10), in his order. Settings asks the same
+    // question (4b-ii), so the two rails are asserted against each other
+    // rather than restated: one drifting would take an answer on one screen
+    // and refuse it on the other.
+    expect([...dietSchema.options]).toEqual(["vegetarian", "vegetarian_eggs", "non_vegetarian", "vegan"]);
+    for (const diet of dietSchema.options) {
+      expect(patchOnboardingRequestSchema.safeParse({ diet }).success, diet).toBe(true);
+      expect(putFitnessProfileRequestSchema.safeParse({ diet }).success, diet).toBe(true);
+    }
+    // A diet is cleared the way every other answer is, and never guessed.
+    expect(patchOnboardingRequestSchema.parse({ diet: null })).toEqual({ diet: null });
+    for (const diet of ["pescatarian", "veg", "", "VEGAN", 1, true]) {
+      expect(patchOnboardingRequestSchema.safeParse({ diet }).success, JSON.stringify(diet)).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse({ diet }).success, JSON.stringify(diet)).toBe(false);
+    }
+  });
+
+  it("asks no cuisine, anywhere (RULINGS 2026-09-12)", () => {
+    // The ruling is that the data does not exist — not at sign-up and not in
+    // the suggestions — so a body carrying one is refused rather than ignored.
+    for (const body of [{ cuisine: "indian" }, { cuisines: ["indian"] }, { cuisineGuess: "italian" }]) {
+      expect(patchOnboardingRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+    }
+    expect(onboardingAnswersSchema.safeParse({ ...answersFixture, cuisine: "indian" }).success).toBe(false);
+  });
+
+  it("takes 2 to 6 meals a day, whole, on both surfaces", () => {
+    for (const mealsPerDay of [2, 3, 4, 5, 6]) {
+      expect(mealsPerDaySchema.safeParse(mealsPerDay).success).toBe(true);
+      expect(patchOnboardingRequestSchema.safeParse({ mealsPerDay }).success, String(mealsPerDay)).toBe(true);
+      expect(putFitnessProfileRequestSchema.safeParse({ mealsPerDay }).success, String(mealsPerDay)).toBe(true);
+    }
+    for (const mealsPerDay of [0, 1, 7, 3.5, -3, "3"]) {
+      expect(patchOnboardingRequestSchema.safeParse({ mealsPerDay }).success, JSON.stringify(mealsPerDay)).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse({ mealsPerDay }).success, JSON.stringify(mealsPerDay)).toBe(false);
+    }
+    expect(patchOnboardingRequestSchema.parse({ mealsPerDay: null })).toEqual({ mealsPerDay: null });
+  });
+
   it("takes screen 2's name on the profile form's own rail: trimmed, 1 to 100 characters, never cleared", () => {
     expect(patchOnboardingRequestSchema.parse({ displayName: "  Kd  " })).toEqual({ displayName: "Kd" });
     expect(patchOnboardingRequestSchema.safeParse({ displayName: "x".repeat(100) }).success).toBe(true);
@@ -178,26 +246,7 @@ describe("one screen's save", () => {
 });
 
 describe("what the server answers with", () => {
-  const answers = onboardingAnswersSchema.parse({
-    displayName: "Kd",
-    weightGoal: null,
-    fitnessGoals: [],
-    age: null,
-    gender: null,
-    heightCm: null,
-    weightKg: null,
-    targetWeightKg: null,
-    pace: null,
-    dayActivity: null,
-    fitnessLevel: null,
-    pushUpsMax: null,
-    plankHoldSeconds: null,
-    trainingDays: null,
-    sessionMinutes: null,
-    availableEquipment: [],
-    onboardingCompleted: false,
-    updatedAt: null,
-  });
+  const answers = answersFixture;
 
   it("refuses a number beside a list of what is missing, and a silence beside neither", () => {
     // The screens' whole promise: a number exists, or an honest account of what
@@ -211,20 +260,27 @@ describe("what the server answers with", () => {
     expect(onboardingAnswersSchema.safeParse({ ...answers, mainGoal: null }).success).toBe(false);
   });
 
-  it("names the health question among what setup is still missing, and every answer the plan itself needs", () => {
-    // The plan can do without the health answer — unanswered simply applies no
-    // condition rule — but setup cannot (4b-i). So the finish's list is the
-    // plan's inputs PLUS `health`, and an input added to the plan cannot go
+  it("names the three answers setup needs and the plan does not, and every answer the plan itself needs", () => {
+    // The plan can do without the health answer (unanswered applies no
+    // condition rule) and without screen 9's two (no meal answer moves a
+    // calorie) — but setup cannot: 4b-i and 4b-ii. So the finish's list is the
+    // plan's inputs PLUS those three, and an input added to the plan cannot go
     // missing here without this failing.
-    expect([...missingSetupAnswerSchema.options].sort()).toEqual([...missingPlanInputSchema.options, "health"].sort());
-    // The PLAN's own list never carries it: a plan is a number, not a gate.
-    expect(missingPlanInputSchema.safeParse("health").success).toBe(false);
+    const setupOnly = ["health", "diet", "mealsPerDay"];
+    expect([...missingSetupAnswerSchema.options].sort()).toEqual([...missingPlanInputSchema.options, ...setupOnly].sort());
+    // The PLAN's own list never carries them: a plan is a number, not a gate.
+    for (const key of setupOnly) expect(missingPlanInputSchema.safeParse(key).success, key).toBe(false);
 
     const body = { error: "onboarding_incomplete", message: "m", requestId: "r" };
     expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["health"] }).success).toBe(true);
     expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["age", "health"] }).success).toBe(true);
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["diet", "mealsPerDay"] }).success).toBe(true);
     expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: [] }).success).toBe(false);
     expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["medicalConditions"] }).success).toBe(false);
+    // The gym code (screen 11) is not an answer at all: most people have none,
+    // so nothing can be missing for it and a refusal can never name it.
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["code"] }).success).toBe(false);
+    expect(onboardingIncompleteBodySchema.safeParse({ ...body, missing: ["joinCode"] }).success).toBe(false);
   });
 
   it("always carries the name the app calls the person", () => {

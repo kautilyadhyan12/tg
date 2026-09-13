@@ -1,13 +1,15 @@
-// Post-workout summary — the PURE pieces: the ported meal/stretch/record tables
-// and the per-workout XP figure. No DB, so these run everywhere.
+// Post-workout summary — the PURE pieces: the meal/stretch/record tables and
+// the per-workout XP figure. No DB, so these run everywhere.
 //
-// These assertions are the port's proof. `summaryContent.ts` claims to be a
-// verbatim port of `backend-ml/app/routers/workouts.py:562-639`; a comment
-// saying so is not evidence, and this project has recorded a "port" whose own
-// record was the only thing certifying it more than once. Every expectation
-// below is the STRING or THRESHOLD from that Python file.
+// These assertions are the proof. The stretches, the record labels and the
+// meal ideas' bands and thresholds are ported from
+// `backend-ml/app/routers/workouts.py:562-639`, and each such expectation is
+// the STRING or THRESHOLD from that Python file. The meal ideas' words are not:
+// they are the market's words, RULINGS 2026-09-13, written out on ROADMAP 4b-ii.
 import { describe, expect, it } from "vitest";
+import { dietSchema } from "@app/shared";
 import {
+  MEAL_IDEA_BANDS,
   mealSuggestionsFor,
   personalRecordsFor,
   primaryMusclesFor,
@@ -15,24 +17,24 @@ import {
 } from "../src/modules/workouts/summaryContent.js";
 import { isStreakContinuationDay, xpEarnedForWorkout } from "../src/modules/gamification/xp.js";
 
-describe("meal suggestions (workouts.py:600-615, verbatim)", () => {
+describe("meal suggestions for a non-vegetarian (workouts.py:600-615's bands; the market's words, RULINGS 2026-09-13)", () => {
   it("the >400 band, and its boundary is EXCLUSIVE", () => {
-    expect(mealSuggestionsFor(401)).toEqual([
+    expect(mealSuggestionsFor(401, "non_vegetarian")).toEqual([
       { meal: "Protein shake + banana", timing: "Within 30 mins" },
-      { meal: "Grilled chicken + rice + vegetables", timing: "Within 2 hours" },
-      { meal: "Greek yogurt with berries", timing: "1 hour before bed" },
+      { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours" },
+      { meal: "Greek yogurt with berries", timing: "In 3–4 hours" },
     ]);
     // Python is `if calories > 400`, so 400 itself falls to the middle band.
     // A `>=` port would be invisible on every other input.
-    expect(mealSuggestionsFor(400)).toHaveLength(2);
+    expect(mealSuggestionsFor(400, "non_vegetarian")).toHaveLength(2);
   });
 
   it("the >200 band, and its boundary is EXCLUSIVE", () => {
-    expect(mealSuggestionsFor(201)).toEqual([
+    expect(mealSuggestionsFor(201, "non_vegetarian")).toEqual([
       { meal: "Protein shake or chocolate milk", timing: "Within 30 mins" },
       { meal: "Eggs + whole grain toast + avocado", timing: "Within 2 hours" },
     ]);
-    expect(mealSuggestionsFor(200)[0]?.meal).toBe("Banana + peanut butter");
+    expect(mealSuggestionsFor(200, "non_vegetarian")[0]?.meal).toBe("Banana + peanut butter");
   });
 
   it("the low band, and a NULL kcal takes it — Python's `.get(…, 0)`", () => {
@@ -40,8 +42,76 @@ describe("meal suggestions (workouts.py:600-615, verbatim)", () => {
       { meal: "Banana + peanut butter", timing: "Within 30 mins" },
       { meal: "Light salad with grilled protein", timing: "Within 2 hours" },
     ];
-    expect(mealSuggestionsFor(0)).toEqual(low);
-    expect(mealSuggestionsFor(null)).toEqual(low);
+    expect(mealSuggestionsFor(0, "non_vegetarian")).toEqual(low);
+    expect(mealSuggestionsFor(null, "non_vegetarian")).toEqual(low);
+  });
+});
+
+/** Kd's amendment (RULINGS 2026-09-13): the ideas follow the diet. Each diet's
+ *  lists are written out whole, so a swap that changed more than the food its
+ *  diet rules out — or an idea that went missing — fails here by name. */
+describe("meal suggestions follow the diet (RULINGS 2026-09-10, 2026-09-13)", () => {
+  const meals = (kcal: number, diet: Parameters<typeof mealSuggestionsFor>[1]) =>
+    mealSuggestionsFor(kcal, diet).map((s) => s.meal);
+
+  it("a vegan gets every idea with its animal food swapped for a plant one", () => {
+    expect(meals(401, "vegan")).toEqual([
+      "Plant protein shake + banana",
+      "Grilled tofu + potatoes + vegetables",
+      "Soy yogurt with berries",
+    ]);
+    expect(meals(201, "vegan")).toEqual([
+      "Plant protein shake or soy chocolate milk",
+      "Tofu scramble + whole grain toast + avocado",
+    ]);
+    expect(meals(0, "vegan")).toEqual(["Banana + peanut butter", "Light salad with chickpeas"]);
+  });
+
+  it("a vegetarian keeps the dairy, and loses the meat and the eggs", () => {
+    expect(meals(401, "vegetarian")).toEqual([
+      "Protein shake + banana",
+      "Grilled tofu + potatoes + vegetables",
+      "Greek yogurt with berries",
+    ]);
+    expect(meals(201, "vegetarian")).toEqual([
+      "Protein shake or chocolate milk",
+      "Tofu scramble + whole grain toast + avocado",
+    ]);
+    expect(meals(0, "vegetarian")).toEqual(["Banana + peanut butter", "Light salad with chickpeas"]);
+  });
+
+  it("a vegetarian who eats eggs keeps the eggs too, and still loses the meat", () => {
+    expect(meals(401, "vegetarian_eggs")).toEqual([
+      "Protein shake + banana",
+      "Grilled tofu + potatoes + vegetables",
+      "Greek yogurt with berries",
+    ]);
+    expect(meals(201, "vegetarian_eggs")).toEqual([
+      "Protein shake or chocolate milk",
+      "Eggs + whole grain toast + avocado",
+    ]);
+    expect(meals(0, "vegetarian_eggs")).toEqual(["Banana + peanut butter", "Light salad with chickpeas"]);
+  });
+
+  it("no diet answer gets the ideas every diet can eat — never a guess at meat", () => {
+    for (const kcal of [401, 201, 0]) expect(meals(kcal, null), String(kcal)).toEqual(meals(kcal, "vegan"));
+  });
+
+  it("the bands and the timings are the same for every diet: only the food moves", () => {
+    for (const kcal of [401, 400, 201, 200, 0]) {
+      const unswapped = mealSuggestionsFor(kcal, "non_vegetarian");
+      for (const diet of [...dietSchema.options, null]) {
+        const got = mealSuggestionsFor(kcal, diet);
+        expect(got.map((s) => s.timing), `${String(kcal)} ${String(diet)}`).toEqual(unswapped.map((s) => s.timing));
+      }
+    }
+  });
+
+  it("every idea below the vegan rung carries a swap, and one every diet can eat carries none", () => {
+    for (const idea of [...MEAL_IDEA_BANDS.high, ...MEAL_IDEA_BANDS.middle, ...MEAL_IDEA_BANDS.low]) {
+      expect(idea.swap === null, idea.meal).toBe(idea.fitsFrom === "vegan");
+      expect(idea.swap, idea.meal).not.toBe(idea.meal);
+    }
   });
 });
 

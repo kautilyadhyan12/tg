@@ -13,9 +13,10 @@ import { useTransition } from '../context/TransitionContext';
 import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
 import { onboardingService } from '../api/onboardingApi';
 import {
-  EQUIPMENT, GOALS, WEIGHT_GOALS, cleanEquipment, targetDirection, targetWrongSide, toggleEquipment, toggleGoal, wrongSideText,
+  DIETS, EQUIPMENT, GOALS, MEALS_PER_DAY, WEIGHT_GOALS, cleanEquipment, targetDirection, targetWrongSide, toggleEquipment,
+  toggleGoal, wrongSideText,
 } from './onboarding/onboardingModel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
+import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
 import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
@@ -296,6 +297,9 @@ export function FitnessTab({ profile, onSaved }) {
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',
     exerciseFrequency:    profile.exerciseFrequency    ?? null,
+    // Screen 9's two answers (4b-ii), asked here so a diet can change.
+    diet:                 profile.diet                 ?? null,
+    mealsPerDay:          profile.mealsPerDay          ?? null,
   });
   const [loading, setLoading] = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -318,6 +322,8 @@ export function FitnessTab({ profile, onSaved }) {
         sessionDurationMin:   Number.isFinite(form.sessionDuration) ? form.sessionDuration : null,
         preferredWorkoutTime: form.preferredWorkoutTime || null,
         exerciseFrequency:    Number.isFinite(form.exerciseFrequency) ? form.exerciseFrequency : null,
+        diet:                 form.diet,
+        mealsPerDay:          Number.isFinite(form.mealsPerDay) ? form.mealsPerDay : null,
       }));
       toast.success('Fitness preferences updated');
       setSaved(true);
@@ -392,6 +398,28 @@ export function FitnessTab({ profile, onSaved }) {
         </div>
       </Field>
 
+      {/* Screen 9's diet, in the screen's own words, icons and table (4b-ii),
+          so the two can never offer different answers. It says what a person
+          eats, never where the food is from — there is no cuisine question
+          anywhere (RULINGS 2026-09-12). */}
+      <Field label="Diet" hint="Meal suggestions follow this.">
+        <div className="flex flex-wrap gap-2">
+          {DIETS.map((d) => {
+            const Icon = DIET_ICONS[d.value];
+            const on = form.diet === d.value;
+            return (
+              <button key={d.value} type="button"
+                aria-pressed={on}
+                onClick={() => setForm((f) => ({ ...f, diet: d.value }))}
+                className="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                style={chipStyle(on)}>
+                <Icon aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />{d.label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* T3 F2: the slider always has a position, so an UNSET duration keeps
             state null (saved as null) and is labelled "Not set" — the 30 below
@@ -431,6 +459,22 @@ export function FitnessTab({ profile, onSaved }) {
             options={[
               { value: '', label: 'Not set' },
               ...[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n} day${n !== 1 ? 's' : ''} / week` })),
+            ]}
+          />
+        </Field>
+
+        {/* "Not set" only while nothing is stored. Setup does not finish
+            without this answer, so once given it can be changed here but not
+            taken back — as the diet's chips above offer no way to clear one. */}
+        <Field label="Meals a Day">
+          <Select
+            value={form.mealsPerDay ?? ''}
+            onChange={(v) => setForm((f) => ({ ...f, mealsPerDay: v === '' ? null : v }))}
+            ariaLabel="Meals a day"
+            style={inputStyle}
+            options={[
+              ...((profile.mealsPerDay ?? null) === null ? [{ value: '', label: 'Not set' }] : []),
+              ...MEALS_PER_DAY.map((n) => ({ value: n, label: `${n} meals a day` })),
             ]}
           />
         </Field>

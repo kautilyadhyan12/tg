@@ -78,6 +78,10 @@ export function mergeFitnessProfile(current, edits) {
     availableEquipment: current?.availableEquipment ?? [],
     sessionDurationMin: current?.sessionDurationMin ?? null,
     preferredWorkoutTime: current?.preferredWorkoutTime ?? null,
+    // Screen 9's two answers (4b-ii). Carried like every other field: the PUT
+    // is a full document, so a save that left them out would clear the diet.
+    diet: current?.diet ?? null,
+    mealsPerDay: current?.mealsPerDay ?? null,
   };
   const defined = Object.fromEntries(
     Object.entries(edits || {}).filter(([, v]) => v !== undefined),

@@ -92,6 +92,20 @@ describe('Settings → Profile', () => {
     expect(screen.getByText('Kd')).toBeTruthy(); // the page's own header
   });
 
+  it("keeps screen 9's diet and meals when the Profile tab saves, though it never shows them", async () => {
+    // The route is a full-document PUT, so what this tab does not show still
+    // has to go back with every save, or the diet the person gave setup is
+    // cleared by a change of age. The Fitness tab passes both explicitly; this
+    // tab relies on the merge carrying them, which is what is pinned here.
+    serve({ fitness: { diet: 'vegan', mealsPerDay: 5 } });
+    render(<Settings />);
+    await loaded();
+    type('30', '31');
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledTimes(1));
+    expect(svc.putFitnessProfile.mock.calls[0][0]).toMatchObject({ age: 31, diet: 'vegan', mealsPerDay: 5 });
+  });
+
   it('shows the name on the Account tab', async () => {
     serve();
     render(<Settings />);

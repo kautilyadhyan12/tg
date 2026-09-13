@@ -23,6 +23,18 @@ vi.setConfig({ testTimeout: 15_000 });
 // One auth state serves both the page and the app's own route guard.
 const auth = { user: null, loading: false, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
+// Screen 11 draws the join door's own two components (4b-ii), which read on
+// mount. `...actual` keeps `errorText`, which the page itself uses.
+vi.mock('../api/orgsApi', async (importOriginal) => ({
+  ...(await importOriginal()),
+  orgService: {
+    join: vi.fn(),
+    getMyApplications: vi.fn(() => Promise.resolve({ data: { applications: [] } })),
+    getMine: vi.fn(() => Promise.resolve({ data: { gyms: [] } })),
+    nudgeApplication: vi.fn(),
+    getHours: vi.fn(() => Promise.resolve({ data: { hours: { mode: 'unset', timezone: 'UTC', week: [], closures: [] } } })),
+  },
+}));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
 vi.mock('../api/onboardingApi', async (importOriginal) => ({ ...(await importOriginal()), onboardingService: svc }));
@@ -38,18 +50,21 @@ vi.mock('../api/healthApi', async (importOriginal) => ({
 }));
 
 const toast = (await import('react-hot-toast')).default;
+const { orgService } = await import('../api/orgsApi');
+const { DIETS } = await import('./onboarding/onboardingModel');
 const Onboarding = (await import('./Onboarding')).default;
 const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 
 const EMPTY = {
   displayName: 'kd.test', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-  trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null,
+  onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
   ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
-  availableEquipment: ['dumbbells'],
+  availableEquipment: ['dumbbells'], diet: 'non_vegetarian', mealsPerDay: 3,
 };
 
 const UNANSWERED_HEALTH = {
@@ -120,10 +135,14 @@ function serve(initial = {}, screening = UNANSWERED_HEALTH) {
     }
     if (body.onboardingCompleted === true) {
       // What the real route refuses on: everything the plan needs, plus the
-      // health question, which the plan itself can do without (4b-i).
+      // three the plan itself can do without — the health question (4b-i) and
+      // screen 9's two food answers (4b-ii).
+      const after = { ...server.answers, ...body };
       const missing = [
-        ...missingOf({ ...server.answers, ...body }),
+        ...missingOf(after),
         ...(server.health.answered ? [] : ['health']),
+        ...(after.diet === null ? ['diet'] : []),
+        ...(after.mealsPerDay === null ? ['mealsPerDay'] : []),
       ];
       if (missing.length > 0) throw refusal(missing);
     }
@@ -193,12 +212,36 @@ const next = async (title) => {
   tap(/continue/i);
   await heading(title);
 };
+/** From the health screen on to the LAST one, which is where Finish lives —
+ *  screen 11 since 4b-ii moved two screens in behind screen 8. Both screens in
+ *  between are answered in these fixtures, so it is Continue, twice. */
+const toFinish = async () => {
+  await next('Food');
+  await next('Your code');
+};
+/** Back to the health screen from where a person with every answer in lands —
+ *  the last screen — by the step bar, which reaches any screen already
+ *  answered. */
+const onHealth = async () => {
+  await heading('Your code');
+  tap('Health');
+  await heading('Health');
+};
 
-/** The disclaimer tap — one of the two things Finish waits for on screen 8. */
+/** The disclaimer tap — one of the two things Finish waits for, made on screen 8. */
 const agreeBox = () => screen.getByRole('checkbox', { name: 'I have read and understood this' });
 const agree = async () => {
   fireEvent.click(agreeBox());
   await waitFor(() => expect(consent.record).toHaveBeenCalledWith('health_step'));
+};
+/** The same tap, reached FROM the last screen by the sentence that names it,
+ *  and back again — the walk a person makes when they get to Finish without
+ *  having ticked it (4b-ii moved Finish two screens on from the tap). */
+const agreeOnHealth = async () => {
+  tap('Go to Health');
+  await heading('Health');
+  await agree();
+  await toFinish();
 };
 
 /** Screen 2 in kilograms and centimetres, each answer a tap on its wheel. */
@@ -217,6 +260,12 @@ beforeEach(() => {
   auth.updateUser.mockClear();
   auth.logout.mockClear();
   toast.error.mockClear();
+  // Screen 11's own reads and its one write (4b-ii): nobody is in a gym, and
+  // no code has been sent, unless a test says so.
+  orgService.join.mockReset();
+  orgService.join.mockRejectedValue(new Error('no join expected in this test'));
+  orgService.getMyApplications.mockResolvedValue({ data: { applications: [] } });
+  orgService.getMine.mockResolvedValue({ data: { gyms: [] } });
 });
 afterEach(() => cleanup());
 
@@ -304,7 +353,7 @@ describe('onboarding screens 1–7', () => {
     tap(/Keep my weight/);
     await stored({ weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] });
     await next('About you');
-    expect(screen.getByText('Step 2 of 7')).toBeTruthy(); // eight screens, less the target this goal never asks
+    expect(screen.getByText('Step 2 of 9')).toBeTruthy(); // ten screens, less the target this goal never asks
     await aboutYou();
     await next('Your day');
     tap(/back/i);
@@ -726,13 +775,14 @@ describe('onboarding screens 1–7', () => {
   it('loads an old answer of "none" beside equipment without the "none", and finishes with that', async () => {
     serve({ ...ALL, availableEquipment: ['none', 'dumbbells'] }, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health'); // the last screen: every question has an answer
+    await heading('Your code'); // the last screen: every question has an answer
     tap('Equipment'); // back to it from the step bar
     await heading('Equipment');
     expect(pressed(/No equipment/)).toBe('false');
     expect(pressed(/Dumbbells/)).toBe('true');
     await next('Health');
     await agree();
+    await toFinish();
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
     expect(svc.patch).toHaveBeenLastCalledWith({ availableEquipment: ['dumbbells'], onboardingCompleted: true });
@@ -742,7 +792,7 @@ describe('onboarding screens 1–7', () => {
 
   // ── Screen 8: the one health question, and the tap beside it ─────────────
 
-  it('asks the health question last, in the words the ruling gives it, and stores a no at once', async () => {
+  it('asks the health question in the words the ruling gives it, and stores a no at once', async () => {
     serve(ALL);
     draw();
     await heading('Health'); // the only screen without an answer
@@ -750,7 +800,10 @@ describe('onboarding screens 1–7', () => {
     // What the app keeps of this answer is told where the answer is given, so
     // the line is checked on the screen, not only in the shared words' test.
     expect(screen.getByText(HEALTH_QUESTION_NOTE)).toBeTruthy();
-    expect(button(/finish setup/i).disabled).toBe(true);
+    // Nobody goes past this screen without answering it: the question holds
+    // Continue exactly as every other screen's does (Finish is on the last
+    // screen, two on from here, since 4b-ii).
+    expect(button(/continue/i).disabled).toBe(true);
 
     tap('No');
     await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: false }));
@@ -768,7 +821,7 @@ describe('onboarding screens 1–7', () => {
     expect(screen.getByText('Pick one of the two to save your answer.')).toBeTruthy();
     // A yes with no choice is not an answer the server takes, so none is sent.
     expect(health.put).not.toHaveBeenCalled();
-    expect(button(/finish setup/i).disabled).toBe(true);
+    expect(button(/continue/i).disabled).toBe(true);
 
     tap(/^Not yet/);
     await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: true, checkFirst: 'not_yet' }));
@@ -778,38 +831,59 @@ describe('onboarding screens 1–7', () => {
   it('will not finish until the question is answered AND the disclaimer is agreed to, and records that tap', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health');
+    await onHealth();
     // Answered, but nobody has agreed to anything yet.
     expect(screen.getByText(DISCLAIMER_WORDINGS.health_step.v2)).toBeTruthy();
     expect(screen.getByText('Tick this to finish setup.')).toBeTruthy();
+
+    // THE TAP IS TWO SCREENS BACK FROM FINISH SINCE 4b-ii, so the last screen
+    // has to say what is holding the button and offer the way to it. A dead
+    // Finish with its reason on a screen the person has left is the defect
+    // this names.
+    await toFinish();
     expect(button(/finish setup/i).disabled).toBe(true);
+    expect(screen.getByText('Read the note on the Health screen and tick it.')).toBeTruthy();
+    tap('Go to Health');
+    await heading('Health');
 
     await agree();
     expect(agreeBox().getAttribute('aria-checked')).toBe('true');
+    await toFinish();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    expect(screen.queryByText('Read the note on the Health screen and tick it.')).toBeNull();
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
   });
 
-  it('keeps Finish shut while the health question is open, and names it', async () => {
+  it('keeps the person on the health screen while its question is open', async () => {
+    // With the question unanswered there is no way forward at all: Continue is
+    // shut, so the last screen — and Finish with it — cannot be reached, and
+    // the step bar cannot jump past it either.
     serve(ALL); // every other answer in, the health one open
     draw();
     await heading('Health');
     await agree();
-    expect(button(/finish setup/i).disabled).toBe(true);
-    expect(screen.getByText('Before you finish, answer the health question.')).toBeTruthy();
+    expect(button(/continue/i).disabled).toBe(true);
+    expect(button('Food').disabled).toBe(true);
+    expect(button('Your code').disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /finish setup/i })).toBeNull();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
     expect(auth.updateUser).not.toHaveBeenCalled();
+
+    // Answered, the way on opens.
+    tap('No');
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
   });
 
   it('names it again when the SERVER is the one that refuses, not the screen', async () => {
     // The screen believes the question is answered; the server knows better —
     // a reset on another device clears it (4b-i). The 409 must reach the person
-    // as the same sentence, not as a failure they cannot read.
+    // as a sentence they can act on, not as a failure they cannot read.
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health');
+    await onHealth();
     await agree();
+    await toFinish();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     server.health = UNANSWERED_HEALTH;
     tap(/finish setup/i);
@@ -818,19 +892,21 @@ describe('onboarding screens 1–7', () => {
     expect(auth.updateUser).not.toHaveBeenCalled();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
 
-    // …and the person can DO what the sentence asks, standing where they are.
-    // The question is on this very screen, so there is no "Go to" button to
-    // send them anywhere; the answer the screen shows must therefore be the
-    // server's, which holds none. Showing the old answer as chosen would make
-    // the only way out "answer something you can see you already answered" —
-    // and the tap would be swallowed as one already stored.
-    expect(screen.queryByRole('button', { name: /^Go to/ })).toBeNull();
+    // …and the person can DO what the sentence asks. The question is not on
+    // this screen any more (4b-ii put two screens behind it), so the way back
+    // to it is offered — and what that screen then shows must be the SERVER's
+    // answer, which is none. Showing the old answer as chosen would make the
+    // only way out "answer something you can see you already answered", and
+    // the tap would be swallowed as one already stored.
+    tap('Go to Health');
+    await heading('Health');
     expect(pressed('No')).toBe('false');
     expect(pressed('Yes')).toBe('false');
     tap('No');
     await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: false }));
     // The sentence goes when the question is answered, rather than standing
     // over a question the person has just answered, and Finish finishes.
+    await toFinish();
     await waitFor(() => expect(screen.queryByText('Before you finish, answer the health question.')).toBeNull());
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     tap(/finish setup/i);
@@ -838,9 +914,10 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('will not let Finish race the health answer it was just given', async () => {
-    // The answer shows the moment it is tapped, but Finish waits for the server
-    // to hold it: otherwise the finish can overtake the save and come back
-    // "answer the health question" to somebody who just answered it.
+    // The answer shows the moment it is tapped, so the person can walk on to
+    // the last screen before the server holds it. Finish waits for it there:
+    // otherwise the finish overtakes the save and comes back "answer the
+    // health question" to somebody who just answered it.
     serve(ALL);
     draw();
     await heading('Health');
@@ -857,22 +934,30 @@ describe('onboarding screens 1–7', () => {
     );
     tap('No');
     await waitFor(() => expect(pressed('No')).toBe('true'));
+    await toFinish();
     expect(button(/finish setup/i).disabled).toBe(true);
     land();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
   });
 
-  it('takes no health answer while a finish is out, so a refusal cannot forget one the server took', async () => {
+  it('shuts every way back to the health question while a finish is out, so a refusal cannot forget an answer the server took', async () => {
     // A finish refused over this question forgets the answer the screen holds,
-    // because the server has just said it holds none. An answer tapped WHILE
-    // the finish is in flight can reach the server first and be stored — and
-    // then the (rightly stale) refusal would forget it, leaving the question
-    // with nothing chosen over an answer the server now has, and the sentence
-    // asking for something already given. So nothing is answerable in that window.
+    // because the server has just said it holds none. An answer given WHILE the
+    // finish is in flight can reach the server first and be stored — and then
+    // the (rightly stale) refusal would forget it, leaving the question with
+    // nothing chosen over an answer the server now has, and the sentence asking
+    // for something already given.
+    //
+    // Since 4b-ii the question and Finish are never on one screen, so what
+    // closes that window is the WAY BACK being shut: while a finish is out the
+    // step bar takes no jump, and Back takes none either. The question's own
+    // buttons wait on the same flag, and the test after this one pins that in
+    // the one wait the question IS on screen for.
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health');
+    await onHealth();
     await agree();
+    await toFinish();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
 
     let refuse;
@@ -885,15 +970,56 @@ describe('onboarding screens 1–7', () => {
         : patch(body),
     );
     tap(/finish setup/i);
-    await waitFor(() => expect(button('Yes').disabled).toBe(true));
-    expect(button('No').disabled).toBe(true);
+    await waitFor(() => expect(button('Health').disabled).toBe(true));
+    expect(button('Food').disabled).toBe(true);
+    expect(button(/^back$/i).disabled).toBe(true);
 
     refuse();
-    // The refusal lands, the question is asked again with nothing chosen, and
-    // NOW it can be answered.
-    await waitFor(() => expect(pressed('No')).toBe('false'));
-    expect(button('No').disabled).toBe(false);
+    // The refusal lands, the way back opens, and the question is asked again
+    // with nothing chosen — so the next tap is a real save.
+    const goBack = await screen.findByRole('button', { name: 'Go to Health' });
+    fireEvent.click(goBack);
+    await heading('Health');
+    expect(pressed('No')).toBe('false');
     expect(health.put).not.toHaveBeenCalled();
+  });
+
+  it('takes no health answer while the page waits on its saves — a Continue from this screen included', async () => {
+    // `health.saving` carries the page's own wait (`busy`), not only the health
+    // save's. A finish is the wait that matters most (the test above), and a
+    // Continue from this screen is the wait the question is on screen for: it
+    // waits on the plan's read-back that follows every health answer. A Yes
+    // tapped then would be left half-given — "Check first" open, nothing saved —
+    // as the page moves on to Food.
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await onHealth();
+
+    // Hold the read-back of the plan that follows a health answer.
+    let land;
+    const patch = svc.patch;
+    svc.patch = vi.fn(
+      (body) =>
+        new Promise((resolve, reject) => {
+          land = () => patch(body).then(resolve, reject);
+        }),
+    );
+    tap('Yes');
+    tap(/^Not yet/);
+    await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: true, checkFirst: 'not_yet' }));
+    await waitFor(() => expect(svc.patch).toHaveBeenCalledWith({}));
+    // The health save itself has landed, so the question is open to a tap…
+    await waitFor(() => expect(button('No').disabled).toBe(false));
+
+    // …until Continue is pressed, which waits on the read-back still out.
+    tap(/continue/i);
+    await waitFor(() => expect(button('No').disabled).toBe(true));
+    expect(button('Yes').disabled).toBe(true);
+    expect(button(/^A professional has cleared me/).disabled).toBe(true);
+
+    land();
+    await heading('Food');
+    expect(health.put).toHaveBeenCalledTimes(1);
   });
 
   it('waits for the health answer as well as the others before it puts anybody on a screen', async () => {
@@ -909,7 +1035,7 @@ describe('onboarding screens 1–7', () => {
     expect(screen.queryByRole('heading', { name: 'Health' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Your goal' })).toBeNull();
     land();
-    await heading('Health');
+    await heading('Your code'); // every answer in, so the last screen
   });
 
   it('says so when the health answer cannot be read, and Try again retries the read that failed', async () => {
@@ -924,7 +1050,7 @@ describe('onboarding screens 1–7', () => {
     const answersRead = svc.get.mock.calls.length;
     health.get = vi.fn(async () => ({ data: { healthScreening: server.health } }));
     fireEvent.click(retry);
-    await heading('Health');
+    await heading('Your code');
     expect(failed).toHaveBeenCalledTimes(1);
     expect(svc.get.mock.calls.length).toBe(answersRead);
   });
@@ -932,7 +1058,7 @@ describe('onboarding screens 1–7', () => {
   it('writes nothing when the answer tapped is the one already stored', async () => {
     serve(ALL, screeningOf({ hasCondition: true, checkFirst: 'not_yet' }));
     draw();
-    await heading('Health');
+    await onHealth();
     tap('Yes');
     tap(/^Not yet/);
     await settleWheels();
@@ -944,7 +1070,7 @@ describe('onboarding screens 1–7', () => {
   it('puts the stored answer back when a save fails, so the screen never keeps one the server refused', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health');
+    await onHealth();
     server.failHealth = new Error('down');
     tap('Yes');
     tap(/^Not yet/);
@@ -954,11 +1080,173 @@ describe('onboarding screens 1–7', () => {
     expect(server.health).toMatchObject({ hasCondition: false });
   });
 
+  // ── Screens 9 and 11: food, and the gym code ─────────────────────────────
+
+  it('asks the diet and the meals, saves each tap at once, and leaves the plan panel as it was', async () => {
+    serve({ ...ALL, diet: null, mealsPerDay: null }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Food'); // the first screen still open
+    const before = panel().textContent;
+    expect(button(/continue/i).disabled).toBe(true);
+
+    tap(/^Vegetarian with eggs/);
+    await saved({ diet: 'vegetarian_eggs' });
+    expect(button(/continue/i).disabled).toBe(true); // one of the two is not an answer
+
+    tap('4 meals a day');
+    await stored({ diet: 'vegetarian_eggs', mealsPerDay: 4 });
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
+    // The screen leaves the number it is showing alone. Whether the SERVER's
+    // number moves with a food answer is not something this stand-in can say —
+    // its plan never reads a diet — so that is proved against the real route
+    // (users.onboarding.routes "screen 9 stores the diet and the meals…").
+    expect(panel().textContent).toBe(before);
+  });
+
+  it('asks exactly two things on screen 9, the diet and the meals, and so no cuisine by any name (RULINGS 2026-09-12)', async () => {
+    serve({ ...ALL, diet: null, mealsPerDay: null }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Food');
+    expect(screen.getByText('How do you eat?')).toBeTruthy();
+    expect(screen.getByText('How many meals a day?')).toBeTruthy();
+    // Every choice on the screen, by name. A third question adds choices here
+    // however it is worded, where a search for "cuisine" would let "Where is
+    // your food from?" through.
+    const choices = screen
+      .getAllByRole('button')
+      .filter((b) => b.hasAttribute('aria-pressed'))
+      .map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(choices).toEqual([
+      ...DIETS.map((d) => `${d.label}${d.desc}`),
+      '2 meals a day', '3 meals a day', '4 meals a day', '5 meals a day', '6 meals a day',
+    ]);
+    // Nothing to type, and nothing to pick from a list.
+    expect(screen.queryAllByRole('textbox')).toEqual([]);
+    expect(screen.queryAllByRole('combobox')).toEqual([]);
+  });
+
+  it('makes the diet one choice: a second tap moves it rather than adding to it', async () => {
+    serve({ ...ALL, diet: 'vegan' }, screeningOf({ hasCondition: false }));
+    draw();
+    await onHealth();
+    await next('Food');
+    expect(pressed(/^Vegan/)).toBe('true');
+    tap(/^Non-vegetarian/);
+    await stored({ diet: 'non_vegetarian' });
+    await waitFor(() => expect(pressed(/^Vegan/)).toBe('false'));
+    expect(pressed(/^Non-vegetarian/)).toBe('true');
+    // The answer already on screen is not written again.
+    svc.patch.mockClear();
+    tap(/^Non-vegetarian/);
+    await settleWheels();
+    expect(svc.patch).not.toHaveBeenCalled();
+  });
+
+  it('holds Finish while a food answer is open, names it, and offers the way back', async () => {
+    serve({ ...ALL, mealsPerDay: null }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Food');
+    tap('3 meals a day');
+    await stored({ mealsPerDay: 3 });
+    await next('Your code');
+    // Cleared from another device meanwhile: the server refuses the finish and
+    // names it, though no plan number is missing.
+    server.answers.mealsPerDay = null;
+    await agreeOnHealth();
+    tap(/finish setup/i);
+    expect(await screen.findByText('Before you finish, answer how many meals a day.')).toBeTruthy();
+    expect(screen.queryByText('MEMBER APP')).toBeNull();
+    tap('Go to Food');
+    await heading('Food');
+    tap('5 meals a day');
+    await stored({ mealsPerDay: 5 });
+    await next('Your code');
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    tap(/finish setup/i);
+    await screen.findByText('MEMBER APP');
+  });
+
+  it('asks for a gym code without ever holding anyone, in the join door\'s own words', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your code'); // the last screen, where Finish is
+    expect(screen.getByText('Have a code from your gym, studio or trainer?')).toBeTruthy();
+    expect(screen.getByLabelText('Your join code')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /ask to join/i })).toBeTruthy();
+    // Nothing here is an answer: with no code typed at all, Finish is offered
+    // as soon as the disclaimer is ticked.
+    expect(screen.getByText(/No code\? Carry on/)).toBeTruthy();
+    await agreeOnHealth();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    tap(/finish setup/i);
+    await screen.findByText('MEMBER APP');
+    // Setup finished without one, and none was ever sent.
+    expect(orgService.join).not.toHaveBeenCalled();
+  });
+
+  it('applies a code on screen 11 through the join door itself, and finishes after it', async () => {
+    orgService.join.mockResolvedValue({
+      data: {
+        outcome: 'pending',
+        org: { id: 'gym-1', slug: 'iron-house', name: 'Iron House', orgType: 'gym' },
+        application: { applicationId: 'app-1', status: 'pending', expiresAt: null, orgCanConfirm: true, lastNudgeAt: null },
+      },
+    });
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your code');
+    fireEvent.change(screen.getByLabelText('Your join code'), { target: { value: 'abc123' } });
+    fireEvent.click(button(/ask to join/i));
+    await waitFor(() => expect(orgService.join).toHaveBeenCalledWith({ code: 'ABC123' }));
+    expect(await screen.findByText("You've asked to join Iron House.")).toBeTruthy();
+    // The panel's usual way out is a dead end mid-setup — an unfinished
+    // account is sent straight back here — so it is not offered.
+    expect(screen.queryByRole('link', { name: /back to your dashboard/i })).toBeNull();
+
+    await agreeOnHealth();
+    tap(/finish setup/i);
+    await screen.findByText('MEMBER APP');
+  });
+
+  it("a refused or expired request's Try again puts the cursor in the code box below, and never leaves setup", async () => {
+    // The card's Try again links to the join door everywhere else. From here
+    // that address sends an unfinished account straight back to this wizard,
+    // so on screen 11 it goes to the box that is already on the screen.
+    orgService.getMyApplications.mockResolvedValue({
+      data: {
+        applications: [
+          {
+            id: 'app-1', status: 'rejected', appliedAt: '2026-08-19T09:00:00.000Z', expiresAt: '2026-09-02T09:00:00.000Z',
+            decidedAt: null, nudgedAt: null,
+            org: {
+              id: 'gym-1', slug: 'iron-house', name: 'Iron House', city: null, orgType: 'gym', timezone: 'UTC',
+              locale: 'en', currencyDisplay: 'USD', status: 'active',
+            },
+          },
+        ],
+      },
+    });
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your code');
+    expect(await screen.findByText("Iron House didn't confirm your request")).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
+    const codeBox = screen.getByLabelText('Your join code');
+    expect(document.activeElement).not.toBe(codeBox);
+
+    tap(/try again/i);
+    expect(document.activeElement).toBe(codeBox);
+    // Still here, on the last screen of setup.
+    expect(screen.getByRole('heading', { name: 'Your code' })).toBeTruthy();
+    expect(screen.queryByText('MEMBER APP')).toBeNull();
+  });
+
   it('when the server refuses Finish, names what is open and offers the way back to it', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Health'); // every question answered, so it opens on the last screen
+    await onHealth(); // every question answered, so it opens on the last screen
     await agree();
+    await toFinish();
     server.answers.dayActivity = null; // cleared from another device meanwhile
     tap(/finish setup/i);
     expect(await screen.findByText('Before you finish, answer your day.')).toBeTruthy();
@@ -1052,6 +1340,7 @@ describe('onboarding screens 1–7', () => {
     await next('Equipment');
     await next('Health');
     await agree();
+    await toFinish();
     tap(/finish setup/i);
     await screen.findByText('NUTRITION');
   });

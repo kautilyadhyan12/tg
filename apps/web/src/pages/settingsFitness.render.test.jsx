@@ -94,3 +94,82 @@ describe('Settings → Fitness: equipment', () => {
     expect(await save()).toMatchObject({ availableEquipment: ['dumbbells'] });
   });
 });
+
+describe("Settings → Fitness: screen 9's two food answers (4b-ii)", () => {
+  it('shows the diet the person gave and changes it on a tap: one choice, never two', async () => {
+    draw({ diet: 'vegetarian', mealsPerDay: 3 });
+    expect(pressed(/^Vegetarian$/)).toBe('true');
+    fireEvent.click(chip(/^Vegan$/));
+    expect(pressed(/^Vegan$/)).toBe('true');
+    expect(pressed(/^Vegetarian$/)).toBe('false');
+    expect(await save()).toMatchObject({ diet: 'vegan', mealsPerDay: 3 });
+  });
+
+  it('changes how many meals a day, offers every count the server takes, and never un-answers it', async () => {
+    draw({ diet: 'non_vegetarian', mealsPerDay: 3 });
+    expect(chip('Meals a day').textContent).toContain('3 meals a day');
+    fireEvent.click(chip('Meals a day'));
+    // No "Not set" once an answer is stored: setup does not finish without
+    // one, so it can be changed here and not taken back — as the diet's chips
+    // offer no way to clear a diet either.
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '2 meals a day', '3 meals a day', '4 meals a day', '5 meals a day', '6 meals a day',
+    ]);
+    fireEvent.click(screen.getByRole('option', { name: '5 meals a day' }));
+    expect(await save()).toMatchObject({ diet: 'non_vegetarian', mealsPerDay: 5 });
+  });
+
+  it('shows an unanswered person nothing picked, and saves nothing invented', async () => {
+    // Nobody was ever asked before 4b-ii, so this is what everyone who finished
+    // setup before it looks like. No default is shown and none is sent.
+    draw({ diet: null, mealsPerDay: null });
+    for (const name of [/^Vegetarian$/, /^Vegetarian with eggs$/, /^Non-vegetarian$/, /^Vegan$/]) {
+      expect(pressed(name), String(name)).toBe('false');
+    }
+    expect(chip('Meals a day').textContent).toContain('Not set');
+    // "Not set" is what they have, so it is offered, first.
+    fireEvent.click(chip('Meals a day'));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)[0]).toBe('Not set');
+    fireEvent.click(chip('Meals a day'));
+    expect(await save()).toMatchObject({ diet: null, mealsPerDay: null });
+  });
+
+  it('keeps the answers it did not ask about: a save carries the whole document', async () => {
+    // The route is a full-document PUT, so a field this form leaves out is
+    // cleared. The diet and the meals ride along with everything else.
+    draw({ diet: 'vegan', mealsPerDay: 4, weightGoal: 'lose', availableEquipment: ['dumbbells'] });
+    fireEvent.click(chip(/Better balance/));
+    expect(await save()).toMatchObject({
+      diet: 'vegan',
+      mealsPerDay: 4,
+      weightGoal: 'lose',
+      availableEquipment: ['dumbbells'],
+      fitnessGoals: ['balance'],
+    });
+  });
+
+  it('asks exactly these questions, and so no cuisine question by any name (RULINGS 2026-09-12)', () => {
+    // The whole tab, question by question. A cuisine question — or any other
+    // new one — fails here however it is worded, where a search for the word
+    // "cuisine" would let "Where is your food from?" through.
+    const { container } = draw({ diet: 'vegan' });
+    expect([...container.querySelectorAll('label')].map((l) => l.textContent)).toEqual([
+      'Fitness Level',
+      'Your Goal',
+      'Available Equipment',
+      'Diet',
+      'Session Duration — Not set',
+      'Preferred Workout Time',
+      'Weekly Workout Target',
+      'Meals a Day',
+    ]);
+    // …and the diet offers Kd's four, nothing beside them.
+    const dietField = screen.getByText('Diet', { selector: 'label' }).parentElement;
+    expect([...dietField.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Vegetarian',
+      'Vegetarian with eggs',
+      'Non-vegetarian',
+      'Vegan',
+    ]);
+  });
+});

@@ -120,10 +120,20 @@ describe('userService repoint (Card 6)', () => {
       // notes box and its column (migration 0029): the PUT is .strict(), so a
       // merge that still sent it would 400 every Settings save.
       expect(Object.keys(mergeFitnessProfile(flatMerged, {})).sort()).toEqual([
-        'age', 'availableEquipment', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
-        'gender', 'heightCm', 'onboardingCompleted',
+        'age', 'availableEquipment', 'diet', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
+        'gender', 'heightCm', 'mealsPerDay', 'onboardingCompleted',
         'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'weightGoal',
       ]);
+    });
+
+    it('carries screen 9\'s two answers through a save of any other form (4b-ii)', () => {
+      // The PUT is a full document: a Profile-tab save that dropped them would
+      // clear the diet the person gave the wizard.
+      const eating = { ...current, diet: 'vegan', mealsPerDay: 5 };
+      expect(mergeFitnessProfile(eating, { age: 26 })).toMatchObject({ diet: 'vegan', mealsPerDay: 5 });
+      expect(mergeFitnessProfile(eating, { diet: 'non_vegetarian' }).diet).toBe('non_vegetarian');
+      expect(mergeFitnessProfile(eating, { diet: null }).diet).toBe(null);
+      expect(mergeFitnessProfile(null, {})).toMatchObject({ diet: null, mealsPerDay: null });
     });
 
     it('handles a null current (never-onboarded) → all-null base + the edits', () => {

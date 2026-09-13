@@ -1,21 +1,24 @@
-// Onboarding v2, screens 1–8 (ROADMAP Stage 1 items 4a-ii and 4b-i; RULINGS
-// 2026-09-07 and 2026-09-09): goal · about you · target · your day · your
-// training · your week · equipment · health. Every answer is saved the moment
-// it is given, and the server's plan number sits on every screen from the
-// moment it exists. Screens 9–12 (food, running, code, your plan) follow.
+// Onboarding v2, screens 1–9 and 11 (ROADMAP Stage 1 items 4a-ii, 4b-i and
+// 4b-ii; RULINGS 2026-09-07, 2026-09-09 and 2026-09-10): goal · about you ·
+// target · your day · your training · your week · equipment · health · food ·
+// your code. Every answer is saved the moment it is given, and the server's
+// plan number sits on every screen from the moment it exists. Screen 10
+// (running) and screen 12 (your plan) follow.
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, HeartPulse, LogOut, Sun, Target, TrendingDown, User, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, HeartPulse, LogOut, Sun, Target, Ticket, TrendingDown, User, Utensils, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { consentService } from '../api/healthApi';
 import { errorText } from '../api/orgsApi';
 import PlanPanel from './onboarding/PlanPanel';
 import {
   AboutScreen,
+  CodeScreen,
   DayScreen,
   EquipmentScreen,
+  FoodScreen,
   GoalScreen,
   HealthScreen,
   TargetScreen,
@@ -32,12 +35,24 @@ import {
   directionOf,
   firstOpenScreen,
   missingText,
+  openSetupAnswers,
   reachableScreens,
   screenAnswered,
   visibleScreens,
 } from './onboarding/onboardingModel';
 
-const ICONS = { goal: Target, about: User, target: TrendingDown, day: Sun, training: Zap, week: Clock, equipment: Dumbbell, health: HeartPulse };
+const ICONS = {
+  goal: Target,
+  about: User,
+  target: TrendingDown,
+  day: Sun,
+  training: Zap,
+  week: Clock,
+  equipment: Dumbbell,
+  health: HeartPulse,
+  food: Utensils,
+  code: Ticket,
+};
 
 const SCREEN_VIEWS = {
   goal: GoalScreen,
@@ -48,6 +63,8 @@ const SCREEN_VIEWS = {
   week: WeekScreen,
   equipment: EquipmentScreen,
   health: HealthScreen,
+  food: FoodScreen,
+  code: CodeScreen,
 };
 
 const NAME_NEEDED = 'Type the name we should call you.';
@@ -121,11 +138,14 @@ export default function Onboarding() {
 
   const health = {
     screening: hs.screening,
-    // No health answer while one is already on its way — AND none while a
-    // finish is out (`busy`). A finish the server refuses over this question
-    // forgets what the screen holds, because the server has just said it holds
-    // nothing; an answer given in that window would be saved and then
-    // forgotten, leaving nothing chosen over an answer the server now has.
+    // No health answer while one is already on its way — AND none while the
+    // page is waiting (`busy`). A finish is the wait that matters: one the
+    // server refuses over this question forgets what the screen holds, so an
+    // answer given in that window would be saved and then forgotten. Since
+    // Finish moved to the last screen the question is never on show during a
+    // finish (the way back is held too); it is during a Continue or a jump
+    // waiting on the saves, where a Yes tapped would be left half-given as the
+    // page moves on.
     saving: hs.saving || busy,
     agreed,
     agreeing,
@@ -271,12 +291,19 @@ export default function Onboarding() {
   };
 
   // What still stands between the person and Finish, in the server's words.
-  // The plan's own list never names the health question — the plan works
-  // without it — so an unanswered screening is added here, in the word the
-  // server's refusal would use.
+  // The plan's own list never names the health question or screen 9's two food
+  // answers — a plan is a number and is worked out without all three — so the
+  // ones this screen can see are still open are added here, in the words the
+  // server's own refusal would use.
   const serverOpen = refused ?? (ob.plan === null ? ob.missing : []);
-  const open = screenAnswered('health', answers) ? serverOpen : [...serverOpen.filter((k) => k !== 'health'), 'health'];
+  const open = openSetupAnswers(serverOpen, answers);
   const openScreens = [...new Set(open.map((k) => SCREEN_OF_MISSING[k]).filter(Boolean))];
+  // The disclaimer tap is made on screen 8 and Finish is on the last screen
+  // (screen 11 since 4b-ii), so the one thing holding Finish can now be two
+  // screens back. It is named where Finish is, with the way to it, exactly as
+  // an unanswered question is — otherwise the button is simply dead and the
+  // reason is somewhere the person is not looking.
+  const toAnswer = [...new Set([...openScreens, ...(agreed ? [] : ['health'])])].filter((id) => id !== screen.id);
   // The disclaimer tap is the person's own act on this screen, not an answer
   // the server holds, so it gates Finish here. `hs.saving` is waited for as
   // `busy` waits for the answers' queue: a health answer shows the moment it is
@@ -435,17 +462,16 @@ export default function Onboarding() {
                   />
                 </motion.div>
 
-                {isLast && open.length > 0 && (
+                {isLast && (open.length > 0 || !agreed) && (
                   <div role="status" className="card-glass mt-6 space-y-3">
-                    <p className="text-sm">Before you finish, answer {missingText(open)}.</p>
+                    {open.length > 0 && <p className="text-sm">Before you finish, answer {missingText(open)}.</p>}
+                    {!agreed && <p className="text-sm">Read the note on the Health screen and tick it.</p>}
                     <div className="flex flex-wrap gap-2">
-                      {openScreens
-                        .filter((id) => id !== screen.id)
-                        .map((id) => (
-                          <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
-                            Go to {SCREENS.find((s) => s.id === id)?.title}
-                          </button>
-                        ))}
+                      {toAnswer.map((id) => (
+                        <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
+                          Go to {SCREENS.find((s) => s.id === id)?.title}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -462,7 +488,18 @@ export default function Onboarding() {
           >
             <div className="max-w-lg mx-auto flex gap-3">
               {index > 0 && (
-                <button type="button" onClick={goBack} className="btn-secondary flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={goBack}
+                  // Held while a finish is out, as the step bar and Continue
+                  // are. A finish the server refuses over the health question
+                  // forgets the answer this wizard holds, so walking back to
+                  // that question mid-finish is a way to give an answer the
+                  // refusal would then forget (4b-i's window, reopened when
+                  // 4b-ii moved Finish two screens on from the question).
+                  disabled={busy}
+                  className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <ChevronLeft className="w-4 h-4" />
                   Back
                 </button>

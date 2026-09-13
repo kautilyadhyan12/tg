@@ -4,6 +4,91 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii's last fixes: "In 3–4 hours", a reset cannot slip past a finish, tidier records, PR #64
+
+- Kd picked "In 3–4 hours" for the yogurt idea's timing ("Later today" did not count from the workout; RULINGS
+  2026-08-06, amended again). Changed in `summaryContent.ts`, both summary tests and ROADMAP 4b-ii.
+- New test: a profile PUT that finishes setup while a reset holds the account is refused (409, health named),
+  never finished with no health answer. Moving the "already finished" read outside the lock turns it red (200).
+- HANDOFF's 2144cda entry cut to ten lines; the no-diet rule labelled the chat's choice; schema comment rewritten.
+- Verified: api tsc 0 · eslint 0 · the four touched test files 93/93 · full local suite 999/999 · gitleaks clean.
+- Kd's click-through passed (*"all passed merge"*); CI green on 04eab8e, all five jobs; merged 2026-09-13 (PR #64).
+- Next: 4b-ii-b (a poster's code survives sign-in and setup). API 3000 on the LOCAL Postgres and web 5173 running.
+
+## 2026-09-13 · The post-workout meal ideas in the market's words (4b-ii), branch `food-and-gym-code`, PR #64
+
+- Commit ce4420e: the seven meal-idea lines on ROADMAP 4b-ii, in `summaryContent.ts` and its two tests — potatoes for
+  rice, "Later today" for "1 hour before bed", chickpeas in the vegetarian and vegan salad. Bands, thresholds and
+  diet swaps unchanged.
+- Verified locally: shared tsc 0 · eslint 0; api tsc 0 · eslint 0; `test:local` on the two summary files 39/39;
+  gitleaks on the staged files, no leaks.
+- Open: CI on PR #64, Kd's fresh-chat re-check of 2144cda + ce4420e, merge; then 4b-ii-b.
+
+## 2026-09-13 · The click-through of the fixes passed; the plan for Kd's next asks (Fable, planning only — no code)
+
+- Kd's click-through of 2144cda passed (*"as for the tests all passed"*). CI is green on attempt 2 of run
+  34738247155: attempt 1 sat queued for 2 h 25 min with no runner assigned (GitHub Actions "operational" on its
+  status page); `gh run cancel` then `gh run rerun` fixed it — no code change.
+- Kd plans with Fable 5.1 (max) and builds with Opus — *"don't start coding, you just need to make the plan so
+  that Opus can follow"*. This chat wrote the plan into RULINGS, ROADMAP and here, and changed no code.
+- He ruled the post-workout meal ideas' words (RULINGS 2026-08-06, amended again): no "1 hour before bed" on a
+  post-workout card, and no rice-first food for a Western market. The seven lines, with their diet swaps, are on
+  ROADMAP 4b-ii; Opus changes them on this branch before the re-check.
+- He asked for options on the dashboard's Recommended box — Exercise · Food · Running — each showing its kind
+  (RULINGS 2026-09-13): ROADMAP 7a-ii, built with 7a's engine; Exercise joins at 6b, Running at 7b. Two questions
+  for him sit on that line (the design as read; whether the web shows the week's runs). Asked in chat, unanswered.
+- Kd then asked whether the post-workout ideas repeat every day (today: yes — seven fixed lines; from 7a they vary,
+  drawn from the food list) and said a non-vegetarian can eat veg too (RULINGS 2026-09-13: the diet is a ceiling,
+  never a demand; 7a includes veg dishes for non-vegetarians). Variety waits for 7a — *"wait for 7a is fine"*.
+- Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat. Accounts: `kd.meals.0913@example.com`
+  (finished, vegan, one 560 kcal workout, id `f45b13f5-2316-4fe9-a77c-26112c01bd3e`) and `kd.code.0913@example.com`
+  (setup unfinished, a refused request to join `2LY3BZ`); the sign-in code prints in the API log.
+- Next: an Opus chat on this branch — the wording change, checks, push, then it hands Kd the re-check prompt;
+  a fresh chat re-checks 2144cda + that commit; merge; then 4b-ii-b, 4b-iii, 4c, 7a-i, 7a, 7a-ii, 7c.
+
+## 2026-09-13 · 4b-ii: the finish gate on the profile PUT, meal ideas that follow the diet (2144cda), PR #64
+
+- Meal ideas after a workout follow the diet (Kd, RULINGS 2026-08-06 amended): a vegan gets tofu and soy yogurt.
+  No diet answer gets the ideas every diet can eat — the chat's choice, from RULINGS 2026-07-15, not Kd's ruling.
+  The card carries the food-allergy caution, its words now `FOOD_ALLERGY_CAUTION` in `@app/shared`.
+- The profile PUT no longer finishes setup with answers open: the PATCH's 409 and list, the users row locked
+  first; a finish already stored is kept, so Settings saves still work.
+- Screen 9's meals hint promises nothing; Settings offers "Not set" for meals only while none is stored; screen
+  11's "Try again" goes to the code box. A poster link's code is split out as ROADMAP 4b-ii-b.
+- Verified: api tsc/eslint 0, full local 981/998 (17 = item 10's `workouts.sync` flake, 23/23 alone); web full
+  2046/2047 (poseAssets.contract, the known local red); 19 deliberate breaks, each red for its own reason.
+- Open: CI, merge.
+
+## 2026-09-12 · Screen 9 (food) and screen 11 (the gym code), item 4b-ii, branch `food-and-gym-code`
+
+- Kd asked for two NEW things and ruled the order (RULINGS 2026-09-12): the food list grows to about 300 and is
+  not vegetarian-first (the market is Western), and a person may build their own diet plan beside the app's —
+  both before launch, after the setup screens. New roadmap lines 7a-i and 7c; nothing else re-ordered.
+- He also asked what a meal scan does when the food is not in our list. Answered from the code: our table, then
+  foods a search already pulled in, then Open Food Facts; no match means the item is dropped from the totals and
+  named ("Couldn't identify: …"), or, if nothing matched, "we couldn't match it to our nutrition data" plus
+  "Add an ingredient". It never invents a number (RULINGS 2026-08-24) — which is what 7a-i is for.
+- Built: screen 9 asks the diet (four choices, Kd's order) and meals a day (2–6), saved as you go; screen 11 is
+  the join door's own two components, the ones Settings' Gym tab draws. Migration `0030` adds both columns with
+  their CHECKs and no backfill. Both food answers gate the finish beside `health`; the code never can.
+- Finish moved to the LAST screen with them, so the disclaimer tap (screen 8) is named and reachable from there,
+  and Back is now held while a finish is out — the step bar already was, and that gap was found by its own test.
+- Verified: shared tsc/eslint 0, 94 · api tsc/eslint 0, CI-shaped 299, FULL local suite 989/989 (the
+  `workouts.sync` flake passed this run too) · web 2041 (poseAssets.contract is the known local encoding red,
+  confirmed untouched by this branch) · web lint's 4 in Settings.jsx are master's 4, checked line by line
+  against HEAD's own file · gitleaks clean · six deliberate breaks, each turning a different new test red.
+- Kd's click-through PASSED on 2026-09-13 (*"the testes passed"*), with copy changes he asked for on the way —
+  the "What {gym} can see" sheet, now RULINGS 2026-09-13 and ROADMAP 8a, NOT built on this branch.
+- Open: the fresh-chat review of PR #64 (CI is green on 9687895, all five jobs), then merge. 8a's plan must raise
+  two things with Kd, both on its ROADMAP line.
+- Local: API 3000 on the LOCAL Postgres and web 5173, both started this session (two stale servers from the
+  2026-09-12 chat were killed first — the one on 3000 was answering with master's code). The click-through
+  account is `kd.food.0912@example.com`, seeded through screens 1–8 so it lands on Food; the sign-in code
+  prints in the API log. Live join code on the local database: `2LY3BZ` (Step 22b Gym 075154).
+- Next: 4b-iii (running), then 4c, then 7a-i (the bigger food list), then 7c (your own diet plan). Worth Kd's
+  word at some point: the diets are listed vegetarian-first, as his ruling names them; a Western audience may
+  want Non-vegetarian first.
+
 ## 2026-09-12 · 4b-i's last round: three Lows and two weak tests, merged as PR #63
 
 - No Critical/High in the last review, so this is the end of the round (RULINGS 2026-09-08). Kd: *"fix and merge"*.

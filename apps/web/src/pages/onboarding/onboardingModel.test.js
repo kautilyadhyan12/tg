@@ -9,6 +9,7 @@ import {
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
   dayActivitySchema,
+  dietSchema,
   equipmentSchema,
   fitnessGoalSchema,
   fitnessLevelSchema,
@@ -24,6 +25,7 @@ import {
 import * as m from './onboardingModel';
 import {
   Barbell,
+  DIET_ICONS,
   EQUIPMENT_ICONS,
   GOAL_ICONS,
   LEVEL_ICONS,
@@ -44,13 +46,14 @@ const HEALTH_ANSWERED = { answered: true, hasCondition: false, checkFirst: null,
 const EMPTY = {
   displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-  trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false, updatedAt: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null,
+  onboardingCompleted: false, updatedAt: null,
   health: NO_HEALTH_ANSWER,
 };
 const ALL = {
   ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
-  availableEquipment: ['dumbbells'], health: HEALTH_ANSWERED,
+  availableEquipment: ['dumbbells'], diet: 'non_vegetarian', mealsPerDay: 3, health: HEALTH_ANSWERED,
 };
 
 describe('what the screens offer is exactly what the server accepts', () => {
@@ -62,6 +65,20 @@ describe('what the screens offer is exactly what the server accepts', () => {
     expect(values(m.DAYS)).toEqual([...dayActivitySchema.options].sort());
     expect(values(m.LEVELS)).toEqual([...fitnessLevelSchema.options].sort());
     expect(values(m.EQUIPMENT)).toEqual([...equipmentSchema.options].sort());
+    expect(values(m.DIETS)).toEqual([...dietSchema.options].sort());
+  });
+
+  it('screen 9 offers Kd\'s four diets in his order, and every meal count the server takes', () => {
+    // RULINGS 2026-09-10. The words are the person's, the values the server's.
+    expect(m.DIETS.map((d) => d.value)).toEqual([...dietSchema.options]);
+    expect(m.DIETS.map((d) => d.label)).toEqual(['Vegetarian', 'Vegetarian with eggs', 'Non-vegetarian', 'Vegan']);
+    for (const d of m.DIETS) expect(accepts({ diet: d.value }), d.value).toBe(true);
+    for (const n of m.MEALS_PER_DAY) expect(accepts({ mealsPerDay: n }), String(n)).toBe(true);
+    // Both ends of the rail are offered, so no answer the server takes is
+    // unreachable on the screen.
+    expect(m.MEALS_PER_DAY).toEqual([2, 3, 4, 5, 6]);
+    expect(accepts({ mealsPerDay: Math.min(...m.MEALS_PER_DAY) - 1 })).toBe(false);
+    expect(accepts({ mealsPerDay: Math.max(...m.MEALS_PER_DAY) + 1 })).toBe(false);
   });
 
   it("screen 1 words the two questions as the goals ruling does, and screen 7 offers a gym (RULINGS 2026-09-10)", () => {
@@ -90,6 +107,7 @@ describe('what the screens offer is exactly what the server accepts', () => {
     covered(GOAL_ICONS, fitnessGoalSchema.options);
     covered(LEVEL_ICONS, fitnessLevelSchema.options);
     covered(EQUIPMENT_ICONS, equipmentSchema.options);
+    covered(DIET_ICONS, dietSchema.options);
   });
 
   it('draws its own icons where the library has none that fits, in the line style of the rest (Kd, 2026-09-10)', () => {
@@ -112,14 +130,15 @@ describe('what the screens offer is exactly what the server accepts', () => {
   });
 
   it('every answer a refused finish can name has words and a screen that asks it', () => {
-    // The finish's list, not the plan's: it carries the health question too
-    // (4b-i), and a key the screen cannot put a name or a screen to would send
-    // the person looking for something that is not there.
+    // The finish's list, not the plan's: it carries the health question and
+    // screen 9's two as well (4b-i, 4b-ii), and a key the screen cannot put a
+    // name or a screen to would send the person looking for something that is
+    // not there.
     const keys = [...missingSetupAnswerSchema.options].sort();
-    // Which is the plan's own list plus the health question, and not the other
-    // way round: the plan itself is never missing it.
-    expect([...missingPlanInputSchema.options]).not.toContain('health');
-    expect(keys).toEqual([...missingPlanInputSchema.options, 'health'].sort());
+    // Which is the plan's own list plus those three, and not the other way
+    // round: the plan itself is never missing any of them.
+    for (const key of m.SETUP_ONLY_ANSWERS) expect([...missingPlanInputSchema.options], key).not.toContain(key);
+    expect(keys).toEqual([...missingPlanInputSchema.options, ...m.SETUP_ONLY_ANSWERS].sort());
     expect(Object.keys(m.MISSING_LABELS).sort()).toEqual(keys);
     expect(Object.keys(m.SCREEN_OF_MISSING).sort()).toEqual(keys);
     const ids = m.SCREENS.map((s) => s.id);
@@ -137,8 +156,8 @@ describe('which screens a person sees, and where they land', () => {
     // keeping the weight, it asks for no target.
     expect(ids({ ...EMPTY, weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] })).not.toContain('target');
     // Before the weight choice is made the step count does not jump when it is.
-    expect(ids(EMPTY)).toHaveLength(8);
-    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(8);
+    expect(ids(EMPTY)).toHaveLength(10);
+    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(10);
   });
 
   it('counts screen 1 answered on the weight choice alone: the goals beside it may be none', () => {
@@ -152,11 +171,53 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.firstOpenScreen({ ...ALL, weightGoal: null, fitnessGoals: ['muscle_gain'] })).toBe('goal');
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('target');
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
-    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('health');
+    // Screen 5's two checks may be "Not sure", so they never hold anyone: with
+    // everything else in, this person lands on the last screen.
+    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('code');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] })).toBe('equipment');
     // Screen 8 is a screen like any other to the landing rule: unanswered, it
-    // is where a person with everything else in lands.
+    // is where a person with everything else in lands. So is screen 9.
     expect(m.firstOpenScreen({ ...ALL, health: NO_HEALTH_ANSWER })).toBe('health');
+    expect(m.firstOpenScreen({ ...ALL, diet: null })).toBe('food');
+    expect(m.firstOpenScreen({ ...ALL, mealsPerDay: null })).toBe('food');
+  });
+
+  it('counts screen 9 answered only when BOTH food answers are given', () => {
+    expect(m.screenAnswered('food', ALL)).toBe(true);
+    expect(m.screenAnswered('food', { ...ALL, diet: null })).toBe(false);
+    expect(m.screenAnswered('food', { ...ALL, mealsPerDay: null })).toBe(false);
+    expect(m.screenAnswered('food', EMPTY)).toBe(false);
+  });
+
+  it('never holds anyone on screen 11: the gym code asks nothing', () => {
+    // Most people have no code, and one who has may apply now, in Settings, or
+    // never — so this screen is answered whatever the person has done.
+    expect(m.screenAnswered('code', EMPTY)).toBe(true);
+    expect(m.screenAnswered('code', ALL)).toBe(true);
+    // …which is why the step bar can always reach it once everything before it
+    // is answered, and why it is where a finished person lands.
+    expect([...m.reachableScreens(ALL)]).toContain('code');
+    expect(m.firstOpenScreen(ALL)).toBe('code');
+    // And the server has no word for it either: nothing can be missing for it.
+    expect([...missingSetupAnswerSchema.options]).not.toContain('code');
+    expect(Object.values(m.SCREEN_OF_MISSING)).not.toContain('code');
+  });
+
+  it('names the food answers as open before any refusal, and drops each one as it is given', () => {
+    // The plan's `missing` never carries them, so this is the only thing that
+    // can put them in the sentence above Finish (4b-ii).
+    expect(m.openSetupAnswers([], EMPTY)).toEqual(['health', 'diet', 'mealsPerDay']);
+    expect(m.openSetupAnswers([], { ...ALL, diet: null })).toEqual(['diet']);
+    expect(m.openSetupAnswers([], ALL)).toEqual([]);
+    // The plan's own list keeps its place, in front, and is not touched.
+    expect(m.openSetupAnswers(['age', 'weightKg'], { ...ALL, mealsPerDay: null })).toEqual(['age', 'weightKg', 'mealsPerDay']);
+    // A refusal that named one is answered by giving it: the server's own word
+    // is dropped rather than repeated, so the sentence stops naming it at once.
+    expect(m.openSetupAnswers(['health', 'diet', 'mealsPerDay'], ALL)).toEqual([]);
+    expect(m.openSetupAnswers(['diet'], { ...ALL, mealsPerDay: null })).toEqual(['mealsPerDay']);
+    // Every one of them has words, so the sentence can never print a key.
+    for (const key of m.SETUP_ONLY_ANSWERS) expect(m.MISSING_LABELS[key], key).toBeTruthy();
+    expect(m.missingText(m.openSetupAnswers([], EMPTY))).toBe('the health question, your diet and how many meals a day');
   });
 
   it('counts screen 8 answered only once the server has stored the answer', () => {

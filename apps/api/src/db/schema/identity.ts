@@ -177,6 +177,13 @@ export const userFitnessProfiles = pgTable(
     // input to the calorie plan — the plan builder (6a) reads them.
     pushUpsMax: smallint("push_ups_max"),
     plankHoldSeconds: smallint("plank_hold_seconds"),
+    // Screen 9's two answers (migration 0030; ROADMAP 4b-ii). What a person
+    // eats and how many sittings it is split across. The diet is read by the
+    // meal ideas after a workout; both will be read by the meal suggestions
+    // (7a), and neither by the calorie maths. No cuisine column: Kd ruled
+    // cuisine out entirely (RULINGS 2026-09-12).
+    diet: text("diet"),
+    mealsPerDay: smallint("meals_per_day"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
@@ -208,6 +215,8 @@ export const userFitnessProfiles = pgTable(
       "user_fitness_profiles_plank_hold_seconds_check",
       sql`${t.plankHoldSeconds} >= 0 AND ${t.plankHoldSeconds} <= 3600`,
     ),
+    check("user_fitness_profiles_diet_check", sql`${t.diet} IN ('vegetarian','vegetarian_eggs','non_vegetarian','vegan')`),
+    check("user_fitness_profiles_meals_per_day_check", sql`${t.mealsPerDay} BETWEEN 2 AND 6`),
   ],
 );
 

@@ -44,8 +44,14 @@ function forDisplay(raw) {
 /** `onApplied` — fired after the server answers a join, so a screen holding
  *  BOTH this panel and `GymMembershipCard` can re-read the card rather than
  *  letting the two disagree until a reload (T3 r1 L-6). Optional: `/org/join`
- *  draws the panel alone and passes nothing. */
-export default function JoinGymPanel({ initialCode = '', onApplied }) {
+ *  draws the panel alone and passes nothing.
+ *
+ *  `dashboardLink` — onboarding's screen 11 draws this panel and passes false.
+ *  The link is right on every other screen and a DEAD END there: an account
+ *  that has not finished setup is sent straight back to the wizard by
+ *  `ProtectedRoute`, so the link would look like a way out and be a loop. The
+ *  wizard's own Continue is the way on, directly under the panel. */
+export default function JoinGymPanel({ initialCode = '', onApplied, dashboardLink = true }) {
   const [code, setCode] = useState(forDisplay(initialCode));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -216,9 +222,11 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
         <OrgVisibilitySheet orgName={result.org.name} orgType={result.org.orgType} />
 
         <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="text-sm font-medium" style={{ color: '#FF8A1F' }}>
-            Back to your dashboard
-          </Link>
+          {dashboardLink && (
+            <Link to="/dashboard" className="text-sm font-medium" style={{ color: '#FF8A1F' }}>
+              Back to your dashboard
+            </Link>
+          )}
           <button type="button" onClick={startOver} className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
             Enter a different code
           </button>

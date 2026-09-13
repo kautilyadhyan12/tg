@@ -208,3 +208,10 @@ export const nutritionTargetsResponseSchema = z.object({
   });
 export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
 export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;
+
+/** The line every food suggestion carries (RULINGS 2026-09-09): there are no
+ *  allergen tags on foods and no allergy question anywhere, so the person is
+ *  told to take care if they have any food allergy, and to check labels. One
+ *  wording, read by every screen that suggests food — the meal ideas after a
+ *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
+export const FOOD_ALLERGY_CAUTION = "If you have any food allergy, take care and check the labels.";

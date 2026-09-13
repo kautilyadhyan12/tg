@@ -4,6 +4,7 @@ import {
   CHECK_FIRST_OPTIONS,
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
+  FOOD_ALLERGY_CAUTION,
   HEALTH_QUESTION,
   HEALTH_QUESTION_NOTE,
   UNANSWERED_HEALTH_SCREENING,
@@ -119,8 +120,16 @@ describe("the words both screens show (4b-i)", () => {
     expect(CHECK_FIRST_OPTIONS.cleared.detail).not.toContain("Safe mode");
   });
 
+  it("the food caution says both halves of the ruling: any food allergy, and the labels (RULINGS 2026-09-09)", () => {
+    const lower = FOOD_ALLERGY_CAUTION.toLowerCase();
+    expect(lower).toContain("any food allergy");
+    expect(lower).toContain("check the labels");
+    // It cautions; it never promises a food is free of anything.
+    expect(lower).not.toMatch(/allergen-free|allergy-free|\bsafe\b|free from/);
+  });
+
   it("never claims anything is safe for the person, treated or cured", () => {
-    for (const text of [HEALTH_QUESTION, HEALTH_QUESTION_NOTE, ...Object.values(CHECK_FIRST_OPTIONS).flatMap((o) => [o.label, o.detail])]) {
+    for (const text of [HEALTH_QUESTION, HEALTH_QUESTION_NOTE, FOOD_ALLERGY_CAUTION, ...Object.values(CHECK_FIRST_OPTIONS).flatMap((o) => [o.label, o.detail])]) {
       const lower = text.toLowerCase();
       expect(lower).not.toContain("safe for you");
       expect(lower).not.toMatch(/treats?/);

@@ -113,12 +113,33 @@ export const equipmentSchema = z.enum([
 ]);
 export const workoutTimeSchema = z.enum(["morning", "afternoon", "evening"]);
 
+/** Screen 9's diet (RULINGS 2026-09-10), in the order that ruling names them.
+ *  Every meal suggestion respects it — the meal ideas after a workout today
+ *  (RULINGS 2026-09-13), the meal suggestions (7a) when they are built; nothing
+ *  in the calorie maths reads it. It says what a person eats, never where the
+ *  food is from — there is no cuisine question and no cuisine data (RULINGS
+ *  2026-09-12).
+ *
+ *  The four are a ladder, and each value means exactly one more thing than the
+ *  one below it: vegan eats no animal food at all, vegetarian adds milk,
+ *  `vegetarian_eggs` adds eggs, and non-vegetarian adds meat and fish. Nothing
+ *  is derived from another: a screen that showed "vegetarian" to a vegan would
+ *  suggest them milk. */
+export const dietSchema = z.enum(["vegetarian", "vegetarian_eggs", "non_vegetarian", "vegan"]);
+
+/** How many meals a day the food is split across. Two is a real answer (people
+ *  who skip one on purpose) and six is as many sittings as a day is ever
+ *  planned in; the suggestions (7a) share the day's calories across this many.
+ *  A rail, not a default — unanswered stays unanswered (RULINGS 2026-07-15). */
+export const mealsPerDaySchema = z.number().int().min(2).max(6);
+
 export type Gender = z.infer<typeof genderSchema>;
 export type FitnessLevel = z.infer<typeof fitnessLevelSchema>;
 export type WeightGoal = z.infer<typeof weightGoalSchema>;
 export type FitnessGoal = z.infer<typeof fitnessGoalSchema>;
 export type Equipment = z.infer<typeof equipmentSchema>;
 export type WorkoutTime = z.infer<typeof workoutTimeSchema>;
+export type Diet = z.infer<typeof dietSchema>;
 
 /** A set, not a list: duplicates are rejected rather than silently deduped, so
  *  the parsed value is a true multiset-free set (R2.3 parse-don't-validate) —
@@ -176,6 +197,11 @@ export const fitnessProfileSchema = z.object({
   availableEquipment: z.array(equipmentSchema),
   sessionDurationMin: z.number().int().nullable(), // minutes
   preferredWorkoutTime: workoutTimeSchema.nullable(),
+  /** Screen 9's two answers (4b-ii), asked in Settings as well so they can be
+   *  changed later. The meal ideas after a workout follow the diet; the meals
+   *  a day wait for the meal suggestions (7a). */
+  diet: dietSchema.nullable(),
+  mealsPerDay: z.number().int().nullable(),
   onboardingCompleted: z.boolean(),
   /** NULL for a user who has never saved onboarding (no row): the GET returns
    *  the empty profile rather than a 404, so the wizard renders blank instead of
@@ -213,6 +239,8 @@ export const putFitnessProfileRequestSchema = z
     availableEquipment: equipmentArraySchema.optional(),
     sessionDurationMin: z.number().int().min(5).max(240).nullable().optional(),
     preferredWorkoutTime: workoutTimeSchema.nullable().optional(),
+    diet: dietSchema.nullable().optional(),
+    mealsPerDay: mealsPerDaySchema.nullable().optional(),
     onboardingCompleted: z.boolean().optional(),
   })
   .strict();

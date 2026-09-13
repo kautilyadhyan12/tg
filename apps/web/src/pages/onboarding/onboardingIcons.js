@@ -6,8 +6,11 @@ import {
   Apple,
   BicepsFlexed,
   Building2,
+  Carrot,
   createLucideIcon,
+  Drumstick,
   Dumbbell,
+  Egg,
   Footprints,
   HeartPulse,
   House,
@@ -19,6 +22,7 @@ import {
   Sprout,
   TrendingDown,
   TrendingUp,
+  Vegan,
   Weight,
 } from 'lucide-react';
 
@@ -83,6 +87,14 @@ export const LEVEL_ICONS = {
   beginner: Sprout,
   intermediate: TrendingUp,
   advanced: Rocket,
+};
+
+/** Screen 9's diet: what each one may eat, not a flag or a cuisine. */
+export const DIET_ICONS = {
+  vegetarian: Carrot,
+  vegetarian_eggs: Egg,
+  non_vegetarian: Drumstick,
+  vegan: Vegan,
 };
 
 export const EQUIPMENT_ICONS = {

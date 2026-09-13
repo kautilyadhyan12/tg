@@ -1,22 +1,26 @@
-// Onboarding v2, screens 1–8 (RULINGS 2026-09-07, 2026-09-09 and 2026-09-10).
-// Every tap and every wheel saves at once through `save`; the one typed box,
-// the name, saves when the person leaves it. Nothing here decides a number:
-// the plan panel shows the server's.
-import { useState } from 'react';
+// Onboarding v2, screens 1–9 and 11 (RULINGS 2026-09-07, 2026-09-09 and
+// 2026-09-10). Every tap and every wheel saves at once through `save`; the one
+// typed box, the name, saves when the person leaves it. Nothing here decides a
+// number: the plan panel shows the server's.
+import { useRef, useState } from 'react';
 import { Check } from 'lucide-react';
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, patchOnboardingRequestSchema } from '@app/shared';
+import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, ORG_TYPES_PHRASE, patchOnboardingRequestSchema } from '@app/shared';
+import GymMembershipCard from '../../components/gym/GymMembershipCard';
+import JoinGymPanel from '../../components/gym/JoinGymPanel';
 import HealthQuestion from './HealthQuestion';
 import NumberWheel from './NumberWheel';
-import { EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
+import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
   AGE_REST,
   DAYS,
+  DIETS,
   EQUIPMENT,
   GENDERS,
   GOALS,
   HEIGHT_REST,
   INCHES,
   LEVELS,
+  MEALS_PER_DAY,
   PACES,
   PLANK_REST,
   PUSH_UPS_REST,
@@ -687,6 +691,105 @@ export function HealthScreen({ health }) {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Screen 9 ────────────────────────────────────────────────────────────────
+// Food: the diet and how many meals a day (RULINGS 2026-09-10). NO cuisine
+// question and no cuisine data (RULINGS 2026-09-12). Neither answer moves a
+// calorie — the meal ideas after a workout follow the diet, and the meal
+// suggestions (7a) will read both — but both are needed before setup can
+// finish: guessing a diet would put meat in front of a vegetarian, and
+// unanswered is never a default (RULINGS 2026-07-15).
+//
+// Every line here is true TODAY. Nothing yet shares a day's food across the
+// meals a day, so the hint under that question says how to count and promises
+// nothing about what the answer does.
+export function FoodScreen({ answers, save }) {
+  const pill = (pressed) =>
+    `py-3 rounded-xl border-2 font-bold transition-all text-sm ${
+      pressed ? 'border-primary-500 bg-primary-500/10 text-white' : 'border-white/10 bg-dark-100 text-gray-400 hover:border-white/20'
+    }`;
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <Question>How do you eat?</Question>
+        {DIETS.map((d) => (
+          <Choice
+            key={`diet-${d.value}`}
+            selected={answers.diet === d.value}
+            onSelect={() => answers.diet !== d.value && save({ diet: d.value })}
+            icon={DIET_ICONS[d.value]}
+            label={d.label}
+            desc={d.desc}
+          />
+        ))}
+      </div>
+      <div>
+        <Question>How many meals a day?</Question>
+        <div className="flex gap-2">
+          {MEALS_PER_DAY.map((n) => (
+            <button
+              key={`meals-${n}`}
+              type="button"
+              aria-pressed={answers.mealsPerDay === n}
+              aria-label={`${n} meals a day`}
+              onClick={() => answers.mealsPerDay !== n && save({ mealsPerDay: n })}
+              className={`flex-1 ${pill(answers.mealsPerDay === n)}`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        <p className="text-gray-400 text-xs mt-2">Snacks count.</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Screen 11 ───────────────────────────────────────────────────────────────
+// The gym code, applied before the plan screen (RULINGS 2026-09-07) so a person
+// walks out of setup already waiting on their gym rather than hunting for the
+// box afterwards.
+//
+// THE SAME TWO COMPONENTS SETTINGS' GYM TAB DRAWS, for the reason that tab and
+// `/org/join` already share one panel: three places asking for a code must not
+// answer differently. The card above says nothing at all unless this person is
+// in a place or waiting on one, so somebody with no code sees the box alone.
+//
+// IT ASKS FOR NOTHING. Most people have no code, so this screen never holds
+// Continue or Finish (`screenAnswered`), and the server's finish check has no
+// word for it either.
+//
+// NO LINK HERE LEAVES SETUP. `ProtectedRoute` sends an unfinished account
+// straight back to the wizard, so a link out would look like a way on and be a
+// loop. The panel's "Back to your dashboard" is not offered
+// (`dashboardLink={false}`), and the card's "Try again" on a refused or expired
+// request puts the cursor in the code box just below instead of linking to the
+// join door's own address (`onTryAgain`).
+export function CodeScreen() {
+  const [applied, setApplied] = useState(0);
+  const panel = useRef(null);
+  const toCodeBox = () => {
+    const box = panel.current?.querySelector('#gym-join-code');
+    // After a code is sent the panel shows its answer instead of the box, and
+    // its own "Enter a different code" is then what the person is shown.
+    const target = box ?? panel.current;
+    box?.focus();
+    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  };
+  return (
+    <div className="space-y-4">
+      <Question>Have a code from your {ORG_TYPES_PHRASE}?</Question>
+      <GymMembershipCard refreshToken={applied} onTryAgain={toCodeBox} />
+      <div ref={panel}>
+        <JoinGymPanel dashboardLink={false} onApplied={() => setApplied((n) => n + 1)} />
+      </div>
+      <p className="text-gray-400 text-xs">
+        No code? Carry on — everything works without one, and you can enter a code any time in
+        Settings.
+      </p>
     </div>
   );
 }

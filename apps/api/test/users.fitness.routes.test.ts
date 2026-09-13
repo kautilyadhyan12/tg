@@ -4,11 +4,12 @@
 // full-document PUT incl. its absent→NULL replace rule, idempotency (R3.5),
 // every validation rail (strict body, ported enums, Kd-approved bounds, the
 // no-duplicates set rule), the cross-user isolation denial proof (R3.2/R9.2),
-// onboardingCompleted surfacing on GET /v1/users/me (the web's onboarding gate,
-// inert since web-repoint Card 1 — DECISIONS 2026-07-15), and the active-only
-// upsert (a soft-deleted user cannot write, Part 4 §5.2).
+// onboardingCompleted surfacing on GET /v1/users/me (the web's onboarding gate),
+// the finish check this route shares with the onboarding PATCH (4b-ii), and the
+// active-only upsert (a soft-deleted user cannot write, Part 4 §5.2).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { onboardingIncompleteBodySchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -52,7 +53,10 @@ const nextIp = () =>
 const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
-/** A complete, valid profile — the shape the wizard submits. */
+/** A complete, valid profile — every field this form carries, as Settings sends
+ *  it. It does NOT finish setup: a save that does is refused while an answer
+ *  only the other screens ask is still open (4b-ii), so the tests that finish
+ *  answer those first (`answerTheRest`) and send the flag themselves. */
 const FULL_PROFILE = {
   age: 34,
   gender: "female",
@@ -65,8 +69,14 @@ const FULL_PROFILE = {
   availableEquipment: ["dumbbells", "resistance_bands"],
   sessionDurationMin: 45,
   preferredWorkoutTime: "morning",
-  onboardingCompleted: true,
+  // Screen 9's two answers (4b-ii). Settings asks them, so this route writes
+  // them, and a body that omits them clears them like any other field here.
+  diet: "vegetarian_eggs",
+  mealsPerDay: 4,
+  onboardingCompleted: false,
 };
+/** The same profile, finishing setup. */
+const FINISH = { ...FULL_PROFILE, onboardingCompleted: true };
 
 d("users fitness-profile routes (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -77,7 +87,7 @@ d("users fitness-profile routes (real Postgres)", () => {
   };
 
   const inject = (opts: {
-    method: "GET" | "POST" | "PUT" | "DELETE";
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     url: string;
     body?: unknown;
     cookies?: Record<string, string>;
@@ -112,6 +122,28 @@ d("users fitness-profile routes (real Postgres)", () => {
     const res = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
     expect(res.statusCode).toBe(200);
     return (JSON.parse(res.body) as { fitnessProfile: Record<string, unknown> }).fitnessProfile;
+  };
+
+  const put = (cookies: Record<string, string>, body: unknown) =>
+    inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });
+
+  /** The gate the web reads: `onboardingCompleted` on GET /v1/users/me. */
+  const finishedOnMe = async (cookies: Record<string, string>) => {
+    const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { user: { onboardingCompleted: boolean } }).user.onboardingCompleted;
+  };
+
+  /** What setup needs beyond FULL_PROFILE's own fields, each on its own route:
+   *  the weight (a weigh-in), "your day" (asked only by the screens) and the
+   *  health question. With these in, FINISH is a finish the server takes. */
+  const answerTheRest = async (cookies: Record<string, string>) => {
+    const weight = await inject({ method: "PATCH", url: "/v1/users/me", body: { weightKg: 60 }, cookies });
+    expect(weight.statusCode, weight.body).toBe(200);
+    const day = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { dayActivity: "sitting" }, cookies });
+    expect(day.statusCode, day.body).toBe(200);
+    const health = await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: false }, cookies });
+    expect(health.statusCode, health.body).toBe(200);
   };
 
   beforeAll(async () => {
@@ -153,6 +185,8 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
+      diet: null, // screen 9's two, never guessed: a diet nobody gave is no diet
+      mealsPerDay: null,
       onboardingCompleted: false,
       updatedAt: null, // never written — a synthesized timestamp would be a lie
     });
@@ -245,7 +279,10 @@ d("users fitness-profile routes (real Postgres)", () => {
     // completed onboarding is undone. Accepted; asserted here so it can never
     // silently become a no-op (T3 finding, R9.2).
     const { cookies } = await makeUser("ofp-empty-put@example.com");
-    await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: FULL_PROFILE, cookies });
+    await answerTheRest(cookies);
+    const finished = await put(cookies, FINISH);
+    expect(finished.statusCode, finished.body).toBe(200);
+    expect(await finishedOnMe(cookies)).toBe(true);
 
     const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: {}, cookies });
     expect(res.statusCode).toBe(200);
@@ -266,8 +303,11 @@ d("users fitness-profile routes (real Postgres)", () => {
       availableEquipment: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
+      diet: null,
+      mealsPerDay: null,
       onboardingCompleted: false,
     });
+    expect(await finishedOnMe(cookies)).toBe(false);
   });
 
   it("rejects every invalid body: unknown key, bad enum, out-of-bounds, duplicates", { timeout: 30_000 }, async () => {
@@ -289,6 +329,10 @@ d("users fitness-profile routes (real Postgres)", () => {
       { sessionDurationMin: 4 }, // below the 5-minute floor
       { heightCm: 301 }, // above the 300 ceiling
       { medicalConditions: "knee injury" }, // the free-text notes box is gone (0029); .strict() refuses it
+      { diet: "pescatarian" }, // outside the four Kd ruled (RULINGS 2026-09-10)
+      { cuisine: "indian" }, // there is no cuisine question anywhere (RULINGS 2026-09-12)
+      { mealsPerDay: 1 }, // below the floor of 2
+      { mealsPerDay: 7 }, // above the ceiling of 6
     ];
     for (const body of bad) {
       const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });
@@ -335,22 +379,79 @@ d("users fitness-profile routes (real Postgres)", () => {
   it("surfaces onboardingCompleted on GET /v1/users/me — the web's onboarding gate", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ofp-gate@example.com");
 
-    const before = await inject({ method: "GET", url: "/v1/users/me", cookies });
-    expect(before.statusCode).toBe(200);
     // No profile row yet → COALESCEs to false rather than vanishing.
-    expect((JSON.parse(before.body) as { user: { onboardingCompleted: boolean } }).user
-      .onboardingCompleted).toBe(false);
+    expect(await finishedOnMe(cookies)).toBe(false);
 
-    await inject({
-      method: "PUT",
-      url: "/v1/users/me/fitness-profile",
-      body: FULL_PROFILE,
-      cookies,
-    });
+    await answerTheRest(cookies);
+    const res = await put(cookies, FINISH);
+    expect(res.statusCode, res.body).toBe(200);
 
-    const after = await inject({ method: "GET", url: "/v1/users/me", cookies });
-    expect((JSON.parse(after.body) as { user: { onboardingCompleted: boolean } }).user
-      .onboardingCompleted).toBe(true);
+    expect(await finishedOnMe(cookies)).toBe(true);
+  });
+
+  /** THE FINISH CHECK (4b-ii). Finishing setup opens the training side, so this
+   *  route refuses it on the onboarding PATCH's terms (RULINGS 2026-07-19):
+   *  without it, `{"onboardingCompleted": true}` alone would open the app with
+   *  no health answer, no diet and no meals. */
+  it("refuses to FINISH setup while an answer is open, names what is open, and writes nothing", { timeout: 60_000 }, async () => {
+    // A stranger with every answer in, the health one included, changes
+    // nothing below: the check reads only the caller's own rows.
+    const stranger = await makeUser("ofp-finish-stranger@example.com");
+    await answerTheRest(stranger.cookies);
+    expect((await put(stranger.cookies, FINISH)).statusCode).toBe(200);
+
+    const { cookies } = await makeUser("ofp-finish-refused@example.com");
+    // Every field this form carries is in the body. What is open is what only
+    // other screens ask: the weight, "your day" and the health question.
+    const first = await put(cookies, FINISH);
+    expect(first.statusCode, first.body).toBe(409);
+    expect([...onboardingIncompleteBodySchema.parse(JSON.parse(first.body)).missing].sort()).toEqual([
+      "dayActivity",
+      "health",
+      "weightKg",
+    ]);
+    // Refused whole: not even a row was made, and the gate still reads false.
+    expect(await getProfile(cookies)).toMatchObject({ age: null, onboardingCompleted: false, updatedAt: null });
+    expect(await finishedOnMe(cookies)).toBe(false);
+
+    // The rest answered, screen 9's two left out: refused, naming exactly those
+    // two, and the row the "your day" save made keeps only what it had.
+    await answerTheRest(cookies);
+    const noFood = await put(cookies, { ...FINISH, diet: undefined, mealsPerDay: undefined });
+    expect(noFood.statusCode, noFood.body).toBe(409);
+    expect(onboardingIncompleteBodySchema.parse(JSON.parse(noFood.body)).missing).toEqual(["diet", "mealsPerDay"]);
+    expect(await getProfile(cookies)).toMatchObject({ age: null, diet: null, onboardingCompleted: false });
+    expect(await finishedOnMe(cookies)).toBe(false);
+
+    // Everything in: the same body finishes.
+    const done = await put(cookies, FINISH);
+    expect(done.statusCode, done.body).toBe(200);
+    expect(await finishedOnMe(cookies)).toBe(true);
+  });
+
+  it("keeps a finished account finished through a Settings save, even with an answer open", { timeout: 60_000 }, async () => {
+    // Settings sends the flag back on every save, so someone who finished
+    // before a question was asked (the old form; screen 9 before 4b-ii) must
+    // still be able to save there. A true already stored is kept, unchecked.
+    const { cookies } = await makeUser("ofp-finish-kept@example.com");
+    await answerTheRest(cookies);
+    expect((await put(cookies, FINISH)).statusCode).toBe(200);
+    // "Your day" cleared since, as its screen can: setup has an open answer.
+    const cleared = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { dayActivity: null }, cookies });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+
+    const save = await put(cookies, { ...FINISH, age: 35 });
+    expect(save.statusCode, save.body).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ age: 35, onboardingCompleted: true });
+    expect(await finishedOnMe(cookies)).toBe(true);
+
+    // A save that un-finishes, then one that finishes again, is checked like
+    // any first finish.
+    expect((await put(cookies, FULL_PROFILE)).statusCode).toBe(200);
+    expect(await finishedOnMe(cookies)).toBe(false);
+    const again = await put(cookies, FINISH);
+    expect(again.statusCode, again.body).toBe(409);
+    expect(onboardingIncompleteBodySchema.parse(JSON.parse(again.body)).missing).toEqual(["dayActivity"]);
   });
 
   it("a soft-deleted user cannot write a profile (active-only upsert, Part 4 §5.2)", { timeout: 30_000 }, async () => {

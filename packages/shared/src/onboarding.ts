@@ -18,6 +18,7 @@
 import { z } from "zod";
 import { dayActivitySchema, missingPlanInputSchema, planNumbersSchema, planPaceSchema } from "./plan.js";
 import {
+  dietSchema,
   displayNameSchema,
   equipmentArraySchema,
   equipmentSchema,
@@ -25,6 +26,7 @@ import {
   fitnessGoalsArraySchema,
   fitnessLevelSchema,
   genderSchema,
+  mealsPerDaySchema,
   weightGoalSchema,
 } from "./users.js";
 
@@ -68,6 +70,11 @@ export const onboardingAnswersSchema = z
     trainingDays: z.number().int().nullable(),
     sessionMinutes: z.number().int().nullable(),
     availableEquipment: z.array(equipmentSchema),
+    /** Screen 9's two answers. Neither moves a calorie: the meal ideas after a
+     *  workout follow the diet, the meal suggestions (7a) will read both, and
+     *  the plan number never does. */
+    diet: dietSchema.nullable(),
+    mealsPerDay: z.number().int().nullable(),
     onboardingCompleted: z.boolean(),
     updatedAt: z.string().datetime().nullable(),
   })
@@ -109,6 +116,8 @@ export const patchOnboardingRequestSchema = z
     trainingDays: trainingDaysSchema.nullable().optional(),
     sessionMinutes: sessionMinutesSchema.nullable().optional(),
     availableEquipment: equipmentArraySchema.optional(),
+    diet: dietSchema.nullable().optional(),
+    mealsPerDay: mealsPerDaySchema.nullable().optional(),
     onboardingCompleted: z.boolean().optional(),
   })
   .strict();
@@ -131,14 +140,25 @@ export const onboardingResponseSchema = z
 export type OnboardingResponse = z.infer<typeof onboardingResponseSchema>;
 
 /** What still stands between a person and the end of setup: everything the PLAN
- *  needs, plus `health` — the one question on screen 8, which the plan can do
- *  without (an unanswered screening simply applies no condition rule, plan.ts)
- *  but setup cannot: it decides Safe mode and the calorie cut, so the training
- *  side never opens on a guess about it.
+ *  needs, plus the three answers no number depends on and setup does.
+ *
+ *  `health` is the one question on screen 8, which the plan can do without (an
+ *  unanswered screening simply applies no condition rule, plan.ts) but setup
+ *  cannot: it decides Safe mode and the calorie cut, so the training side never
+ *  opens on a guess about it.
+ *
+ *  `diet` and `mealsPerDay` are screen 9's (4b-ii). The calorie number never
+ *  reads them, and the meal suggestions (7a) cannot be made without them —
+ *  guessing "non-vegetarian" would put meat in front of a vegetarian, which is
+ *  the invented default RULINGS 2026-07-15 rules out. Every other screen is
+ *  answered before a person may finish, and this one is too.
+ *
+ *  Screen 11, the gym code, is NOT here and never will be: most people have no
+ *  code, so there is nothing to answer.
  *
  *  Written out rather than spread from `missingPlanInputSchema` so the enum
  *  stays a plain list; the shared test pins it to that schema's options plus
- *  the one extra, so an input added to the plan cannot go missing here. */
+ *  the extras, so an input added to the plan cannot go missing here. */
 export const missingSetupAnswerSchema = z.enum([
   "goal",
   "age",
@@ -151,6 +171,8 @@ export const missingSetupAnswerSchema = z.enum([
   "trainingDays",
   "sessionMinutes",
   "health",
+  "diet",
+  "mealsPerDay",
 ]);
 export type MissingSetupAnswer = z.infer<typeof missingSetupAnswerSchema>;
 

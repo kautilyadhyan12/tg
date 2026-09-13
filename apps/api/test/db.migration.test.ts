@@ -12,6 +12,7 @@ import {
   GYM_NUDGE_PRESETS,
   ORG_PRIVILEGES,
   consentPurposeSchema,
+  dietSchema,
   equipmentSchema,
   fitnessGoalSchema,
   orgTypeSchema,
@@ -1670,5 +1671,60 @@ d("0001_init on a real database", () => {
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'user_health_screenings' ORDER BY column_name`;
     expect(columns.map((r) => r.column_name)).toEqual(["check_first", "created_at", "has_condition", "updated_at", "user_id"]);
+  });
+
+  /** MIGRATION `0030`: SCREEN 9'S TWO ANSWERS. The diet's value set is read
+   *  back off the deployed catalogue and held against `dietSchema`, for the
+   *  reason `0024` and `0028` are: a `.sql` file the journal does not name is
+   *  applied silently and reports success, and a drift either way fails far
+   *  from the edit — a value in the enum but not the CHECK 500s the save on an
+   *  unmapped 23514, and one in the CHECK but not the enum is refused on the
+   *  way OUT, turning that person's every onboarding read into a 500.
+   *
+   *  NO CUISINE COLUMN is asserted too (RULINGS 2026-09-12): the ruling is
+   *  that the data does not exist, and a column added later "just in case" is
+   *  exactly what it rules out.
+   *
+   *  Both CHECKs are proven by CAUSING them, and NULL passes both — the wizard
+   *  is partial by design and nobody has ever been asked either question. */
+  it("0030 stores the diet and the meals, checks both, and adds no cuisine column", async () => {
+    const columns = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'user_fitness_profiles' AND column_name IN ('diet', 'meals_per_day', 'cuisine', 'cuisines')
+      ORDER BY column_name`;
+    expect(columns.map((r) => r.column_name)).toEqual(["diet", "meals_per_day"]);
+
+    const [row] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'user_fitness_profiles'::regclass AND conname = 'user_fitness_profiles_diet_check'`;
+    if (row === undefined) throw new Error("user_fitness_profiles_diet_check is not on the table");
+    const values = [...new Set([...row.def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]))].sort();
+    expect(values).toEqual([...dietSchema.options].sort());
+
+    const [u] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0030@example.com', 'zz 0030')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const userId = u?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+      const nulls = await sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM user_fitness_profiles
+        WHERE user_id = ${userId} AND diet IS NULL AND meals_per_day IS NULL`;
+      expect(nulls[0]?.n, "a fresh row is unanswered on both, with no default").toBe("1");
+      await refused(sql`UPDATE user_fitness_profiles SET diet = 'pescatarian' WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET diet = '' WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET meals_per_day = 1 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET meals_per_day = 7 WHERE user_id = ${userId}`);
+      // What the screen sends is taken — every diet, and both ends of the rail.
+      for (const diet of dietSchema.options) {
+        await sql`UPDATE user_fitness_profiles SET diet = ${diet} WHERE user_id = ${userId}`;
+      }
+      for (const meals of [2, 6]) {
+        await sql`UPDATE user_fitness_profiles SET meals_per_day = ${meals} WHERE user_id = ${userId}`;
+      }
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${userId}`;
+    }
   });
 });

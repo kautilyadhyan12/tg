@@ -481,7 +481,10 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // "your day", so the rings name exactly those two, however complete the
     // rest is. The weight lives in the weigh-in history, so this read spans
     // both tables.
-    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["flexibility"],onboardingCompleted:true})).statusCode).toBe(200);
+    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:3,sessionDurationMin:45,fitnessGoals:["flexibility"]})).statusCode).toBe(200);
+    // The old form finished setup before today's questions existed. The route
+    // refuses that finish now (4b-ii), so the row is stamped the way it left it.
+    await sql`UPDATE user_fitness_profiles SET onboarding_completed = true WHERE user_id = ${t.userId}`;
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
     const old=await inject("GET","/v1/nutrition/targets",t.access);
     expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"],targetWrongSide:false});
