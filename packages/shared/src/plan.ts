@@ -151,8 +151,8 @@ export const missingPlanInputSchema = z.enum([
 export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
 
 /** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07).
- *  Shared so screen 3 marks a pace for building muscle only where the plan maths
- *  could cut at all. */
+ *  Shared so screen 3 can leave its building-muscle mark off before the plan
+ *  exists to say what each pace eats. */
 export const ADULT_AGE = 18;
 
 /** Why the plan holds no calorie cut: under 18 · a yes on the health question
@@ -326,6 +326,16 @@ export const planNumbersSchema = z
     /** Exactly targetKcal − dailyBurnKcal, so the two numbers on screen subtract to it.
      *  Negative on a cut, positive on a gain or when the floor sits above the burn. */
     dailyChangeKcal: z.number().int(),
+    /** `dailyChangeKcal` as it would be at each pace, every other answer the
+     *  same; null when the weight choice asks no pace or no target is given.
+     *  Screen 3 reads it to mark the gentle pace for building muscle only where
+     *  another pace would cut more: under 18, after a yes to the health question,
+     *  on the calorie floor, or with a target the plan cannot run to, every pace
+     *  eats the same. */
+    dailyChangeKcalByPace: z
+      .object({ gentle: z.number().int(), steady: z.number().int(), brisk: z.number().int() })
+      .strict()
+      .nullable(),
     /** The three add up to targetKcal (to rounding); carbohydrates never under 50 g. */
     proteinG: z.number().int(),
     carbsG: z.number().int(),
@@ -365,6 +375,11 @@ export const planNumbersSchema = z
         w.beforeFloorKcal === p.dailyBurnKcal + (w.change?.kcal ?? 0) &&
         p.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal) &&
         p.dailyChangeKcal === p.targetKcal - p.dailyBurnKcal &&
+        // Each pace's change: the picked pace's is the plan's own, and none eats
+        // under the floor.
+        (p.dailyChangeKcalByPace === null ||
+          ((w.change === null || p.dailyChangeKcalByPace[w.change.pace] === p.dailyChangeKcal) &&
+            Object.values(p.dailyChangeKcalByPace).every((kcal) => p.dailyBurnKcal + kcal >= w.floorKcal))) &&
         p.proteinG <= w.protein.wantedG &&
         p.fatG === Math.round((p.targetKcal * w.fatShare) / 9) &&
         p.carbsG >= w.carbsFloorG &&

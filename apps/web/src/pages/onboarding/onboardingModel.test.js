@@ -547,6 +547,7 @@ const WORKINGS = {
 describe('the plan panel says what the server said', () => {
   const plan = {
     restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550,
+    dailyChangeKcalByPace: { gentle: -275, steady: -550, brisk: -617 },
     proteinG: 140, carbsG: 98, fatG: 35, plannedTargetKg: 65, daysToTarget: 70, finishDate: '2026-11-19', flags: [],
     workings: WORKINGS,
   };
@@ -843,9 +844,10 @@ describe('the plan screen (ROADMAP 4c)', () => {
     }
   });
 
-  it('marks no pace where no pace can cut: under 18, or after any yes to the health question', () => {
+  it('before there is a plan, marks no pace where none can cut: under 18, or after any yes to the health question', () => {
     // Every pace then eats the same (the plan maths' no-cut rule), so a mark
-    // would point at a choice that changes nothing.
+    // would point at a choice that changes nothing. On the first walk there is
+    // no plan yet at screen 3, so these two answers are all that is known.
     const muscle = { ...ALL, fitnessGoals: ['muscle_gain'] };
     const notes = (a) => m.PACES.map((p) => m.paceNote(p.value, 'lose', a));
     const MARKED = ['Best if you also build muscle', null, null];
@@ -858,6 +860,27 @@ describe('the plan screen (ROADMAP 4c)', () => {
     // A no, or the question not reached yet (screen 8 comes after screen 3), is not a yes.
     expect(notes({ ...muscle, health: HEALTH_ANSWERED })).toEqual(MARKED);
     expect(notes({ ...muscle, health: NO_HEALTH_ANSWER })).toEqual(MARKED);
+  });
+
+  it('once there is a plan, marks the gentle pace only where the plan says another pace would cut more', () => {
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain'] };
+    const notes = (byPace, a = muscle) => m.PACES.map((p) => m.paceNote(p.value, 'lose', a, { dailyChangeKcalByPace: byPace }));
+    const MARKED = ['Best if you also build muscle', null, null];
+    const NONE = [null, null, null];
+    // Each pace its own cut; the floor holding steady and brisk to 500 while
+    // gentle cuts 275; gentle out of reach while the others cut.
+    expect(notes({ gentle: -275, steady: -550, brisk: -825 })).toEqual(MARKED);
+    expect(notes({ gentle: -275, steady: -500, brisk: -500 })).toEqual(MARKED);
+    expect(notes({ gentle: 0, steady: -550, brisk: -825 })).toEqual(MARKED);
+    // Every pace eats the same: the burn (under 18, a health yes, a target the
+    // plan cannot run to), the floor above the burn, or one cut for all.
+    expect(notes({ gentle: 0, steady: 0, brisk: 0 })).toEqual(NONE);
+    expect(notes({ gentle: 19, steady: 19, brisk: 19 })).toEqual(NONE);
+    expect(notes({ gentle: -300, steady: -300, brisk: -300 })).toEqual(NONE);
+    // A plan with no paces to give falls back on the answers, and the answers
+    // still count while a plan that differs has not caught up with them.
+    expect(notes(null)).toEqual(MARKED);
+    expect(notes({ gentle: -275, steady: -550, brisk: -825 }, { ...muscle, age: ADULT_AGE - 1 })).toEqual(NONE);
   });
 });
 

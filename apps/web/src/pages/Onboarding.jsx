@@ -512,6 +512,7 @@ export default function Onboarding() {
                     planNote={planTap}
                     adjust={adjust}
                     busy={busy}
+                    plan={ob.plan}
                   />
                 </motion.div>
 

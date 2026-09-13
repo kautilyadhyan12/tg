@@ -217,7 +217,21 @@ function daysFor(goal: PlanGoal, kgToMove: number, dailyChange: number): number 
   return days > MAX_PLAN_DAYS ? null : days;
 }
 
+/** The plan for these answers, and what each pace would change a day with every
+ *  other answer the same: the same maths run at each pace, so screen 3's
+ *  building-muscle mark and the plan cannot disagree. */
 export function computePlan(input: PlanInputs): PlanNumbers {
+  const changeAt = (pace: PlanPace): number => planAt({ ...input, pace }).dailyChangeKcal;
+  const dailyChangeKcalByPace =
+    input.goal === "maintain" || input.targetWeightKg === null
+      ? null
+      : { gentle: changeAt("gentle"), steady: changeAt("steady"), brisk: changeAt("brisk") };
+  // In the contract's order, so the plan reads the same before and after parsing.
+  const { restingBurnKcal, dailyBurnKcal, targetKcal, dailyChangeKcal, ...rest } = planAt(input);
+  return { restingBurnKcal, dailyBurnKcal, targetKcal, dailyChangeKcal, dailyChangeKcalByPace, ...rest };
+}
+
+function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
   const steps = burnSteps(input);
   const burn = steps.burnKcal;
   const flags: PlanFlag[] = [];

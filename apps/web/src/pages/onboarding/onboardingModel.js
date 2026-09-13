@@ -775,14 +775,24 @@ export const CLEARED_LINE = 'You told us a professional has cleared you. Follow 
 
 /** The mark on screen 3's pace card that leaves muscle room to grow, for
  *  someone building muscle while losing weight (Kd, 2026-09-13). The pace is
- *  the shared one the server's plan line suggests. Only where a pace can cut at
- *  all: under 18, or after a yes to the health question, every pace eats the
- *  same, so marking one would point at a choice that changes nothing. */
+ *  the shared one the server's plan line suggests, marked only where another
+ *  pace would cut more: where every pace eats the same, a mark would point at a
+ *  choice that changes nothing. Once there is a plan, the server says what each
+ *  pace would change a day (`dailyChangeKcalByPace`, which counts every rule
+ *  that stops or shrinks a cut: under 18, a yes to the health question, the
+ *  calorie floor, a target the plan cannot run to). Before there is one — the
+ *  first walk, with screens 4 to 7 still to come — only the age and the health
+ *  answer are known here. */
 export const MUSCLE_PACE_NOTE = 'Best if you also build muscle';
-export function paceNote(pace, direction, a) {
+export function paceNote(pace, direction, a, plan = null) {
   const buildsMuscle = Array.isArray(a.fitnessGoals) && a.fitnessGoals.includes('muscle_gain');
   const canCut = answered(a.age) && a.age >= ADULT_AGE && a.health?.hasCondition !== true;
-  return direction === 'lose' && buildsMuscle && canCut && pace === MUSCLE_GAIN_PACE ? MUSCLE_PACE_NOTE : null;
+  const byPace = plan?.dailyChangeKcalByPace ?? null;
+  const cut = (p) => Math.max(0, -byPace[p]);
+  const anotherCutsMore = byPace === null || PACES.some((p) => cut(p.value) > cut(MUSCLE_GAIN_PACE));
+  return direction === 'lose' && buildsMuscle && canCut && anotherCutsMore && pace === MUSCLE_GAIN_PACE
+    ? MUSCLE_PACE_NOTE
+    : null;
 }
 
 // ── Saving as you go ────────────────────────────────────────────────────────

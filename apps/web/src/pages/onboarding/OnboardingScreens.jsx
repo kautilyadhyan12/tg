@@ -461,7 +461,7 @@ export function AboutScreen({ answers, save, units, setUnits, name }) {
 }
 
 // ── Screen 3 (only for a goal that moves the weight) ────────────────────────
-export function TargetScreen({ answers, save, units, setUnits, direction }) {
+export function TargetScreen({ answers, save, units, setUnits, direction, plan }) {
   const target = answers.targetWeightKg ?? null;
   const weightKg = answers.weightKg ?? null;
   const verb = direction === 'gain' ? 'Gain' : 'Lose';
@@ -479,9 +479,9 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
         <Question>How fast?</Question>
         <div className="space-y-3">
           {/* Building muscle while losing weight, the pace that leaves it room
-              to grow is marked here, where the pace is picked (Kd, 2026-09-13).
-              `answers` carries the age and the health answer, which decide
-              whether any pace can cut. */}
+              to grow is marked here, where the pace is picked (Kd, 2026-09-13):
+              only where another pace would cut more, which the plan says once
+              there is one. */}
           {PACES.map((p) => (
             <Choice
               key={`pace-${p.value}`}
@@ -489,7 +489,7 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
               onSelect={() => answers.pace !== p.value && save({ pace: p.value })}
               label={p.label}
               desc={`${verb} ${paceText(p.value, units)}`}
-              note={paceNote(p.value, direction, answers)}
+              note={paceNote(p.value, direction, answers, plan)}
             />
           ))}
         </div>
@@ -896,9 +896,9 @@ export function PlanScreen({ answers, units, health, planNote, adjust, busy }) {
         )}
       </section>
 
-      {/* "Your answers", never "what your plan is built on": a plan with no
-          calorie cut (under 18, a health yes, a target out of reach) keeps the
-          weight, and the target row is still the person's answer. */}
+      {/* The person's answers, as they gave them: a plan with no calorie cut
+          (under 18, a health yes, a target out of reach) keeps the weight, and
+          the target row still shows the target they asked for. */}
       <section aria-label="Your answers" className="card-glass">
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
           Your answers

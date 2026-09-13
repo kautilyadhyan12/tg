@@ -101,6 +101,8 @@ const GOLDEN_LOSE = {
   dailyBurnKcal: 1817,
   targetKcal: 1267,
   dailyChangeKcal: -550,
+  // gentle 275 · steady 550 · brisk asks for 825, and the 1200 floor holds it to 1200 − 1817
+  dailyChangeKcalByPace: { gentle: -275, steady: -550, brisk: -617 },
   proteinG: 140,
   carbsG: 98,
   fatG: 35,
@@ -542,6 +544,8 @@ d("onboarding v2 routes (real Postgres)", () => {
       dailyBurnKcal: 1895,
       targetKcal: 1895,
       dailyChangeKcal: 0,
+      // Every pace eats the burn, so screen 3 marks none for building muscle.
+      dailyChangeKcalByPace: { gentle: 0, steady: 0, brisk: 0 },
       flags: [{ code: "no_deficit", reasons: ["under_18"] }],
     });
     expect((await patchOk(cookies, { age: 18 })).plan).toMatchObject({ dailyChangeKcal: -550 });

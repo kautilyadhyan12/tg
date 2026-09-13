@@ -126,6 +126,15 @@ function brokenFacts(body: PlanInputs): string[] {
     "the muscle line exactly when Build muscle is ticked and the cut is over the limit",
     codes.includes("cut_limits_muscle_gain") === (body.buildMuscle && plan.dailyBurnKcal - plan.targetKcal > 500),
   );
+  // Each pace's change is the plan that pace would make, every other answer the
+  // same; none is given where the weight choice asks no pace or has no target.
+  const byPace = plan.dailyChangeKcalByPace;
+  check(
+    "each pace's change is the plan at that pace",
+    byPace === null
+      ? body.goal === "maintain" || body.targetWeightKg === null
+      : (["gentle", "steady", "brisk"] as const).every((pace) => byPace[pace] === computePlan({ ...body, pace }).dailyChangeKcal),
+  );
   const muscle = plan.flags.find((f) => f.code === "cut_limits_muscle_gain");
   if (muscle?.suggestedPace) {
     const slower = computePlan({ ...body, pace: muscle.suggestedPace });
@@ -207,6 +216,8 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       dailyBurnKcal: 2255,
       targetKcal: 1705,
       dailyChangeKcal: -550,
+      // 0.25 / 0.5 / 0.75 kg a week · 7700 ÷ 7
+      dailyChangeKcalByPace: { gentle: -275, steady: -550, brisk: -825 },
       proteinG: 164,
       carbsG: 156,
       fatG: 47,
@@ -876,6 +887,55 @@ describe("plan maths — the sanity rules", () => {
         { ...at500, flags: [...at500.flags, muscleLine] },
       ];
       for (const plan of lies) expect(planNumbersSchema.safeParse(plan).success, JSON.stringify(plan.flags)).toBe(false);
+    });
+
+    it("says what each pace would change a day, so screen 3 marks the gentle pace only where another would cut more", () => {
+      const byPace = (body: PlanInputs) => computePlan(body).dailyChangeKcalByPace;
+      // The golden body: each pace cuts its own amount, whichever pace is picked.
+      for (const pace of ["gentle", "steady", "brisk"] as const) {
+        expect(byPace({ ...muscle, pace }), pace).toEqual({ gentle: -275, steady: -550, brisk: -825 });
+      }
+      // Burn 1700: gentle cuts 275, and the floor holds steady and brisk to 500.
+      expect(
+        byPace({ ...muscle, gender: "female", heightCm: 165, weightKg: 67, targetWeightKg: 60, pace: "brisk", trainingDays: 2, sessionMinutes: 20 }),
+      ).toEqual({ gentle: -275, steady: -500, brisk: -500 });
+      // Every pace eats the same: under 18, a yes on the health question, a burn
+      // under the floor (female 60 · 150 cm · 50 kg · sitting · 1 × 15 min: burn
+      // 1181, every pace eats 1200), and a weight already under the healthy
+      // floor with a target below it.
+      const same: [PlanInputs, number][] = [
+        [{ ...muscle, age: 17 }, 0],
+        [{ ...muscle, health: { hasCondition: true, safeMode: false } }, 0],
+        [{ ...muscle, gender: "female", age: 60, heightCm: 150, weightKg: 50, targetWeightKg: 47, trainingDays: 1, sessionMinutes: 15 }, 19],
+        [{ ...muscle, gender: "female", heightCm: 165, weightKg: 50, targetWeightKg: 45, dayActivity: "active", trainingDays: 4 }, 0],
+      ];
+      for (const [body, kcal] of same) {
+        expect(byPace(body), JSON.stringify(body)).toEqual({ gentle: kcal, steady: kcal, brisk: kcal });
+        expectSanePlan(body);
+      }
+      // No pace to give: keeping the weight, or no target yet.
+      expect(byPace({ ...muscle, goal: "maintain", targetWeightKg: null, pace: null })).toBeNull();
+      expect(byPace({ ...muscle, targetWeightKg: null })).toBeNull();
+      // Gaining weight gives them too.
+      expect(byPace({ ...muscle, goal: "gain", weightKg: 70, targetWeightKg: 75 })).toEqual({ gentle: 275, steady: 550, brisk: 825 });
+    });
+
+    it("the contract refuses a pace's change the plan does not bear out", () => {
+      const plan = computePlan({ ...muscle, pace: "steady" });
+      expect(planNumbersSchema.safeParse(plan).success).toBe(true);
+      const byPace = { gentle: -275, steady: -550, brisk: -825 };
+      const lies = [
+        // The picked pace's change is not the plan's own.
+        { ...plan, dailyChangeKcalByPace: { ...byPace, steady: -551 } },
+        // A pace that would eat under the floor (burn 2255, floor 1200).
+        { ...plan, dailyChangeKcalByPace: { ...byPace, brisk: -1056 } },
+        // A pace missing, or one the app does not offer.
+        { ...plan, dailyChangeKcalByPace: { gentle: -275, steady: -550 } },
+        { ...plan, dailyChangeKcalByPace: { ...byPace, sprint: -1100 } },
+      ];
+      for (const lie of lies) expect(planNumbersSchema.safeParse(lie).success, JSON.stringify(lie.dailyChangeKcalByPace)).toBe(false);
+      // At the floor exactly is not under it.
+      expect(planNumbersSchema.safeParse({ ...plan, dailyChangeKcalByPace: { ...byPace, brisk: -1055 } }).success).toBe(true);
     });
   });
 });
