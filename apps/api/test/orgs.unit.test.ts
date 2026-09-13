@@ -8,11 +8,11 @@ import {
   JOIN_CODE_LENGTH,
   SUPPORTED_COUNTRIES,
   currencyForCountry,
+  normaliseJoinCode,
 } from "@app/shared";
 import {
   RESERVED_SLUGS,
   codeFromBytes,
-  normaliseCode,
   slugCandidate,
   slugifyName,
 } from "../src/modules/orgs/codes.js";
@@ -59,18 +59,18 @@ describe("join code alphabet (Part 3 §4.0 step 4)", () => {
   });
 });
 
-describe("normaliseCode", () => {
+describe("normaliseJoinCode (from @app/shared: the server's lookup and the web's poster link)", () => {
   it("accepts what a human actually types off a poster", () => {
-    expect(normaliseCode(" 24kq7b ")).toBe("24KQ7B");
-    expect(normaliseCode("24K-Q7B")).toBe("24KQ7B");
-    expect(normaliseCode("24 KQ 7B")).toBe("24KQ7B");
+    expect(normaliseJoinCode(" 24kq7b ")).toBe("24KQ7B");
+    expect(normaliseJoinCode("24K-Q7B")).toBe("24KQ7B");
+    expect(normaliseJoinCode("24 KQ 7B")).toBe("24KQ7B");
   });
 
   it("does NOT substitute look-alikes — a guess would join the wrong gym", () => {
     // 0 and O are both outside the alphabet; turning one into the other would
     // be inventing an intent the code cannot confirm.
-    expect(normaliseCode("240Q7B")).toBe("240Q7B");
-    expect(normaliseCode("24IQ7B")).toBe("24IQ7B");
+    expect(normaliseJoinCode("240Q7B")).toBe("240Q7B");
+    expect(normaliseJoinCode("24IQ7B")).toBe("24IQ7B");
   });
 });
 

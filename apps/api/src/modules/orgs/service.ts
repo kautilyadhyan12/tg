@@ -2,12 +2,12 @@
 // code, list mine, read the roster. Authorization decisions live here (R3.3
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
-import { JOIN_CODE_LENGTH, ORG_TYPES_PHRASE, currencyForCountry, orgWords } from "@app/shared";
+import { JOIN_CODE_LENGTH, ORG_TYPES_PHRASE, currencyForCountry, normaliseJoinCode, orgWords } from "@app/shared";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import type { RedisLike } from "../../redis.js";
-import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./codes.js";
+import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import * as repo from "./repo.js";
 import {
   ORG_PRIVILEGES,
@@ -184,7 +184,7 @@ function toOrgSummary(org: repo.OrgRow): OrgSummary {
  *  looks the country up, so without this the row could store `us` while the
  *  currency was derived from `US` — and the column's own CHECK (two capitals)
  *  would then refuse the write with a 500 rather than a sentence. Same shape as
- *  `normaliseCode`, and for the same reason: normalise once, at the boundary. */
+ *  `normaliseJoinCode`, and for the same reason: normalise once, at the boundary. */
 function normaliseCountry(country: string): string {
   return country.trim().toUpperCase();
 }
@@ -557,7 +557,7 @@ export async function applyToOrg(
     // Normalised here, once, so the repo only ever looks up the stored form.
     // Doing it at the call site instead is how one caller ends up comparing
     // "aihg-24kq7b" against a stored "24KQ7B" and getting "no such gym".
-    code: normaliseCode(req.code),
+    code: normaliseJoinCode(req.code),
     consent: req.consent ?? false,
   });
 
@@ -1380,7 +1380,7 @@ export async function updateOrgCode(
     gymId,
     // Normalised for the same reason the join door normalises: an owner
     // pasting "k7qm-2x" out of a message must reach the row stored as "K7QM2X".
-    code: normaliseCode(code),
+    code: normaliseJoinCode(code),
     patch,
     actorUserId: userId,
   });
@@ -1416,7 +1416,7 @@ export async function rotateOrgCode(
   const outcome = await mintCode(deps, (newCode) =>
     repo.rotateCode(deps.sql, {
       gymId,
-      code: normaliseCode(code),
+      code: normaliseJoinCode(code),
       newCode,
       actorUserId: userId,
     }),
@@ -1461,7 +1461,7 @@ export async function removeOrgCode(
 
   const outcome = await repo.removeCode(deps.sql, {
     gymId,
-    code: normaliseCode(code),
+    code: normaliseJoinCode(code),
     actorUserId: userId,
   });
 

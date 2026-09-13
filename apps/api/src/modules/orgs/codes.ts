@@ -1,4 +1,4 @@
-// Pure helpers for the org module: join-code minting, code normalisation, and
+// Pure helpers for the org module: join-code minting and
 // slug derivation. Kept out of repo/service so they are node-testable without
 // a database — the alphabet rule (Part 3 §4.0 step 4) is the kind of thing a
 // later edit breaks silently, so it gets its own assertions.
@@ -31,17 +31,6 @@ export function codeFromBytes(bytes: Uint8Array, length = JOIN_CODE_LENGTH): str
     out += JOIN_CODE_ALPHABET.charAt(byte % JOIN_CODE_ALPHABET.length);
   }
   return out;
-}
-
-/** What a human typed off a poster → what is stored.
- *
- *  Case, spaces and dashes only. There is deliberately NO look-alike
- *  substitution (0→O, 1→I): those characters are not IN the alphabet, so
- *  "correcting" them would be guessing at an intent the code cannot confirm,
- *  and a wrong guess joins somebody to the wrong gym. An unrecognised code
- *  gets an honest "no such code" instead. */
-export function normaliseCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[\s-]/g, "");
 }
 
 const SLUG_MAX = 48;

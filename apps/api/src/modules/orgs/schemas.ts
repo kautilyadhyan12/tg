@@ -336,9 +336,10 @@ export type StaffParams = z.infer<typeof staffParamsSchema>;
  *  "404" is an oracle telling a stranger which strings are real codes. Length is
  *  bounded so a megabyte of path never reaches Postgres.
  *
- *  Uppercase-and-strip happens in the SERVICE (`normaliseCode`), not here: the
- *  join door already normalises there and one spelling of that rule is what
- *  stops a pasted "k7qm-2x" missing a row stored as "K7QM2X". */
+ *  Uppercase-and-strip happens in the SERVICE (`normaliseJoinCode`, from
+ *  `@app/shared`), not here: the join door already normalises there and one
+ *  spelling of that rule is what stops a pasted "k7qm-2x" missing a row stored
+ *  as "K7QM2X". */
 export const codeParamsSchema = z
   .object({ gymId: z.string().uuid(), code: z.string().trim().min(1).max(32) })
   .strict();
