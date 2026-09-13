@@ -14,8 +14,12 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   Stage 2 item 13, with three questions to him: the plan and two packages (`qrcode-generator`; `jsqr` for tests only) ·
   store QRs drawn only once the listings exist (recommended) · order (next, before 4b-iii, recommended).
 - Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat; live code EMH283 (Step 22b Gym 987027).
-- Next: Kd's answers → one more records commit; the review of PR #65 in a fresh chat; fixes; merge; then an Opus chat
-  builds the card off `master` (or 4b-iii, if Kd puts the card later).
+- Kd then ruled the card is built WITH the phone app, not on the web now (RULINGS amended): Stage 2 item 13 → Stage 5 item 7,
+  simplified to ONE QR (the join link) with the code printed under it (the chat's choice). He asked how US gyms really do
+  it: answered from general knowledge of Mindbody / Glofox / Zen Planner / PushPress — the owner adds the member by email
+  and the software invites them; QR signage is the backup. Recommended, unanswered: Stage 2 items 3 and 5 (roster import,
+  notify) come first in Stage 2.
+- Next: the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
 
 ## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
 
