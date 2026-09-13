@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4c review fixed (no Critical/High; seven Lows, one weak test), branch `plan-screen`, PR #66
+
+- 15fc226: the plan's list is "Your answers" (a plan with no cut showed its target under "built on") · screen 3 marks Gentle only for 18 or over
+  with no health yes (`ADULT_AGE` now in `@app/shared`) · "You told us a professional has cleared you." · "Go to …" under Finish is an Adjust.
+- posterCode's flake: the join page forgets the kept code in an effect, which a busy machine runs after the heading shows; both checks now wait.
+  Delaying the effect 20 ms on purpose fails the old checks ("expected 'K7QM2X' to be null") and passes the new. Not reproduced under real load.
+- Weak test: each disclaimer tap is held on the wire. Ticked early (the review's break), health-only, plan-only and Finish-early each fail at their
+  own line; "Go to" as a plain jump and screen 3 blind to the health answer fail too. All broken on throwaway copies the dev server never loads.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · plan.unit 61/61; web eslint 0 on touched files · model 57/57 · onboarding
+  render 70/70 · posterCode 24/24 · gitleaks clean · CI green on 15fc226, all five jobs, web 2123/2123 tests in 76/76 files. A wide-window grep
+  over a transcript took 6.7 GB and got the local API killed twice; stopped, and saved as a memory.
+- Next: Kd's click-through with these fixes; the re-check of 15fc226, or Kd's waiver (no Critical/High, RULINGS 2026-09-08); merge; then ask if 4d.
+
 ## 2026-09-13 · 4c: "Your plan", the last setup screen; Kd: tell them about building muscle, branch `plan-screen`, PR #66
 
 - Built: after "Your code", the plan: the number, "Your workouts" (the week as asked; Safe mode's "not yet" words in its place; "Follow their
