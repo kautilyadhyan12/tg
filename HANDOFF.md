@@ -4,6 +4,23 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
+
+- Kd picked option 1 (RULINGS 2026-09-13): someone not set up meets "Your code" moved to the front of setup, the code filled
+  in, sent only by "Ask to join"; a set-up person lands on the join page with it; the sign-in page says "Sign in to use your
+  code …" (Train door only). Continue from the code goes on to the first open question.
+- Built (no server change): the code is kept in the tab like the door (`CarryJoinCode`; `rememberJoinCode` / `readJoinCode` /
+  `forgetJoinCode`), only a code the server could have made (`linkedJoinCodeSchema`, `@app/shared`); forgotten when sent, at
+  the finish, on reaching the join page and on sign-out.
+- Kd asked where the gym's QR went: never built (the console shows the code big with Copy; no QR, WhatsApp share or poster)
+  and missed at the 09-07 reset. Now ROADMAP Stage 2 item 13; asked "QR next" (recommended; needs a QR package) or "QR later".
+- Verified: shared tsc 0 · eslint 0 · 102/102; api tsc 0; web eslint 0 on touched files · full 2080/2080 (poseAssets.contract
+  fails to load, the known local red, `src/hooks` untouched); 20 deliberate breaks, all red; gitleaks clean.
+- `mutate-login-door.mjs` re-anchored (D6/D8/D10 moved here; D8/D9 stale since 09-07) but still aborts at D13 (console
+  sign-out moved to `useConsoleSignOut`); `mutate-join-door.mjs` aborts at J1 — both stale before this card, neither run.
+- Local: API 3000 on the LOCAL Postgres, web 5173; live code EMH283 (Step 22b Gym 987027, trialing).
+- Next: CI, Kd's click-through, a fresh-chat review, fixes, merge; then the QR line if Kd says next, else 4b-iii.
+
 ## 2026-09-13 · 4b-ii's last fixes: "In 3–4 hours", a reset cannot slip past a finish, tidier records, PR #64
 
 - Kd picked "In 3–4 hours" for the yogurt idea's timing ("Later today" did not count from the workout; RULINGS
