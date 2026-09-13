@@ -19,7 +19,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   for him sit on that line (the design as read; whether the web shows the week's runs). Asked in chat, unanswered.
 - Kd then asked whether the post-workout ideas repeat every day (today: yes — seven fixed lines; from 7a they vary,
   drawn from the food list) and said a non-vegetarian can eat veg too (RULINGS 2026-09-13: the diet is a ceiling,
-  never a demand; 7a includes veg dishes for non-vegetarians). Whether he wants variety BEFORE 7a: asked, unanswered.
+  never a demand; 7a includes veg dishes for non-vegetarians). Variety waits for 7a — *"wait for 7a is fine"*.
 - Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat. Accounts: `kd.meals.0913@example.com`
   (finished, vegan, one 560 kcal workout, id `f45b13f5-2316-4fe9-a77c-26112c01bd3e`) and `kd.code.0913@example.com`
   (setup unfinished, a refused request to join `2LY3BZ`); the sign-in code prints in the API log.
