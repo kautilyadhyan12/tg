@@ -110,8 +110,14 @@ export const targetDirection = (weightGoal) => (weightGoal === 'lose' || weightG
  *  count does not jump when "Lose weight" is chosen. */
 export const asksTarget = (weightGoal) => directionOf(weightGoal) !== 'maintain';
 
-export const visibleScreens = (answers) =>
-  SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.weightGoal));
+/** The screens in the order this person meets them. `codeFirst` is for someone
+ *  who came from a poster link with its code (ROADMAP 4b-ii-b): "Your code"
+ *  moves to the front, so they can ask to join before the questions, and the
+ *  count stays the same. */
+export const visibleScreens = (answers, { codeFirst = false } = {}) => {
+  const shown = SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.weightGoal));
+  return codeFirst ? [...shown.filter((s) => s.id === 'code'), ...shown.filter((s) => s.id !== 'code')] : shown;
+};
 
 const answered = (v) => v !== null && v !== undefined;
 
@@ -154,16 +160,17 @@ export function screenAnswered(id, a) {
 }
 
 /** Where a returning person lands: the first screen still unanswered, or the
- *  last one when every screen has its answer. */
-export function firstOpenScreen(answers) {
-  const screens = visibleScreens(answers);
+ *  last one when every screen has its answer. "Your code" is always answered,
+ *  so with it first this is where its Continue goes on to. */
+export function firstOpenScreen(answers, order = {}) {
+  const screens = visibleScreens(answers, order);
   return (screens.find((s) => !screenAnswered(s.id, answers)) ?? screens[screens.length - 1]).id;
 }
 
 /** Where the step bar may jump: every screen up to the first one still
  *  unanswered. A screen past that would skip a question. */
-export function reachableScreens(answers) {
-  const screens = visibleScreens(answers);
+export function reachableScreens(answers, order = {}) {
+  const screens = visibleScreens(answers, order);
   const open = screens.findIndex((s) => !screenAnswered(s.id, answers));
   return new Set(screens.slice(0, open === -1 ? screens.length : open + 1).map((s) => s.id));
 }

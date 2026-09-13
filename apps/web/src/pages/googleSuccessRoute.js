@@ -1,4 +1,4 @@
-import { landingRoute, readDoor } from './landingRoute';
+import { landingRoute, readDoor, readJoinCode } from './landingRoute';
 
 // Pure routing decision for the Google OAuth landing, extracted so every branch
 // is unit-testable without a DOM (the web project has no jsdom yet).  Returning
@@ -9,9 +9,9 @@ import { landingRoute, readDoor } from './landingRoute';
 // comes back, so it is the one that most needed the door to be remembered
 // rather than held in React state. What stays here is what is specific to
 // arriving from Google — the spinner, and a landing with no session at all.
-export function googleSuccessRoute(user, loading, door = readDoor()) {
+export function googleSuccessRoute(user, loading, door = readDoor(), joinCode = readJoinCode()) {
   if (loading) return null;
   // Reaching /success without a session means the cookie restore failed.
   if (!user) return '/login?error=google_failed';
-  return landingRoute(user, door);
+  return landingRoute(user, door, joinCode);
 }

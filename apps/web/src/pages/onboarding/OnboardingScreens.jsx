@@ -762,13 +762,17 @@ export function FoodScreen({ answers, save }) {
 // Continue or Finish (`screenAnswered`), and the server's finish check has no
 // word for it either.
 //
+// A POSTER'S CODE (`poster.code`, ROADMAP 4b-ii-b) arrives filled in, on this
+// screen moved to the front of setup, and is sent only by the person's own tap
+// on "Ask to join"; once sent, the page forgets it (`poster.sent`).
+//
 // NO LINK HERE LEAVES SETUP. `ProtectedRoute` sends an unfinished account
 // straight back to the wizard, so a link out would look like a way on and be a
 // loop. The panel's "Back to your dashboard" is not offered
 // (`dashboardLink={false}`), and the card's "Try again" on a refused or expired
 // request puts the cursor in the code box just below instead of linking to the
 // join door's own address (`onTryAgain`).
-export function CodeScreen() {
+export function CodeScreen({ poster }) {
   const [applied, setApplied] = useState(0);
   const panel = useRef(null);
   const toCodeBox = () => {
@@ -784,7 +788,14 @@ export function CodeScreen() {
       <Question>Have a code from your {ORG_TYPES_PHRASE}?</Question>
       <GymMembershipCard refreshToken={applied} onTryAgain={toCodeBox} />
       <div ref={panel}>
-        <JoinGymPanel dashboardLink={false} onApplied={() => setApplied((n) => n + 1)} />
+        <JoinGymPanel
+          dashboardLink={false}
+          initialCode={poster?.code ?? ''}
+          onApplied={() => {
+            setApplied((n) => n + 1);
+            poster?.sent();
+          }}
+        />
       </div>
       <p className="text-gray-400 text-xs">
         No code? Carry on — everything works without one, and you can enter a code any time in

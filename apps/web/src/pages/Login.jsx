@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
+import { Dumbbell, ArrowRight, Zap, Mail, Ticket } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SIGN_IN_CODE_RULES } from '@app/shared';
-import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
+import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, readJoinCode, rememberDoor } from './landingRoute';
 
 // ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
 // act: type your email, type the 6-digit code we send, you are in — a new
@@ -76,6 +76,12 @@ export default function Login() {
     // lost for exactly the people who never press Continue.
     rememberDoor(next);
   };
+
+  // A code from a poster link, kept while the person signs in (ROADMAP
+  // 4b-ii-b). Read once, so the line on screen and where the person lands
+  // agree. It is used through the member door only; the gym door still goes
+  // to the console, so the line is shown only while Train is chosen.
+  const [joinCode] = useState(() => readJoinCode());
 
   // Two steps: the address, then the code.
   const [step,     setStep]     = useState('email');
@@ -183,7 +189,7 @@ export default function Login() {
       if (res.isNewAccount) toast.success('Welcome! Your account is ready.');
       // The door comes from THIS component's state, not from storage: a browser
       // that refuses sessionStorage must still honour the button just pressed.
-      const dest = landingRoute(res.user, door);
+      const dest = landingRoute(res.user, door, joinCode);
       triggerTransition(() => navigate(dest));
     } catch (err) {
       setProblem(messageFrom(err, 'That code did not work. Please try again.'));
@@ -258,6 +264,24 @@ export default function Login() {
                 : 'Sign in or create your account — no password needed'}
             </p>
           </div>
+
+          {joinCode !== null && door === MEMBER_DOOR && (
+            <div
+              className="flex items-center gap-3 rounded-2xl px-4 py-3 mb-6"
+              style={{
+                background: 'rgba(255,138,31,0.08)',
+                border:     '1px solid rgba(255,138,31,0.30)',
+              }}
+            >
+              <Ticket className="w-5 h-5 flex-shrink-0" style={{ color: '#FF8A1F' }} />
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                Sign in to use your code{' '}
+                <strong className="tracking-widest" style={{ color: 'rgba(255,255,255,0.95)' }}>
+                  {joinCode}
+                </strong>
+              </p>
+            </div>
+          )}
 
           {/* ── The two doors ───────────────────────────────────────────────
               ONE ACCOUNT. The email below is the same either way; this only

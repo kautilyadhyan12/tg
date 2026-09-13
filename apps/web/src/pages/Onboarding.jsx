@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { consentService } from '../api/healthApi';
 import { errorText } from '../api/orgsApi';
 import PlanPanel from './onboarding/PlanPanel';
+import { forgetJoinCode, readJoinCode } from './landingRoute';
 import {
   AboutScreen,
   CodeScreen,
@@ -95,6 +96,22 @@ export default function Onboarding() {
   // the app" sits beside Sign out for them.
   const finished = user?.onboardingCompleted === true;
   const returnTo = RETURN_TO.has(location.state?.returnTo) ? location.state.returnTo : '/dashboard';
+
+  // A code from a poster link (ROADMAP 4b-ii-b; Kd, 2026-09-13): someone not yet
+  // set up meets "Your code" FIRST, the code in its box, and asks to join before
+  // the questions. The order is fixed for this visit, so sending the code never
+  // moves the screen they are on; once sent, the code is forgotten and a return
+  // to that screen finds the box empty.
+  const [posterCode, setPosterCode] = useState(() => (finished ? null : readJoinCode()));
+  const [codeFirst] = useState(() => posterCode !== null);
+  const order = { codeFirst };
+  const poster = {
+    code: posterCode,
+    sent: () => {
+      forgetJoinCode();
+      setPosterCode(null);
+    },
+  };
 
   // Sign out, for everyone, and THE ONLY WAY OUT OF THIS SCREEN WITHOUT
   // FINISHING IT for someone who has not (Kd, 2026-08-19). `ProtectedRoute`
@@ -212,14 +229,15 @@ export default function Onboarding() {
       : hs.status === 'failed'
         ? { text: hs.error, retry: hs.retry }
         : null;
-  const screens = visibleScreens(answers);
-  const current = picked ?? (loaded ? firstOpenScreen({ ...ob.first, health: hs.first }) : SCREENS[0].id);
+  const screens = visibleScreens(answers, order);
+  const landing = () => (codeFirst ? 'code' : firstOpenScreen({ ...ob.first, health: hs.first }));
+  const current = picked ?? (loaded ? landing() : SCREENS[0].id);
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
   const isLast = index === screens.length - 1;
   const direction = directionOf(answers.weightGoal);
   const answered = screenAnswered(screen.id, answers);
-  const reachable = reachableScreens(answers);
+  const reachable = reachableScreens(answers, order);
 
   /** Leaving a screen forward first saves its typed box, if it has one. */
   const leave = () => (screen.id === 'about' ? commitName() : true);
@@ -234,7 +252,10 @@ export default function Onboarding() {
     setBusy(true);
     const saved = await ob.settled();
     setBusy(false);
-    if (saved) goTo(screens[index + 1].id);
+    if (!saved) return;
+    // From "Your code" at the front, on to the first question still open: where
+    // this person would have landed without a poster.
+    goTo(codeFirst && screen.id === 'code' ? firstOpenScreen(answers, order) : screens[index + 1].id);
   };
 
   const goBack = () => {
@@ -271,6 +292,8 @@ export default function Onboarding() {
     const result = await ob.finish({ availableEquipment: cleanEquipment(answers.availableEquipment) });
     setBusy(false);
     if (result.ok) {
+      // A poster's code still unsent at the finish was left unsent on purpose.
+      forgetJoinCode();
       // The name the rest of the app greets the person by is the one saved here.
       updateUser({ onboardingCompleted: true, displayName: result.answers.displayName });
       toast.success("You're all set. Let's train.");
@@ -459,6 +482,7 @@ export default function Onboarding() {
                     name={name}
                     direction={direction}
                     health={health}
+                    poster={poster}
                   />
                 </motion.div>
 

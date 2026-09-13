@@ -32,6 +32,8 @@
 // privacy shape: health questions are not put to someone running a business
 // until they choose to train.
 
+import { linkedJoinCodeSchema } from '@app/shared';
+
 export const MEMBER_DOOR = 'member';
 export const GYM_DOOR = 'gym';
 
@@ -115,10 +117,65 @@ export function forgetDoor(store = defaultStore()) {
   }
 }
 
+// ── A poster's code, kept through sign-in and setup (ROADMAP 4b-ii-b) ───────
+//
+// `/org/join?code=…` needs a signed-in, set-up person, so everyone else is sent
+// away from it — to sign in, or into setup — and the address with its code was
+// lost on the way. The code is kept here, in the same tab store as the door and
+// for the same reason: "Continue with Google" leaves the site and comes back.
+// It is only ever put in a box; sending it is the person's own tap.
+
+const JOIN_CODE_KEY = 'aihg_join_code';
+
+/** Keep a poster link's code. Only a code the server could have made is kept
+ *  (`linkedJoinCodeSchema`); a newer poster replaces an older one. Returns
+ *  whether it stuck. */
+export function rememberJoinCode(raw, store = defaultStore()) {
+  const parsed = linkedJoinCodeSchema.safeParse(raw);
+  if (!parsed.success || store === null) return false;
+  try {
+    store.setItem(JOIN_CODE_KEY, parsed.data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The kept code, or null. A stored value is parsed again on the way out, so
+ *  one edited in the browser is no code at all. */
+export function readJoinCode(store = defaultStore()) {
+  if (store === null) return null;
+  let raw;
+  try {
+    raw = store.getItem(JOIN_CODE_KEY);
+  } catch {
+    return null;
+  }
+  const parsed = linkedJoinCodeSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Forget the kept code: it was sent, setup finished, it reached the join page,
+ *  or the person signed out (the next person at a shared browser must not find
+ *  it filled in). */
+export function forgetJoinCode(store = defaultStore()) {
+  if (store === null) return false;
+  try {
+    store.removeItem(JOIN_CODE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Where this signed-in person goes now.
  *
  *  Callers own "is there a session at all" — this answers only the destination,
  *  which is the part all four of them were spelling differently.
+ *
+ *  `joinCode` is a kept poster code (`readJoinCode`). Someone who has finished
+ *  setup goes to the join page with it in the box; someone who has not goes to
+ *  setup, which puts it first. The gym door still goes to the console.
  *
  *  THE GYM DOOR IS ANSWERED FIRST, before the onboarding check (the Kd
  *  amendment in this file's header): the wizard is the member app's gate and
@@ -135,8 +192,10 @@ export function forgetDoor(store = defaultStore()) {
  *  a brand-new owner — the exact person pressing it — into the member app
  *  instead, with no way to find the screen that makes them an owner.
  */
-export function landingRoute(user, door) {
+export function landingRoute(user, door, joinCode = null) {
   if (door === GYM_DOOR) return '/console';
   if (user?.onboardingCompleted === false) return '/onboarding';
+  const code = linkedJoinCodeSchema.safeParse(joinCode);
+  if (code.success) return `/org/join?code=${encodeURIComponent(code.data)}`;
   return '/dashboard';
 }

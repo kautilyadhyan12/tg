@@ -1,6 +1,7 @@
-import { Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { landingRoute, readDoor } from '../../pages/landingRoute';
+import { landingRoute, readDoor, readJoinCode, rememberJoinCode } from '../../pages/landingRoute';
 
 const Spinner = () => (
   <div
@@ -58,5 +59,25 @@ export const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return children;
-  return <Navigate to={landingRoute(user, readDoor())} replace />;
+  return <Navigate to={landingRoute(user, readDoor(), readJoinCode())} replace />;
+};
+
+// The poster address, `/org/join?code=…`, sits behind `ProtectedRoute`, which
+// sends a signed-out person to sign in and an unfinished one into setup. Both
+// leave the address behind, so the code is kept on the way (ROADMAP 4b-ii-b):
+// the sign-in page and setup read it on arrival. It is written in an effect,
+// and React runs a render's effects before it draws the next render — here, the
+// page the guard's redirect leads to. Someone already set up stays on the page,
+// which reads the code from the address itself.
+export const CarryJoinCode = ({ children }) => {
+  const { user, loading } = useAuth();
+  const [params] = useSearchParams();
+  const code = params.get('code');
+  const leaving = !loading && (!user || user.onboardingCompleted === false);
+
+  useEffect(() => {
+    if (leaving) rememberJoinCode(code);
+  }, [leaving, code]);
+
+  return children;
 };

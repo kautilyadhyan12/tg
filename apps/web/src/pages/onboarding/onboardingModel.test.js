@@ -239,6 +239,25 @@ describe('which screens a person sees, and where they land', () => {
     expect(gap.has('equipment')).toBe(false);
   });
 
+  it('puts "Your code" first for a poster code, keeping the count, and lands and reaches in that order', () => {
+    const codeFirst = { codeFirst: true };
+    const ids = (a, order) => m.visibleScreens(a, order).map((s) => s.id);
+    expect(ids(EMPTY, codeFirst)).toEqual(['code', ...ids(EMPTY).filter((id) => id !== 'code')]);
+    expect(ids(EMPTY, codeFirst)).toHaveLength(ids(EMPTY).length);
+    expect(ids({ ...EMPTY, weightGoal: 'maintain' }, codeFirst)).toEqual(
+      ['code', ...ids({ ...EMPTY, weightGoal: 'maintain' }).filter((id) => id !== 'code')],
+    );
+    // Without a poster, nothing moves.
+    expect(ids(EMPTY, { codeFirst: false })).toEqual(ids(EMPTY));
+    // "Your code" never holds anyone, so its Continue goes to the first open
+    // question — the last screen, Food, once every one is answered.
+    expect(m.firstOpenScreen(EMPTY, codeFirst)).toBe('goal');
+    expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] }, codeFirst)).toBe('equipment');
+    expect(m.firstOpenScreen(ALL, codeFirst)).toBe('food');
+    expect([...m.reachableScreens(EMPTY, codeFirst)]).toEqual(['code', 'goal']);
+    expect([...m.reachableScreens(ALL, codeFirst)]).toEqual(ids(ALL, codeFirst));
+  });
+
   it('counts screen 5 answered on the self-rating alone: push-ups and plank may be "Not sure"', () => {
     expect(m.screenAnswered('training', { ...EMPTY, fitnessLevel: 'beginner' })).toBe(true);
     expect(m.screenAnswered('training', { ...EMPTY, pushUpsMax: 10, plankHoldSeconds: 30 })).toBe(false);

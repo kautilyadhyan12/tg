@@ -1147,6 +1147,22 @@ export const joinOrgRequestSchema = z
   .strict();
 export type JoinOrgRequest = z.infer<typeof joinOrgRequestSchema>;
 
+/** The code a poster link carries (`/org/join?code=…`), which the web keeps
+ *  through sign-in and setup and prints on the sign-in page. A link is made by
+ *  the app, so it only ever holds a code the server generated: exactly
+ *  `JOIN_CODE_LENGTH` symbols of `JOIN_CODE_ALPHABET`, after the same case,
+ *  space and dash normalising the server's lookup does. Anything else is not
+ *  kept, so an edited link cannot put its own words on the sign-in page. */
+export const linkedJoinCodeSchema = z
+  .string()
+  .transform((raw) => raw.trim().toUpperCase().replace(/[\s-]/g, ""))
+  .pipe(
+    z
+      .string()
+      .length(JOIN_CODE_LENGTH)
+      .regex(new RegExp(`^[${JOIN_CODE_ALPHABET}]+$`)),
+  );
+
 export const membershipSchema = z.object({
   id: z.string().uuid(),
   joinedAt: z.string(),
