@@ -4,7 +4,7 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-13 · 4b-ii-b re-check: no Critical/High, its two Lows fixed, the orgs harness starts again, PR #65
+## 2026-09-13 · 4b-ii-b re-check: no Critical/High, its two Lows fixed, the orgs harness starts again, merged (PR #65)
 
 - The fresh-chat re-check of the fixes found no Critical/High, so the round ends (CLAUDE.md §2.6). Both Lows fixed:
 - Mutant O11 still aimed at `codes.ts` after the join-code rule moved to `@app/shared`; it aims there now. A census of the
@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - The shared and api tests read the source now: the poster link's schema and the join lookup must call `normaliseJoinCode`.
   An exact inline copy turns only the new test red (shared 1 failed | 8 passed; api 1 failed | 22 passed).
 - Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 (src test tools) · orgs.unit 23/23; gitleaks clean.
-- Next: Kd's eight-step click-through of Finish (posted by the building chat, no result recorded); CI; merge on his word.
+- Kd's Finish click-through passed (*"all passed"*); CI green on 4631f35, all five jobs; merged 2026-09-13 (PR #65). Next: 4b-iii.
+- Kd asked if typing the join link lets a hacker skip a step: no. Sign-in, a live code, rate limits and the gym's confirm are server-side.
 
 ## 2026-09-13 · 4b-ii-b review fixed (1 High, 5 Low, 3 weak tests), branch `poster-code`, PR #65
 
