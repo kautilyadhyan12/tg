@@ -18,8 +18,14 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   simplified to ONE QR (the join link) with the code printed under it (the chat's choice). He asked how US gyms really do
   it: answered from general knowledge of Mindbody / Glofox / Zen Planner / PushPress — the owner adds the member by email
   and the software invites them; QR signage is the backup. Recommended, unanswered: Stage 2 items 3 and 5 (roster import,
-  notify) come first in Stage 2.
-- Next: the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
+  notify) come first in Stage 2 — Kd agreed (*"i agree with you"*; RULINGS 2026-09-13, the Stage 2 order note). He REFUSED
+  the one-QR simplification: the app's QR stays on the card, as big as the join QR, with the app's name (Stage 5 item 7).
+- CI on PR #65: run 34759344217 (records-only commit 18a605b) failed in "drizzle migrations on Neon branch" — `drizzle-kit
+  migrate` exit 1 about a second after connecting, no detail in the log; no migration file differs from master on this
+  branch (`git diff master --stat -- apps/api/drizzle` is empty) and the same job passed three times on it earlier today.
+  The failed job was rerun on the same commit; if it fails again, look at Neon's branch list (one `ci-<run_id>` branch per
+  run) before anything else.
+- Next: CI green; the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
 
 ## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
 
