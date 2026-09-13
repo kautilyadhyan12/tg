@@ -19,7 +19,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - `mutate-login-door.mjs` re-anchored (D6/D8/D10 moved here; D8/D9 stale since 09-07) but still aborts at D13 (console
   sign-out moved to `useConsoleSignOut`); `mutate-join-door.mjs` aborts at J1 — both stale before this card, neither run.
 - Local: API 3000 on the LOCAL Postgres, web 5173; live code EMH283 (Step 22b Gym 987027, trialing).
-- Next: CI, Kd's click-through, a fresh-chat review, fixes, merge; then the QR line if Kd says next, else 4b-iii.
+- CI green on PR #65 (all five jobs). Kd's click-through passed (*"all passed"*); he then asked what the sign-in line and the QR are.
+- Next: a fresh-chat review, fixes, merge; then the QR line if Kd says next, else 4b-iii.
 
 ## 2026-09-13 · 4b-ii's last fixes: "In 3–4 hours", a reset cannot slip past a finish, tidier records, PR #64
 
