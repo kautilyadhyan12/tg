@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · The post-workout meal ideas in the market's words (4b-ii), branch `food-and-gym-code`, PR #64
+
+- Commit ce4420e: the seven meal-idea lines on ROADMAP 4b-ii, in `summaryContent.ts` and its two tests — potatoes for
+  rice, "Later today" for "1 hour before bed", chickpeas in the vegetarian and vegan salad. Bands, thresholds and
+  diet swaps unchanged. A word swap: no mutation sweep, no review round of its own.
+- Verified locally: shared tsc 0 · eslint 0; api tsc 0 · eslint 0; `test:local` on the two summary files 39/39;
+  gitleaks on the staged files, no leaks.
+- Open: CI on PR #64, Kd's fresh-chat re-check of 2144cda + ce4420e, merge; then 4b-ii-b.
+
 ## 2026-09-13 · The click-through of the fixes passed; the plan for Kd's next asks (Fable, planning only — no code)
 
 - Kd's click-through of 2144cda passed (*"as for the tests all passed"*). CI is green on attempt 2 of run
