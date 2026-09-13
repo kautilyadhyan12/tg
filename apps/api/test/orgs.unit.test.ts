@@ -1,6 +1,7 @@
 // Orgs — pure helper unit suite (no database). Covers the join-code alphabet
 // rule (Part 3 §4.0 step 4), the normalisation a poster-typed code goes
 // through, and slug derivation for the worldwide names Part 3 §6.3 promises.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   COUNTRY_CURRENCY,
@@ -71,6 +72,17 @@ describe("normaliseJoinCode (from @app/shared: the server's lookup and the web's
     // be inventing an intent the code cannot confirm.
     expect(normaliseJoinCode("240Q7B")).toBe("240Q7B");
     expect(normaliseJoinCode("24IQ7B")).toBe("24IQ7B");
+  });
+
+  // An exact copy of the rule behaves the same as a call to it, so no request
+  // can tell them apart; this reads the join lookup's own source instead.
+  it("is what the join lookup hands the repo, not a copy of its rule", () => {
+    const service = readFileSync(new URL("../src/modules/orgs/service.ts", import.meta.url), "utf8");
+    const start = service.indexOf("export async function applyToOrg(");
+    expect(start).toBeGreaterThan(-1);
+    const lookup = service.slice(start, service.indexOf("switch (outcome.kind)", start));
+    expect(lookup).toContain("repo.applyByCode(");
+    expect(lookup).toContain("code: normaliseJoinCode(req.code),");
   });
 });
 

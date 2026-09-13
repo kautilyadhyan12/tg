@@ -1,4 +1,5 @@
 // The code a poster link carries, as the web keeps it through sign-in and setup.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, linkedJoinCodeSchema, normaliseJoinCode } from "../src/index.js";
 
@@ -18,7 +19,7 @@ describe("linkedJoinCodeSchema", () => {
   // `normaliseJoinCode` is the function the server's lookup calls
   // (`apps/api/src/modules/orgs/service.ts`), so a link's code and a typed one
   // are cleaned by the same rule, not by two copies of it.
-  it("cleans a code with normaliseJoinCode, the server's own rule", () => {
+  it("cleans a code exactly as normaliseJoinCode, the server's own rule, does", () => {
     for (const typed of [" k7q-m2x ", "K7Q M2X", "\tk7-q7-m2\n", "K-7-Q-M-2-X", "k7qm2x"]) {
       const cleaned = normaliseJoinCode(typed);
       expect(cleaned).toHaveLength(JOIN_CODE_LENGTH);
@@ -28,6 +29,19 @@ describe("linkedJoinCodeSchema", () => {
       expect(normaliseJoinCode(typed)).not.toMatch(new RegExp(`^[${JOIN_CODE_ALPHABET}]{${String(JOIN_CODE_LENGTH)}}$`));
       expect(parse(typed).success).toBe(false);
     }
+  });
+
+  // An exact copy of the rule behaves the same as a call to it, so no parse can
+  // tell them apart; this reads the schema's own source instead.
+  it("calls normaliseJoinCode itself, not a copy of its rule", () => {
+    const source = readFileSync(new URL("../src/orgs.ts", import.meta.url), "utf8");
+    const start = source.indexOf("export const linkedJoinCodeSchema");
+    expect(start).toBeGreaterThan(-1);
+    const schema = source.slice(start, source.indexOf("export const", start + 1));
+    // The slice is the whole schema, down to the check that follows the clean.
+    expect(schema).toContain(".regex(");
+    expect(schema).toContain(".transform(normaliseJoinCode)");
+    expect(schema).not.toContain("toUpperCase");
   });
 
   it("refuses a code of the wrong length", () => {
