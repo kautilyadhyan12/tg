@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii-b re-check: no Critical/High, its two Lows fixed, the orgs harness starts again, PR #65
+
+- The fresh-chat re-check of the fixes found no Critical/High, so the round ends (CLAUDE.md §2.6). Both Lows fixed:
+- Mutant O11 still aimed at `codes.ts` after the join-code rule moved to `@app/shared`; it aims there now. A census of the
+  whole table found 13 more rows dead since the type and wording cards of 2026-09-08 (8c28c02, 0eff79a), so the orgs
+  harness had not started on master either. All 14 re-aimed; its start-up check passes for 286; the 14 run: 14/14 red.
+- The shared and api tests read the source now: the poster link's schema and the join lookup must call `normaliseJoinCode`.
+  An exact inline copy turns only the new test red (shared 1 failed | 8 passed; api 1 failed | 22 passed).
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 (src test tools) · orgs.unit 23/23; gitleaks clean.
+- Next: Kd's eight-step click-through of Finish (posted by the building chat, no result recorded); CI; merge on his word.
+
 ## 2026-09-13 · 4b-ii-b review fixed (1 High, 5 Low, 3 weak tests), branch `poster-code`, PR #65
 
 - High: Finish dropped a poster code never sent. Kd picked "Join page, code ready" (RULINGS 2026-09-13): Finish lands on
