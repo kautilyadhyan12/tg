@@ -19,13 +19,17 @@ configure({ asyncUtilTimeout: 3000 });
 vi.setConfig({ testTimeout: 15_000 });
 
 // One auth state for every guard and page. A proved sign-in code stores the
-// session's user, as the real provider does, before the page moves on.
+// session's user, as the real provider does, before the page moves on; and
+// `updateUser` merges into it as the provider's does, so a finished setup is
+// set up to the guards it passes next.
 const auth = {
   user: null,
   loading: false,
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
-  updateUser: vi.fn(),
+  updateUser: vi.fn((patch) => {
+    auth.user = { ...auth.user, ...patch };
+  }),
   logout: vi.fn(() => Promise.resolve()),
 };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
@@ -243,6 +247,29 @@ describe('signed out, a poster link', () => {
     expect(readJoinCode()).toBeNull();
   });
 
+  // The newest link is the one the person means: an older code kept in the tab
+  // must not be named, nor landed on, after a link that carries none.
+  it('drops an OLDER kept code when the newer link has no code: sign-in neither names it nor lands on it', async () => {
+    rememberJoinCode('AAAAAA');
+    draw('/org/join');
+    await screen.findByText('Get started.');
+    expect(screen.queryByText(CODE_LINE)).toBeNull();
+    expect(readJoinCode()).toBeNull();
+
+    await signInAs(SET_UP);
+    await screen.findByText('MEMBER APP');
+    expect(orgService.join).not.toHaveBeenCalled();
+  });
+
+  it('drops an OLDER kept code when the newer link carries something that is not a code', async () => {
+    rememberJoinCode('AAAAAA');
+    draw('/org/join?code=CALL-US-NOW');
+    await screen.findByText('Get started.');
+    expect(screen.queryByText(CODE_LINE)).toBeNull();
+    expect(screen.queryByText('AAAAAA')).toBeNull();
+    expect(readJoinCode()).toBeNull();
+  });
+
   it('keeps the NEWER poster when a second one is scanned', async () => {
     rememberJoinCode('AAAAAA');
     draw('/org/join?code=k7qm2x');
@@ -351,13 +378,10 @@ describe('in setup with a poster code', () => {
     expect(readJoinCode()).toBeNull();
   });
 
-  it('finishing setup without sending it forgets the code', async () => {
-    serve(ALL, HEALTH_NO);
-    rememberJoinCode('k7qm2x');
-    draw('/onboarding');
-    await heading('Your code');
-    // Every question answered, so Continue goes to the last screen, where
-    // Finish is, and the disclaimer tap is the one thing still to do.
+  /** From "Your code", with every question answered: Continue goes to the last
+   *  screen, where Finish is, and the disclaimer tap on Health is the one thing
+   *  still to do. */
+  const readyToFinish = async () => {
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     await heading('Food');
     fireEvent.click(screen.getByRole('button', { name: 'Go to Health' }));
@@ -366,12 +390,39 @@ describe('in setup with a poster code', () => {
     await waitFor(() => expect(consent.record).toHaveBeenCalledWith('health_step'));
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     await heading('Food');
+  };
+
+  // Kd, 2026-09-13: the code the person scanned the poster for is not dropped
+  // at Finish. They are set up now, and a set-up person with a code lands on
+  // the join page with it, still to be sent by their own tap.
+  it('finishing setup without sending it lands on the join page, the code in the box and still unsent', async () => {
+    serve(ALL, HEALTH_NO);
+    rememberJoinCode('k7qm2x');
+    draw('/onboarding');
+    await heading('Your code');
+    await readyToFinish();
     expect(readJoinCode()).toBe('K7QM2X');
 
     fireEvent.click(screen.getByRole('button', { name: /finish setup/i }));
-    await screen.findByText('MEMBER APP');
-    expect(readJoinCode()).toBeNull();
+    await heading('Join with a code');
+    expect(codeBox().value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
+    // The address holds it now, so the kept copy is not left to turn up again.
+    expect(readJoinCode()).toBeNull();
+  });
+
+  it('finishing setup after the code was sent goes on to the app, not back to the join page', async () => {
+    serve(ALL, HEALTH_NO);
+    rememberJoinCode('k7qm2x');
+    draw('/onboarding');
+    await heading('Your code');
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+    await screen.findByText("You've asked to join Iron House.");
+    await readyToFinish();
+
+    fireEvent.click(screen.getByRole('button', { name: /finish setup/i }));
+    await screen.findByText('MEMBER APP');
+    expect(orgService.join).toHaveBeenCalledTimes(1);
   });
 
   it('is not put first for someone already set up, sent back to answer a question', async () => {
@@ -384,17 +435,29 @@ describe('in setup with a poster code', () => {
 });
 
 // App.jsx is the route table and no test renders it (it pulls in every page),
-// so its one line of wiring for this is read from the source. The path is a
+// so `draw` above is a copy of four of its routes. Each is read from the source
+// here and must be guarded exactly as `draw` guards it — otherwise App.jsx could
+// drop `PublicRoute` from the sign-in page, or change the guard on setup, and
+// every test above would still pass on the copy. (`AppLayout` is the one
+// difference: the page's frame, which `draw` leaves out.) The path is a
 // variable because the build rewrites `new URL('<literal>', import.meta.url)`
 // into a served address.
-describe('App.jsx keeps the code on the poster address', () => {
+describe('App.jsx guards these routes as the tests above draw them', () => {
   const APP = '../App.jsx';
   const stripComments = (raw) => raw.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
+  const src = stripComments(readFileSync(fileURLToPath(new URL(APP, import.meta.url)), 'utf8'));
+  const elementOf = (path) => {
+    const routes = [...src.matchAll(/<Route\s+path="([^"]+)"\s+element=\{([\s\S]*?)\}\s*\/>/g)];
+    const found = routes.filter((r) => r[1] === path);
+    return found.length === 1 ? found[0][2].replace(/\s+/g, ' ').replace(/>\s+</g, '><').trim() : `${found.length} routes`;
+  };
 
-  it('wraps the /org/join guard in CarryJoinCode', () => {
-    const src = stripComments(readFileSync(fileURLToPath(new URL(APP, import.meta.url)), 'utf8'));
-    const route = src.match(/<Route\s+path="\/org\/join"\s+element=\{([\s\S]*?)\}\s*\/>/);
-    expect(route).not.toBeNull();
-    expect(route[1]).toMatch(/^\s*<CarryJoinCode>\s*<ProtectedRoute>[\s\S]*<JoinGym\s*\/>[\s\S]*<\/ProtectedRoute>\s*<\/CarryJoinCode>\s*$/);
+  it.each([
+    ['/login', '<PublicRoute><Login /></PublicRoute>'],
+    ['/auth/google/success', '<GoogleAuthSuccess />'],
+    ['/onboarding', '<ProtectedRoute requireOnboarding={false}><Onboarding /></ProtectedRoute>'],
+    ['/org/join', '<CarryJoinCode><ProtectedRoute><AppLayout><JoinGym /></AppLayout></ProtectedRoute></CarryJoinCode>'],
+  ])('%s', (path, element) => {
+    expect(elementOf(path)).toBe(element);
   });
 });

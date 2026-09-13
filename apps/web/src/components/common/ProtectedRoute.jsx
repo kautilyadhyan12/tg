@@ -65,10 +65,12 @@ export const PublicRoute = ({ children }) => {
 // The poster address, `/org/join?code=…`, sits behind `ProtectedRoute`, which
 // sends a signed-out person to sign in and an unfinished one into setup. Both
 // leave the address behind, so the code is kept on the way (ROADMAP 4b-ii-b):
-// the sign-in page and setup read it on arrival. It is written in an effect,
-// and React runs a render's effects before it draws the next render — here, the
-// page the guard's redirect leads to. Someone already set up stays on the page,
-// which reads the code from the address itself.
+// the sign-in page and setup read it on arrival. This link is the newest word,
+// so one with no code, or none the server could have made, leaves no code kept
+// (`rememberJoinCode`). It is written in an effect, and React runs a render's
+// effects before it draws the next render — here, the page the guard's redirect
+// leads to. Someone already set up stays on the page, which reads the code from
+// the address itself.
 export const CarryJoinCode = ({ children }) => {
   const { user, loading } = useAuth();
   const [params] = useSearchParams();

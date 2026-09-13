@@ -128,17 +128,23 @@ export function forgetDoor(store = defaultStore()) {
 const JOIN_CODE_KEY = 'aihg_join_code';
 
 /** Keep a poster link's code. Only a code the server could have made is kept
- *  (`linkedJoinCodeSchema`); a newer poster replaces an older one. Returns
- *  whether it stuck. */
+ *  (`linkedJoinCodeSchema`). The newest link is the one the person means, so
+ *  its code replaces a kept one, and a link with no code (or none the server
+ *  could have made, or one this browser will not store) leaves NO code kept:
+ *  otherwise the sign-in page would name an older code than the link just
+ *  opened, and land the person on it. Returns whether a code is now kept. */
 export function rememberJoinCode(raw, store = defaultStore()) {
   const parsed = linkedJoinCodeSchema.safeParse(raw);
-  if (!parsed.success || store === null) return false;
-  try {
-    store.setItem(JOIN_CODE_KEY, parsed.data);
-    return true;
-  } catch {
-    return false;
+  if (parsed.success && store !== null) {
+    try {
+      store.setItem(JOIN_CODE_KEY, parsed.data);
+      return true;
+    } catch {
+      // On to forgetting: an older code must not stand in for this link's.
+    }
   }
+  forgetJoinCode(store);
+  return false;
 }
 
 /** The kept code, or null. A stored value is parsed again on the way out, so
@@ -155,9 +161,9 @@ export function readJoinCode(store = defaultStore()) {
   return parsed.success ? parsed.data : null;
 }
 
-/** Forget the kept code: it was sent, setup finished, it reached the join page,
- *  or the person signed out (the next person at a shared browser must not find
- *  it filled in). */
+/** Forget the kept code: it was sent, it reached the join page, a newer link
+ *  carried none, or the person signed out (the next person at a shared browser
+ *  must not find it filled in). */
 export function forgetJoinCode(store = defaultStore()) {
   if (store === null) return false;
   try {
@@ -195,7 +201,13 @@ export function forgetJoinCode(store = defaultStore()) {
 export function landingRoute(user, door, joinCode = null) {
   if (door === GYM_DOOR) return '/console';
   if (user?.onboardingCompleted === false) return '/onboarding';
+  return joinPageFor(joinCode) ?? '/dashboard';
+}
+
+/** The join page with `joinCode` in its box, or null when it is not a code.
+ *  The one place that address is built: for signing in, and for setup's Finish
+ *  when a poster's code was never sent. */
+export function joinPageFor(joinCode) {
   const code = linkedJoinCodeSchema.safeParse(joinCode);
-  if (code.success) return `/org/join?code=${encodeURIComponent(code.data)}`;
-  return '/dashboard';
+  return code.success ? `/org/join?code=${encodeURIComponent(code.data)}` : null;
 }

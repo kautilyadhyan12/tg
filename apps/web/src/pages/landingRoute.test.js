@@ -13,6 +13,7 @@ import {
   MEMBER_DOOR,
   forgetDoor,
   forgetJoinCode,
+  joinPageFor,
   landingRoute,
   readDoor,
   readJoinCode,
@@ -131,15 +132,38 @@ describe('the poster code survives the trip through sign-in', () => {
     expect(readJoinCode(store)).toBe('K7QM2X');
   });
 
-  it('keeps nothing that is not a code, and leaves an earlier code alone', () => {
+  it('keeps nothing that is not a code', () => {
     const store = fakeStore();
     for (const bad of [null, undefined, '', 'K7QM2', 'CALL US NOW', 'K7QM2I', 42]) {
       expect(rememberJoinCode(bad, store)).toBe(false);
     }
     expect(store.size()).toBe(0);
-    rememberJoinCode('K7QM2X', store);
-    expect(rememberJoinCode('not a code', store)).toBe(false);
-    expect(readJoinCode(store)).toBe('K7QM2X');
+  });
+
+  // The newest link is the one the person means. An older code left behind
+  // would be named on the sign-in page and land them on it.
+  it('drops an earlier code when a newer link carries no code, or none that is a code', () => {
+    for (const bad of [null, undefined, '', 'not a code', 'K7QM2I']) {
+      const store = fakeStore();
+      rememberJoinCode('AAAAAA', store);
+      expect(rememberJoinCode(bad, store)).toBe(false);
+      expect(readJoinCode(store)).toBeNull();
+      expect(store.size()).toBe(0);
+    }
+  });
+
+  it('drops an earlier code when this browser will not store the newer one', () => {
+    const store = fakeStore({ aihg_join_code: 'AAAAAA' });
+    const full = { ...store, setItem: () => { throw new Error('quota'); } };
+    expect(rememberJoinCode('K7QM2X', full)).toBe(false);
+    expect(readJoinCode(store)).toBeNull();
+  });
+
+  it('builds the join page only from a code', () => {
+    expect(joinPageFor('k7qm2x')).toBe('/org/join?code=K7QM2X');
+    for (const bad of [null, undefined, '', 'K7QM2X&next=/console', '//evil.example']) {
+      expect(joinPageFor(bad)).toBeNull();
+    }
   });
 
   it('reads a stored value that is not a code as no code', () => {

@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { consentService } from '../api/healthApi';
 import { errorText } from '../api/orgsApi';
 import PlanPanel from './onboarding/PlanPanel';
-import { forgetJoinCode, readJoinCode } from './landingRoute';
+import { forgetJoinCode, joinPageFor, readJoinCode } from './landingRoute';
 import {
   AboutScreen,
   CodeScreen,
@@ -101,7 +101,8 @@ export default function Onboarding() {
   // set up meets "Your code" FIRST, the code in its box, and asks to join before
   // the questions. The order is fixed for this visit, so sending the code never
   // moves the screen they are on; once sent, the code is forgotten and a return
-  // to that screen finds the box empty.
+  // to that screen finds the box empty. A code still unsent at Finish is not
+  // dropped: Finish lands on the join page with it in the box, still unsent.
   const [posterCode, setPosterCode] = useState(() => (finished ? null : readJoinCode()));
   const [codeFirst] = useState(() => posterCode !== null);
   const order = { codeFirst };
@@ -292,14 +293,15 @@ export default function Onboarding() {
     const result = await ob.finish({ availableEquipment: cleanEquipment(answers.availableEquipment) });
     setBusy(false);
     if (result.ok) {
-      // A poster's code still unsent at the finish was left unsent on purpose.
-      forgetJoinCode();
       // The name the rest of the app greets the person by is the one saved here.
       updateUser({ onboardingCompleted: true, displayName: result.answers.displayName });
       toast.success("You're all set. Let's train.");
       // Everyone here came through the member door, heading for the member
-      // app — or back to the screen in it that sent them here.
-      navigate(returnTo);
+      // app — or back to the screen in it that sent them here. A poster's code
+      // never sent goes with them to the join page, in its box and still unsent
+      // (Kd, 2026-09-13): they are set up now, and a set-up person with a code
+      // lands there. The join page forgets the kept copy on arrival.
+      navigate(joinPageFor(posterCode) ?? returnTo);
       return;
     }
     if (result.missing) {
