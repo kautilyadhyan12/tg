@@ -32,10 +32,14 @@
  *     person on either screen could have no way out at all.
  *
  *   D12/D13/D14  the console shell    (ConsoleLayout — the crossing re-opening,
- *                a sign-out that does not end the session, and the phone bar
- *                losing what the desktop rail keeps)
+ *                a sign-out that does not end the session (D13, in
+ *                `useConsoleSignOut`), and the phone bar losing what the
+ *                desktop rail keeps)
  *   D15          the member sidebar   (Sidebar — `My Gym` restored)
  *   D16          the questionnaire    (Onboarding — the dead end returning)
+ *
+ * P1-P11 cover a poster's code carried through the sign-in door and setup
+ * (ROADMAP 4b-ii-b), each at the table's own rows below.
  *
  * Deliberately NOT mutated, per the same rule: the button colours, the heading
  * copy, the order of the two doors, comments. The onboarding wizard's exit is
@@ -73,6 +77,8 @@ const UNIT_SUITE = 'src/pages/landingRoute.test.js';
 const RENDER_SUITE = 'src/pages/login.render.test.jsx';
 const GOOGLE_SUITE = 'src/pages/googleAuth.test.js';
 const CROSSING_SUITE = 'src/pages/loginDoorCrossing.render.test.jsx';
+const POSTER_SUITE = 'src/pages/posterCode.render.test.jsx';
+const SIGN_OUT_SUITE = 'src/context/authSignOut.render.test.jsx';
 
 const TARGETS = {
   route: { file: resolve(ROOT, 'apps/web/src/pages/landingRoute.js') },
@@ -82,6 +88,8 @@ const TARGETS = {
   auth: { file: resolve(ROOT, 'apps/web/src/context/AuthContext.jsx') },
   google: { file: resolve(ROOT, 'apps/web/src/pages/googleSuccessRoute.js') },
   consoleShell: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleLayout.jsx') },
+  consoleSignOut: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleSignOut.js') },
+  joinPage: { file: resolve(ROOT, 'apps/web/src/pages/JoinGym.jsx') },
   sidebar: { file: resolve(ROOT, 'apps/web/src/components/common/Sidebar.jsx') },
   wizard: { file: resolve(ROOT, 'apps/web/src/pages/Onboarding.jsx') },
 };
@@ -230,13 +238,16 @@ const MUTANTS = [
     to: '        <Link to="/dashboard" className={railBase} style={navStyle(false)}>\n          <ChevronLeft className="w-4 h-4 flex-shrink-0" />\n          <span>Back to the app</span>\n        </Link>',
   },
   {
+    // Re-aimed 2026-09-13 at the SAME call: the shell's sign-out moved into
+    // `useConsoleSignOut`, which the rail, the phone bar and the subscribe
+    // prompt all call, so the anchor in ConsoleLayout had matched nothing.
     id: 'D13',
-    target: 'consoleShell',
+    target: 'consoleSignOut',
     suite: CROSSING_SUITE,
     why: 'SIGNED OUT IN NAME ONLY: the console returns to the login page WITHOUT ending the session, so a gym\'s shared front-desk browser hands the next person the last one\'s account — and the door choice is never cleared either, since logout() is what clears it',
     expect: 'from the desktop rail',
-    from: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
-    to: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    navigate(\'/login\');\n  };',
+    from: '  const signOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const signOut = async () => {\n    setSigningOut(true);\n    navigate(\'/login\');\n  };',
   },
   {
     id: 'D14',
@@ -289,6 +300,113 @@ const MUTANTS = [
     expect: 'signing out is NOT a skip',
     from: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
     to: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    navigate(\'/dashboard\');\n  };',
+  },
+
+  // P1-P11 — A POSTER'S CODE THROUGH THE SIGN-IN DOOR (ROADMAP 4b-ii-b; Kd,
+  // 2026-09-13). The code on `/org/join?code=…` is kept while the person signs
+  // in or sets up, put in front of them, and sent only by their own tap. Two
+  // columns: ON SCREEN AND FALSE (a code dropped without a word, or an older
+  // code named instead of the link just opened) and THE SHARED BROWSER (a code
+  // left for the next person, one tap from asking to join a gym they never
+  // chose).
+  {
+    id: 'P1',
+    target: 'wizard',
+    suite: POSTER_SUITE,
+    why: 'DROPPED WITHOUT A WORD: Finish sends a person whose poster code was never sent to the dashboard, and the reason they scanned the poster is gone',
+    expect: 'finishing setup without sending it lands on the join page',
+    from: '      navigate(joinPageFor(posterCode) ?? returnTo);',
+    to: '      navigate(returnTo);',
+  },
+  {
+    id: 'P2',
+    target: 'wizard',
+    suite: POSTER_SUITE,
+    why: 'ASKED TWICE: a code already sent is not let go, so Finish takes the person back to the join page for a request they already made',
+    expect: 'finishing setup after the code was sent goes on to the app',
+    from: '      forgetJoinCode();\n      setPosterCode(null);',
+    to: '      forgetJoinCode();',
+  },
+  {
+    id: 'P3',
+    target: 'route',
+    suite: POSTER_SUITE,
+    why: 'AN OLDER CODE NAMED: a link with no code leaves the last poster\'s code kept, so the sign-in page offers it and lands the person on it',
+    expect: 'drops an OLDER kept code when the newer link has no code',
+    from: '  forgetJoinCode(store);\n  return false;\n}',
+    to: '  return false;\n}',
+  },
+  {
+    id: 'P4',
+    target: 'auth',
+    suite: SIGN_OUT_SUITE,
+    why: 'SHARED BROWSER: sign-out stops forgetting the kept code, so the next person at the front desk finds a gym\'s code filled in, one tap from asking to join',
+    expect: 'forgets the kept join code and the door',
+    from: '      forgetJoinCode();',
+    to: '      void 0;',
+  },
+  {
+    id: 'P5',
+    target: 'app',
+    suite: POSTER_SUITE,
+    why: 'THE COPY PASSES, THE APP DOES NOT: App.jsx drops PublicRoute from the sign-in page, so a signed-in person with a kept code is shown the form instead of being sent on, and the render tests draw their own copy',
+    expect: 'draw them /login',
+    from: '              <PublicRoute><Login /></PublicRoute>',
+    to: '              <Login />',
+  },
+  {
+    id: 'P6',
+    target: 'app',
+    suite: POSTER_SUITE,
+    why: 'THE COPY PASSES, THE APP DOES NOT: setup\'s route loses its onboarding opt-out in App.jsx, a loop for everyone not set up, while the render tests keep their own copy',
+    expect: 'draw them /onboarding',
+    from: '              <ProtectedRoute requireOnboarding={false}><Onboarding /></ProtectedRoute>',
+    to: '              <ProtectedRoute><Onboarding /></ProtectedRoute>',
+  },
+  {
+    id: 'P7',
+    target: 'guard',
+    suite: POSTER_SUITE,
+    why: 'LOST ON THE WAY: the join address stops keeping its code for the person it sends to sign in, which is the defect 4b-ii-b exists to end',
+    expect: 'reaches the sign-in page with its code kept and named',
+    from: '    if (leaving) rememberJoinCode(code);',
+    to: '    void leaving;',
+  },
+  {
+    id: 'P8',
+    target: 'route',
+    suite: POSTER_SUITE,
+    why: 'LOST AT THE LAST STEP: signing in ignores the kept code and lands a set-up person on the dashboard',
+    expect: 'then someone already set up lands on the join page with the code in the box',
+    from: '  return joinPageFor(joinCode) ?? \'/dashboard\';',
+    to: '  return \'/dashboard\';',
+  },
+  {
+    id: 'P9',
+    target: 'login',
+    suite: POSTER_SUITE,
+    why: 'ON SCREEN AND FALSE: the sign-in page says "Sign in to use your code" under the gym door, which goes to the console and never uses it',
+    expect: 'still takes the gym door to the console',
+    from: '          {joinCode !== null && door === MEMBER_DOOR && (',
+    to: '          {joinCode !== null && (',
+  },
+  {
+    id: 'P10',
+    target: 'joinPage',
+    suite: POSTER_SUITE,
+    why: 'LEFT BEHIND: the join page stops forgetting the kept code once the address holds it, so it turns up again at the next sign-in',
+    expect: 'then someone already set up lands on the join page with the code in the box',
+    from: '  useEffect(() => {\n    forgetJoinCode();\n  }, []);',
+    to: '  useEffect(() => {}, []);',
+  },
+  {
+    id: 'P11',
+    target: 'wizard',
+    suite: POSTER_SUITE,
+    why: 'NOT PUT FIRST (Kd picked the code screen first): setup keeps "Your code" last, behind ten screens of questions',
+    expect: 'the link goes into setup with',
+    from: '  const [codeFirst] = useState(() => posterCode !== null);',
+    to: '  const [codeFirst] = useState(() => false);',
   },
 ];
 
