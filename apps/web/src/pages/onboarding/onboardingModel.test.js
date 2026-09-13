@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
+  ADULT_AGE,
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
   dayActivitySchema,
@@ -826,17 +827,37 @@ describe('the plan screen (ROADMAP 4c)', () => {
     expect(m.workoutsLine({ ...ALL, sessionMinutes: null })).toBeNull();
     expect(m.workoutsDetail(ALL)).toBe('Beginner · Dumbbells');
     expect(m.workoutsDetail({ ...ALL, availableEquipment: ['none'] })).toBe('Beginner · No equipment');
-    expect(m.CLEARED_LINE).toBe('A professional has cleared you. Follow their advice.');
+    // The clearance is the person's word; the app cannot know it.
+    expect(m.CLEARED_LINE).toBe('You told us a professional has cleared you. Follow their advice.');
   });
 
   it("marks the pace that leaves muscle room to grow, only for someone losing weight with Build muscle ticked", () => {
-    const muscle = ['muscle_gain', 'posture'];
-    expect(m.PACES.map((p) => m.paceNote(p.value, 'lose', muscle))).toEqual(['Best if you also build muscle', null, null]);
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain', 'posture'] };
+    const notes = (direction, a) => m.PACES.map((p) => m.paceNote(p.value, direction, a));
+    const MARKED = ['Best if you also build muscle', null, null];
+    expect(notes('lose', muscle)).toEqual(MARKED);
     // The pace the server's own plan line suggests, from the one shared table.
     expect(m.PACES.map((p) => p.value).filter((p) => m.paceNote(p, 'lose', muscle))).toEqual([MUSCLE_GAIN_PACE]);
-    for (const [direction, goals] of [['lose', ['posture']], ['lose', []], ['gain', muscle], ['maintain', muscle], [null, muscle]]) {
-      expect(m.PACES.map((p) => m.paceNote(p.value, direction, goals)), `${direction} ${goals}`).toEqual([null, null, null]);
+    for (const [direction, goals] of [['lose', ['posture']], ['lose', []], ['gain', muscle.fitnessGoals], ['maintain', muscle.fitnessGoals], [null, muscle.fitnessGoals]]) {
+      expect(notes(direction, { ...muscle, fitnessGoals: goals }), `${direction} ${goals}`).toEqual([null, null, null]);
     }
+  });
+
+  it('marks no pace where no pace can cut: under 18, or after any yes to the health question', () => {
+    // Every pace then eats the same (the plan maths' no-cut rule), so a mark
+    // would point at a choice that changes nothing.
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain'] };
+    const notes = (a) => m.PACES.map((p) => m.paceNote(p.value, 'lose', a));
+    const MARKED = ['Best if you also build muscle', null, null];
+    expect(notes({ ...muscle, age: ADULT_AGE })).toEqual(MARKED);
+    expect(notes({ ...muscle, age: ADULT_AGE - 1 })).toEqual([null, null, null]);
+    expect(notes({ ...muscle, age: null })).toEqual([null, null, null]);
+    const yes = { ...HEALTH_ANSWERED, hasCondition: true, noCalorieCut: true };
+    expect(notes({ ...muscle, health: { ...yes, checkFirst: 'cleared' } })).toEqual([null, null, null]);
+    expect(notes({ ...muscle, health: { ...yes, checkFirst: 'not_yet', safeMode: true } })).toEqual([null, null, null]);
+    // A no, or the question not reached yet (screen 8 comes after screen 3), is not a yes.
+    expect(notes({ ...muscle, health: HEALTH_ANSWERED })).toEqual(MARKED);
+    expect(notes({ ...muscle, health: NO_HEALTH_ANSWER })).toEqual(MARKED);
   });
 });
 

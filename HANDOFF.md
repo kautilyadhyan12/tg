@@ -13,7 +13,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Kd picked "Tell them" (RULINGS 2026-09-13): Build muscle and a cut eaten over 500 kcal a day raise `cut_limits_muscle_gain`, naming the
   gentle pace, which screen 3 marks. Calories unchanged. Murphy & Koehler's words were read on Europe PMC (PMID 34623696) before asking.
 - Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + onboarding + nutrition 132/132; web eslint 0 · three
-  setup files 148/148 · full 2101/2101 on 4367dfe (poseAssets.contract, the known local red); 14 deliberate breaks all red; login-door anchors match.
+  setup files 148/148 · full run on 4367dfe: 2101/2101 tests in 75/76 files (poseAssets.contract fails to load, the known local red); 14 breaks red; login-door anchors match.
 - Found, on ROADMAP: 4d the sign-up disclaimer tap was never built; 5b the Nutrition rings never say why there is no cut. posterCode's "someone
   already set up lands on the join page" failed once under load, then passed twice. Next: CI, click-through, review, merge; ask Kd if 4d is next.
 

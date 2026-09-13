@@ -150,6 +150,11 @@ export const missingPlanInputSchema = z.enum([
 ]);
 export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
 
+/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07).
+ *  Shared so screen 3 marks a pace for building muscle only where the plan maths
+ *  could cut at all. */
+export const ADULT_AGE = 18;
+
 /** Why the plan holds no calorie cut: under 18 · a yes on the health question
  *  (a condition, an injury, pregnancy or anything else) · Safe mode on top of
  *  that yes (RULINGS 2026-09-07, amended 2026-09-09). */

@@ -519,9 +519,13 @@ export default function Onboarding() {
                   <div role="status" className="card-glass mt-6 space-y-3">
                     {open.length > 0 && <p className="text-sm">Before you finish, answer {missingText(open)}.</p>}
                     {!agreed && <p className="text-sm">Read the note on the Health screen and tick it.</p>}
+                    {/* The last screen is always the plan, so each way to what
+                        is open is an Adjust: its screen's button then reads
+                        "Back to your plan", one tap back instead of a Continue
+                        through every screen in between. */}
                     <div className="flex flex-wrap gap-2">
                       {toAnswer.map((id) => (
-                        <button key={`go-${id}`} type="button" onClick={() => goTo(id)} className="btn-secondary">
+                        <button key={`go-${id}`} type="button" onClick={() => adjust(id)} className="btn-secondary">
                           Go to {SCREENS.find((s) => s.id === id)?.title}
                         </button>
                       ))}

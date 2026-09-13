@@ -479,7 +479,9 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
         <Question>How fast?</Question>
         <div className="space-y-3">
           {/* Building muscle while losing weight, the pace that leaves it room
-              to grow is marked here, where the pace is picked (Kd, 2026-09-13). */}
+              to grow is marked here, where the pace is picked (Kd, 2026-09-13).
+              `answers` carries the age and the health answer, which decide
+              whether any pace can cut. */}
           {PACES.map((p) => (
             <Choice
               key={`pace-${p.value}`}
@@ -487,7 +489,7 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
               onSelect={() => answers.pace !== p.value && save({ pace: p.value })}
               label={p.label}
               desc={`${verb} ${paceText(p.value, units)}`}
-              note={paceNote(p.value, direction, answers.fitnessGoals)}
+              note={paceNote(p.value, direction, answers)}
             />
           ))}
         </div>
@@ -894,9 +896,12 @@ export function PlanScreen({ answers, units, health, planNote, adjust, busy }) {
         )}
       </section>
 
-      <section aria-label="What your plan is built on" className="card-glass">
+      {/* "Your answers", never "what your plan is built on": a plan with no
+          calorie cut (under 18, a health yes, a target out of reach) keeps the
+          weight, and the target row is still the person's answer. */}
+      <section aria-label="Your answers" className="card-glass">
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
-          What your plan is built on
+          Your answers
         </p>
         <ul className="mt-2 divide-y divide-white/5">
           {answerRows(answers, units).map((row) => {

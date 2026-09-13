@@ -42,6 +42,7 @@
 // is rounded to a whole kcal before the next step reads it, so each sum on that
 // screen holds exactly; `workings` on the plan carries those steps.
 import {
+  ADULT_AGE,
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   daysToMove,
   KCAL_PER_KG,
@@ -75,8 +76,9 @@ export { KCAL_PER_KG };
 /** Calories never go below this (RULINGS 2026-09-07: "the floor already in the code"). */
 export const CALORIE_FLOOR_KCAL = 1200;
 
-/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07). */
-export const ADULT_AGE = 18;
+/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07);
+ *  in the shared contract so screen 3's pace cards read the same age. */
+export { ADULT_AGE };
 
 /** The lowest healthy weight for a height, as a BMI. */
 export const HEALTHY_BMI_FLOOR = 18.5;

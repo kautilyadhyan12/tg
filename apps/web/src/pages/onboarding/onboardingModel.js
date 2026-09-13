@@ -3,7 +3,7 @@
 // their units, the words the plan panel and the plan screen use, and the save
 // queue. Every NUMBER of the plan is the server's (GET/PATCH
 // /v1/users/me/onboarding); nothing here computes a plan.
-import { CHECK_FIRST_OPTIONS, MUSCLE_GAIN_PACE, ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
+import { ADULT_AGE, CHECK_FIRST_OPTIONS, MUSCLE_GAIN_PACE, ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
@@ -769,16 +769,20 @@ export const workoutsDetail = (a) => joined([LEVEL_LABEL[a.fitnessLevel], equipm
 
 /** A yes a professional has cleared: the normal plan, and this line with it
  *  (RULINGS 2026-09-09: "a cleared person gets the normal plan plus a 'follow
- *  your professional' line"). */
-export const CLEARED_LINE = 'A professional has cleared you. Follow their advice.';
+ *  your professional' line"). The clearance is the person's word, never a fact
+ *  the app holds, so the line says who told it. */
+export const CLEARED_LINE = 'You told us a professional has cleared you. Follow their advice.';
 
 /** The mark on screen 3's pace card that leaves muscle room to grow, for
  *  someone building muscle while losing weight (Kd, 2026-09-13). The pace is
- *  the shared one the server's plan line suggests. */
+ *  the shared one the server's plan line suggests. Only where a pace can cut at
+ *  all: under 18, or after a yes to the health question, every pace eats the
+ *  same, so marking one would point at a choice that changes nothing. */
 export const MUSCLE_PACE_NOTE = 'Best if you also build muscle';
-export function paceNote(pace, direction, goals) {
-  const buildsMuscle = Array.isArray(goals) && goals.includes('muscle_gain');
-  return direction === 'lose' && buildsMuscle && pace === MUSCLE_GAIN_PACE ? MUSCLE_PACE_NOTE : null;
+export function paceNote(pace, direction, a) {
+  const buildsMuscle = Array.isArray(a.fitnessGoals) && a.fitnessGoals.includes('muscle_gain');
+  const canCut = answered(a.age) && a.age >= ADULT_AGE && a.health?.hasCondition !== true;
+  return direction === 'lose' && buildsMuscle && canCut && pace === MUSCLE_GAIN_PACE ? MUSCLE_PACE_NOTE : null;
 }
 
 // ── Saving as you go ────────────────────────────────────────────────────────
