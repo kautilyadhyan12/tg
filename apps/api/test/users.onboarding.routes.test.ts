@@ -490,9 +490,16 @@ d("onboarding v2 routes (real Postgres)", () => {
 
     // Build muscle beside losing weight (building muscle is not gaining weight,
     // RULINGS 2026-09-11): the same calories, and protein at 2.2 g a kilo —
-    // 154 g, not 140 — with the carbohydrates giving way to it.
+    // 154 g, not 140 — with the carbohydrates giving way to it. The steady cut
+    // of 550 a day is over the 500 that leaves muscle room to grow, so the plan
+    // says so and names the gentle pace (Kd, 2026-09-13).
     const muscle = await patchOk(cookies, { fitnessGoals: ["muscle_gain"] });
-    expect(muscle.plan).toMatchObject({ ...GOLDEN_LOSE, proteinG: 154, carbsG: 84 });
+    expect(muscle.plan).toMatchObject({
+      ...GOLDEN_LOSE,
+      proteinG: 154,
+      carbsG: 84,
+      flags: [{ code: "cut_limits_muscle_gain", limitKcal: 500, suggestedPace: "gentle" }],
+    });
     expect(muscle.plan?.["workings"]).toMatchObject({ protein: { gPerKg: 2.2, weightKg: 70, wantedG: 154, buildMuscle: true } });
     // And beside keeping the weight: 2.2, not keep's 1.6.
     expect((await patchOk(cookies, { weightGoal: "maintain" })).plan).toMatchObject({ targetKcal: 1817, proteinG: 154 });

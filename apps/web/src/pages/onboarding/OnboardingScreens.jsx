@@ -1,17 +1,24 @@
-// Onboarding v2, screens 1–9 and 11 (RULINGS 2026-09-07, 2026-09-09 and
-// 2026-09-10). Every tap and every wheel saves at once through `save`; the one
-// typed box, the name, saves when the person leaves it. Nothing here decides a
-// number: the plan panel shows the server's.
+// Onboarding v2: the screens from "Your goal" to "Your plan" (RULINGS
+// 2026-09-07, 2026-09-09 and 2026-09-10). Every tap and every wheel saves at
+// once through `save`; the one typed box, the name, saves when the person
+// leaves it. Nothing here decides a number: the plan panel shows the server's.
 import { useRef, useState } from 'react';
-import { Check } from 'lucide-react';
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, ORG_TYPES_PHRASE, patchOnboardingRequestSchema } from '@app/shared';
+import { Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
+import {
+  CHECK_FIRST_OPTIONS,
+  CURRENT_DISCLAIMER_VERSION,
+  DISCLAIMER_WORDINGS,
+  ORG_TYPES_PHRASE,
+  patchOnboardingRequestSchema,
+} from '@app/shared';
 import GymMembershipCard from '../../components/gym/GymMembershipCard';
 import JoinGymPanel from '../../components/gym/JoinGymPanel';
 import HealthQuestion from './HealthQuestion';
 import NumberWheel from './NumberWheel';
-import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
+import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, STEP_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
   AGE_REST,
+  CLEARED_LINE,
   DAYS,
   DIETS,
   EQUIPMENT,
@@ -30,6 +37,7 @@ import {
   WEIGHT_GOALS,
   WEIGHT_REST,
   ageList,
+  answerRows,
   clampTarget,
   cleanEquipment,
   cmFromParts,
@@ -38,6 +46,7 @@ import {
   heightParts,
   heightShown,
   kgFromParts,
+  paceNote,
   paceText,
   plankList,
   plankShown,
@@ -55,6 +64,8 @@ import {
   weightParts,
   weightShown,
   weightWholes,
+  workoutsDetail,
+  workoutsLine,
   wrongSideText,
 } from './onboardingModel';
 
@@ -86,7 +97,7 @@ function IconBadge({ icon: Icon, selected }) {
   );
 }
 
-function Choice({ selected, onSelect, icon: Icon, label, desc }) {
+function Choice({ selected, onSelect, icon: Icon, label, desc, note }) {
   return (
     <button
       type="button"
@@ -99,6 +110,11 @@ function Choice({ selected, onSelect, icon: Icon, label, desc }) {
       <span className="flex-1 min-w-0">
         <span className={`block font-medium text-sm ${selected ? 'text-white' : 'text-gray-300'}`}>{label}</span>
         {desc && <span className="block text-gray-500 text-xs mt-0.5">{desc}</span>}
+        {note && (
+          <span className="block text-xs font-semibold mt-1" style={{ color: '#FFB347' }}>
+            {note}
+          </span>
+        )}
       </span>
       {selected && (
         <span className="w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -462,6 +478,8 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
       <div>
         <Question>How fast?</Question>
         <div className="space-y-3">
+          {/* Building muscle while losing weight, the pace that leaves it room
+              to grow is marked here, where the pace is picked (Kd, 2026-09-13). */}
           {PACES.map((p) => (
             <Choice
               key={`pace-${p.value}`}
@@ -469,6 +487,7 @@ export function TargetScreen({ answers, save, units, setUnits, direction }) {
               onSelect={() => answers.pace !== p.value && save({ pace: p.value })}
               label={p.label}
               desc={`${verb} ${paceText(p.value, units)}`}
+              note={paceNote(p.value, direction, answers.fitnessGoals)}
             />
           ))}
         </div>
@@ -655,42 +674,50 @@ export function EquipmentScreen({ answers, save }) {
   );
 }
 
+// ── The disclaimer taps ─────────────────────────────────────────────────────
+// RULINGS 2026-09-07: one explicit tap at the health step and on the plan
+// screen, each stored with the time, the build and the words it was shown
+// beside. One component, so the two ask for the tap the same way.
+function DisclaimerTick({ wording, tap }) {
+  return (
+    <div className="card-glass space-y-3">
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.70)' }}>{wording}</p>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={tap.agreed}
+        disabled={tap.agreed || tap.agreeing}
+        onClick={tap.agree}
+        className="flex items-center gap-3 text-left w-full disabled:cursor-default"
+      >
+        <span
+          aria-hidden="true"
+          className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border-2 transition-all
+                     ${tap.agreed ? 'bg-primary-500 border-primary-500' : 'border-white/25'}`}
+        >
+          {tap.agreed && <Check className="w-3 h-3 text-white" />}
+        </span>
+        <span className={`text-sm ${tap.agreed ? 'text-white' : 'text-gray-300'}`}>I have read and understood this</span>
+      </button>
+      {!tap.agreed && (
+        <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          Tick this to finish setup.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Screen 8 ─────────────────────────────────────────────────────────
-// The one health question, and the disclaimer tap that goes with it (RULINGS
-// 2026-09-07: one explicit tap, stored with the time, the build and the words).
-// The question itself is the component Settings uses, so the two ask it in the
+// The one health question, and the disclaimer tap that goes with it. The
+// question itself is the component Settings uses, so the two ask it in the
 // same words; the tap belongs to this step alone.
 export function HealthScreen({ health }) {
   const wording = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
   return (
     <div className="space-y-6">
       <HealthQuestion screening={health.screening} onAnswer={health.answer} busy={health.saving} />
-
-      <div className="card-glass space-y-3">
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.70)' }}>{wording}</p>
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={health.agreed}
-          disabled={health.agreed || health.agreeing}
-          onClick={health.agree}
-          className="flex items-center gap-3 text-left w-full disabled:cursor-default"
-        >
-          <span
-            aria-hidden="true"
-            className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border-2 transition-all
-                       ${health.agreed ? 'bg-primary-500 border-primary-500' : 'border-white/25'}`}
-          >
-            {health.agreed && <Check className="w-3 h-3 text-white" />}
-          </span>
-          <span className={`text-sm ${health.agreed ? 'text-white' : 'text-gray-300'}`}>I have read and understood this</span>
-        </button>
-        {!health.agreed && (
-          <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Tick this to finish setup.
-          </p>
-        )}
-      </div>
+      <DisclaimerTick wording={wording} tap={health} />
     </div>
   );
 }
@@ -801,6 +828,94 @@ export function CodeScreen({ poster }) {
         No code? Carry on — everything works without one, and you can enter a code any time in
         Settings.
       </p>
+    </div>
+  );
+}
+
+// ── The last screen: your plan (ROADMAP 4c) ─────────────────────────────────
+// The number sits above it, in the panel every screen shows. Here: the week of
+// workouts, or in Safe mode the reason there is none (RULINGS 2026-09-07); what
+// every answer is, each with a way back to the screen that asked it; and the
+// plan's disclaimer with its tap, which Finish waits for.
+//
+// NO WORKOUT IS NAMED: the week is the one the person asked for, in their own
+// answers. The workouts themselves come with the weekly plan (6a) and runs with
+// the running feature in the phone app (7b), so nothing here promises either.
+
+/** Back to the screen that asked; its button then brings the person straight
+ *  back here (`Onboarding.jsx`). Held while the page waits, as the step bar and
+ *  Back are: a finish refused over the health question forgets the answer the
+ *  page holds, so no way back to that question may open while one is out. */
+function AdjustButton({ title, onClick, busy }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Adjust ${title}`}
+      onClick={onClick}
+      disabled={busy}
+      className="flex items-center gap-0.5 text-xs font-semibold flex-shrink-0 enabled:hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ color: '#FF8A1F' }}
+    >
+      Adjust
+      <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
+export function PlanScreen({ answers, units, health, planNote, adjust, busy }) {
+  const screening = health.screening;
+  const safeMode = screening?.safeMode === true;
+  const cleared = screening?.hasCondition === true && screening?.checkFirst === 'cleared';
+  const week = workoutsLine(answers);
+  const detail = workoutsDetail(answers);
+  const wording = DISCLAIMER_WORDINGS.plan_screen[CURRENT_DISCLAIMER_VERSION.plan_screen];
+  return (
+    <div className="space-y-6">
+      <section aria-label="Your workouts" className="card-glass">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
+          <Dumbbell className="w-3.5 h-3.5" aria-hidden="true" />
+          Your workouts
+        </p>
+        {safeMode ? (
+          <div className="mt-3 flex items-start gap-3">
+            <IconBadge icon={ShieldCheck} selected={false} />
+            <p className="flex-1 min-w-0 text-sm text-white">{CHECK_FIRST_OPTIONS.not_yet.detail}</p>
+          </div>
+        ) : (
+          <>
+            {week && <p className="mt-1 text-lg font-bold text-white">{week}</p>}
+            {detail && <p className="text-xs mt-1">{detail}</p>}
+            {cleared && (
+              <p className="text-xs mt-2" style={{ color: '#FFB347' }}>
+                {CLEARED_LINE}
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
+      <section aria-label="What your plan is built on" className="card-glass">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
+          What your plan is built on
+        </p>
+        <ul className="mt-2 divide-y divide-white/5">
+          {answerRows(answers, units).map((row) => {
+            const Icon = STEP_ICONS[row.id];
+            return (
+              <li key={`answer-${row.id}`} className="flex items-center gap-3 py-2.5">
+                <Icon className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} style={{ color: '#FFB347' }} aria-hidden="true" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-2xs text-gray-500">{row.title}</span>
+                  <span className="block text-sm text-white">{row.value}</span>
+                </span>
+                <AdjustButton title={row.title} onClick={() => adjust(row.id)} busy={busy} />
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <DisclaimerTick wording={wording} tap={planNote} />
     </div>
   );
 }

@@ -1,9 +1,9 @@
-// Onboarding v2, screens 1–7 (ROADMAP Stage 1 item 4a-ii): the wizard's pure
-// half. What each screen asks, when a screen counts as answered, the wheels
-// and their units, the words the plan panel uses, and the save queue. Every
-// NUMBER of the plan is the server's (GET/PATCH /v1/users/me/onboarding);
-// nothing here computes a plan.
-import { ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
+// Onboarding v2 (ROADMAP Stage 1 items 4a-ii to 4c): the wizard's pure half.
+// What each screen asks, when a screen counts as answered, the wheels and
+// their units, the words the plan panel and the plan screen use, and the save
+// queue. Every NUMBER of the plan is the server's (GET/PATCH
+// /v1/users/me/onboarding); nothing here computes a plan.
+import { CHECK_FIRST_OPTIONS, MUSCLE_GAIN_PACE, ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
@@ -94,6 +94,7 @@ export const SCREENS = [
   { id: 'health',    title: 'Health',        desc: 'One question, so your plan is careful' },
   { id: 'food',      title: 'Food',          desc: 'What you eat, so meals can be suggested' },
   { id: 'code',      title: 'Your code',     desc: `Only if a ${ORG_TYPES_PHRASE} gave you one` },
+  { id: 'plan',      title: 'Your plan',     desc: 'Check it, adjust anything, then finish' },
 ];
 
 /** The direction the calorie maths works in: the weight choice itself, which
@@ -136,7 +137,12 @@ const answered = (v) => v !== null && v !== undefined;
  *  have no code, and a person who has one may apply now, later in Settings, or
  *  never. So it is always answered — Continue and Finish are never held by it —
  *  and the server's finish check has no word for it either (`@app/shared`
- *  `missingSetupAnswerSchema`). It is a screen, not a question. */
+ *  `missingSetupAnswerSchema`). It is a screen, not a question.
+ *
+ *  The last screen, your plan (4c), asks nothing either: it shows what every
+ *  other screen answered. So it counts as answered exactly when they all are —
+ *  which makes it where a person with every answer in lands, and the one screen
+ *  the step bar reaches only then. */
 export function screenAnswered(id, a) {
   switch (id) {
     case 'goal':      return answered(a.weightGoal);
@@ -155,6 +161,7 @@ export function screenAnswered(id, a) {
     case 'health':    return a.health?.answered === true;
     case 'food':      return answered(a.diet) && answered(a.mealsPerDay);
     case 'code':      return true;
+    case 'plan':      return visibleScreens(a).every((s) => s.id === 'plan' || screenAnswered(s.id, a));
     default:          return false;
   }
 }
@@ -526,6 +533,11 @@ export function flagLines(plan, direction, units) {
         return `This plan has no calorie cut because ${listText(f.reasons.map((r) => NO_CUT_REASON[r] ?? r))}.`;
       case 'target_out_of_reach':
         return 'This target cannot be reached on these calories, so this plan keeps your weight where it is.';
+      case 'cut_limits_muscle_gain':
+        // Kd, 2026-09-13: tell them, and keep their pace.
+        return `Building muscle while losing weight: a cut of more than ${kcalText(f.limitKcal)} kcal a day mostly stops muscle growing.${
+          f.suggestedPace ? ` The ${PACE_LABEL[f.suggestedPace].toLowerCase()} pace leaves room for it.` : ''
+        }`;
       default:
         return null;
     }
@@ -533,10 +545,10 @@ export function flagLines(plan, direction, units) {
   return lines.filter((line) => line !== null);
 }
 
-/** The note under the live number: the opening sentence of the plan screen's
- *  disclaimer, word for word (the test pins it to the shared wording). The
- *  whole disclaimer, and the tap that records it, belong to the plan screen
- *  itself (screen 12). */
+/** The note under the live number on the screens that ask: the opening
+ *  sentence of the plan screen's disclaimer, word for word (the test pins it to
+ *  the shared wording). The plan screen shows the whole disclaimer, with the tap
+ *  that records it, so the panel there leaves this out. */
 export const PLAN_NOTE = 'These numbers are general guidance, not medical advice.';
 
 // ── "How is this worked out?" (Kd, 2026-09-10) ──────────────────────────────
@@ -608,10 +620,15 @@ export function workingSteps(plan, direction) {
     },
   ];
   if (w.change) {
+    const muscle = plan.flags.find((f) => f.code === 'cut_limits_muscle_gain');
     steps.push({
       title: 'Your pace',
       sum: `${num(w.change.kgPerWeek)} kg a week × ${kcalText(w.change.kcalPerKg)} kcal ÷ 7 days = ${kcalText(Math.abs(w.change.kcal))} kcal a day`,
-      note: `${kcalText(w.change.kcalPerKg)} kcal per kilo is the usual planning figure (Wishnofsky). Real weight change is often slower, so the date is an estimate.`,
+      note: `${kcalText(w.change.kcalPerKg)} kcal per kilo is the usual planning figure (Wishnofsky). Real weight change is often slower, so the date is an estimate.${
+        muscle
+          ? ` A review of trials that trained while eating less found that a cut of about ${kcalText(muscle.limitKcal)} kcal a day stopped the muscle training builds (Murphy and Koehler, 2022).`
+          : ''
+      }`,
     });
   }
   const floored = w.beforeFloorKcal < w.floorKcal;
@@ -663,6 +680,105 @@ export function workingSteps(plan, direction) {
     });
   }
   return steps;
+}
+
+// ── The plan screen (ROADMAP 4c) ────────────────────────────────────────────
+// The last screen: the number (the panel above it), the week of workouts, what
+// every answer is, a way back to each screen that asked it, and the plan's own
+// disclaimer. Every word here is read from the answers and the shared tables,
+// never kept as a second copy.
+
+const labels = (table) => Object.fromEntries(table.map((row) => [row.value, row.label]));
+const WEIGHT_GOAL_LABEL = labels(WEIGHT_GOALS);
+const GOAL_LABEL = labels(GOALS);
+const GENDER_LABEL = labels(GENDERS);
+const DAY_LABEL = labels(DAYS);
+const LEVEL_LABEL = labels(LEVELS);
+const EQUIPMENT_LABEL = labels(EQUIPMENT);
+const DIET_LABEL = labels(DIETS);
+
+export const NOT_ANSWERED = 'Not answered';
+/** Words on one line, " · " between them, in the order given; nothing empty. */
+const joined = (parts) => parts.filter((p) => typeof p === 'string' && p !== '').join(' · ');
+const equipmentText = (a) => joined(cleanEquipment(a.availableEquipment).map((e) => EQUIPMENT_LABEL[e] ?? e));
+
+/** What one screen holds, in the words that screen uses. */
+export function answerValue(id, a, units) {
+  switch (id) {
+    case 'goal':
+      // The weight choice, then the goals beside it, as screen 1's grid has them.
+      if (!answered(a.weightGoal)) return NOT_ANSWERED;
+      return joined([
+        WEIGHT_GOAL_LABEL[a.weightGoal],
+        ...(Array.isArray(a.fitnessGoals) ? a.fitnessGoals : []).map((g) => GOAL_LABEL[g] ?? g),
+      ]);
+    case 'about':
+      return (
+        joined([
+          a.displayName,
+          answered(a.age) ? `${a.age} years` : null,
+          GENDER_LABEL[a.gender],
+          answered(a.heightCm) ? heightShown(heightParts(a.heightCm, units), units) : null,
+          answered(a.weightKg) ? weightShown(weightParts(a.weightKg, units), units) : null,
+        ]) || NOT_ANSWERED
+      );
+    case 'target':
+      if (!answered(a.targetWeightKg) || !answered(a.pace)) return NOT_ANSWERED;
+      return `${weightShown(weightParts(a.targetWeightKg, units), units)} · ${PACE_LABEL[a.pace]}, ${paceText(a.pace, units)}`;
+    case 'day':
+      return DAY_LABEL[a.dayActivity] ?? NOT_ANSWERED;
+    case 'training':
+      if (!answered(a.fitnessLevel)) return NOT_ANSWERED;
+      return joined([
+        LEVEL_LABEL[a.fitnessLevel],
+        answered(a.pushUpsMax) ? pushUpShown(a.pushUpsMax) : null,
+        answered(a.plankHoldSeconds) ? `${plankShown(a.plankHoldSeconds)} plank` : null,
+      ]);
+    case 'week':
+      if (!answered(a.trainingDays) || !answered(a.sessionMinutes)) return NOT_ANSWERED;
+      return `${a.trainingDays} ${a.trainingDays === 1 ? 'day' : 'days'} a week · ${a.sessionMinutes} minutes`;
+    case 'equipment':
+      return equipmentText(a) || NOT_ANSWERED;
+    case 'health':
+      if (a.health?.answered !== true) return NOT_ANSWERED;
+      return a.health.hasCondition === true ? joined(['Yes', CHECK_FIRST_OPTIONS[a.health.checkFirst]?.label]) : 'No';
+    case 'food':
+      if (!answered(a.diet) || !answered(a.mealsPerDay)) return NOT_ANSWERED;
+      return `${DIET_LABEL[a.diet] ?? a.diet} · ${a.mealsPerDay} meals a day`;
+    default:
+      return NOT_ANSWERED;
+  }
+}
+
+/** The plan screen's rows: every screen that asks something, in the order
+ *  they are met, each with what it holds. */
+export const answerRows = (a, units) =>
+  visibleScreens(a)
+    .filter((s) => s.id !== 'code' && s.id !== 'plan')
+    .map((s) => ({ id: s.id, title: s.title, value: answerValue(s.id, a, units) }));
+
+/** The week of workouts as the person asked for it, or null until both
+ *  answers are in. It names no workout: those come with the weekly plan (6a). */
+export function workoutsLine(a) {
+  if (!answered(a.trainingDays) || !answered(a.sessionMinutes)) return null;
+  return `${a.trainingDays} ${a.trainingDays === 1 ? 'workout' : 'workouts'} a week, ${a.sessionMinutes} minutes each`;
+}
+
+/** The level and the equipment the workouts are for: "Beginner · Dumbbells". */
+export const workoutsDetail = (a) => joined([LEVEL_LABEL[a.fitnessLevel], equipmentText(a)]);
+
+/** A yes a professional has cleared: the normal plan, and this line with it
+ *  (RULINGS 2026-09-09: "a cleared person gets the normal plan plus a 'follow
+ *  your professional' line"). */
+export const CLEARED_LINE = 'A professional has cleared you. Follow their advice.';
+
+/** The mark on screen 3's pace card that leaves muscle room to grow, for
+ *  someone building muscle while losing weight (Kd, 2026-09-13). The pace is
+ *  the shared one the server's plan line suggests. */
+export const MUSCLE_PACE_NOTE = 'Best if you also build muscle';
+export function paceNote(pace, direction, goals) {
+  const buildsMuscle = Array.isArray(goals) && goals.includes('muscle_gain');
+  return direction === 'lose' && buildsMuscle && pace === MUSCLE_GAIN_PACE ? MUSCLE_PACE_NOTE : null;
 }
 
 // ── Saving as you go ────────────────────────────────────────────────────────

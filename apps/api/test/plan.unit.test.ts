@@ -5,6 +5,9 @@ import {
   daysToMove,
   MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
+  MUSCLE_GAIN_CUT_LIMIT_KCAL,
+  MUSCLE_GAIN_PACE,
+  paceDailyKcal,
   planAnswersSchema,
   planHealthSchema,
   planInputsSchema,
@@ -117,6 +120,17 @@ function brokenFacts(body: PlanInputs): string[] {
     check("an unmoved plan says why", body.goal === "maintain" || codes.some((c) => c !== "calorie_floor_applied" && c !== "pace_over_a_year"));
   }
   if (plan.dailyChangeKcal < 0) check("a cut is never under no_deficit", !codes.includes("no_deficit"));
+  // Restated, not called: the muscle line exactly when Build muscle is ticked and
+  // the cut eaten is over the limit, and its pace cuts within it on this body.
+  check(
+    "the muscle line exactly when Build muscle is ticked and the cut is over the limit",
+    codes.includes("cut_limits_muscle_gain") === (body.buildMuscle && plan.dailyBurnKcal - plan.targetKcal > 500),
+  );
+  const muscle = plan.flags.find((f) => f.code === "cut_limits_muscle_gain");
+  if (muscle?.suggestedPace) {
+    const slower = computePlan({ ...body, pace: muscle.suggestedPace });
+    check("the muscle line's pace cuts within the limit", slower.dailyBurnKcal - slower.targetKcal <= 500);
+  }
   return broken;
 }
 
@@ -157,6 +171,14 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     expect(BUILD_MUSCLE_PROTEIN_G_PER_KG).toBe(2.2); // Morton and colleagues, 2018: "~2.2 g protein/kg/d" to maximise
     expect(PROTEIN_REFERENCE_BMI).toBe(30);
     expect(MIFFLIN_ST_JEOR_CONSTANT).toEqual({ female: -161, male: 5 });
+    // Murphy and Koehler, 2022: "an energy deficit of ~500 kcal · day⁻¹ prevented gains in LM".
+    expect(MUSCLE_GAIN_CUT_LIMIT_KCAL).toBe(500);
+    expect({ gentle: paceDailyKcal("gentle"), steady: paceDailyKcal("steady"), brisk: paceDailyKcal("brisk") }).toEqual({
+      gentle: 275,
+      steady: 550,
+      brisk: 825,
+    });
+    expect(MUSCLE_GAIN_PACE).toBe("gentle");
   });
 
   it("resting burn is Mifflin-St Jeor; only 'female' takes −161", () => {
@@ -473,10 +495,16 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
       const muscle = computePlan({ ...body, buildMuscle: true });
       expect(muscle.workings.protein, body.goal).toMatchObject({ gPerKg: 2.2, buildMuscle: true });
       // Every number but protein and carbohydrates is the same plan's.
-      const same = ["restingBurnKcal", "dailyBurnKcal", "targetKcal", "dailyChangeKcal", "fatG", "plannedTargetKg", "daysToTarget", "finishDate", "flags"] as const;
+      const same = ["restingBurnKcal", "dailyBurnKcal", "targetKcal", "dailyChangeKcal", "fatG", "plannedTargetKg", "daysToTarget", "finishDate"] as const;
       for (const key of same) expect(muscle[key], `${body.goal} ${key}`).toEqual(plain[key]);
+      // The flags too, but for the one line Build muscle adds to a cut over the
+      // limit: the sample's steady cut of 550 (RULINGS 2026-09-13).
+      expect(muscle.flags.filter((f) => f.code !== "cut_limits_muscle_gain"), body.goal).toEqual(plain.flags);
       expectSanePlan({ ...body, buildMuscle: true });
     }
+    expect(computePlan({ ...sample, buildMuscle: true }).flags).toEqual([
+      { code: "cut_limits_muscle_gain", limitKcal: 500, suggestedPace: "gentle" },
+    ]);
     // The sample man losing weight: 2.2 × 82 = 180 g, not the loss figure's
     // 164, and the carbohydrates give way to it: (1705 − 721.6 − 426.25) ÷ 4.
     expect(computePlan({ ...sample, buildMuscle: true })).toMatchObject({ targetKcal: 1705, proteinG: 180, carbsG: 139, fatG: 47 });
@@ -785,6 +813,70 @@ describe("plan maths — the sanity rules", () => {
   it("a wrong-direction 'lose' target is not also reported as a refused cut", () => {
     const plan = computePlan({ ...sample, age: 17, targetWeightKg: 90 });
     expect(plan.flags).toEqual([{ code: "target_wrong_direction" }]);
+  });
+
+  describe("building muscle while losing weight (Kd, 2026-09-13: tell them)", () => {
+    const muscleLine = { code: "cut_limits_muscle_gain", limitKcal: 500, suggestedPace: "gentle" };
+    const muscle: PlanInputs = { ...sample, buildMuscle: true };
+
+    it("a cut over 500 kcal a day says so and suggests the gentle pace; the calories stay the weight choice's", () => {
+      for (const pace of ["steady", "brisk"] as const) {
+        const plan = computePlan({ ...muscle, pace });
+        expect(plan.flags, pace).toEqual([muscleLine]);
+        expect(plan.targetKcal, pace).toBe(computePlan({ ...sample, pace }).targetKcal);
+        expect(plan.dailyChangeKcal, pace).toBe(-paceDailyKcal(pace));
+      }
+      // Gentle cuts 275 a day: room to grow, nothing to say.
+      expect(computePlan({ ...muscle, pace: "gentle" }).flags).toEqual([]);
+      // The same cut without Build muscle ticked says nothing either.
+      expect(computePlan({ ...sample, pace: "brisk" }).flags).toEqual([]);
+    });
+
+    it("says nothing where nothing is cut: keeping or gaining weight, under 18, or a yes on the health question", () => {
+      const noCut: PlanInputs[] = [
+        { ...muscle, goal: "maintain", targetWeightKg: null, pace: null },
+        { ...muscle, goal: "gain", weightKg: 70, targetWeightKg: 75, pace: "brisk" },
+        { ...muscle, age: 17, pace: "brisk" },
+        { ...muscle, pace: "brisk", health: { hasCondition: true, safeMode: false } },
+        { ...muscle, pace: "brisk", health: { hasCondition: true, safeMode: true } },
+      ];
+      for (const body of noCut) {
+        const plan = computePlan(body);
+        expect(plan.dailyChangeKcal, JSON.stringify(body)).toBeGreaterThanOrEqual(0);
+        expect(plan.flags.map((f) => f.code), JSON.stringify(body)).not.toContain("cut_limits_muscle_gain");
+      }
+    });
+
+    it("counts the cut eaten, after the calorie floor: 500 says nothing, 501 says so", () => {
+      // female 30 · 165 cm · 67 kg · sitting · 2 × 20 min: resting 1390, day 1668, training
+      // 5 × 67 × 40 min ÷ 60 ÷ 7 = 31.9 → 32, burn 1700. Brisk asks for 875, floored to 1200: a cut of 500.
+      const at = computePlan({ ...muscle, gender: "female", heightCm: 165, weightKg: 67, targetWeightKg: 60, pace: "brisk", trainingDays: 2, sessionMinutes: 20 });
+      expect([at.dailyBurnKcal, at.targetKcal]).toEqual([1700, 1200]);
+      expect(at.flags).toEqual([{ code: "calorie_floor_applied", floorKcal: 1200 }]);
+      // female 30 · 165 cm · 61.5 kg · sitting · 3 × 45 min: resting 1335, day 1602, training
+      // 5 × 61.5 × 135 min ÷ 60 ÷ 7 = 98.8 → 99, burn 1701. Floored to 1200: a cut of 501.
+      const over = computePlan({ ...muscle, gender: "female", heightCm: 165, weightKg: 61.5, targetWeightKg: 55, pace: "brisk" });
+      expect([over.dailyBurnKcal, over.targetKcal]).toEqual([1701, 1200]);
+      expect(over.flags).toEqual([{ code: "calorie_floor_applied", floorKcal: 1200 }, muscleLine]);
+      expectSanePlan({ ...muscle, gender: "female", heightCm: 165, weightKg: 61.5, targetWeightKg: 55, pace: "brisk" });
+    });
+
+    it("the contract refuses a muscle line the plan's own numbers do not bear out", () => {
+      const flagged = computePlan({ ...muscle, pace: "brisk" });
+      expect(planNumbersSchema.safeParse(flagged).success).toBe(true);
+      const at500 = computePlan({ ...muscle, gender: "female", heightCm: 165, weightKg: 67, targetWeightKg: 60, pace: "brisk", trainingDays: 2, sessionMinutes: 20 });
+      const lies = [
+        // Build muscle not ticked.
+        { ...flagged, workings: { ...flagged.workings, protein: { ...flagged.workings.protein, buildMuscle: false } } },
+        // A limit, or a pace, other than the ones screen 3 and the sentence use.
+        { ...flagged, flags: [{ ...muscleLine, limitKcal: 400 }] },
+        { ...flagged, flags: [{ ...muscleLine, suggestedPace: "steady" }] },
+        { ...flagged, flags: [{ ...muscleLine, suggestedPace: null }] },
+        // A cut of exactly the limit.
+        { ...at500, flags: [...at500.flags, muscleLine] },
+      ];
+      for (const plan of lies) expect(planNumbersSchema.safeParse(plan).success, JSON.stringify(plan.flags)).toBe(false);
+    });
   });
 });
 

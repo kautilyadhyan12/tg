@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4c: "Your plan", the last setup screen; Kd: tell them about building muscle, branch `plan-screen`
+
+- Built: after "Your code", the plan: the number, "Your workouts" (the week as asked; Safe mode's "not yet" words in its place;
+  "Follow their advice" for a cleared yes), every answer with an Adjust, the plan's note with its tap. Finish is there, waiting for both taps.
+- Adjust opens the screen; its button reads "Back to your plan" and goes to the first open question (the plan when none is). Held during a finish.
+- Kd picked "Tell them" (RULINGS 2026-09-13): Build muscle and a cut eaten over 500 kcal a day raise `cut_limits_muscle_gain`, naming the
+  gentle pace, which screen 3 marks. Calories unchanged. The quote was read from Europe PMC (PMID 34623696) before asking.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan.unit + onboarding and nutrition routes 132/132; web
+  eslint 0 · model 56/56 · onboarding + posterCode 92/92 · full 2101/2101 (poseAssets.contract fails to load, the known local red).
+- 14 deliberate breaks, each red for its own test; the login-door harness's five setup-page anchors still match once.
+- Found and put on ROADMAP: 4d, the sign-up disclaimer tap, was never built (RULINGS 2026-09-07); 5b, the Nutrition rings never say why a plan has no cut.
+- Next: CI, Kd's click-through, the fresh-chat review, merge. Ask Kd whether 4d goes before 7a-i.
+
 ## 2026-09-13 · 4b-ii-b re-check fixed and merged (PR #65); Kd: setup asks nothing about running
 
 - Re-check: no Critical/High. O11 re-aimed at `@app/shared`; a census found 13 more orgs-harness rows dead since 8c28c02

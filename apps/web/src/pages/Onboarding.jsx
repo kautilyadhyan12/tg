@@ -1,14 +1,15 @@
-// Onboarding v2, screens 1–9 and 11 (ROADMAP Stage 1 items 4a-ii, 4b-i and
-// 4b-ii; RULINGS 2026-09-07, 2026-09-09 and 2026-09-10): goal · about you ·
-// target · your day · your training · your week · equipment · health · food ·
-// your code. Every answer is saved the moment it is given, and the server's
-// plan number sits on every screen from the moment it exists. Screen 10
-// (running) and screen 12 (your plan) follow.
+// Onboarding v2 (ROADMAP Stage 1 items 4a-ii to 4c; RULINGS 2026-09-07,
+// 2026-09-09 and 2026-09-10): goal · about you · target · your day · your
+// training · your week · equipment · health · food · your code · your plan.
+// Every answer is saved the moment it is given, and the server's plan number
+// sits on every screen from the moment it exists. Setup asks nothing about
+// running (RULINGS 2026-09-13). The last screen shows the plan, a way back to
+// every answer, and the plan's own disclaimer; Finish is there.
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, HeartPulse, LogOut, Sun, Target, Ticket, TrendingDown, User, Utensils, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { consentService } from '../api/healthApi';
 import { errorText } from '../api/orgsApi';
@@ -22,10 +23,12 @@ import {
   FoodScreen,
   GoalScreen,
   HealthScreen,
+  PlanScreen,
   TargetScreen,
   TrainingScreen,
   WeekScreen,
 } from './onboarding/OnboardingScreens';
+import { STEP_ICONS } from './onboarding/onboardingIcons';
 import { useHealthScreening } from './onboarding/useHealthScreening';
 import { useOnboardingAnswers } from './onboarding/useOnboardingAnswers';
 import {
@@ -42,19 +45,6 @@ import {
   visibleScreens,
 } from './onboarding/onboardingModel';
 
-const ICONS = {
-  goal: Target,
-  about: User,
-  target: TrendingDown,
-  day: Sun,
-  training: Zap,
-  week: Clock,
-  equipment: Dumbbell,
-  health: HeartPulse,
-  food: Utensils,
-  code: Ticket,
-};
-
 const SCREEN_VIEWS = {
   goal: GoalScreen,
   about: AboutScreen,
@@ -66,6 +56,7 @@ const SCREEN_VIEWS = {
   health: HealthScreen,
   food: FoodScreen,
   code: CodeScreen,
+  plan: PlanScreen,
 };
 
 const NAME_NEEDED = 'Type the name we should call you.';
@@ -74,6 +65,26 @@ const NAME_NEEDED = 'Type the name we should call you.';
  *  rings' "Answer now", ROADMAP 4a-iii). Anything else is the dashboard: a
  *  value in the page's state is never followed as an address. */
 const RETURN_TO = new Set(['/nutrition']);
+
+/** One disclaimer tap (RULINGS 2026-09-07: one explicit tap, stored with the
+ *  time, the build and the words), recorded the moment it is made — so the
+ *  consent log holds it whether or not the person goes on to finish. */
+function useDisclaimerTap(purpose) {
+  const [agreed, setAgreed] = useState(false);
+  const [agreeing, setAgreeing] = useState(false);
+  const agree = async () => {
+    setAgreeing(true);
+    try {
+      await consentService.record(purpose);
+      setAgreed(true);
+    } catch (err) {
+      toast.error(errorText(err, "Couldn't record that just now. Please try again."));
+    } finally {
+      setAgreeing(false);
+    }
+  };
+  return { agreed, agreeing, agree };
+}
 
 function Spinner() {
   return (
@@ -146,13 +157,14 @@ export default function Onboarding() {
   const [units, setUnits] = useState(() => defaultUnits(typeof navigator === 'undefined' ? undefined : navigator.language));
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState(null); // the questions a refused finish named
+  const [adjusting, setAdjusting] = useState(false); // on a screen opened by the plan screen's Adjust
 
   // Screen 8's answer, on its own route (4b-i), and the disclaimer tap that
-  // goes with it. The tap is recorded the moment it is made, so the consent log
-  // holds it whether or not the person goes on to finish.
+  // goes with it; and the plan screen's own tap (4c). Finish waits for both.
   const hs = useHealthScreening();
-  const [agreed, setAgreed] = useState(false);
-  const [agreeing, setAgreeing] = useState(false);
+  const healthTap = useDisclaimerTap('health_step');
+  const planTap = useDisclaimerTap('plan_screen');
+  const agreed = healthTap.agreed;
 
   const health = {
     screening: hs.screening,
@@ -166,7 +178,8 @@ export default function Onboarding() {
     // page moves on.
     saving: hs.saving || busy,
     agreed,
-    agreeing,
+    agreeing: healthTap.agreeing,
+    agree: healthTap.agree,
     /** A health answer moves the daily number (any yes stops the calorie cut),
      *  so the plan is re-read the moment one lands — through the same save
      *  queue the taps use, whose empty body simply re-reads it. A refusal that
@@ -176,17 +189,6 @@ export default function Onboarding() {
       if (!(await hs.save(body))) return;
       setRefused((named) => (named === null ? null : named.filter((k) => k !== 'health')));
       ob.save({});
-    },
-    agree: async () => {
-      setAgreeing(true);
-      try {
-        await consentService.record('health_step');
-        setAgreed(true);
-      } catch (err) {
-        toast.error(errorText(err, "Couldn't record that just now. Please try again."));
-      } finally {
-        setAgreeing(false);
-      }
     },
   };
 
@@ -246,7 +248,20 @@ export default function Onboarding() {
   const goTo = (id) => {
     setPicked(id);
     setRefused(null);
+    // Arriving back on the plan, by any way, ends an adjustment.
+    if (id === 'plan') setAdjusting(false);
   };
+
+  /** "Adjust" on the plan screen (4c): the screen that asked, whose Continue
+   *  then goes on to the first question still open — straight back to the
+   *  plan when none is, so a change costs one tap there and one back. A change
+   *  that opens a new question (Lose weight picked over Keep my weight asks
+   *  for a target) goes to that question first. */
+  const adjust = (id) => {
+    goTo(id);
+    setAdjusting(true);
+  };
+  const nextScreen = adjusting || (codeFirst && screen.id === 'code') ? firstOpenScreen(answers, order) : screens[index + 1]?.id;
 
   const goNext = async () => {
     if (!leave()) return;
@@ -255,8 +270,9 @@ export default function Onboarding() {
     setBusy(false);
     if (!saved) return;
     // From "Your code" at the front, on to the first question still open: where
-    // this person would have landed without a poster.
-    goTo(codeFirst && screen.id === 'code' ? firstOpenScreen(answers, order) : screens[index + 1].id);
+    // this person would have landed without a poster. From a screen opened by
+    // Adjust, the same — which is the plan once every question is answered.
+    goTo(nextScreen);
   };
 
   const goBack = () => {
@@ -323,22 +339,23 @@ export default function Onboarding() {
   const serverOpen = refused ?? (ob.plan === null ? ob.missing : []);
   const open = openSetupAnswers(serverOpen, answers);
   const openScreens = [...new Set(open.map((k) => SCREEN_OF_MISSING[k]).filter(Boolean))];
-  // The disclaimer tap is made on screen 8 and Finish is on the last screen
-  // (screen 11 since 4b-ii), so the one thing holding Finish can now be two
-  // screens back. It is named where Finish is, with the way to it, exactly as
-  // an unanswered question is — otherwise the button is simply dead and the
-  // reason is somewhere the person is not looking.
+  // The health step's tap is made on screen 8 and Finish is on the last screen,
+  // your plan, so the one thing holding Finish can be three screens back. It is
+  // named where Finish is, with the way to it, exactly as an unanswered question
+  // is — otherwise the button is simply dead and the reason is somewhere the
+  // person is not looking.
   const toAnswer = [...new Set([...openScreens, ...(agreed ? [] : ['health'])])].filter((id) => id !== screen.id);
-  // The disclaimer tap is the person's own act on this screen, not an answer
-  // the server holds, so it gates Finish here. `hs.saving` is waited for as
-  // `busy` waits for the answers' queue: a health answer shows the moment it is
-  // tapped, so without it a Finish pressed straight after the tap can reach the
-  // server before the answer does and come back "answer the health question"
-  // to somebody who just did.
-  const canFinish = answered && open.length === 0 && agreed && !busy && !hs.saving;
+  // The disclaimer taps are the person's own acts, not answers the server
+  // holds, so they gate Finish here: the health step's, and the plan screen's
+  // on the screen Finish is on. `hs.saving` is waited for as `busy` waits for
+  // the answers' queue: a health answer shows the moment it is tapped, so
+  // without it a Finish pressed straight after the tap can reach the server
+  // before the answer does and come back "answer the health question" to
+  // somebody who just did.
+  const canFinish = answered && open.length === 0 && agreed && planTap.agreed && !busy && !hs.saving;
 
   const View = SCREEN_VIEWS[screen.id];
-  const StepIcon = ICONS[screen.id];
+  const StepIcon = STEP_ICONS[screen.id];
   const progress = screens.length > 1 ? (index / (screens.length - 1)) * 100 : 100;
 
   return (
@@ -406,7 +423,7 @@ export default function Onboarding() {
                 </div>
                 <nav aria-label="Steps" className="flex justify-between">
                   {screens.map((s, i) => {
-                    const Icon = ICONS[s.id];
+                    const Icon = STEP_ICONS[s.id];
                     const here = i === index;
                     const done = !here && screenAnswered(s.id, answers);
                     const open = reachable.has(s.id);
@@ -468,7 +485,7 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                <PlanPanel plan={ob.plan} direction={direction} units={units} />
+                <PlanPanel plan={ob.plan} direction={direction} units={units} note={screen.id !== 'plan'} />
 
                 <motion.div
                   key={`screen-${screen.id}`}
@@ -485,6 +502,9 @@ export default function Onboarding() {
                     direction={direction}
                     health={health}
                     poster={poster}
+                    planNote={planTap}
+                    adjust={adjust}
+                    busy={busy}
                   />
                 </motion.div>
 
@@ -547,7 +567,8 @@ export default function Onboarding() {
                   disabled={!answered || busy}
                   className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Continue
+                  {/* Opened by Adjust, with nothing else open: one tap back. */}
+                  {adjusting && nextScreen === 'plan' ? 'Back to your plan' : 'Continue'}
                   <ChevronRight className="w-4 h-4" />
                 </button>
               )}

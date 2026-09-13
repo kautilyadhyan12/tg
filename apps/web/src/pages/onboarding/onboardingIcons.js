@@ -1,12 +1,14 @@
-// The icons on the onboarding choice cards: clean line icons, never cartoon
-// emoji (Kd, 2026-09-10). Keyed by the shared enums' values; the test pins
-// every key to its enum, so a new goal or kind of equipment cannot reach a
-// screen without an icon.
+// The icons on the onboarding screens and their choice cards: clean line
+// icons, never cartoon emoji (Kd, 2026-09-10). Keyed by the screens' ids and
+// the shared enums' values; the test pins every key to its list, so a new
+// screen, goal or kind of equipment cannot reach a screen without an icon.
 import {
   Apple,
   BicepsFlexed,
   Building2,
   Carrot,
+  ClipboardCheck,
+  Clock,
   createLucideIcon,
   Drumstick,
   Dumbbell,
@@ -20,11 +22,33 @@ import {
   PersonStanding,
   Rocket,
   Sprout,
+  Sun,
+  Target,
+  Ticket,
   TrendingDown,
   TrendingUp,
+  User,
+  Utensils,
   Vegan,
   Weight,
+  Zap,
 } from 'lucide-react';
+
+/** Each screen's icon: on the step bar, beside the screen's title, and on its
+ *  row of the plan screen. */
+export const STEP_ICONS = {
+  goal: Target,
+  about: User,
+  target: TrendingDown,
+  day: Sun,
+  training: Zap,
+  week: Clock,
+  equipment: Dumbbell,
+  health: HeartPulse,
+  food: Utensils,
+  code: Ticket,
+  plan: ClipboardCheck,
+};
 
 // Drawn here, in the library's own 24-unit line style, where it has no icon
 // that means the thing (Kd, 2026-09-10: its wheelchair read as flexibility and
