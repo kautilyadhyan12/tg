@@ -384,7 +384,10 @@ export default function Onboarding() {
           className="border-b border-white/5 px-6 py-3"
           style={{ background: 'rgba(13,12,11,0.55)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' }}
         >
-          <div className="max-w-lg mx-auto">
+          {/* Wider than the screens below it, and the steps in even columns:
+              eleven steps and their names (4c added "Your plan") ran into each
+              other at the screens' width. */}
+          <div className="max-w-2xl mx-auto">
             <div className="flex justify-end gap-4 mb-2">
               {finished && (
                 <button
@@ -421,7 +424,11 @@ export default function Onboarding() {
                     />
                   </div>
                 </div>
-                <nav aria-label="Steps" className="flex justify-between">
+                <nav
+                  aria-label="Steps"
+                  className="grid sm:gap-1"
+                  style={{ gridTemplateColumns: `repeat(${screens.length}, minmax(0, 1fr))` }}
+                >
                   {screens.map((s, i) => {
                     const Icon = STEP_ICONS[s.id];
                     const here = i === index;
@@ -447,7 +454,7 @@ export default function Onboarding() {
                         >
                           {done ? <Check className="w-4 h-4 text-white" /> : <Icon className="w-4 h-4 text-white/60" />}
                         </span>
-                        <span className={`text-xs hidden sm:block ${here ? 'text-primary-400' : 'text-gray-600'}`}>
+                        <span className={`text-xs leading-tight text-center hidden sm:block ${here ? 'text-primary-400' : 'text-gray-600'}`}>
                           {s.title}
                         </span>
                       </button>

@@ -4,18 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-13 · 4c: "Your plan", the last setup screen; Kd: tell them about building muscle, branch `plan-screen`
+## 2026-09-13 · 4c: "Your plan", the last setup screen; Kd: tell them about building muscle, branch `plan-screen`, PR #66
 
-- Built: after "Your code", the plan: the number, "Your workouts" (the week as asked; Safe mode's "not yet" words in its place;
-  "Follow their advice" for a cleared yes), every answer with an Adjust, the plan's note with its tap. Finish is there, waiting for both taps.
-- Adjust opens the screen; its button reads "Back to your plan" and goes to the first open question (the plan when none is). Held during a finish.
+- Built: after "Your code", the plan: the number, "Your workouts" (the week as asked; Safe mode's "not yet" words in its place; "Follow their
+  advice" for a cleared yes), every answer with an Adjust, the plan's note and its tap. Finish is there and waits for both taps.
+- Adjust's screen offers "Back to your plan" (the first open question, else the plan); Adjust is held during a finish. Seen in headless Edge
+  at 1000/700/400 px: eleven step names ran together, so the step bar is wider, in even columns.
 - Kd picked "Tell them" (RULINGS 2026-09-13): Build muscle and a cut eaten over 500 kcal a day raise `cut_limits_muscle_gain`, naming the
-  gentle pace, which screen 3 marks. Calories unchanged. The quote was read from Europe PMC (PMID 34623696) before asking.
-- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan.unit + onboarding and nutrition routes 132/132; web
-  eslint 0 · model 56/56 · onboarding + posterCode 92/92 · full 2101/2101 (poseAssets.contract fails to load, the known local red).
-- 14 deliberate breaks, each red for its own test; the login-door harness's five setup-page anchors still match once.
-- Found and put on ROADMAP: 4d, the sign-up disclaimer tap, was never built (RULINGS 2026-09-07); 5b, the Nutrition rings never say why a plan has no cut.
-- Next: CI, Kd's click-through, the fresh-chat review, merge. Ask Kd whether 4d goes before 7a-i.
+  gentle pace, which screen 3 marks. Calories unchanged. Murphy & Koehler's words were read on Europe PMC (PMID 34623696) before asking.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + onboarding + nutrition 132/132; web eslint 0 · three
+  setup files 148/148 · full 2101/2101 on 4367dfe (poseAssets.contract, the known local red); 14 deliberate breaks all red; login-door anchors match.
+- Found, on ROADMAP: 4d the sign-up disclaimer tap was never built; 5b the Nutrition rings never say why there is no cut. posterCode's "someone
+  already set up lands on the join page" failed once under load, then passed twice. Next: CI, click-through, review, merge; ask Kd if 4d is next.
 
 ## 2026-09-13 · 4b-ii-b re-check fixed and merged (PR #65); Kd: setup asks nothing about running
 
