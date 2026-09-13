@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · The invite card, planned (Fable, plan only — no code); PR #65 still awaits its review
+
+- Kd's click-through of 4b-ii-b passed (*"all passed"*); CI green on PR #65. The fresh-chat review has NOT been run yet.
+- He asked what "Sign in to use your code EMH283" is and where the QR went. Answered: the line says a join link's code was
+  kept through sign-in; no QR exists and nothing in the app makes the join link today (the console shows the code with Copy).
+- He ruled the invite card (RULINGS 2026-09-13): downloaded and put up physically, never social media; a join QR and
+  Android/iPhone QRs; the organisation's logo big (its name when it has none), the app's logo small. The plan is ROADMAP
+  Stage 2 item 13, with three questions to him: the plan and two packages (`qrcode-generator`; `jsqr` for tests only) ·
+  store QRs drawn only once the listings exist (recommended) · order (next, before 4b-iii, recommended).
+- Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat; live code EMH283 (Step 22b Gym 987027).
+- Next: Kd's answers → one more records commit; the review of PR #65 in a fresh chat; fixes; merge; then an Opus chat
+  builds the card off `master` (or 4b-iii, if Kd puts the card later).
+
 ## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
 
 - Kd picked option 1 (RULINGS 2026-09-13): someone not set up meets "Your code" moved to the front of setup, the code filled
