@@ -4,46 +4,42 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii-b review fixed (1 High, 5 Low, 3 weak tests), branch `poster-code`, PR #65
+
+- High: Finish dropped a poster code never sent. Kd picked "Join page, code ready" (RULINGS 2026-09-13): Finish lands on
+  the join page with the code in its box, still unsent; a code already sent finishes to the app as before.
+- Lows: a link with no code now drops an older kept one · `normaliseJoinCode` in `@app/shared` is the one rule for the
+  server's lookup and the web's link · two HANDOFF entries cut to ten lines · ROADMAP Stage 5 item 7 says a QR each.
+- Harnesses: login-door D13 re-aimed at `useConsoleSignOut`, P1–P11 added: 28/28 red. join-door aborted at J1 because six
+  multi-line anchors missed CRLF checkouts; it now follows line endings: 36/36 red. Restores byte-exact.
+- Weak tests: posterCode checks its four copied routes against App.jsx; the Finish test flipped; the shared rule broken on purpose turns shared and api red.
+- Verified: shared tsc 0 · eslint 0 · 103/103; api tsc 0 · eslint 0 · unit 22/22 · the typed-code join test on local
+  Postgres; web eslint 0 · full 2089/2089 (poseAssets.contract fails to load, the known local red); gitleaks clean.
+- Next: the fresh-chat re-check of these fixes; Kd's click-through of the Finish step; CI; merge; then 4b-iii.
+
 ## 2026-09-13 · The invite card, planned (Fable, plan only — no code); PR #65 still awaits its review
 
-- Kd's click-through of 4b-ii-b passed (*"all passed"*); CI green on PR #65. The fresh-chat review has NOT been run yet.
-- He asked what "Sign in to use your code EMH283" is and where the QR went. Answered: the line says a join link's code was
-  kept through sign-in; no QR exists and nothing in the app makes the join link today (the console shows the code with Copy).
-- He ruled the invite card (RULINGS 2026-09-13): downloaded and put up physically, never social media; a join QR and
-  Android/iPhone QRs; the organisation's logo big (its name when it has none), the app's logo small. The plan is ROADMAP
-  Stage 2 item 13, with three questions to him: the plan and two packages (`qrcode-generator`; `jsqr` for tests only) ·
-  store QRs drawn only once the listings exist (recommended) · order (next, before 4b-iii, recommended).
-- Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat; live code EMH283 (Step 22b Gym 987027).
-- Kd then ruled the card is built WITH the phone app, not on the web now (RULINGS amended): Stage 2 item 13 → Stage 5 item 7,
-  simplified to ONE QR (the join link) with the code printed under it (the chat's choice). He asked how US gyms really do
-  it: answered from general knowledge of Mindbody / Glofox / Zen Planner / PushPress — the owner adds the member by email
-  and the software invites them; QR signage is the backup. Recommended, unanswered: Stage 2 items 3 and 5 (roster import,
-  notify) come first in Stage 2 — Kd agreed (*"i agree with you"*; RULINGS 2026-09-13, the Stage 2 order note). He REFUSED
-  the one-QR simplification: the app's QR stays on the card, as big as the join QR, with the app's name (Stage 5 item 7).
-- CI on PR #65: run 34759344217 (records-only commit 18a605b) failed in "drizzle migrations on Neon branch" — `drizzle-kit
-  migrate` exit 1 about a second after connecting, no detail in the log; no migration file differs from master on this
-  branch (`git diff master --stat -- apps/api/drizzle` is empty) and the same job passed three times on it earlier today.
-  The rerun was cancelled by the next push; the run on 4c6c49b passed all five jobs, the migrations job included — a
-  one-off on Neon's side. If it recurs, look at Neon's branch list (one `ci-<run_id>` branch per run) first.
-- Next: CI green; the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
+- Kd's click-through of 4b-ii-b passed (*"all passed"*). He asked what "Sign in to use your code EMH283" is and where the QR
+  went: the line names a join link's kept code; no QR exists, and nothing in the app makes the join link today.
+- He ruled the invite card (RULINGS 2026-09-13): downloaded and put up, never social media; a join QR and a QR each for the
+  Android and iPhone app; the organisation's logo big (its name when it has none), the app's small.
+- Then: built WITH the phone app (Stage 5 item 7). He REFUSED the chat's one-QR simplification: the app's QR stays, as big as
+  the join QR, with the app's name. Stage 2 starts with the email invite (items 3 and 5): Kd agreed (*"i agree with you"*).
+- CI run 34759344217 failed once in "drizzle migrations on Neon branch" with no migration changed on the branch; the next
+  run passed all five jobs. If it recurs, look at Neon's `ci-<run_id>` branches first.
+- Next: the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
 
 ## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
 
-- Kd picked option 1 (RULINGS 2026-09-13): someone not set up meets "Your code" moved to the front of setup, the code filled
-  in, sent only by "Ask to join"; a set-up person lands on the join page with it; the sign-in page says "Sign in to use your
-  code …" (Train door only). Continue from the code goes on to the first open question.
-- Built (no server change): the code is kept in the tab like the door (`CarryJoinCode`; `rememberJoinCode` / `readJoinCode` /
-  `forgetJoinCode`), only a code the server could have made (`linkedJoinCodeSchema`, `@app/shared`); forgotten when sent, at
-  the finish, on reaching the join page and on sign-out.
-- Kd asked where the gym's QR went: never built (the console shows the code big with Copy; no QR, WhatsApp share or poster)
-  and missed at the 09-07 reset. Now ROADMAP Stage 2 item 13; asked "QR next" (recommended; needs a QR package) or "QR later".
+- Kd picked option 1 (RULINGS 2026-09-13): not set up → "Your code" moved to the front of setup, filled in, sent only by
+  "Ask to join"; set up → the join page with it; the sign-in page says "Sign in to use your code …" (Train door only).
+- Built, no server change: the code is kept in the tab like the door (`CarryJoinCode`; `rememberJoinCode` / `readJoinCode` /
+  `forgetJoinCode`), and only a code the server could have made (`linkedJoinCodeSchema`, `@app/shared`).
 - Verified: shared tsc 0 · eslint 0 · 102/102; api tsc 0; web eslint 0 on touched files · full 2080/2080 (poseAssets.contract
-  fails to load, the known local red, `src/hooks` untouched); 20 deliberate breaks, all red; gitleaks clean.
-- `mutate-login-door.mjs` re-anchored (D6/D8/D10 moved here; D8/D9 stale since 09-07) but still aborts at D13 (console
-  sign-out moved to `useConsoleSignOut`); `mutate-join-door.mjs` aborts at J1 — both stale before this card, neither run.
+  fails to load, the known local red); 20 deliberate breaks, all red; gitleaks clean.
+- The gym QR Kd asked about was never built; it became the invite card (the entry above).
 - Local: API 3000 on the LOCAL Postgres, web 5173; live code EMH283 (Step 22b Gym 987027, trialing).
-- CI green on PR #65 (all five jobs). Kd's click-through passed (*"all passed"*); he then asked what the sign-in line and the QR are.
-- Next: a fresh-chat review, fixes, merge; then the QR line if Kd says next, else 4b-iii.
+- CI green on PR #65; Kd's click-through passed (*"all passed"*). Next: a fresh-chat review, fixes, merge.
 
 ## 2026-09-13 · 4b-ii's last fixes: "In 3–4 hours", a reset cannot slip past a finish, tidier records, PR #64
 
