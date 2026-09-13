@@ -23,8 +23,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - CI on PR #65: run 34759344217 (records-only commit 18a605b) failed in "drizzle migrations on Neon branch" — `drizzle-kit
   migrate` exit 1 about a second after connecting, no detail in the log; no migration file differs from master on this
   branch (`git diff master --stat -- apps/api/drizzle` is empty) and the same job passed three times on it earlier today.
-  The failed job was rerun on the same commit; if it fails again, look at Neon's branch list (one `ci-<run_id>` branch per
-  run) before anything else.
+  The rerun was cancelled by the next push; the run on 4c6c49b passed all five jobs, the migrations job included — a
+  one-off on Neon's side. If it recurs, look at Neon's branch list (one `ci-<run_id>` branch per run) first.
 - Next: CI green; the review of PR #65 in a fresh chat; fixes; merge; then 4b-iii. The card waits for Stage 5.
 
 ## 2026-09-13 · 4b-ii-b: a poster's code survives sign-in and setup, "Your code" first (Kd), branch `poster-code`, PR #65
