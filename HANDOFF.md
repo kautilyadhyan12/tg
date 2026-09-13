@@ -4,6 +4,25 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · The click-through of the fixes passed; the plan for Kd's next asks (Fable, planning only — no code)
+
+- Kd's click-through of 2144cda passed (*"as for the tests all passed"*). CI is green on attempt 2 of run
+  34738247155: attempt 1 sat queued for 2 h 25 min with no runner assigned (GitHub Actions "operational" on its
+  status page); `gh run cancel` then `gh run rerun` fixed it — no code change.
+- Kd plans with Fable 5.1 (max) and builds with Opus — *"don't start coding, you just need to make the plan so
+  that Opus can follow"*. This chat wrote the plan into RULINGS, ROADMAP and here, and changed no code.
+- He ruled the post-workout meal ideas' words (RULINGS 2026-08-06, amended again): no "1 hour before bed" on a
+  post-workout card, and no rice-first food for a Western market. The seven lines, with their diet swaps, are on
+  ROADMAP 4b-ii; Opus changes them on this branch before the re-check.
+- He asked for options on the dashboard's Recommended box — Exercise · Food · Running — each showing its kind
+  (RULINGS 2026-09-13): ROADMAP 7a-ii, built with 7a's engine; Exercise joins at 6b, Running at 7b. Two questions
+  for him sit on that line (the design as read; whether the web shows the week's runs). Asked in chat, unanswered.
+- Local: API 3000 on the LOCAL Postgres and web 5173 running from this chat. Accounts: `kd.meals.0913@example.com`
+  (finished, vegan, one 560 kcal workout, id `f45b13f5-2316-4fe9-a77c-26112c01bd3e`) and `kd.code.0913@example.com`
+  (setup unfinished, a refused request to join `2LY3BZ`); the sign-in code prints in the API log.
+- Next: an Opus chat on this branch — the wording change, checks, push, then it hands Kd the re-check prompt;
+  a fresh chat re-checks 2144cda + that commit; merge; then 4b-ii-b, 4b-iii, 4c, 7a-i, 7a, 7a-ii, 7c.
+
 ## 2026-09-13 · 4b-ii's review fixed (two High, four Low, five weak tests), branch `food-and-gym-code`, PR #64
 
 - Kd ruled the clash between "ported word for word" and "every meal suggestion respects the diet": the meal ideas
