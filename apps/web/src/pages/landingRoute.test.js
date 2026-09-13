@@ -12,9 +12,13 @@ import {
   GYM_DOOR,
   MEMBER_DOOR,
   forgetDoor,
+  forgetJoinCode,
+  joinPageFor,
   landingRoute,
   readDoor,
+  readJoinCode,
   rememberDoor,
+  rememberJoinCode,
 } from './landingRoute';
 
 const read = (name) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), 'utf8');
@@ -82,6 +86,108 @@ describe('landingRoute picks the screen the door promised', () => {
     expect(landingRoute(done, undefined)).toBe('/dashboard');
     expect(landingRoute(done, 'owner')).toBe('/dashboard');
     expect(landingRoute(done, '/console')).toBe('/dashboard');
+  });
+});
+
+describe('landingRoute with a poster code kept through sign-in', () => {
+  const done = { onboardingCompleted: true };
+
+  it('sends someone already set up to the join page, the code in the address', () => {
+    expect(landingRoute(done, MEMBER_DOOR, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
+    expect(landingRoute(done, null, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
+  });
+
+  it('sends someone not set up into setup, which puts the code first', () => {
+    expect(landingRoute({ onboardingCompleted: false }, MEMBER_DOOR, 'K7QM2X')).toBe('/onboarding');
+  });
+
+  it('still sends the gym door to the console', () => {
+    expect(landingRoute(done, GYM_DOOR, 'K7QM2X')).toBe('/console');
+    expect(landingRoute({ onboardingCompleted: false }, GYM_DOOR, 'K7QM2X')).toBe('/console');
+  });
+
+  it('fails open to the join page when the onboarding flag is missing, as it does to the dashboard', () => {
+    expect(landingRoute({}, MEMBER_DOOR, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
+  });
+
+  it('never builds an address from something that is not a code', () => {
+    expect(landingRoute(done, MEMBER_DOOR, null)).toBe('/dashboard');
+    expect(landingRoute(done, MEMBER_DOOR, '')).toBe('/dashboard');
+    expect(landingRoute(done, MEMBER_DOOR, 'K7QM2X&next=/console')).toBe('/dashboard');
+    expect(landingRoute(done, MEMBER_DOOR, '//evil.example')).toBe('/dashboard');
+  });
+});
+
+describe('the poster code survives the trip through sign-in', () => {
+  it('keeps a code in capitals and reads it back', () => {
+    const store = fakeStore();
+    expect(rememberJoinCode(' k7q-m2x ', store)).toBe(true);
+    expect(readJoinCode(store)).toBe('K7QM2X');
+  });
+
+  it('lets a newer poster replace an older one', () => {
+    const store = fakeStore();
+    rememberJoinCode('AAAAAA', store);
+    rememberJoinCode('K7QM2X', store);
+    expect(readJoinCode(store)).toBe('K7QM2X');
+  });
+
+  it('keeps nothing that is not a code', () => {
+    const store = fakeStore();
+    for (const bad of [null, undefined, '', 'K7QM2', 'CALL US NOW', 'K7QM2I', 42]) {
+      expect(rememberJoinCode(bad, store)).toBe(false);
+    }
+    expect(store.size()).toBe(0);
+  });
+
+  // The newest link is the one the person means. An older code left behind
+  // would be named on the sign-in page and land them on it.
+  it('drops an earlier code when a newer link carries no code, or none that is a code', () => {
+    for (const bad of [null, undefined, '', 'not a code', 'K7QM2I']) {
+      const store = fakeStore();
+      rememberJoinCode('AAAAAA', store);
+      expect(rememberJoinCode(bad, store)).toBe(false);
+      expect(readJoinCode(store)).toBeNull();
+      expect(store.size()).toBe(0);
+    }
+  });
+
+  it('drops an earlier code when this browser will not store the newer one', () => {
+    const store = fakeStore({ aihg_join_code: 'AAAAAA' });
+    const full = { ...store, setItem: () => { throw new Error('quota'); } };
+    expect(rememberJoinCode('K7QM2X', full)).toBe(false);
+    expect(readJoinCode(store)).toBeNull();
+  });
+
+  it('builds the join page only from a code', () => {
+    expect(joinPageFor('k7qm2x')).toBe('/org/join?code=K7QM2X');
+    for (const bad of [null, undefined, '', 'K7QM2X&next=/console', '//evil.example']) {
+      expect(joinPageFor(bad)).toBeNull();
+    }
+  });
+
+  it('reads a stored value that is not a code as no code', () => {
+    expect(readJoinCode(fakeStore({ aihg_join_code: 'Call 555 0100' }))).toBeNull();
+    expect(readJoinCode(fakeStore({ aihg_join_code: '' }))).toBeNull();
+    expect(readJoinCode(fakeStore())).toBeNull();
+  });
+
+  it('forgets the code when asked', () => {
+    const store = fakeStore();
+    rememberJoinCode('K7QM2X', store);
+    expect(forgetJoinCode(store)).toBe(true);
+    expect(readJoinCode(store)).toBeNull();
+  });
+
+  it('reports rather than throws when the browser has no usable storage', () => {
+    expect(readJoinCode()).toBeNull();
+    expect(rememberJoinCode('K7QM2X')).toBe(false);
+    expect(forgetJoinCode()).toBe(false);
+
+    const denied = throwingStore();
+    expect(rememberJoinCode('K7QM2X', denied)).toBe(false);
+    expect(readJoinCode(denied)).toBeNull();
+    expect(forgetJoinCode(denied)).toBe(false);
   });
 });
 

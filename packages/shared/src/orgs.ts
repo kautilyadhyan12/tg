@@ -55,6 +55,19 @@ export type OrgStatus = z.infer<typeof orgStatusSchema>;
 export const JOIN_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const JOIN_CODE_LENGTH = 6;
 
+/** What a human typed off a poster → what is stored. The server's lookup and
+ *  the web's poster link (`linkedJoinCodeSchema`) both clean a code with this
+ *  one function, so the two cannot disagree about what a code is.
+ *
+ *  Case, spaces and dashes only. There is deliberately NO look-alike
+ *  substitution (0→O, 1→I): those characters are not IN the alphabet, so
+ *  "correcting" them would be guessing at an intent the code cannot confirm,
+ *  and a wrong guess joins somebody to the wrong gym. An unrecognised code
+ *  gets an honest "no such code" instead. */
+export function normaliseJoinCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[\s-]/g, "");
+}
+
 /** KD RULING 2026-08-18: *"no inr default wil update according to location for
  *  now usa india candan and europe later"*.
  *
@@ -1146,6 +1159,22 @@ export const joinOrgRequestSchema = z
   })
   .strict();
 export type JoinOrgRequest = z.infer<typeof joinOrgRequestSchema>;
+
+/** The code a poster link carries (`/org/join?code=…`), which the web keeps
+ *  through sign-in and setup and prints on the sign-in page. A link is made by
+ *  the app, so it only ever holds a code the server generated: exactly
+ *  `JOIN_CODE_LENGTH` symbols of `JOIN_CODE_ALPHABET`, once cleaned by the
+ *  server's own lookup rule (`normaliseJoinCode`). Anything else is not kept,
+ *  so an edited link cannot put its own words on the sign-in page. */
+export const linkedJoinCodeSchema = z
+  .string()
+  .transform(normaliseJoinCode)
+  .pipe(
+    z
+      .string()
+      .length(JOIN_CODE_LENGTH)
+      .regex(new RegExp(`^[${JOIN_CODE_ALPHABET}]+$`)),
+  );
 
 export const membershipSchema = z.object({
   id: z.string().uuid(),

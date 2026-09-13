@@ -100,6 +100,15 @@ const TARGETS = {
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
+/** ANCHORS ARE WRITTEN WITH LF AND MATCHED AGAINST THE FILE'S OWN LINE ENDINGS,
+ *  as `mutate-login-door.mjs` already does. Found 2026-09-13: git checks these
+ *  files out with CRLF on Windows (`core.autocrlf`), so every anchor spanning a
+ *  line break (J1, J2, J8, J23, J32, J34) matched nothing and the harness
+ *  aborted at J1 before a byte was written. The anchor is converted, never the
+ *  file, so a mutant differs from the original only at its own line. */
+const eolOf = (text) => (text.includes('\r\n') ? '\r\n' : '\n');
+const withEolOf = (snippet, text) => snippet.replace(/\r\n/g, '\n').replace(/\n/g, eolOf(text));
+
 const MUTANTS = [
   {
     id: 'J1',
@@ -508,7 +517,7 @@ const originals = new Map(
 // chat hunting a hole that was never there (:5199, :8610, and twice more since).
 for (const m of MUTANTS) {
   const original = originals.get(m.target);
-  if (!original.text.includes(m.from)) {
+  if (!original.text.includes(withEolOf(m.from, original.text))) {
     abort(
       `${m.id}: its anchor matches nothing in '${m.target}'. Nothing has been written yet. ` +
       `Re-anchor it against the current file — a no-op mutation reports as ALIVE, which reads as "this guarantee has no test".`,
@@ -562,7 +571,7 @@ const results = [];
 for (const m of MUTANTS) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
-  const mutated = original.text.replace(m.from, m.to);
+  const mutated = original.text.replace(withEolOf(m.from, original.text), withEolOf(m.to, original.text));
   if (mutated === original.text) {
     abort(`${m.id}: its anchor matched nothing at apply time. Re-anchor it against the current file.`);
   }

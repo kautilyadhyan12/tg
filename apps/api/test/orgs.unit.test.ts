@@ -1,6 +1,7 @@
 // Orgs — pure helper unit suite (no database). Covers the join-code alphabet
 // rule (Part 3 §4.0 step 4), the normalisation a poster-typed code goes
 // through, and slug derivation for the worldwide names Part 3 §6.3 promises.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   COUNTRY_CURRENCY,
@@ -8,11 +9,11 @@ import {
   JOIN_CODE_LENGTH,
   SUPPORTED_COUNTRIES,
   currencyForCountry,
+  normaliseJoinCode,
 } from "@app/shared";
 import {
   RESERVED_SLUGS,
   codeFromBytes,
-  normaliseCode,
   slugCandidate,
   slugifyName,
 } from "../src/modules/orgs/codes.js";
@@ -59,18 +60,29 @@ describe("join code alphabet (Part 3 §4.0 step 4)", () => {
   });
 });
 
-describe("normaliseCode", () => {
+describe("normaliseJoinCode (from @app/shared: the server's lookup and the web's poster link)", () => {
   it("accepts what a human actually types off a poster", () => {
-    expect(normaliseCode(" 24kq7b ")).toBe("24KQ7B");
-    expect(normaliseCode("24K-Q7B")).toBe("24KQ7B");
-    expect(normaliseCode("24 KQ 7B")).toBe("24KQ7B");
+    expect(normaliseJoinCode(" 24kq7b ")).toBe("24KQ7B");
+    expect(normaliseJoinCode("24K-Q7B")).toBe("24KQ7B");
+    expect(normaliseJoinCode("24 KQ 7B")).toBe("24KQ7B");
   });
 
   it("does NOT substitute look-alikes — a guess would join the wrong gym", () => {
     // 0 and O are both outside the alphabet; turning one into the other would
     // be inventing an intent the code cannot confirm.
-    expect(normaliseCode("240Q7B")).toBe("240Q7B");
-    expect(normaliseCode("24IQ7B")).toBe("24IQ7B");
+    expect(normaliseJoinCode("240Q7B")).toBe("240Q7B");
+    expect(normaliseJoinCode("24IQ7B")).toBe("24IQ7B");
+  });
+
+  // An exact copy of the rule behaves the same as a call to it, so no request
+  // can tell them apart; this reads the join lookup's own source instead.
+  it("is what the join lookup hands the repo, not a copy of its rule", () => {
+    const service = readFileSync(new URL("../src/modules/orgs/service.ts", import.meta.url), "utf8");
+    const start = service.indexOf("export async function applyToOrg(");
+    expect(start).toBeGreaterThan(-1);
+    const lookup = service.slice(start, service.indexOf("switch (outcome.kind)", start));
+    expect(lookup).toContain("repo.applyByCode(");
+    expect(lookup).toContain("code: normaliseJoinCode(req.code),");
   });
 });
 

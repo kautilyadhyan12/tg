@@ -52,8 +52,8 @@ const TARGETS = {
   repo: { file: resolve(ROOT, 'apps/api/src/modules/orgs/repo.ts') },
   service: { file: resolve(ROOT, 'apps/api/src/modules/orgs/service.ts') },
   codes: { file: resolve(ROOT, 'apps/api/src/modules/orgs/codes.ts') },
-  // The country→currency map is a CONTRACT, shared with the console's country
-  // picker, so it lives in @app/shared and is mutated there. The api suite
+  // The country→currency map, the org types and the join-code rule are CONTRACTS
+  // shared with the web, so they live in @app/shared and are mutated there. The api suite
   // imports the workspace source directly, so no build step sits in between.
   shared: { file: resolve(ROOT, 'packages/shared/src/orgs.ts') },
   // THE ROUTE-LEVEL PARSERS, and they were unreachable from this harness until
@@ -342,12 +342,12 @@ const MUTANTS = [
     target: 'service',
     why: 'OWNERSHIP: the clinic/studio trainer hold-back goes, so a trainer reads every caseload in a clinic with no scoping built yet',
     expect: 'holds a studio trainer back',
-    from: '  if (role === "trainer" && org.orgType !== "gym") {',
+    from: '  if (role === "trainer" && org.orgType !== "gym" && org.orgType !== "personal_trainer") {',
     to: '  if (role === "trainer" && org.orgType === "zzz_never") {',
   },
   {
     id: 'O11',
-    target: 'codes',
+    target: 'shared',
     why: 'FALSE ON SCREEN: codes stop being normalised, so a code typed off a poster in lower case is answered "that code does not match any gym"',
     expect: 'typing a code APPLIES',
     from: '  return raw.trim().toUpperCase().replace(/[\\s-]/g, "");',
@@ -437,8 +437,8 @@ const MUTANTS = [
     target: 'shared',
     why: "KD RULING RESTORED-AWAY: clinics can be created again, against his 2026-08-18 ruling that the product is gyms and fitness centres only",
     expect: 'refuses to create a clinic',
-    from: 'export const createOrgTypeSchema = z.enum(["gym", "studio"]);',
-    to: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "clinic"]);',
+    from: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer"]);',
+    to: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer", "clinic"]);',
   },
   {
     id: 'O20',
@@ -961,8 +961,8 @@ const MUTANTS = [
     id: 'O59',
     target: 'service',
     why: "PRIVILEGE: code management drops to the INVITE tick, which §2.2 grants all three roles — so a trainer, who may hand out a poster, can switch the gym's door off instead",
-    from: '  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
-    to: '  await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    from: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
     expect: 'refuses a TRAINER',
   },
   {
@@ -1076,8 +1076,8 @@ const MUTANTS = [
     id: 'O70',
     target: 'service',
     why: "PRIVILEGE: tidying a code away drops to the INVITE tick, which §2.2 grants all three roles — so a trainer can make a gym's codes disappear from the owner's screen",
-    from: '  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n\n  const outcome = await repo.removeCode(deps.sql, {',
-    to: '  await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    from: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
     expect: 'refuses a TRAINER',
   },
 
@@ -1175,8 +1175,8 @@ const MUTANTS = [
     id: 'O79',
     target: 'service',
     why: "OWNERSHIP: staff management drops to the members tick, which §2.2 grants all three roles — so a TRAINER can appoint themselves manager, or take the owner's keys",
-    from: '  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.addStaff(deps.sql, {',
-    to: '  await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    from: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.addStaff(deps.sql, {',
     // STALE FILTER, FOUND 2026-08-29 WHILE RE-AIMING THIS ROW and fixed because
     // the re-aim is unmeasurable without it. It named "four staff routes"; the
     // test has said FIVE since the privileges route was added beside the other
@@ -1459,8 +1459,8 @@ const MUTANTS = [
     // guard that EXISTS, which is the lesson :14745 recorded when Kd's browser
     // found what no mutant could.
     why: "THE ROUTE'S GATE: changing somebody's ticks stops needing `staff.manage` and accepts `members.read`, which every trainer holds — so any staff member reaches the route at all. Necessary and NOT sufficient on its own: what stops a granted manager escalating is O102's refusal, not this gate",
-    from: '  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
-    to: '  await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    from: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
     expect: 'refused all five staff routes with 403',
   },
   {
@@ -1617,8 +1617,9 @@ const MUTANTS = [
     id: 'O115',
     target: 'service',
     why: "THE DOOR ITSELF: the privilege check comes off the edit route, so any trainer — and any member of any gym — can rename somebody else's gym and change the money it is billed in. `requirePrivilege` is what makes 404 and 403 mean what they mean here",
-    from: '  await requireWritablePrivilege(deps, gymId, userId, "org.manage");\n\n  const patch: repo.OrgPatch = {};',
-    to: '  const patch: repo.OrgPatch = {};',
+    // `org` is still read, with no check, because the currency refusal below names the org's type.
+    from: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "org.manage");\n\n  const patch: repo.OrgPatch = {};',
+    to: '  const org = await repo.getOrgById(deps.sql, gymId);\n\n  const patch: repo.OrgPatch = {};',
     expect: 'refuses everybody who is not this gym',
   },
   {
@@ -1987,8 +1988,8 @@ const MUTANTS = [
     suite: PLANS_SUITE,
     why: "OWNERSHIP: the price list drops to a privilege every TRAINER holds, so anybody the gym has hired can read what the gym is quoted. It is the same seam :15534's C/H-1 was, and Kd's ruling of 2026-08-28 is that this prompt stops only the person who can actually pay",
     expect: 'a trainer is refused the price list',
-    from: 'const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");',
-    to: 'const { org } = await requirePrivilege(deps, gymId, userId, "members.read");',
+    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);',
+    to: '  const { org } = await requirePrivilege(deps, gymId, userId, "members.read");\n  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);',
   },
   {
     id: 'O147',
@@ -2102,8 +2103,8 @@ const MUTANTS = [
     target: 'service',
     why: "THE WHOLE CARD, DELETED: the refusal never fires, so a gym whose trial ended keeps a fully working console — it issues join codes, confirms new members and edits its own details while granting those members nothing. That is the state Kd's ruling exists to remove, and the one the money hole was measured in (:22215 §2)",
     expect: 'refuses every console write',
-    from: '    throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);',
-    to: '    void GYM_NOT_ON_PLAN_MESSAGE;',
+    from: '    throw new OrgsError(409, "gym_not_on_plan", notOnPlanMessage(authorised.org.orgType));',
+    to: '    void notOnPlanMessage;',
   },
   {
     id: 'O155',
@@ -2150,8 +2151,8 @@ const MUTANTS = [
     target: 'service',
     why: "THE WAY OUT IS GATED ON BEING OUT: the trial door itself refuses a gym with no plan, so the one action left to a lapsed gym is the one it cannot take. That is :22215 §4's brick wall built by hand — the console says subscribe, and subscribing is refused because the gym has not subscribed",
     expect: 'READS and the pay path keep working',
-    from: '  await requirePrivilege(deps, gymId, userId, "billing.manage");',
-    to: '  await requireWritablePrivilege(deps, gymId, userId, "billing.manage");',
+    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });',
   },
 
   // ── THE HELD REQUEST (Kd 2026-08-29, :24141 §1) ──────────────────────────
@@ -2370,7 +2371,7 @@ const MUTANTS = [
     target: 'service',
     why: "A CLOSED GYM STAYS WRITABLE: the console's write gate stops asking whether the gym is closed and asks only about the plan, so the day :19016's admin panel suspends a fraudulent gym that is still paying, that gym carries on issuing join codes and admitting members through every one of its twelve write doors. Every other gate in this module asks about the PLAN and not about the GYM, which is why this line is the only thing standing there",
     expect: 'a CLOSED gym refuses a console write',
-    from: '  if (authorised.org.status !== "active") {\n    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);\n  }\n',
+    from: '  if (authorised.org.status !== "active") {\n    throw new OrgsError(409, "org_archived", archivedMessage(authorised.org.orgType));\n  }\n',
     to: '',
   },
   {
@@ -2763,8 +2764,8 @@ const MUTANTS = [
     suite: ATTENDANCE_SUITE,
     why: "OWNERSHIP: the live-membership check goes, so ANY signed-in stranger holding a gym's uuid can mark themselves present at it - and a REMOVED member keeps marking for ever. The gym's numbers stop being about its members",
     expect: 'a REMOVED member cannot mark',
-    from: '  if (org === null || !member) {\n    throw new OrgsError(404, "org_not_found", "Gym not found.");\n  }\n  if (org.status === "archived") {',
-    to: '  if (org === null) {\n    throw new OrgsError(404, "org_not_found", "Gym not found.");\n  }\n  if (org.status === "archived") {',
+    from: '  if (org === null || !member) {\n    throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);\n  }\n  if (org.status === "archived") {',
+    to: '  if (org === null) {\n    throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);\n  }\n  if (org.status === "archived") {',
   },
   {
     id: 'O212',
@@ -3321,8 +3322,8 @@ const MUTANTS = [
     suite: CHEERS_SUITE,
     why: "THE REFUSAL GOES BACK TO ACCUSING THE READER. The cap is per GYM - the lookup filters gym_id and user_id and nothing else - so You've already cheered this member today is FALSE for the second staffer on the desk, who is told they did something a colleague did. It is :5807 exactly: a sentence a user can see that is not true, and it shipped in the card (T3 round 1, C/H-4). The window it names has moved since: a ROLLING seven days when this row was written, and the gym's calendar DAY since Kd's :35762 - which is why the mutant swaps the PRONOUN and leaves the day word alone",
     expect: "tells a second staffer what happened",
-    from: '      throw new OrgsError(409, "cheer_already_sent", "This member has already been cheered today.");',
-    to: '      throw new OrgsError(409, "cheer_already_sent", "You\'ve already cheered this member today.");',
+    from: '        `This ${orgWords(org.orgType).person} has already been cheered today.`,',
+    to: '        `You\'ve already cheered this ${orgWords(org.orgType).person} today.`,',
   },
   // -- KD'S ONE-PER-GYM-DAY CAP (2026-09-05, :35762) ------------------------
   {

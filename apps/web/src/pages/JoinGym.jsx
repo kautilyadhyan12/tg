@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ORG_TYPES_PHRASE } from '@app/shared';
 import JoinGymPanel from '../components/gym/JoinGymPanel';
+import { forgetJoinCode } from './landingRoute';
 
 // `/org/join?code=…` — the address a gym's poster points at.
 //
@@ -15,15 +17,19 @@ import JoinGymPanel from '../components/gym/JoinGymPanel';
 // applied on their behalf would mean a QR taped to a wall could enrol whoever
 // scanned it out of curiosity.
 //
-// KNOWN GAP, tracked rather than papered over: this address needs you to be
-// signed in. Someone who scans the poster while signed out is sent to the login
-// page and the code is lost on the way, because the sign-in path decides where
-// you land on its own (the two-doors ruling) and does not carry a destination.
-// Fixing that touches the login door, so it is its own line on OWED.md.
+// This address needs a signed-in, set-up person. Anyone else is sent to sign in
+// or into setup, and `CarryJoinCode` keeps the code for them on the way: signing
+// in lands a set-up person back here with it, and setup puts it first. Arriving
+// here is where a kept code was headed, so it is forgotten now — the address
+// holds it from here on.
 
 export default function JoinGym() {
   const [params] = useSearchParams();
   const code = params.get('code') ?? '';
+
+  useEffect(() => {
+    forgetJoinCode();
+  }, []);
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">

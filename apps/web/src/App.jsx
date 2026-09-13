@@ -4,7 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { TransitionProvider } from './context/TransitionContext';
 import { RunProvider } from './context/RunContext';
 import RunMiniBar from './components/running/RunMiniBar';
-import { ProtectedRoute, PublicRoute } from './components/common/ProtectedRoute';
+import { CarryJoinCode, ProtectedRoute, PublicRoute } from './components/common/ProtectedRoute';
 import AppLayout from './components/common/AppLayout';
 
 // Pages
@@ -163,11 +163,14 @@ export default function App() {
                 it ("member enters code at registration or in Settings").
                 NOTHING is added to the sidebar: this is a member joining a gym,
                 not a way into the gym console (Kd ruling 2026-08-19 shut that
-                crossing in both directions). */}
+                crossing in both directions). `CarryJoinCode` keeps the code for
+                somebody the guard sends to sign in or into setup. */}
             <Route path="/org/join" element={
-              <ProtectedRoute>
-                <AppLayout><JoinGym /></AppLayout>
-              </ProtectedRoute>
+              <CarryJoinCode>
+                <ProtectedRoute>
+                  <AppLayout><JoinGym /></AppLayout>
+                </ProtectedRoute>
+              </CarryJoinCode>
             } />
 
             {/* ── Running ───────────────────────────────────────────────── */}
