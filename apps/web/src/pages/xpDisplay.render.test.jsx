@@ -28,6 +28,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { FOOD_ALLERGY_CAUTION } from '@app/shared';
 
 // Only the NETWORK functions are mocked. readXpView / readStatsView /
 // readOverviewView / orUnknown / formatLevel — every piece of logic that decides
@@ -2606,6 +2607,29 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // ROUND 3 F5: this is the ONLY state where all four `.map` bodies execute
     // with content, and it was one of the four missing the sweep.
     expect(container.textContent).not.toMatch(/undefined|NaN|null/);
+  });
+
+  it('puts the food-allergy caution under the meal ideas, and only where there are ideas (RULINGS 2026-09-09)', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_LISTS });
+    renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+    // In the meal card itself, after the idea it cautions about.
+    const idea = screen.getByText('Paneer bhurji + rice');
+    const caution = screen.getByText(FOOD_ALLERGY_CAUTION);
+    expect(idea.closest('.card')).toBe(caution.closest('.card'));
+    expect(idea.compareDocumentPosition(caution) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+
+    // No ideas, nothing to caution about: an empty list, and a list the
+    // reader could not read ("Suggestions unavailable").
+    for (const data of [SUMMARY, SUMMARY_BAD_LISTS]) {
+      workoutService.getSummary.mockResolvedValue({ data });
+      renderPostWorkout();
+      await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+      expect(screen.queryByText(FOOD_ALLERGY_CAUTION)).toBeNull();
+      cleanup();
+    }
   });
 
   it('lists arriving as strings do not blank the page', async () => {

@@ -104,7 +104,7 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
   };
 
   const inject = (opts: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PATCH";
     url: string;
     body?: unknown;
     access?: string;
@@ -330,7 +330,7 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(smallBody.personalRecords).not.toContain("Longest workout session!");
   });
 
-  it("meal ideas follow the workout's OWN calorie band", { timeout: 30_000 }, async () => {
+  it("meal ideas follow the workout's OWN calorie band, and the person's diet as it is now", { timeout: 60_000 }, async () => {
     // An hour of jump_squat (met 8.0, 70 kg fallback) = 8 × 70 × 1 h = 560 kcal,
     // which clears the >400 band; the tiny workout above sits in the low one.
     // Same account, different answers — which is the whole point of the card:
@@ -339,10 +339,34 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     // MIDDLE band — the arithmetic, not the code, was wrong.)
     const hot = crypto.randomUUID();
     await sync(hot, daysAgoIso(1), [engineSet(1, { durationMs: 3_600_000, exercise: "jump_squat" })], cookieA);
+    const ideas = async (access: string) =>
+      workoutSummarySchema.parse((await summary(hot, access)).json()).mealSuggestions.map((s) => s.meal);
+    /** Screen 9's diet, saved as the screen saves it. */
+    const eat = async (access: string, diet: string | null) => {
+      const res = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet }, access });
+      expect(res.statusCode, res.body).toBe(200);
+    };
+
+    // A non-vegetarian reads the ported words (RULINGS 2026-08-06).
+    await eat(cookieA, "non_vegetarian");
     const hotBody = workoutSummarySchema.parse((await summary(hot, cookieA)).json());
     expect(hotBody.caloriesBurned ?? 0).toBeGreaterThan(400);
     expect(hotBody.mealSuggestions).toHaveLength(3);
     expect(hotBody.mealSuggestions[0]?.meal).toBe("Protein shake + banana");
+    expect(hotBody.mealSuggestions[1]?.meal).toBe("Grilled chicken + rice + vegetables");
+
+    // Another person's diet reaches nobody else's ideas.
+    await eat(cookieB, "vegan");
+    expect(await ideas(cookieA)).toContain("Grilled chicken + rice + vegetables");
+
+    // A vegan is never offered the chicken (RULINGS 2026-09-13), and a diet
+    // changed since the workout is the one the ideas follow.
+    const plant = ["Plant protein shake + banana", "Grilled tofu + rice + vegetables", "Soy yogurt with berries"];
+    await eat(cookieA, "vegan");
+    expect(await ideas(cookieA)).toEqual(plant);
+    // No answer is never a guess at meat: the ideas every diet can eat.
+    await eat(cookieA, null);
+    expect(await ideas(cookieA)).toEqual(plant);
   });
 
   it("CROSS-TENANT: another user's workout is 404, byte-identical to an unknown id (R3.2)", { timeout: 30_000 }, async () => {

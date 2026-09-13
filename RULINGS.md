@@ -99,7 +99,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-08-08 · The object-detector idea is dropped. *"yeah drop my idea"* [archive :6489]
 - 2026-08-01 · Hand-logged workouts earn the base workout XP. The workout's engine version means the client's build. [archive :3151, :3298]
 - 2026-07-24 · XP and levels are kept, with storage added; the level curve is ported verbatim. [archive :1020]
-- 2026-08-06 · Post-workout summary content is ported verbatim. [archive :5473]
+- 2026-08-06 · Post-workout summary content is ported verbatim. [archive :5473] **AMENDED 2026-09-13**: its meal ideas follow the diet (RULINGS 2026-09-10) — the same calorie bands and timings, a food the diet rules out swapped for one it allows (a vegan gets grilled tofu for the chicken, soy yogurt for the Greek yogurt), the ported words for a non-vegetarian. *"Follow the diet (Recommended)"*
 - 2026-07-09 · Camera parity gate for the first three exercises: the nine recorded clips green is enough (option B). [archive :53]
 
 ## Nutrition

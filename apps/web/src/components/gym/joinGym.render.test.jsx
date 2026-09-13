@@ -143,6 +143,11 @@ describe('the join panel', () => {
     // The ordinary answer keeps the front-desk sentence — the positive control
     // for the held case below (:7104's PG1).
     expect(screen.getByText(/ask them now/i)).toBeTruthy();
+    // The way back to the app, wherever the panel is drawn without being told
+    // otherwise — `/org/join` and Settings → Gym. Only onboarding's screen 11,
+    // where the dashboard sends an unfinished account straight back, turns it
+    // off (its own test, onboarding.render.test.jsx).
+    expect(screen.getByRole('link', { name: /back to your dashboard/i }).getAttribute('href')).toBe('/dashboard');
   });
 
   // ── APPLYING TO A GYM THAT CANNOT CONFIRM ANYBODY (Kd, :24141 §1) ─────────
@@ -541,6 +546,21 @@ describe('the gym card on the dashboard', () => {
       expect(screen.getByText(/iron house didn't confirm your request/i)).toBeTruthy(),
     );
     expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
+  });
+
+  it('on a screen that already has the code box, Try again goes to it instead of leaving', async () => {
+    // Onboarding's screen 11: the join door's address would send an unfinished
+    // account straight back to setup, so the screen hands the card its own way.
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, status: 'expired', org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    const toCodeBox = vi.fn();
+    draw(<GymMembershipCard onTryAgain={toCodeBox} />);
+    const again = await screen.findByRole('button', { name: /try again/i });
+    expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
+    fireEvent.click(again);
+    expect(toCodeBox).toHaveBeenCalledTimes(1);
   });
 
   /** ROADMAP 2b on the three rows themselves. `gymStatusRows` carries the

@@ -2,7 +2,7 @@
 // 2026-09-10). Every tap and every wheel saves at once through `save`; the one
 // typed box, the name, saves when the person leaves it. Nothing here decides a
 // number: the plan panel shows the server's.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, ORG_TYPES_PHRASE, patchOnboardingRequestSchema } from '@app/shared';
 import GymMembershipCard from '../../components/gym/GymMembershipCard';
@@ -698,9 +698,14 @@ export function HealthScreen({ health }) {
 // ── Screen 9 ────────────────────────────────────────────────────────────────
 // Food: the diet and how many meals a day (RULINGS 2026-09-10). NO cuisine
 // question and no cuisine data (RULINGS 2026-09-12). Neither answer moves a
-// calorie — the meal suggestions (7a) are what read them — but both are needed
-// before setup can finish: guessing a diet would put meat in front of a
-// vegetarian, and unanswered is never a default (RULINGS 2026-07-15).
+// calorie — the meal ideas after a workout follow the diet, and the meal
+// suggestions (7a) will read both — but both are needed before setup can
+// finish: guessing a diet would put meat in front of a vegetarian, and
+// unanswered is never a default (RULINGS 2026-07-15).
+//
+// Every line here is true TODAY. Nothing yet shares a day's food across the
+// meals a day, so the hint under that question says how to count and promises
+// nothing about what the answer does.
 export function FoodScreen({ answers, save }) {
   const pill = (pressed) =>
     `py-3 rounded-xl border-2 font-bold transition-all text-sm ${
@@ -737,7 +742,7 @@ export function FoodScreen({ answers, save }) {
             </button>
           ))}
         </div>
-        <p className="text-gray-400 text-xs mt-2">Snacks count. Your day&apos;s food is shared across these.</p>
+        <p className="text-gray-400 text-xs mt-2">Snacks count.</p>
       </div>
     </div>
   );
@@ -755,16 +760,32 @@ export function FoodScreen({ answers, save }) {
 //
 // IT ASKS FOR NOTHING. Most people have no code, so this screen never holds
 // Continue or Finish (`screenAnswered`), and the server's finish check has no
-// word for it either. `dashboardLink={false}`: the panel's usual "Back to your
-// dashboard" is a dead end mid-setup — `ProtectedRoute` sends an unfinished
-// account straight back here — and Continue is the way on from this screen.
+// word for it either.
+//
+// NO LINK HERE LEAVES SETUP. `ProtectedRoute` sends an unfinished account
+// straight back to the wizard, so a link out would look like a way on and be a
+// loop. The panel's "Back to your dashboard" is not offered
+// (`dashboardLink={false}`), and the card's "Try again" on a refused or expired
+// request puts the cursor in the code box just below instead of linking to the
+// join door's own address (`onTryAgain`).
 export function CodeScreen() {
   const [applied, setApplied] = useState(0);
+  const panel = useRef(null);
+  const toCodeBox = () => {
+    const box = panel.current?.querySelector('#gym-join-code');
+    // After a code is sent the panel shows its answer instead of the box, and
+    // its own "Enter a different code" is then what the person is shown.
+    const target = box ?? panel.current;
+    box?.focus();
+    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  };
   return (
     <div className="space-y-4">
       <Question>Have a code from your {ORG_TYPES_PHRASE}?</Question>
-      <GymMembershipCard refreshToken={applied} />
-      <JoinGymPanel dashboardLink={false} onApplied={() => setApplied((n) => n + 1)} />
+      <GymMembershipCard refreshToken={applied} onTryAgain={toCodeBox} />
+      <div ref={panel}>
+        <JoinGymPanel dashboardLink={false} onApplied={() => setApplied((n) => n + 1)} />
+      </div>
       <p className="text-gray-400 text-xs">
         No code? Carry on — everything works without one, and you can enter a code any time in
         Settings.

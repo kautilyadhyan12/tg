@@ -21,7 +21,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
-import { deleteOnboarding, patchOnboarding, updateProfile } from "../src/modules/users/repo.js";
+import { deleteOnboarding, patchOnboarding, updateProfile, upsertFitnessProfile } from "../src/modules/users/repo.js";
 import {
   AccountNotActiveError,
   createMeasurement,
@@ -1560,6 +1560,29 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).answers["weightKg"]).toBe(69);
   });
 
+  it("the profile PUT takes the users row before the profile row, so a Settings save and a reset queue rather than cross", { timeout: 60_000 }, async () => {
+    // The PUT's finish check reads the health answer, which a reset deletes.
+    // Both take the users row first, so a reset cannot slip between that read
+    // and the commit and leave an account finished with no health answer. A
+    // save that took the profile row first would not queue here at all.
+    const { userId, cookies } = await makeUser("ob-put-lock-order@example.com");
+    await completeScreens(cookies); // the profile row exists, so an update needs no FK check
+    const write = {
+      age: 31, gender: "female", heightCm: 165, targetWeightKg: 65, fitnessLevel: "beginner", fitnessGoals: [],
+      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], sessionDurationMin: 45,
+      preferredWorkoutTime: null, diet: "vegan", mealsPerDay: 3, onboardingCompleted: false,
+    };
+    const out = await interleave(holdUsersRow(userId), () => upsertFitnessProfile(sql, userId, write), async (pids) => {
+      const [row] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_locks
+        WHERE pid = ANY(${pids}::int[]) AND relation = 'user_fitness_profiles'::regclass AND granted`;
+      expect(row?.n ?? 0, "the PUT touched the profile row before the users row").toBe(0);
+    });
+    expect(out.firstError).toBeNull();
+    expect(out.secondError).toBeNull();
+    expect((await get(cookies)).answers).toMatchObject({ age: 31, diet: "vegan" });
+  });
+
   it("a history write that waits behind the account's deletion is refused with the same 401, whichever write it is", { timeout: 60_000 }, async () => {
     // It passes sign-in while the deletion is still uncommitted, then queues
     // on the users row. All three writes answer as sign-in does for every
@@ -1623,15 +1646,15 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect(rows).toEqual([{ weight_kg: "70.00", source: "self_reported" }]);
   });
 
-  it("a v1 profile write's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {
+  it("a foreign-key check's key-share lock never blocks a v2 save", { timeout: 30_000 }, async () => {
     const { userId } = await makeUser("ob-locks@example.com");
-    // WHAT THIS GUARDS: the v1 upsert takes the two rows in the OPPOSITE order
-    // to this route — the profile row first, then the users row as FOR KEY
-    // SHARE, which is what its foreign key check does. Holding the users row
-    // with a lock that conflicts with FOR KEY SHARE therefore makes one person
-    // saving on both screens at the same moment a deadlock (40P01 → a 500 on a
-    // save that was perfectly fine). The lock below is exactly the one that FK
-    // check takes; the save must not wait on it.
+    // WHAT THIS GUARDS: every insert that points at this person — a meal, a
+    // workout, a weigh-in, the health answer — checks its foreign key with FOR
+    // KEY SHARE on the users row. Holding the users row with a lock that
+    // conflicts with it would make each of them wait behind a save, and one
+    // already holding a row the save wants a deadlock (40P01 → a 500 on a save
+    // that was perfectly fine). The lock below is exactly the one an FK check
+    // takes; the save must not wait on it.
     let release = (): void => undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;

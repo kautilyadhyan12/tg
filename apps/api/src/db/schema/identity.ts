@@ -178,8 +178,9 @@ export const userFitnessProfiles = pgTable(
     pushUpsMax: smallint("push_ups_max"),
     plankHoldSeconds: smallint("plank_hold_seconds"),
     // Screen 9's two answers (migration 0030; ROADMAP 4b-ii). What a person
-    // eats and how many sittings it is split across — read by the meal
-    // suggestions (7a), never by the calorie maths. No cuisine column: Kd
+    // eats and how many sittings it is split across — the diet read by the meal
+    // ideas after a workout, both by the meal suggestions (7a), never by the
+    // calorie maths. No cuisine column: Kd
     // ruled cuisine out entirely (RULINGS 2026-09-12).
     diet: text("diet"),
     mealsPerDay: smallint("meals_per_day"),

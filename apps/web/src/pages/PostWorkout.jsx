@@ -17,6 +17,7 @@ import {
 } from '../api/gamificationApi';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
+import { FOOD_ALLERGY_CAUTION } from '@app/shared';
 
 // How long to wait for the background sync before giving up on the summary, and
 // in how many steps. 5 × 800 ms ≈ 4 s of patience: long enough to cover a flush
@@ -855,6 +856,13 @@ export default function PostWorkout() {
                                  px-2 py-1 rounded-full flex-shrink-0 ml-3">✓</span>
               </div>
             ))}
+            {/* Every food suggestion carries the food-allergy caution (RULINGS
+                2026-09-09): no food has allergen tags and nothing asks about
+                allergies, so the ideas above cannot be checked for anyone.
+                Drawn only under ideas that are there. */}
+            {Array.isArray(summary.mealSuggestions) && summary.mealSuggestions.length > 0 && (
+              <p className="text-gray-400 text-xs">{FOOD_ALLERGY_CAUTION}</p>
+            )}
           </div>
         </motion.div>
 

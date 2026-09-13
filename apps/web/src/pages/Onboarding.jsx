@@ -138,11 +138,14 @@ export default function Onboarding() {
 
   const health = {
     screening: hs.screening,
-    // No health answer while one is already on its way — AND none while a
-    // finish is out (`busy`). A finish the server refuses over this question
-    // forgets what the screen holds, because the server has just said it holds
-    // nothing; an answer given in that window would be saved and then
-    // forgotten, leaving nothing chosen over an answer the server now has.
+    // No health answer while one is already on its way — AND none while the
+    // page is waiting (`busy`). A finish is the wait that matters: one the
+    // server refuses over this question forgets what the screen holds, so an
+    // answer given in that window would be saved and then forgotten. Since
+    // Finish moved to the last screen the question is never on show during a
+    // finish (the way back is held too); it is during a Continue or a jump
+    // waiting on the saves, where a Yes tapped would be left half-given as the
+    // page moves on.
     saving: hs.saving || busy,
     agreed,
     agreeing,

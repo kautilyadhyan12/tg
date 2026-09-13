@@ -106,6 +106,8 @@ export function registerUserRoutes(
 
   // PUT, not POST: full-document replace, idempotent by construction — the same
   // body twice yields the same row, so no Idempotency-Key is needed (R3.5).
+  // A body that FINISHES setup while an answer is still open is refused with
+  // the onboarding PATCH's own 409 and its list (service `putFitnessProfile`).
   app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseBody(putFitnessProfileRequestSchema, req, reply);
     if (body === null) return;

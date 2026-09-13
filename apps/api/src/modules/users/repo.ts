@@ -227,11 +227,16 @@ export async function getFitnessProfile(
  *  the same body twice yields the same row — idempotent by construction (R3.5),
  *  which is why no Idempotency-Key is needed here.
  *
- *  INSERT…SELECT-from-users is what enforces "active user only" ATOMICALLY: a
- *  deleted user's SELECT yields no row, so nothing inserts, no conflict fires,
- *  and RETURNING is empty → null. A check-then-insert would be a TOCTOU race
- *  against a concurrent account deletion. The FK guarantees the user EXISTS but
- *  says nothing about status, since §5.2 soft-deletes.
+ *  One transaction, the users row locked first — active-only, as
+ *  `patchOnboarding` and `deleteOnboarding` take it and for their reasons, so
+ *  the three writers of this row queue on one lock and a concurrent deletion
+ *  waits. The FK guarantees the user EXISTS but says nothing about status,
+ *  since §5.2 soft-deletes. Null = not active.
+ *
+ *  `verify` sees the answers as saved, the transaction, and whether setup was
+ *  ALREADY finished before this save (read under that lock, so a reset cannot
+ *  slip between the read and the write). It throws to refuse the save, and
+ *  then nothing of it is written — the service's finish check (4b-ii).
  *
  *  THE ANSWERS ONLY THE SCREENS ASK ARE LEFT ALONE — the pace, the day,
  *  push-ups and plank (0026): this is Settings' route, which has no way to
@@ -245,38 +250,51 @@ export async function upsertFitnessProfile(
   sql: Sql,
   userId: string,
   input: FitnessProfileWrite,
+  verify?: (saved: OnboardingRow, tx: SqlOrTx, wasCompleted: boolean) => Promise<void> | void,
 ): Promise<FitnessProfileRow | null> {
-  const rows = await sql<FitnessProfileDbRow[]>`
-    INSERT INTO user_fitness_profiles
-      (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
-       fitness_goals, weight_goal, exercise_frequency, available_equipment,
-       session_duration_min, preferred_workout_time, diet, meals_per_day,
-       onboarding_completed, updated_at)
-    SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
-           ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
-           ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment},
-           ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
-           ${input.diet}, ${input.mealsPerDay},
-           ${input.onboardingCompleted}, now()
-    FROM users u WHERE u.id = ${userId} AND u.status = 'active'
-    ON CONFLICT (user_id) DO UPDATE SET
-      age = EXCLUDED.age,
-      gender = EXCLUDED.gender,
-      height_cm = EXCLUDED.height_cm,
-      target_weight_kg = EXCLUDED.target_weight_kg,
-      fitness_level = EXCLUDED.fitness_level,
-      fitness_goals = EXCLUDED.fitness_goals,
-      weight_goal = EXCLUDED.weight_goal,
-      exercise_frequency = EXCLUDED.exercise_frequency,
-      available_equipment = EXCLUDED.available_equipment,
-      session_duration_min = EXCLUDED.session_duration_min,
-      preferred_workout_time = EXCLUDED.preferred_workout_time,
-      diet = EXCLUDED.diet,
-      meals_per_day = EXCLUDED.meals_per_day,
-      onboarding_completed = EXCLUDED.onboarding_completed,
-      updated_at = now()
-    RETURNING ${sql(FITNESS_PROFILE_COLUMNS)}`;
-  return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
+  return await sql.begin(async (tx) => {
+    const active = await tx<{ id: string }[]>`
+      SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
+    if (active[0] === undefined) return null;
+    const before = await tx<{ onboarding_completed: boolean }[]>`
+      SELECT onboarding_completed FROM user_fitness_profiles WHERE user_id = ${userId}`;
+
+    const rows = await tx<FitnessProfileDbRow[]>`
+      INSERT INTO user_fitness_profiles
+        (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
+         fitness_goals, weight_goal, exercise_frequency, available_equipment,
+         session_duration_min, preferred_workout_time, diet, meals_per_day,
+         onboarding_completed, updated_at)
+      SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
+             ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
+             ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment},
+             ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
+             ${input.diet}, ${input.mealsPerDay},
+             ${input.onboardingCompleted}, now()
+      FROM users u WHERE u.id = ${userId} AND u.status = 'active'
+      ON CONFLICT (user_id) DO UPDATE SET
+        age = EXCLUDED.age,
+        gender = EXCLUDED.gender,
+        height_cm = EXCLUDED.height_cm,
+        target_weight_kg = EXCLUDED.target_weight_kg,
+        fitness_level = EXCLUDED.fitness_level,
+        fitness_goals = EXCLUDED.fitness_goals,
+        weight_goal = EXCLUDED.weight_goal,
+        exercise_frequency = EXCLUDED.exercise_frequency,
+        available_equipment = EXCLUDED.available_equipment,
+        session_duration_min = EXCLUDED.session_duration_min,
+        preferred_workout_time = EXCLUDED.preferred_workout_time,
+        diet = EXCLUDED.diet,
+        meals_per_day = EXCLUDED.meals_per_day,
+        onboarding_completed = EXCLUDED.onboarding_completed,
+        updated_at = now()
+      RETURNING ${tx(FITNESS_PROFILE_COLUMNS)}`;
+    const row = rows[0];
+    if (row === undefined) return null;
+    // A check that throws here rolls the whole save back.
+    await verify?.(await getOnboarding(tx, userId), tx, before[0]?.onboarding_completed === true);
+    return toFitnessProfile(row);
+  });
 }
 
 /** The write shape the repo accepts: every field resolved to a value or NULL by
@@ -348,15 +366,16 @@ export async function getOnboarding(sql: SqlOrTx, userId: string): Promise<Onboa
  *  blocks a concurrent deletion (itself an UPDATE of that row) for the rest of
  *  the transaction. Null = not active.
  *
- *  NO KEY, and that word is load-bearing. `upsertFitnessProfile` above takes
- *  the same two rows in the OPPOSITE order — the profile row first, then the
- *  users row as FOR KEY SHARE, which is what its foreign key check does. Plain
- *  FOR UPDATE is the one mode that conflicts with FOR KEY SHARE, so one person
- *  saving on the v1 screen and this one at the same moment could deadlock
- *  (40P01, and a 500 on a save that was perfectly fine). FOR NO KEY UPDATE
- *  still excludes every other writer of this row and the deletion, and lets
- *  that FK check through, so neither route ever waits on the other's second
- *  lock. Pinned by a test that holds exactly that key-share lock.
+ *  NO KEY, and that word is load-bearing. Every insert that points at this
+ *  person — a meal, a workout, a weigh-in, the health answer — checks its
+ *  foreign key with FOR KEY SHARE on the users row, and plain FOR UPDATE is the
+ *  one mode that conflicts with it: each of those would wait behind this save,
+ *  and one already holding a row this save wants would deadlock (40P01, and a
+ *  500 on a save that was perfectly fine). FOR NO KEY UPDATE still excludes
+ *  every other writer of this row and the deletion, and lets those checks
+ *  through. The v1 upsert above takes the users row the same way, first, so
+ *  the two routes queue rather than cross. Pinned by a test that holds exactly
+ *  that key-share lock.
  *
  *  `verify` sees the answers as saved, before the commit, and the transaction
  *  they were saved in — so a check can read a row this one does not touch (the
@@ -441,8 +460,8 @@ export async function patchOnboarding(
  *  the weigh-in history's (RULINGS 2026-09-10).
  *
  *  Active-only, with the users row locked first, as `patchOnboarding` takes it
- *  and for its reasons: a concurrent deletion waits, and NO KEY lets the v1
- *  upsert's foreign-key check through. Null = not active. Deleting a row that
+ *  and for its reasons: a concurrent deletion waits, and NO KEY lets every
+ *  foreign-key check on this person through. Null = not active. Deleting a row that
  *  is not there is a quiet success, so a second reset answers as the first. */
 export async function deleteOnboarding(sql: Sql, userId: string): Promise<OnboardingRow | null> {
   return await sql.begin(async (tx) => {

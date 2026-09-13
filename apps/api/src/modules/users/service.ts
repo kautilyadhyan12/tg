@@ -27,6 +27,7 @@ import {
   consentListResponseSchema,
   consentRecordSchema,
   deriveHealthFlags,
+  dietSchema,
   DISCLAIMER_WORDINGS,
   fitnessProfileSchema,
   healthScreeningSchema,
@@ -37,6 +38,7 @@ import {
 import type {
   ConsentListResponse,
   ConsentRecord,
+  Diet,
   FitnessProfile,
   HealthScreening,
   OnboardingAnswers,
@@ -83,6 +85,16 @@ export async function getPlanHealth(sql: Sql, userId: string): Promise<PlanHealt
   return { hasCondition: stored.hasCondition, safeMode: deriveHealthFlags(stored).safeMode };
 }
 
+/** The person's diet, screen 9's answer (4b-ii), for the meal ideas after a
+ *  workout — null until answered. sql-only like the readers above, for the same
+ *  reason: the workouts module's deps cannot supply UsersDeps. Keyed on the caller's own id,
+ *  and parsed through the shared enum, so a value outside it fails loud rather
+ *  than choosing anybody's food. */
+export async function getUserDiet(sql: Sql, userId: string): Promise<Diet | null> {
+  const profile = await repo.getFitnessProfile(sql, userId);
+  return dietSchema.nullable().parse(profile?.diet ?? null);
+}
+
 /** Typed failure for the central error mapper (R8.1); message client-safe. */
 export class UsersError extends Error {
   readonly statusCode: number;
@@ -96,9 +108,10 @@ export class UsersError extends Error {
 }
 
 /** Finishing onboarding while setup still lacks an answer (RULINGS 2026-07-19:
- *  the questions come before the training side). Carries the list so the screen
- *  can send the person to the question that is open — the plan's own inputs,
- *  and `health`, the question on screen 8 (4b-i). */
+ *  the questions come before the training side), on either route that can
+ *  finish it — the onboarding PATCH and the profile PUT. Carries the list so the
+ *  screen can send the person to the question that is open — the plan's own
+ *  inputs, `health` (screen 8, 4b-i) and screen 9's two (4b-ii). */
 export class OnboardingIncompleteError extends UsersError {
   readonly missing: readonly MissingSetupAnswer[];
   constructor(missing: readonly MissingSetupAnswer[]) {
@@ -189,28 +202,48 @@ export async function getFitnessProfile(
 }
 
 /** PUT = full-document replace: absent field → NULL. The absent→NULL rule lives
- *  HERE (once), so the repo takes a fully-resolved write shape. */
+ *  HERE (once), so the repo takes a fully-resolved write shape.
+ *
+ *  FINISHING SETUP IS REFUSED HERE ON THE ONBOARDING PATCH'S OWN TERMS (RULINGS
+ *  2026-07-19): a save that turns `onboardingCompleted` from false to true is
+ *  checked on the answers as saved, in the save's transaction, and a refusal
+ *  writes nothing. A true ALREADY stored is kept without the check, because
+ *  Settings sends the flag back on every save — so a finished person is never
+ *  refused a Settings save over a question the screens have not asked them. */
 export async function putFitnessProfile(
   deps: UsersDeps,
   userId: string,
   body: PutFitnessProfileRequest,
 ): Promise<FitnessProfile> {
-  const row = await repo.upsertFitnessProfile(deps.sql, userId, {
-    age: body.age ?? null,
-    gender: body.gender ?? null,
-    heightCm: body.heightCm ?? null,
-    targetWeightKg: body.targetWeightKg ?? null,
-    fitnessLevel: body.fitnessLevel ?? null,
-    fitnessGoals: body.fitnessGoals ?? [],
-    weightGoal: body.weightGoal ?? null,
-    exerciseFrequency: body.exerciseFrequency ?? null,
-    availableEquipment: body.availableEquipment ?? [],
-    sessionDurationMin: body.sessionDurationMin ?? null,
-    preferredWorkoutTime: body.preferredWorkoutTime ?? null,
-    diet: body.diet ?? null,
-    mealsPerDay: body.mealsPerDay ?? null,
-    onboardingCompleted: body.onboardingCompleted ?? false,
-  });
+  const onboardingCompleted = body.onboardingCompleted ?? false;
+  const verify = onboardingCompleted
+    ? async (saved: repo.OnboardingRow, tx: repo.SqlOrTx, wasCompleted: boolean): Promise<void> => {
+        if (wasCompleted) return;
+        const missing = await missingSetupAnswers(tx, userId, saved, null);
+        if (missing.length > 0) throw new OnboardingIncompleteError(missing);
+      }
+    : undefined;
+  const row = await repo.upsertFitnessProfile(
+    deps.sql,
+    userId,
+    {
+      age: body.age ?? null,
+      gender: body.gender ?? null,
+      heightCm: body.heightCm ?? null,
+      targetWeightKg: body.targetWeightKg ?? null,
+      fitnessLevel: body.fitnessLevel ?? null,
+      fitnessGoals: body.fitnessGoals ?? [],
+      weightGoal: body.weightGoal ?? null,
+      exerciseFrequency: body.exerciseFrequency ?? null,
+      availableEquipment: body.availableEquipment ?? [],
+      sessionDurationMin: body.sessionDurationMin ?? null,
+      preferredWorkoutTime: body.preferredWorkoutTime ?? null,
+      diet: body.diet ?? null,
+      mealsPerDay: body.mealsPerDay ?? null,
+      onboardingCompleted,
+    },
+    verify,
+  );
   // No row = the user was deleted mid-request (the upsert is active-only).
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return toFitnessProfile(row);

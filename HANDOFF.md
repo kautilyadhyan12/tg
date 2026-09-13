@@ -4,6 +4,27 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-13 · 4b-ii's review fixed (two High, four Low, five weak tests), branch `food-and-gym-code`, PR #64
+
+- Kd ruled the clash between "ported word for word" and "every meal suggestion respects the diet": the meal ideas
+  after a workout follow the diet (RULINGS 2026-08-06, amended). Vegan: tofu for the chicken, soy yogurt; no diet
+  answer gets the ideas every diet can eat; non-vegetarians see the ported words. The card carries the food-allergy
+  caution (RULINGS 2026-09-09), whose words are now `FOOD_ALLERGY_CAUTION` in `@app/shared`.
+- High: `PUT /v1/users/me/fitness-profile {"onboardingCompleted": true}` finished setup with nothing answered. It
+  now refuses a false→true finish while setup lacks an answer (the PATCH's 409 and list), in one transaction with
+  the users row locked first; a finish already stored is kept, so Settings saves still work.
+- Lows: screen 9's meals hint promises nothing ("Snacks count."); Settings offers "Not set" for meals only while
+  none is stored; screen 11's "Try again" puts the cursor in the code box instead of looping into setup.
+- "Code applied first" means, in Kd's 2026-09-07 words, applied before setup "so they are joined even if they stop
+  halfway". A poster link loses its code at sign-in and at the setup redirect; that goes through the sign-in door,
+  so it is split out as ROADMAP 4b-ii-b, next in line.
+- Verified: shared tsc/eslint 0, 95 · api tsc/eslint 0, CI-shaped 305, full local 981/998 (the 17 are
+  `workouts.sync` logged out mid-run, item 10's shared-database flake; 23/23 alone) · web touched files 283, full
+  2046/2047 (poseAssets.contract the known local red) · web lint on the touched files identical to the committed
+  files · 19 deliberate breaks, each red for its own reason. The one web red, Settings' health "Try again" test,
+  fails the same way on the committed code without these fixes (2040/2041): a load flake, now on item 10.
+- Open: CI, the fresh-chat re-check of these fixes only, Kd's click-through of what changed, merge.
+
 ## 2026-09-12 · Screen 9 (food) and screen 11 (the gym code), item 4b-ii, branch `food-and-gym-code`
 
 - Kd asked for two NEW things and ruled the order (RULINGS 2026-09-12): the food list grows to about 300 and is
@@ -24,9 +45,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   against HEAD's own file · gitleaks clean · six deliberate breaks, each turning a different new test red.
 - Kd's click-through PASSED on 2026-09-13 (*"the testes passed"*), with copy changes he asked for on the way —
   the "What {gym} can see" sheet, now RULINGS 2026-09-13 and ROADMAP 8a, NOT built on this branch.
-- Open: the fresh-chat review of PR #64 (CI is green on 9687895, all five jobs), then merge. Then 8a, whose plan
-  must raise two things with Kd: "if you choose to share" describes a control that does not exist yet, and he
-  quoted the join panel's front-desk sentence without saying what should change — one line, never a guess.
+- Open: the fresh-chat review of PR #64 (CI is green on 9687895, all five jobs), then merge. 8a's plan must raise
+  two things with Kd, both on its ROADMAP line.
 - Local: API 3000 on the LOCAL Postgres and web 5173, both started this session (two stale servers from the
   2026-09-12 chat were killed first — the one on 3000 was answering with master's code). The click-through
   account is `kd.food.0912@example.com`, seeded through screens 1–8 so it lands on Food; the sign-in code

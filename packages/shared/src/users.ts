@@ -114,9 +114,11 @@ export const equipmentSchema = z.enum([
 export const workoutTimeSchema = z.enum(["morning", "afternoon", "evening"]);
 
 /** Screen 9's diet (RULINGS 2026-09-10), in the order that ruling names them.
- *  Every meal suggestion respects it (7a); nothing in the calorie maths reads
- *  it. It says what a person eats, never where the food is from — there is no
- *  cuisine question and no cuisine data (RULINGS 2026-09-12).
+ *  Every meal suggestion respects it — the meal ideas after a workout today
+ *  (RULINGS 2026-09-13), the meal suggestions (7a) when they are built; nothing
+ *  in the calorie maths reads it. It says what a person eats, never where the
+ *  food is from — there is no cuisine question and no cuisine data (RULINGS
+ *  2026-09-12).
  *
  *  The four are a ladder, and each value means exactly one more thing than the
  *  one below it: vegan eats no animal food at all, vegetarian adds milk,
@@ -196,7 +198,8 @@ export const fitnessProfileSchema = z.object({
   sessionDurationMin: z.number().int().nullable(), // minutes
   preferredWorkoutTime: workoutTimeSchema.nullable(),
   /** Screen 9's two answers (4b-ii), asked in Settings as well so they can be
-   *  changed later. Nothing reads them until meal suggestions (7a). */
+   *  changed later. The meal ideas after a workout follow the diet; the meals
+   *  a day wait for the meal suggestions (7a). */
   diet: dietSchema.nullable(),
   mealsPerDay: z.number().int().nullable(),
   onboardingCompleted: z.boolean(),

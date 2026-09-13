@@ -181,7 +181,7 @@ function WaitingRow({ row }) {
   );
 }
 
-function Row({ row }) {
+function Row({ row, onTryAgain }) {
   // The words this row speaks — the type of the place it is about.
   const words = orgWords(row?.orgType);
   if (row.kind === 'member') {
@@ -280,9 +280,20 @@ function Row({ row }) {
         <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
           Check with the {words.itToMembers}, then ask again — it takes seconds.
         </p>
-        <Link to="/org/join" className="text-sm font-medium inline-block mt-1.5" style={{ color: '#FF8A1F' }}>
-          Try again
-        </Link>
+        {onTryAgain ? (
+          <button
+            type="button"
+            onClick={onTryAgain}
+            className="text-sm font-medium inline-block mt-1.5"
+            style={{ color: '#FF8A1F' }}
+          >
+            Try again
+          </button>
+        ) : (
+          <Link to="/org/join" className="text-sm font-medium inline-block mt-1.5" style={{ color: '#FF8A1F' }}>
+            Try again
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -317,8 +328,14 @@ function Row({ row }) {
  *    load-bearing (`:11385`) and pointless on a screen only members reach.
  *
  *  They are also rare and transient, where a membership row is permanent — so
- *  what he was looking at is gone and none of the sentences he ruled in are. */
-export default function GymMembershipCard({ refreshToken = 0, showMemberships = true }) {
+ *  what he was looking at is gone and none of the sentences he ruled in are.
+ *
+ *  `onTryAgain` — for a screen with the code box already on it. "Try again" on
+ *  a refused or expired request then calls it instead of linking to
+ *  `/org/join`: onboarding's screen 11 passes one that puts the cursor in the
+ *  box below, because an account that has not finished setup following that
+ *  link is sent straight back to the wizard. */
+export default function GymMembershipCard({ refreshToken = 0, showMemberships = true, onTryAgain }) {
   const [rows, setRows] = useState([]);
 
   useEffect(() => {
@@ -361,7 +378,7 @@ export default function GymMembershipCard({ refreshToken = 0, showMemberships = 
           className="rounded-2xl p-4"
           style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
         >
-          <Row row={row} />
+          <Row row={row} onTryAgain={onTryAgain} />
         </div>
       ))}
     </div>

@@ -11,6 +11,13 @@
 // improved. The bands, the thresholds, the muscle names and the strings are the
 // Python file's, in the Python file's order.
 //
+// ONE AMENDMENT, KD'S (RULINGS 2026-09-13): THE MEAL IDEAS FOLLOW THE DIET.
+// Screen 9 stores a diet and every meal suggestion respects it (RULINGS
+// 2026-09-10), so a vegan is never offered the chicken. The bands, thresholds
+// and timings stay the Python file's; where a diet rules an idea's food out,
+// that food alone is swapped for one it allows, and a non-vegetarian reads the
+// ported words exactly. The stretches and the record labels are untouched.
+//
 // WHY STRINGS AND NOT MESSAGE KEYS. v1 §14 wants message keys so hi/as is a
 // translation task. These are English strings because that is what ships today
 // and what the old screen renders; converting them to keys is the same
@@ -22,31 +29,60 @@
 // (R3.1). The old backend chose server-side too; a client that picked its own
 // meal ideas from a number it computed itself is the class of thing this
 // project keeps deleting.
-import { EXERCISE_CONTENT, type MealSuggestion } from "@app/shared";
+import { EXERCISE_CONTENT, type Diet, type MealSuggestion } from "@app/shared";
+
+/** The diets as a ladder, each allowing everything the one below it does and
+ *  one thing more (`dietSchema`): vegan, then dairy, then eggs, then meat and
+ *  fish. */
+const DIET_LADDER: Record<Diet, number> = { vegan: 0, vegetarian: 1, vegetarian_eggs: 2, non_vegetarian: 3 };
+
+/** One meal idea. `meal` is the ported words, eaten as they are by `fitsFrom`
+ *  and every diet above it; `swap` is the same idea for the diets below, with
+ *  only the food they rule out changed. An idea every diet can eat has none. */
+interface MealIdea {
+  meal: string;
+  timing: string;
+  fitsFrom: Diet;
+  swap: string | null;
+}
 
 /** workouts.py:600-615 — three calorie bands, in the source's order. The
  *  thresholds are `> 400` and `> 200` on the workout's kcal figure. */
-export function mealSuggestionsFor(caloriesBurned: number | null): MealSuggestion[] {
+const HIGH_BAND: readonly MealIdea[] = [
+  { meal: "Protein shake + banana", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake + banana" },
+  { meal: "Grilled chicken + rice + vegetables", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Grilled tofu + rice + vegetables" },
+  { meal: "Greek yogurt with berries", timing: "1 hour before bed", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
+];
+const MIDDLE_BAND: readonly MealIdea[] = [
+  { meal: "Protein shake or chocolate milk", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake or soy chocolate milk" },
+  { meal: "Eggs + whole grain toast + avocado", timing: "Within 2 hours", fitsFrom: "vegetarian_eggs", swap: "Tofu scramble + whole grain toast + avocado" },
+];
+const LOW_BAND: readonly MealIdea[] = [
+  { meal: "Banana + peanut butter", timing: "Within 30 mins", fitsFrom: "vegan", swap: null },
+  { meal: "Light salad with grilled protein", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Light salad with grilled tofu" },
+];
+
+/** Every idea, for the test that holds each to the ladder. */
+export const MEAL_IDEA_BANDS = { high: HIGH_BAND, middle: MIDDLE_BAND, low: LOW_BAND } as const;
+
+/** The workout's band of ideas, in the words the person's diet allows.
+ *
+ *  NO DIET ANSWER READS AS THE STRICTEST DIET, so every idea is one anybody
+ *  can eat: a guessed "non-vegetarian" is the one guess that would put meat in
+ *  front of a vegetarian (RULINGS 2026-07-15: unanswered is never a default). */
+export function mealSuggestionsFor(caloriesBurned: number | null, diet: Diet | null): MealSuggestion[] {
   // Python read `session.get("calories_burned", 0)`, so an absent figure took
   // the lowest band rather than producing no suggestions. NULL is that case.
   const kcal = caloriesBurned ?? 0;
-  if (kcal > 400) {
-    return [
-      { meal: "Protein shake + banana", timing: "Within 30 mins" },
-      { meal: "Grilled chicken + rice + vegetables", timing: "Within 2 hours" },
-      { meal: "Greek yogurt with berries", timing: "1 hour before bed" },
-    ];
-  }
-  if (kcal > 200) {
-    return [
-      { meal: "Protein shake or chocolate milk", timing: "Within 30 mins" },
-      { meal: "Eggs + whole grain toast + avocado", timing: "Within 2 hours" },
-    ];
-  }
-  return [
-    { meal: "Banana + peanut butter", timing: "Within 30 mins" },
-    { meal: "Light salad with grilled protein", timing: "Within 2 hours" },
-  ];
+  const band = kcal > 400 ? HIGH_BAND : kcal > 200 ? MIDDLE_BAND : LOW_BAND;
+  const level = diet === null ? 0 : DIET_LADDER[diet];
+  return band.map((idea) => {
+    if (level >= DIET_LADDER[idea.fitsFrom]) return { meal: idea.meal, timing: idea.timing };
+    // Never the ported words in place of a missing swap: that fallback is the
+    // chicken offered to a vegan this function exists to prevent.
+    if (idea.swap === null) throw new Error(`meal idea "${idea.meal}" has no swap for a diet below ${idea.fitsFrom}`);
+    return { meal: idea.swap, timing: idea.timing };
+  });
 }
 
 /** Primary muscles of the exercises in a workout, by catalog slug.

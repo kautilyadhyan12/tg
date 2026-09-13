@@ -463,6 +463,9 @@ export function FitnessTab({ profile, onSaved }) {
           />
         </Field>
 
+        {/* "Not set" only while nothing is stored. Setup does not finish
+            without this answer, so once given it can be changed here but not
+            taken back — as the diet's chips above offer no way to clear one. */}
         <Field label="Meals a Day">
           <Select
             value={form.mealsPerDay ?? ''}
@@ -470,7 +473,7 @@ export function FitnessTab({ profile, onSaved }) {
             ariaLabel="Meals a day"
             style={inputStyle}
             options={[
-              { value: '', label: 'Not set' },
+              ...((profile.mealsPerDay ?? null) === null ? [{ value: '', label: 'Not set' }] : []),
               ...MEALS_PER_DAY.map((n) => ({ value: n, label: `${n} meals a day` })),
             ]}
           />

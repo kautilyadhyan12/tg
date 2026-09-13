@@ -70,8 +70,9 @@ export const onboardingAnswersSchema = z
     trainingDays: z.number().int().nullable(),
     sessionMinutes: z.number().int().nullable(),
     availableEquipment: z.array(equipmentSchema),
-    /** Screen 9's two answers. Neither moves a calorie: the meal suggestions
-     *  (7a) read them, and the plan number never does. */
+    /** Screen 9's two answers. Neither moves a calorie: the meal ideas after a
+     *  workout follow the diet, the meal suggestions (7a) will read both, and
+     *  the plan number never does. */
     diet: dietSchema.nullable(),
     mealsPerDay: z.number().int().nullable(),
     onboardingCompleted: z.boolean(),
