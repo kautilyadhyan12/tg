@@ -62,7 +62,7 @@ export interface NutritionDeps {
 }
 
 // Internal draft/cache parser consumes the stable nutrition fields and strips
-// curated inventory-only provenance such as sourceLine.
+// the curated list's own diet and citation.
 const foodSchema = z.object({
   canonical: z.string(),
   name: z.string(),
@@ -72,7 +72,7 @@ const foodSchema = z.object({
   proteinG: z.number().min(0).max(100),
   carbsG: z.number().min(0).max(100),
   fatG: z.number().min(0).max(100),
-  fiberG: z.number().min(0).max(100),
+  fiberG: z.number().min(0).max(100).nullable(),
   serving: z.number(),
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts"]),
@@ -191,8 +191,13 @@ async function cachedExternal(deps: NutritionDeps, query: string, limit: number)
   return found;
 }
 
+/** A curated food as the search box receives it: the fields every food has,
+ *  without the list's diet and citation, which no response contract carries. */
+const asReference = ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source }: FoodReference): FoodReference =>
+  ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source });
+
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
-  const local = searchCurated(query, limit);
+  const local = searchCurated(query, limit).map(asReference);
   if (local.length >= limit) return local;
   const external = await cachedExternal(deps, query, limit - local.length);
   return [...local, ...external].slice(0, limit);

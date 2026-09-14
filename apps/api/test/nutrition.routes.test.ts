@@ -34,12 +34,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("PATCH preserves originals in meal_log_corrections; foreign user gets 404",async()=>{const patch=await inject("PATCH",`/v1/nutrition/meals/${mealId}`,cookieA,{mealName:"Corrected meal"});expect(patch.statusCode).toBe(200);const rows=await sql<{field:string;original:unknown;corrected:unknown}[]>`SELECT field,original,corrected FROM meal_log_corrections WHERE meal_log_id=${mealId}`;expect(rows.some((r)=>r.field==="meal_name"&&r.original==="Dal and roti"&&r.corrected==="Corrected meal")).toBe(true);expect((await inject("GET",`/v1/nutrition/meals/${mealId}`,cookieB)).statusCode).toBe(404);expect((await inject("PATCH",`/v1/nutrition/meals/${mealId}`,cookieB,{mealName:"stolen"})).statusCode).toBe(404);},30_000);
 
-  it("manual meal (GAP-2): no scanToken, items via food search, origin=manual, badge fires without photo badge",async()=>{const m=await session("p26a-manual@example.com");const created=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Lunch dal and rice",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(created.statusCode,created.body).toBe(201);const meal=created.json<{meal:{origin:string;totals:{kcalPoint:number};items:{nutritionSource:string}[]}}>().meal;expect(meal.origin).toBe("manual");const exact=(kcalPer100:number,grams:number):number=>Math.round(kcalPer100*grams/100);expect(meal.totals.kcalPoint).toBe(exact(110,150)+exact(130,200));expect(meal.items.every((i)=>i.nutritionSource==="curated")).toBe(true);const earned=await sql<{code:string}[]>`SELECT code FROM user_achievements WHERE user_id=${m.userId}`;const codes=earned.map((v)=>v.code);expect(codes).toContain("first_meal");expect(codes).not.toContain("photo_meal");const unknown=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Mystery",takenAt:new Date().toISOString(),items:[{canonical:"definitely_not_a_food_xyz",grams:100}]});expect(unknown.statusCode).toBe(400);},30_000);
+  it("manual meal (GAP-2): no scanToken, items via food search, origin=manual, badge fires without photo badge",async()=>{const m=await session("p26a-manual@example.com");const created=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Lunch dal and rice",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(created.statusCode,created.body).toBe(201);const meal=created.json<{meal:{origin:string;totals:{kcalPoint:number};items:{nutritionSource:string}[]}}>().meal;expect(meal.origin).toBe("manual");const exact=(kcalPer100:number,grams:number):number=>Math.round(kcalPer100*grams/100);expect(meal.totals.kcalPoint).toBe(exact(145,150)+exact(130,200));expect(meal.items.every((i)=>i.nutritionSource==="curated")).toBe(true);const earned=await sql<{code:string}[]>`SELECT code FROM user_achievements WHERE user_id=${m.userId}`;const codes=earned.map((v)=>v.code);expect(codes).toContain("first_meal");expect(codes).not.toContain("photo_meal");const unknown=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Mystery",takenAt:new Date().toISOString(),items:[{canonical:"definitely_not_a_food_xyz",grams:100}]});expect(unknown.statusCode).toBe(400);},30_000);
 
   // Preview endpoint (Kd-approved 2026-07-16 at the Card-5a smoke): the SERVER
   // answers "what would these grams be?" live, without saving — the client
   // never computes nutrition (2B). No quota (curated-table math, no AI spend).
-  it("preview computes server-side nutrition without persisting or metering",async()=>{const before=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;const res=await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(res.statusCode,res.body).toBe(200);const preview=res.json<{items:{kcalPoint:number;proteinG:number}[];totals:{kcalPoint:number}}>();const exact=(kcalPer100:number,grams:number):number=>Math.round(kcalPer100*grams/100);expect(preview.totals.kcalPoint).toBe(exact(110,150)+exact(130,200));expect(preview.items).toHaveLength(2);const after=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;expect(after[0]?.n).toBe(before[0]?.n);},30_000);
+  it("preview computes server-side nutrition without persisting or metering",async()=>{const before=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;const res=await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(res.statusCode,res.body).toBe(200);const preview=res.json<{items:{kcalPoint:number;proteinG:number}[];totals:{kcalPoint:number}}>();const exact=(kcalPer100:number,grams:number):number=>Math.round(kcalPer100*grams/100);expect(preview.totals.kcalPoint).toBe(exact(145,150)+exact(130,200));expect(preview.items).toHaveLength(2);const after=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;expect(after[0]?.n).toBe(before[0]?.n);},30_000);
   it("preview consumes no meal_scan quota in either window",async()=>{const read=async()=>[await redis.get(quotaKey("meal_scan",userA,"day",new Date())),await redis.get(quotaKey("meal_scan",userA,"month",new Date()))];const before=await read();expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:100}]})).statusCode).toBe(200);expect(await read()).toEqual(before);},30_000);
   it("preview: unknown food is 400, unauthenticated is 401, .strict() boundary rejects extra keys and bad grams",async()=>{expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"definitely_not_a_food_xyz",grams:100}]})).statusCode).toBe(400);expect((await inject("POST","/v1/nutrition/meals/preview","",{items:[{canonical:"dal_lentil_curry",grams:100}]})).statusCode).toBe(401);expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:100}],smuggled:true})).statusCode).toBe(400);expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:-1}]})).statusCode).toBe(400);},30_000);
 
@@ -96,6 +96,26 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const meal=created.json<{meal:{totals:{kcalPoint:number}}}>().meal;
       expect(meal.totals.kcalPoint).toBe(Math.round(476*150/100));
     }finally{await app4.close();}
+  },30_000);
+
+  // Saving re-finds each food by its canonical, and a canonical holding another
+  // food's (peanut_butter holds butter, pineapple holds apple) is still its own food.
+  it("a food picked in the search box is the food priced, even when its canonical holds another food's",async()=>{
+    const picked=["peanut_butter","almond_butter","orange_juice","apple_juice","pineapple","sweet_potato_baked","butter_chicken"];
+    const res=await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:picked.map((canonical)=>({canonical,grams:100}))});
+    expect(res.statusCode,res.body).toBe(200);
+    expect(res.json<{items:{canonical:string}[]}>().items.map((i)=>i.canonical)).toEqual(picked);
+  },30_000);
+
+  // The curated list carries each food's diet and citation for the server's own
+  // use; the search box receives the fields every food has, as before.
+  it("search sends a curated food's reference fields, never the list's diet or citation",async()=>{
+    const res=await inject("GET","/v1/nutrition/foods?q=ham&limit=3",cookieA);
+    expect(res.statusCode,res.body).toBe(200);
+    const items=res.json<{items:Record<string,unknown>[]}>().items;
+    expect(items[0]?.["canonical"]).toBe("ham_sliced");
+    expect(items.length).toBeGreaterThan(0);
+    for(const item of items)expect(Object.keys(item).sort()).toEqual(["canonical","carbsG","fatG","fiberG","kcal","name","proteinG","serving","source","unit"]);
   },30_000);
 
   // T3 (manual-off-foods) violation 1: an OFF slug EMBEDDING a curated
@@ -383,7 +403,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const pv=preview.json<{items:{gramsPoint:number;portionSource:string;kcalPoint:number}[]}>().items[0];
       expect(pv?.gramsPoint).toBe(135);
       expect(pv?.portionSource).toBe("user_dishware");
-      expect(pv?.kcalPoint).toBe(Math.round(110*135/100)); // dal 110 kcal/100g
+      expect(pv?.kcalPoint).toBe(Math.round(145*135/100)); // dal 145 kcal/100g
       const created=await call("POST","/v1/nutrition/meals",{mealName:"Dal",takenAt:new Date().toISOString(),items:[item]});
       expect(created.statusCode,created.body).toBe(201);
       const saved=created.json<{meal:{items:{gramsPoint:number;portionSource:string;kcalPoint:number}[]}}>().meal.items[0];
