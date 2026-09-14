@@ -922,10 +922,15 @@ function PhotoModal({ open, onClose, onSave }) {
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
+      // An item the photo counted starts at its count, one piece a step (six
+      // nuggets read ×6, and + makes seven); any other starts at ×1.
       const g = {};
       const c = {};
       const b = {};
-      res.data.items.forEach((item, i) => { g[i] = String(item.gramsPoint); c[i] = 1; b[i] = item.gramsPoint; });
+      res.data.items.forEach((item, i) => {
+        const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
+        g[i] = String(item.gramsPoint); c[i] = pieces; b[i] = item.gramsPoint / pieces;
+      });
       setGrams(g);
       setCounts(c);
       setBases(b);
@@ -1194,9 +1199,9 @@ function PhotoModal({ open, onClose, onSave }) {
                             </p>
                             {itemMeasures[i] === undefined ? (
                               <div className="flex items-center gap-2">
-                                {/* Count stepper: multiplies the AI's per-unit
-                                    grams (count × gramsPoint) — portion scaling
-                                    only; nutrition math stays on the server. */}
+                                {/* Count stepper: multiplies one piece's grams
+                                    (the scan's grams over its count) — portion
+                                    scaling only; nutrition math stays on the server. */}
                                 <div className="flex items-center gap-1 text-2xs"
                                      style={{ color: 'rgba(255,255,255,0.45)' }}>
                                   <button type="button"
@@ -1210,7 +1215,8 @@ function PhotoModal({ open, onClose, onSave }) {
                                   <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
                                   <button type="button"
                                     onClick={() => {
-                                      const n = Math.min(30, (counts[i] ?? 1) + 1);
+                                      // Never lower a scan's own count above the cap.
+                                      const n = Math.max(counts[i] ?? 1, Math.min(30, (counts[i] ?? 1) + 1));
                                       setCounts({ ...counts, [i]: n });
                                       setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
                                     }}
