@@ -6,20 +6,18 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 
 ## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`, PR #70
 
-- Kd picked a screen of its own straight after signing in (RULINGS 2026-09-14): *"Own screen after sign-in (Recommended)"*, once per account, either door.
-- Then the words: Kd found v2 read as "this app should not be followed" and wrote his own; with his go to three changes they are the sign-up
-  wording's v3 (RULINGS 2026-09-14). Shared tsc 0 · eslint 0 · 105/105; api health + users routes 31/31; web note + onboarding + healthApi 91/91;
-  seen at 400 px against the restarted local API, and the tick's row holds v3's words.
-- Built: the profile's `signUpDisclaimerAgreed` (this person's tap, on the sign-up note, in today's words, read from the consent log); the web's
-  guard draws the note in place of any signed-in screen until then, and a profile it cannot read shows the note (fails closed, unlike setup's
-  gate). Setup's tick and its hook are shared now (`DisclaimerTick`, `useDisclaimerTap`); on this screen the words are at reading size.
-- Seen in headless Edge on the local database, 400 and 1000 px: the note, the tick kept, Continue on to "Your goal" and, from /console, to
-  "Create your organisation"; a reload brings no note back.
-- Verified: shared tsc 0 · eslint 0; api tsc 0 · eslint 0 · health + users routes 31/31 · full test:local 999/1013, all 14 red in workouts.sync
-  (23/23 alone, ROADMAP 10's flake); web eslint 0 on the touched files but AuthContext.jsx (its five, as on master) · note + onboarding 85/85
-  · full run 2132/2132 in 76/77 (poseAssets.contract, the known local red). Breaks: 4 server and 14 screen, each red, restored byte for byte;
-  the login-door harness 28/28 RED; anchor census login-door 28 · auth 20 · orgs 286, none stale.
-- Next: CI; Kd's click-through (local: a new address, then `kd.lowtarget@example.com` through the Manage door); the fresh-chat review; merge.
+- Kd picked a screen of its own straight after signing in (*"Own screen after sign-in (Recommended)"*), once per account. His click-through passed
+  with one change: the note is the training side's, never the console's, and staff meet it when they come to train (RULINGS 2026-09-14, amended).
+- Kd found v2's words read as "this app should not be followed" and wrote his own; with his go to three changes they are the sign-up wording's v3.
+- Built: the profile's `signUpDisclaimerAgreed` (this person's tap, on the sign-up note, in today's words, read from the consent log);
+  `ProtectedRoute` draws the note in place until then and fails closed on a profile it cannot read; the six console routes pass
+  `requireSignUpNote={false}`. Setup's tick and its hook are shared (`DisclaimerTick`, `useDisclaimerTap`).
+- Verified: shared tsc 0 · eslint 0 · 105/105; api tsc 0 · eslint 0 · health + users routes 31/31 · full test:local 999/1013 (the 14 red all
+  workouts.sync, 23/23 alone: ROADMAP 10); web eslint 0 on the touched files but AuthContext.jsx (its five, as on master) · door tests 107/107 ·
+  full run before the words and console changes 2132/2132 in 76/77 (poseAssets.contract, the known local red). Breaks: 4 server and 18 screen, each
+  red, restored byte for byte; login-door harness 31/31 RED (S1-S3 new, D11 re-aimed); census login-door 31 · auth 20 · orgs 286.
+- Headless Edge on the local database: the note at 400 and 1000 px, the tick's row holding v3's words; /console shows no note, /onboarding does.
+- Next: CI; Kd's click-through of the console change; the fresh-chat review; merge.
 
 ## 2026-09-14 · 4c-ii merged (PR #69): Kd's click-through passed; the review's findings fixed (no Critical/High)
 
