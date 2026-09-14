@@ -376,7 +376,7 @@ export async function analyzePhoto(
         count: evidence.count,
       },
       savedDishware,
-      food.serving,
+      { grams: food.serving, unit: food.unit },
     );
     foods.push(food);
     draftItems.push({ canonical: food.canonical, ...portion });

@@ -107,6 +107,35 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(res.json<{items:{canonical:string}[]}>().items.map((i)=>i.canonical)).toEqual(picked);
   },30_000);
 
+  // A photo's count of pieces: the food's own piece times the count where its
+  // serving is one piece, the Appendix B piece only for a hint that ends in it,
+  // and a serving by weight never multiplied.
+  it("a photo's count multiplies the food's own piece, never a weight and never another food's piece",async()=>{
+    const counted=fakeVision();
+    const item=(canonical_hint:string,count:number)=>({name:canonical_hint,canonical_hint,container:null,fill_level:null,size_class:null,count,confidence:"high" as const});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",items:[item("chicken nuggets",6),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3)]});
+    const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
+    try{
+      const email="p26a-counted@example.com";
+      await a.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a Counted"})});
+      const login=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});
+      const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const scan=await a.inject({method:"POST",url:"/v1/nutrition/analyze-photo",cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const items=scan.json<{items:{canonical:string;gramsPoint:number;portionSource:string}[]}>().items;
+      expect(items.map((i)=>[i.canonical,i.gramsPoint,i.portionSource])).toEqual([
+        ["chicken_nuggets",96,"default"], // six 16 g nuggets, not one
+        ["veggie_burger",100,"default"], // its own patty, not an egg's 50 g
+        ["eggplant_cooked",100,"default"], // a serving by weight, not an egg
+        ["apple",360,"default"],
+        ["grapes",100,"default"], // ten grapes are not ten 100 g servings
+        ["banana_bread",120,"default"], // two slices, not two bananas
+        ["egg_hard_boiled",100,"regional_prior"],
+        ["roti_chapati",120,"regional_prior"],
+      ]);
+    }finally{await a.close();}
+  },30_000);
+
   // The curated list carries each food's diet and citation for the server's own
   // use; the search box receives the fields every food has, as before.
   it("search sends a curated food's reference fields, never the list's diet or citation",async()=>{

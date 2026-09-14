@@ -30,9 +30,11 @@ function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   // Canonical is UNIQUE per product via the OFF barcode (T3: name-slug
   // canonicals collide across products and let one entry overwrite another —
   // preview and save could then use different macros). Code-less products
-  // fall back to the name slug (rare; first-wins caching guards those).
+  // fall back to the slug of the name as shown, brand included, so two brands'
+  // jars of one name stay two foods (rare; first-wins caching guards the rest).
   const code = p.code === undefined ? "" : canonicalize(String(p.code));
-  return { canonical: code === "" ? `off_${canonicalize(name)}` : `off_${code}`, name: withBrand(name, p.brands), kcal, proteinG, carbsG, fatG, fiberG, serving: servingMatch === null ? 100 : Number(servingMatch[1]), unit: servingMatch?.[2]?.toLowerCase() ?? "g", source: "openfoodfacts" };
+  const shown = withBrand(name, p.brands);
+  return { canonical: code === "" ? `off_${canonicalize(shown)}` : `off_${code}`, name: shown, kcal, proteinG, carbsG, fatG, fiberG, serving: servingMatch === null ? 100 : Number(servingMatch[1]), unit: servingMatch?.[2]?.toLowerCase() ?? "g", source: "openfoodfacts" };
 }
 export function createOpenFoodFactsProvider(fetchImpl: typeof fetch = fetch): FoodSearchProvider {
   return { async search(query, limit) {

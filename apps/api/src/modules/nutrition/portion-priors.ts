@@ -32,11 +32,36 @@ const density = (hint: string): number => {
   if (normalized.includes("sabzi") || normalized.includes("halwa") || normalized.includes("thick_gravy")) return DENSITY_G_PER_ML.thick;
   return DENSITY_G_PER_ML.medium;
 };
+const singular = (word: string): string => (word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word);
+
+/** The Appendix B piece a hint names: the key's words must be the hint's last
+ *  words, whole ("boiled eggs", "masala dosa", "bread slices"). A hint that only
+ *  holds the key inside a word or before its own last word names another food:
+ *  "eggplant" and "veggie burger" are no egg, and "banana bread" no banana. */
 const countKey = (hint: string): string | null => {
-  const normalized = hint.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_");
-  for (const key of Object.keys(COUNTABLE_PRIORS)) if (normalized.includes(key)) return key;
+  const words = hint.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w !== "").map(singular);
+  for (const key of Object.keys(COUNTABLE_PRIORS)) {
+    const keyWords = key.split("_");
+    const tail = words.slice(-keyWords.length);
+    if (tail.length === keyWords.length && tail.every((w, i) => w === keyWords[i])) return key;
+  }
   return null;
 };
+
+/** Serving units that are ONE of what a photo counts: a piece of the food or a
+ *  sealed can, bottle or pot. A count multiplies only these. A weight, a spoon, a
+ *  cup, a glass or a bowl is not one: ten grapes are not ten 100 g servings, and a
+ *  vessel's size is the container rung's to measure. */
+export const PIECE_UNITS: ReadonlySet<string> = new Set([
+  "apple", "banana", "bagel", "bar", "bottle", "brownie", "burger", "cake", "can", "clementine",
+  "container", "cookie", "croissant", "date", "donut", "dosa", "egg", "gyro", "hot dog", "idli",
+  "kiwi", "link", "meatball", "muffin", "naan", "nugget", "orange", "pancake", "paratha", "patty",
+  "peach", "pear", "pita", "plum", "potato", "quesadilla", "roll", "roti", "samosa", "sandwich",
+  "sausage", "slice", "spear", "stick", "taco", "tortilla", "waffle", "white",
+]);
+
+/** The food's own serving: `grams` of it make one `unit`. */
+export interface Serving { grams: number; unit: string; }
 
 /** Grams from a saved dish: volume(ml) × fill(0–1) × food density. The ONE
  *  place both the scan-time rung-1 resolver (below) and the confirm-time
@@ -46,14 +71,23 @@ export function dishwareGrams(volumeMl: number, fillLevel: number, canonicalHint
   return Math.round(volumeMl * fillLevel * density(canonicalHint));
 }
 
-/** Stage 2 approved rungs: reliable count, 1, 3, 4. Anchor scaling is deferred. */
-export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishware[], defaultGrams: number): PortionResult {
-  const ck = countKey(e.canonicalHint);
-  if (e.count !== null && ck !== null) {
-    const prior = countablePriors[ck];
-    if (prior === undefined) throw new Error("countable prior key missing");
-    const range = scaled(prior, e.count);
-    return { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior" };
+/** Stage 2 approved rungs: reliable count, 1, 3, 4. Anchor scaling is deferred.
+ *  A count takes the Appendix B piece the hint names, else the food's own
+ *  serving times the count where that serving is one piece; otherwise the count
+ *  cannot say how much there is and the rungs below decide. */
+export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult {
+  if (e.count !== null) {
+    const ck = countKey(e.canonicalHint);
+    if (ck !== null) {
+      const prior = countablePriors[ck];
+      if (prior === undefined) throw new Error("countable prior key missing");
+      const range = scaled(prior, e.count);
+      return { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior" };
+    }
+    if (PIECE_UNITS.has(serving.unit)) {
+      const grams = Math.round(serving.grams * e.count);
+      return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default" };
+    }
   }
   if (e.container !== null) {
     const saved = dishware.find((d) => d.containerClass === e.container && (d.foodHint === null || e.canonicalHint.includes(d.foodHint)));
@@ -73,5 +107,5 @@ export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishw
   // The curated salvage row provides one serving value, not a sourced range;
   // do not invent a ± percentage (R0.2). The UI still receives the range
   // shape, collapsed honestly to the only sourced value.
-  return { gramsPoint: defaultGrams, gramsRange: [defaultGrams, defaultGrams], portionSource: "default" };
+  return { gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default" };
 }
