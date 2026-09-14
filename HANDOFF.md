@@ -4,9 +4,12 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`
+## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`, PR #70
 
 - Kd picked a screen of its own straight after signing in (RULINGS 2026-09-14): *"Own screen after sign-in (Recommended)"*, once per account, either door.
+- Then the words: Kd found v2 read as "this app should not be followed" and wrote his own; with his go to three changes they are the sign-up
+  wording's v3 (RULINGS 2026-09-14). Shared tsc 0 · eslint 0 · 105/105; api health + users routes 31/31; web note + onboarding + healthApi 91/91;
+  seen at 400 px against the restarted local API, and the tick's row holds v3's words.
 - Built: the profile's `signUpDisclaimerAgreed` (this person's tap, on the sign-up note, in today's words, read from the consent log); the web's
   guard draws the note in place of any signed-in screen until then, and a profile it cannot read shows the note (fails closed, unlike setup's
   gate). Setup's tick and its hook are shared now (`DisclaimerTick`, `useDisclaimerTap`); on this screen the words are at reading size.
