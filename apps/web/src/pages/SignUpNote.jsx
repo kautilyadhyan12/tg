@@ -6,10 +6,11 @@
 // account exists.
 //
 // `ProtectedRoute` draws this IN PLACE of whatever a signed-in person asked for
-// — setup, the member app or the console, through either door — until their
-// profile says this account has ticked the note in today's words. The tap is
-// kept on the server the moment it is made, so no device asks again; Continue
-// only lets this tab go on to the screen it was already on its way to.
+// — setup or the member app, through either door; the six console routes opt
+// out — until their profile says this account has ticked the note in today's
+// words. The tap is kept on the server the moment it is made, so no device asks
+// again; Continue only lets this tab go on to the screen it was already on its
+// way to.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';

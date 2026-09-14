@@ -511,6 +511,16 @@ d("health screening + consent routes (real Postgres)", () => {
     expect((await tap(a.cookies, "plan_screen", CURRENT_DISCLAIMER_VERSION.plan_screen)).statusCode).toBe(201);
     expect(await agreedFlag(a.cookies)).toBe(false);
 
+    // The same two notes in the sign-up note's version, put straight into the
+    // log: the route takes only a note's own versions, and today neither note
+    // has that one, so without these rows the note itself is never checked.
+    for (const purpose of ["health_step", "plan_screen"]) {
+      await sql`
+        INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
+        VALUES (${a.userId}, ${purpose}, ${CURRENT_DISCLAIMER_VERSION.sign_up}, 'another note', 'web-test')`;
+    }
+    expect(await agreedFlag(a.cookies)).toBe(false);
+
     // A stranger's tap on the right note, in the right words.
     expect((await tap(b.cookies, "sign_up", CURRENT_DISCLAIMER_VERSION.sign_up)).statusCode).toBe(201);
     expect(await agreedFlag(b.cookies)).toBe(true);
