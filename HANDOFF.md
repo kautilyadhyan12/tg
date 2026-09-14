@@ -13,7 +13,12 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   ROADMAP 4c-ii, next, before 4d (RULINGS 2026-09-14); its plan asks him two lines (the number box keeps its line; the target stays pickable).
 - Kd: a click-through tests only what its card changed, all steps in one list (RULINGS 2026-09-14). Set the test account up beforehand
   on the local database, so his first step is on the card's own screen.
-- Next: plan 4c-ii with Kd (ten lines or fewer), then build it; after it, ask Kd if 4d is next.
+- GitHub's 90 % minutes warning: 1,816 billed minutes 2026-09-01 to 14 (measured from the run logs), 842 of them (46 %) on record-only
+  pushes. Kd: stay private, GitHub Pro, an $8 cap, no name scrub (RULINGS 2026-09-14). PR #67 (`ci-trim`): a `what changed` job skips the
+  code checks for a records-only push and the Neon migration check unless a migration changed; anything uncertain runs everything. Its
+  first run ran all six jobs (no earlier green run on the branch); the records push after it is the proof of the skips.
+- Next: merge #67 on Kd's word; when Pro is on, the merge lock on `master` (required checks: the five job names; a skipped job counts as
+  passed); then plan 4c-ii with Kd (ten lines or fewer) and build it; after it, ask Kd if 4d is next.
 
 ## 2026-09-14 · 4c finished after its review, branch `plan-screen`, PR #66
 
