@@ -3,8 +3,9 @@
 // `tools/check-food-sources.ts` compares every number with its table; these
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
-import { DIET_LADDER, dietSchema } from "@app/shared";
+import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
 import { CURATED_FOODS, FOOD_ALIASES, findCurated, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { PIECE_UNITS } from "../src/modules/nutrition/portion-priors.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -47,7 +48,7 @@ const nameWords = (name: string): string[] =>
 
 describe("the curated food list", () => {
   it("gives every food a table entry, a diet, whole kcal per 100 g and a serving", () => {
-    expect(CURATED_FOODS).toHaveLength(317);
+    expect(CURATED_FOODS).toHaveLength(318);
     for (const f of CURATED_FOODS) {
       expect(f.citation, f.name).toMatch(/^(?:usda-sr:\d{6}|usda-fndds:\d{7}|uk-cofid:\d{2}-\d{3,4})$/);
       expect(dietSchema.options, f.name).toContain(f.diet);
@@ -97,9 +98,107 @@ describe("the curated food list", () => {
     expect(food("pho_beef")).toMatchObject({ kcal: 77, serving: 400, citation: "usda-fndds:2707124" });
     expect(Math.round((food("pho_beef").kcal * food("pho_beef").serving) / 100)).toBe(308);
   });
+
+  it("says of every serving whether it is one piece a photo's count can multiply", () => {
+    // Each unit on the list is a piece (or a sealed pack) or a measure, never both
+    // and never neither, so a new unit cannot slip into the count unclassified.
+    const MEASURES = new Set(["g", "oz", "tsp", "tbsp", "2 tbsp", "cup", "half cup", "glass", "bowl", "small", "portion", "half", "scoop", "shot"]);
+    for (const f of CURATED_FOODS) expect(PIECE_UNITS.has(f.unit) !== MEASURES.has(f.unit), `${f.name}: "${f.unit}"`).toBe(true);
+    for (const unit of PIECE_UNITS) expect(CURATED_FOODS.some((f) => f.unit === unit), unit).toBe(true);
+  });
+
+  it("keeps both rotis, each from its own table, and roti means the homemade one", () => {
+    // USDA's roti is store-bought; the UK table's is made at home without fat (Kd, 2026-09-14).
+    expect(food("roti_chapati")).toMatchObject({ name: "Roti / Chapati (homemade flatbread, no fat)", kcal: 202, serving: 40, citation: "uk-cofid:11-459" });
+    expect(food("roti_chapati_store_bought_flatbread")).toMatchObject({ kcal: 297, serving: 68, citation: "usda-sr:171844" });
+    expect(findCurated("roti")?.canonical).toBe("roti_chapati");
+    expect(findCurated("chapatis")?.canonical).toBe("roti_chapati");
+    expect(findCurated("store-bought roti")?.canonical).toBe("roti_chapati_store_bought_flatbread");
+    // Naan and paratha are USDA's, as the rule says; paneer stays the UK table's.
+    expect(food("naan").citation).toBe("usda-sr:171845");
+    expect(food("paratha").citation).toBe("usda-sr:174076");
+    expect(food("paneer")).toMatchObject({ carbsG: 0.9, citation: "uk-cofid:12-495" });
+  });
 });
 
+/** Every food's diet, written out, so a label changed on the list must be changed
+ *  here too, where a review sees it. Checked against each dish's ingredients as
+ *  its table lists them. */
+const DIETS: Readonly<Record<Diet, readonly string[]>> = {
+  vegan: [
+    "tofu_firm", "tempeh", "lentils_cooked", "chickpeas_cooked", "black_beans_cooked", "kidney_beans_cooked",
+    "edamame_cooked", "pinto_beans_cooked", "white_beans_cooked", "hummus", "baked_beans_canned", "falafel",
+    "rice_white_cooked", "rice_brown_cooked", "oats_dry", "quinoa_cooked", "pasta_cooked", "tortilla_flour",
+    "bagel_plain", "cereal_cornflakes", "oatmeal_cooked", "pasta_whole_wheat_cooked", "couscous_cooked",
+    "rice_noodles_cooked", "rye_bread", "french_bread_sourdough", "pita_bread", "tortilla_corn", "crackers",
+    "rice_cakes", "crispbread_rye", "potato_baked", "sweet_potato_baked", "french_fries", "corn_cooked",
+    "potato_boiled", "hash_browns", "butternut_squash_cooked", "broccoli_cooked", "spinach_raw", "kale_cooked",
+    "carrots_raw", "bell_pepper", "cucumber", "tomato", "lettuce", "onion", "mushrooms", "asparagus_cooked",
+    "zucchini", "cauliflower_cooked", "brussels_sprouts", "cabbage", "avocado", "green_beans_cooked", "celery",
+    "eggplant_cooked", "beets_cooked", "spinach_cooked", "carrots_cooked", "peas_green_cooked", "arugula",
+    "okra_cooked", "sauerkraut", "pickles", "olives", "mixed_vegetables_cooked", "salad_green_no_dressing",
+    "apple", "banana", "orange", "strawberries", "blueberries", "grapes", "watermelon", "mango", "pineapple",
+    "pear", "peach", "kiwi", "raspberries", "blackberries", "cherries", "plum", "grapefruit", "cantaloupe",
+    "clementine", "dates_medjool", "raisins", "pomegranate", "applesauce_unsweetened", "almonds", "peanuts",
+    "walnuts", "cashews", "peanut_butter", "almond_butter", "chia_seeds", "flax_seeds", "sunflower_seeds",
+    "pistachios", "pecans", "hazelnuts", "pumpkin_seeds", "mixed_nuts", "trail_mix", "olive_oil", "coconut_oil",
+    "vegetable_oil", "ketchup", "mustard", "bbq_sauce", "soy_sauce", "jam", "maple_syrup",
+    "tomato_sauce_marinara", "salsa", "guacamole", "coffee_black", "tea_unsweetened", "orange_juice",
+    "apple_juice", "coke_cola", "beer_regular", "wine_red", "sports_drink", "energy_drink", "diet_cola",
+    "wine_white", "beer_light", "spirits_vodka_gin_rum_whiskey", "soy_milk", "almond_milk", "oat_milk", "water",
+    "tomato_soup", "lentil_soup", "potato_chips", "pretzels", "popcorn_plain", "sugar_white", "tortilla_chips",
+    "roti_chapati", "roti_chapati_store_bought_flatbread", "idli", "dosa_plain",
+  ],
+  vegetarian: [
+    "greek_yogurt_plain", "cottage_cheese_low_fat", "milk_whole", "milk_skim", "cheddar_cheese",
+    "mozzarella_cheese", "butter", "curd_dahi", "milk_2", "milk_1", "chocolate_milk", "yogurt_plain_low_fat",
+    "yogurt_fruit_low_fat", "cream_cheese", "parmesan_cheese", "feta_cheese", "swiss_cheese", "brie",
+    "goat_cheese", "sour_cream", "heavy_cream", "kefir", "cottage_cheese_full_fat", "ghee", "whole_wheat_bread",
+    "white_bread", "granola", "multigrain_bread", "english_muffin", "muesli", "mashed_potatoes",
+    "roast_potatoes", "italian_dressing", "pesto", "whey_protein_powder", "latte", "cappuccino",
+    "hot_chocolate", "smoothie_fruit", "protein_shake_ready_to_drink", "pizza_cheese", "mac_and_cheese",
+    "grilled_cheese_sandwich", "peanut_butter_and_jelly_sandwich", "quesadilla_cheese", "nachos_cheese",
+    "chocolate_dark_70", "honey", "protein_bar", "granola_bar", "milk_chocolate", "apple_pie",
+    "dal_lentil_curry", "paneer", "samosa", "palak_paneer", "chana_masala", "vegetable_curry",
+    "biryani_vegetable", "paratha",
+  ],
+  vegetarian_eggs: [
+    "egg_whole_large", "egg_white", "egg_hard_boiled", "eggs_scrambled", "egg_fried", "egg_poached",
+    "omelette_plain", "egg_noodles_cooked", "bread_roll", "pancakes", "waffles", "french_toast", "coleslaw",
+    "mayonnaise", "ranch_dressing", "fried_rice", "veggie_burger", "potato_salad", "chocolate_chip_cookie",
+    "ice_cream_vanilla", "donut_glazed", "croissant", "brownie", "cheesecake", "blueberry_muffin",
+    "chocolate_cake", "banana_bread", "naan", "spring_roll",
+  ],
+  non_vegetarian: [
+    "chicken_breast_cooked", "chicken_thigh_cooked", "ground_beef_85_cooked", "ground_beef_90_cooked",
+    "steak_sirloin_cooked", "pork_chop_cooked", "bacon_cooked", "turkey_breast_cooked", "lamb_cooked",
+    "chicken_breast_grilled", "chicken_drumstick_cooked", "chicken_wings_cooked", "rotisserie_chicken",
+    "fried_chicken", "chicken_nuggets", "ground_turkey_cooked", "turkey_deli_slices", "ribeye_steak_cooked",
+    "beef_brisket_cooked", "beef_jerky", "meatballs_in_sauce", "ground_beef_80_cooked", "ham_sliced",
+    "pork_tenderloin_cooked", "pulled_pork_barbecue", "pork_sausage_cooked", "salami", "pepperoni",
+    "pork_ribs_cooked", "bratwurst", "lamb_chop_cooked", "turkey_bacon_cooked", "salmon_cooked",
+    "tuna_canned_in_water", "tilapia_cooked", "cod_cooked", "shrimp_cooked", "sardines_canned_in_oil",
+    "tuna_steak_cooked", "salmon_canned", "smoked_salmon", "trout_cooked", "mackerel_cooked", "herring_pickled",
+    "haddock_cooked", "sea_bass_cooked", "crab_cooked", "lobster_cooked", "scallops_cooked", "mussels_cooked",
+    "calamari_fried", "fish_sticks", "fried_fish_coated", "tuna_salad", "refried_beans", "caesar_dressing",
+    "pizza_pepperoni", "hamburger_fast_food", "hot_dog", "sushi_roll", "burrito_chicken", "sandwich_turkey",
+    "caesar_salad_with_chicken", "spaghetti_bolognese", "lasagna_meat", "chili_con_carne", "beef_stew",
+    "chicken_noodle_soup", "tacos_beef", "cheeseburger", "chicken_sandwich_fried", "shepherd_s_pie",
+    "chicken_stir_fry_with_vegetables", "greek_salad_no_dressing", "gyro", "chicken_curry", "butter_chicken",
+    "biryani_chicken", "ramen_cooked", "pad_thai", "dumplings_pork", "pho_beef", "ramen_bowl",
+  ],
+};
+
 describe("a food's diet", () => {
+  it("is the one written out for every food, and no food is left out or listed twice", () => {
+    const listed = Object.values(DIETS).flat();
+    expect(new Set(listed).size).toBe(listed.length);
+    expect([...listed].sort()).toEqual(CURATED_FOODS.map((f) => f.canonical).sort());
+    for (const diet of dietSchema.options) {
+      for (const canonical of DIETS[diet]) expect(food(canonical).diet, canonical).toBe(diet);
+    }
+  });
+
   it("is non-vegetarian for meat and fish, with eggs or above for egg, and vegetarian or above for dairy", () => {
     const MEAT_AND_FISH = ["chicken", "beef", "pork", "bacon", "ham", "turkey", "lamb", "steak", "ribeye", "brisket", "jerky", "meatball", "sausage", "salami", "pepperoni", "rib", "bratwurst", "meat", "carne", "salmon", "tuna", "tilapia", "cod", "shrimp", "sardine", "trout", "mackerel", "herring", "haddock", "bass", "crab", "lobster", "scallop", "mussel", "calamari", "fish", "hamburger", "cheeseburger", "dog", "gyro"];
     const EGG = ["egg", "omelette", "mayonnaise"];
@@ -175,8 +274,29 @@ describe("the food a name means", () => {
       ["cookies", "chocolate_chip_cookie"],
       ["nugget", "chicken_nuggets"],
       ["paneer tikka", "paneer"],
+      // An Indian dish by its English name too (Kd, 2026-09-14), and never the
+      // English food of the same words: cottage cheese is still cottage cheese.
+      ["indian cottage cheese", "paneer"],
+      ["cottage cheese", "cottage_cheese_low_fat"],
+      ["lentil curry", "dal_lentil_curry"],
+      ["chickpea curry", "chana_masala"],
+      ["naan bread", "naan"],
+      // Other spellings.
+      ["shepherds pie", "shepherd_s_pie"],
+      ["chilli", "chili_con_carne"],
+      ["chilli con carne", "chili_con_carne"],
+      // A renamed food's old canonical is still that food.
+      ["spring_roll", "spring_roll"],
+      ["greek_yogurt_plain", "greek_yogurt_plain"],
     ];
     for (const [hint, canonical] of cases) expect(findCurated(hint)?.canonical, hint).toBe(canonical);
+  });
+
+  it("is found by its canonical before by its words, so a saved food is never another", () => {
+    // The store-bought roti's name holds both of roti_chapati's words in fewer
+    // words than the homemade one's; a saved homemade roti must stay homemade.
+    expect(findCurated("roti_chapati")?.name).toBe("Roti / Chapati (homemade flatbread, no fat)");
+    for (const f of CURATED_FOODS) expect(findCurated(f.canonical), f.canonical).toBe(f);
   });
 
   it("drops the words that only say how a food is served, and nothing else", () => {
@@ -198,6 +318,9 @@ describe("the food a name means", () => {
     for (const hint of ["mango lassi", "strawberry yogurt", "Aloo Paratha", "banana chips", "orange chicken", "fish", "fish curry", "constructor", "__proto__", ""]) {
       expect(findCurated(hint), hint).toBeNull();
     }
+    // Words the markets use for different foods: jelly (jam in the US, a gelatine
+    // dessert in the UK), chips (crisps or fries), beans (baked beans on a British plate).
+    for (const hint of ["jelly", "chips", "beans"]) expect(findCurated(hint), hint).toBeNull();
   });
 
   it("lists a whole word before part of a word in the search box", () => {
@@ -211,5 +334,18 @@ describe("the food a name means", () => {
     expect(searchCurated("flatbread", 5).some((f) => f.canonical === "roti_chapati")).toBe(true);
     expect(searchCurated("aloo", 5).some((f) => f.canonical === "potato_baked")).toBe(true);
     for (const f of CURATED_FOODS) expect(searchCurated(f.name, 1)[0], f.name).toBe(f);
+  });
+
+  it("lists an Indian dish when its English name is typed, and both rotis for roti", () => {
+    const names = (q: string, limit = 15): string[] => searchCurated(q, limit).map((f) => f.canonical);
+    expect(names("cottage cheese")).toEqual(expect.arrayContaining(["cottage_cheese_low_fat", "cottage_cheese_full_fat", "paneer"]));
+    expect(names("lentil curry")).toContain("dal_lentil_curry");
+    expect(names("chickpea curry")).toContain("chana_masala");
+    expect(names("flatbread")).toEqual(expect.arrayContaining(["roti_chapati", "roti_chapati_store_bought_flatbread", "naan", "paratha"]));
+    expect(names("rice cake")[0]).toBe("rice_cakes");
+    expect(names("rice cake")).toContain("idli");
+    expect(names("roti", 2)).toEqual(["roti_chapati", "roti_chapati_store_bought_flatbread"]);
+    expect(names("shepherds pie")).toContain("shepherd_s_pie");
+    expect(names("chilli")).toContain("chili_con_carne");
   });
 });

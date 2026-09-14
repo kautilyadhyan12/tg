@@ -5,14 +5,16 @@
 //   usda-sr:<FDC id>     USDA FoodData Central, SR Legacy (April 2018)
 //   usda-fndds:<FDC id>  USDA FoodData Central, FNDDS 2021-2023 survey foods (October 2024)
 //   uk-cofid:<food code> UK McCance and Widdowson's Composition of Foods Integrated Dataset (2021)
-// USDA is used first. CoFID is used where USDA has no entry for the food (roti,
-// naan, paratha, muesli, chana masala, butter chicken), and for paneer, whose
-// USDA survey entry is a recipe carrying 22 g of carbohydrate per 100 g where
-// CoFID's nine analysed samples carry 0.9 g. kcal, protein, carbohydrate and fat
-// are each table's own figures: USDA counts carbohydrate by difference, fibre
-// included, and CoFID counts available carbohydrate. Fibre is null where the
-// table has no measured figure (CoFID's fibre is AOAC, or NSP where AOAC is not
-// given). To check every number against its table:
+// USDA is used first. CoFID is used where USDA has no entry for the food: a roti
+// made at home without fat (USDA's rotis are store-bought), muesli, chana masala
+// and butter chicken. Paneer is CoFID's too: USDA's survey entry is worked out
+// from whole milk and vinegar and keeps the milk's sugar, 22 g of carbohydrate
+// per 100 g, where CoFID's nine analysed samples carry 0.9 g (Kd, 2026-09-14).
+// kcal, protein, carbohydrate and fat are each table's own figures: USDA counts
+// carbohydrate by difference, fibre included, and CoFID counts available
+// carbohydrate. Fibre is null where the table has no measured figure (CoFID's
+// fibre is AOAC, or NSP where AOAC is not given). To check every number against
+// its table:
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts
 //
 // The diet is the lowest rung of `dietSchema`'s ladder that eats the food, by
@@ -37,16 +39,31 @@ export interface CuratedFood extends FoodReference {
 
 const slug = (v: string): string => v.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
 
-/** Foods renamed to say what their numbers are. Each keeps the canonical of its
- *  old name, because a saved meal finds its foods again by canonical. */
+/** Foods renamed to say what their numbers are, or to carry an English name
+ *  beside an Indian one so they are found by either (Kd, 2026-09-14). Each keeps
+ *  the canonical of the name it had, because a saved meal finds its foods again
+ *  by canonical. */
 const KEPT_CANONICALS: ReadonlyMap<string, string> = new Map([
+  ["Greek yogurt (plain, nonfat)", "greek_yogurt_plain"],
   ["Brussels sprouts (cooked)", "brussels_sprouts"],
   ["Caesar salad (with chicken, no dressing)", "caesar_salad_with_chicken"],
   ["Ramen (instant, cooked)", "ramen_cooked"],
-  ["Spring roll (vegetable, fried)", "spring_roll"],
+  ["Egg roll (vegetable, fried)", "spring_roll"],
   ["Dumplings (pork, fried)", "dumplings_pork"],
   ["Butter chicken / tikka masala", "butter_chicken"],
   ["Chocolate (dark, 70–85%)", "chocolate_dark_70"],
+  ["Roti / Chapati (homemade flatbread, no fat)", "roti_chapati"],
+  ["Naan (Indian flatbread)", "naan"],
+  ["Paneer (Indian cottage cheese)", "paneer"],
+  ["Biryani (spiced rice with chicken)", "biryani_chicken"],
+  ["Samosa (fried pastry, potato and peas)", "samosa"],
+  ["Idli (steamed rice cake)", "idli"],
+  ["Dosa (rice and lentil crepe, plain)", "dosa_plain"],
+  ["Palak paneer (spinach and cheese curry)", "palak_paneer"],
+  ["Chana masala (chickpea curry)", "chana_masala"],
+  ["Biryani (spiced rice with vegetables)", "biryani_vegetable"],
+  ["Paratha (layered flatbread)", "paratha"],
+  ["Curd / Dahi (plain yogurt, whole milk)", "curd_dahi"],
 ]);
 
 const row = (
@@ -142,14 +159,14 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Egg (poached)", 143, 12.51, 0.71, 9.47, 0, 50, "egg", "vegetarian_eggs", "usda-sr:172186"),
   row("Omelette (plain)", 154, 10.57, 0.64, 11.66, 0, 100, "g", "vegetarian_eggs", "usda-sr:172185"),
   // ── Dairy
-  row("Greek yogurt (plain)", 59, 10.19, 3.6, 0.39, 0, 100, "g", "vegetarian", "usda-sr:170894"),
+  row("Greek yogurt (plain, nonfat)", 59, 10.19, 3.6, 0.39, 0, 100, "g", "vegetarian", "usda-sr:170894"),
   row("Cottage cheese (low-fat)", 81, 10.45, 4.76, 2.27, 0, 100, "g", "vegetarian", "usda-sr:172182"),
   row("Milk (whole)", 61, 3.15, 4.8, 3.25, 0, 240, "cup", "vegetarian", "usda-sr:171265"),
   row("Milk (skim)", 34, 3.37, 4.96, 0.08, 0, 240, "cup", "vegetarian", "usda-sr:171269"),
   row("Cheddar cheese", 403, 22.87, 3.37, 33.31, 0, 30, "slice", "vegetarian", "usda-sr:173414"),
   row("Mozzarella cheese", 299, 22.17, 2.4, 22.14, 0, 30, "slice", "vegetarian", "usda-sr:170845"),
   row("Butter", 717, 0.85, 0.06, 81.11, 0, 14, "tbsp", "vegetarian", "usda-sr:173410"),
-  row("Curd / Dahi", 61, 3.47, 4.66, 3.25, 0, 100, "g", "vegetarian", "usda-sr:171284"),
+  row("Curd / Dahi (plain yogurt, whole milk)", 61, 3.47, 4.66, 3.25, 0, 100, "g", "vegetarian", "usda-sr:171284"),
   row("Milk (2%)", 50, 3.3, 4.8, 1.98, 0, 240, "cup", "vegetarian", "usda-sr:171267"),
   row("Milk (1%)", 42, 3.37, 4.99, 0.97, 0, 240, "cup", "vegetarian", "usda-sr:170872"),
   row("Chocolate milk", 76, 2.99, 12.13, 1.9, 0.7, 240, "cup", "vegetarian", "usda-sr:170880"),
@@ -388,36 +405,39 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Tortilla chips", 472, 7.1, 67.78, 20.68, 5.4, 28, "oz", "vegan", "usda-sr:167558"),
   row("Banana bread", 326, 4.3, 54.6, 10.5, 1.1, 60, "slice", "vegetarian_eggs", "usda-sr:174906"),
   // ── Indian dishes
-  row("Roti / Chapati", 202, 7.3, 43.7, 1, null, 40, "roti", "vegan", "uk-cofid:11-459"),
-  row("Naan", 285, 7.8, 50.2, 7.3, 2.9, 90, "naan", "vegetarian_eggs", "uk-cofid:11-973"),
+  row("Roti / Chapati (homemade flatbread, no fat)", 202, 7.3, 43.7, 1, null, 40, "roti", "vegan", "uk-cofid:11-459"),
+  row("Roti / Chapati (store-bought flatbread)", 297, 11.25, 46.36, 7.45, 4.9, 68, "roti", "vegan", "usda-sr:171844"),
+  row("Naan (Indian flatbread)", 291, 9.62, 50.43, 5.65, 2.2, 90, "naan", "vegetarian_eggs", "usda-sr:171845"),
   row("Dal (lentil curry)", 145, 8.6, 19.17, 4.31, 7.5, 100, "g", "vegetarian", "usda-fndds:2707427"),
-  row("Paneer", 328, 26, 0.9, 24.5, 0, 100, "g", "vegetarian", "uk-cofid:12-495"),
+  row("Paneer (Indian cottage cheese)", 328, 26, 0.9, 24.5, 0, 100, "g", "vegetarian", "uk-cofid:12-495"),
   row("Chicken curry", 107, 6.48, 6.54, 6.48, 1.4, 100, "g", "non_vegetarian", "usda-fndds:2706437"),
   row("Butter chicken / tikka masala", 156, 12.4, 4.9, 9.8, 1.4, 100, "g", "non_vegetarian", "uk-cofid:19-296"),
-  row("Biryani (chicken)", 104, 7.15, 13.55, 2.38, 1.1, 100, "g", "non_vegetarian", "usda-fndds:2706538"),
-  row("Samosa", 310, 5.14, 33.16, 17.47, 1.8, 75, "samosa", "vegetarian", "usda-fndds:2708730"),
-  row("Idli", 128, 6.36, 24.98, 0.35, 5.8, 38, "idli", "vegan", "usda-fndds:2708346"),
-  row("Dosa (plain)", 210, 5.7, 37.04, 4.05, 1.8, 80, "dosa", "vegan", "usda-fndds:2708347"),
-  row("Palak paneer", 101, 5.42, 4.28, 7.02, 0.9, 200, "cup", "vegetarian", "usda-fndds:2709631"),
-  row("Chana masala", 237, 7.7, 20.1, 14.4, 4.2, 200, "g", "vegetarian", "uk-cofid:15-746"),
+  row("Biryani (spiced rice with chicken)", 104, 7.15, 13.55, 2.38, 1.1, 100, "g", "non_vegetarian", "usda-fndds:2706538"),
+  row("Samosa (fried pastry, potato and peas)", 310, 5.14, 33.16, 17.47, 1.8, 75, "samosa", "vegetarian", "usda-fndds:2708730"),
+  row("Idli (steamed rice cake)", 128, 6.36, 24.98, 0.35, 5.8, 38, "idli", "vegan", "usda-fndds:2708346"),
+  row("Dosa (rice and lentil crepe, plain)", 210, 5.7, 37.04, 4.05, 1.8, 80, "dosa", "vegan", "usda-fndds:2708347"),
+  row("Palak paneer (spinach and cheese curry)", 101, 5.42, 4.28, 7.02, 0.9, 200, "cup", "vegetarian", "usda-fndds:2709631"),
+  row("Chana masala (chickpea curry)", 237, 7.7, 20.1, 14.4, 4.2, 200, "g", "vegetarian", "uk-cofid:15-746"),
   row("Vegetable curry", 86, 1.6, 8.81, 5.27, 1.8, 240, "cup", "vegetarian", "usda-fndds:2710067"),
-  row("Biryani (vegetable)", 109, 1.93, 17.91, 3.2, 1.2, 172, "cup", "vegetarian", "usda-fndds:2708985"),
-  row("Paratha", 333, 7.8, 45.8, 14.4, 4.9, 80, "paratha", "vegetarian", "uk-cofid:11-1104"),
+  row("Biryani (spiced rice with vegetables)", 109, 1.93, 17.91, 3.2, 1.2, 172, "cup", "vegetarian", "usda-fndds:2708985"),
+  row("Paratha (layered flatbread)", 326, 6.36, 45.35, 13.2, 9.6, 79, "paratha", "vegetarian", "usda-sr:174076"),
   // ── Asian dishes
   row("Ramen (instant, cooked)", 66, 1.53, 9.04, 2.64, 0.4, 100, "g", "non_vegetarian", "usda-fndds:2709152"),
   row("Pad Thai", 154, 8.13, 14.36, 7.5, 1.2, 100, "g", "non_vegetarian", "usda-fndds:2708804"),
-  row("Spring roll (vegetable, fried)", 270, 5.62, 30.02, 14.14, 2.3, 64, "roll", "vegetarian_eggs", "usda-fndds:2708700"),
+  row("Egg roll (vegetable, fried)", 270, 5.62, 30.02, 14.14, 2.3, 64, "roll", "vegetarian_eggs", "usda-fndds:2708700"),
   row("Dumplings (pork, fried)", 192, 8.76, 14.05, 11.13, 1.5, 100, "g", "non_vegetarian", "usda-fndds:2708705"),
   row("Pho (beef)", 77, 5.81, 5.6, 3.33, 0.4, 400, "bowl", "non_vegetarian", "usda-fndds:2707124"),
   row("Ramen bowl", 127, 7.13, 13.95, 4.57, 0.9, 490, "bowl", "non_vegetarian", "usda-fndds:2709153"),
 ];
 
-/** Names the list's own names do not contain, each pointing at a canonical:
- *  other spellings and local names, a cooking word where the table's cooking is
- *  the same one, and the single words that stand for one common food ("chicken"
- *  for cooked chicken breast). A Map, not an object literal, so a key such as
- *  "constructor" is never found on the prototype. Exported for the test that
- *  holds each one to a food on the list. */
+/** Names the words of the list's own names do not reach, each pointing at a
+ *  canonical: other spellings and local names, the English name of an Indian
+ *  dish (its name holds it in brackets, but a name is found by the words outside
+ *  them), a cooking word where the table's cooking is the same one, and the
+ *  single words that stand for one common food ("chicken" for cooked chicken
+ *  breast). A Map, not an object literal, so a key such as "constructor" is
+ *  never found on the prototype. Exported for the test that holds each one to a
+ *  food on the list. */
 export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries({
   // Indian names
   roti: "roti_chapati", chapati: "roti_chapati", flatbread: "roti_chapati",
@@ -428,15 +448,18 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
   anda: "egg_whole_large",
   chana: "chickpeas_cooked", chhole: "chana_masala", chole: "chana_masala",
   rajma: "kidney_beans_cooked", bhindi: "okra_cooked", garlic_naan: "naan", paneer_tikka: "paneer",
+  // English names for Indian dishes
+  lentil_curry: "dal_lentil_curry", chickpea_curry: "chana_masala", indian_cottage_cheese: "paneer",
+  naan_bread: "naan",
   // other spellings and names
   capsicum: "bell_pepper", maize: "corn_cooked", groundnut: "peanuts",
   prawns: "shrimp_cooked", prawn: "shrimp_cooked",
   yoghurt: "yogurt_plain_low_fat", courgette: "zucchini", aubergine: "eggplant_cooked",
   beetroot: "beets_cooked", rocket: "arugula", crisps: "potato_chips", porridge: "oatmeal_cooked",
   mince: "ground_beef_85_cooked", minced_beef: "ground_beef_85_cooked", lasagne: "lasagna_meat",
-  fish_fingers: "fish_sticks", cottage_pie: "shepherd_s_pie", omelet: "omelette_plain",
+  fish_fingers: "fish_sticks", cottage_pie: "shepherd_s_pie", shepherds_pie: "shepherd_s_pie", omelet: "omelette_plain",
   doughnut: "donut_glazed", mandarin: "clementine", tangerine: "clementine",
-  apple_sauce: "applesauce_unsweetened", jelly: "jam", mayo: "mayonnaise", lox: "smoked_salmon",
+  apple_sauce: "applesauce_unsweetened", mayo: "mayonnaise", lox: "smoked_salmon",
   cornflakes: "cereal_cornflakes", corn_flakes: "cereal_cornflakes", pita: "pita_bread",
   bun: "bread_roll", baguette: "french_bread_sourdough", ribeye: "ribeye_steak_cooked",
   rib_eye_steak: "ribeye_steak_cooked", brisket: "beef_brisket_cooked", jerky: "beef_jerky",
@@ -460,9 +483,13 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
   pork: "pork_chop_cooked", turkey: "turkey_breast_cooked", sausage: "pork_sausage_cooked",
   bread: "whole_wheat_bread", cheese: "cheddar_cheese", cheddar: "cheddar_cheese",
   mozzarella: "mozzarella_cheese", parmesan: "parmesan_cheese", feta: "feta_cheese",
-  beans: "black_beans_cooked", nuts: "mixed_nuts", juice: "orange_juice", chips: "potato_chips",
+  nuts: "mixed_nuts", juice: "orange_juice",
   fries: "french_fries", burger: "hamburger_fast_food", cookie: "chocolate_chip_cookie",
-  sushi: "sushi_roll", spaghetti: "pasta_cooked", chili: "chili_con_carne", bolognese: "spaghetti_bolognese",
+  sushi: "sushi_roll", spaghetti: "pasta_cooked", chili: "chili_con_carne", chilli: "chili_con_carne",
+  chilli_con_carne: "chili_con_carne", bolognese: "spaghetti_bolognese",
+  // Left out on purpose: a word the markets use for different foods. "Jelly" is
+  // jam in the US and a gelatine dessert in the UK, "chips" are crisps in the US
+  // and fries in the UK, and "beans" on a British plate are baked beans.
 }));
 
 /** Words that only say how a food is arranged, cut or served, never what it
@@ -555,14 +582,18 @@ function byAliasOrWords(slugged: string): CuratedFood | null {
   return byWords(slugged);
 }
 
-/** The one food a name means, or null: an alias, then the name's own words,
- *  and then the same again with the noise words dropped ("Pizza Slice" is
- *  pizza). A canonical is made of its food's name's words (a renamed food keeps
- *  its old name's, which the new name still holds), so a saved or searched food
- *  is found again by its canonical. */
+/** The one food a name means, or null: the food whose canonical it is, then an
+ *  alias, then the name's own words, and then the same again with the noise
+ *  words dropped ("Pizza Slice" is pizza). The canonical comes first, so a saved
+ *  or searched food is found again as itself even where another food's name
+ *  holds its words, or its own name no longer does ("roti_chapati" is the
+ *  homemade roti, not the store-bought one with fewer words; "spring_roll" is
+ *  the egg roll it was renamed to). */
 export function findCurated(query: string): CuratedFood | null {
   const q = slug(query);
   if (q === "") return null;
+  const exact = BY_CANONICAL.get(q);
+  if (exact !== undefined) return exact;
   const stripped = denoise(q);
   return byAliasOrWords(q) ?? (stripped === null ? null : byAliasOrWords(stripped));
 }
