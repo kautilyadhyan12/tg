@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · 7a-i: PR #71's second re-check fixed (3 High, 2 Low, 3 weak tests); a re-check next, on Kd's word
+
+- Why every round found a High: each fix read a count from the words of the one example it was given. Now the food's serving unit decides (`COUNT_RULES`, every unit ruled in a test).
+- H1: "pieces" counts whole things (nuggets, pizza, roti, idli, samosa as Appendix B's), a cut only of `CUT_UP_PIECES` (fruit, potato, egg). Idli pieces ×4: 160 g, as idli ×4 (the review's 152 was four of the list's 38 g idli).
+- H2: a "vessel" serving (can, bottle, pot, glass, cup, bowl) is the count × one of what it is shown in: a saved dish, a known container, else its serving; a yogurt's "cup" is its pot, with or without a count.
+- H3: a packaged product prices a scanned item only where its name holds every word of the hint (`holdsEveryWord`, noise words aside). L1: a blank name reads as its hint; the model's own unknowns trimmed and deduplicated. L2: "Not in our food list".
+- Tests: the reviewer's rows; every unit × 7 containers × fill × count; every cut word; the scan reply parsed with `mealPhotoAnalysisSchema`; red wine, glasses of beer, samosa pieces now count. 7 deliberate breaks each red, files restored.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 41/41 · routes 34/34 · full local 1039/1039; shared tsc 0 · eslint 0 · 106/106; web nutrition 40/40, Nutrition.jsx its 7 lint errors as on master.
+- Found, older than this PR (ROADMAP 10): Open Food Facts' "1 oz (28 g)" is a 1 g serving; cornflakes in a cereal bowl weigh 375 g, and a count of two now 750 g.
+- A second chat was open on this branch in the same folder; Kd was asked to stop it. Next: CI, the fresh-chat re-check of these fixes (Kd, RULINGS 2026-09-15), merge.
+
 ## 2026-09-15 · 7a-i: PR #71's re-check fixed (3 High, 5 Low, 1 weak test), a third round as §2.6 allows
 
 - H1: a count never multiplies a cut: banana slices ×10 is one banana's 120 g (was 1,200). A cut counts only as the serving itself ("pizza slices",
