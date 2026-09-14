@@ -37,31 +37,70 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(CONTAINER_PRIORS.standard_katori).toEqual([150, 200]);
     expect(COUNTABLE_PRIORS.roti).toEqual([35, 45]);
     expect(DENSITY_G_PER_ML).toEqual({ thin: 0.95, medium: 1, thick: 1.1 });
-    expect(resolvePortion({ canonicalHint: "roti", container: null, fillLevel: null, sizeClass: null, count: 2 }, [], { grams: 40, unit: "roti" })).toEqual({ gramsPoint: 80, gramsRange: [70, 90], portionSource: "regional_prior" });
-    expect(resolvePortion({ canonicalHint: "dal", container: "my_bowl", fillLevel: 0.5, sizeClass: null, count: null }, [{ containerClass: "my_bowl", volumeMl: 180, foodHint: null }], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 90, gramsRange: [90, 90], portionSource: "user_dishware" });
-    expect(resolvePortion({ canonicalHint: "dal", container: "standard_katori", fillLevel: 0.5, sizeClass: null, count: null }, [], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 88, gramsRange: [75, 100], portionSource: "regional_prior" });
-    expect(resolvePortion({ canonicalHint: "mystery", container: null, fillLevel: null, sizeClass: null, count: null }, [], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default" });
+    expect(resolvePortion({ canonicalHint: "roti", container: null, fillLevel: null, sizeClass: null, count: 2 }, [], { grams: 40, unit: "roti" })).toEqual({ gramsPoint: 80, gramsRange: [70, 90], portionSource: "regional_prior", pieces: 2 });
+    expect(resolvePortion({ canonicalHint: "dal", container: "my_bowl", fillLevel: 0.5, sizeClass: null, count: null }, [{ containerClass: "my_bowl", volumeMl: 180, foodHint: null }], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 90, gramsRange: [90, 90], portionSource: "user_dishware", pieces: null });
+    expect(resolvePortion({ canonicalHint: "dal", container: "standard_katori", fillLevel: 0.5, sizeClass: null, count: null }, [], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 88, gramsRange: [75, 100], portionSource: "regional_prior", pieces: null });
+    expect(resolvePortion({ canonicalHint: "mystery", container: null, fillLevel: null, sizeClass: null, count: null }, [], { grams: 100, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default", pieces: null });
   });
 
   it("counts pieces: the Appendix B piece a hint ends in, else the food's own piece times the count, never a weight", () => {
     const counted = (canonicalHint: string, count: number, serving: { grams: number; unit: string }) =>
       resolvePortion({ canonicalHint, container: null, fillLevel: null, sizeClass: null, count }, [], serving);
-    expect(counted("chicken_nuggets", 6, { grams: 16, unit: "nugget" })).toEqual({ gramsPoint: 96, gramsRange: [96, 96], portionSource: "default" });
-    expect(counted("Boiled Eggs", 2, { grams: 50, unit: "egg" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "regional_prior" });
-    expect(counted("masala_dosa", 2, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 200, gramsRange: [160, 240], portionSource: "regional_prior" });
+    const one = (grams: number, pieces: number | null) => ({ gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces });
+    expect(counted("chicken_nuggets", 6, { grams: 16, unit: "nugget" })).toEqual(one(96, 6));
+    expect(counted("Boiled Eggs", 2, { grams: 50, unit: "egg" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "regional_prior", pieces: 2 });
+    expect(counted("masala_dosa", 2, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 200, gramsRange: [160, 240], portionSource: "regional_prior", pieces: 2 });
+    // A two-word key is both its words: two pizza slices are the pizza's own
+    // slices, two bread slices Appendix B's, and "vada" alone is no medu vada.
+    expect(counted("pizza slices", 2, { grams: 107, unit: "slice" })).toEqual(one(214, 2));
+    expect(counted("bread slices", 2, { grams: 30, unit: "slice" })).toEqual({ gramsPoint: 55, gramsRange: [50, 60], portionSource: "regional_prior", pieces: 2 });
+    expect(counted("medu vada", 2, { grams: 70, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [80, 120], portionSource: "regional_prior", pieces: 2 });
+    expect(counted("vada", 2, { grams: 70, unit: "g" })).toEqual(one(70, null));
     // A key inside a word, or before the hint's own last word, is another food.
-    expect(counted("veggie_burger", 1, { grams: 100, unit: "patty" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default" });
-    expect(counted("eggplant", 2, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default" });
-    expect(counted("banana_bread", 2, { grams: 60, unit: "slice" })).toEqual({ gramsPoint: 120, gramsRange: [120, 120], portionSource: "default" });
+    expect(counted("veggie_burger", 1, { grams: 100, unit: "patty" })).toEqual(one(100, 1));
+    expect(counted("eggplant", 2, { grams: 100, unit: "g" })).toEqual(one(100, null));
+    expect(counted("banana_bread", 2, { grams: 60, unit: "slice" })).toEqual(one(120, 2));
     // A serving that is a weight or a vessel is never multiplied: ten grapes are
     // not ten 100 g servings, and two glasses of wine are the glass rung's.
-    expect(counted("grapes", 10, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default" });
-    expect(counted("almonds", 12, { grams: 28, unit: "oz" })).toEqual({ gramsPoint: 28, gramsRange: [28, 28], portionSource: "default" });
-    expect(counted("red_wine", 2, { grams: 150, unit: "glass" })).toEqual({ gramsPoint: 150, gramsRange: [150, 150], portionSource: "default" });
-    // A count still comes before a dish: three pancakes on a saved plate are three pancakes.
+    expect(counted("grapes", 10, { grams: 100, unit: "g" })).toEqual(one(100, null));
+    expect(counted("almonds", 12, { grams: 28, unit: "oz" })).toEqual(one(28, null));
+    expect(counted("red_wine", 2, { grams: 150, unit: "glass" })).toEqual(one(150, null));
+    // A count beside a cut counts cuts: ten banana slices are one banana's
+    // serving, not ten bananas, by the food's own piece or by Appendix B's.
+    expect(counted("banana slices", 10, { grams: 120, unit: "banana" })).toEqual(one(120, null));
+    expect(counted("sliced banana", 10, { grams: 120, unit: "banana" })).toEqual(one(120, null));
+    expect(counted("apple_slices", 8, { grams: 180, unit: "apple" })).toEqual(one(180, null));
+    expect(counted("Orange Segments", 6, { grams: 150, unit: "orange" })).toEqual(one(150, null));
+    expect(counted("halved boiled eggs", 4, { grams: 50, unit: "egg" })).toEqual(one(50, null));
+    expect(counted("cheese cubes", 10, { grams: 30, unit: "slice" })).toEqual(one(30, null));
+    expect(counted("samosa pieces", 3, { grams: 75, unit: "samosa" })).toEqual(one(75, null));
+    // …unless the cut is the serving itself.
+    expect(counted("sliced bread", 2, { grams: 30, unit: "slice" })).toEqual(one(60, 2));
+    expect(counted("ham slices", 3, { grams: 28, unit: "slice" })).toEqual(one(84, 3));
+    // A vessel says nothing of a piece's count ("a plate of nuggets"), but beside
+    // a sealed pack it is what was counted: two glasses of beer are not two cans.
+    expect(counted("plate of nuggets", 6, { grams: 16, unit: "nugget" })).toEqual(one(96, 6));
+    expect(counted("stack of pancakes", 3, { grams: 50, unit: "pancake" })).toEqual(one(150, 3));
+    expect(counted("beer", 2, { grams: 350, unit: "can" })).toEqual(one(700, 2));
+    expect(counted("cans of beer", 2, { grams: 350, unit: "can" })).toEqual(one(700, 2));
+    expect(counted("glasses of beer", 2, { grams: 350, unit: "can" })).toEqual(one(350, null));
+    expect(counted("yogurt cups", 2, { grams: 170, unit: "container" })).toEqual(one(170, null));
+    // A count still comes before a dish for pieces: three pancakes on a saved plate are three pancakes.
     expect(
       resolvePortion({ canonicalHint: "pancakes", container: "my_plate", fillLevel: 1, sizeClass: null, count: 3 }, [{ containerClass: "my_plate", volumeMl: 500, foodHint: null }], { grams: 50, unit: "pancake" }),
-    ).toEqual({ gramsPoint: 150, gramsRange: [150, 150], portionSource: "default" });
+    ).toEqual(one(150, 3));
+    // But a sealed pack in a dish the person saved is the dish's (§3.4): a beer
+    // in their pint glass is the glass, a yogurt in their bowl the bowl.
+    expect(
+      resolvePortion({ canonicalHint: "beer", container: "pint_glass", fillLevel: 1, sizeClass: null, count: 1 }, [{ containerClass: "pint_glass", volumeMl: 568, foodHint: null }], { grams: 350, unit: "can" }),
+    ).toEqual({ gramsPoint: 568, gramsRange: [568, 568], portionSource: "user_dishware", pieces: null });
+    expect(
+      resolvePortion({ canonicalHint: "yogurt", container: "my_bowl", fillLevel: 1, sizeClass: null, count: 1 }, [{ containerClass: "my_bowl", volumeMl: 300, foodHint: null }], { grams: 170, unit: "container" }),
+    ).toEqual({ gramsPoint: 300, gramsRange: [300, 300], portionSource: "user_dishware", pieces: null });
+    // A dish the person saved for another food is not theirs for this pack.
+    expect(
+      resolvePortion({ canonicalHint: "beer", container: "pint_glass", fillLevel: 1, sizeClass: null, count: 1 }, [{ containerClass: "pint_glass", volumeMl: 568, foodHint: "milk" }], { grams: 350, unit: "can" }),
+    ).toEqual(one(350, 1));
   });
 
   it("prompt bans nutrition arithmetic and cost math is integer micro-USD", () => {
@@ -76,7 +115,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     // thali_section prior is GRAMS (100–150), not ml×density (Appendix B).
     expect(
       resolvePortion({ canonicalHint: "dal", container: "thali_section", fillLevel: 1, sizeClass: null, count: null }, [], { grams: 100, unit: "g" }),
-    ).toEqual({ gramsPoint: 125, gramsRange: [100, 150], portionSource: "regional_prior" });
+    ).toEqual({ gramsPoint: 125, gramsRange: [100, 150], portionSource: "regional_prior", pieces: null });
     // Density classes over the same katori: thin rasam 0.95 vs thick sabzi 1.1.
     const thin = resolvePortion({ canonicalHint: "rasam", container: "standard_katori", fillLevel: 1, sizeClass: null, count: null }, [], { grams: 100, unit: "g" });
     const thick = resolvePortion({ canonicalHint: "dry_sabzi", container: "standard_katori", fillLevel: 1, sizeClass: null, count: null }, [], { grams: 100, unit: "g" });

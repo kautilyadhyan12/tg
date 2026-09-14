@@ -396,7 +396,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Croissant", 406, 8.2, 45.8, 21, 2.6, 60, "croissant", "vegetarian_eggs", "usda-sr:174987"),
   row("Protein bar", 386, 22.36, 55.22, 9.94, 4.7, 60, "bar", "vegetarian", "usda-fndds:2708127"),
   row("Granola bar", 471, 10.1, 64.4, 19.8, 5.3, 25, "bar", "vegetarian", "usda-sr:167542"),
-  row("Milk chocolate", 535, 7.65, 59.4, 29.66, 3.4, 44, "bar", "vegetarian", "usda-sr:167587"),
+  row("Milk chocolate", 535, 7.65, 59.4, 29.66, 3.4, 28, "oz", "vegetarian", "usda-sr:167587"),
   row("Brownie", 405, 4.8, 63.9, 16.3, 2.1, 56, "brownie", "vegetarian_eggs", "usda-sr:172713"),
   row("Cheesecake", 321, 5.5, 25.5, 22.5, 0.4, 80, "slice", "vegetarian_eggs", "usda-sr:172711"),
   row("Apple pie", 237, 1.9, 34, 11, 1.6, 125, "slice", "vegetarian", "usda-sr:175011"),
@@ -451,6 +451,8 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
   // English names for Indian dishes
   lentil_curry: "dal_lentil_curry", chickpea_curry: "chana_masala", indian_cottage_cheese: "paneer",
   naan_bread: "naan",
+  // the closest entry USDA has: its survey foods hold egg rolls and no spring roll
+  spring_roll: "spring_roll",
   // other spellings and names
   capsicum: "bell_pepper", maize: "corn_cooked", groundnut: "peanuts",
   prawns: "shrimp_cooked", prawn: "shrimp_cooked",
@@ -496,8 +498,10 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
  *  is, so dropping them can only reveal the food's own name ("flatbread stack",
  *  "sliced banana", "glass of milk"). Words that change what a food is stay out:
  *  hot, warm, iced, fresh, plain and homemade ("hot chocolate" is not chocolate,
- *  "iced coffee" is not black coffee), and so do cooking words. */
-const NOISE_WORDS: ReadonlySet<string> = new Set([
+ *  "iced coffee" is not black coffee), and so do cooking words. Exported for the
+ *  test that holds each cut and vessel among them to the photo count's own
+ *  lists, because a food found by dropping "slices" must not be counted whole. */
+export const NOISE_WORDS: ReadonlySet<string> = new Set([
   "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
   "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",
   "helping", "helpings", "of", "with", "a", "an", "the", "some", "handful", "handfuls",
@@ -534,15 +538,16 @@ interface FoodWords {
   food: CuratedFood;
   /** The name outside its brackets, one list per "/" alternative ("Roti / Chapati"). */
   heads: readonly (readonly string[])[];
+  /** The heads as one string, equal for two versions of one food ("Milk (whole)", "Milk (skim)"). */
+  headKey: string;
   /** Every word of the name, brackets included. */
   all: ReadonlySet<string>;
 }
 
-const FOOD_WORDS: readonly FoodWords[] = CURATED_FOODS.map((food) => ({
-  food,
-  heads: food.name.replaceAll(/\([^)]*\)/g, " ").split("/").map(stemmedWords).filter((head) => head.length > 0),
-  all: new Set(stemmedWords(food.name)),
-}));
+const FOOD_WORDS: readonly FoodWords[] = CURATED_FOODS.map((food) => {
+  const heads = food.name.replaceAll(/\([^)]*\)/g, " ").split("/").map(stemmedWords).filter((head) => head.length > 0);
+  return { food, heads, headKey: heads.map((head) => head.join(" ")).join(" / "), all: new Set(stemmedWords(food.name)) };
+});
 
 const BY_CANONICAL: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map((food) => [food.canonical, food]));
 
@@ -551,18 +556,24 @@ const BY_CANONICAL: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map
  *  earlier of two such foods, so a plain food is listed before its variants).
  *  Then a food whose name holds every one of the words and the whole of its own
  *  name outside the brackets ("white rice" is "Rice (white, cooked)"), the one
- *  with the fewest words if two do. A word the food's name lacks rules it out:
- *  "banana bread" is never a banana and "hot tea" never a tea, because a wrong
- *  food is worse than an honest miss. */
+ *  with the fewest words if two do. Two versions of one food (the same name
+ *  outside the brackets) are never told apart by how many words their brackets
+ *  hold: the one listed first is the one a plain name means, so "roti flatbread"
+ *  is the homemade roti whichever version's brackets are shorter (Kd,
+ *  2026-09-14). A word the food's name lacks rules it out: "banana bread" is
+ *  never a banana and "hot tea" never a tea, because a wrong food is worse than
+ *  an honest miss. */
 function byWords(slugged: string): CuratedFood | null {
   const words = toTokens(slugged).map(stem);
   if (words.length === 0) return null;
   const named = FOOD_WORDS.find((f) => f.heads.some((head) => head.length === words.length && head.every((w, i) => w === words[i])));
   if (named !== undefined) return named.food;
+  const matches = FOOD_WORDS.filter(
+    (f) => words.every((w) => f.all.has(w)) && f.heads.some((head) => head.every((w) => words.includes(w))),
+  );
   let best: FoodWords | null = null;
-  for (const f of FOOD_WORDS) {
-    if (!words.every((w) => f.all.has(w))) continue;
-    if (!f.heads.some((head) => head.every((w) => words.includes(w)))) continue;
+  for (const [at, f] of matches.entries()) {
+    if (matches.slice(0, at).some((earlier) => earlier.headKey === f.headKey)) continue;
     if (best === null || f.all.size < best.all.size) best = f;
   }
   return best === null ? null : best.food;

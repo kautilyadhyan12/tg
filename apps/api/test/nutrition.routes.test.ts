@@ -110,29 +110,41 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // A photo's count of pieces: the food's own piece times the count where its
   // serving is one piece, the Appendix B piece only for a hint that ends in it,
   // and a serving by weight never multiplied.
-  it("a photo's count multiplies the food's own piece, never a weight and never another food's piece",async()=>{
+  it("a photo's count multiplies the food's own piece, never a weight, a cut or a pack in a saved dish, and what matches no food is named",async()=>{
     const counted=fakeVision();
-    const item=(canonical_hint:string,count:number)=>({name:canonical_hint,canonical_hint,container:null,fill_level:null,size_class:null,count,confidence:"high" as const});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",items:[item("chicken nuggets",6),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3)]});
+    const item=(canonical_hint:string,count:number,container:string|null=null)=>({name:canonical_hint,canonical_hint,container,fill_level:container===null?null:1,size_class:null,count,confidence:"high" as const});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce"],items:[item("chicken nuggets",6),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",1,"pint_glass"),item("mango lassi",1),item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";
       await a.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a Counted"})});
       const login=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});
       const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";
-      const scan=await a.inject({method:"POST",url:"/v1/nutrition/analyze-photo",cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});
+      const call=(url:string,body:unknown)=>a.inject({method:"POST",url,cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify(body)});
+      const dish=await call("/v1/nutrition/dishware",{label:"My pint glass",containerClass:"pint_glass",volumeMl:568});
+      expect(dish.statusCode,dish.body).toBe(201);
+      const scan=await call("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
       expect(scan.statusCode,scan.body).toBe(200);
-      const items=scan.json<{items:{canonical:string;gramsPoint:number;portionSource:string}[]}>().items;
-      expect(items.map((i)=>[i.canonical,i.gramsPoint,i.portionSource])).toEqual([
-        ["chicken_nuggets",96,"default"], // six 16 g nuggets, not one
-        ["veggie_burger",100,"default"], // its own patty, not an egg's 50 g
-        ["eggplant_cooked",100,"default"], // a serving by weight, not an egg
-        ["apple",360,"default"],
-        ["grapes",100,"default"], // ten grapes are not ten 100 g servings
-        ["banana_bread",120,"default"], // two slices, not two bananas
-        ["egg_hard_boiled",100,"regional_prior"],
-        ["roti_chapati",120,"regional_prior"],
+      const draft=scan.json<{scanToken:string;unknownItems:string[];items:{canonical:string;gramsPoint:number;portionSource:string;pieces:number|null}[]}>();
+      expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.portionSource,i.pieces])).toEqual([
+        ["chicken_nuggets",96,"default",6], // six 16 g nuggets, not one
+        ["veggie_burger",100,"default",1], // its own patty, not an egg's 50 g
+        ["eggplant_cooked",100,"default",null], // a serving by weight, not an egg
+        ["apple",360,"default",2],
+        ["grapes",100,"default",null], // ten grapes are not ten 100 g servings
+        ["banana_bread",120,"default",2], // two slices, not two bananas
+        ["egg_hard_boiled",100,"regional_prior",2],
+        ["roti_chapati",120,"regional_prior",3],
+        ["banana",120,"default",null], // ten slices are one banana's serving, not ten bananas
+        ["spring_roll",128,"default",2], // the egg roll, the closest entry, not dropped
+        ["roti_chapati",80,"default",2], // the homemade roti, not the store-bought one
+        ["beer_regular",568,"user_dishware",null], // the person's own pint glass, not a can
       ]);
+      // What matches no food is named beside what the model could not identify, once each.
+      expect(draft.unknownItems).toEqual(["Mystery sauce","mango lassi"]);
+      // The stored draft still loads: the count of pieces is the sheet's, never the draft's.
+      const confirmed=await call("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint}))});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
     }finally{await a.close();}
   },30_000);
 

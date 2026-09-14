@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import type { ChosenItem, Meal, MealItem } from "@app/shared";
+import type { ChosenItem, Meal, MealItem, MealPhotoItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
@@ -318,7 +318,7 @@ export interface ScanDraftResponse {
   scanToken: string;
   mealName: string;
   cuisineGuess: string | null;
-  items: MealItem[];
+  items: MealPhotoItem[];
   unknownItems: string[];
   photoQuality: "good";
   totals: ReturnType<typeof totals>;
@@ -363,10 +363,18 @@ export async function analyzePhoto(
   }));
   const foods: FoodReference[] = [];
   const draftItems: Draft["items"] = [];
-  const items: MealItem[] = [];
+  const items: MealPhotoItem[] = [];
+  const unknownItems = [...result.evidence.unknown_items];
   for (const evidence of result.evidence.items) {
     const food = await findFood(deps, evidence.canonical_hint);
-    if (food === null) continue; // honest unknown (§3.5) — stays in unknown_items
+    if (food === null) {
+      // Honest unknown (§3.5): an item seen but matching no food stays out of the
+      // totals and is named with the ones the model could not identify, so the
+      // sheet says "Couldn't identify" rather than dropping it without a word.
+      const name = evidence.name.trim();
+      if (!unknownItems.some((u) => u.trim().toLowerCase() === name.toLowerCase())) unknownItems.push(name);
+      continue;
+    }
     const portion = resolvePortion(
       {
         canonicalHint: evidence.canonical_hint,
@@ -379,8 +387,10 @@ export async function analyzePhoto(
       { grams: food.serving, unit: food.unit },
     );
     foods.push(food);
-    draftItems.push({ canonical: food.canonical, ...portion });
-    items.push(nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource));
+    // The stored draft keeps its strict shape: the count of pieces is only the
+    // sheet's, for its stepper.
+    draftItems.push({ canonical: food.canonical, gramsPoint: portion.gramsPoint, gramsRange: portion.gramsRange, portionSource: portion.portionSource });
+    items.push({ ...nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource), pieces: portion.pieces });
   }
 
   const scanToken = token();
@@ -393,7 +403,7 @@ export async function analyzePhoto(
     mealName: result.evidence.meal_name,
     cuisineGuess: result.evidence.cuisine_guess,
     items,
-    unknownItems: result.evidence.unknown_items,
+    unknownItems,
     photoQuality: "good",
     totals: totals(items),
     confirmed: false,

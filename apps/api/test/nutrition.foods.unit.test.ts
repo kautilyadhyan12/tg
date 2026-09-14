@@ -4,8 +4,8 @@
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
-import { CURATED_FOODS, FOOD_ALIASES, findCurated, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
-import { PIECE_UNITS } from "../src/modules/nutrition/portion-priors.js";
+import { CURATED_FOODS, FOOD_ALIASES, NOISE_WORDS, findCurated, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { CUT_WORDS, PIECE_UNITS, VESSEL_WORDS } from "../src/modules/nutrition/portion-priors.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -105,6 +105,23 @@ describe("the curated food list", () => {
     const MEASURES = new Set(["g", "oz", "tsp", "tbsp", "2 tbsp", "cup", "half cup", "glass", "bowl", "small", "portion", "half", "scoop", "shot"]);
     for (const f of CURATED_FOODS) expect(PIECE_UNITS.has(f.unit) !== MEASURES.has(f.unit), `${f.name}: "${f.unit}"`).toBe(true);
     for (const unit of PIECE_UNITS) expect(CURATED_FOODS.some((f) => f.unit === unit), unit).toBe(true);
+    // Chocolate is eaten by the square, so neither is served as a bar a count of squares would multiply.
+    expect(food("milk_chocolate")).toMatchObject({ serving: 28, unit: "oz" });
+  });
+
+  it("holds each word the matcher drops to the photo count's cuts, vessels, or neither", () => {
+    // The matcher finds "banana" in "banana slices" by dropping "slices", so each
+    // dropped word that names a cut or a vessel must be one the count reads, or a
+    // food found without it would be counted whole.
+    const NEITHER = new Set([
+      "stack", "stacks", "pile", "piles", "serving", "servings", "portion", "portions", "helping", "helpings",
+      "handful", "handfuls", "of", "with", "a", "an", "the", "some", "peeled", "fillet", "fillets", "small", "medium", "large",
+    ]);
+    for (const word of NOISE_WORDS) {
+      const classes = [CUT_WORDS.has(word), VESSEL_WORDS.has(word), NEITHER.has(word)].filter(Boolean);
+      expect(classes, word).toHaveLength(1);
+    }
+    for (const word of NEITHER) expect(NOISE_WORDS.has(word), word).toBe(true);
   });
 
   it("keeps both rotis, each from its own table, and roti means the homemade one", () => {
@@ -285,11 +302,30 @@ describe("the food a name means", () => {
       ["shepherds pie", "shepherd_s_pie"],
       ["chilli", "chili_con_carne"],
       ["chilli con carne", "chili_con_carne"],
-      // A renamed food's old canonical is still that food.
+      // A renamed food's old canonical is still that food, and so is its old name.
       ["spring_roll", "spring_roll"],
+      ["spring roll", "spring_roll"],
+      ["spring rolls", "spring_roll"],
       ["greek_yogurt_plain", "greek_yogurt_plain"],
     ];
     for (const [hint, canonical] of cases) expect(findCurated(hint)?.canonical, hint).toBe(canonical);
+  });
+
+  it("is the homemade roti for its names in any order or plural, and the store-bought one only when named so", () => {
+    // Two versions of one food are told apart by their words, never by whose
+    // brackets are shorter: the store-bought roti's name has fewer words.
+    const arrangements = (words: readonly string[]): string[][] =>
+      words.flatMap((word, at) => [[word], ...arrangements([...words.slice(0, at), ...words.slice(at + 1)]).map((rest) => [word, ...rest])]);
+    const orders = arrangements(["roti", "chapati", "flatbread"]);
+    expect(orders).toHaveLength(15);
+    for (const order of orders) {
+      for (const hint of [order.join(" "), `${order.join(" ")}s`, `${order.join("_")}_pieces`]) {
+        expect(findCurated(hint)?.canonical, hint).toBe("roti_chapati");
+      }
+    }
+    for (const hint of ["store-bought roti", "store bought chapati", "roti flatbread store bought"]) {
+      expect(findCurated(hint)?.canonical, hint).toBe("roti_chapati_store_bought_flatbread");
+    }
   });
 
   it("is found by its canonical before by its words, so a saved food is never another", () => {
@@ -347,5 +383,6 @@ describe("the food a name means", () => {
     expect(names("roti", 2)).toEqual(["roti_chapati", "roti_chapati_store_bought_flatbread"]);
     expect(names("shepherds pie")).toContain("shepherd_s_pie");
     expect(names("chilli")).toContain("chili_con_carne");
+    expect(names("spring roll")[0]).toBe("spring_roll");
   });
 });

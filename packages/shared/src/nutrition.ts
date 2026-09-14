@@ -32,8 +32,14 @@ export const analyzeMealPhotoRequestSchema = z.object({
 }).strict();
 export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSchema>;
 
+/** A scanned item as the photo sheet receives it. `pieces` is how many counted
+ *  pieces its grams stand for where the photo's count set them (six nuggets), and
+ *  null where it did not, so one step of the sheet's stepper is one piece. */
+export const mealPhotoItemSchema = mealItemSchema.extend({ pieces: z.number().int().positive().nullable() });
+export type MealPhotoItem = z.infer<typeof mealPhotoItemSchema>;
+
 export const mealPhotoAnalysisSchema = z.object({
-  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealItemSchema),
+  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealPhotoItemSchema),
   unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
   confirmed: z.literal(false), retakeToken: z.string().optional(),
 });
