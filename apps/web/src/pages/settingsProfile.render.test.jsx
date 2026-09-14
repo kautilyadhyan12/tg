@@ -133,7 +133,11 @@ describe('Settings → Profile', () => {
     await loaded();
     const line = 'Your target is below the lowest healthy weight for your height, 50.4 kg. Your plan will not take you below it.';
     expect(screen.queryByText(line)).toBeNull();
-    type('65', '45');
+    type('65', '50.4'); // the lowest healthy weight itself
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    type('50.4', '50.35'); // under it as typed, though a wheel would read it 50.4
+    expect(screen.getByText(line)).toBeTruthy();
+    type('50.35', '45');
     expect(screen.getByText(line)).toBeTruthy();
     save();
     await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 45 })));

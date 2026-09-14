@@ -3,7 +3,7 @@
 // once through `save`; the one typed box, the name, saves when the person
 // leaves it. Nothing here decides a number: the plan panel shows the server's.
 import { useRef, useState } from 'react';
-import { Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
 import {
   CHECK_FIRST_OPTIONS,
   CURRENT_DISCLAIMER_VERSION,
@@ -325,11 +325,16 @@ function TargetWheel({ target, weightKg, direction, units, save, healthy }) {
           {weightShown(weight, units)}.
         </p>
       )}
-      {/* On the page before the line is, so the line is read out when it comes. */}
+      {/* On the page before the line is, so the line is read out when it comes;
+          on a panel of its own, so it reads clearly over the page's picture. */}
       <div role="status">
         {healthy && (
-          <p className="text-xs mt-2" style={{ color: '#FFB347' }}>
-            {healthy}
+          <p
+            className="mt-3 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs bg-dark-100"
+            style={{ color: '#FFB347', border: '1px solid rgba(255,138,31,0.35)' }}
+          >
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span>{healthy}</span>
           </p>
         )}
       </div>

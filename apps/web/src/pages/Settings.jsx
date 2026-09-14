@@ -142,15 +142,19 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
   const targetTyped = targetKg !== (profile.targetWeightKg ?? null);
   // A target under the lowest healthy weight is said in screen 3's words, and
   // still saves (Kd, 2026-09-14), held against the height, age and gender this
-  // save leaves.
+  // save leaves, and read as the boxes show it: 50.35 typed is under 50.4.
   const ageNow = parseInt(form.age, 10);
+  const typed = (text) => {
+    const n = parseFloat(text);
+    return Number.isFinite(n) ? n : null;
+  };
   const healthy = healthyTargetLine(direction, {
     targetWeightKg: targetKg,
     weightKg: weightKgNow,
     heightCm: heightToCm(form.height, form.heightUnit),
     age: Number.isFinite(ageNow) ? ageNow : null,
     gender: form.gender || null,
-  }, units);
+  }, units, { target: typed(form.targetWeight), weight: typed(form.weight) });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

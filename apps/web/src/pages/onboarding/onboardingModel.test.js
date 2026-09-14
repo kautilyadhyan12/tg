@@ -582,15 +582,29 @@ describe('a target under the lowest healthy weight is said on screen 3 as it is 
     expect(m.healthyFloorKg({ ...girl, gender: null })).toBeNull();
   });
 
-  it('holds a target against the floor row by row, so a weight that reads as the floor is never called under it', () => {
+  it('holds a target against the floor as the screen shows both, so a weight that reads as the floor is never called under it', () => {
     // 111.1 lb is stored as 50.39 kg: under 50.4 kg in kilograms, and 111.1 lb on screen.
     expect(m.kgFromParts({ whole: 111, tenth: 1 }, 'imperial')).toBe(50.39);
-    expect(m.readsBelow(50.39, 50.4, 'imperial')).toBe(false);
-    expect(m.readsBelow(50.39, 50.4, 'metric')).toBe(false); // it reads 50.4 kg as well
-    expect(m.readsBelow(50.35, 50.4, 'imperial')).toBe(true); // 111.0 lb
-    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial')).toBeNull();
-    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.35 }, 'imperial')).toMatch(/^Your target is below/);
+    expect(m.rowValue(50.39, 'imperial')).toBe(111.1);
+    expect(m.readsBelow(111.1, 50.4, 'imperial')).toBe(false);
+    expect(m.readsBelow(111, 50.4, 'imperial')).toBe(true);
+    expect(m.readsBelow(50.4, 50.4, 'metric')).toBe(false);
+    expect(m.readsBelow(50.35, 50.4, 'metric')).toBe(true);
     expect(m.readsBelow(null, 50.4, 'metric')).toBe(false);
+    // On the wheels, rows: 50.39 kg reads 111.1 lb and 50.4 kg; 50.35 kg reads 111.0 lb.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial')).toBeNull();
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'metric')).toBeNull();
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.35 }, 'imperial')).toMatch(/^Your target is below/);
+    // In Settings' boxes, the numbers typed: 50.35 is under 50.4, and 111.08 under 111.1.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.35 }, 'metric', { target: 50.35 })).toMatch(/^Your target is below/);
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial', { target: 111.08 })).toMatch(/111\.1 lb\. Your plan/);
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial', { target: 111.1 })).toBeNull();
+    // Never where the plan's kilograms are not under the floor, whatever is shown.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.4 }, 'metric', { target: 50.35 })).toBeNull();
+    // The weight is read as shown too: 50.35 kg reads 50.4 on its row, and 50.35 typed.
+    expect(m.rowValue(50.35, 'metric')).toBe(50.4);
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.35 }, 'metric')).toMatch(/You are already at it/);
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.35 }, 'metric', { target: 45, weight: 50.35 })).toMatch(/You already weigh less/);
   });
 
   it('agrees with the plan and the plan panel on every row near the floor, for every height the wheels show, in both units', () => {
