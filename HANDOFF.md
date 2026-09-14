@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4c-ii built: a too-low target is said on "Your target" as it is picked, branch `too-low-target`
+
+- Kd said *"go"* to the plan's three recommendations (RULINGS 2026-09-14): the number box keeps its line; the target stays pickable;
+  16 and 17 are held to the teen healthy weight (Cole and colleagues, 2007, BMJ, Table 4), not the adult BMI 18.5.
+- Built: the line under the target wheel, and in Settings' target box, from one shared rule the plan maths runs to and the contract
+  checks the flag against; said only where the target reads below it in the units on show. Words, cases and files: ROADMAP 4c-ii.
+- Found on the way, fixed by the same rule: in pounds the number box said "below 111.1 lb" of a 111.1 lb target (stored as 50.39 kg).
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + nutrition + onboarding + health 176/176; web
+  eslint 0 on the touched files but Settings.jsx (its four errors are on master too) · full web run 2117/2117 in 75/76 files
+  (poseAssets.contract fails to load, the known local red); twelve deliberate breaks each red, every file restored byte for byte.
+- Next: CI; Kd's click-through on the local database; the fresh-chat review; merge; then ask Kd if 4d is next.
+
 ## 2026-09-14 · 4c merged (PR #66); GitHub: cheaper checks (PR #67), the lock on master, Pro
 
 - Kd's click-through of 4c passed on the local database (*"all test passed"*); the re-check of 11d99e1 was skipped on his word (no
