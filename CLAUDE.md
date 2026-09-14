@@ -39,10 +39,16 @@ at a specific `[archive :line]` for detail. Never quote it as a rule.
    same code means stop and ask Kd for a redesign.
 7. **Commit and open a pull request to `master`**; CI must be green; merge within a day
    or two; delete the branch. Small commits, explicit file lists (`git add <files>`,
-   never `git add -A`).
+   never `git add -A`). `master` takes pull requests only: GitHub refuses a direct
+   push, records included, and refuses a merge until the six checks pass (a skipped
+   check counts as passed).
 8. **Record**: one line in `RULINGS.md` for anything Kd decided; tick or add lines in
    `ROADMAP.md`; ten lines in `HANDOFF.md`. That is all. No cards, no essays, no
-   review-round history anywhere, including code comments.
+   review-round history anywhere, including code comments. Records ride on the
+   feature's pull request, never a pull request of their own: check minutes are
+   metered (GitHub Pro, 3,000 a month), so a push that changes only `.md` files runs
+   just the secrets scan, and every code push runs every check — the `what changed`
+   job in `.github/workflows/ci.yml` decides, not the chat.
 
 ## 3. Writing for Kd
 

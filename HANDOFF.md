@@ -4,21 +4,21 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-14 · 4c merged (PR #66); Kd: a too-low target is said as it is picked
+## 2026-09-14 · 4c merged (PR #66); GitHub: cheaper checks (PR #67), the lock on master, Pro
 
-- Kd's click-through of 4c passed on the local database (*"all test passed"*), `kd.pace@example.com`: the plan screen, Adjust and "Back to
-  your plan", no Gentle mark at 50 kg, the mark and the muscle line at 60 kg, Safe mode's words, the cleared line, Finish.
-- Re-check of 11d99e1 skipped on Kd's word (no Critical/High was open). CI green on 4965f1a; merged 2026-09-14 as faa41f7; branch deleted.
-- Kd: "Your target is below the lowest healthy weight…" must be said on "Your target" while the weight is picked, not first at the end.
-  ROADMAP 4c-ii, next, before 4d (RULINGS 2026-09-14); its plan asks him two lines (the number box keeps its line; the target stays pickable).
-- Kd: a click-through tests only what its card changed, all steps in one list (RULINGS 2026-09-14). Set the test account up beforehand
-  on the local database, so his first step is on the card's own screen.
-- GitHub's 90 % minutes warning: 1,816 billed minutes 2026-09-01 to 14 (measured from the run logs), 842 of them (46 %) on record-only
-  pushes. Kd: stay private, GitHub Pro, an $8 cap, no name scrub (RULINGS 2026-09-14). PR #67 (`ci-trim`): a `what changed` job skips the
-  code checks for a records-only push and the Neon migration check unless a migration changed; anything uncertain runs everything. Its
-  first run ran all six jobs (no earlier green run on the branch); the records push after it is the proof of the skips.
-- Next: merge #67 on Kd's word; when Pro is on, the merge lock on `master` (required checks: the five job names; a skipped job counts as
-  passed); then plan 4c-ii with Kd (ten lines or fewer) and build it; after it, ask Kd if 4d is next.
+- Kd's click-through of 4c passed on the local database (*"all test passed"*); the re-check of 11d99e1 was skipped on his word (no
+  Critical/High); merged as faa41f7, branch deleted.
+- Kd: "Your target is below the lowest healthy weight…" must be said on "Your target" as the weight is picked, not first at the end
+  (RULINGS 2026-09-14): ROADMAP 4c-ii, next, before 4d; its plan asks him two lines (the number box keeps its line; the target stays pickable).
+- Kd: a click-through tests only what its card changed, all steps in one list (RULINGS 2026-09-14); set the test account up beforehand on
+  the local database, so his first step is the card's own screen.
+- GitHub's 90 % minutes warning: 1,816 billed minutes 2026-09-01 to 14, 842 (46 %) on record-only pushes. Kd: stay private, no name scrub,
+  GitHub Pro (3,000 minutes a month); the Actions budget stays at $0, so the checks pause if the minutes run out; $8 only when told.
+- PR #67 (merged, 5969053): the `what changed` job skips the four code jobs for a records-only push, and the Neon migration job unless
+  `apps/api/drizzle` changed; anything uncertain runs everything. Proven: the code push ran six jobs (16 min), the records push two (2 min).
+- `master` is locked: pull requests only (a direct push is refused, admins included), six required checks, a skipped job counts as passed.
+  CLAUDE.md §2 now says records ride on the feature's pull request.
+- Next: plan 4c-ii with Kd (ten lines or fewer), then build it; after it, ask Kd if 4d is next.
 
 ## 2026-09-14 · 4c finished after its review, branch `plan-screen`, PR #66
 
