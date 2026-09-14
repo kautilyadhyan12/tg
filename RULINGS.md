@@ -117,6 +117,7 @@ Superseded rulings are kept and marked **SUPERSEDED**.
 - 2026-07-17 · Dishware lives inside the add and photo flows, never a standalone card. [archive :375]
 - 2026-07-18 · "Measure with my dish" asks every time; never silently reuse. [archive :419]
 - 2026-07-19 · Desktop webcam capture for meal photos: won't build. [archive :456]
+- 2026-09-14 · Taking a meal photo, and scanning a barcode, with the camera is the phone app's main food feature and is not in the browser; the browser only uploads a photo. *"scanning/taking photo meal with phone is the main feature which will not be available in browser only can upload in browser"*
 - 2026-07-19 · Macro rings stay on past days. [archive :447]
 - 2026-08-24 · Meal scanner runs on Gemini 2.5 Flash Lite; nutrition arithmetic stays on our own food table; photos are resized; the prompt is not shortened. [archive :16548]
 - 2026-08-24 · Meal photos ARE stored and self-destruct after seven days. [archive :17133, :9732]
