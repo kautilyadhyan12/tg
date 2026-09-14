@@ -3,6 +3,7 @@ import {
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   calendarDaySchema,
   daysToMove,
+  formulaFor,
   healthyBmiFloor,
   MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
@@ -18,7 +19,6 @@ import {
   PROTEIN_REFERENCE_BMI,
   proteinWeight,
   TEEN_HEALTHY_BMI_FLOOR,
-  versionFor,
   type PlanAnswers,
   type PlanInputs,
 } from "@app/shared";
@@ -619,8 +619,8 @@ describe("plan maths — the sanity rules", () => {
     expect(healthyWeightFloorKg(165, 16, "male")).toBe(47.8);
     expect(healthyWeightFloorKg(165, 17, "female")).toBe(49.7);
     expect(healthyWeightFloorKg(165, 17, "male")).toBe(49.1);
-    expect(versionFor("female")).toBe("female");
-    for (const gender of ["male", "other", "prefer_not_to_say"] as const) expect(versionFor(gender), gender).toBe("male");
+    expect(formulaFor("female")).toBe("female");
+    for (const gender of ["male", "other", "prefer_not_to_say"] as const) expect(formulaFor(gender), gender).toBe("male");
   });
 
   it("holds a 16- or 17-year-old's target to the teen healthy weight, not the adult one", () => {
@@ -660,6 +660,17 @@ describe("plan maths — the sanity rules", () => {
     expect(plan.dailyChangeKcal).toBe(0);
     expect(plan.daysToTarget).toBeNull();
     expect(plan.plannedTargetKg).toBe(55);
+  });
+
+  it("someone exactly at the healthy floor who wants to lose gets no cut either, and no finish date of today", () => {
+    // 175 cm: the floor is 56.7 kg, and so is the weight.
+    const plan = computePlan({ ...sample, weightKg: 56.7, targetWeightKg: 50 });
+    expect(plan.flags).toEqual([{ code: "target_below_healthy_weight", floorKg: 56.7 }]);
+    expect(plan.dailyChangeKcal).toBe(0);
+    expect(plan.daysToTarget).toBeNull();
+    expect(plan.finishDate).toBeNull();
+    expect(plan.plannedTargetKg).toBe(56.7);
+    expectSanePlan({ ...sample, weightKg: 56.7, targetWeightKg: 50 });
   });
 
   it("over a year: flagged, with the gentlest pace that finishes within a year", () => {

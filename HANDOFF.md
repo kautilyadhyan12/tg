@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4c-ii: Kd's click-through passed; the review's findings fixed (no Critical/High), PR #69
+
+- Kd's click-through passed on the local database (*"all test passed"*).
+- Review, four Lows fixed: no healthy weight is named for an age or height the plan cannot take (Settings lets 13 be typed); the
+  target is read on the row its wheel shows (one row under a weight it would read the same as) on screen 3, in the box and in the
+  plan's answers; under 18 the words say "for your height and age"; `versionFor` is `formulaFor`, and ROADMAP 4c-ii is plain words.
+- Three weak tests fixed: a weight exactly at the floor (no cut, no finish date of today), Settings in pounds, Settings' gender box.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + nutrition + onboarding routes 157/157; web
+  eslint 0 on the touched files but Settings.jsx (its four, as on master) · the eleven files drawing setup or Settings 390/390;
+  nine deliberate breaks, the review's three among them, each red, every file restored byte for byte.
+- Next: CI; the re-check of these fixes, or Kd waives it (no Critical/High, RULINGS 2026-09-08); merge on his word; ask if 4d is next.
+
 ## 2026-09-14 · 4c-ii built: a too-low target is said on "Your target" as it is picked, branch `too-low-target`
 
 - Kd said *"go"* to the plan's three recommendations (RULINGS 2026-09-14): the number box keeps its line; the target stays pickable;

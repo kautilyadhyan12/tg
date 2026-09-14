@@ -732,6 +732,26 @@ describe('onboarding screens 1–7', () => {
     await stored({ targetWeightKg: 45 });
   });
 
+  it('holds a target to the row its wheel shows where it would read the same as the weight, on screen 3, in the box and on the plan', async () => {
+    // 50.42 kg and 50.39 kg both read 50.4 kg, so the wheel shows the target one
+    // row down, at 50.3 kg: under the 50.4 kg floor, as the plan's kilograms are.
+    serve({ ...ALL, weightKg: 50.42, targetWeightKg: 50.39 }, screeningOf({ hasCondition: false }));
+    server.plan = { ...PLAN, flags: [{ code: 'target_below_healthy_weight', floorKg: 50.4 }] };
+    draw();
+    await heading('Your plan');
+    tap('Adjust Your target');
+    await heading('Your target');
+    tap(/kg · cm/);
+    expect(spin('Target weight, tenths of a kilogram').getAttribute('aria-valuetext')).toBe('.3');
+    const box = 'Your target is below the lowest healthy weight for your height, 50.4 kg.';
+    expect(screen.getByText(`${box} Your plan will not take you below it.`)).toBeTruthy();
+    expect(panel().textContent).toContain(box);
+    await backToPlan();
+    expect(within(screen.getByRole('region', { name: 'Your answers' })).getByText(/^50\.3 kg · Steady/)).toBeTruthy();
+    expect(panel().textContent).toContain(box);
+    expect(svc.patch).not.toHaveBeenCalled();
+  });
+
   it('keeps the line in the number box too, said exactly where screen 3 says it, in the units on show', async () => {
     // The stand-in raises the flag as the real plan does at 165 cm, whatever the
     // target, so only the target on screen decides the box's line here.

@@ -48,6 +48,7 @@ import {
   ADULT_AGE,
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   daysToMove,
+  formulaFor,
   HEALTHY_BMI_FLOOR,
   healthyWeightFloorKg,
   KCAL_PER_KG,
@@ -61,7 +62,6 @@ import {
   planInputsSchema,
   planResponseSchema,
   proteinWeight,
-  versionFor,
   type DayActivity,
   type Gender,
   type MissingPlanInput,
@@ -136,9 +136,9 @@ export function addDays(day: string, days: number): string {
 }
 
 /** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5
- *  (`versionFor`, the rule the teen healthy weights take too). */
+ *  (`formulaFor`, the rule the teen healthy weights take too). */
 export function restingBurn(input: { age: number; gender: Gender; heightCm: number; weightKg: number }): number {
-  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[versionFor(input.gender)];
+  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[formulaFor(input.gender)];
 }
 
 export interface BurnSteps {
@@ -241,8 +241,8 @@ function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
     if (input.targetWeightKg >= input.weightKg) {
       flags.push({ code: "target_wrong_direction" });
     } else {
-      // One rounded floor, shown and used alike, for this height, age and version.
-      const floorKg = healthyWeightFloorKg(input.heightCm, input.age, versionFor(input.gender));
+      // One rounded floor, shown and used alike, for this height, age and formula.
+      const floorKg = healthyWeightFloorKg(input.heightCm, input.age, formulaFor(input.gender));
       if (input.targetWeightKg < floorKg) {
         flags.push({ code: "target_below_healthy_weight", floorKg });
         // Already at or under the floor: nothing to lose.
@@ -303,7 +303,7 @@ function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
     ? Math.max(PROTEIN_G_PER_KG[input.goal], BUILD_MUSCLE_PROTEIN_G_PER_KG)
     : PROTEIN_G_PER_KG[input.goal];
   const protein = proteinWeight(input.weightKg, input.heightCm);
-  const formula = versionFor(input.gender);
+  const formula = formulaFor(input.gender);
   return {
     restingBurnKcal: steps.restingKcal,
     dailyBurnKcal: burn,

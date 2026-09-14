@@ -56,7 +56,7 @@ import {
   stepIn,
   stepInches,
   targetRest,
-  targetRow,
+  targetShownRow,
   targetTenths,
   targetWholes,
   targetWrongSide,
@@ -294,7 +294,7 @@ function TargetWheel({ target, weightKg, direction, units, save, healthy }) {
   // A wrong-side target is on no row of the wheel, so the wheel rests and
   // reads "Not set" while the error under it names the target.
   const isSet = target !== null && !wrong;
-  const at = isSet ? targetRow(direction, weight, target, units) : targetRest(direction, weight);
+  const at = isSet ? targetShownRow(direction, { targetWeightKg: target, weightKg }, units) : targetRest(direction, weight);
   const wholes = targetWholes(units, direction, weight, at);
   const pick = (parts) => {
     const row = clampTarget(direction, weight, parts);

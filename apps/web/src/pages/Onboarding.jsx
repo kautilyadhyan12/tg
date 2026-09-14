@@ -42,6 +42,7 @@ import {
   openSetupAnswers,
   reachableScreens,
   screenAnswered,
+  targetShownValue,
   visibleScreens,
 } from './onboarding/onboardingModel';
 
@@ -496,7 +497,7 @@ export default function Onboarding() {
                   plan={ob.plan}
                   direction={direction}
                   units={units}
-                  targetKg={answers.targetWeightKg ?? null}
+                  targetShown={targetShownValue(direction, answers, units)}
                   note={screen.id !== 'plan'}
                 />
 
