@@ -499,8 +499,8 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
  *  "sliced banana", "glass of milk"). Words that change what a food is stay out:
  *  hot, warm, iced, fresh, plain and homemade ("hot chocolate" is not chocolate,
  *  "iced coffee" is not black coffee), and so do cooking words. Exported for the
- *  test that holds each cut and vessel among them to the photo count's own
- *  lists, because a food found by dropping "slices" must not be counted whole. */
+ *  test that holds each cut among them to the photo count's own list, because a
+ *  food found by dropping "slices" must not be counted whole. */
 export const NOISE_WORDS: ReadonlySet<string> = new Set([
   "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
   "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",
@@ -607,6 +607,18 @@ export function findCurated(query: string): CuratedFood | null {
   if (exact !== undefined) return exact;
   const stripped = denoise(q);
   return byAliasOrWords(q) ?? (stripped === null ? null : byAliasOrWords(stripped));
+}
+
+/** Whether a name holds every word of a query, by the list's own rules: a word
+ *  and its plural are one, and a noise word the query only serves its food with
+ *  is not needed ("bottles of coca cola" is held by "Coca-Cola Classic"). A query
+ *  of noise words alone needs them all. */
+export function holdsEveryWord(name: string, query: string): boolean {
+  const words = toTokens(slug(query));
+  const meant = words.filter((w) => !NOISE_WORDS.has(w));
+  const needed = (meant.length > 0 ? meant : words).map(stem);
+  const held = new Set(stemmedWords(name));
+  return needed.length > 0 && needed.every((w) => held.has(w));
 }
 
 function aliasTargetFor(slugged: string): string | undefined {

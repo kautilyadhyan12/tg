@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, nutritionTargetsResponseSchema } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -48,7 +48,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // and previewing must not consume the single-use draft.
   it("preview with scanToken matches the confirmed meal exactly for an OFF-sourced draft item",async()=>{
     const offFood={canonical:"off_test_dish",name:"Test Dish",kcal:200,proteinG:10,carbsG:20,fatG:5,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const};
-    const offVision=fakeVision();offVision.queue.push({...goodEvidence,meal_name:"Test dish plate",items:[{name:"Test Dish",canonical_hint:"off test dish",container:null,fill_level:null,size_class:null,count:1,confidence:"high"}]});
+    const offVision=fakeVision();offVision.queue.push({...goodEvidence,meal_name:"Test dish plate",items:[{name:"Test Dish",canonical_hint:"test dish",container:null,fill_level:null,size_class:null,count:1,confidence:"high"}]});
     const app3=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:offVision,foodSearchProvider:{search:()=>Promise.resolve([offFood])}}});
     try{
       const login=async(email:string)=>{await app3.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a OFF"})});const l=await app3.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});return l.cookies.find((c)=>c.name==="accessToken")?.value??"";};
@@ -107,13 +107,13 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(res.json<{items:{canonical:string}[]}>().items.map((i)=>i.canonical)).toEqual(picked);
   },30_000);
 
-  // A photo's count of pieces: the food's own piece times the count where its
-  // serving is one piece, the Appendix B piece only for a hint that ends in it,
-  // and a serving by weight never multiplied.
-  it("a photo's count multiplies the food's own piece, never a weight, a cut or a pack in a saved dish, and what matches no food is named",async()=>{
+  // A photo's count: pieces times the food's own piece (the Appendix B piece for a
+  // hint that ends in it), vessels times one of what the photo shows them in, and
+  // a serving by weight or a count of cut bits never multiplied.
+  it("a photo's count multiplies pieces and vessels, never a weight or cut bits, and what matches no food is named",async()=>{
     const counted=fakeVision();
     const item=(canonical_hint:string,count:number,container:string|null=null)=>({name:canonical_hint,canonical_hint,container,fill_level:container===null?null:1,size_class:null,count,confidence:"high" as const});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce"],items:[item("chicken nuggets",6),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",1,"pint_glass"),item("mango lassi",1),item("mystery sauce",1)]});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"pint_glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";
@@ -125,9 +125,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(dish.statusCode,dish.body).toBe(201);
       const scan=await call("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
       expect(scan.statusCode,scan.body).toBe(200);
-      const draft=scan.json<{scanToken:string;unknownItems:string[];items:{canonical:string;gramsPoint:number;portionSource:string;pieces:number|null}[]}>();
+      const draft=mealPhotoAnalysisSchema.parse(scan.json());
       expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.portionSource,i.pieces])).toEqual([
         ["chicken_nuggets",96,"default",6], // six 16 g nuggets, not one
+        ["chicken_nuggets",96,"default",6], // six nugget pieces are six nuggets
+        ["pizza_cheese",321,"default",3], // three slices, not one
+        ["roti_chapati",120,"regional_prior",3], // three rotis, as "roti ×3" is
         ["veggie_burger",100,"default",1], // its own patty, not an egg's 50 g
         ["eggplant_cooked",100,"default",null], // a serving by weight, not an egg
         ["apple",360,"default",2],
@@ -138,13 +141,41 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
         ["banana",120,"default",null], // ten slices are one banana's serving, not ten bananas
         ["spring_roll",128,"default",2], // the egg roll, the closest entry, not dropped
         ["roti_chapati",80,"default",2], // the homemade roti, not the store-bought one
-        ["beer_regular",568,"user_dishware",null], // the person's own pint glass, not a can
+        ["beer_regular",1136,"user_dishware",2], // two of the person's own 568 ml pint glasses, not one
+        ["beer_regular",1050,"default",3], // three bottles, not one
+        ["yogurt_plain_low_fat",340,"default",2], // two pots, not one
+        ["beer_regular",975,"regional_prior",3], // three mugs
+        ["beer_regular",975,"regional_prior",3], // three mugs, however the hint names them
       ]);
-      // What matches no food is named beside what the model could not identify, once each.
-      expect(draft.unknownItems).toEqual(["Mystery sauce","mango lassi"]);
+      // What matches no food is named beside what the model could not identify, once
+      // each, by its name as written (a blank name by its hint), never a blank entry.
+      expect(draft.unknownItems).toEqual(["Mystery sauce","Mango Lassi","black garlic relish"]);
       // The stored draft still loads: the count of pieces is the sheet's, never the draft's.
       const confirmed=await call("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint}))});
       expect(confirmed.statusCode,confirmed.body).toBe(201);
+    }finally{await a.close();}
+  },30_000);
+
+  // A packaged product prices a scanned item (§3.5) only where its name holds every
+  // word of the item's hint: the search's top product for other words is another
+  // food, so the item is named as not on the list instead of priced as that food.
+  it("a scanned item takes a packaged product only when the product's name holds every word of its hint",async()=>{
+    const product=(canonical:string,name:string)=>({canonical,name,kcal:324,proteinG:1,carbsG:80,fatG:0,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const});
+    const answersEverything:FoodSearchProvider={search:(query)=>Promise.resolve([query.toLowerCase().includes("yakult")?product("off_4901392000034","Yakult Original · Yakult"):product("off_mystery","Mystery")])};
+    const scanned=fakeVision();
+    const item=(name:string,canonical_hint:string)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count:null,confidence:"high" as const});
+    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult"),item("Chips","chips")]});
+    const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:scanned,foodSearchProvider:answersEverything}});
+    try{
+      const email="p26a-packaged@example.com";
+      await a.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a Packaged"})});
+      const login=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});
+      const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const scan=await a.inject({method:"POST",url:"/v1/nutrition/analyze-photo",cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const draft=mealPhotoAnalysisSchema.parse(scan.json());
+      expect(draft.items.map((i)=>i.canonical)).toEqual(["off_4901392000034"]);
+      expect(draft.unknownItems).toEqual(["Mystery sauce","Chips"]);
     }finally{await a.close();}
   },30_000);
 

@@ -11,7 +11,7 @@ import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
+import { CURATED_FOODS, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
@@ -218,6 +218,15 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   return (await cachedExternal(deps, query, 1))[0] ?? null;
 }
 
+/** The food a scanned item names: the list's food for its hint, else a packaged
+ *  product (§3.5) only where the product's name holds every word of the hint.
+ *  The search's top product for other words is another food ("mystery sauce"
+ *  finds one named "Mystery"), and a wrong food is worse than an honest miss. */
+async function findScannedFood(deps: NutritionDeps, hint: string): Promise<FoodReference | null> {
+  const food = await findFood(deps, hint);
+  return food === null || food.source === "curated" || holdsEveryWord(food.name, hint) ? food : null;
+}
+
 // ── Stage-3 arithmetic + §3.3 display standard ───────────────────────────────
 
 const round1 = (v: number): number => Math.round(v * 10) / 10;
@@ -364,15 +373,19 @@ export async function analyzePhoto(
   const foods: FoodReference[] = [];
   const draftItems: Draft["items"] = [];
   const items: MealPhotoItem[] = [];
-  const unknownItems = [...result.evidence.unknown_items];
+  // Honest unknown (§3.5): what the model could not identify, and each item seen
+  // but matching no food, stay out of the totals and are named once each on the
+  // sheet rather than dropped without a word. A blank name reads as its hint.
+  const unknownItems: string[] = [];
+  const nameUnknown = (label: string): void => {
+    const shown = label.replaceAll(/[_\s]+/g, " ").trim();
+    if (shown !== "" && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
+  };
+  for (const label of result.evidence.unknown_items) nameUnknown(label);
   for (const evidence of result.evidence.items) {
-    const food = await findFood(deps, evidence.canonical_hint);
+    const food = await findScannedFood(deps, evidence.canonical_hint);
     if (food === null) {
-      // Honest unknown (§3.5): an item seen but matching no food stays out of the
-      // totals and is named with the ones the model could not identify, so the
-      // sheet says "Couldn't identify" rather than dropping it without a word.
-      const name = evidence.name.trim();
-      if (!unknownItems.some((u) => u.trim().toLowerCase() === name.toLowerCase())) unknownItems.push(name);
+      nameUnknown(evidence.name.trim() === "" ? evidence.canonical_hint : evidence.name);
       continue;
     }
     const portion = resolvePortion(

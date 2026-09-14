@@ -4,8 +4,8 @@
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
-import { CURATED_FOODS, FOOD_ALIASES, NOISE_WORDS, findCurated, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
-import { CUT_WORDS, PIECE_UNITS, VESSEL_WORDS } from "../src/modules/nutrition/portion-priors.js";
+import { CURATED_FOODS, FOOD_ALIASES, NOISE_WORDS, findCurated, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { COUNT_RULES, CUT_UP_PIECES, CUT_WORDS, type CountRule } from "../src/modules/nutrition/portion-priors.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -99,29 +99,54 @@ describe("the curated food list", () => {
     expect(Math.round((food("pho_beef").kcal * food("pho_beef").serving) / 100)).toBe(308);
   });
 
-  it("says of every serving whether it is one piece a photo's count can multiply", () => {
-    // Each unit on the list is a piece (or a sealed pack) or a measure, never both
-    // and never neither, so a new unit cannot slip into the count unclassified.
-    const MEASURES = new Set(["g", "oz", "tsp", "tbsp", "2 tbsp", "cup", "half cup", "glass", "bowl", "small", "portion", "half", "scoop", "shot"]);
-    for (const f of CURATED_FOODS) expect(PIECE_UNITS.has(f.unit) !== MEASURES.has(f.unit), `${f.name}: "${f.unit}"`).toBe(true);
-    for (const unit of PIECE_UNITS) expect(CURATED_FOODS.some((f) => f.unit === unit), unit).toBe(true);
+  it("says of every serving unit on the list what a photo's count of the food counts", () => {
+    // Every unit has exactly the rule written here, and every rule's unit is on the
+    // list, so a new unit cannot slip into the count unclassified and a rule cannot
+    // change without this test changing with it.
+    const rules = (rule: CountRule, units: string[]): [string, CountRule][] => units.map((unit) => [unit, rule]);
+    expect(new Map([
+      ...rules("piece", [
+        "apple", "bagel", "banana", "bar", "brownie", "burger", "cake", "clementine", "cookie", "croissant", "date",
+        "donut", "dosa", "egg", "gyro", "half", "hot dog", "idli", "kiwi", "link", "meatball", "muffin", "naan",
+        "nugget", "orange", "pancake", "paratha", "patty", "peach", "pear", "pita", "plum", "potato", "quesadilla",
+        "roll", "roti", "samosa", "sandwich", "sausage", "scoop", "shot", "slice", "spear", "stick", "taco",
+        "tortilla", "waffle", "white",
+      ]),
+      ...rules("vessel", ["bottle", "bowl", "can", "container", "cup", "glass", "half cup", "portion", "small"]),
+      ...rules("none", ["g", "oz", "tbsp", "2 tbsp", "tsp"]),
+    ])).toEqual(COUNT_RULES);
+    for (const f of CURATED_FOODS) expect(COUNT_RULES.has(f.unit), `${f.name}: "${f.unit}"`).toBe(true);
+    for (const unit of COUNT_RULES.keys()) expect(CURATED_FOODS.some((f) => f.unit === unit), unit).toBe(true);
+    // The pieces people cut up rather than count: whole fruit, a vegetable, an egg.
+    expect([...CUT_UP_PIECES].sort()).toEqual(["apple", "banana", "clementine", "date", "egg", "half", "kiwi", "orange", "peach", "pear", "plum", "potato", "spear", "white"]);
     // Chocolate is eaten by the square, so neither is served as a bar a count of squares would multiply.
     expect(food("milk_chocolate")).toMatchObject({ serving: 28, unit: "oz" });
   });
 
-  it("holds each word the matcher drops to the photo count's cuts, vessels, or neither", () => {
+  it("holds each word the matcher drops to the photo count's cuts, or to no cut", () => {
     // The matcher finds "banana" in "banana slices" by dropping "slices", so each
-    // dropped word that names a cut or a vessel must be one the count reads, or a
-    // food found without it would be counted whole.
-    const NEITHER = new Set([
-      "stack", "stacks", "pile", "piles", "serving", "servings", "portion", "portions", "helping", "helpings",
-      "handful", "handfuls", "of", "with", "a", "an", "the", "some", "peeled", "fillet", "fillets", "small", "medium", "large",
+    // dropped word that names a cut must be one the count reads as a cut, or a food
+    // found without it would be counted whole. "Piece" counts whole things, and a
+    // vessel or a size names no cut.
+    const NOT_CUTS = new Set([
+      "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls", "serving", "servings",
+      "portion", "portions", "piece", "pieces", "helping", "helpings", "of", "with", "a", "an", "the", "some",
+      "handful", "handfuls", "cup", "cups", "glass", "glasses", "mug", "mugs", "can", "cans", "bottle", "bottles",
+      "peeled", "fillet", "fillets", "small", "medium", "large",
     ]);
-    for (const word of NOISE_WORDS) {
-      const classes = [CUT_WORDS.has(word), VESSEL_WORDS.has(word), NEITHER.has(word)].filter(Boolean);
-      expect(classes, word).toHaveLength(1);
-    }
-    for (const word of NEITHER) expect(NOISE_WORDS.has(word), word).toBe(true);
+    for (const word of NOISE_WORDS) expect(CUT_WORDS.has(word) !== NOT_CUTS.has(word), word).toBe(true);
+    for (const word of NOT_CUTS) expect(NOISE_WORDS.has(word), word).toBe(true);
+  });
+
+  it("says a name holds a query only where it holds every word the query means", () => {
+    expect(holdsEveryWord("Coca-Cola Classic · Coca-Cola", "bottles of coca cola")).toBe(true);
+    expect(holdsEveryWord("Chocolate Chip Cookie · Brand", "chocolate_chip_cookies")).toBe(true);
+    expect(holdsEveryWord("Mystery", "mystery sauce")).toBe(false);
+    expect(holdsEveryWord("Barbecue Lentil Chips", "chips")).toBe(true);
+    expect(holdsEveryWord("Hamburger buns", "ham")).toBe(false);
+    expect(holdsEveryWord("Glass noodles", "glass")).toBe(true);
+    expect(holdsEveryWord("Anything", "")).toBe(false);
+    expect(holdsEveryWord("Anything", "!!!")).toBe(false);
   });
 
   it("keeps both rotis, each from its own table, and roti means the homemade one", () => {
