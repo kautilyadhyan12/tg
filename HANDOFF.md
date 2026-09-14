@@ -16,7 +16,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: api tsc 0 · eslint 0; shared tsc 0 · eslint 0 · 106/106; foods + nutrition + summary unit 57/57; nutrition routes 32/32; full local api
   1023/1026 (the 3 red are catalog.seed, 7/7 alone: ROADMAP 10's shared-database flake); 13 deliberate breaks each red (a 14th survived: a redundant lookup, removed), files restored byte for byte.
 - The summary harness's M4 anchor had gone stale at 4b-ii (0 matches); re-anchored to the band ternary, and its mutant turns the band test red.
-- Next: CI; Kd's click-through (local `kd.lowtarget@example.com`, Nutrition → Add food); the fresh-chat review; merge.
+- Kd's click-through passed (*"all the tests passed"*). From it (RULINGS 2026-09-14): an Open Food Facts product reads "name · brand" with "Packaged
+  product · Open Food Facts" under it (4 breaks red); the list grows again at 7a-i-b. Found: the Gemini scanner ruling unbuilt, and Open Food
+  Facts' live search capped at 10 a minute per IP — Stage 4 items 7 and 8. Next: CI; the fresh-chat review of PR #71; merge.
 
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
