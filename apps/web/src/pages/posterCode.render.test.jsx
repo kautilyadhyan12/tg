@@ -167,8 +167,9 @@ const signInAs = async (user) => {
   fireEvent.click(screen.getByText('Continue'));
 };
 
-const NEW_ACCOUNT = { id: 'u1', displayName: 'kd.test', onboardingCompleted: false };
-const SET_UP = { id: 'u1', displayName: 'kd.test', onboardingCompleted: true };
+// Both have ticked the sign-up note, which its own test file covers.
+const NEW_ACCOUNT = { id: 'u1', displayName: 'kd.test', onboardingCompleted: false, signUpDisclaimerAgreed: true };
+const SET_UP = { id: 'u1', displayName: 'kd.test', onboardingCompleted: true, signUpDisclaimerAgreed: true };
 
 beforeEach(() => {
   vi.clearAllMocks();

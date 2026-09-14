@@ -5,10 +5,12 @@
 // calorie cut" are DERIVED on the server from the stored answer, the macro
 // rings' number stops cutting for a yes, saving again changes everything at
 // once, the consent row carries the wording verbatim, and an unknown wording
-// version is refused.
+// version is refused. The profile's sign-up note flag (ROADMAP 4d) is read from
+// this log, so its tests live here too.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { DISCLAIMER_WORDINGS } from "@app/shared";
+import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from "@app/shared";
+import type { ConsentPurpose } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -464,5 +466,68 @@ d("health screening + consent routes (real Postgres)", () => {
     const rows = await sql<{ user_id: string }[]>`
       SELECT user_id FROM consent_log WHERE user_id IN (${a.userId}, ${b.userId})`;
     expect(rows).toEqual([{ user_id: a.userId }]);
+  });
+
+  // ── the sign-up note's gate (ROADMAP 4d) ──────────────────────────────────
+  // The screens show "Before you start" to a signed-in person until the
+  // profile says the note has been ticked. Only one tap may say so: THIS
+  // person's, on THE SIGN-UP NOTE, in the words shown TODAY.
+
+  const agreedFlag = async (cookies: Record<string, string>) => {
+    const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { user: { signUpDisclaimerAgreed: unknown } }).user.signUpDisclaimerAgreed;
+  };
+  const tap = (cookies: Record<string, string>, purpose: ConsentPurpose, wordingVersion: string) =>
+    inject({ method: "POST", url: "/v1/users/me/consents", body: { purpose, wordingVersion, appVersion: "web-test" }, cookies });
+
+  it("a new account has not ticked the sign-up note; a tap on today's words turns it on, in the PATCH reply too", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("hs-note-new@example.com");
+    expect(await agreedFlag(cookies)).toBe(false);
+
+    expect((await tap(cookies, "sign_up", CURRENT_DISCLAIMER_VERSION.sign_up)).statusCode).toBe(201);
+    expect(await agreedFlag(cookies)).toBe(true);
+
+    const patched = await inject({ method: "PATCH", url: "/v1/users/me", body: { displayName: "Note Ticked" }, cookies });
+    expect(patched.statusCode).toBe(200);
+    expect((JSON.parse(patched.body) as { user: Record<string, unknown> }).user).toMatchObject({
+      displayName: "Note Ticked",
+      signUpDisclaimerAgreed: true,
+    });
+  });
+
+  it("older words, another screen's note or someone else's tap never count as ticking it", { timeout: 30_000 }, async () => {
+    const a = await makeUser("hs-note-a@example.com");
+    const b = await makeUser("hs-note-b@example.com");
+
+    // Words the note no longer shows: new words are asked for once more.
+    const older = Object.keys(DISCLAIMER_WORDINGS.sign_up).filter((v) => v !== CURRENT_DISCLAIMER_VERSION.sign_up);
+    expect(older.length).toBeGreaterThan(0);
+    for (const version of older) expect((await tap(a.cookies, "sign_up", version)).statusCode).toBe(201);
+    expect(await agreedFlag(a.cookies)).toBe(false);
+
+    // The health step's and the plan's notes, in today's words.
+    expect((await tap(a.cookies, "health_step", CURRENT_DISCLAIMER_VERSION.health_step)).statusCode).toBe(201);
+    expect((await tap(a.cookies, "plan_screen", CURRENT_DISCLAIMER_VERSION.plan_screen)).statusCode).toBe(201);
+    expect(await agreedFlag(a.cookies)).toBe(false);
+
+    // A stranger's tap on the right note, in the right words.
+    expect((await tap(b.cookies, "sign_up", CURRENT_DISCLAIMER_VERSION.sign_up)).statusCode).toBe(201);
+    expect(await agreedFlag(b.cookies)).toBe(true);
+    expect(await agreedFlag(a.cookies)).toBe(false);
+  });
+
+  it("the flag cannot be sent: a profile PATCH carrying it is refused and changes nothing", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("hs-note-forged@example.com");
+    const forged = await inject({ method: "PATCH", url: "/v1/users/me", body: { signUpDisclaimerAgreed: true }, cookies });
+    expect(forged.statusCode).toBe(400);
+    const withName = await inject({
+      method: "PATCH",
+      url: "/v1/users/me",
+      body: { displayName: "Forger", signUpDisclaimerAgreed: true },
+      cookies,
+    });
+    expect(withName.statusCode).toBe(400);
+    expect(await agreedFlag(cookies)).toBe(false);
   });
 });

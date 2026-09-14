@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { landingRoute, readDoor, readJoinCode, rememberJoinCode } from '../../pages/landingRoute';
+import SignUpNote from '../../pages/SignUpNote';
 
 const Spinner = () => (
   <div
@@ -43,6 +44,18 @@ export const ProtectedRoute = ({ children, requireOnboarding = true }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
+  // THE SIGN-UP NOTE COMES FIRST (ROADMAP 4d): before setup, the member app and
+  // the console alike, since every signed-in screen sits behind this guard
+  // whichever door was pressed. It is drawn IN PLACE rather than sent to an
+  // address of its own, so the address the person was on their way to (a
+  // poster's join link with its code) is still there when they continue.
+  //
+  // `!== true`, the opposite of the setup check below, on purpose: a profile
+  // read that failed shows the note to someone who has already ticked it (one
+  // more tap, one more true row), where failing open would let someone who
+  // never ticked it in with no record. It cannot trap anyone the way a
+  // finished wizard could: ticking needs only the tap's own request.
+  if (user.signUpDisclaimerAgreed !== true) return <SignUpNote />;
   if (requireOnboarding && user.onboardingCompleted === false) {
     return <Navigate to="/onboarding" replace />;
   }

@@ -141,6 +141,7 @@ async function toUserProfile(sql: Sql, row: repo.ProfileRow): Promise<UserProfil
     weightKg: row.weightKg,
     leaderboardOptOut: row.leaderboardOptOut,
     onboardingCompleted: row.onboardingCompleted,
+    signUpDisclaimerAgreed: row.signUpDisclaimerAgreed,
     createdAt: row.createdAt.toISOString(),
   };
 }

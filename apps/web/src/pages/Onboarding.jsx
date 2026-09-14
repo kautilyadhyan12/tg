@@ -11,8 +11,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { consentService } from '../api/healthApi';
-import { errorText } from '../api/orgsApi';
+import { useDisclaimerTap } from '../hooks/useDisclaimerTap';
 import PlanPanel from './onboarding/PlanPanel';
 import { forgetJoinCode, joinPageFor, readJoinCode } from './landingRoute';
 import {
@@ -66,26 +65,6 @@ const NAME_NEEDED = 'Type the name we should call you.';
  *  rings' "Answer now", ROADMAP 4a-iii). Anything else is the dashboard: a
  *  value in the page's state is never followed as an address. */
 const RETURN_TO = new Set(['/nutrition']);
-
-/** One disclaimer tap (RULINGS 2026-09-07: one explicit tap, stored with the
- *  time, the build and the words), recorded the moment it is made — so the
- *  consent log holds it whether or not the person goes on to finish. */
-function useDisclaimerTap(purpose) {
-  const [agreed, setAgreed] = useState(false);
-  const [agreeing, setAgreeing] = useState(false);
-  const agree = async () => {
-    setAgreeing(true);
-    try {
-      await consentService.record(purpose);
-      setAgreed(true);
-    } catch (err) {
-      toast.error(errorText(err, "Couldn't record that just now. Please try again."));
-    } finally {
-      setAgreeing(false);
-    }
-  };
-  return { agreed, agreeing, agree };
-}
 
 function Spinner() {
   return (

@@ -24,20 +24,24 @@ const adoptSession = (user) => {
 // `=== false` gates saw undefined and enforced it for nobody). Fails OPEN
 // (undefined) on any error — a profile-read blip must never trap a logged-in
 // user; the gate stays exactly as permissive as it is today on failure.
-/** One profile read, two facts — the onboarding gate flag and the stored
- *  timezone. Kept as ONE request because both are needed on every session
- *  adoption and the profile already carries both. */
+/** One profile read, three facts — the onboarding gate flag, the sign-up
+ *  note's gate flag (ROADMAP 4d) and the stored timezone. Kept as ONE request
+ *  because all three are needed on every session adoption and the profile
+ *  already carries them. The note's flag is left UNDEFINED on a failed read
+ *  too, and `ProtectedRoute` reads that as "not ticked" (it fails closed; the
+ *  guard says why). */
 const fetchProfileFacts = async () => {
   try {
     const res = await userService.getProfile();
     return {
       onboardingCompleted: res.data.user?.onboardingCompleted,
+      signUpDisclaimerAgreed: res.data.user?.signUpDisclaimerAgreed,
       timezone: res.data.user?.timezone ?? null,
     };
   } catch {
     // timezone UNDEFINED, not null (T3 F3): a failed read is not the same as
     // "the server has none", and conflating them makes a transient blip write.
-    return { onboardingCompleted: undefined, timezone: undefined };
+    return { onboardingCompleted: undefined, signUpDisclaimerAgreed: undefined, timezone: undefined };
   }
 };
 
@@ -89,8 +93,8 @@ export function AuthProvider({ children }) {
         // Enrich with the gate flag BEFORE loading clears, so ProtectedRoute
         // never renders once with onboardingCompleted===undefined (gate open)
         // and then redirects — the `finally` below awaits this.
-        const { onboardingCompleted, timezone } = await fetchProfileFacts();
-        setUser({ ...authUser, onboardingCompleted });
+        const { onboardingCompleted, signUpDisclaimerAgreed, timezone } = await fetchProfileFacts();
+        setUser({ ...authUser, onboardingCompleted, signUpDisclaimerAgreed });
         // Fire-and-forget AFTER the gate flag has landed: a best-effort write
         // must never delay rendering or hold the loading spinner open.
         void syncTimezone(timezone);
@@ -112,8 +116,8 @@ export function AuthProvider({ children }) {
     // Enrich with the onboarding gate flag so Login.jsx can route to the wizard
     // vs the dashboard, and ProtectedRoute sees it immediately (login returns
     // authUserSchema, which omits it — same reason as session restore above).
-    const { onboardingCompleted, timezone } = await fetchProfileFacts();
-    const user = { ...authUser, onboardingCompleted };
+    const { onboardingCompleted, signUpDisclaimerAgreed, timezone } = await fetchProfileFacts();
+    const user = { ...authUser, onboardingCompleted, signUpDisclaimerAgreed };
     setUser(user);
     // Login is the FIRST session a new account gets, so it is where a timezone
     // is usually captured for the first time. Fire-and-forget: the login
@@ -138,8 +142,8 @@ export function AuthProvider({ children }) {
     const res = await authService.verifyCode(email, code);
     const authUser = res.data.user;
     adoptSession(authUser);
-    const { onboardingCompleted, timezone } = await fetchProfileFacts();
-    const user = { ...authUser, onboardingCompleted };
+    const { onboardingCompleted, signUpDisclaimerAgreed, timezone } = await fetchProfileFacts();
+    const user = { ...authUser, onboardingCompleted, signUpDisclaimerAgreed };
     setUser(user);
     void syncTimezone(timezone);
     return { ...res.data, user };
