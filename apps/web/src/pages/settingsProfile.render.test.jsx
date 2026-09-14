@@ -50,6 +50,11 @@ function serve({ me = {}, fitness = {} } = {}) {
 }
 
 const type = (shown, text) => fireEvent.change(screen.getByDisplayValue(shown), { target: { value: text } });
+/** Picks an option from one of the page's dropdowns. */
+const pick = (dropdown, option) => {
+  fireEvent.click(screen.getByRole('button', { name: dropdown }));
+  fireEvent.click(screen.getByRole('option', { name: option }));
+};
 const save = () => fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 const loaded = () => screen.findByDisplayValue('Kd');
 
@@ -125,6 +130,64 @@ describe('Settings → Profile', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(why));
     expect(svc.putFitnessProfile).not.toHaveBeenCalled();
     expect(svc.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("says a target under the lowest healthy weight in screen 3's words, and still saves it (Kd, 2026-09-14)", async () => {
+    serve(); // Female, 30, 165 cm, 70 kg, losing weight: the lowest healthy weight is 50.4 kg
+    render(<Settings />);
+    await loaded();
+    const line = 'Your target is below the lowest healthy weight for your height, 50.4 kg. Your plan will not take you below it.';
+    expect(screen.queryByText(line)).toBeNull();
+    type('65', '50.4'); // the lowest healthy weight itself
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    type('50.4', '50.35'); // under it as typed, though a wheel would read it 50.4
+    expect(screen.getByText(line)).toBeTruthy();
+    type('50.35', '45');
+    expect(screen.getByText(line)).toBeTruthy();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 45 })));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('holds that target to the age and height typed beside it', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    type('65', '49');
+    expect(screen.getByText(/below the lowest healthy weight for your height, 50\.4 kg\./)).toBeTruthy();
+    type('30', '16'); // a girl of 16 at 165 cm: 48.8 kg (Cole and colleagues, 2007)
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    type('165', '175'); // and at 175 cm, 54.8 kg
+    expect(screen.getByText(/below the lowest healthy weight for your height and age, 54\.8 kg\./)).toBeTruthy();
+    type('16', '13'); // an age the server refuses has no healthy weight to name
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+  });
+
+  it('holds that target to the gender picked beside it', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    type('30', '16');
+    type('65', '47');
+    // At 16 and 165 cm, a girl's lowest healthy weight is 48.8 kg and a boy's 47.8 kg (Cole and colleagues, 2007).
+    expect(screen.getByText(/for your height and age, 48\.8 kg\./)).toBeTruthy();
+    pick('Gender', 'Male');
+    expect(screen.getByText(/for your height and age, 47\.8 kg\./)).toBeTruthy();
+    pick('Gender', 'Prefer not to say');
+    expect(screen.getByText(/for your height and age, 47\.8 kg\./)).toBeTruthy();
+  });
+
+  it('reads the boxes in pounds when pounds are picked', async () => {
+    serve(); // 165 cm: the lowest healthy weight is 50.4 kg, which reads 111.1 lb
+    render(<Settings />);
+    await loaded();
+    pick('Weight unit', 'lbs'); // the boxes now show 154.32 and 143.3
+    type('143.3', '111.1'); // the healthy weight itself, though it is stored as 50.39 kg
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    type('111.1', '111');
+    expect(
+      screen.getByText('Your target is below the lowest healthy weight for your height, 111.1 lb. Your plan will not take you below it.'),
+    ).toBeTruthy();
   });
 
   it('holds the target to the weight typed beside it', async () => {

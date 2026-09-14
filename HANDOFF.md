@@ -4,6 +4,31 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4c-ii merged (PR #69): Kd's click-through passed; the review's findings fixed (no Critical/High)
+
+- Kd's click-through passed on the local database (*"all test passed"*).
+- Review, four Lows fixed: no healthy weight is named for an age or height the plan cannot take (Settings lets 13 be typed); the
+  target is read on the row its wheel shows (one row under a weight it would read the same as) on screen 3, in the box and in the
+  plan's answers; under 18 the words say "for your height and age"; `versionFor` is `formulaFor`, and ROADMAP 4c-ii is plain words.
+- Three weak tests fixed: a weight exactly at the floor (no cut, no finish date of today), Settings in pounds, Settings' gender box.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + nutrition + onboarding routes 157/157; web
+  eslint 0 on the touched files but Settings.jsx (its four, as on master) · the eleven files drawing setup or Settings 390/390;
+  nine deliberate breaks, the review's three among them, each red, every file restored byte for byte.
+- CI green on cd77a61, all five jobs. Kd waived the re-check (no Critical/High, RULINGS 2026-09-08): *"merge"*. Next: 4d, the sign-up tap.
+
+## 2026-09-14 · 4c-ii built: a too-low target is said on "Your target" as it is picked, branch `too-low-target`
+
+- Kd said *"go"* to the plan's three recommendations (RULINGS 2026-09-14): the number box keeps its line; the target stays pickable;
+  16 and 17 are held to the teen healthy weight (Cole and colleagues, 2007, BMJ, Table 4), not the adult BMI 18.5.
+- Built: the line under the target wheel, and in Settings' target box, from one shared rule the plan maths runs to and the contract
+  checks the flag against; said only where the plan's kilograms are under it AND it reads under it as the screen shows it. ROADMAP 4c-ii.
+- Found and fixed: in pounds the number box said "below 111.1 lb" of a 111.1 lb target (stored as 50.39 kg). Seen in headless Edge:
+  the line was lost on the page's picture (now on a panel of its own), and Settings said nothing of a typed 50.35 (it read rows).
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + nutrition + onboarding + health 176/176; web
+  eslint 0 on the touched files but Settings.jsx (its four errors are on master too) · the eleven files drawing setup or Settings
+  385/385 · full run before the last fix 2117/2117 in 75/76 (poseAssets.contract, the known local red); sixteen breaks each red.
+- Next: CI; Kd's click-through (local: `kd.lowtarget@example.com`); the fresh-chat review; merge; then ask Kd if 4d is next.
+
 ## 2026-09-14 · 4c merged (PR #66); GitHub: cheaper checks (PR #67), the lock on master, Pro
 
 - Kd's click-through of 4c passed on the local database (*"all test passed"*); the re-check of 11d99e1 was skipped on his word (no

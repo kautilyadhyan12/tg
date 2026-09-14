@@ -15,6 +15,8 @@ import {
   fitnessGoalSchema,
   fitnessLevelSchema,
   genderSchema,
+  formulaFor,
+  healthyWeightFloorKg,
   missingPlanInputSchema,
   missingSetupAnswerSchema,
   MUSCLE_GAIN_PACE,
@@ -530,6 +532,158 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
   });
 });
 
+describe('a target under the lowest healthy weight is said on screen 3 as it is picked, and can still be picked (Kd, 2026-09-14)', () => {
+  // Female, 30, 165 cm: the lowest healthy weight is 50.4 kg, which reads 111.1 lb.
+  const LOW = { ...ALL, targetWeightKg: 45 };
+  const FIRST = 'Your target is below the lowest healthy weight for your height, 50.4 kg.';
+  const tenths = ({ whole, tenth }) => whole * 10 + tenth;
+
+  it('says what the plan does about it: it goes no lower, or leaves a weight already there where it is', () => {
+    expect(m.healthyTargetLine('lose', LOW, 'metric')).toBe(`${FIRST} Your plan will not take you below it.`);
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50 }, 'metric')).toBe(
+      `${FIRST} You already weigh less, so your plan will not lower your weight.`,
+    );
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.4 }, 'metric')).toBe(
+      `${FIRST} You are already at it, so your plan will not lower your weight.`,
+    );
+    // 50.38 kg reads 50.4 too, and the plan does not move a weight at or under the floor.
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.38 }, 'metric')).toMatch(/You are already at it/);
+    // 50.42 kg also reads 50.4, but the plan still runs the last 0.02 kg down to the floor.
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.42 }, 'metric')).toMatch(/will not take you below it\.$/);
+    expect(m.healthyTargetLine('lose', LOW, 'imperial')).toBe(
+      'Your target is below the lowest healthy weight for your height, 111.1 lb. Your plan will not take you below it.',
+    );
+  });
+
+  it('says nothing at or above that weight, for a weight choice that is not a loss, for a target on the wrong side, or before the answers it needs', () => {
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.4 }, 'metric')).toBeNull();
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.3 }, 'metric')).not.toBeNull();
+    expect(m.healthyTargetLine('lose', ALL, 'metric')).toBeNull(); // 65 kg
+    expect(m.healthyTargetLine('gain', { ...LOW, weightKg: 40 }, 'metric')).toBeNull();
+    expect(m.healthyTargetLine('maintain', LOW, 'metric')).toBeNull();
+    expect(m.healthyTargetLine(null, LOW, 'metric')).toBeNull();
+    // Under a weight already under the floor, a target above that weight is the wrong-side error's to name.
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 44 }, 'metric')).toBeNull();
+    for (const key of ['heightCm', 'age', 'gender', 'weightKg', 'targetWeightKg']) {
+      expect(m.healthyTargetLine('lose', { ...LOW, [key]: null }, 'metric'), key).toBeNull();
+    }
+  });
+
+  it("holds a 16- or 17-year-old to the teen figures, girls' for Female and boys' for every other answer, and says the age counts", () => {
+    // Cole and colleagues, 2007, Table 4: at 165 cm, 48.8 kg for a girl of 16 and 49.1 kg for a boy of 17.
+    const girl = { ...LOW, age: 16, weightKg: 60 };
+    expect(m.healthyFloorKg(girl)).toBe(48.8);
+    expect(m.healthyTargetLine('lose', { ...girl, targetWeightKg: 49.5 }, 'metric')).toBeNull();
+    expect(m.healthyTargetLine('lose', girl, 'metric')).toBe(
+      'Your target is below the lowest healthy weight for your height and age, 48.8 kg. Your plan will not take you below it.',
+    );
+    for (const gender of ['male', 'other', 'prefer_not_to_say']) expect(m.healthyFloorKg({ ...girl, age: 17, gender }), gender).toBe(49.1);
+    expect(m.healthyFloorKg({ ...girl, age: 18 })).toBe(50.4);
+    expect(m.healthyTargetLine('lose', { ...girl, age: 18 }, 'metric')).toMatch(/^Your target is below the lowest healthy weight for your height, 50\.4 kg\./);
+    expect(m.healthyFloorKg({ ...girl, gender: null })).toBeNull();
+  });
+
+  it('names no floor for an age or a height the plan cannot take, so a 13 typed in Settings shows none', () => {
+    // The plan is for 16 and over (RULINGS 2026-09-07); Settings' age box still lets 13 be typed, and the server refuses it.
+    for (const age of [13, 15, 121, 16.5]) {
+      expect(m.healthyFloorKg({ ...LOW, age }), String(age)).toBeNull();
+      expect(m.healthyTargetLine('lose', { ...LOW, age }, 'metric'), String(age)).toBeNull();
+    }
+    for (const heightCm of [49, 301]) expect(m.healthyFloorKg({ ...LOW, heightCm }), String(heightCm)).toBeNull();
+    expect(m.healthyFloorKg({ ...LOW, age: 16 })).toBe(48.8);
+    expect(m.healthyFloorKg({ ...LOW, age: 120, heightCm: 50 })).not.toBeNull();
+  });
+
+  it('reads a target as its wheel shows it: one row under a weight it would otherwise read the same as', () => {
+    // 50.42 kg and 50.39 kg both read 50.4 kg, so the wheel shows the target at 50.3 (`targetRow`) —
+    // under the 50.4 kg floor, where the plan's kilograms are too.
+    const same = { ...LOW, weightKg: 50.42, targetWeightKg: 50.39 };
+    expect(m.targetShownRow('lose', same, 'metric')).toEqual({ whole: 50, tenth: 3 });
+    expect(m.targetShownValue('lose', same, 'metric')).toBe(50.3);
+    expect(m.healthyTargetLine('lose', same, 'metric')).toBe(`${FIRST} Your plan will not take you below it.`);
+    // The plan screen names it by the same row, and the plan box says the line beside it.
+    expect(m.answerValue('target', same, 'metric')).toMatch(/^50\.3 kg · /);
+    const flags = [{ code: 'target_below_healthy_weight', floorKg: 50.4 }];
+    expect(m.flagLines({ flags }, 'lose', 'metric', m.targetShownValue('lose', same, 'metric'))).toEqual([FIRST]);
+    // A target on the wrong side, or with no weight to keep to, reads as its own row.
+    expect(m.targetShownRow('lose', { ...LOW, targetWeightKg: 83 }, 'metric')).toEqual({ whole: 83, tenth: 0 });
+    expect(m.targetShownRow('lose', { ...LOW, weightKg: null }, 'metric')).toEqual({ whole: 45, tenth: 0 });
+    expect(m.targetShownValue('lose', { ...LOW, targetWeightKg: null }, 'metric')).toBeNull();
+  });
+
+  it('holds a target against the floor as the screen shows both, so a weight that reads as the floor is never called under it', () => {
+    // 111.1 lb is stored as 50.39 kg: under 50.4 kg in kilograms, and 111.1 lb on screen.
+    expect(m.kgFromParts({ whole: 111, tenth: 1 }, 'imperial')).toBe(50.39);
+    expect(m.rowValue(50.39, 'imperial')).toBe(111.1);
+    expect(m.readsBelow(111.1, 50.4, 'imperial')).toBe(false);
+    expect(m.readsBelow(111, 50.4, 'imperial')).toBe(true);
+    expect(m.readsBelow(50.4, 50.4, 'metric')).toBe(false);
+    expect(m.readsBelow(50.35, 50.4, 'metric')).toBe(true);
+    expect(m.readsBelow(null, 50.4, 'metric')).toBe(false);
+    // On the wheels, rows: 50.39 kg reads 111.1 lb and 50.4 kg; 50.35 kg reads 111.0 lb.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial')).toBeNull();
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'metric')).toBeNull();
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.35 }, 'imperial')).toMatch(/^Your target is below/);
+    // In Settings' boxes, the numbers typed: 50.35 is under 50.4, and 111.08 under 111.1.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.35 }, 'metric', { target: 50.35 })).toMatch(/^Your target is below/);
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial', { target: 111.08 })).toMatch(/111\.1 lb\. Your plan/);
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.39 }, 'imperial', { target: 111.1 })).toBeNull();
+    // Never where the plan's kilograms are not under the floor, whatever is shown.
+    expect(m.healthyTargetLine('lose', { ...LOW, targetWeightKg: 50.4 }, 'metric', { target: 50.35 })).toBeNull();
+    // The weight is read as shown too: 50.35 kg reads 50.4 on its row, and 50.35 typed.
+    expect(m.rowValue(50.35, 'metric')).toBe(50.4);
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.35 }, 'metric')).toMatch(/You are already at it/);
+    expect(m.healthyTargetLine('lose', { ...LOW, weightKg: 50.35 }, 'metric', { target: 45, weight: 50.35 })).toMatch(/You already weigh less/);
+  });
+
+  it('agrees with the plan and the plan panel on every row near the floor, for every height the wheels show, in both units', () => {
+    // The plan compares kilograms: a flag when the target is under the shared
+    // floor (plan/maths.ts). For every height on either height wheel, at 16, 17
+    // and 18, both versions, the forty rows either side of the floor, in both
+    // units: where screen 3 says it the plan flags it, and the target reads
+    // under the floor; where the plan flags it and screen 3 does not, the target
+    // reads as the floor the plan then runs to; and the plan panel says it
+    // exactly when screen 3 does.
+    const heights = [
+      ...m.heightCmList(null),
+      ...m.heightFeetList(null).flatMap((ft) => m.INCHES.map((inch) => m.cmFromParts({ ft, inch }, 'imperial'))),
+    ];
+    const bad = [];
+    let rows = 0;
+    let readsAsFloor = 0;
+    for (const heightCm of heights) {
+      for (const age of [16, 17, 18]) {
+        for (const gender of ['female', 'male']) {
+          const floorKg = healthyWeightFloorKg(heightCm, age, formulaFor(gender));
+          const plan = { flags: [{ code: 'target_below_healthy_weight', floorKg }], workings: { resting: { age } } };
+          for (const units of ['metric', 'imperial']) {
+            const floorRow = tenths(m.weightParts(floorKg, units));
+            for (let t = floorRow - 40; t <= floorRow + 40; t += 1) {
+              const targetKg = m.kgFromParts({ whole: Math.floor(t / 10), tenth: t % 10 }, units);
+              const a = { ...ALL, heightCm, age, gender, weightKg: 250, targetWeightKg: targetKg };
+              const said = m.healthyTargetLine('lose', a, units) !== null;
+              const flagged = targetKg < floorKg;
+              const panel = m.flagLines(plan, 'lose', units, m.targetShownValue('lose', a, units)).length === 1;
+              const where = `${heightCm} cm ${age} ${gender} ${units} row ${t}`;
+              if (said && !flagged) bad.push(`said, not flagged: ${where}`);
+              if (said && tenths(m.weightParts(targetKg, units)) >= floorRow) bad.push(`said, reads at or over the floor: ${where}`);
+              if (flagged && !said) {
+                readsAsFloor += 1;
+                if (tenths(m.weightParts(targetKg, units)) !== floorRow) bad.push(`flagged, not said, reads apart: ${where}`);
+              }
+              if (panel !== said) bad.push(`panel and screen 3 differ: ${where}`);
+              rows += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(rows).toBeGreaterThan(200_000);
+    expect(readsAsFloor).toBeGreaterThan(0); // the case is real: pounds put some there
+  });
+});
+
 /** The route's golden person (users.onboarding.routes.test.ts), working and all. */
 const WORKINGS = {
   resting: { formula: 'female', weightKg: 70, heightCm: 165, age: 30, constant: -161, kcal: 1420 },
@@ -599,7 +753,8 @@ describe('the plan panel says what the server said', () => {
     for (const flags of Object.values(samples)) {
       for (const flag of flags) {
         expect(planFlagSchema.safeParse(flag).success, flag.code).toBe(true);
-        const lines = m.flagLines({ ...plan, flags: [flag] }, 'lose', 'metric');
+        // A target of 45 kg, under the 50.4 kg the healthy-weight sample names.
+        const lines = m.flagLines({ ...plan, flags: [flag] }, 'lose', 'metric', 45);
         expect(lines, flag.code).toHaveLength(1);
         expect(lines[0], flag.code).toMatch(/\.$/);
       }
@@ -622,6 +777,30 @@ describe('the plan panel says what the server said', () => {
     expect(
       m.flagLines({ ...plan, flags: [...samples.calorie_floor_applied, { code: 'target_out_of_reach' }] }, 'lose', 'metric')[0],
     ).not.toMatch(/slower/);
+  });
+
+  it('says the healthy-weight line only while the target reads under the floor as setup shows it, and says the age counts under 18', () => {
+    const flags = [{ code: 'target_below_healthy_weight', floorKg: 50.4 }];
+    // The fourth figure is the target as setup shows it, in the units on show (`targetShownValue`).
+    expect(m.flagLines({ ...plan, flags }, 'lose', 'metric', 45)).toEqual([
+      'Your target is below the lowest healthy weight for your height, 50.4 kg.',
+    ]);
+    expect(m.flagLines({ ...plan, flags }, 'lose', 'imperial', 99.2)).toEqual([
+      'Your target is below the lowest healthy weight for your height, 111.1 lb.',
+    ]);
+    // 111.1 lb is stored as 50.39 kg: the plan runs to 50.4 kg, which reads 111.1 lb as well.
+    expect(m.flagLines({ ...plan, flags }, 'lose', 'imperial', 111.1)).toEqual([]);
+    expect(m.flagLines({ ...plan, flags }, 'lose', 'metric', null)).toEqual([]);
+    expect(m.flagLines({ ...plan, flags })).toEqual([]);
+    // The plan's own age goes with the figure its flag carries: a teen's depends on the age as well.
+    const teen = {
+      ...plan,
+      flags: [{ code: 'target_below_healthy_weight', floorKg: 48.8 }],
+      workings: { ...WORKINGS, resting: { ...WORKINGS.resting, age: 16 } },
+    };
+    expect(m.flagLines(teen, 'lose', 'metric', 45)).toEqual([
+      'Your target is below the lowest healthy weight for your height and age, 48.8 kg.',
+    ]);
   });
 
   it('shows the pace cards the rate the plan maths uses', () => {

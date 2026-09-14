@@ -10,7 +10,7 @@
 // it reads no clock, so "today" is an input — the route (item 4a) derives it from
 // the device's time zone and the server clock, never from a body field.
 import { z } from "zod";
-import { genderSchema, weightGoalSchema, type WeightGoal } from "./users.js";
+import { genderSchema, weightGoalSchema, type Gender, type WeightGoal } from "./users.js";
 
 /** What the person wants their weight to do: screen 1's weight choice, stored
  *  as it is asked (RULINGS 2026-09-10), so the screens and the maths share one
@@ -155,6 +155,41 @@ export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
  *  exists to say what each pace eats. */
 export const ADULT_AGE = 18;
 
+/** Which of a figure's two formulas the plan reads for a gender answer: the
+ *  women's (or girls') for "female", the men's (or boys') for every other
+ *  answer. Mifflin-St Jeor's resting burn and the teen healthy weights both
+ *  come in two, and both take this one rule. */
+export type SexFormula = "female" | "male";
+export const formulaFor = (gender: Gender): SexFormula => (gender === "female" ? "female" : "male");
+
+/** The lowest healthy BMI for an adult: the WHO's underweight line. */
+export const HEALTHY_BMI_FLOOR = 18.5;
+
+/** The same line at 16 and 17, while the body is still growing: the BMI on the
+ *  curve that reaches 18.5 at 18 years (Cole and colleagues, 2007, BMJ 335:194,
+ *  Table 4, thinness grade 1), girls' and boys'. The age is asked in whole
+ *  years, so each year takes the figure at its start, the lowest it reaches,
+ *  and nobody is told a healthy weight is too low (Kd, 2026-09-14). */
+export const TEEN_HEALTHY_BMI_FLOOR: Readonly<Record<16 | 17, Readonly<Record<SexFormula, number>>>> = {
+  16: { female: 17.91, male: 17.54 },
+  17: { female: 18.25, male: 18.05 },
+};
+
+/** The lowest healthy BMI at this age: the adult line from ADULT_AGE, the teen
+ *  figure before it (the contract's rails start at 16). */
+export function healthyBmiFloor(age: number, formula: SexFormula): number {
+  if (age >= ADULT_AGE) return HEALTHY_BMI_FLOOR;
+  return TEEN_HEALTHY_BMI_FLOOR[age >= 17 ? 17 : 16][formula];
+}
+
+/** The lowest healthy weight for a height, in kilograms to one decimal: the one
+ *  rounded figure the plan runs to, its flag names, and screen 3 holds a target
+ *  against as it is picked (ROADMAP 4c-ii). */
+export function healthyWeightFloorKg(heightCm: number, age: number, formula: SexFormula): number {
+  const m = heightCm / 100;
+  return Math.round(healthyBmiFloor(age, formula) * m * m * 10) / 10;
+}
+
 /** Why the plan holds no calorie cut: under 18 · a yes on the health question
  *  (a condition, an injury, pregnancy or anything else) · Safe mode on top of
  *  that yes (RULINGS 2026-09-07, amended 2026-09-09). */
@@ -165,7 +200,8 @@ export type NoDeficitReason = z.infer<typeof noDeficitReasonSchema>;
 export const planFlagSchema = z.discriminatedUnion("code", [
   /** The target is on the wrong side of the current weight for the goal, or equal to it. */
   z.object({ code: z.literal("target_wrong_direction") }).strict(),
-  /** The target is below the lowest healthy weight for the height. The plan runs to that
+  /** The target is below the lowest healthy weight for the height (`healthyWeightFloorKg`,
+   *  at the age and formula the resting line names). The plan runs to that
    *  floor instead (`plannedTargetKg` is `floorKg`) unless the weight cannot move — the
    *  person is already at or under the floor, a no-deficit rule applies, or
    *  `target_out_of_reach` is listed too — in which case the plan holds the current weight. */
@@ -403,13 +439,15 @@ export const planNumbersSchema = z
         // pace line's kcal per kilo.
         (w.finish === null || w.finish.kgToMove === kgBetween(p.plannedTargetKg, r.weightKg)) &&
         (w.finish === null || w.change === null || w.finish.kcalPerKg === w.change.kcalPerKg) &&
-        // The flags' figures: the floor "To eat" names, the healthy weight a
-        // dated plan runs to, and the cut the muscle line names — raised only
-        // with Build muscle ticked and a cut over it, and suggesting the one
-        // pace screen 3 marks.
+        // The flags' figures: the floor "To eat" names, the healthy weight —
+        // the shared rule's for the resting line's height, age and formula,
+        // which screen 3 reads too, and the weight a dated plan runs to — and
+        // the cut the muscle line names, raised only with Build muscle ticked
+        // and a cut over it, and suggesting the one pace screen 3 marks.
         p.flags.every(
           (flag) =>
             (flag.code !== "calorie_floor_applied" || flag.floorKcal === w.floorKcal) &&
+            (flag.code !== "target_below_healthy_weight" || flag.floorKg === healthyWeightFloorKg(r.heightCm, r.age, r.formula)) &&
             (flag.code !== "target_below_healthy_weight" || p.daysToTarget === null || flag.floorKg === p.plannedTargetKg) &&
             (flag.code !== "cut_limits_muscle_gain" ||
               (flag.limitKcal === MUSCLE_GAIN_CUT_LIMIT_KCAL &&

@@ -3,7 +3,16 @@
 // their units, the words the plan panel and the plan screen use, and the save
 // queue. Every NUMBER of the plan is the server's (GET/PATCH
 // /v1/users/me/onboarding); nothing here computes a plan.
-import { ADULT_AGE, CHECK_FIRST_OPTIONS, MUSCLE_GAIN_PACE, ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
+import {
+  ADULT_AGE,
+  CHECK_FIRST_OPTIONS,
+  MUSCLE_GAIN_PACE,
+  ORG_TYPES_PHRASE,
+  PACE_KG_PER_WEEK,
+  formulaFor,
+  healthyWeightFloorKg,
+  planInputsSchema,
+} from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
@@ -424,6 +433,83 @@ export function clampTarget(direction, weight, parts) {
 export const targetRow = (direction, weight, targetKg, units) =>
   clampTarget(direction, weight, weightParts(targetKg, units));
 
+// ── Screen 3: a target under the lowest healthy weight is said as it is
+//    picked, and can still be picked (Kd, 2026-09-14) ──────────────────────
+
+/** The lowest healthy weight for these answers' height, age and gender, in
+ *  kilograms to one decimal — the shared rule the plan maths runs to — or null
+ *  until all three are answered with an age and a height the plan can take (its
+ *  own rails: Settings' age box lets 13 be typed before the server refuses it). */
+export function healthyFloorKg(a) {
+  const takes = (field, value) => planInputsSchema.shape[field].safeParse(value).success;
+  if (!takes('age', a.age) || !takes('heightCm', a.heightCm) || !answered(a.gender)) return null;
+  return healthyWeightFloorKg(a.heightCm, a.age, formulaFor(a.gender));
+}
+
+/** The number a weight reads on a wheel: its row, in the units on show. */
+export const rowValue = (kg, units) => {
+  const { whole, tenth } = weightParts(kg, units);
+  return whole + tenth / 10;
+};
+
+/** The row setup shows a target on, in the units on show: the target wheel's
+ *  own (`targetRow`: one row onto the goal's side of a weight it would read the
+ *  same as), or the target's own row where there is no side to keep to. Screen
+ *  3, the plan panel and the plan screen's answers all read the target by it. */
+export function targetShownRow(direction, a, units) {
+  const side = targetDirection(direction);
+  if (side === null || !answered(a.weightKg) || targetWrongSide(side, a.targetWeightKg, a.weightKg)) {
+    return weightParts(a.targetWeightKg, units);
+  }
+  return targetRow(side, weightParts(a.weightKg, units), a.targetWeightKg, units);
+}
+
+/** `targetShownRow` as a number, or null while there is no target. */
+export function targetShownValue(direction, a, units) {
+  if (!answered(a.targetWeightKg)) return null;
+  const { whole, tenth } = targetShownRow(direction, a, units);
+  return whole + tenth / 10;
+}
+
+/** Whether a weight that reads `shown` on screen, in the units on show — a
+ *  wheel's row, or the number typed in Settings' box — reads under `floorKg` as
+ *  the screens name it (`weightLabel`). The plan compares kilograms, and a
+ *  target a hair under the floor can read the same as it (111.1 lb is stored as
+ *  50.39 kg, under the 50.4 kg that reads 111.1 lb): the plan then runs to the
+ *  floor, which reads as the target, so there is nothing true to say. */
+export function readsBelow(shown, floorKg, units) {
+  if (!answered(shown) || !answered(floorKg)) return false;
+  return Math.round(shown * 100) < Math.round(labelValue(floorKg, units) * 100);
+}
+
+/** The flag's sentence, on screen 3 and in the plan panel alike. Under 18 the
+ *  figure is the teen one, which the age moves as well as the height. */
+export const belowHealthyText = (floorKg, units, age) =>
+  `Your target is below the lowest healthy weight for your height${age < ADULT_AGE ? ' and age' : ''}, ${weightLabel(floorKg, units)}.`;
+
+/** Screen 3's line under the target wheel (and Settings' under its box), or
+ *  null when there is nothing to say: a "Lose weight" target on the right side
+ *  of the weight that is under the lowest healthy weight in kilograms, as the
+ *  plan judges it, AND reads under it on screen. `shown` holds the numbers the
+ *  screen shows, in the units on show: by default the rows setup shows
+ *  (`targetShownRow`); Settings passes the numbers typed. What the line says the
+ *  plan does holds whatever else the plan holds — under 18, a yes to the health
+ *  question and the calorie floor can each stop the cut, and none of them takes
+ *  anyone under that weight. */
+export function healthyTargetLine(direction, a, units, shown = {}) {
+  if (direction !== 'lose' || !answered(a.weightKg) || !answered(a.targetWeightKg)) return null;
+  if (targetWrongSide(direction, a.targetWeightKg, a.weightKg)) return null;
+  const floorKg = healthyFloorKg(a);
+  if (floorKg === null || !(a.targetWeightKg < floorKg)) return null;
+  if (!readsBelow(shown.target ?? targetShownValue(direction, a, units), floorKg, units)) return null;
+  const first = belowHealthyText(floorKg, units, a.age);
+  // The plan runs down to the floor only from a weight above it, in kilograms.
+  if (floorKg < a.weightKg) return `${first} Your plan will not take you below it.`;
+  const weightShownNow = shown.weight ?? rowValue(a.weightKg, units);
+  const already = readsBelow(weightShownNow, floorKg, units) ? 'You already weigh less' : 'You are already at it';
+  return `${first} ${already}, so your plan will not lower your weight.`;
+}
+
 /** Height: whole centimetres, or feet and inches. */
 export const HEIGHT_REST = { metric: { cm: 170 }, imperial: { ft: 5, inch: 7 } };
 export const INCHES = range(0, 11);
@@ -475,8 +561,13 @@ export function dayText(day) {
     .format(new Date(Date.UTC(y, m - 1, d)));
 }
 
+/** The number `weightLabel` prints for a weight. */
+function labelValue(kg, units) {
+  return units === 'imperial' ? round(kg / KG_PER_LB, 1) : round(kg, 2);
+}
+
 export function weightLabel(kg, units) {
-  return units === 'imperial' ? `${round(kg / KG_PER_LB, 1)} lb` : `${round(kg, 2)} kg`;
+  return `${labelValue(kg, units)} ${units === 'imperial' ? 'lb' : 'kg'}`;
 }
 
 /** A pace card's rate, from the shared table the plan maths reads. */
@@ -512,15 +603,18 @@ const NO_CUT_REASON = {
   safe_mode: 'Safe mode is on',
 };
 
-/** Every sanity rule the server raised, as one plain sentence each. */
-export function flagLines(plan, direction, units) {
+/** Every sanity rule the server raised, as one plain sentence each. The
+ *  healthy-weight line is said only while `targetShown`, the target as setup
+ *  shows it (`targetShownValue`), reads below the floor, as screen 3 says it;
+ *  its words follow the plan's own age, the age its figure was worked out for. */
+export function flagLines(plan, direction, units, targetShown = null) {
   const codes = new Set(plan.flags.map((f) => f.code));
   const lines = plan.flags.map((f) => {
     switch (f.code) {
       case 'target_wrong_direction':
         return `Your target is not ${direction === 'gain' ? 'above' : 'below'} your current weight, so this plan keeps your weight where it is.`;
       case 'target_below_healthy_weight':
-        return `Your target is below the lowest healthy weight for your height, ${weightLabel(f.floorKg, units)}.`;
+        return readsBelow(targetShown, f.floorKg, units) ? belowHealthyText(f.floorKg, units, plan.workings?.resting.age) : null;
       case 'pace_over_a_year':
         return f.suggestedPace
           ? `At this pace your target is more than a year away. The ${PACE_LABEL[f.suggestedPace].toLowerCase()} pace gets there within a year.`
@@ -724,7 +818,8 @@ export function answerValue(id, a, units) {
       );
     case 'target':
       if (!answered(a.targetWeightKg) || !answered(a.pace)) return NOT_ANSWERED;
-      return `${weightShown(weightParts(a.targetWeightKg, units), units)} · ${PACE_LABEL[a.pace]}, ${paceText(a.pace, units)}`;
+      // On the row its wheel shows, so the plan screen and screen 3 read it alike.
+      return `${weightShown(targetShownRow(directionOf(a.weightGoal), a, units), units)} · ${PACE_LABEL[a.pace]}, ${paceText(a.pace, units)}`;
     case 'day':
       return DAY_LABEL[a.dayActivity] ?? NOT_ANSWERED;
     case 'training':

@@ -4,7 +4,8 @@
 // questions, and no number is ever built from a default (RULINGS 2026-07-15).
 // Under the number, "How is this worked out?" opens the server's own steps.
 // `note` is off only on the plan screen, which shows the whole disclaimer that
-// the note is the first sentence of.
+// the note is the first sentence of. `targetShown` is the target as setup shows
+// it, which the healthy-weight line is held against as screen 3 holds it.
 import { useState } from 'react';
 import { ChevronDown, Flame } from 'lucide-react';
 import {
@@ -18,11 +19,11 @@ import {
   workingSteps,
 } from './onboardingModel';
 
-export default function PlanPanel({ plan, direction, units, note = true }) {
+export default function PlanPanel({ plan, direction, units, targetShown = null, note = true }) {
   const [open, setOpen] = useState(false);
   if (plan === null) return null;
   const target = targetLine(plan, units);
-  const flags = flagLines(plan, direction, units);
+  const flags = flagLines(plan, direction, units, targetShown);
   return (
     <section aria-label="Your plan" className="card-glass mb-6">
       <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>

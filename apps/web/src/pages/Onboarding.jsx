@@ -42,6 +42,7 @@ import {
   openSetupAnswers,
   reachableScreens,
   screenAnswered,
+  targetShownValue,
   visibleScreens,
 } from './onboarding/onboardingModel';
 
@@ -492,7 +493,13 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                <PlanPanel plan={ob.plan} direction={direction} units={units} note={screen.id !== 'plan'} />
+                <PlanPanel
+                  plan={ob.plan}
+                  direction={direction}
+                  units={units}
+                  targetShown={targetShownValue(direction, answers, units)}
+                  note={screen.id !== 'plan'}
+                />
 
                 <motion.div
                   key={`screen-${screen.id}`}

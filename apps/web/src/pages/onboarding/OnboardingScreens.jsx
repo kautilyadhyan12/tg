@@ -3,7 +3,7 @@
 // once through `save`; the one typed box, the name, saves when the person
 // leaves it. Nothing here decides a number: the plan panel shows the server's.
 import { useRef, useState } from 'react';
-import { Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
 import {
   CHECK_FIRST_OPTIONS,
   CURRENT_DISCLAIMER_VERSION,
@@ -41,6 +41,7 @@ import {
   clampTarget,
   cleanEquipment,
   cmFromParts,
+  healthyTargetLine,
   heightCmList,
   heightFeetList,
   heightParts,
@@ -55,7 +56,7 @@ import {
   stepIn,
   stepInches,
   targetRest,
-  targetRow,
+  targetShownRow,
   targetTenths,
   targetWholes,
   targetWrongSide,
@@ -284,14 +285,16 @@ function WeightWheel({ id, question, shown, isSet, at, wholes, tenths, units, on
 
 /** Screen 3's wheel (Kd, 2026-09-11): only weights on the goal's side of the
  *  current weight are on it, so a contradiction cannot be picked. A stored
- *  target already on the wrong side is named, and the screen waits. */
-function TargetWheel({ target, weightKg, direction, units, save }) {
+ *  target already on the wrong side is named, and the screen waits. A target
+ *  under the lowest healthy weight stays pickable and is said the moment the
+ *  wheel lands on it (`healthy`, Kd 2026-09-14). */
+function TargetWheel({ target, weightKg, direction, units, save, healthy }) {
   const weight = weightParts(weightKg, units);
   const wrong = targetWrongSide(direction, target, weightKg);
   // A wrong-side target is on no row of the wheel, so the wheel rests and
   // reads "Not set" while the error under it names the target.
   const isSet = target !== null && !wrong;
-  const at = isSet ? targetRow(direction, weight, target, units) : targetRest(direction, weight);
+  const at = isSet ? targetShownRow(direction, { targetWeightKg: target, weightKg }, units) : targetRest(direction, weight);
   const wholes = targetWholes(units, direction, weight, at);
   const pick = (parts) => {
     const row = clampTarget(direction, weight, parts);
@@ -322,6 +325,19 @@ function TargetWheel({ target, weightKg, direction, units, save }) {
           {weightShown(weight, units)}.
         </p>
       )}
+      {/* On the page before the line is, so the line is read out when it comes;
+          on a panel of its own, so it reads clearly over the page's picture. */}
+      <div role="status">
+        {healthy && (
+          <p
+            className="mt-3 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs bg-dark-100"
+            style={{ color: '#FFB347', border: '1px solid rgba(255,138,31,0.35)' }}
+          >
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span>{healthy}</span>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -473,7 +489,14 @@ export function TargetScreen({ answers, save, units, setUnits, direction, plan }
         // said plainly all the same, never a wheel with no side to keep to.
         <p className="text-sm text-gray-300">Set your weight on About you first.</p>
       ) : (
-        <TargetWheel target={target} weightKg={weightKg} direction={direction} units={units} save={save} />
+        <TargetWheel
+          target={target}
+          weightKg={weightKg}
+          direction={direction}
+          units={units}
+          save={save}
+          healthy={healthyTargetLine(direction, answers, units)}
+        />
       )}
       <div>
         <Question>How fast?</Question>

@@ -13,8 +13,8 @@ import { useTransition } from '../context/TransitionContext';
 import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
 import { onboardingService } from '../api/onboardingApi';
 import {
-  DIETS, EQUIPMENT, GOALS, MEALS_PER_DAY, WEIGHT_GOALS, cleanEquipment, targetDirection, targetWrongSide, toggleEquipment,
-  toggleGoal, wrongSideText,
+  DIETS, EQUIPMENT, GOALS, MEALS_PER_DAY, WEIGHT_GOALS, cleanEquipment, healthyTargetLine, targetDirection, targetWrongSide,
+  toggleEquipment, toggleGoal, wrongSideText,
 } from './onboarding/onboardingModel';
 import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
@@ -135,10 +135,26 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
   const direction = targetDirection(profile.weightGoal);
   const weightKgNow = weightToKg(form.weight, form.weightUnit) ?? profile.weightKg ?? null;
   const targetKg = weightToKg(form.targetWeight, form.weightUnit);
+  const units = form.weightUnit === 'lbs' ? 'imperial' : 'metric';
   const wrongSide = direction !== null && targetWrongSide(direction, targetKg, weightKgNow)
-    ? wrongSideText(direction, targetKg, weightKgNow, form.weightUnit === 'lbs' ? 'imperial' : 'metric')
+    ? wrongSideText(direction, targetKg, weightKgNow, units)
     : null;
   const targetTyped = targetKg !== (profile.targetWeightKg ?? null);
+  // A target under the lowest healthy weight is said in screen 3's words, and
+  // still saves (Kd, 2026-09-14), held against the height, age and gender this
+  // save leaves, and read as the boxes show it: 50.35 typed is under 50.4.
+  const ageNow = parseInt(form.age, 10);
+  const typed = (text) => {
+    const n = parseFloat(text);
+    return Number.isFinite(n) ? n : null;
+  };
+  const healthy = healthyTargetLine(direction, {
+    targetWeightKg: targetKg,
+    weightKg: weightKgNow,
+    heightCm: heightToCm(form.height, form.heightUnit),
+    age: Number.isFinite(ageNow) ? ageNow : null,
+    gender: form.gender || null,
+  }, units, { target: typed(form.targetWeight), weight: typed(form.weight) });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -266,6 +282,9 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
           {wrongSide && (
             <p role="alert" className="text-2xs" style={{ color: '#f87171' }}>{wrongSide}</p>
           )}
+          <div role="status">
+            {healthy && <p className="text-2xs" style={{ color: '#FFB347' }}>{healthy}</p>}
+          </div>
         </Field>
       </div>
 
