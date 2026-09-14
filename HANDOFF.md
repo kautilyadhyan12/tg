@@ -17,7 +17,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   full run before the words and console changes 2132/2132 in 76/77 (poseAssets.contract, the known local red). Breaks: 4 server and 18 screen, each
   red, restored byte for byte; login-door harness 31/31 RED (S1-S3 new, D11 re-aimed); census login-door 31 · auth 20 · orgs 286.
 - Headless Edge on the local database: the note at 400 and 1000 px, the tick's row holding v3's words; /console shows no note, /onboarding does.
-- Next: CI; Kd's click-through of the console change; the fresh-chat review; merge.
+- Kd's click-through of the console change passed (*"all passed"*): `kd.staff@example.com` reached the console with no note, then through Train
+  met it and ticked v3 (the row is on the local database). CI green on 2226f3d. Next: the fresh-chat review of PR #70; merge on Kd's word.
 
 ## 2026-09-14 · 4c-ii merged (PR #69): Kd's click-through passed; the review's findings fixed (no Critical/High)
 
