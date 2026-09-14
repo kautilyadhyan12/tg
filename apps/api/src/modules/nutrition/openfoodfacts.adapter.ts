@@ -9,6 +9,15 @@ const searchSchema = z.object({ hits: z.array(productSchema).optional(), product
 const num = (v: unknown): number => typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && Number.isFinite(Number(v)) ? Number(v) : 0;
 const first = (v: string | string[] | undefined): string => Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
 const canonicalize = (v: string): string => v.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
+/** A product's name with its brand, so two brands' jars never read alike
+ *  ("Peanut butter · Happy Shopper"; RULINGS 2026-09-14). The first brand of a
+ *  list is used, and a brand the name already holds is not repeated. */
+function withBrand(name: string, brands: string | string[] | undefined): string {
+  const plain = name.trim();
+  const brand = (first(brands).split(",")[0] ?? "").trim().slice(0, 30);
+  if (brand === "" || plain.toLowerCase().includes(brand.toLowerCase())) return plain.slice(0, 80);
+  return `${plain.slice(0, 80 - brand.length - 3)} · ${brand}`;
+}
 function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   const name = first(p.product_name) || first(p.generic_name); if (name.trim() === "") return null;
   const n = p.nutriments ?? {}; let kcal = num(n["energy-kcal_100g"]); if (kcal === 0) kcal = num(n["energy_100g"]) / 4.184; if (kcal <= 0) return null;
@@ -23,7 +32,7 @@ function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   // preview and save could then use different macros). Code-less products
   // fall back to the name slug (rare; first-wins caching guards those).
   const code = p.code === undefined ? "" : canonicalize(String(p.code));
-  return { canonical: code === "" ? `off_${canonicalize(name)}` : `off_${code}`, name: name.slice(0, 80), kcal, proteinG, carbsG, fatG, fiberG, serving: servingMatch === null ? 100 : Number(servingMatch[1]), unit: servingMatch?.[2]?.toLowerCase() ?? "g", source: "openfoodfacts" };
+  return { canonical: code === "" ? `off_${canonicalize(name)}` : `off_${code}`, name: withBrand(name, p.brands), kcal, proteinG, carbsG, fatG, fiberG, serving: servingMatch === null ? 100 : Number(servingMatch[1]), unit: servingMatch?.[2]?.toLowerCase() ?? "g", source: "openfoodfacts" };
 }
 export function createOpenFoodFactsProvider(fetchImpl: typeof fetch = fetch): FoodSearchProvider {
   return { async search(query, limit) {

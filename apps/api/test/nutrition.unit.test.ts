@@ -85,6 +85,22 @@ describe("P2.6a nutrition pure pipeline", () => {
     const foods5 = await p5.search("peanut butter", 5);
     expect(foods5.map((f) => f.canonical)).toEqual(["off_8901063014312", "off_8901063999999"]);
     expect(foods5.some((f) => f.name === "Prank Bar")).toBe(false);
+    // Each jar reads with its brand (RULINGS 2026-09-14): the search service
+    // sends a list, the legacy search a comma-separated string, and a brand the
+    // name already holds is not repeated.
+    const branded = { hits: [
+      { code: "1", product_name: "Peanut butter", brands: ["Happy Shopper", "Other"], nutriments: { "energy-kcal_100g": 563 } },
+      { code: "2", product_name: "Peanut Butter", brands: "Peanut Butter & Co, Other", nutriments: { "energy-kcal_100g": 563 } },
+      { code: "3", product_name: "Kabayan's Peanut Butter", brands: ["Kabayan's Peanut Butter"], nutriments: { "energy-kcal_100g": 571 } },
+      { code: "4", product_name: "Crunchy peanut butter", nutriments: { "energy-kcal_100g": 590 } },
+    ] };
+    const p6 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(branded), { status: 200 })));
+    expect((await p6.search("peanut butter", 5)).map((f) => f.name)).toEqual([
+      "Peanut butter · Happy Shopper",
+      "Peanut Butter · Peanut Butter & Co",
+      "Kabayan's Peanut Butter",
+      "Crunchy peanut butter",
+    ]);
     // First URL fails → legacy CGI fallback answers with `products`.
     let calls = 0;
     const p2 = createOpenFoodFactsProvider(() => {

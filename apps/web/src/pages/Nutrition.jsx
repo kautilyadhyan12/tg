@@ -251,6 +251,7 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
         {canAdd && (
           <button
             onClick={() => onAdd(mealType.id)}
+            aria-label={`Add to ${mealType.label}`}
             className="w-8 h-8 rounded-lg flex items-center justify-center
                        transition-all"
             style={{
@@ -531,6 +532,14 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
                   · Carbs {Math.round(r.carbsG)}g · Fat {Math.round(r.fatG)}g
                   <span className="ml-1" style={{ color: 'rgba(255,255,255,0.25)' }}>/ 100 g</span>
                 </p>
+                {/* A packaged product is one brand's jar, from Open Food Facts,
+                    whose free licence asks for attribution (RULINGS
+                    2026-09-14); the app's own foods carry no label. */}
+                {r.source === 'openfoodfacts' && (
+                  <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                    Packaged product · Open Food Facts
+                  </p>
+                )}
               </div>
               {selected?.canonical === r.canonical && (
                 <Check className="w-4 h-4 flex-shrink-0" style={{ color: '#FF8A1F' }} />
