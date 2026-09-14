@@ -6,6 +6,7 @@ on:
     branches: [master]
 
 permissions:
+  actions: read # `changes` lists this workflow's earlier runs
   contents: read
   pull-requests: read
 
@@ -14,8 +15,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # What changed since the newest commit these checks already passed on, on
+  # this branch and for this kind of run (a pull request, or a push to master).
+  # A push that changes ONLY record files — the rulings, the roadmap, a
+  # handoff, a spec page: every path ending in .md — cannot change what the
+  # code checks read (no source or test file reads a .md file), so the
+  # typecheck/lint/test, purity, database-test and migration jobs skip it.
+  # gitleaks is not tied to this: it scans every push, records included.
+  # The Neon migration job runs only when a migration file changed; db-tests
+  # applies every migration on a fresh Postgres in every code run anyway.
+  # Anything uncertain runs everything: no earlier green run on the branch, a
+  # rewritten branch (no green commit this one grew from), an API error, more
+  # files than the compare API lists (300), an output never written. The
+  # distance is measured from the green commit, not the previous push, so a
+  # code push whose run the concurrency group cancelled is covered by the
+  # next run. Records-only pushes were 46 % of the billed minutes in the
+  # first two weeks of 2026-09 (measured 2026-09-14).
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+      migrations: ${{ steps.decide.outputs.migrations }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set +e
+          code=true
+          migrations=true
+          decide() {
+            local shas sha cmp status files
+            shas=$(gh api -X GET "repos/$REPO/actions/workflows/ci.yml/runs" \
+              -f branch="$BRANCH" -f event="$EVENT" -f status=success -F per_page=20 \
+              --jq '.workflow_runs[].head_sha') || return 0
+            for sha in $shas; do
+              # One line each: the status, the file count, then the files.
+              cmp=$(gh api "repos/$REPO/compare/$sha...$HEAD" \
+                --jq '.status, (.files | length), .files[].filename') || return 0
+              status=$(sed -n 1p <<<"$cmp")
+              # Only a commit this one grew from counts; anything else is an
+              # older or rewritten line, and the next older green run is tried.
+              if [ "$status" != "ahead" ] && [ "$status" != "identical" ]; then continue; fi
+              if [ "$(sed -n 2p <<<"$cmp")" -ge 300 ]; then return 0; fi
+              files=$(sed -n '3,$p' <<<"$cmp")
+              echo "changed since the green run on $sha ($status):"
+              echo "$files" | sed 's/^/  /'
+              if [ -z "$files" ] || ! grep -qvE '\.md$' <<<"$files"; then code=false; fi
+              if ! grep -qE '^apps/api/drizzle/' <<<"$files"; then migrations=false; fi
+              return 0
+            done
+            echo "no earlier green run on $BRANCH that this commit grew from"
+          }
+          decide
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "migrations=$migrations" >> "$GITHUB_OUTPUT"
+          echo "::notice::code checks: $code · migration check: $migrations"
+
   gate:
     name: typecheck / lint / test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +102,8 @@ jobs:
 
   engine-purity:
     name: engine banned-token grep (R5.1)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,8 +133,11 @@ jobs:
   # ONLY the migration — the database TEST suites moved to the `db-tests` job
   # below, against a local Postgres, because Neon's network latency made the full
   # suite take ~38 min (measured 2026-07-23, all tests green but past the cap).
+  # Runs only when a migration file changed (see `changes`).
   migrations:
     name: drizzle migrations on Neon branch
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +199,8 @@ jobs:
   # DATABASE_URL appears nowhere in packages/ or apps/web), hence --filter api.
   db-tests:
     name: api tests on local Postgres
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
