@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · 7a-i: PR #71's re-check fixed (3 High, 5 Low, 1 weak test), a third round as §2.6 allows
+
+- H1: a count never multiplies a cut: banana slices ×10 is one banana's 120 g (was 1,200). A cut counts only as the serving itself ("pizza slices",
+  "bread slices"); `CUT_WORDS`/`VESSEL_WORDS` in portion-priors, and a test classes every word the matcher drops as a cut, a vessel or neither.
+- H2: a can, bottle or pot in a dish the person saved is the dish's (beer in a 568 ml glass: 568 g, was 350); another vessel beside a pack blocks its count.
+- H3 (its text was cut from Kd's paste; rebuilt from its title and the code): a scanned item no food matches is named in `unknownItems`, not dropped silently.
+- L1: two versions of one food are never told apart by bracket length: all 15 orders of roti/chapati/flatbread are the homemade roti (93 of 27,113 hints changed,
+  all roti; 13 more are spring rolls, L2). L3 milk chocolate by the ounce. L4 the scan sends `pieces`; the stepper starts there. L5 moved to 7a-i-b, as allowed.
+- Verified: shared tsc 0 · eslint 0 · 106/106; api tsc 0 · eslint 0 · unit 38/38 · routes 33/33 · full local 1035/1035; web nutrition 35/35 (Nutrition.jsx
+  its 7 lint errors, as on master); checker: 318 foods match; 14,826 matrix scans, no cut or saved-dish pack multiplied; 19 breaks red, files restored.
+- Next: CI; Kd's click-through (the photo sheet's count can't be clicked: tests only); the fresh-chat re-check of these fixes; merge.
+
 ## 2026-09-14 · 7a-i: PR #71's review fixed (2 High, 9 Low, 3 weak tests); Kd on roti, paneer, English names, fruits
 
 - H1: a photo's count multiplies a food's own serving only where it is one piece or a sealed pack, and an Appendix B piece only for a hint ending in it:
