@@ -4,7 +4,7 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-14 · 4d: the fresh-chat review of PR #70 fixed (no Critical/High)
+## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
 - Three Lows fixed: SignUpNote's header no longer says the console draws the note; the 4d entry below is ten lines; setup's test has its
   space back (`onboardingCompleted: false`).
@@ -12,8 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   words for the route to take). The test now puts the other two notes' rows at v3 straight into the log; that break, and "any note but the
   health step's", now fail it at the new line, the server file restored byte for byte after each.
 - The review's phone-app note: the phone's sign-in must read the same `signUpDisclaimerAgreed` or it skips the note (added to Stage 5 item 2).
-- Verified: api tsc 0 · eslint 0 · health + users routes 31/31; web eslint 0 on both files · setup and sign-up note tests 86/86.
-- Next: CI; the reviewer re-checks the fixes, or Kd ends the round without it (no Critical/High, RULINGS 2026-09-08); merge on Kd's word.
+- Verified: api tsc 0 · eslint 0 · health + users routes 31/31; web eslint 0 on both files · setup and sign-up note tests 86/86; CI green on c9d131f.
+- Kd ended the round without the re-check (RULINGS 2026-09-08): *"no re-check needed, merge when ci is green"*. Next: 5a, goals on the server.
 
 ## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`, PR #70
 
