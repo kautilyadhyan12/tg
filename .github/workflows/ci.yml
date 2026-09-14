@@ -44,15 +44,19 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           BRANCH: ${{ github.head_ref || github.ref_name }}
+          BASE: ${{ github.base_ref }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set +e
           code=true
           migrations=true
-          decide() {
+          # Judge the head against the newest green run of `$2` pushes on branch
+          # `$1` that it grew from. Returns 1 when that branch has no such run;
+          # 0 when it judged, or when an API error leaves the defaults standing.
+          judge_from() {
             local shas sha cmp status files
             shas=$(gh api -X GET "repos/$REPO/actions/workflows/ci.yml/runs" \
-              -f branch="$BRANCH" -f event="$EVENT" -f status=success -F per_page=20 \
+              -f branch="$1" -f event="$2" -f status=success -F per_page=20 \
               --jq '.workflow_runs[].head_sha') || return 0
             for sha in $shas; do
               # One line each: the status, the file count, then the files.
@@ -70,9 +74,13 @@ jobs:
               if ! grep -qE '^apps/api/drizzle/' <<<"$files"; then migrations=false; fi
               return 0
             done
-            echo "no earlier green run on $BRANCH that this commit grew from"
+            return 1
           }
-          decide
+          # A pull request's branch with no green run of its own yet grew from
+          # the base branch, so its distance from the base's green run is the
+          # pull request itself.
+          judge_from "$BRANCH" "$EVENT" || { [ -n "$BASE" ] && judge_from "$BASE" push; } ||
+            echo "no earlier green run that this commit grew from"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "migrations=$migrations" >> "$GITHUB_OUTPUT"
           echo "::notice::code checks: $code · migration check: $migrations"
