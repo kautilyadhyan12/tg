@@ -4,6 +4,20 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`
+
+- Kd picked a screen of its own straight after signing in (RULINGS 2026-09-14): *"Own screen after sign-in (Recommended)"*, once per account, either door.
+- Built: the profile's `signUpDisclaimerAgreed` (this person's tap, on the sign-up note, in today's words, read from the consent log); the web's
+  guard draws the note in place of any signed-in screen until then, and a profile it cannot read shows the note (fails closed, unlike setup's
+  gate). Setup's tick and its hook are shared now (`DisclaimerTick`, `useDisclaimerTap`); on this screen the words are at reading size.
+- Seen in headless Edge on the local database, 400 and 1000 px: the note, the tick kept, Continue on to "Your goal" and, from /console, to
+  "Create your organisation"; a reload brings no note back.
+- Verified: shared tsc 0 · eslint 0; api tsc 0 · eslint 0 · health + users routes 31/31 · full test:local 999/1013, all 14 red in workouts.sync
+  (23/23 alone, ROADMAP 10's flake); web eslint 0 on the touched files but AuthContext.jsx (its five, as on master) · note + onboarding 85/85
+  · full run 2132/2132 in 76/77 (poseAssets.contract, the known local red). Breaks: 4 server and 14 screen, each red, restored byte for byte;
+  the login-door harness 28/28 RED; anchor census login-door 28 · auth 20 · orgs 286, none stale.
+- Next: CI; Kd's click-through (local: a new address, then `kd.lowtarget@example.com` through the Manage door); the fresh-chat review; merge.
+
 ## 2026-09-14 · 4c-ii merged (PR #69): Kd's click-through passed; the review's findings fixed (no Critical/High)
 
 - Kd's click-through passed on the local database (*"all test passed"*).
