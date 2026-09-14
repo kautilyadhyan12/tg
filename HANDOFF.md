@@ -4,6 +4,30 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4c finished after its review, branch `plan-screen`, PR #66
+
+- The plan's list is headed "Your answers" · "You told us a professional has cleared you. Follow their advice." · "Go to …" under Finish opens
+  its screen as Adjust does, so it offers "Back to your plan" · posterCode's kept-code checks wait for the join page's effect.
+- Screen 3's "Best if you also build muscle" shows only where another pace would cut more. The plan carries `dailyChangeKcalByPace` (the plan's
+  own maths at each pace), so the calorie floor, a weight under the healthy floor and a target out of reach leave the mark off, as under 18 and a
+  health yes do; before there is a plan, those two answers decide. The contract refuses a picked pace's figure that is not the plan's, or one under the floor.
+- Verified on 11d99e1: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + onboarding + nutrition 153/153; web eslint 0
+  on touched files · model + onboarding render + posterCode 153/153; six deliberate breaks each red; gitleaks clean; CI green, all five jobs.
+- Next: Kd's click-through (local, `kd.pace@example.com`: 165 cm, 50 kg, target 45, then 60 kg); merge; ask Kd if 4d is next.
+
+## 2026-09-13 · 4c: "Your plan", the last setup screen; Kd: tell them about building muscle, branch `plan-screen`, PR #66
+
+- Built: after "Your code", the plan: the number, "Your workouts" (the week as asked; Safe mode's "not yet" words in its place; "Follow their
+  advice" for a cleared yes), every answer with an Adjust, the plan's note and its tap. Finish is there and waits for both taps.
+- Adjust's screen offers "Back to your plan" (the first open question, else the plan); Adjust is held during a finish. Seen in headless Edge
+  at 1000/700/400 px: eleven step names ran together, so the step bar is wider, in even columns.
+- Kd picked "Tell them" (RULINGS 2026-09-13): Build muscle and a cut eaten over 500 kcal a day raise `cut_limits_muscle_gain`, naming the
+  gentle pace, which screen 3 marks. Calories unchanged. Murphy & Koehler's words were read on Europe PMC (PMID 34623696) before asking.
+- Verified: shared tsc 0 · eslint 0 · 104/104; api tsc 0 · eslint 0 · test:local plan + onboarding + nutrition 132/132; web eslint 0 · three
+  setup files 148/148 · full run on 4367dfe: 2101/2101 tests in 75/76 files (poseAssets.contract fails to load, the known local red); 14 breaks red; login-door anchors match.
+- Found, on ROADMAP: 4d the sign-up disclaimer tap was never built; 5b the Nutrition rings never say why there is no cut. posterCode's "someone
+  already set up lands on the join page" failed once under load, then passed twice. Next: CI, click-through, review, merge; ask Kd if 4d is next.
+
 ## 2026-09-13 · 4b-ii-b re-check fixed and merged (PR #65); Kd: setup asks nothing about running
 
 - Re-check: no Critical/High. O11 re-aimed at `@app/shared`; a census found 13 more orgs-harness rows dead since 8c28c02

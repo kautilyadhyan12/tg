@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
+  ADULT_AGE,
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
   dayActivitySchema,
@@ -16,6 +17,7 @@ import {
   genderSchema,
   missingPlanInputSchema,
   missingSetupAnswerSchema,
+  MUSCLE_GAIN_PACE,
   patchOnboardingRequestSchema,
   planFlagSchema,
   planNumbersSchema,
@@ -32,6 +34,7 @@ import {
   OneLegBalance,
   PullUpBar,
   SideStretch,
+  STEP_ICONS,
   WEIGHT_GOAL_ICONS,
 } from './onboardingIcons';
 
@@ -108,6 +111,8 @@ describe('what the screens offer is exactly what the server accepts', () => {
     covered(LEVEL_ICONS, fitnessLevelSchema.options);
     covered(EQUIPMENT_ICONS, equipmentSchema.options);
     covered(DIET_ICONS, dietSchema.options);
+    // Every screen, the plan screen included, on the step bar and the plan's rows.
+    covered(STEP_ICONS, m.SCREENS.map((s) => s.id));
   });
 
   it('draws its own icons where the library has none that fits, in the line style of the rest (Kd, 2026-09-10)', () => {
@@ -156,8 +161,8 @@ describe('which screens a person sees, and where they land', () => {
     // keeping the weight, it asks for no target.
     expect(ids({ ...EMPTY, weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] })).not.toContain('target');
     // Before the weight choice is made the step count does not jump when it is.
-    expect(ids(EMPTY)).toHaveLength(10);
-    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(10);
+    expect(ids(EMPTY)).toHaveLength(11);
+    expect(ids({ ...EMPTY, fitnessGoals: ['muscle_gain'] })).toHaveLength(11);
   });
 
   it('counts screen 1 answered on the weight choice alone: the goals beside it may be none', () => {
@@ -172,8 +177,8 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('target');
     expect(m.firstOpenScreen({ ...EMPTY, weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 165, weightKg: 70 })).toBe('day');
     // Screen 5's two checks may be "Not sure", so they never hold anyone: with
-    // everything else in, this person lands on the last screen.
-    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('code');
+    // everything else in, this person lands on the last screen, their plan.
+    expect(m.firstOpenScreen({ ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe('plan');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] })).toBe('equipment');
     // Screen 8 is a screen like any other to the landing rule: unanswered, it
     // is where a person with everything else in lands. So is screen 9.
@@ -195,9 +200,9 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.screenAnswered('code', EMPTY)).toBe(true);
     expect(m.screenAnswered('code', ALL)).toBe(true);
     // …which is why the step bar can always reach it once everything before it
-    // is answered, and why it is where a finished person lands.
+    // is answered. A person with every answer in lands one screen on, on the plan.
     expect([...m.reachableScreens(ALL)]).toContain('code');
-    expect(m.firstOpenScreen(ALL)).toBe('code');
+    expect(m.firstOpenScreen(ALL)).toBe('plan');
     // And the server has no word for it either: nothing can be missing for it.
     expect([...missingSetupAnswerSchema.options]).not.toContain('code');
     expect(Object.values(m.SCREEN_OF_MISSING)).not.toContain('code');
@@ -250,12 +255,28 @@ describe('which screens a person sees, and where they land', () => {
     // Without a poster, nothing moves.
     expect(ids(EMPTY, { codeFirst: false })).toEqual(ids(EMPTY));
     // "Your code" never holds anyone, so its Continue goes to the first open
-    // question — the last screen, Food, once every one is answered.
+    // question — the last screen, your plan, once every one is answered.
     expect(m.firstOpenScreen(EMPTY, codeFirst)).toBe('goal');
     expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] }, codeFirst)).toBe('equipment');
-    expect(m.firstOpenScreen(ALL, codeFirst)).toBe('food');
+    expect(m.firstOpenScreen(ALL, codeFirst)).toBe('plan');
     expect([...m.reachableScreens(EMPTY, codeFirst)]).toEqual(['code', 'goal']);
     expect([...m.reachableScreens(ALL, codeFirst)]).toEqual(ids(ALL, codeFirst));
+  });
+
+  it('counts the plan screen answered exactly when every screen before it is, so it is reached last and landed on only then', () => {
+    expect(m.SCREENS.at(-1).id).toBe('plan');
+    expect(m.screenAnswered('plan', ALL)).toBe(true);
+    // Keeping the weight asks no target, and the plan does not wait for one.
+    expect(m.screenAnswered('plan', { ...ALL, weightGoal: 'maintain', targetWeightKg: null, pace: null })).toBe(true);
+    for (const open of [{ dayActivity: null }, { availableEquipment: [] }, { health: NO_HEALTH_ANSWER }, { mealsPerDay: null }, { targetWeightKg: 80 }]) {
+      expect(m.screenAnswered('plan', { ...ALL, ...open }), JSON.stringify(open)).toBe(false);
+      expect([...m.reachableScreens({ ...ALL, ...open })], JSON.stringify(open)).not.toContain('plan');
+    }
+    // Push-ups and plank may be "Not sure" there too.
+    expect(m.screenAnswered('plan', { ...ALL, pushUpsMax: null, plankHoldSeconds: null })).toBe(true);
+    expect(m.reachableScreens(ALL).has('plan')).toBe(true);
+    // With a poster's code first, the plan stays last.
+    expect(m.visibleScreens(ALL, { codeFirst: true }).at(-1).id).toBe('plan');
   });
 
   it('counts screen 5 answered on the self-rating alone: push-ups and plank may be "Not sure"', () => {
@@ -526,6 +547,7 @@ const WORKINGS = {
 describe('the plan panel says what the server said', () => {
   const plan = {
     restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550,
+    dailyChangeKcalByPace: { gentle: -275, steady: -550, brisk: -617 },
     proteinG: 140, carbsG: 98, fatG: 35, plannedTargetKg: 65, daysToTarget: 70, finishDate: '2026-11-19', flags: [],
     workings: WORKINGS,
   };
@@ -567,6 +589,10 @@ describe('the plan panel says what the server said', () => {
       calorie_floor_applied: [{ code: 'calorie_floor_applied', floorKcal: 1200 }],
       no_deficit: [{ code: 'no_deficit', reasons: ['under_18', 'health_answer', 'safe_mode'] }],
       target_out_of_reach: [{ code: 'target_out_of_reach' }],
+      cut_limits_muscle_gain: [
+        { code: 'cut_limits_muscle_gain', limitKcal: 500, suggestedPace: 'gentle' },
+        { code: 'cut_limits_muscle_gain', limitKcal: 500, suggestedPace: null },
+      ],
     };
     const codes = planFlagSchema.options.map((o) => o.shape.code.value).sort();
     expect(Object.keys(samples).sort()).toEqual(codes);
@@ -584,6 +610,11 @@ describe('the plan panel says what the server said', () => {
     expect(m.flagLines({ ...plan, flags: samples.pace_over_a_year }, 'lose', 'metric')).toEqual([
       'At this pace your target is more than a year away. The brisk pace gets there within a year.',
       'At this pace your target is more than a year away, and no pace gets there within a year.',
+    ]);
+    // Kd, 2026-09-13: tell them, and name the pace that leaves muscle room to grow.
+    expect(m.flagLines({ ...plan, flags: samples.cut_limits_muscle_gain }, 'lose', 'metric')).toEqual([
+      'Building muscle while losing weight: a cut of more than 500 kcal a day mostly stops muscle growing. The gentle pace leaves room for it.',
+      'Building muscle while losing weight: a cut of more than 500 kcal a day mostly stops muscle growing.',
     ]);
     expect(m.flagLines({ ...plan, flags: samples.target_wrong_direction }, 'gain', 'metric')[0]).toMatch(/not above/);
     // "Slower than the pace you picked" is said only when the plan still moves.
@@ -628,6 +659,16 @@ describe('the plan panel says what the server said', () => {
     expect(notes['Your pace']).toMatch(/usual planning figure \(Wishnofsky\)/);
     expect(notes['Protein']).toBe(
       '2 g per kilo for a weight-loss goal: sports nutrition recommends 1.4 to 2.0 g per kilo a day for people who train, and more while eating less, to keep muscle (ISSN, 2017).',
+    );
+  });
+
+  it('names the review behind the muscle line under "Your pace", and only when the plan raised it', () => {
+    const pace = (p) => m.workingSteps(p, 'lose').find((s) => s.title === 'Your pace').note;
+    expect(pace(plan)).not.toMatch(/Murphy/);
+    const flagged = { ...plan, flags: [{ code: 'cut_limits_muscle_gain', limitKcal: 500, suggestedPace: 'gentle' }] };
+    expect(pace(flagged)).toBe(
+      '7,700 kcal per kilo is the usual planning figure (Wishnofsky). Real weight change is often slower, so the date is an estimate. ' +
+        'A review of trials that trained while eating less found that a cut of about 500 kcal a day stopped the muscle training builds (Murphy and Koehler, 2022).',
     );
   });
 
@@ -727,6 +768,119 @@ describe('the plan panel says what the server said', () => {
       sum: '1,817 kcal a day',
       note: 'The same as you burn, so your weight stays where it is.',
     });
+  });
+});
+
+describe('the plan screen (ROADMAP 4c)', () => {
+  it('lists every screen that asks something, in its order, each answer in the words its screen uses', () => {
+    const everything = {
+      ...ALL,
+      displayName: 'Kd',
+      fitnessGoals: ['muscle_gain', 'posture'],
+      pushUpsMax: 12,
+      plankHoldSeconds: 90,
+      availableEquipment: ['dumbbells', 'gym'],
+      diet: 'vegetarian_eggs',
+      mealsPerDay: 4,
+    };
+    expect(m.answerRows(everything, 'metric')).toEqual([
+      { id: 'goal', title: 'Your goal', value: 'Lose weight · Build muscle · Posture' },
+      { id: 'about', title: 'About you', value: 'Kd · 30 years · Female · 165 cm · 70.0 kg' },
+      { id: 'target', title: 'Your target', value: '65.0 kg · Steady, about 0.5 kg a week' },
+      { id: 'day', title: 'Your day', value: 'Mostly sitting' },
+      { id: 'training', title: 'Your training', value: 'Beginner · 12 push-ups · 1 min 30 s plank' },
+      { id: 'week', title: 'Your week', value: '3 days a week · 45 minutes' },
+      { id: 'equipment', title: 'Equipment', value: 'Dumbbells · A gym' },
+      { id: 'health', title: 'Health', value: 'No' },
+      { id: 'food', title: 'Food', value: 'Vegetarian with eggs · 4 meals a day' },
+    ]);
+    // In the units on show, as the wheels show them.
+    const imperial = Object.fromEntries(m.answerRows(everything, 'imperial').map((r) => [r.id, r.value]));
+    expect(imperial.about).toBe('Kd · 30 years · Female · 5 ft 5 in · 154.3 lb');
+    expect(imperial.target).toBe('143.3 lb · Steady, about 1.1 lb a week');
+    // Keeping the weight asks no target, so there is no row for one; a skipped
+    // check is left out rather than printed as nothing.
+    const kept = m.answerRows({ ...everything, weightGoal: 'maintain', fitnessGoals: [], pushUpsMax: null, plankHoldSeconds: null }, 'metric');
+    expect(kept.map((r) => r.id)).not.toContain('target');
+    expect(kept.find((r) => r.id === 'goal').value).toBe('Keep my weight');
+    expect(kept.find((r) => r.id === 'training').value).toBe('Beginner');
+    // Never the gym code, and never the plan itself.
+    expect(kept.map((r) => r.id)).not.toContain('code');
+    expect(kept.map((r) => r.id)).not.toContain('plan');
+  });
+
+  it('says the health answer as it was given, and "Not answered" for anything open, never a blank', () => {
+    const health = (screening) => m.answerValue('health', { ...ALL, health: screening }, 'metric');
+    expect(health(HEALTH_ANSWERED)).toBe('No');
+    expect(health({ ...HEALTH_ANSWERED, hasCondition: true, checkFirst: 'cleared', noCalorieCut: true })).toBe(
+      'Yes · A professional has cleared me',
+    );
+    expect(health({ ...HEALTH_ANSWERED, hasCondition: true, checkFirst: 'not_yet', safeMode: true, noCalorieCut: true })).toBe('Yes · Not yet');
+    expect(health(NO_HEALTH_ANSWER)).toBe(m.NOT_ANSWERED);
+    // Only the weight choice given: every other row says so, and none is blank.
+    const rows = m.answerRows({ ...EMPTY, weightGoal: 'lose', displayName: '' }, 'metric');
+    expect(rows.map((r) => r.value)).toEqual(['Lose weight', ...Array(rows.length - 1).fill(m.NOT_ANSWERED)]);
+  });
+
+  it('puts the week of workouts in the words of the answers, and names no workout', () => {
+    expect(m.workoutsLine(ALL)).toBe('3 workouts a week, 45 minutes each');
+    expect(m.workoutsLine({ ...ALL, trainingDays: 1, sessionMinutes: 20 })).toBe('1 workout a week, 20 minutes each');
+    expect(m.workoutsLine({ ...ALL, sessionMinutes: null })).toBeNull();
+    expect(m.workoutsDetail(ALL)).toBe('Beginner · Dumbbells');
+    expect(m.workoutsDetail({ ...ALL, availableEquipment: ['none'] })).toBe('Beginner · No equipment');
+    // The clearance is the person's word; the app cannot know it.
+    expect(m.CLEARED_LINE).toBe('You told us a professional has cleared you. Follow their advice.');
+  });
+
+  it("marks the pace that leaves muscle room to grow, only for someone losing weight with Build muscle ticked", () => {
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain', 'posture'] };
+    const notes = (direction, a) => m.PACES.map((p) => m.paceNote(p.value, direction, a));
+    const MARKED = ['Best if you also build muscle', null, null];
+    expect(notes('lose', muscle)).toEqual(MARKED);
+    // The pace the server's own plan line suggests, from the one shared table.
+    expect(m.PACES.map((p) => p.value).filter((p) => m.paceNote(p, 'lose', muscle))).toEqual([MUSCLE_GAIN_PACE]);
+    for (const [direction, goals] of [['lose', ['posture']], ['lose', []], ['gain', muscle.fitnessGoals], ['maintain', muscle.fitnessGoals], [null, muscle.fitnessGoals]]) {
+      expect(notes(direction, { ...muscle, fitnessGoals: goals }), `${direction} ${goals}`).toEqual([null, null, null]);
+    }
+  });
+
+  it('before there is a plan, marks no pace where none can cut: under 18, or after any yes to the health question', () => {
+    // Every pace then eats the same (the plan maths' no-cut rule), so a mark
+    // would point at a choice that changes nothing. On the first walk there is
+    // no plan yet at screen 3, so these two answers are all that is known.
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain'] };
+    const notes = (a) => m.PACES.map((p) => m.paceNote(p.value, 'lose', a));
+    const MARKED = ['Best if you also build muscle', null, null];
+    expect(notes({ ...muscle, age: ADULT_AGE })).toEqual(MARKED);
+    expect(notes({ ...muscle, age: ADULT_AGE - 1 })).toEqual([null, null, null]);
+    expect(notes({ ...muscle, age: null })).toEqual([null, null, null]);
+    const yes = { ...HEALTH_ANSWERED, hasCondition: true, noCalorieCut: true };
+    expect(notes({ ...muscle, health: { ...yes, checkFirst: 'cleared' } })).toEqual([null, null, null]);
+    expect(notes({ ...muscle, health: { ...yes, checkFirst: 'not_yet', safeMode: true } })).toEqual([null, null, null]);
+    // A no, or the question not reached yet (screen 8 comes after screen 3), is not a yes.
+    expect(notes({ ...muscle, health: HEALTH_ANSWERED })).toEqual(MARKED);
+    expect(notes({ ...muscle, health: NO_HEALTH_ANSWER })).toEqual(MARKED);
+  });
+
+  it('once there is a plan, marks the gentle pace only where the plan says another pace would cut more', () => {
+    const muscle = { ...ALL, fitnessGoals: ['muscle_gain'] };
+    const notes = (byPace, a = muscle) => m.PACES.map((p) => m.paceNote(p.value, 'lose', a, { dailyChangeKcalByPace: byPace }));
+    const MARKED = ['Best if you also build muscle', null, null];
+    const NONE = [null, null, null];
+    // Each pace its own cut; the floor holding steady and brisk to 500 while
+    // gentle cuts 275; gentle out of reach while the others cut.
+    expect(notes({ gentle: -275, steady: -550, brisk: -825 })).toEqual(MARKED);
+    expect(notes({ gentle: -275, steady: -500, brisk: -500 })).toEqual(MARKED);
+    expect(notes({ gentle: 0, steady: -550, brisk: -825 })).toEqual(MARKED);
+    // Every pace eats the same: the burn (under 18, a health yes, a target the
+    // plan cannot run to), the floor above the burn, or one cut for all.
+    expect(notes({ gentle: 0, steady: 0, brisk: 0 })).toEqual(NONE);
+    expect(notes({ gentle: 19, steady: 19, brisk: 19 })).toEqual(NONE);
+    expect(notes({ gentle: -300, steady: -300, brisk: -300 })).toEqual(NONE);
+    // A plan with no paces to give falls back on the answers, and the answers
+    // still count while a plan that differs has not caught up with them.
+    expect(notes(null)).toEqual(MARKED);
+    expect(notes({ gentle: -275, steady: -550, brisk: -825 }, { ...muscle, age: ADULT_AGE - 1 })).toEqual(NONE);
   });
 });
 

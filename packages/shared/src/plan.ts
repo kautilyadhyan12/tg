@@ -31,6 +31,34 @@ export const PACE_KG_PER_WEEK: Readonly<Record<PlanPace, number>> = {
   brisk: 0.75,
 };
 
+/** One kilogram of body weight is about 7 700 kcal — the usual planning figure
+ *  (Wishnofsky: 3 500 kcal a pound). */
+export const KCAL_PER_KG = 7700;
+
+/** The whole kcal a day a pace asks for — a cut on a loss, a surplus on a gain:
+ *  kg a week × kcal per kg ÷ 7 days. The plan maths and screen 3's pace cards
+ *  share this one sum. */
+export function paceDailyKcal(pace: PlanPace): number {
+  return Math.round((PACE_KG_PER_WEEK[pace] * KCAL_PER_KG) / 7);
+}
+
+/** A daily cut larger than this mostly stops the muscle training builds: "an
+ *  energy deficit of ~500 kcal · day⁻¹ prevented gains in LM" (Murphy and
+ *  Koehler, 2022, a meta-analysis and meta-regression of trials that trained in
+ *  a deficit for three weeks or more). With Build muscle ticked, a plan that cuts
+ *  more says so and suggests a pace that cuts less; the number itself is never
+ *  changed for it, because the weight choice alone sets the calories (RULINGS
+ *  2026-09-10 and 2026-09-13). */
+export const MUSCLE_GAIN_CUT_LIMIT_KCAL = 500;
+
+/** The fastest pace whose cut stays within MUSCLE_GAIN_CUT_LIMIT_KCAL, or null
+ *  when none does: the pace the plan suggests to someone building muscle while
+ *  losing weight, and the pace card screen 3 marks for them. */
+export const MUSCLE_GAIN_PACE: PlanPace | null =
+  planPaceSchema.options
+    .filter((pace) => paceDailyKcal(pace) <= MUSCLE_GAIN_CUT_LIMIT_KCAL)
+    .sort((a, b) => paceDailyKcal(b) - paceDailyKcal(a))[0] ?? null;
+
 /** Screen 4 ("your day"): what the day looks like OUTSIDE training. Training is
  *  added on top from the week's answers, so these factors are the no-exercise ones. */
 export const dayActivitySchema = z.enum(["sitting", "on_feet", "active", "very_active"]);
@@ -122,6 +150,11 @@ export const missingPlanInputSchema = z.enum([
 ]);
 export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
 
+/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07).
+ *  Shared so screen 3 can leave its building-muscle mark off before the plan
+ *  exists to say what each pace eats. */
+export const ADULT_AGE = 18;
+
 /** Why the plan holds no calorie cut: under 18 · a yes on the health question
  *  (a condition, an injury, pregnancy or anything else) · Safe mode on top of
  *  that yes (RULINGS 2026-09-07, amended 2026-09-09). */
@@ -151,6 +184,14 @@ export const planFlagSchema = z.discriminatedUnion("code", [
    *  under the floor); on a "gain" goal the target is more than ten years away at
    *  the fastest pace. No finish date; `plannedTargetKg` is the current weight. */
   z.object({ code: z.literal("target_out_of_reach") }).strict(),
+  /** Build muscle is ticked and the plan cuts more than `limitKcal` a day
+   *  (MUSCLE_GAIN_CUT_LIMIT_KCAL), which mostly stops muscle growing, so the
+   *  plan keeps muscle more than it builds it. The calories are not changed for
+   *  it. `suggestedPace` is MUSCLE_GAIN_PACE: the fastest pace that cuts no more
+   *  than the limit, or null when none does. */
+  z
+    .object({ code: z.literal("cut_limits_muscle_gain"), limitKcal: z.number().int(), suggestedPace: planPaceSchema.nullable() })
+    .strict(),
 ]);
 export type PlanFlag = z.infer<typeof planFlagSchema>;
 
@@ -285,6 +326,16 @@ export const planNumbersSchema = z
     /** Exactly targetKcal − dailyBurnKcal, so the two numbers on screen subtract to it.
      *  Negative on a cut, positive on a gain or when the floor sits above the burn. */
     dailyChangeKcal: z.number().int(),
+    /** `dailyChangeKcal` as it would be at each pace, every other answer the
+     *  same; null when the weight choice asks no pace or no target is given.
+     *  Screen 3 reads it to mark the gentle pace for building muscle only where
+     *  another pace would cut more: under 18, after a yes to the health question,
+     *  on the calorie floor, or with a target the plan cannot run to, every pace
+     *  eats the same. */
+    dailyChangeKcalByPace: z
+      .object({ gentle: z.number().int(), steady: z.number().int(), brisk: z.number().int() })
+      .strict()
+      .nullable(),
     /** The three add up to targetKcal (to rounding); carbohydrates never under 50 g. */
     proteinG: z.number().int(),
     carbsG: z.number().int(),
@@ -324,6 +375,11 @@ export const planNumbersSchema = z
         w.beforeFloorKcal === p.dailyBurnKcal + (w.change?.kcal ?? 0) &&
         p.targetKcal === Math.max(w.beforeFloorKcal, w.floorKcal) &&
         p.dailyChangeKcal === p.targetKcal - p.dailyBurnKcal &&
+        // Each pace's change: the picked pace's is the plan's own, and none eats
+        // under the floor.
+        (p.dailyChangeKcalByPace === null ||
+          ((w.change === null || p.dailyChangeKcalByPace[w.change.pace] === p.dailyChangeKcal) &&
+            Object.values(p.dailyChangeKcalByPace).every((kcal) => p.dailyBurnKcal + kcal >= w.floorKcal))) &&
         p.proteinG <= w.protein.wantedG &&
         p.fatG === Math.round((p.targetKcal * w.fatShare) / 9) &&
         p.carbsG >= w.carbsFloorG &&
@@ -347,12 +403,19 @@ export const planNumbersSchema = z
         // pace line's kcal per kilo.
         (w.finish === null || w.finish.kgToMove === kgBetween(p.plannedTargetKg, r.weightKg)) &&
         (w.finish === null || w.change === null || w.finish.kcalPerKg === w.change.kcalPerKg) &&
-        // The flags' figures: the floor "To eat" names, and the healthy weight
-        // a dated plan runs to.
+        // The flags' figures: the floor "To eat" names, the healthy weight a
+        // dated plan runs to, and the cut the muscle line names — raised only
+        // with Build muscle ticked and a cut over it, and suggesting the one
+        // pace screen 3 marks.
         p.flags.every(
           (flag) =>
             (flag.code !== "calorie_floor_applied" || flag.floorKcal === w.floorKcal) &&
-            (flag.code !== "target_below_healthy_weight" || p.daysToTarget === null || flag.floorKg === p.plannedTargetKg),
+            (flag.code !== "target_below_healthy_weight" || p.daysToTarget === null || flag.floorKg === p.plannedTargetKg) &&
+            (flag.code !== "cut_limits_muscle_gain" ||
+              (flag.limitKcal === MUSCLE_GAIN_CUT_LIMIT_KCAL &&
+                flag.suggestedPace === MUSCLE_GAIN_PACE &&
+                w.protein.buildMuscle &&
+                -p.dailyChangeKcal > flag.limitKcal)),
         )
       );
     },

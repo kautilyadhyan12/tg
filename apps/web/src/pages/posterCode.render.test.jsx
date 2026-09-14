@@ -148,6 +148,11 @@ const draw = (entry) =>
 const heading = (name) => screen.findByRole('heading', { name });
 const codeBox = () => screen.getByLabelText('Your join code');
 const CODE_LINE = 'Sign in to use your code';
+/** The join page forgets the kept code in an effect, which React runs just
+ *  after the page is drawn. After a move made from a sign-in or a finish, a
+ *  busy machine can draw the heading and run that effect as two separate
+ *  tasks, so a check made the moment the heading shows can land between them. */
+const forgotten = () => waitFor(() => expect(readJoinCode()).toBeNull());
 
 /** Signs in by email code as `user`, the way a person does on the page. */
 const signInAs = async (user) => {
@@ -195,7 +200,7 @@ describe('signed out, a poster link', () => {
     await signInAs(NEW_ACCOUNT);
 
     await heading('Your code');
-    expect(screen.getByText('Step 1 of 10')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 11')).toBeTruthy();
     expect(codeBox().value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
 
@@ -223,7 +228,7 @@ describe('signed out, a poster link', () => {
     expect(codeBox().value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
     // The address holds it now, so the kept copy is not left to turn up again.
-    expect(readJoinCode()).toBeNull();
+    await forgotten();
   });
 
   it('still takes the gym door to the console, and the line is not shown under it', async () => {
@@ -305,7 +310,7 @@ describe('signed in', () => {
     auth.user = NEW_ACCOUNT;
     draw('/org/join?code=k7qm2x');
     await heading('Your code');
-    expect(screen.getByText('Step 1 of 10')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 11')).toBeTruthy();
     expect(codeBox().value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
   });
@@ -326,11 +331,11 @@ describe('signed in', () => {
     expect(codeBox().value).toBe('K7QM2X');
   });
 
-  it('with no poster, setup opens where it always did, "Your code" last', async () => {
+  it('with no poster, setup opens where it always did, on "Your goal"', async () => {
     auth.user = NEW_ACCOUNT;
     draw('/onboarding');
     await heading('Your goal');
-    expect(screen.getByText('Step 1 of 10')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 11')).toBeTruthy();
   });
 });
 
@@ -344,7 +349,7 @@ describe('in setup with a poster code', () => {
     rememberJoinCode('k7qm2x');
     draw('/onboarding');
     await heading('Your code');
-    expect(screen.getByText('Step 1 of 9')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 10')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     await heading('Equipment');
     expect(orgService.join).not.toHaveBeenCalled();
@@ -379,17 +384,20 @@ describe('in setup with a poster code', () => {
   });
 
   /** From "Your code", with every question answered: Continue goes to the last
-   *  screen, where Finish is, and the disclaimer tap on Health is the one thing
-   *  still to do. */
+   *  screen, your plan, where Finish is, and the two disclaimer taps are what
+   *  is still to do — the one on Health, and the plan's own (4c). "Go to
+   *  Health" works as an Adjust, so Health offers the one tap back. */
   const readyToFinish = async () => {
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    await heading('Food');
+    await heading('Your plan');
     fireEvent.click(screen.getByRole('button', { name: 'Go to Health' }));
     await heading('Health');
     fireEvent.click(screen.getByRole('checkbox', { name: 'I have read and understood this' }));
     await waitFor(() => expect(consent.record).toHaveBeenCalledWith('health_step'));
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    await heading('Food');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to your plan' }));
+    await heading('Your plan');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I have read and understood this' }));
+    await waitFor(() => expect(consent.record).toHaveBeenCalledWith('plan_screen'));
   };
 
   // Kd, 2026-09-13: the code the person scanned the poster for is not dropped
@@ -408,7 +416,7 @@ describe('in setup with a poster code', () => {
     expect(codeBox().value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
     // The address holds it now, so the kept copy is not left to turn up again.
-    expect(readJoinCode()).toBeNull();
+    await forgotten();
   });
 
   it('finishing setup after the code was sent goes on to the app, not back to the join page', async () => {

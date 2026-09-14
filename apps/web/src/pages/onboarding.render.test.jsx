@@ -1,4 +1,4 @@
-// Onboarding v2, screens 1–8, drawn in a browser-shaped test. The server is a
+// Onboarding v2, every screen, drawn in a browser-shaped test. The server is a
 // small stand-in that stores what it is sent and answers with a plan only once
 // the eight core answers are in, as the real route does (the real route is
 // proved in apps/api/test/users.onboarding.routes.test.ts). What is pinned
@@ -10,7 +10,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { DISCLAIMER_WORDINGS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE, missingPlanInputSchema } from '@app/shared';
+import { CHECK_FIRST_OPTIONS, DISCLAIMER_WORDINGS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE, missingPlanInputSchema } from '@app/shared';
 
 // These tests walk the wizard save by save. Alone, the longest takes about
 // two seconds; in the full suite, with every other file running at once, a
@@ -84,7 +84,8 @@ const screeningOf = ({ hasCondition, checkFirst = null }) => ({
 
 /** The route's golden person (users.onboarding.routes.test.ts), working and all. */
 const PLAN = {
-  restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550, proteinG: 140,
+  restingBurnKcal: 1420, dailyBurnKcal: 1817, targetKcal: 1267, dailyChangeKcal: -550,
+  dailyChangeKcalByPace: { gentle: -275, steady: -550, brisk: -617 }, proteinG: 140,
   carbsG: 98, fatG: 35, plannedTargetKg: 65, daysToTarget: 70, finishDate: '2026-11-19', flags: [],
   workings: {
     resting: { formula: 'female', weightKg: 70, heightCm: 165, age: 30, constant: -161, kcal: 1420 },
@@ -121,10 +122,12 @@ const refusal = (missing) =>
 
 let server;
 function serve(initial = {}, screening = UNANSWERED_HEALTH) {
-  server = { answers: { ...EMPTY, ...initial }, health: screening, failNext: null, failHealth: null };
+  // `plan` is the number the stand-in answers with once nothing is missing; a
+  // test that needs the server to raise a line sets its own.
+  server = { answers: { ...EMPTY, ...initial }, health: screening, plan: PLAN, failNext: null, failHealth: null };
   const reply = () => {
     const missing = missingOf(server.answers);
-    return { data: { answers: { ...server.answers }, plan: missing.length > 0 ? null : PLAN, missing } };
+    return { data: { answers: { ...server.answers }, plan: missing.length > 0 ? null : server.plan, missing } };
   };
   svc.get = vi.fn(async () => reply());
   svc.patch = vi.fn(async (body) => {
@@ -212,36 +215,63 @@ const next = async (title) => {
   tap(/continue/i);
   await heading(title);
 };
-/** From the health screen on to the LAST one, which is where Finish lives —
- *  screen 11 since 4b-ii moved two screens in behind screen 8. Both screens in
- *  between are answered in these fixtures, so it is Continue, twice. */
-const toFinish = async () => {
+/** From the health screen on to the LAST one, your plan, where Finish lives
+ *  (4c). The screens in between are answered in these fixtures, so it is
+ *  Continue, three times. */
+const toPlan = async () => {
   await next('Food');
   await next('Your code');
+  await next('Your plan');
 };
 /** Back to the health screen from where a person with every answer in lands —
- *  the last screen — by the step bar, which reaches any screen already
- *  answered. */
+ *  the last screen, their plan — by the step bar, which reaches any screen
+ *  already answered. */
 const onHealth = async () => {
-  await heading('Your code');
+  await heading('Your plan');
   tap('Health');
   await heading('Health');
 };
 
-/** The disclaimer tap — one of the two things Finish waits for, made on screen 8. */
+/** A disclaimer tap. There are two, and Finish waits for both: the health
+ *  step's, made on screen 8, and the plan screen's own (4c). Each screen has
+ *  only its own box. */
 const agreeBox = () => screen.getByRole('checkbox', { name: 'I have read and understood this' });
 const agree = async () => {
   fireEvent.click(agreeBox());
   await waitFor(() => expect(consent.record).toHaveBeenCalledWith('health_step'));
 };
-/** The same tap, reached FROM the last screen by the sentence that names it,
- *  and back again — the walk a person makes when they get to Finish without
- *  having ticked it (4b-ii moved Finish two screens on from the tap). */
+/** The plan screen's tap, unless it is already made on this visit. */
+const agreePlan = async () => {
+  if (agreeBox().getAttribute('aria-checked') === 'true') return;
+  fireEvent.click(agreeBox());
+  await waitFor(() => expect(consent.record).toHaveBeenCalledWith('plan_screen'));
+  await waitFor(() => expect(agreeBox().getAttribute('aria-checked')).toBe('true'));
+};
+/** On to the plan, its own note ticked: at Finish, which then waits only on
+ *  whatever the test is about. */
+const toFinish = async () => {
+  await toPlan();
+  await agreePlan();
+};
+/** From a screen the plan sent the person to — an Adjust, or a "Go to …" under
+ *  Finish — straight back to it: one tap, the button that screen offers. */
+const backToPlan = async () => {
+  await waitFor(() => expect(button('Back to your plan').disabled).toBe(false));
+  tap('Back to your plan');
+  await heading('Your plan');
+};
+const backToFinish = async () => {
+  await backToPlan();
+  await agreePlan();
+};
+/** The health step's tap, reached FROM the last screen by the sentence that
+ *  names it, and back again — the walk a person makes when they get to Finish
+ *  without having ticked it (4b-ii moved Finish two screens on from the tap). */
 const agreeOnHealth = async () => {
   tap('Go to Health');
   await heading('Health');
   await agree();
-  await toFinish();
+  await backToFinish();
 };
 
 /** Screen 2 in kilograms and centimetres, each answer a tap on its wheel. */
@@ -353,7 +383,7 @@ describe('onboarding screens 1–7', () => {
     tap(/Keep my weight/);
     await stored({ weightGoal: 'maintain', fitnessGoals: ['muscle_gain'] });
     await next('About you');
-    expect(screen.getByText('Step 2 of 9')).toBeTruthy(); // ten screens, less the target this goal never asks
+    expect(screen.getByText('Step 2 of 10')).toBeTruthy(); // eleven screens, less the target this goal never asks
     await aboutYou();
     await next('Your day');
     tap(/back/i);
@@ -775,7 +805,7 @@ describe('onboarding screens 1–7', () => {
   it('loads an old answer of "none" beside equipment without the "none", and finishes with that', async () => {
     serve({ ...ALL, availableEquipment: ['none', 'dumbbells'] }, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Your code'); // the last screen: every question has an answer
+    await heading('Your plan'); // the last screen: every question has an answer
     tap('Equipment'); // back to it from the step bar
     await heading('Equipment');
     expect(pressed(/No equipment/)).toBe('false');
@@ -836,10 +866,10 @@ describe('onboarding screens 1–7', () => {
     expect(screen.getByText(DISCLAIMER_WORDINGS.health_step.v2)).toBeTruthy();
     expect(screen.getByText('Tick this to finish setup.')).toBeTruthy();
 
-    // THE TAP IS TWO SCREENS BACK FROM FINISH SINCE 4b-ii, so the last screen
+    // THE TAP IS THREE SCREENS BACK FROM FINISH SINCE 4c, so the last screen
     // has to say what is holding the button and offer the way to it. A dead
     // Finish with its reason on a screen the person has left is the defect
-    // this names.
+    // this names. (The plan screen's own tap is made on the way: `toFinish`.)
     await toFinish();
     expect(button(/finish setup/i).disabled).toBe(true);
     expect(screen.getByText('Read the note on the Health screen and tick it.')).toBeTruthy();
@@ -848,7 +878,10 @@ describe('onboarding screens 1–7', () => {
 
     await agree();
     expect(agreeBox().getAttribute('aria-checked')).toBe('true');
-    await toFinish();
+    // And back in one tap, as from an Adjust — not a Continue through Food and
+    // Your code.
+    expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
+    await backToFinish();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     expect(screen.queryByText('Read the note on the Health screen and tick it.')).toBeNull();
     tap(/finish setup/i);
@@ -866,6 +899,7 @@ describe('onboarding screens 1–7', () => {
     expect(button(/continue/i).disabled).toBe(true);
     expect(button('Food').disabled).toBe(true);
     expect(button('Your code').disabled).toBe(true);
+    expect(button('Your plan').disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /finish setup/i })).toBeNull();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
     expect(auth.updateUser).not.toHaveBeenCalled();
@@ -906,7 +940,7 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: false }));
     // The sentence goes when the question is answered, rather than standing
     // over a question the person has just answered, and Finish finishes.
-    await toFinish();
+    await backToFinish();
     await waitFor(() => expect(screen.queryByText('Before you finish, answer the health question.')).toBeNull());
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     tap(/finish setup/i);
@@ -973,6 +1007,9 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(button('Health').disabled).toBe(true));
     expect(button('Food').disabled).toBe(true);
     expect(button(/^back$/i).disabled).toBe(true);
+    // The plan screen's Adjust is a way back too (4c), and waits the same.
+    expect(button('Adjust Health').disabled).toBe(true);
+    expect(button('Adjust Food').disabled).toBe(true);
 
     refuse();
     // The refusal lands, the way back opens, and the question is asked again
@@ -1035,7 +1072,7 @@ describe('onboarding screens 1–7', () => {
     expect(screen.queryByRole('heading', { name: 'Health' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Your goal' })).toBeNull();
     land();
-    await heading('Your code'); // every answer in, so the last screen
+    await heading('Your plan'); // every answer in, so the last screen
   });
 
   it('says so when the health answer cannot be read, and Try again retries the read that failed', async () => {
@@ -1050,7 +1087,7 @@ describe('onboarding screens 1–7', () => {
     const answersRead = svc.get.mock.calls.length;
     health.get = vi.fn(async () => ({ data: { healthScreening: server.health } }));
     fireEvent.click(retry);
-    await heading('Your code');
+    await heading('Your plan');
     expect(failed).toHaveBeenCalledTimes(1);
     expect(svc.get.mock.calls.length).toBe(answersRead);
   });
@@ -1149,6 +1186,7 @@ describe('onboarding screens 1–7', () => {
     tap('3 meals a day');
     await stored({ mealsPerDay: 3 });
     await next('Your code');
+    await next('Your plan');
     // Cleared from another device meanwhile: the server refuses the finish and
     // names it, though no plan number is missing.
     server.answers.mealsPerDay = null;
@@ -1160,7 +1198,7 @@ describe('onboarding screens 1–7', () => {
     await heading('Food');
     tap('5 meals a day');
     await stored({ mealsPerDay: 5 });
-    await next('Your code');
+    await backToPlan();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
@@ -1169,13 +1207,16 @@ describe('onboarding screens 1–7', () => {
   it('asks for a gym code without ever holding anyone, in the join door\'s own words', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
-    await heading('Your code'); // the last screen, where Finish is
+    await heading('Your plan'); // every answer in: the last screen
+    tap('Your code');
+    await heading('Your code');
     expect(screen.getByText('Have a code from your gym, studio or trainer?')).toBeTruthy();
     expect(screen.getByLabelText('Your join code')).toBeTruthy();
     expect(screen.getByRole('button', { name: /ask to join/i })).toBeTruthy();
-    // Nothing here is an answer: with no code typed at all, Finish is offered
-    // as soon as the disclaimer is ticked.
+    // Nothing here is an answer: with no code typed at all, the plan and its
+    // Finish are one Continue on, and Finish is offered once the notes are ticked.
     expect(screen.getByText(/No code\? Carry on/)).toBeTruthy();
+    await next('Your plan');
     await agreeOnHealth();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     tap(/finish setup/i);
@@ -1194,6 +1235,8 @@ describe('onboarding screens 1–7', () => {
     });
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
+    await heading('Your plan');
+    tap('Your code');
     await heading('Your code');
     fireEvent.change(screen.getByLabelText('Your join code'), { target: { value: 'abc123' } });
     fireEvent.click(button(/ask to join/i));
@@ -1203,6 +1246,7 @@ describe('onboarding screens 1–7', () => {
     // account is sent straight back here — so it is not offered.
     expect(screen.queryByRole('link', { name: /back to your dashboard/i })).toBeNull();
 
+    await next('Your plan');
     await agreeOnHealth();
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
@@ -1228,6 +1272,8 @@ describe('onboarding screens 1–7', () => {
     });
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
+    await heading('Your plan');
+    tap('Your code');
     await heading('Your code');
     expect(await screen.findByText("Iron House didn't confirm your request")).toBeTruthy();
     expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
@@ -1236,7 +1282,7 @@ describe('onboarding screens 1–7', () => {
 
     tap(/try again/i);
     expect(document.activeElement).toBe(codeBox);
-    // Still here, on the last screen of setup.
+    // Still here, on the code screen of setup.
     expect(screen.getByRole('heading', { name: 'Your code' })).toBeTruthy();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
   });
@@ -1255,6 +1301,259 @@ describe('onboarding screens 1–7', () => {
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(true));
     tap('Go to Your day');
     await heading('Your day');
+  });
+
+  // ── The last screen: your plan (4c) ─────────────────────────────────────
+
+  const built = () => screen.getByRole('region', { name: 'Your answers' });
+  const workouts = () => screen.getByRole('region', { name: 'Your workouts' });
+
+  it('ends on your plan: the number, the week of workouts, every answer with its Adjust, and its own note, which Finish waits for', async () => {
+    serve({ ...ALL, fitnessGoals: ['posture'] }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan'); // every answer in, so it lands on the plan
+    expect(screen.getByText('Step 11 of 11')).toBeTruthy();
+    // The live number, as on every screen; its note's first sentence is left to
+    // the whole note below, rather than said twice.
+    expect(panel().textContent).toContain('1,267kcal a day');
+    expect(panel().textContent).not.toContain('not medical advice');
+    expect(workouts().textContent).toContain('3 workouts a week, 45 minutes each');
+    expect(workouts().textContent).toContain('Beginner · Dumbbells');
+    expect(workouts().textContent).not.toContain('Follow their advice');
+    // Every screen that asks something, each with its answer and a way back to it.
+    const rows = [
+      ['Your goal', 'Lose weight · Posture'],
+      ['About you', /^kd\.test · 30 years · Female · /],
+      ['Your target', /^143\.3 lb · Steady, /], // the test browser is en-US
+      ['Your day', 'Mostly sitting'],
+      ['Your training', 'Beginner'],
+      ['Your week', '3 days a week · 45 minutes'],
+      ['Equipment', 'Dumbbells'],
+      ['Health', 'No'],
+      ['Food', 'Non-vegetarian · 3 meals a day'],
+    ];
+    expect(within(built()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(rows.map(([t]) => `Adjust ${t}`));
+    for (const [, value] of rows) expect(within(built()).getByText(value)).toBeTruthy();
+    // Headed as what they are, the person's answers, whatever the plan made of them.
+    expect(within(built()).getByText('Your answers')).toBeTruthy();
+    expect(screen.queryByText(/built on/i)).toBeNull();
+
+    // The plan's own note, whole, and its tap: the second one Finish waits for.
+    expect(screen.getByText(DISCLAIMER_WORDINGS.plan_screen.v2)).toBeTruthy();
+    tap('Go to Health');
+    await heading('Health');
+    await agree();
+    await backToPlan();
+    expect(button(/finish setup/i).disabled).toBe(true);
+    expect(screen.getByText('Tick this to finish setup.')).toBeTruthy();
+    expect(consent.record).not.toHaveBeenCalledWith('plan_screen');
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(consent.record).toHaveBeenCalledWith('plan_screen'));
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    tap(/finish setup/i);
+    await screen.findByText('MEMBER APP');
+  });
+
+  it('each disclaimer tap shows as ticked only once the server has recorded it, and Finish waits for both to land', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan');
+    // Every tap is held on its way to the consent log until the test lets it land.
+    const land = {};
+    const record = consent.record;
+    consent.record = vi.fn(
+      (purpose) =>
+        new Promise((resolve) => {
+          land[purpose] = () => resolve(record(purpose));
+        }),
+    );
+
+    // The health step's tap, still on its way when the person goes back.
+    tap('Go to Health');
+    await heading('Health');
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(consent.record).toHaveBeenCalledWith('health_step'));
+    expect(agreeBox().getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Tick this to finish setup.')).toBeTruthy();
+    await backToPlan();
+    expect(screen.getByText('Read the note on the Health screen and tick it.')).toBeTruthy();
+
+    // The plan screen's tap: not ticked before it lands, and once it has,
+    // Finish still waits for the health step's.
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(consent.record).toHaveBeenCalledWith('plan_screen'));
+    expect(agreeBox().getAttribute('aria-checked')).toBe('false');
+    expect(button(/finish setup/i).disabled).toBe(true);
+    land.plan_screen();
+    await waitFor(() => expect(agreeBox().getAttribute('aria-checked')).toBe('true'));
+    expect(button(/finish setup/i).disabled).toBe(true);
+
+    land.health_step();
+    await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
+    expect(screen.queryByText('Read the note on the Health screen and tick it.')).toBeNull();
+    // And the health step's box shows it, back where it was made.
+    tap('Health');
+    await heading('Health');
+    expect(agreeBox().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('a plan note tap that fails says so, stays unticked and keeps Finish shut', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan');
+    tap('Go to Health');
+    await heading('Health');
+    await agree();
+    await backToPlan();
+    consent.record = vi.fn(() => Promise.reject(new Error('Network Error')));
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't reach the server. Check your connection and try again."));
+    expect(consent.record).toHaveBeenCalledWith('plan_screen');
+    await waitFor(() => expect(agreeBox().disabled).toBe(false));
+    expect(agreeBox().getAttribute('aria-checked')).toBe('false');
+    expect(button(/finish setup/i).disabled).toBe(true);
+  });
+
+  it('Adjust opens the screen that asked, and "Back to your plan" brings the person straight back', async () => {
+    serve(ALL, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan');
+    tap('Adjust Your day');
+    await heading('Your day');
+    expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
+    tap(/On my feet most of the day/);
+    await stored({ dayActivity: 'active' });
+    tap('Back to your plan');
+    await heading('Your plan'); // one tap, not five screens of Continue
+    expect(within(built()).getByText('On my feet most of the day')).toBeTruthy();
+    // Back on the plan, the adjustment is over: a walk from the start is an
+    // ordinary one again.
+    tap('Your goal');
+    await heading('Your goal');
+    await next('About you');
+  });
+
+  it('an Adjust that opens a new question goes to that question before the plan', async () => {
+    serve({ ...ALL, weightGoal: 'maintain', targetWeightKg: null, pace: null }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan');
+    expect(screen.getByText('Step 10 of 10')).toBeTruthy(); // keeping the weight asks no target
+    tap('Adjust Your goal');
+    await heading('Your goal');
+    expect(button('Back to your plan')).toBeTruthy();
+    tap(/Lose weight/);
+    await stored({ weightGoal: 'lose' });
+    // Losing weight asks for a target the plan has not got: Continue, to it.
+    await next('Your target');
+    tap(/kg · cm/);
+    tapRow('Target weight in whole kilograms', '65');
+    tap(/^Steady/);
+    await stored({ targetWeightKg: 65, pace: 'steady' });
+    await waitFor(() => expect(button('Back to your plan').disabled).toBe(false));
+    tap('Back to your plan');
+    await heading('Your plan');
+    expect(screen.getByText('Step 11 of 11')).toBeTruthy();
+    expect(within(built()).getByText('65.0 kg · Steady, about 0.5 kg a week')).toBeTruthy();
+  });
+
+  it('Safe mode shows no workout plan and says what still works; cleared, the week comes back with a line to follow the professional', async () => {
+    // RULINGS 2026-09-07: Safe mode shows no workout or run plan; 2026-09-09: a
+    // cleared person gets the normal plan plus a "follow your professional" line.
+    serve(ALL, screeningOf({ hasCondition: true, checkFirst: 'not_yet' }));
+    draw();
+    await heading('Your plan');
+    expect(within(workouts()).getByText(CHECK_FIRST_OPTIONS.not_yet.detail)).toBeTruthy();
+    expect(workouts().textContent).not.toMatch(/a week/);
+    expect(workouts().textContent).not.toContain('Beginner');
+    // The answers stay, the week's among them, each with its way back.
+    expect(within(built()).getByText('3 days a week · 45 minutes')).toBeTruthy();
+    expect(within(built()).getByText('Yes · Not yet')).toBeTruthy();
+
+    tap('Adjust Health');
+    await heading('Health');
+    tap(/^A professional has cleared me/);
+    await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: true, checkFirst: 'cleared' }));
+    await waitFor(() => expect(button('Back to your plan').disabled).toBe(false));
+    tap('Back to your plan');
+    await heading('Your plan');
+    expect(workouts().textContent).toContain('3 workouts a week, 45 minutes each');
+    expect(within(workouts()).getByText('You told us a professional has cleared you. Follow their advice.')).toBeTruthy();
+    expect(workouts().textContent).not.toContain(CHECK_FIRST_OPTIONS.not_yet.detail);
+    expect(within(built()).getByText('Yes · A professional has cleared me')).toBeTruthy();
+  });
+
+  it('building muscle while losing weight: the plan says a steep cut mostly stops muscle growing, and the gentle pace is marked where paces are picked', async () => {
+    // Kd, 2026-09-13: tell them, and keep their pace. The line is the server's
+    // (the stand-in raises it here as the real route does at the steady pace).
+    serve({ ...ALL, fitnessGoals: ['muscle_gain'] }, screeningOf({ hasCondition: false }));
+    server.plan = {
+      ...PLAN,
+      proteinG: 154,
+      carbsG: 84,
+      flags: [{ code: 'cut_limits_muscle_gain', limitKcal: 500, suggestedPace: 'gentle' }],
+      workings: { ...PLAN.workings, protein: { ...PLAN.workings.protein, gPerKg: 2.2, wantedG: 154, buildMuscle: true } },
+    };
+    draw();
+    await heading('Your plan');
+    expect(panel().textContent).toContain(
+      'Building muscle while losing weight: a cut of more than 500 kcal a day mostly stops muscle growing. The gentle pace leaves room for it.',
+    );
+    tap('Adjust Your target');
+    await heading('Your target');
+    expect(button(/^Gentle/).textContent).toContain('Best if you also build muscle');
+    for (const pace of [/^Steady/, /^Brisk/]) expect(button(pace).textContent).not.toContain('Best if');
+    // Their pace stays theirs: nothing was saved by showing it.
+    expect(svc.patch).not.toHaveBeenCalled();
+
+    // Without Build muscle, no card is marked.
+    tap('Your goal');
+    await heading('Your goal');
+    tap(/Build muscle/);
+    await stored({ fitnessGoals: [] });
+    tap('Your target');
+    await heading('Your target');
+    for (const pace of [/^Gentle/, /^Steady/, /^Brisk/]) expect(button(pace).textContent).not.toContain('Best if');
+  });
+
+  it('marks no pace for building muscle once a yes to the health question stops every cut', async () => {
+    // Any yes means no calorie cut, cleared or not (RULINGS 2026-09-09): every
+    // pace then eats the same, so a mark would point at a choice that changes
+    // nothing. The answer comes from its own route, beside the others.
+    serve({ ...ALL, fitnessGoals: ['muscle_gain'] }, screeningOf({ hasCondition: false }));
+    draw();
+    await heading('Your plan');
+    tap('Adjust Your target');
+    await heading('Your target');
+    expect(button(/^Gentle/).textContent).toContain('Best if you also build muscle');
+
+    tap('Health');
+    await heading('Health');
+    tap('Yes');
+    tap(/^A professional has cleared me/);
+    await waitFor(() => expect(health.put).toHaveBeenCalledWith({ hasCondition: true, checkFirst: 'cleared' }));
+    tap('Your target');
+    await heading('Your target');
+    await waitFor(() => {
+      for (const pace of [/^Gentle/, /^Steady/, /^Brisk/]) expect(button(pace).textContent).not.toContain('Best if');
+    });
+  });
+
+  it('marks no pace where the plan says every pace eats the same, and marks it once another pace would cut more', async () => {
+    // As on the calorie floor: the stand-in's plan has every pace eat 19 kcal
+    // over the burn, so no pace leaves muscle more room than another.
+    serve({ ...ALL, fitnessGoals: ['muscle_gain'] }, screeningOf({ hasCondition: false }));
+    server.plan = { ...PLAN, dailyChangeKcalByPace: { gentle: 19, steady: 19, brisk: 19 } };
+    draw();
+    await heading('Your plan');
+    tap('Adjust Your target');
+    await heading('Your target');
+    for (const pace of [/^Gentle/, /^Steady/, /^Brisk/]) expect(button(pace).textContent).not.toContain('Best if');
+
+    // The plan the next answer brings back is the one the cards read.
+    server.plan = PLAN;
+    tap(/^Brisk/);
+    await stored({ pace: 'brisk' });
+    await waitFor(() => expect(button(/^Gentle/).textContent).toContain('Best if you also build muscle'));
   });
 
   it('a person who already finished setup can go back to the app, and can still sign out', async () => {

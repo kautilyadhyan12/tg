@@ -27,6 +27,10 @@
 //                  plateau is 1.62 g/kg a day, 95 % CI 1.03 to 2.20). A body heavier
 //                  than BMI 30 for its height is counted at its BMI-30 weight
 //                  (@app/shared `proteinWeight`; Weijs, 2025).
+//   500 kcal a day a cut of about this size stops muscle growing: "an energy deficit
+//                  of ~500 kcal · day⁻¹ prevented gains in LM" (Murphy and Koehler's
+//                  2022 meta-regression). With Build muscle ticked a larger cut is
+//                  flagged, never changed (@app/shared `MUSCLE_GAIN_CUT_LIMIT_KCAL`).
 //   the 1 200 floor, the 25 % fat share and the 50 g carbohydrate floor are the
 //                  constants of the app's first nutrition calculator, carried over.
 //   BMI 18.5       the WHO underweight line.
@@ -38,12 +42,17 @@
 // is rounded to a whole kcal before the next step reads it, so each sum on that
 // screen holds exactly; `workings` on the plan carries those steps.
 import {
+  ADULT_AGE,
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   daysToMove,
+  KCAL_PER_KG,
   kgBetween,
   MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
+  MUSCLE_GAIN_CUT_LIMIT_KCAL,
+  MUSCLE_GAIN_PACE,
   PACE_KG_PER_WEEK,
+  paceDailyKcal,
   planInputsSchema,
   planResponseSchema,
   proteinWeight,
@@ -60,14 +69,16 @@ import {
   type PlanResponse,
 } from "@app/shared";
 
-/** One kilogram of body weight is about 7 700 kcal — the usual planning figure. */
-export const KCAL_PER_KG = 7700;
+/** One kilogram of body weight is about 7 700 kcal — the usual planning figure,
+ *  in the shared contract so the pace cards count a pace's cut with it too. */
+export { KCAL_PER_KG };
 
 /** Calories never go below this (RULINGS 2026-09-07: "the floor already in the code"). */
 export const CALORIE_FLOOR_KCAL = 1200;
 
-/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07). */
-export const ADULT_AGE = 18;
+/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07);
+ *  in the shared contract so screen 3's pace cards read the same age. */
+export { ADULT_AGE };
 
 /** The lowest healthy weight for a height, as a BMI. */
 export const HEALTHY_BMI_FLOOR = 18.5;
@@ -191,7 +202,7 @@ function eatFor(burn: number, change: number): { targetKcal: number; floored: bo
 
 /** The whole daily change a pace asks for: negative for a cut, positive for a gain. */
 function wantedDailyChange(goal: PlanGoal, pace: PlanPace): number {
-  const size = Math.round((PACE_KG_PER_WEEK[pace] * KCAL_PER_KG) / 7);
+  const size = paceDailyKcal(pace);
   return goal === "gain" ? size : -size;
 }
 
@@ -206,7 +217,21 @@ function daysFor(goal: PlanGoal, kgToMove: number, dailyChange: number): number 
   return days > MAX_PLAN_DAYS ? null : days;
 }
 
+/** The plan for these answers, and what each pace would change a day with every
+ *  other answer the same: the same maths run at each pace, so screen 3's
+ *  building-muscle mark and the plan cannot disagree. */
 export function computePlan(input: PlanInputs): PlanNumbers {
+  const changeAt = (pace: PlanPace): number => planAt({ ...input, pace }).dailyChangeKcal;
+  const dailyChangeKcalByPace =
+    input.goal === "maintain" || input.targetWeightKg === null
+      ? null
+      : { gentle: changeAt("gentle"), steady: changeAt("steady"), brisk: changeAt("brisk") };
+  // In the contract's order, so the plan reads the same before and after parsing.
+  const { restingBurnKcal, dailyBurnKcal, targetKcal, dailyChangeKcal, ...rest } = planAt(input);
+  return { restingBurnKcal, dailyBurnKcal, targetKcal, dailyChangeKcal, dailyChangeKcalByPace, ...rest };
+}
+
+function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
   const steps = burnSteps(input);
   const burn = steps.burnKcal;
   const flags: PlanFlag[] = [];
@@ -266,6 +291,12 @@ export function computePlan(input: PlanInputs): PlanNumbers {
     flags.push({ code: "pace_over_a_year", suggestedPace: suggested ?? null });
   }
   if (outOfReach) flags.push({ code: "target_out_of_reach" });
+  // Building muscle while losing weight (Kd, 2026-09-13: tell them): a cut over
+  // the limit is said, with the pace that cuts less, and the calories stay the
+  // weight choice's. The cut is the one eaten, after the floor.
+  if (input.buildMuscle && burn - eat.targetKcal > MUSCLE_GAIN_CUT_LIMIT_KCAL) {
+    flags.push({ code: "cut_limits_muscle_gain", limitKcal: MUSCLE_GAIN_CUT_LIMIT_KCAL, suggestedPace: MUSCLE_GAIN_PACE });
+  }
 
   // Build muscle ticked raises protein, whatever the weight choice, and moves
   // no calorie (RULINGS 2026-09-11: building muscle is not gaining weight).

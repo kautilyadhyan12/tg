@@ -3,6 +3,8 @@
 // the box is not drawn at all (Kd, 2026-09-10): the screens themselves ask the
 // questions, and no number is ever built from a default (RULINGS 2026-07-15).
 // Under the number, "How is this worked out?" opens the server's own steps.
+// `note` is off only on the plan screen, which shows the whole disclaimer that
+// the note is the first sentence of.
 import { useState } from 'react';
 import { ChevronDown, Flame } from 'lucide-react';
 import {
@@ -16,7 +18,7 @@ import {
   workingSteps,
 } from './onboardingModel';
 
-export default function PlanPanel({ plan, direction, units }) {
+export default function PlanPanel({ plan, direction, units, note = true }) {
   const [open, setOpen] = useState(false);
   if (plan === null) return null;
   const target = targetLine(plan, units);
@@ -75,9 +77,11 @@ export default function PlanPanel({ plan, direction, units }) {
           </li>
         </ol>
       )}
-      <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        {PLAN_NOTE}
-      </p>
+      {note && (
+        <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {PLAN_NOTE}
+        </p>
+      )}
     </section>
   );
 }
