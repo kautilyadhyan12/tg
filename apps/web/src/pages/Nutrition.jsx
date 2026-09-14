@@ -548,10 +548,17 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
           </button>
         ))}
       </div>
-      {/* The Open Database License's notice for showing its data (section 4.3). */}
+      {/* The Open Database License's notice for showing its data (section 4.3a):
+          the database's name links to the database, and the licence's name to
+          its text, as Open Food Facts' terms of use also ask. */}
       {shown.some((r) => r.source === 'openfoodfacts') && (
         <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
-          Packaged products contain information from Open Food Facts, which is made available here under the Open Database License.
+          Packaged products contain information from{' '}
+          <a href="https://openfoodfacts.org" target="_blank" rel="noreferrer" className="underline"
+             style={{ color: 'rgba(255,255,255,0.45)' }}>Open Food Facts</a>
+          , which is made available here under the{' '}
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer" className="underline"
+             style={{ color: 'rgba(255,255,255,0.45)' }}>Open Database License (ODbL)</a>.
         </p>
       )}
     </>

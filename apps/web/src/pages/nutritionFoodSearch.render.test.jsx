@@ -27,6 +27,7 @@ describe('the Add food search box', () => {
         items: [
           food('peanut_butter', 'Peanut butter', 'curated'),
           food('off_1', 'Peanut butter · Happy Shopper', 'openfoodfacts'),
+          food('off_2', 'Peanut butter · Whole Earth', 'openfoodfacts'),
         ],
       },
     }));
@@ -40,13 +41,24 @@ describe('the Add food search box', () => {
     fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'peanut butter' } });
 
     const packaged = (await screen.findByText('Peanut butter · Happy Shopper')).closest('button');
+    const second = screen.getByText('Peanut butter · Whole Earth').closest('button');
     const own = screen.getByText('Peanut butter').closest('button');
     expect(within(packaged).getByText('Packaged product · Open Food Facts')).toBeTruthy();
+    expect(within(second).getByText('Packaged product · Open Food Facts')).toBeTruthy();
     expect(within(own).queryByText(/Packaged product/)).toBeNull();
-    expect(screen.getAllByText('Packaged product · Open Food Facts')).toHaveLength(1);
+    expect(screen.getAllByText('Packaged product · Open Food Facts')).toHaveLength(2);
     expect(svc.searchFoods).toHaveBeenCalledWith('peanut butter', 15);
-    // The licence's notice, once, under a list that holds a packaged product.
-    expect(screen.getAllByText(/made available here under the Open Database License/)).toHaveLength(1);
+    // The licence's notice once under the list, however many packaged products it
+    // holds, its two names linked to the database and to the licence's text.
+    expect(screen.getAllByText(/which is made available here under the/)).toHaveLength(1);
+    const database = screen.getAllByRole('link', { name: 'Open Food Facts' });
+    const licence = screen.getAllByRole('link', { name: 'Open Database License (ODbL)' });
+    expect(database).toHaveLength(1);
+    expect(licence).toHaveLength(1);
+    expect(database[0].getAttribute('href')).toBe('https://openfoodfacts.org');
+    expect(licence[0].getAttribute('href')).toBe('https://opendatacommons.org/licenses/odbl/1-0/');
+    for (const link of [database[0], licence[0]]) expect(link.getAttribute('target')).toBe('_blank');
+    expect(within(packaged).queryByRole('link')).toBeNull();
   });
 
   it("shows no licence notice when every result is the app's own food", async () => {
