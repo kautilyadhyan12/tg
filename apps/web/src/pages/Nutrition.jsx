@@ -1384,8 +1384,8 @@ function PhotoModal({ open, onClose, onSave }) {
                     {analysis.unknownItems?.length > 0 && (
                       <p className="text-2xs mb-4"
                          style={{ color: 'rgba(251,191,36,0.75)' }}>
-                        Couldn't identify: {analysis.unknownItems.join(', ')} —
-                        add them manually if needed.
+                        Not in our food list: {analysis.unknownItems.join(', ')} —
+                        add them with “Add an ingredient” above if needed.
                       </p>
                     )}
 

@@ -72,8 +72,8 @@ describe('the photo sheet count stepper', () => {
     expect(within(grapes).getByRole('spinbutton').value).toBe('100');
     fireEvent.click(within(grapes).getByRole('button', { name: '+' }));
     await waitFor(() => expect(within(grapes).getByRole('spinbutton').value).toBe('200'));
-    // What matched no food is named, so the person knows to add it.
-    expect(screen.getByText(/Couldn't identify: mango lassi/)).toBeTruthy();
+    // What matched no food is named as not on the list, so the person knows to add it.
+    expect(screen.getByText(/Not in our food list: mango lassi — add them with “Add an ingredient” above/)).toBeTruthy();
   });
 
   it("never lowers a scan's own count that is above the stepper's cap of 30", async () => {
