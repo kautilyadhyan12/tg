@@ -4,21 +4,31 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 7a-i: PR #71's review fixed (2 High, 9 Low, 3 weak tests); Kd on roti, paneer, English names, fruits
+
+- H1: a photo's count multiplies a food's own serving only where it is one piece or a sealed pack, and an Appendix B piece only for a hint ending in it:
+  six nuggets 96 g (was 16), a veggie burger its 100 g patty (was an egg's 50). The review's own fix, serving × count for every food, would log ten grapes as 1 kg.
+- H2 true (USDA has store-bought roti, naan and paratha). Kd, RULINGS 2026-09-14: both rotis, named; naan and paratha USDA's; paneer the UK table's; English
+  names beside Indian ones; fruits at 7a-i-b. Found fixing it: a saved roti_chapati would price as the store-bought roti, so a canonical is looked up first.
+- Lows: notice links (ODbL 4.3a, Open Food Facts' terms); Greek yogurt "(plain, nonfat)"; "Egg roll (vegetable, fried)"; jelly, chips, beans not aliases;
+  shepherds pie, chilli; code-less products keyed with their brand; RULINGS 2026-08-24 amended; the inventory doc archived; every diet written out in a test.
+- 318 foods (USDA SR 241, FNDDS 72, CoFID 5), every number matches its table; master's 131 all found, 55 with changed kcal, 187 new.
+- Verified: api tsc 0 · eslint 0; unit 36/36; nutrition routes 33/33; full local api 1033/1033; web nutrition 32/32; web eslint 0 on the test, Nutrition.jsx
+  its 7 as on master; 13 deliberate breaks each red (the scan-wiring break only in the route test), files restored byte for byte.
+- Next: CI; Kd's click-through (the names, the notice links); the fresh-chat re-check of the fixes; merge.
+
 ## 2026-09-14 · 7a-i built: the food list from named tables, every food's diet, branch `bigger-food-list`
 
 - Next was 7a-i, not 5a as the entry below says: RULINGS 2026-09-12 puts the food list before goals. Kd said *"go"* to the plan (RULINGS 2026-09-14).
 - 317 foods, 131 kept under their canonicals and 186 new (44 meat, fish and eggs); each cites USDA SR Legacy (238), USDA FNDDS (72) or UK CoFID (7);
   55 old foods' kcal per 100 g changed to their table's. Every food has `diet`; `DIET_LADDER`/`dietAllows` moved to `@app/shared`. Fibre may be null.
-- Matching is by whole words. On master a search pick of peanut butter, almond butter, orange juice, apple juice, pineapple, sweet potato or butter
-  chicken was priced as butter, orange, apple or potato (the new route test, red on master's list); the scan took "tea" for steak, "water" for tuna.
-- 637 hints before and after: 536 the same, 56 now found, 34 now the right food, 2 now none ("hot", and "mango lassi", which was mango).
-- `tools/check-food-sources.ts` (its own zip, CSV and XLSX readers): 317 foods, every number matches; a 1-kcal change and a wrong entry each reported, exit 1.
-- Verified: api tsc 0 · eslint 0; shared tsc 0 · eslint 0 · 106/106; foods + nutrition + summary unit 57/57; nutrition routes 32/32; full local api
-  1023/1026 (the 3 red are catalog.seed, 7/7 alone: ROADMAP 10's shared-database flake); 13 deliberate breaks each red (a 14th survived: a redundant lookup, removed), files restored byte for byte.
-- The summary harness's M4 anchor had gone stale at 4b-ii (0 matches); re-anchored to the band ternary, and its mutant turns the band test red.
-- Kd's click-through passed (*"all the tests passed"*). From it (RULINGS 2026-09-14): an Open Food Facts product reads "name · brand" with "Packaged
-  product · Open Food Facts" under it, and the licence's notice under the list (6 breaks red; his click-through passed); the list grows again at 7a-i-b.
-  Found: the Gemini scanner ruling unbuilt, and Open Food Facts' live search capped at 10 a minute per IP — Stage 4 items 7 and 8. Next: CI; the review.
+- Matching by whole words: on master a search pick of peanut butter, orange juice, sweet potato, butter chicken and three more was priced as another
+  food, and the scan took "tea" for steak; of 637 hints, 56 are now found, 34 now the right food, 2 now none ("hot", "mango lassi").
+- `tools/check-food-sources.ts`: every number matches; a 1-kcal change and a wrong entry each reported, exit 1. The summary harness's M4 anchor re-anchored.
+- Verified: api tsc 0 · eslint 0; shared tsc 0 · eslint 0 · 106/106; unit 57/57; nutrition routes 32/32; full local api 1023/1026 (catalog.seed, 7/7
+  alone: ROADMAP 10's flake); 13 deliberate breaks each red (a 14th survived: a redundant lookup, removed), files restored byte for byte.
+- Kd's click-through passed (*"all the tests passed"*), and so did his second, of "name · brand" over "Packaged product · Open Food Facts" (RULINGS
+  2026-09-14); the licence notice came after it. Found: Stage 4 items 7 (the Gemini scanner unbuilt) and 8 (Open Food Facts' 10 searches a minute per IP).
 
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
