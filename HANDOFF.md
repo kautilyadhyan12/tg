@@ -4,6 +4,20 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 7a-i built: the food list from named tables, every food's diet, branch `bigger-food-list`
+
+- Next was 7a-i, not 5a as the entry below says: RULINGS 2026-09-12 puts the food list before goals. Kd said *"go"* to the plan (RULINGS 2026-09-14).
+- 317 foods, 131 kept under their canonicals and 186 new (44 meat, fish and eggs); each cites USDA SR Legacy (238), USDA FNDDS (72) or UK CoFID (7);
+  55 old foods' kcal per 100 g changed to their table's. Every food has `diet`; `DIET_LADDER`/`dietAllows` moved to `@app/shared`. Fibre may be null.
+- Matching is by whole words. On master a search pick of peanut butter, almond butter, orange juice, apple juice, pineapple, sweet potato or butter
+  chicken was priced as butter, orange, apple or potato (the new route test, red on master's list); the scan took "tea" for steak, "water" for tuna.
+- 637 hints before and after: 536 the same, 56 now found, 34 now the right food, 2 now none ("hot", and "mango lassi", which was mango).
+- `tools/check-food-sources.ts` (its own zip, CSV and XLSX readers): 317 foods, every number matches; a 1-kcal change and a wrong entry each reported, exit 1.
+- Verified: api tsc 0 · eslint 0; shared tsc 0 · eslint 0 · 106/106; foods + nutrition + summary unit 57/57; nutrition routes 32/32; full local api
+  1023/1026 (the 3 red are catalog.seed, 7/7 alone: ROADMAP 10's shared-database flake); 13 deliberate breaks each red (a 14th survived: a redundant lookup, removed), files restored byte for byte.
+- The summary harness's M4 anchor had gone stale at 4b-ii (0 matches); re-anchored to the band ternary, and its mutant turns the band test red.
+- Next: CI; Kd's click-through (local `kd.lowtarget@example.com`, Nutrition → Add food); the fresh-chat review; merge.
+
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
 - Three Lows fixed: SignUpNote's header no longer says the console draws the note; the 4d entry below is ten lines; setup's test has its
