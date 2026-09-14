@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4c merged (PR #66); Kd: a too-low target is said as it is picked
+
+- Kd's click-through of 4c passed on the local database (*"all test passed"*), `kd.pace@example.com`: the plan screen, Adjust and "Back to
+  your plan", no Gentle mark at 50 kg, the mark and the muscle line at 60 kg, Safe mode's words, the cleared line, Finish.
+- Re-check of 11d99e1 skipped on Kd's word (no Critical/High was open). CI green on 4965f1a; merged 2026-09-14 as faa41f7; branch deleted.
+- Kd: "Your target is below the lowest healthy weight…" must be said on "Your target" while the weight is picked, not first at the end.
+  ROADMAP 4c-ii, next, before 4d (RULINGS 2026-09-14); its plan asks him two lines (the number box keeps its line; the target stays pickable).
+- Kd: a click-through tests only what its card changed, all steps in one list (RULINGS 2026-09-14). Set the test account up beforehand
+  on the local database, so his first step is on the card's own screen.
+- Next: plan 4c-ii with Kd (ten lines or fewer), then build it; after it, ask Kd if 4d is next.
+
 ## 2026-09-14 · 4c finished after its review, branch `plan-screen`, PR #66
 
 - The plan's list is headed "Your answers" · "You told us a professional has cleared you. Follow their advice." · "Go to …" under Finish opens
