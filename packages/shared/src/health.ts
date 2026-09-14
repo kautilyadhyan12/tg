@@ -165,11 +165,20 @@ export type ConsentPurpose = z.infer<typeof consentPurposeSchema>;
  *  their advice should be kept but over the app should not be there"*). It is a
  *  new version rather than an edit so the consent log keeps the words each
  *  person actually agreed to. v1 stays exactly as it was, for the rows that
- *  carry it. */
+ *  carry it.
+ *
+ *  The sign-up note's v3 is Kd's own words (2026-09-14: v2 read *"like this
+ *  app is not good and should not be followed"*), with the three changes he
+ *  said go to: no "Disclaimer:" label under the screen's heading, pregnancy and
+ *  medicine named as the health question names them, and "follow their advice"
+ *  kept (decision D). It sends to a professional the people with a condition,
+ *  an injury, a pregnancy, a medicine or a health concern, as exercise
+ *  screening does since ACSM 2015 (Riebe and colleagues), rather than everyone. */
 export const DISCLAIMER_WORDINGS: Readonly<Record<ConsentPurpose, Readonly<Record<string, string>>>> = {
   sign_up: {
     v1: "This app gives general fitness and eating information. It is not medical advice and does not diagnose anything. Talk to a doctor or another qualified professional before you start, and follow their advice over anything this app says.",
     v2: "This app gives general fitness and eating information. It is not medical advice and does not diagnose anything. Talk to a doctor or another qualified professional before you start, and follow their advice.",
+    v3: "This app provides fitness, workout, and nutrition guidance intended to support your health and fitness goals. The recommendations are not a substitute for professional medical advice, diagnosis, or treatment. If you have a medical condition or an injury, are pregnant, take any medicine, or have a specific health concern, consult a qualified healthcare professional before making significant changes to your exercise or diet, and follow their advice.",
   },
   health_step: {
     v1: "Your answer here only makes the app more careful. It is not a diagnosis and not medical advice. If you have a medical condition, an injury, or are pregnant, ask a professional before you train or change how you eat, and follow their advice over the app's.",
@@ -183,7 +192,7 @@ export const DISCLAIMER_WORDINGS: Readonly<Record<ConsentPurpose, Readonly<Recor
 
 /** The version a screen shows today, per purpose — the newest entry. */
 export const CURRENT_DISCLAIMER_VERSION: Readonly<Record<ConsentPurpose, string>> = {
-  sign_up: "v2",
+  sign_up: "v3",
   health_step: "v2",
   plan_screen: "v2",
 };

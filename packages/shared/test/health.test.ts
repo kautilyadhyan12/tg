@@ -153,7 +153,9 @@ describe("consent contract", () => {
         expect(lower, `${purpose} ${version}`).not.toContain("safe for you");
         expect(lower, `${purpose} ${version}`).not.toMatch(/\btreats?\b/);
         expect(lower, `${purpose} ${version}`).not.toMatch(/\bcures?\b/);
-        expect(lower, `${purpose} ${version}`).toContain("not medical advice");
+        // "Not medical advice", in the words each version says it: Kd's own
+        // sign-up words (v3) say "not a substitute for professional medical advice".
+        expect(lower, `${purpose} ${version}`).toMatch(/not medical advice|not a substitute for professional medical advice/);
         expect(lower, `${purpose} ${version}`).toContain("professional");
       }
     }
@@ -161,8 +163,9 @@ describe("consent contract", () => {
 
   it("v2 keeps 'follow their advice' and drops the comparison with the app, on all three screens (Kd, 2026-09-10)", () => {
     for (const purpose of consentPurposeSchema.options) {
-      // v2 is what a screen shows today…
-      expect(CURRENT_DISCLAIMER_VERSION[purpose]).toBe("v2");
+      // v2 is what the health step and the plan show today (the sign-up note
+      // has moved on to Kd's own words, v3: the next test)…
+      expect(CURRENT_DISCLAIMER_VERSION[purpose]).toBe(purpose === "sign_up" ? "v3" : "v2");
       const v1 = DISCLAIMER_WORDINGS[purpose]["v1"] ?? "";
       const v2 = DISCLAIMER_WORDINGS[purpose]["v2"] ?? "";
       expect(v1, purpose).not.toBe("");
@@ -177,6 +180,23 @@ describe("consent contract", () => {
       // agreed to.
       expect(v2, purpose).toBe(v1.replace(/ over the app's| over anything this app says/, ""));
     }
+  });
+
+  it("the sign-up note shows Kd's own words, which keep 'follow their advice' and name what the health question asks about (Kd, 2026-09-14)", () => {
+    expect(CURRENT_DISCLAIMER_VERSION.sign_up).toBe("v3");
+    const v3 = DISCLAIMER_WORDINGS.sign_up["v3"] ?? "";
+    // Word for word what Kd said go to.
+    expect(v3).toBe(
+      "This app provides fitness, workout, and nutrition guidance intended to support your health and fitness goals. The recommendations are not a substitute for professional medical advice, diagnosis, or treatment. If you have a medical condition or an injury, are pregnant, take any medicine, or have a specific health concern, consult a qualified healthcare professional before making significant changes to your exercise or diet, and follow their advice.",
+    );
+    expect(v3).toContain("follow their advice");
+    expect(v3).not.toMatch(/disclaimer/i);
+    for (const asked of ["medical condition", "injury", "pregnant", "medicine"]) {
+      expect(HEALTH_QUESTION, asked).toContain(asked);
+      expect(v3, asked).toContain(asked);
+    }
+    // The words people ticked before stay, for the rows that carry them.
+    expect(DISCLAIMER_WORDINGS.sign_up["v2"]).toContain("Talk to a doctor or another qualified professional before you start");
   });
 
   it("the request names a screen, a version and a build; nothing else", () => {
