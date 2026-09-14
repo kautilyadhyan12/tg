@@ -110,7 +110,7 @@ Order (Kd, 2026-09-13; RULINGS the same day): **items 3 and 5 first** — the em
 ## Stage 5 — The phone app
 
 1. [ ] Expo dev client; the two-day pose spike (≥20 fps on a mid-range Android is the gate).
-2. [ ] Screens on shared packages: sign-in (code, Google, Apple), onboarding v2, Today, goals, plans, library, camera workout, progress, My Gyms, console.
+2. [ ] Screens on shared packages: sign-in (code, Google, Apple), "Before you start" (4d: the phone reads the profile's `signUpDisclaimerAgreed` too, or it skips the note; never before the console), onboarding v2, Today, goals, plans, library, camera workout, progress, My Gyms, console.
 3. [ ] Offline SQLite mirror and the sync engine.
 4. [ ] Running end to end: MapLibre + OpenStreetMap tiles, background tracking, the Play permission flow, routes, published routes only.
 5. [ ] Meal scan and barcode on the phone.
