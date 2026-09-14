@@ -45,5 +45,26 @@ describe('the Add food search box', () => {
     expect(within(own).queryByText(/Packaged product/)).toBeNull();
     expect(screen.getAllByText('Packaged product · Open Food Facts')).toHaveLength(1);
     expect(svc.searchFoods).toHaveBeenCalledWith('peanut butter', 15);
+    // The licence's notice, once, under a list that holds a packaged product.
+    expect(screen.getAllByText(/made available here under the Open Database License/)).toHaveLength(1);
+  });
+
+  it("shows no licence notice when every result is the app's own food", async () => {
+    svc.listMealsForDay = vi.fn(async () => ({ meals: [], truncated: false }));
+    svc.listDishware = vi.fn(async () => ({ data: { items: [], nextCursor: null } }));
+    svc.getTargets = vi.fn(async () => ({ data: { targets: null, missing: ['goal'], targetWrongSide: false } }));
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [food('peanut_butter', 'Peanut butter', 'curated')] } }));
+    render(
+      <MemoryRouter initialEntries={['/nutrition']}>
+        <Nutrition />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Breakfast' }));
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'peanut butter' } });
+
+    expect(await screen.findByText('Peanut butter')).toBeTruthy();
+    expect(screen.queryByText(/Open Database License/)).toBeNull();
+    expect(screen.queryByText(/Packaged product/)).toBeNull();
   });
 });

@@ -548,6 +548,12 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
           </button>
         ))}
       </div>
+      {/* The Open Database License's notice for showing its data (section 4.3). */}
+      {shown.some((r) => r.source === 'openfoodfacts') && (
+        <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
+          Packaged products contain information from Open Food Facts, which is made available here under the Open Database License.
+        </p>
+      )}
     </>
   );
 }
