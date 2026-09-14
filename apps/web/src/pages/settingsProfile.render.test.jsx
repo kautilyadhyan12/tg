@@ -127,6 +127,31 @@ describe('Settings → Profile', () => {
     expect(svc.updateProfile).not.toHaveBeenCalled();
   });
 
+  it("says a target under the lowest healthy weight in screen 3's words, and still saves it (Kd, 2026-09-14)", async () => {
+    serve(); // Female, 30, 165 cm, 70 kg, losing weight: the lowest healthy weight is 50.4 kg
+    render(<Settings />);
+    await loaded();
+    const line = 'Your target is below the lowest healthy weight for your height, 50.4 kg. Your plan will not take you below it.';
+    expect(screen.queryByText(line)).toBeNull();
+    type('65', '45');
+    expect(screen.getByText(line)).toBeTruthy();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ targetWeightKg: 45 })));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('holds that target to the age and height typed beside it', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    type('65', '49');
+    expect(screen.getByText(/below the lowest healthy weight for your height, 50\.4 kg\./)).toBeTruthy();
+    type('30', '16'); // a girl of 16 at 165 cm: 48.8 kg (Cole and colleagues, 2007)
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    type('165', '175'); // and at 175 cm, 54.8 kg
+    expect(screen.getByText(/below the lowest healthy weight for your height, 54\.8 kg\./)).toBeTruthy();
+  });
+
   it('holds the target to the weight typed beside it', async () => {
     serve();
     render(<Settings />);

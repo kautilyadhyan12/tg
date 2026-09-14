@@ -3,7 +3,15 @@
 // their units, the words the plan panel and the plan screen use, and the save
 // queue. Every NUMBER of the plan is the server's (GET/PATCH
 // /v1/users/me/onboarding); nothing here computes a plan.
-import { ADULT_AGE, CHECK_FIRST_OPTIONS, MUSCLE_GAIN_PACE, ORG_TYPES_PHRASE, PACE_KG_PER_WEEK } from '@app/shared';
+import {
+  ADULT_AGE,
+  CHECK_FIRST_OPTIONS,
+  MUSCLE_GAIN_PACE,
+  ORG_TYPES_PHRASE,
+  PACE_KG_PER_WEEK,
+  healthyWeightFloorKg,
+  versionFor,
+} from '@app/shared';
 import { KG_PER_LB } from '../../api/userApi';
 
 // ── What the screens offer (each table's values are the shared enum's, pinned
@@ -424,6 +432,48 @@ export function clampTarget(direction, weight, parts) {
 export const targetRow = (direction, weight, targetKg, units) =>
   clampTarget(direction, weight, weightParts(targetKg, units));
 
+// ── Screen 3: a target under the lowest healthy weight is said as it is
+//    picked, and can still be picked (Kd, 2026-09-14) ──────────────────────
+
+/** The lowest healthy weight for these answers' height, age and gender, in
+ *  kilograms to one decimal — the shared rule the plan maths runs to — or null
+ *  until all three are answered. */
+export function healthyFloorKg(a) {
+  if (!answered(a.heightCm) || !answered(a.age) || !answered(a.gender)) return null;
+  return healthyWeightFloorKg(a.heightCm, a.age, versionFor(a.gender));
+}
+
+/** Whether `kg` reads below `floorKg` in the units on show, row against row.
+ *  The plan compares kilograms, and a target a hair under the floor can read
+ *  the same as it (111.1 lb is stored as 50.39 kg, under the 50.4 kg that reads
+ *  111.1 lb): the plan then runs to the floor, which reads as the target, so
+ *  there is nothing true to say. Wherever a target reads below, its kilograms
+ *  are below too. */
+export function readsBelow(kg, floorKg, units) {
+  if (!answered(kg) || !answered(floorKg)) return false;
+  return tenthsOf(weightParts(kg, units)) < tenthsOf(weightParts(floorKg, units));
+}
+
+/** The flag's sentence, on screen 3 and in the plan panel alike. */
+export const belowHealthyText = (floorKg, units) =>
+  `Your target is below the lowest healthy weight for your height, ${weightLabel(floorKg, units)}.`;
+
+/** Screen 3's line under the target wheel, or null when there is nothing to
+ *  say: a "Lose weight" target on the right side of the weight that reads
+ *  below the lowest healthy weight. What it says the plan does holds whatever
+ *  else the plan holds — under 18, a yes to the health question and the calorie
+ *  floor can each stop the cut, and none of them takes anyone under that weight. */
+export function healthyTargetLine(direction, a, units) {
+  if (direction !== 'lose' || !answered(a.weightKg) || targetWrongSide(direction, a.targetWeightKg, a.weightKg)) return null;
+  const floorKg = healthyFloorKg(a);
+  if (floorKg === null || !readsBelow(a.targetWeightKg, floorKg, units)) return null;
+  const first = belowHealthyText(floorKg, units);
+  // The plan runs down to the floor only from a weight above it, in kilograms.
+  if (floorKg < a.weightKg) return `${first} Your plan will not take you below it.`;
+  const already = readsBelow(a.weightKg, floorKg, units) ? 'You already weigh less' : 'You are already at it';
+  return `${first} ${already}, so your plan will not lower your weight.`;
+}
+
 /** Height: whole centimetres, or feet and inches. */
 export const HEIGHT_REST = { metric: { cm: 170 }, imperial: { ft: 5, inch: 7 } };
 export const INCHES = range(0, 11);
@@ -512,15 +562,17 @@ const NO_CUT_REASON = {
   safe_mode: 'Safe mode is on',
 };
 
-/** Every sanity rule the server raised, as one plain sentence each. */
-export function flagLines(plan, direction, units) {
+/** Every sanity rule the server raised, as one plain sentence each. The
+ *  healthy-weight line is said only while `targetKg`, the target on screen,
+ *  reads below the floor (`readsBelow`), exactly as screen 3 says it. */
+export function flagLines(plan, direction, units, targetKg = null) {
   const codes = new Set(plan.flags.map((f) => f.code));
   const lines = plan.flags.map((f) => {
     switch (f.code) {
       case 'target_wrong_direction':
         return `Your target is not ${direction === 'gain' ? 'above' : 'below'} your current weight, so this plan keeps your weight where it is.`;
       case 'target_below_healthy_weight':
-        return `Your target is below the lowest healthy weight for your height, ${weightLabel(f.floorKg, units)}.`;
+        return readsBelow(targetKg, f.floorKg, units) ? belowHealthyText(f.floorKg, units) : null;
       case 'pace_over_a_year':
         return f.suggestedPace
           ? `At this pace your target is more than a year away. The ${PACE_LABEL[f.suggestedPace].toLowerCase()} pace gets there within a year.`

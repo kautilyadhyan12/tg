@@ -33,7 +33,10 @@
 //                  flagged, never changed (@app/shared `MUSCLE_GAIN_CUT_LIMIT_KCAL`).
 //   the 1 200 floor, the 25 % fat share and the 50 g carbohydrate floor are the
 //                  constants of the app's first nutrition calculator, carried over.
-//   BMI 18.5       the WHO underweight line.
+//   BMI 18.5       the WHO underweight line; at 16 and 17 the teen figures on the
+//                  curve that reaches it at 18 (Cole and colleagues, 2007). One rule
+//                  in @app/shared (`healthyWeightFloorKg`), which screen 3 reads to
+//                  say a target under it as it is picked (Kd, 2026-09-14).
 // Engineering choices of this file, not textbook tables: the no-exercise day
 // factors (1.2 is the standard sedentary figure; 1.3 / 1.45 / 1.6 are ours, with
 // training added on top at 5 MET), and the ten-year horizon.
@@ -45,6 +48,8 @@ import {
   ADULT_AGE,
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   daysToMove,
+  HEALTHY_BMI_FLOOR,
+  healthyWeightFloorKg,
   KCAL_PER_KG,
   kgBetween,
   MIFFLIN_ST_JEOR_CONSTANT,
@@ -56,6 +61,7 @@ import {
   planInputsSchema,
   planResponseSchema,
   proteinWeight,
+  versionFor,
   type DayActivity,
   type Gender,
   type MissingPlanInput,
@@ -80,8 +86,9 @@ export const CALORIE_FLOOR_KCAL = 1200;
  *  in the shared contract so screen 3's pace cards read the same age. */
 export { ADULT_AGE };
 
-/** The lowest healthy weight for a height, as a BMI. */
-export const HEALTHY_BMI_FLOOR = 18.5;
+/** The lowest healthy weight for a height (the adult BMI, and the rule with the
+ *  teen figures): the shared rule, so the plan and screen 3 cannot disagree. */
+export { HEALTHY_BMI_FLOOR, healthyWeightFloorKg };
 
 /** A plan that takes longer than this is flagged. */
 export const ONE_YEAR_DAYS = 365;
@@ -128,13 +135,10 @@ export function addDays(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-/** Mifflin-St Jeor has two versions: the women's for a female answer, and the
- *  men's for every other answer. */
-const formulaFor = (gender: Gender): "female" | "male" => (gender === "female" ? "female" : "male");
-
-/** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5. */
+/** Mifflin-St Jeor. Only "female" takes −161; every other answer takes +5
+ *  (`versionFor`, the rule the teen healthy weights take too). */
 export function restingBurn(input: { age: number; gender: Gender; heightCm: number; weightKg: number }): number {
-  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[formulaFor(input.gender)];
+  return 10 * input.weightKg + 6.25 * input.heightCm - 5 * input.age + MIFFLIN_ST_JEOR_CONSTANT[versionFor(input.gender)];
 }
 
 export interface BurnSteps {
@@ -153,11 +157,6 @@ export function burnSteps(input: PlanInputs): BurnSteps {
   const weekHours = (input.sessionMinutes * input.trainingDays) / 60;
   const trainingKcal = Math.round((TRAINING_MET * input.weightKg * weekHours) / 7);
   return { restingKcal, dayKcal, trainingKcal, burnKcal: dayKcal + trainingKcal };
-}
-
-export function healthyWeightFloorKg(heightCm: number): number {
-  const m = heightCm / 100;
-  return HEALTHY_BMI_FLOOR * m * m;
 }
 
 export interface Macros {
@@ -242,8 +241,8 @@ function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
     if (input.targetWeightKg >= input.weightKg) {
       flags.push({ code: "target_wrong_direction" });
     } else {
-      // One rounded floor, shown and used alike.
-      const floorKg = Math.round(healthyWeightFloorKg(input.heightCm) * 10) / 10;
+      // One rounded floor, shown and used alike, for this height, age and version.
+      const floorKg = healthyWeightFloorKg(input.heightCm, input.age, versionFor(input.gender));
       if (input.targetWeightKg < floorKg) {
         flags.push({ code: "target_below_healthy_weight", floorKg });
         // Already at or under the floor: nothing to lose.
@@ -304,7 +303,7 @@ function planAt(input: PlanInputs): Omit<PlanNumbers, "dailyChangeKcalByPace"> {
     ? Math.max(PROTEIN_G_PER_KG[input.goal], BUILD_MUSCLE_PROTEIN_G_PER_KG)
     : PROTEIN_G_PER_KG[input.goal];
   const protein = proteinWeight(input.weightKg, input.heightCm);
-  const formula = formulaFor(input.gender);
+  const formula = versionFor(input.gender);
   return {
     restingBurnKcal: steps.restingKcal,
     dailyBurnKcal: burn,

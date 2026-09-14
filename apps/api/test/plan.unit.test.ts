@@ -3,6 +3,7 @@ import {
   BUILD_MUSCLE_PROTEIN_G_PER_KG,
   calendarDaySchema,
   daysToMove,
+  healthyBmiFloor,
   MIFFLIN_ST_JEOR_CONSTANT,
   missingPlanInputSchema,
   MUSCLE_GAIN_CUT_LIMIT_KCAL,
@@ -16,6 +17,8 @@ import {
   planStartDaySchema,
   PROTEIN_REFERENCE_BMI,
   proteinWeight,
+  TEEN_HEALTHY_BMI_FLOOR,
+  versionFor,
   type PlanAnswers,
   type PlanInputs,
 } from "@app/shared";
@@ -393,6 +396,27 @@ describe("plan maths — the numbers (Stage 1 item 3a)", () => {
     }
   });
 
+  it("the contract refuses a healthy weight that is not the shared rule's for the resting line's height, age and version", () => {
+    // Held, so no "Reach …" to agree with: already under the floor (55 kg, 175 cm), and a 16-year-old with no cut.
+    const under = computePlan({ ...sample, weightKg: 55, targetWeightKg: 50 });
+    const teen = computePlan({ ...sample, gender: "female", age: 16, heightCm: 165, weightKg: 60, targetWeightKg: 45 });
+    for (const plan of [under, teen]) {
+      expect(plan.daysToTarget).toBeNull();
+      expect(planNumbersSchema.safeParse(plan).success).toBe(true);
+    }
+    const floorAt = (plan: typeof under, floorKg: number) => ({
+      ...plan,
+      flags: plan.flags.map((f) => (f.code === "target_below_healthy_weight" ? { ...f, floorKg } : f)),
+    });
+    for (const plan of [
+      floorAt(under, 56.6), // 56.65625 rounded down
+      floorAt(teen, 50.4), // the adult line for a 16-year-old
+      floorAt(teen, 47.8), // the boys' figure for a Female answer
+    ]) {
+      expect(planNumbersSchema.safeParse(plan).success, JSON.stringify(plan.flags)).toBe(false);
+    }
+  });
+
   describe("reads no clock", () => {
     afterEach(() => vi.useRealTimers());
     it("every number follows the 'today' passed in, whatever the machine's clock says", () => {
@@ -576,9 +600,49 @@ describe("plan maths — the sanity rules", () => {
     }
   });
 
-  it("healthy-weight floor: BMI 18.5 for the height", () => {
-    expect(healthyWeightFloorKg(175)).toBeCloseTo(56.65625, 6);
-    expect(healthyWeightFloorKg(160)).toBeCloseTo(47.36, 6);
+  it("healthy-weight floor: BMI 18.5 for the height from 18, to one decimal of a kilo", () => {
+    expect(healthyWeightFloorKg(175, 30, "male")).toBe(56.7); // 18.5 × 1.75² = 56.65625
+    expect(healthyWeightFloorKg(160, 30, "female")).toBe(47.4); // 47.36
+    expect(healthyWeightFloorKg(165, 18, "female")).toBe(50.4); // 50.36625
+    expect(healthyWeightFloorKg(165, 120, "male")).toBe(50.4);
+  });
+
+  it("healthy-weight floor at 16 and 17: the teen figures, girls' for Female and boys' for every other answer (Kd, 2026-09-14)", () => {
+    // Cole and colleagues, 2007, BMJ 335:194, Table 4, thinness grade 1 — the
+    // curve that reaches BMI 18.5 at 18 years — at the start of each year.
+    expect(TEEN_HEALTHY_BMI_FLOOR).toEqual({ 16: { female: 17.91, male: 17.54 }, 17: { female: 18.25, male: 18.05 } });
+    expect(healthyBmiFloor(16, "female")).toBe(17.91);
+    expect(healthyBmiFloor(17, "male")).toBe(18.05);
+    expect(healthyBmiFloor(18, "female")).toBe(18.5);
+    // At 165 cm (1.65² = 2.7225): 48.76, 47.75, 49.69 and 49.14 kg.
+    expect(healthyWeightFloorKg(165, 16, "female")).toBe(48.8);
+    expect(healthyWeightFloorKg(165, 16, "male")).toBe(47.8);
+    expect(healthyWeightFloorKg(165, 17, "female")).toBe(49.7);
+    expect(healthyWeightFloorKg(165, 17, "male")).toBe(49.1);
+    expect(versionFor("female")).toBe("female");
+    for (const gender of ["male", "other", "prefer_not_to_say"] as const) expect(versionFor(gender), gender).toBe("male");
+  });
+
+  it("holds a 16- or 17-year-old's target to the teen healthy weight, not the adult one", () => {
+    // female 16 · 165 cm · 60 kg: the teen floor is 48.8 kg, the adult 50.4. No cut under 18 either way.
+    const girl: PlanInputs = { ...sample, gender: "female", age: 16, heightCm: 165, weightKg: 60 };
+    expect(computePlan({ ...girl, targetWeightKg: 49.5 }).flags).toEqual([{ code: "no_deficit", reasons: ["under_18"] }]);
+    expect(computePlan({ ...girl, targetWeightKg: 45 }).flags).toEqual([
+      { code: "target_below_healthy_weight", floorKg: 48.8 },
+      { code: "no_deficit", reasons: ["under_18"] },
+    ]);
+    // At 17 the boys' figure for every answer but Female, as the resting line's formula.
+    for (const gender of ["male", "other", "prefer_not_to_say"] as const) {
+      expect(computePlan({ ...girl, gender, age: 17, targetWeightKg: 45 }).flags[0], gender).toEqual({
+        code: "target_below_healthy_weight",
+        floorKg: 49.1,
+      });
+    }
+    // From 18, the adult line: 49.5 is under it, and the plan runs to 50.4.
+    const adult = computePlan({ ...girl, age: 18, targetWeightKg: 49.5 });
+    expect(adult.flags).toEqual([{ code: "target_below_healthy_weight", floorKg: 50.4 }]);
+    expect(adult.plannedTargetKg).toBe(50.4);
+    for (const body of [{ ...girl, targetWeightKg: 45 }, { ...girl, age: 17, gender: "other" as const, targetWeightKg: 45 }]) expectSanePlan(body);
   });
 
   it("a target below the healthy floor is named and the plan runs to the floor instead — the same rounded floor in both", () => {

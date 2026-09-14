@@ -41,6 +41,7 @@ import {
   clampTarget,
   cleanEquipment,
   cmFromParts,
+  healthyTargetLine,
   heightCmList,
   heightFeetList,
   heightParts,
@@ -284,8 +285,10 @@ function WeightWheel({ id, question, shown, isSet, at, wholes, tenths, units, on
 
 /** Screen 3's wheel (Kd, 2026-09-11): only weights on the goal's side of the
  *  current weight are on it, so a contradiction cannot be picked. A stored
- *  target already on the wrong side is named, and the screen waits. */
-function TargetWheel({ target, weightKg, direction, units, save }) {
+ *  target already on the wrong side is named, and the screen waits. A target
+ *  under the lowest healthy weight stays pickable and is said the moment the
+ *  wheel lands on it (`healthy`, Kd 2026-09-14). */
+function TargetWheel({ target, weightKg, direction, units, save, healthy }) {
   const weight = weightParts(weightKg, units);
   const wrong = targetWrongSide(direction, target, weightKg);
   // A wrong-side target is on no row of the wheel, so the wheel rests and
@@ -322,6 +325,14 @@ function TargetWheel({ target, weightKg, direction, units, save }) {
           {weightShown(weight, units)}.
         </p>
       )}
+      {/* On the page before the line is, so the line is read out when it comes. */}
+      <div role="status">
+        {healthy && (
+          <p className="text-xs mt-2" style={{ color: '#FFB347' }}>
+            {healthy}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -473,7 +484,14 @@ export function TargetScreen({ answers, save, units, setUnits, direction, plan }
         // said plainly all the same, never a wheel with no side to keep to.
         <p className="text-sm text-gray-300">Set your weight on About you first.</p>
       ) : (
-        <TargetWheel target={target} weightKg={weightKg} direction={direction} units={units} save={save} />
+        <TargetWheel
+          target={target}
+          weightKg={weightKg}
+          direction={direction}
+          units={units}
+          save={save}
+          healthy={healthyTargetLine(direction, answers, units)}
+        />
       )}
       <div>
         <Question>How fast?</Question>

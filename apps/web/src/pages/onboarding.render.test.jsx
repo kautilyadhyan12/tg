@@ -695,6 +695,70 @@ describe('onboarding screens 1–7', () => {
     expect(screen.queryByText(/is not below/)).toBeNull();
   });
 
+  it('says a target under the lowest healthy weight the moment the wheel lands on it, lets it be picked, and drops the line above it', async () => {
+    // Kd, 2026-09-14: said as it is picked, not first on the plan. Female, 30,
+    // 165 cm: the lowest healthy weight is 50.4 kg. There is no plan yet on a
+    // first walk, so the line is the screen's own, from the shared rule.
+    serve({ weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70 });
+    draw();
+    await heading('Your target');
+    tap(/kg · cm/);
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    tapRow('Target weight in whole kilograms', '45');
+    expect(
+      screen.getByText('Your target is below the lowest healthy weight for your height, 50.4 kg. Your plan will not take you below it.'),
+    ).toBeTruthy();
+    await stored({ targetWeightKg: 45 });
+    tap(/^Steady/);
+    await stored({ pace: 'steady' });
+    await waitFor(() => expect(button(/continue/i).disabled).toBe(false));
+    expect(screen.queryByRole('region', { name: 'Your plan' })).toBeNull();
+    tapRow('Target weight in whole kilograms', '55');
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    await stored({ targetWeightKg: 55 });
+  });
+
+  it('tells someone who already weighs less than that weight that the plan will not lower theirs', async () => {
+    serve({ weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 50 });
+    draw();
+    await heading('Your target');
+    tap(/kg · cm/);
+    tapRow('Target weight in whole kilograms', '45');
+    expect(
+      screen.getByText(
+        'Your target is below the lowest healthy weight for your height, 50.4 kg. You already weigh less, so your plan will not lower your weight.',
+      ),
+    ).toBeTruthy();
+    await stored({ targetWeightKg: 45 });
+  });
+
+  it('keeps the line in the number box too, said exactly where screen 3 says it, in the units on show', async () => {
+    // The stand-in raises the flag as the real plan does at 165 cm, whatever the
+    // target, so only the target on screen decides the box's line here.
+    serve({ ...ALL, targetWeightKg: 45 }, screeningOf({ hasCondition: false }));
+    server.plan = { ...PLAN, flags: [{ code: 'target_below_healthy_weight', floorKg: 50.4 }] };
+    draw();
+    await heading('Your plan');
+    const box = 'Your target is below the lowest healthy weight for your height, 111.1 lb.'; // the test browser is en-US
+    expect(panel().textContent).toContain(box);
+    tap('Adjust Your target');
+    await heading('Your target');
+    expect(panel().textContent).toContain(box);
+    expect(screen.getByText(`${box} Your plan will not take you below it.`)).toBeTruthy();
+    // 111.1 lb is stored as 50.39 kg: under 50.4 kg, and read as it. The plan
+    // runs to 50.4 kg, which reads 111.1 lb, so neither place says a word.
+    tapRow('Target weight in whole pounds', '111');
+    tapRow('Target weight, tenths of a pound', '.1');
+    await stored({ targetWeightKg: 50.39 });
+    await waitFor(() => expect(panel().textContent).not.toContain('lowest healthy weight'));
+    expect(screen.queryByText(/lowest healthy weight/)).toBeNull();
+    // One row down reads under it, and both say so again.
+    tapRow('Target weight, tenths of a pound', '.0');
+    await stored({ targetWeightKg: 50.35 });
+    await waitFor(() => expect(panel().textContent).toContain(box));
+    expect(screen.getByText(`${box} Your plan will not take you below it.`)).toBeTruthy();
+  });
+
   it('saves pounds as kilograms, and feet and inches as centimetres', async () => {
     serve({ weightGoal: 'maintain' });
     draw();

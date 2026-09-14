@@ -492,7 +492,13 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                <PlanPanel plan={ob.plan} direction={direction} units={units} note={screen.id !== 'plan'} />
+                <PlanPanel
+                  plan={ob.plan}
+                  direction={direction}
+                  units={units}
+                  targetKg={answers.targetWeightKg ?? null}
+                  note={screen.id !== 'plan'}
+                />
 
                 <motion.div
                   key={`screen-${screen.id}`}
