@@ -200,24 +200,27 @@ export default function App() {
                 amendment, 2026-08-19): the questionnaire collects fitness data
                 the console never uses, so a gym owner reaches their business
                 screens without it and meets the wizard only on crossing into
-                the member app — which ProtectedRoute's default still walls. */}
+                the member app — which ProtectedRoute's default still walls.
+                The same for the sign-up note (Kd, 2026-09-14): it is the
+                training side's, so the console skips it too and a person
+                who runs an organisation meets it on coming to train. */}
             <Route path="/console" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleHome /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/new" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><NewGym /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleOverview /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/members" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
               </ProtectedRoute>
             } />
@@ -227,12 +230,12 @@ export default function App() {
                 by typing the address either way — the server is the enforcement
                 (R3.3) and the screen prints its refusal. */}
             <Route path="/console/:orgSlug/attendance" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleAttendance /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={
-              <ProtectedRoute requireOnboarding={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleSettings /></ConsoleLayout>
               </ProtectedRoute>
             } />

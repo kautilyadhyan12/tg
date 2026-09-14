@@ -61,7 +61,7 @@ const draw = (entry) =>
           <Route path="/auth/google/success" element={<GoogleAuthSuccess />} />
           <Route path="/onboarding" element={<ProtectedRoute requireOnboarding={false}><p>SET UP YOUR PROFILE</p></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><p>MEMBER APP</p></ProtectedRoute>} />
-          <Route path="/console" element={<ProtectedRoute requireOnboarding={false}><p>GYM CONSOLE</p></ProtectedRoute>} />
+          <Route path="/console" element={<ProtectedRoute requireOnboarding={false} requireSignUpNote={false}><p>GYM CONSOLE</p></ProtectedRoute>} />
           <Route
             path="/org/join"
             element={
@@ -159,17 +159,33 @@ describe('the sign-up note', () => {
     expect(screen.queryByRole('heading', { name: 'Before you start' })).toBeNull();
   });
 
-  it('comes before the console too, for someone who pressed the Manage door', async () => {
+  // Kd, 2026-09-14, from the click-through: *"it should show to someone who
+  // trains not to someone who create organisation"*.
+  it('is not shown on the console: someone who pressed the Manage door goes straight there', async () => {
     rememberDoor(GYM_DOOR);
     profileSays({ onboardingCompleted: false, signUpDisclaimerAgreed: false });
     draw('/login');
     await signInByCode();
 
+    expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Before you start' })).toBeNull();
+    expect(http.post).not.toHaveBeenCalled();
+  });
+
+  it('is shown when someone who runs an organisation comes to train', async () => {
+    signedIn();
+    profileSays({ onboardingCompleted: false, signUpDisclaimerAgreed: false });
+    draw('/console');
+    expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
+    cleanup();
+
+    // The Train door lands an account not yet set up in setup: the note first.
+    draw('/onboarding');
     await note();
-    expect(screen.queryByText('GYM CONSOLE')).toBeNull();
+    expect(screen.queryByText('SET UP YOUR PROFILE')).toBeNull();
     await tickIt();
     fireEvent.click(continueButton());
-    expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
+    expect(await screen.findByText('SET UP YOUR PROFILE')).toBeTruthy();
   });
 
   it('comes after a Google sign-in, which leaves the site and comes back signed in', async () => {

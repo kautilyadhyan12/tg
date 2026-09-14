@@ -272,6 +272,22 @@ describe('the console routes and sign-out honour the amendment', () => {
     }
   });
 
+  it('opts every console route out of the sign-up note, and no training route', () => {
+    // The note is the training side's (Kd, 2026-09-14: *"it should show to
+    // someone who trains not to someone who create organisation"*). A console
+    // route without the opt-out puts it in front of a gym owner; the same
+    // opt-out on any other route lets a person train without it.
+    const src = read('../App.jsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const consoleRoutes = src.match(
+      /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
+    ) ?? [];
+    expect(consoleRoutes.length).toBe(6);
+    for (const route of consoleRoutes) {
+      expect(route).toContain('requireSignUpNote={false}');
+    }
+    expect(src.match(/requireSignUpNote=\{false\}/g) ?? []).toHaveLength(consoleRoutes.length);
+  });
+
   it('clears the door on sign-out, so a shared browser does not inherit one', () => {
     const src = read('../context/AuthContext.jsx');
     expect(src).toMatch(/forgetDoor\(\)/);
