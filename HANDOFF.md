@@ -4,6 +4,29 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
+
+- Three Lows fixed: SignUpNote's header no longer says the console draws the note; the 4d entry below is ten lines; setup's test has its
+  space back (`onboardingCompleted: false`).
+- One weak test fixed: with the note's purpose check taken out of the profile read, every note test stayed green (no other note has v3
+  words for the route to take). The test now puts the other two notes' rows at v3 straight into the log; that break, and "any note but the
+  health step's", now fail it at the new line, the server file restored byte for byte after each.
+- The review's phone-app note: the phone's sign-in must read the same `signUpDisclaimerAgreed` or it skips the note (added to Stage 5 item 2).
+- Verified: api tsc 0 · eslint 0 · health + users routes 31/31; web eslint 0 on both files · setup and sign-up note tests 86/86; CI green on c9d131f.
+- Kd ended the round without the re-check (RULINGS 2026-09-08): *"no re-check needed, merge when ci is green"*. Next: 5a, goals on the server.
+
+## 2026-09-14 · 4d built: "Before you start", the sign-up note, branch `sign-up-note`, PR #70
+
+- Kd picked a screen of its own straight after signing in (*"Own screen after sign-in (Recommended)"*), once per account. His click-through passed
+  with one change: the note is the training side's, never the console's, and staff meet it when they come to train (RULINGS 2026-09-14, amended).
+- Kd found v2's words read as "this app should not be followed" and wrote his own; with his go to three changes they are the sign-up wording's v3.
+- Built: the profile's `signUpDisclaimerAgreed` (this person's tap, on the sign-up note, in today's words, read from the consent log);
+  `ProtectedRoute` draws the note in place until then and fails closed on a profile it cannot read; the six console routes pass
+  `requireSignUpNote={false}`. Setup's tick and its hook are shared (`DisclaimerTick`, `useDisclaimerTap`).
+- Verified: CI green on 2226f3d; locally api 999/1013 (the 14 red all workouts.sync, ROADMAP 10), 22 breaks each red, headless Edge at 400 and 1000 px.
+- Kd's click-through of the console change passed (*"all passed"*): `kd.staff@example.com` reached the console with no note, then met it
+  through Train and ticked v3.
+
 ## 2026-09-14 · 4c-ii merged (PR #69): Kd's click-through passed; the review's findings fixed (no Critical/High)
 
 - Kd's click-through passed on the local database (*"all test passed"*).

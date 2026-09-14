@@ -39,7 +39,8 @@
  *   D16          the questionnaire    (Onboarding — the dead end returning)
  *
  * P1-P11 cover a poster's code carried through the sign-in door and setup
- * (ROADMAP 4b-ii-b), each at the table's own rows below.
+ * (ROADMAP 4b-ii-b), each at the table's own rows below. S1-S3 cover the
+ * sign-up note (ROADMAP 4d): drawn on the training side, skipped by the console.
  *
  * Deliberately NOT mutated, per the same rule: the button colours, the heading
  * copy, the order of the two doors, comments. The onboarding wizard's exit is
@@ -79,6 +80,7 @@ const GOOGLE_SUITE = 'src/pages/googleAuth.test.js';
 const CROSSING_SUITE = 'src/pages/loginDoorCrossing.render.test.jsx';
 const POSTER_SUITE = 'src/pages/posterCode.render.test.jsx';
 const SIGN_OUT_SUITE = 'src/context/authSignOut.render.test.jsx';
+const NOTE_SUITE = 'src/pages/signUpNote.render.test.jsx';
 
 const TARGETS = {
   route: { file: resolve(ROOT, 'apps/web/src/pages/landingRoute.js') },
@@ -211,8 +213,8 @@ const MUTANTS = [
     suite: UNIT_SUITE,
     why: "ONE ROUTE UNDOES THE AMENDMENT: a console route loses its onboarding opt-out, so ProtectedRoute's default bounces an un-onboarded owner into the questionnaire on that route alone — the kind of drift an added or edited route ships silently",
     expect: 'opts every console route out of the onboarding requirement',
-    from: '            <Route path="/console" element={\n              <ProtectedRoute requireOnboarding={false}>',
-    to: '            <Route path="/console" element={\n              <ProtectedRoute>',
+    from: '            <Route path="/console" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>',
+    to: '            <Route path="/console" element={\n              <ProtectedRoute requireSignUpNote={false}>',
   },
 
   // D12-D16 — KD'S 2026-08-19 RULING: THE CROSSING IS CLOSED IN BOTH
@@ -407,6 +409,36 @@ const MUTANTS = [
     expect: 'the link goes into setup with',
     from: '  const [codeFirst] = useState(() => posterCode !== null);',
     to: '  const [codeFirst] = useState(() => false);',
+  },
+
+  // S1-S3 — THE SIGN-UP NOTE (ROADMAP 4d): "Before you start" is the training
+  // side's gate, and the console skips it (Kd, 2026-09-14).
+  {
+    id: 'S1',
+    target: 'guard',
+    suite: NOTE_SUITE,
+    why: 'TRAINING WITHOUT THE NOTE: the guard stops drawing it, so nobody who signs up ever ticks it and the consent log holds no sign-up tap',
+    expect: 'comes straight after the email code',
+    from: '  if (requireSignUpNote && user.signUpDisclaimerAgreed !== true) return <SignUpNote />;',
+    to: '',
+  },
+  {
+    id: 'S2',
+    target: 'guard',
+    suite: NOTE_SUITE,
+    why: 'THE NOTE IN FRONT OF EVERY GYM OWNER: the guard ignores the console\'s opt-out, so a person who pressed the Manage door meets a training note before their business screens',
+    expect: 'is not shown on the console',
+    from: '  if (requireSignUpNote && user.signUpDisclaimerAgreed !== true) return <SignUpNote />;',
+    to: '  if (user.signUpDisclaimerAgreed !== true) return <SignUpNote />;',
+  },
+  {
+    id: 'S3',
+    target: 'app',
+    suite: UNIT_SUITE,
+    why: 'ONE ROUTE PUTS IT BACK: a console route loses its sign-up note opt-out, so a gym owner is stopped by the note on that screen alone',
+    expect: 'opts every console route out of the sign-up note',
+    from: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>',
+    to: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false}>',
   },
 ];
 

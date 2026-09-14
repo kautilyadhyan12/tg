@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { landingRoute, readDoor, readJoinCode, rememberJoinCode } from '../../pages/landingRoute';
+import SignUpNote from '../../pages/SignUpNote';
 
 const Spinner = () => (
   <div
@@ -39,10 +40,25 @@ const Spinner = () => (
   </div>
 );
 
-export const ProtectedRoute = ({ children, requireOnboarding = true }) => {
+export const ProtectedRoute = ({ children, requireOnboarding = true, requireSignUpNote = true }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
+  // THE SIGN-UP NOTE COMES FIRST ON THE TRAINING SIDE (ROADMAP 4d): before
+  // setup and every member screen. The console opts out, route by route, as it
+  // opts out of setup: Kd, 2026-09-14, from the click-through, *"it should show
+  // to someone who trains not to someone who create organisation"*, so a person
+  // who runs an organisation meets it the first time they come to train. It is
+  // drawn IN PLACE rather than sent to an address of its own, so the address
+  // the person was on their way to (a poster's join link with its code) is
+  // still there when they continue.
+  //
+  // `!== true`, the opposite of the setup check below, on purpose: a profile
+  // read that failed shows the note to someone who has already ticked it (one
+  // more tap, one more true row), where failing open would let someone who
+  // never ticked it in with no record. It cannot trap anyone the way a
+  // finished wizard could: ticking needs only the tap's own request.
+  if (requireSignUpNote && user.signUpDisclaimerAgreed !== true) return <SignUpNote />;
   if (requireOnboarding && user.onboardingCompleted === false) {
     return <Navigate to="/onboarding" replace />;
   }

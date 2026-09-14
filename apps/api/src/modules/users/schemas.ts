@@ -4,6 +4,7 @@ export {
   consentListResponseSchema,
   consentRecordResponseSchema,
   consentRecordSchema,
+  CURRENT_DISCLAIMER_VERSION,
   deriveHealthFlags,
   DISCLAIMER_WORDINGS,
   healthScreeningSchema,

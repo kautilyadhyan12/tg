@@ -10,6 +10,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { currentWeightKg, recordTypedWeight } from "../nutrition/repo.js";
+import { CURRENT_DISCLAIMER_VERSION } from "./schemas.js";
 import type { PatchOnboardingRequest, UpdateProfileRequest } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
@@ -28,6 +29,7 @@ export interface ProfileRow {
   weightKg: number | null;
   leaderboardOptOut: boolean;
   onboardingCompleted: boolean;
+  signUpDisclaimerAgreed: boolean;
   createdAt: Date;
 }
 
@@ -40,6 +42,7 @@ interface ProfileDbRow {
   timezone: string | null;
   leaderboard_opt_out: boolean;
   onboarding_completed: boolean;
+  sign_up_disclaimer_agreed: boolean;
   created_at: Date;
 }
 
@@ -53,18 +56,27 @@ const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
   weightKg,
   leaderboardOptOut: r.leaderboard_opt_out,
   onboardingCompleted: r.onboarding_completed,
+  signUpDisclaimerAgreed: r.sign_up_disclaimer_agreed,
   createdAt: r.created_at,
 });
 
 /** The one profile read. onboarding_completed lives on user_fitness_profiles
  *  (onboarding-storage card), so it arrives by LEFT JOIN and COALESCEs to false
  *  for a user who has not started onboarding — no row is the common case. The
- *  weight is the history's newest weight-bearing row, read fresh every time. */
+ *  weight is the history's newest weight-bearing row, read fresh every time.
+ *  The sign-up note's gate is read from the consent log the same way: a tap by
+ *  THIS person, on the sign-up note, in the words shown today. */
 async function selectProfile(sql: SqlOrTx, userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileDbRow[]>`
     SELECT u.id, u.email, u.display_name, u.locale, u.units, u.timezone,
            u.leaderboard_opt_out, u.created_at,
-           COALESCE(f.onboarding_completed, false) AS onboarding_completed
+           COALESCE(f.onboarding_completed, false) AS onboarding_completed,
+           EXISTS (
+             SELECT 1 FROM consent_log c
+             WHERE c.user_id = u.id
+               AND c.purpose = 'sign_up'
+               AND c.wording_version = ${CURRENT_DISCLAIMER_VERSION.sign_up}
+           ) AS sign_up_disclaimer_agreed
     FROM users u
     LEFT JOIN user_fitness_profiles f ON f.user_id = u.id
     WHERE u.id = ${userId} AND u.status = 'active'`;

@@ -21,6 +21,13 @@ export const userProfileSchema = z.object({
    *  absent from the auth view). Stored on user_fitness_profiles; false when
    *  the user has no profile row yet (onboarding-storage card). */
   onboardingCompleted: z.boolean(),
+  /** The sign-up note's gate (RULINGS 2026-09-07; ROADMAP 4d): true once this
+   *  account has a tap on the sign-up disclaimer in the wording the screens
+   *  show TODAY (`CURRENT_DISCLAIMER_VERSION.sign_up`). Read from the consent
+   *  log on the server, never stored and never writable, so a tap on older
+   *  words, or on another screen's note, leaves it false: new words are asked
+   *  for once more. */
+  signUpDisclaimerAgreed: z.boolean(),
   createdAt: z.string(), // ISO timestamptz
 });
 export type UserProfile = z.infer<typeof userProfileSchema>;

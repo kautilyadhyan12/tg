@@ -286,7 +286,7 @@ const aboutYou = async () => {
 
 beforeEach(() => {
   // Signed in, setup not finished; the app and the server agree on the name.
-  auth.user = { onboardingCompleted: false, displayName: 'kd.test' };
+  auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: false, displayName: 'kd.test' };
   auth.updateUser.mockClear();
   auth.logout.mockClear();
   toast.error.mockClear();
@@ -874,7 +874,7 @@ describe('onboarding screens 1–7', () => {
 
   it('someone who picked Build muscle before the split lands on screen 1 with it ticked, and one tap on Gain weight brings the number back', async () => {
     // Where migration 0028 leaves them (RULINGS 2026-09-11).
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, weightGoal: null, fitnessGoals: ['muscle_gain'], targetWeightKg: 75 });
     draw(FROM_RINGS);
     await heading('Your goal');
@@ -1641,7 +1641,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('a person who already finished setup can go back to the app, and can still sign out', async () => {
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, dayActivity: null }); // the one question the plan still needs
     draw(FROM_RINGS);
     await heading('Your day'); // it opens on that question
@@ -1652,7 +1652,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('Back to the app saves the name box first, and stays while it is blank', async () => {
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, age: null }); // "About you" is the open screen
     draw(FROM_RINGS);
     await heading('About you');
@@ -1698,7 +1698,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('Back to the app waits for the saves, and a save that failed keeps them here with its message', async () => {
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, dayActivity: null });
     draw(FROM_RINGS);
     await heading('Your day');
@@ -1712,7 +1712,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('answering the open question and finishing brings them back to the rings', async () => {
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, dayActivity: null }, screeningOf({ hasCondition: false }));
     draw(FROM_RINGS);
     await heading('Your day');
@@ -1729,7 +1729,7 @@ describe('onboarding screens 1–7', () => {
   });
 
   it('goes to the dashboard for any other address in the page state', async () => {
-    auth.user = { onboardingCompleted: true, displayName: 'kd.test' };
+    auth.user = { signUpDisclaimerAgreed: true, onboardingCompleted: true, displayName: 'kd.test' };
     serve({ ...ALL, dayActivity: null });
     draw({ pathname: '/onboarding', state: { returnTo: 'https://example.com/' } });
     await heading('Your day');
