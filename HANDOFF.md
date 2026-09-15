@@ -20,7 +20,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - This branch is off master at 870ed10, before PR #71: rebase after #71 merges (RULINGS, ROADMAP, HANDOFF and nutrition's service and tests will conflict).
 - Kd's GitHub bill is overdue (pay by 2026-09-16), most likely the Pro plan's auto-charge; he was given the steps and told to pay, not to go public early.
   He pasted an unrecorded decision (repo renamed `tg`; public when the free minutes run out, six safeguards, told before each): now in RULINGS 2026-09-14.
-- Next: CI; Kd's click-through (upload a gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then 18+ (Stage 4 item 9).
+- The repository went PUBLIC on 2026-09-15 (Kd: *"go public, make sure everything is safe and the repository is not easily discoverable"*): logs of all 405 runs and all
+  405 stored reports deleted first; no secrets or real database addresses in the tree (the Neon step masks the password); Issues, Projects and Wiki off; no description,
+  topics, website, README or licence; the lock on master kept (6 checks, admins included); strangers' pull requests need approval before checks run; secret scanning
+  and push protection on. Kd downgraded Pro to Free himself; GitHub still showed the unpaid first $4 — pay it or ask support to void it, nothing we use depends on it.
+- Next: Kd's click-through (upload a gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then 18+ (Stage 4 item 9).
 
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
