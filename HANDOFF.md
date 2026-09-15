@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · PR #72's fourth re-check: no defects; its weak test and one Low test gap fixed; merge next
+
+- The re-check found the High closed (a refused try takes off only its own count, in either order with a give-back) and no new defect. Still open: one weak test and one Low test gap.
+- Weak test: `test/redis.scripts.test.ts`, the only test of the counter scripts production runs, was skipped in CI (seen in 3240506's log), so a broken script could merge green. CI's database job now starts a Redis (`redis:7-alpine`) beside its Postgres and sets `TEST_REDIS_URL`.
+- Low: the test took any window from 1 to 90 s. Now a first count's window must read 85–90 s, and a later count or a take-off on a 30 s window 25–30 s.
+- Verified: api tsc 0 · eslint 0 · redis scripts 3/3 on the local Redis · three deliberate breaks (a fixed 30 s first window; a later count cutting it to 1 s; a take-off setting 5 s) each red on the new test and green on the old, `src/redis.ts` restored identical.
+- Per §2.6 these fixes get no further re-check: no Critical or High is open.
+- Next: CI green with the Redis test run, not skipped; merge on Kd's word; then 7a-iii.
+
 ## 2026-09-16 · PR #72's third re-check fixed (1 High, 1 weak test); a re-check of that fix next
 
 - The re-check passed the Critical and the four weak tests and found one High: the quota check counted a try it refused over the limit and never took it off, so a scan given back after an outage was not free again. A free person (2 a day) whose last scan hung while they tried again (429) was told, after that scan failed, "Daily photo-scan limit reached" with one scan left.
