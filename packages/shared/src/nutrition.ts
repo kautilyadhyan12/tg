@@ -54,6 +54,9 @@ const takenAtSchema = z
     message: "must not be more than 24h in the future",
   });
 
+/** The most one item of a meal may weigh, in grams. */
+export const MAX_ITEM_GRAMS = 10_000;
+
 // Card 5c2 — dishware portions. An item's amount is given EITHER as grams
 // directly, OR "measured with my dishware": a saved dish id + how full it was
 // (fillLevel in (0,1]; the UI offers ¼/½/¾/full). The SERVER turns the dishware
@@ -62,7 +65,7 @@ const takenAtSchema = z
 // nutrition arithmetic (2B). Both arms are .strict(), so a hybrid item
 // ({canonical, grams, dishwareId}) is rejected by the union — no ambiguity.
 const gramsItemSchema = z
-  .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(10_000) })
+  .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(MAX_ITEM_GRAMS) })
   .strict();
 const dishwareItemSchema = z
   .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })

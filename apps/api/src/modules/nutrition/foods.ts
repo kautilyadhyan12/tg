@@ -37,7 +37,10 @@ export interface CuratedFood extends FoodReference {
   citation: FoodCitation;
 }
 
-const slug = (v: string): string => v.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
+/** A name's words joined by "_", in lower case with accents folded, so "Müller"
+ *  is "muller" and "crème fraîche" "creme_fraiche". */
+const slug = (v: string): string =>
+  v.normalize("NFKD").replaceAll(/\p{M}/gu, "").toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
 
 /** Foods renamed to say what their numbers are, or to carry an English name
  *  beside an Indian one so they are found by either (Kd, 2026-09-14). Each keeps
@@ -333,7 +336,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Tea (unsweetened)", 1, 0, 0.3, 0, 0, 240, "cup", "vegan", "usda-sr:173227"),
   row("Orange juice", 45, 0.7, 10.4, 0.2, 0.2, 240, "cup", "vegan", "usda-sr:169098"),
   row("Apple juice", 46, 0.1, 11.3, 0.13, 0.2, 240, "cup", "vegan", "usda-sr:173933"),
-  row("Coke / cola", 42, 0, 10.36, 0.25, 0, 240, "cup", "vegan", "usda-sr:174852"),
+  row("Coke / cola", 42, 0, 10.36, 0.25, 0, 370, "can", "vegan", "usda-sr:174852"),
   row("Beer (regular)", 43, 0.46, 3.55, 0, 0, 350, "can", "vegan", "usda-sr:168746"),
   row("Wine (red)", 85, 0.07, 2.61, 0, 0, 150, "glass", "vegan", "usda-sr:173190"),
   row("Whey protein (powder)", 352, 78.13, 6.25, 1.56, 3.1, 30, "scoop", "vegetarian", "usda-fndds:2710742"),
@@ -609,16 +612,27 @@ export function findCurated(query: string): CuratedFood | null {
   return byAliasOrWords(q) ?? (stripped === null ? null : byAliasOrWords(stripped));
 }
 
+/** The noise words that only join a query's words or point at them. */
+const JOINING_WORDS: ReadonlySet<string> = new Set(["of", "with", "a", "an", "the", "some"]);
+
 /** Whether a name holds every word of a query, by the list's own rules: a word
- *  and its plural are one, and a noise word the query only serves its food with
- *  is not needed ("bottles of coca cola" is held by "Coca-Cola Classic"). A query
- *  of noise words alone needs them all. */
+ *  and its plural are one, and a noise word is not needed only where it measures
+ *  the food, in the run of noise words before an "of" ("bottles of coca cola" is
+ *  held by "Coca-Cola Classic", and so is "a small glass of coca cola"), or only
+ *  joins the query's words ("chicken with rice"). Anywhere else a noise word is
+ *  the food's own ("glass noodles", "grated coconut", "shredded wheat"), and a
+ *  query of noise words alone is held by no name. */
 export function holdsEveryWord(name: string, query: string): boolean {
   const words = toTokens(slug(query));
-  const meant = words.filter((w) => !NOISE_WORDS.has(w));
-  const needed = (meant.length > 0 ? meant : words).map(stem);
+  const measuring = new Set<number>();
+  for (const [at, word] of words.entries()) {
+    if (word !== "of") continue;
+    for (let before = at - 1; before >= 0 && NOISE_WORDS.has(words[before] ?? ""); before--) measuring.add(before);
+  }
+  const meant = words.filter((w, at) => !JOINING_WORDS.has(w) && !measuring.has(at));
+  if (meant.every((w) => NOISE_WORDS.has(w))) return false;
   const held = new Set(stemmedWords(name));
-  return needed.length > 0 && needed.every((w) => held.has(w));
+  return meant.every((w) => held.has(stem(w)));
 }
 
 function aliasTargetFor(slugged: string): string | undefined {

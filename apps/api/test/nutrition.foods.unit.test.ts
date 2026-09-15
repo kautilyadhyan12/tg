@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
 import { CURATED_FOODS, FOOD_ALIASES, NOISE_WORDS, findCurated, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
-import { COUNT_RULES, CUT_UP_PIECES, CUT_WORDS, type CountRule } from "../src/modules/nutrition/portion-priors.js";
+import { COUNT_RULES, CUT_WORDS, resolvePortion, type CountRule } from "../src/modules/nutrition/portion-priors.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -104,23 +104,64 @@ describe("the curated food list", () => {
     // list, so a new unit cannot slip into the count unclassified and a rule cannot
     // change without this test changing with it.
     const rules = (rule: CountRule, units: string[]): [string, CountRule][] => units.map((unit) => [unit, rule]);
+    // The packs and pieces a packaged product's label serves by, which no food on the list uses.
+    const LABEL_UNITS = ["bag", "biscuit", "box", "carton", "jar", "pack", "package", "packet", "piece", "pot", "pouch", "sachet", "tub"];
     expect(new Map([
       ...rules("piece", [
         "apple", "bagel", "banana", "bar", "brownie", "burger", "cake", "clementine", "cookie", "croissant", "date",
         "donut", "dosa", "egg", "gyro", "half", "hot dog", "idli", "kiwi", "link", "meatball", "muffin", "naan",
         "nugget", "orange", "pancake", "paratha", "patty", "peach", "pear", "pita", "plum", "potato", "quesadilla",
         "roll", "roti", "samosa", "sandwich", "sausage", "scoop", "shot", "slice", "spear", "stick", "taco",
-        "tortilla", "waffle", "white",
+        "tortilla", "waffle", "white", "biscuit", "piece",
       ]),
-      ...rules("vessel", ["bottle", "bowl", "can", "container", "cup", "glass", "half cup", "portion", "small"]),
+      ...rules("vessel", [
+        "bottle", "bowl", "can", "container", "cup", "glass", "half cup", "portion", "small",
+        "bag", "box", "carton", "jar", "pack", "package", "packet", "pot", "pouch", "sachet", "tub",
+      ]),
       ...rules("none", ["g", "oz", "tbsp", "2 tbsp", "tsp"]),
     ])).toEqual(COUNT_RULES);
     for (const f of CURATED_FOODS) expect(COUNT_RULES.has(f.unit), `${f.name}: "${f.unit}"`).toBe(true);
-    for (const unit of COUNT_RULES.keys()) expect(CURATED_FOODS.some((f) => f.unit === unit), unit).toBe(true);
-    // The pieces people cut up rather than count: whole fruit, a vegetable, an egg.
-    expect([...CUT_UP_PIECES].sort()).toEqual(["apple", "banana", "clementine", "date", "egg", "half", "kiwi", "orange", "peach", "pear", "plum", "potato", "spear", "white"]);
+    for (const unit of COUNT_RULES.keys()) expect(CURATED_FOODS.some((f) => f.unit === unit) !== LABEL_UNITS.includes(unit), unit).toBe(true);
     // Chocolate is eaten by the square, so neither is served as a bar a count of squares would multiply.
     expect(food("milk_chocolate")).toMatchObject({ serving: 28, unit: "oz" });
+    // A cola is served by USDA's own portion, "1 can or bottle (12 fl oz)", as Diet cola is.
+    expect(food("coke_cola")).toMatchObject({ serving: 370, unit: "can", citation: "usda-sr:174852" });
+    expect(food("diet_cola")).toMatchObject({ serving: 370, unit: "can" });
+  });
+
+  it("weighs a photo's count of the list's own foods by their servings", () => {
+    // The re-check's plates, through the matcher and each food's serving as listed.
+    const scanned = (hint: string, count: number, container: string | null = null): [string, number, number | null] => {
+      const f = findCurated(hint);
+      if (f === null) throw new Error(`no food for ${hint}`);
+      const portion = resolvePortion({ canonicalHint: hint, container, fillLevel: container === null ? null : 1, sizeClass: null, count }, [], { grams: f.serving, unit: f.unit });
+      return [f.canonical, portion.gramsPoint, portion.pieces];
+    };
+    const plates: [string, number, string | null, [string, number, number | null]][] = [
+      // A count of chunks or cubes of a dish served by the cup is one cup.
+      ["beef stew chunks", 6, null, ["beef_stew", 255, null]],
+      ["palak paneer cubes", 8, null, ["palak_paneer", 200, null]],
+      ["beef stew", 2, null, ["beef_stew", 510, 2]],
+      // Pieces torn or cut from bread, a sausage or a hot dog are one of it.
+      ["hot dog pieces", 8, null, ["hot_dog", 102, null]],
+      ["quesadilla pieces", 6, null, ["quesadilla_cheese", 120, null]],
+      ["tortilla pieces", 12, null, ["tortilla_flour", 48, null]],
+      ["pita pieces", 8, null, ["pita_bread", 60, null]],
+      ["sausage pieces", 10, null, ["pork_sausage_cooked", 23, null]],
+      // …and the pieces people count as pieces are that many.
+      ["chicken nugget pieces", 6, null, ["chicken_nuggets", 96, 6]],
+      ["meatball pieces", 4, null, ["meatballs_in_sauce", 172, 4]],
+      ["pizza pieces", 3, null, ["pizza_cheese", 321, 3]],
+      // A vessel named in the hint weighs as that vessel.
+      ["mugs of coffee", 2, null, ["coffee_black", 650, 2]],
+      ["coffee", 2, "mug", ["coffee_black", 650, 2]],
+      ["cans of coke", 3, null, ["coke_cola", 1110, 3]],
+      ["cans of diet coke", 3, null, ["diet_cola", 1110, 3]],
+      // A food served by the cup, in a cup, is its own cup: cornflakes' is 30 g.
+      ["cups of cornflakes", 2, null, ["cereal_cornflakes", 60, 2]],
+      ["cornflakes", 2, "cup", ["cereal_cornflakes", 60, 2]],
+    ];
+    for (const [hint, count, container, expected] of plates) expect(scanned(hint, count, container), hint).toEqual(expected);
   });
 
   it("holds each word the matcher drops to the photo count's cuts, or to no cut", () => {
@@ -144,9 +185,27 @@ describe("the curated food list", () => {
     expect(holdsEveryWord("Mystery", "mystery sauce")).toBe(false);
     expect(holdsEveryWord("Barbecue Lentil Chips", "chips")).toBe(true);
     expect(holdsEveryWord("Hamburger buns", "ham")).toBe(false);
-    expect(holdsEveryWord("Glass noodles", "glass")).toBe(true);
     expect(holdsEveryWord("Anything", "")).toBe(false);
     expect(holdsEveryWord("Anything", "!!!")).toBe(false);
+    // A noise word is not needed only where it measures the food, before an "of",
+    // or only joins the query's words.
+    expect(holdsEveryWord("Coca-Cola Classic · Coca-Cola", "a small glass of coca cola")).toBe(true);
+    expect(holdsEveryWord("Glass Noodles · Brand", "a plate of glass noodles")).toBe(true);
+    expect(holdsEveryWord("Chicken & Rice · Brand", "chicken with rice")).toBe(true);
+    // Anywhere else it is the food's own word, which the name must hold.
+    expect(holdsEveryWord("Cup Noodles Chicken · Nissin", "glass noodles")).toBe(false);
+    expect(holdsEveryWord("Glass Noodles · Brand", "glass noodles")).toBe(true);
+    expect(holdsEveryWord("Coconut milk · Thai Kitchen", "grated coconut")).toBe(false);
+    expect(holdsEveryWord("Whole Wheat Bread · Hovis", "shredded wheat")).toBe(false);
+    expect(holdsEveryWord("Yakult Original · Yakult", "yakult bottles")).toBe(false);
+    // "Of" after a word that is no noise word measures nothing: cream of wheat is no wheat bread.
+    expect(holdsEveryWord("Whole Wheat Bread · Hovis", "cream of wheat")).toBe(false);
+    // A query of noise words alone is held by no name, even one holding them.
+    for (const query of ["cup", "glass", "a cup of", "small cup"]) expect(holdsEveryWord("Cup of glass · a small brand", query), query).toBe(false);
+    // Accents are folded on both sides.
+    expect(holdsEveryWord("Müller Corner Strawberry · Müller", "muller corner")).toBe(true);
+    expect(holdsEveryWord("Crème fraîche · Président", "creme fraiche")).toBe(true);
+    expect(holdsEveryWord("Creme fraiche", "crème fraîche")).toBe(true);
   });
 
   it("keeps both rotis, each from its own table, and roti means the homemade one", () => {

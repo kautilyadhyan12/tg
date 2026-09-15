@@ -1,4 +1,6 @@
 // Part 2B Appendix B — India-first seed. Values are copied, never re-derived.
+import { MAX_ITEM_GRAMS } from "@app/shared";
+
 export const CONTAINER_PRIORS = {
   small_katori: [100, 150], katori_or_small_bowl: [150, 200], standard_katori: [150, 200],
   large_katori: [250, 300], large_bowl: [250, 300], serving_bowl: [300, 400],
@@ -15,9 +17,13 @@ export const COUNTABLE_PRIORS = {
 export const RICE_MOUND_PRIORS = { small_mound: [100, 100], medium_mound: [150, 150], large_mound: [250, 250] } as const;
 export const DENSITY_G_PER_ML = { thin: 0.95, medium: 1, thick: 1.1 } as const;
 export const GLOBAL_STARTERS = { dinnerPlateRimCm: [26, 27], cupMl: 240, tablespoonMl: 15, teaspoonMl: 5 } as const;
-const containerPriors: Readonly<Record<string, readonly [number, number]>> = CONTAINER_PRIORS;
-const countablePriors: Readonly<Record<string, readonly [number, number]>> = COUNTABLE_PRIORS;
-const moundPriors: Readonly<Record<string, readonly [number, number]>> = RICE_MOUND_PRIORS;
+/** The priors as Maps, so a name the photo gives that every object answers to
+ *  ("constructor", "toString") is no container, piece or mound. */
+const containerPriors: ReadonlyMap<string, readonly [number, number]> = new Map(Object.entries(CONTAINER_PRIORS));
+const countablePriors: ReadonlyMap<string, readonly [number, number]> = new Map(Object.entries(COUNTABLE_PRIORS));
+const moundPriors: ReadonlyMap<string, readonly [number, number]> = new Map(Object.entries(RICE_MOUND_PRIORS));
+/** How many words the longest container name has ("katori_or_small_bowl"). */
+const LONGEST_CONTAINER_NAME = Math.max(...[...containerPriors.keys()].map((name) => name.split("_").length));
 
 export type PortionSource = "user_dishware" | "regional_prior" | "default";
 export interface PortionEvidence { canonicalHint: string; container: string | null; fillLevel: number | null; sizeClass: string | null; count: number | null; }
@@ -37,7 +43,11 @@ const density = (hint: string): number => {
   if (normalized.includes("sabzi") || normalized.includes("halwa") || normalized.includes("thick_gravy")) return DENSITY_G_PER_ML.thick;
   return DENSITY_G_PER_ML.medium;
 };
-const singular = (word: string): string => (word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word);
+/** A word's singular: "eggs" an egg, "mugs" a mug, "glasses" a glass, "boxes" a box. */
+const singular = (word: string): string => {
+  if (word.length > 4 && /(?:ss|sh|ch|x)es$/.test(word)) return word.slice(0, -2);
+  return word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+};
 const wordsOf = (hint: string): string[] => hint.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w !== "");
 
 /** What a photo's count of a food is a count of, by the unit of the food's serving:
@@ -51,8 +61,10 @@ export type CountRule = "piece" | "vessel" | "none";
 
 const withRule = (rule: CountRule, units: readonly string[]): [string, CountRule][] => units.map((unit) => [unit, rule]);
 
-/** The count rule of every serving unit on the food list. A unit not here, such
- *  as a packaged product's "ml", takes no count. */
+/** The count rule of every serving unit on the food list, and of each pack or
+ *  piece a packaged product's label serves by ("1 pot (125 g)", "1 biscuit (12 g)";
+ *  openfoodfacts.adapter.ts). A unit not here takes no count: a label's "ml" or
+ *  "2 biscuits", or a word in another language. */
 export const COUNT_RULES: ReadonlyMap<string, CountRule> = new Map([
   ...withRule("piece", [
     "apple", "bagel", "banana", "bar", "brownie", "burger", "cake", "clementine", "cookie", "croissant", "date",
@@ -60,18 +72,24 @@ export const COUNT_RULES: ReadonlyMap<string, CountRule> = new Map([
     "nugget", "orange", "pancake", "paratha", "patty", "peach", "pear", "pita", "plum", "potato", "quesadilla",
     "roll", "roti", "samosa", "sandwich", "sausage", "scoop", "shot", "slice", "spear", "stick", "taco",
     "tortilla", "waffle", "white",
+    // the pieces a label names, beside the list's own
+    "biscuit", "piece",
   ]),
-  ...withRule("vessel", ["bottle", "bowl", "can", "container", "cup", "glass", "half cup", "portion", "small"]),
+  ...withRule("vessel", [
+    "bottle", "bowl", "can", "container", "cup", "glass", "half cup", "portion", "small",
+    // the packs a label names, beside the list's own
+    "bag", "box", "carton", "jar", "pack", "package", "packet", "pot", "pouch", "sachet", "tub",
+  ]),
   ...withRule("none", ["g", "oz", "tbsp", "2 tbsp", "tsp"]),
 ]);
 
 /** Words naming a cut of a food, each with the piece it names. A count beside one
  *  is of cut bits, which have no serving of their own: ten "banana slices" are
- *  not ten bananas, and six "orange segments" not six oranges. A count beside the
- *  food's own cut is of that piece ("pizza slices", "bread slices"). A word that
- *  can name either ("cheese squares", "brownie squares") is read as a cut: ten
- *  bits counted as ten wholes is a far larger error than two wholes counted as
- *  one, and the sheet's stepper corrects either. */
+ *  not ten bananas, and six "beef stew chunks" not six cups of stew. A count
+ *  beside the food's own cut is of that piece ("pizza slices", "bread slices",
+ *  "grapefruit halves"). A word that can name either ("cheese squares", "brownie
+ *  squares") is read as a cut: ten bits counted as ten wholes is a far larger
+ *  error than two wholes counted as one, and the sheet's stepper corrects either. */
 export const CUT_WORDS: ReadonlyMap<string, string> = new Map([
   ["slice", "slice"], ["slices", "slice"], ["sliced", "slice"],
   ["segment", "segment"], ["segments", "segment"], ["chunk", "chunk"], ["chunks", "chunk"],
@@ -82,24 +100,32 @@ export const CUT_WORDS: ReadonlyMap<string, string> = new Map([
   ["chopped", "chopped"], ["diced", "diced"], ["shredded", "shredded"], ["grated", "grated"],
 ]);
 
-/** "Piece" is how people count whole things ("six-piece nuggets", "three pieces
- *  of roti"), so it is no part of a food's name, and it names a cut only of the
- *  pieces people cut up (below). */
+/** "Piece" is how people count some whole things ("six-piece nuggets", "three
+ *  pieces of roti"), so it is no part of a food's name, and what it counts is
+ *  settled by the piece (below). */
 const PIECE_WORDS: ReadonlySet<string> = new Set(["piece", "pieces"]);
 
-/** The pieces that are one whole fruit, vegetable or egg, which people cut up
- *  rather than count by the piece: "banana pieces" are bits of a banana. */
-export const CUT_UP_PIECES: ReadonlySet<string> = new Set([
-  "apple", "banana", "clementine", "date", "egg", "half", "kiwi", "orange", "peach", "pear", "plum", "potato", "spear", "white",
+/** The pieces people count as "pieces", Appendix B's and the serving units': a
+ *  nugget ("six-piece nuggets"), a meatball, a slice (a piece of pizza or cake is
+ *  a slice, and so is a bread slice), the piece a label names, and the Indian
+ *  breads and snacks served several at a time as they come: roti, chapati, puri,
+ *  idli, medu vada, samosa. "Pieces" of any other piece are bits cut or torn from
+ *  it, as the tie-break above reads a word that can name either: eight "hot dog
+ *  pieces" are one hot dog, twelve "tortilla pieces" one tortilla, and ten
+ *  "banana pieces" one banana. */
+export const WHOLE_PIECES: ReadonlySet<string> = new Set([
+  "nugget", "meatball", "slice", "bread_slice", "piece", "roti", "chapati", "puri", "idli", "medu_vada", "samosa",
 ]);
 
-/** Whether a hint's count is of cut bits of `piece` rather than of `piece`
- *  itself ("roti", "bread_slice", "hot dog"). */
+/** Whether a hint's count is of bits cut from `piece` (an Appendix B key or a
+ *  serving unit, "roti", "bread_slice", "cup") rather than of `piece` itself: a
+ *  cut other than the piece's own ("beef stew chunks"; not "pizza slices"), or
+ *  "pieces" of a piece people cut up. */
 function countsCutBits(words: readonly string[], piece: string): boolean {
-  const own = piece.split(/[_ ]/);
+  const own = piece.split(/[_ ]/).at(-1);
   return words.some((word) => {
-    const cut = CUT_WORDS.get(word) ?? (PIECE_WORDS.has(word) && CUT_UP_PIECES.has(piece) ? "piece" : undefined);
-    return cut !== undefined && !own.includes(cut);
+    const cut = CUT_WORDS.get(word);
+    return cut === undefined ? PIECE_WORDS.has(word) && !WHOLE_PIECES.has(piece) : cut !== own;
   });
 }
 
@@ -110,7 +136,7 @@ function countsCutBits(words: readonly string[], piece: string): boolean {
  *  banana. */
 const countKey = (words: readonly string[]): string | null => {
   const singulars = words.filter((w) => !PIECE_WORDS.has(w)).map(singular);
-  for (const key of Object.keys(COUNTABLE_PRIORS)) {
+  for (const key of countablePriors.keys()) {
     const keyWords = key.split("_");
     const tail = singulars.slice(-keyWords.length);
     if (tail.length === keyWords.length && tail.every((w, i) => w === keyWords[i])) return key;
@@ -118,9 +144,16 @@ const countKey = (words: readonly string[]): string | null => {
   return null;
 };
 
-/** A container rung's name that is a sealed pack's own, by the pack's unit: a
- *  yogurt shown in its "cup" is its 170 g pot, not Appendix B's 240 ml cup. */
-const PACK_NAMED_AS_CONTAINER: ReadonlyMap<string, ReadonlySet<string>> = new Map([["container", new Set(["cup"])]]);
+/** The containers a sealed pack is also called, by the pack's unit: a yogurt
+ *  shown in its "cup" is its 170 g pot, not Appendix B's 240 ml cup. */
+const PACK_NAMED_AS_CONTAINER: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["container", new Set(["cup"])], ["pot", new Set(["cup"])], ["tub", new Set(["cup"])],
+]);
+
+/** Whether a container is the food's own serving: its unit ("a cup" of cornflakes,
+ *  served by their 30 g cup) or its pack's other name. */
+const isOwnServing = (container: string, serving: Serving): boolean =>
+  container === serving.unit || (PACK_NAMED_AS_CONTAINER.get(serving.unit)?.has(container) ?? false);
 
 /** Grams from a saved dish: volume(ml) × fill(0–1) × food density. The ONE
  *  place both the scan-time rung-1 resolver (below) and the confirm-time
@@ -141,8 +174,26 @@ const times = (one: PortionResult, count: number): PortionResult => ({
   pieces: count,
 });
 
-/** Rungs 1, 3 and 4, for no count: a saved dish, a known container (never where
- *  the container is the food's own pack), a rice mound, the food's serving. */
+/** The container a hint measures its food by: the words before its "of", as the
+ *  longest Appendix B name they end in ("a large bowl of dal" is the large bowl),
+ *  else the last of them ("two mugs of coffee" is a mug). A hint with no "of"
+ *  names no container: "cup noodles" is a food, not a cup. */
+function hintContainer(words: readonly string[]): string | null {
+  const at = words.indexOf("of");
+  const last = words[at - 1];
+  if (at < 1 || last === undefined) return null;
+  const named = [...words.slice(Math.max(0, at - LONGEST_CONTAINER_NAME), at - 1), singular(last)];
+  for (let from = 0; from < named.length - 1; from++) {
+    const name = named.slice(from).join("_");
+    if (containerPriors.has(name)) return name;
+  }
+  return singular(last);
+}
+
+/** Rungs 1, 3 and 4, for no count: a saved dish; the food's own serving where the
+ *  container is it, as full as the photo shows (its table weighs a cup of
+ *  cornflakes at 30 g, where Appendix B's cup is 240 ml of water); a known
+ *  container; a rice mound; the food's serving. */
 function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult {
   const saved = e.container === null
     ? undefined
@@ -151,14 +202,17 @@ function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], servi
     const grams = dishwareGrams(saved.volumeMl, e.fillLevel ?? 1, e.canonicalHint);
     return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware", pieces: null };
   }
-  const ownPack = e.container !== null && (PACK_NAMED_AS_CONTAINER.get(serving.unit)?.has(e.container) ?? false);
-  const prior = e.container === null || ownPack ? undefined : containerPriors[e.container];
+  if (e.container !== null && isOwnServing(e.container, serving)) {
+    const grams = wholeGrams(serving.grams * (e.fillLevel ?? 1));
+    return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces: null };
+  }
+  const prior = e.container === null ? undefined : containerPriors.get(e.container);
   if (prior !== undefined) {
     const isWeightPrior = e.container === "thali_section";
     const range = scaled(prior, (e.fillLevel ?? 1) * (isWeightPrior ? 1 : density(e.canonicalHint)));
     return { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior", pieces: null };
   }
-  const mound = e.sizeClass === null ? undefined : moundPriors[e.sizeClass];
+  const mound = e.sizeClass === null ? undefined : moundPriors.get(e.sizeClass);
   if (mound !== undefined) return { gramsPoint: point(mound), gramsRange: [...mound], portionSource: "regional_prior", pieces: null };
   // The curated salvage row provides one serving value, not a sourced range;
   // do not invent a ± percentage (R0.2). The UI still receives the range
@@ -167,26 +221,31 @@ function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], servi
 }
 
 /** Stage 2 approved rungs: reliable count, 1, 3, 4. Anchor scaling is deferred.
- *  A count is used only where it is a count of servings. The Appendix B piece a
- *  hint ends in comes first; then the food's count rule: pieces times the food's
- *  serving, whatever they sit in; cans, glasses or bowls times one of what the
- *  photo shows them in, weighed by the rungs below; and no count for a serving
- *  by weight or spoonful. A count of cut bits is never used. */
+ *  The container a hint measures its food by stands for an empty container, so
+ *  "mugs of coffee" weigh as coffee shown in mugs. A count is used only where it
+ *  is a count of servings: never of bits cut from one, whatever the food's rule
+ *  (above); then the Appendix B piece a hint ends in; then the food's count rule:
+ *  pieces times the food's serving, whatever they sit in; cans, glasses or bowls
+ *  times one of what the photo shows them in, weighed by the rungs below; and no
+ *  count for a serving by weight or spoonful. A count that would weigh more than
+ *  one item of a meal may is no count of servings on a plate, and is not used. */
 export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult {
-  if (e.count === null) return uncounted(e, dishware, serving);
   const words = wordsOf(e.canonicalHint);
+  const seen = e.container === null ? { ...e, container: hintContainer(words) } : e;
+  const one = uncounted(seen, dishware, serving);
+  if (e.count === null) return one;
   const key = countKey(words);
+  if (countsCutBits(words, key ?? serving.unit)) return one;
+  let counted = one;
   if (key !== null) {
-    if (countsCutBits(words, key)) return uncounted(e, dishware, serving);
-    const prior = countablePriors[key];
+    const prior = countablePriors.get(key);
     if (prior === undefined) throw new Error("countable prior key missing");
     const range = scaled(prior, e.count);
-    return { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior", pieces: e.count };
+    counted = { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior", pieces: e.count };
+  } else {
+    const rule = COUNT_RULES.get(serving.unit) ?? "none";
+    if (rule === "piece") counted = times({ gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default", pieces: null }, e.count);
+    if (rule === "vessel") counted = times(one, e.count);
   }
-  const rule = COUNT_RULES.get(serving.unit) ?? "none";
-  if (rule === "piece" && !countsCutBits(words, serving.unit)) {
-    return times({ gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default", pieces: null }, e.count);
-  }
-  if (rule === "vessel") return times(uncounted(e, dishware, serving), e.count);
-  return uncounted(e, dishware, serving);
+  return counted.gramsPoint > MAX_ITEM_GRAMS ? one : counted;
 }

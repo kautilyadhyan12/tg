@@ -6,7 +6,7 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
 import type { VisionEvidence, VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
-import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
@@ -113,7 +113,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   it("a photo's count multiplies pieces and vessels, never a weight or cut bits, and what matches no food is named",async()=>{
     const counted=fakeVision();
     const item=(canonical_hint:string,count:number,container:string|null=null)=>({name:canonical_hint,canonical_hint,container,fill_level:container===null?null:1,size_class:null,count,confidence:"high" as const});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"pint_glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"pint_glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),item("hot dog pieces",8),item("beef stew chunks",6),item("mugs of coffee",2),item("cans of coke",3),item("ramen bowl",25),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";
@@ -146,6 +146,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
         ["yogurt_plain_low_fat",340,"default",2], // two pots, not one
         ["beer_regular",975,"regional_prior",3], // three mugs
         ["beer_regular",975,"regional_prior",3], // three mugs, however the hint names them
+        ["hot_dog",102,"default",null], // pieces cut from one hot dog, not eight hot dogs
+        ["beef_stew",255,"default",null], // chunks of one cup of stew, not six cups
+        ["coffee_black",650,"regional_prior",2], // two mugs, as the hint names them
+        ["coke_cola",1110,"default",3], // three 370 g cans
+        ["ramen_bowl",490,"default",null], // 25 bowls would pass what one item may weigh
       ]);
       // What matches no food is named beside what the model could not identify, once
       // each, by its name as written (a blank name by its hint), never a blank entry.
@@ -160,11 +165,14 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // word of the item's hint: the search's top product for other words is another
   // food, so the item is named as not on the list instead of priced as that food.
   it("a scanned item takes a packaged product only when the product's name holds every word of its hint",async()=>{
-    const product=(canonical:string,name:string)=>({canonical,name,kcal:324,proteinG:1,carbsG:80,fatG:0,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const});
-    const answersEverything:FoodSearchProvider={search:(query)=>Promise.resolve([query.toLowerCase().includes("yakult")?product("off_4901392000034","Yakult Original · Yakult"):product("off_mystery","Mystery")])};
+    // Open Food Facts' own reply shape, through the real adapter: the search's top
+    // product for every query, and Yakult's label, "1 bottle (65 ml)".
+    const hit=(code:string,product_name:string,serving_size:string)=>({code,product_name,serving_size,nutriments:{"energy-kcal_100g":65}});
+    const top=(q:string)=>q.includes("yakult")?hit("4901392000034","Yakult Original","1 bottle (65 ml)"):q.includes("noodles")?hit("4902105000001","Cup Noodles Chicken","1 cup (64 g)"):hit("1","Mystery","30 g");
+    const answersEverything=createOpenFoodFactsProvider((input)=>Promise.resolve(new Response(JSON.stringify({hits:[top(input instanceof URL?(input.searchParams.get("q")??"").toLowerCase():"")]}),{status:200})));
     const scanned=fakeVision();
-    const item=(name:string,canonical_hint:string)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count:null,confidence:"high" as const});
-    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult"),item("Chips","chips")]});
+    const item=(name:string,canonical_hint:string,count:number|null=null)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count,confidence:"high" as const});
+    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult",3),item("Chips","chips"),item("Glass noodles","glass noodles")]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:scanned,foodSearchProvider:answersEverything}});
     try{
       const email="p26a-packaged@example.com";
@@ -174,8 +182,10 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const scan=await a.inject({method:"POST",url:"/v1/nutrition/analyze-photo",cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});
       expect(scan.statusCode,scan.body).toBe(200);
       const draft=mealPhotoAnalysisSchema.parse(scan.json());
-      expect(draft.items.map((i)=>i.canonical)).toEqual(["off_4901392000034"]);
-      expect(draft.unknownItems).toEqual(["Mystery sauce","Chips"]);
+      // Three 65 g bottles, by the label's own pack.
+      expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.pieces])).toEqual([["off_4901392000034",195,3]]);
+      // Cup Noodles is no glass noodles: "glass" is the food's own word, not a measure.
+      expect(draft.unknownItems).toEqual(["Mystery sauce","Chips","Glass noodles"]);
     }finally{await a.close();}
   },30_000);
 

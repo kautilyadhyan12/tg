@@ -25,10 +25,20 @@ const optionalNameSchema = z.preprocess(
   z.string().nullable(),
 );
 
+/** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
+export const MAX_PHOTO_COUNT = 30;
+const countSchema = z.preprocess(
+  // A count past what one plate can be counted by is no reliable count, so it is
+  // UNKNOWN, as the prompt's "Count only reliably countable items" asks; the
+  // item stays on the sheet at its uncounted serving.
+  (v) => (typeof v === "number" && Number.isInteger(v) && v > MAX_PHOTO_COUNT ? null : v),
+  z.number().int().positive().max(MAX_PHOTO_COUNT).nullable(),
+);
+
 const itemSchema = z.object({
   name: z.string().min(1), canonical_hint: z.string().min(1), container: optionalNameSchema,
   fill_level: fillLevelSchema, size_class: optionalNameSchema,
-  count: z.number().int().positive().nullable(), confidence: confidenceSchema,
+  count: countSchema, confidence: confidenceSchema,
 }).strict();
 const evidenceSchema = z.object({
   meal_name: z.string().min(1), cuisine_guess: z.string().nullable(), items: z.array(itemSchema).max(30),

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CONTAINER_PRIORS, COUNTABLE_PRIORS, COUNT_RULES, CUT_UP_PIECES, CUT_WORDS, DENSITY_G_PER_ML, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
-import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
+import { CONTAINER_PRIORS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
+import { MAX_PHOTO_COUNT, MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
+import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
-import { nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { MAX_ITEM_GRAMS, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -49,16 +50,29 @@ describe("P2.6a nutrition pure pipeline", () => {
     const one = (grams: number, pieces: number | null) => ({ gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces });
     const prior = (lo: number, hi: number, pieces: number) => ({ gramsPoint: Math.round((lo + hi) / 2), gramsRange: [lo, hi], portionSource: "regional_prior", pieces });
     expect(counted("chicken_nuggets", 6, { grams: 16, unit: "nugget" })).toEqual(one(96, 6));
-    // "Pieces" is how whole things are counted: six nugget pieces are six nuggets,
-    // three pizza pieces three slices, and a roti's, idli's or samosa's pieces are
-    // Appendix B's, as the plain name is. Only a fruit, a vegetable or an egg is
-    // cut into pieces: ten banana pieces are one banana's serving.
+    // "Pieces" counts whole things only of the pieces people count as pieces: six
+    // nugget pieces are six nuggets, four meatball pieces four meatballs, three
+    // pizza pieces three slices, and a roti's, idli's or samosa's pieces are
+    // Appendix B's, as the plain name is.
     expect(counted("chicken nugget pieces", 6, { grams: 16, unit: "nugget" })).toEqual(one(96, 6));
+    expect(counted("meatball pieces", 4, { grams: 43, unit: "meatball" })).toEqual(one(172, 4));
     expect(counted("pizza pieces", 3, { grams: 107, unit: "slice" })).toEqual(one(321, 3));
     expect(counted("roti pieces", 3, { grams: 40, unit: "roti" })).toEqual(prior(105, 135, 3));
     expect(counted("pieces of roti", 3, { grams: 40, unit: "roti" })).toEqual(counted("roti", 3, { grams: 40, unit: "roti" }));
     expect(counted("idli pieces", 4, { grams: 38, unit: "idli" })).toEqual(prior(120, 200, 4));
     expect(counted("samosa pieces", 3, { grams: 75, unit: "samosa" })).toEqual(prior(180, 300, 3));
+    expect(counted("puri pieces", 6, { grams: 25, unit: "g" })).toEqual(prior(120, 180, 6));
+    expect(counted("bread slice pieces", 2, { grams: 30, unit: "slice" })).toEqual(prior(50, 60, 2));
+    // "Pieces" of anything else are bits cut or torn from one: eight hot dog pieces
+    // are one hot dog, not eight, and so for a quesadilla, a tortilla, a pita, a
+    // sausage, a dosa, a paratha, a fruit, a potato and an egg.
+    expect(counted("hot dog pieces", 8, { grams: 102, unit: "hot dog" })).toEqual(one(102, null));
+    expect(counted("quesadilla pieces", 6, { grams: 120, unit: "quesadilla" })).toEqual(one(120, null));
+    expect(counted("tortilla pieces", 12, { grams: 48, unit: "tortilla" })).toEqual(one(48, null));
+    expect(counted("pita pieces", 8, { grams: 60, unit: "pita" })).toEqual(one(60, null));
+    expect(counted("sausage pieces", 10, { grams: 23, unit: "link" })).toEqual(one(23, null));
+    expect(counted("dosa pieces", 2, { grams: 80, unit: "dosa" })).toEqual(one(80, null));
+    expect(counted("paratha pieces", 4, { grams: 79, unit: "paratha" })).toEqual(one(79, null));
     expect(counted("banana pieces", 10, { grams: 120, unit: "banana" })).toEqual(one(120, null));
     expect(counted("potato pieces", 8, { grams: 150, unit: "potato" })).toEqual(one(150, null));
     expect(counted("boiled egg pieces", 4, { grams: 50, unit: "egg" })).toEqual(one(50, null));
@@ -121,7 +135,13 @@ describe("P2.6a nutrition pure pipeline", () => {
     // A yogurt's cup is its own pot, with a count or without one, never the 240 ml cup.
     expect(vessels("yogurt cups", 2, yogurt, "cup")).toEqual(one(340, 2));
     expect(vessels("yogurt", null, yogurt, "cup")).toEqual(one(170, null));
-    expect(vessels("coffee", null, { grams: 240, unit: "cup" }, "cup")).toEqual({ gramsPoint: 240, gramsRange: [240, 240], portionSource: "regional_prior", pieces: null });
+    // A food served by the cup, in a cup, is its own cup as full as the photo shows,
+    // never Appendix B's 240 ml of water: two cups of cornflakes are 60 g, not 480 g.
+    expect(vessels("coffee", null, { grams: 240, unit: "cup" }, "cup")).toEqual(one(240, null));
+    expect(resolvePortion({ canonicalHint: "coffee", container: "cup", fillLevel: 0.5, sizeClass: null, count: null }, [], { grams: 240, unit: "cup" })).toEqual(one(120, null));
+    expect(vessels("cornflakes", 2, { grams: 30, unit: "cup" }, "cup")).toEqual(one(60, 2));
+    expect(vessels("cups of cornflakes", 2, { grams: 30, unit: "cup" })).toEqual(one(60, 2));
+    expect(vessels("bottles of yakult", 3, { grams: 65, unit: "bottle" })).toEqual(one(195, 3));
     // A dish the person saved beats everything (§3.4), times the count: two beers
     // in their 568 ml pint glass are two glasses, and in their 330 ml can two cans.
     const pint = [{ containerClass: "pint_glass", volumeMl: 568, foodHint: null }];
@@ -131,6 +151,64 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(vessels("yogurt", 1, yogurt, "my_bowl", [{ containerClass: "my_bowl", volumeMl: 300, foodHint: null }])).toEqual({ gramsPoint: 300, gramsRange: [300, 300], portionSource: "user_dishware", pieces: 1 });
     // A dish the person saved for another food is not theirs for this one.
     expect(vessels("beer", 2, beer, "pint_glass", [{ containerClass: "pint_glass", volumeMl: 568, foodHint: "milk" }])).toEqual(one(700, 2));
+    // A count of bits cut from a vessel's serving is no count of vessels: six chunks
+    // of beef stew are one cup of stew, not six, and eight paneer cubes one cup of
+    // palak paneer; nor are "pieces" of a drink cans of it.
+    expect(vessels("beef stew chunks", 6, { grams: 255, unit: "cup" })).toEqual(one(255, null));
+    expect(vessels("palak paneer cubes", 8, { grams: 200, unit: "cup" })).toEqual(one(200, null));
+    expect(vessels("beer pieces", 4, beer)).toEqual(one(350, null));
+  });
+
+  it("weighs a vessel the hint measures its food by as the photo's container, where that is empty", () => {
+    const hinted = (canonicalHint: string, count: number | null, serving: { grams: number; unit: string }, container: string | null = null, dishware: SavedDishware[] = []) =>
+      resolvePortion({ canonicalHint, container, fillLevel: null, sizeClass: null, count }, dishware, serving);
+    const coffee = { grams: 240, unit: "cup" };
+    // Two mugs of coffee are two mugs, as coffee shown in two mugs is, not two cups.
+    expect(hinted("mugs of coffee", 2, coffee)).toEqual({ gramsPoint: 650, gramsRange: [600, 700], portionSource: "regional_prior", pieces: 2 });
+    expect(hinted("mugs of coffee", 2, coffee)).toEqual(hinted("coffee", 2, coffee, "mug"));
+    expect(hinted("a mug of coffee", null, coffee)).toEqual(hinted("coffee", null, coffee, "mug"));
+    // The longest Appendix B name the words before "of" end in, and the person's own dish.
+    expect(hinted("a large bowl of dal", null, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 275, gramsRange: [250, 300], portionSource: "regional_prior", pieces: null });
+    expect(hinted("two katori or small bowls of dal", null, { grams: 100, unit: "g" })).toEqual(hinted("dal", null, { grams: 100, unit: "g" }, "katori_or_small_bowl"));
+    expect(hinted("bowls of pho", 2, { grams: 400, unit: "bowl" }, null, [{ containerClass: "bowl", volumeMl: 500, foodHint: null }])).toEqual({ gramsPoint: 1000, gramsRange: [1000, 1000], portionSource: "user_dishware", pieces: 2 });
+    // Cans, bottles and glasses have no Appendix B size, so they are the food's serving.
+    expect(hinted("cans of coke", 3, { grams: 370, unit: "can" })).toEqual({ gramsPoint: 1110, gramsRange: [1110, 1110], portionSource: "default", pieces: 3 });
+    expect(hinted("glasses of wine", 2, { grams: 150, unit: "glass" })).toEqual({ gramsPoint: 300, gramsRange: [300, 300], portionSource: "default", pieces: 2 });
+    // The photo's own container wins, and a hint with no "of" names none: cup
+    // noodles are a food, not a 240 ml cup.
+    expect(hinted("mugs of coffee", 2, coffee, "cup")).toEqual(hinted("coffee", 2, coffee, "cup"));
+    expect(hinted("cup noodles", null, { grams: 64, unit: "cup" })).toEqual({ gramsPoint: 64, gramsRange: [64, 64], portionSource: "default", pieces: null });
+    expect(hinted("cream of wheat", null, { grams: 100, unit: "g" })).toEqual({ gramsPoint: 100, gramsRange: [100, 100], portionSource: "default", pieces: null });
+  });
+
+  it("never finds a container, piece or mound on an object's prototype", () => {
+    const rice = { grams: 100, unit: "g" };
+    const plain = { gramsPoint: 100, gramsRange: [100, 100], portionSource: "default", pieces: null };
+    for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) {
+      expect(resolvePortion({ canonicalHint: "rice", container: name, fillLevel: 1, sizeClass: null, count: null }, [], rice), name).toEqual(plain);
+      expect(resolvePortion({ canonicalHint: "rice", container: null, fillLevel: null, sizeClass: name, count: null }, [], rice), name).toEqual(plain);
+      expect(resolvePortion({ canonicalHint: `${name} of rice`, container: null, fillLevel: null, sizeClass: null, count: 2 }, [], rice), name).toEqual(plain);
+      expect(resolvePortion({ canonicalHint: name, container: null, fillLevel: null, sizeClass: null, count: 2 }, [], { grams: 50, unit: name }), name).toEqual({ ...plain, gramsPoint: 50, gramsRange: [50, 50] });
+    }
+  });
+
+  it("uses no count that would weigh more than one item of a meal may, nor one past the stepper", async () => {
+    const ramen = { grams: 490, unit: "bowl" };
+    const bowls = (count: number) => resolvePortion({ canonicalHint: "ramen bowl", container: null, fillLevel: null, sizeClass: null, count }, [], ramen);
+    expect(MAX_ITEM_GRAMS).toBe(10_000);
+    expect(bowls(20)).toEqual({ gramsPoint: 9800, gramsRange: [9800, 9800], portionSource: "default", pieces: 20 });
+    expect(bowls(21)).toEqual({ gramsPoint: 490, gramsRange: [490, 490], portionSource: "default", pieces: null });
+    // The scan reads a count past the sheet's stepper as unknown, and keeps the item.
+    expect(MAX_PHOTO_COUNT).toBe(30);
+    const counts = async (...values: unknown[]) => {
+      const provider = createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+        meal_name: "x", cuisine_guess: null, scale_anchors: [], unknown_items: [], photo_quality: "good",
+        items: values.map((count) => ({ name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, count, confidence: "high" })),
+      }));
+      return (await provider.analyze("AA==", "image/jpeg")).evidence.items.map((item) => item.count);
+    };
+    expect(await counts(1, 30, 31, 400, null)).toEqual([1, 30, null, null, null]);
+    for (const bad of [0, -2, 2.5, "3"]) await expect(counts(bad), String(bad)).rejects.toThrow("vision malformed evidence shape");
   });
 
   it("reads a count of every serving unit the same way in every container: pieces, vessels, or not at all", () => {
@@ -152,19 +230,37 @@ describe("P2.6a nutrition pure pipeline", () => {
         }
       }
     }
-    // A cut word makes a piece's count one of cut bits, unless the cut is the piece itself.
-    for (const [word, cut] of CUT_WORDS) {
-      const hinted = (unit: string) => resolvePortion({ canonicalHint: `test food ${word}`, container: null, fillLevel: null, sizeClass: null, count: 4 }, [], { grams: 50, unit });
-      expect(hinted("nugget").pieces, word).toBeNull();
-      if (COUNT_RULES.get(cut) === "piece") expect(hinted(cut).pieces, word).toBe(4);
-    }
-    // "Pieces" is a count of every piece but one people cut up.
+    // A cut word makes a count one of cut bits whatever the unit's rule, piece, vessel
+    // or none, in every container: the count is not used, and the grams are the
+    // uncounted ones. Only a unit that is itself the cut (a slice, a half) counts it.
+    expect([...COUNT_RULES.keys()].filter((unit) => CUT_WORDS.get(unit) === unit)).toEqual(["half", "slice"]);
     for (const [unit, rule] of COUNT_RULES) {
-      if (rule !== "piece") continue;
-      const got = resolvePortion({ canonicalHint: "test food pieces", container: null, fillLevel: null, sizeClass: null, count: 4 }, [], { grams: 50, unit });
-      expect(got.pieces, unit).toBe(CUT_UP_PIECES.has(unit) ? null : 4);
+      for (const container of [null, "mug", "cup", "my_glass"]) {
+        const seen = { canonicalHint: "test food", container, fillLevel: null, sizeClass: null };
+        const uncounted = resolvePortion({ ...seen, count: null }, dishware, { grams: 50, unit });
+        const plain = resolvePortion({ ...seen, count: 4 }, dishware, { grams: 50, unit });
+        for (const [word, cut] of CUT_WORDS) {
+          const got = resolvePortion({ ...seen, canonicalHint: `test food ${word}`, count: 4 }, dishware, { grams: 50, unit });
+          const own = (unit === "half" || unit === "slice") && unit === cut && rule !== "none";
+          expect(got, `${word} of ${unit} in ${container ?? "nothing"}`).toEqual(own ? plain : uncounted);
+        }
+      }
     }
-    expect([...CUT_UP_PIECES].filter((piece) => COUNT_RULES.get(piece) !== "piece")).toEqual([]);
+    // "Pieces" counts whole things of exactly these pieces, written out here so the
+    // list cannot change without this test: the serving units and Appendix B keys
+    // people count as pieces. Of every other unit, and every other key, "pieces"
+    // are cut bits.
+    const WHOLE = ["bread_slice", "chapati", "idli", "meatball", "medu_vada", "nugget", "piece", "puri", "roti", "samosa", "slice"];
+    expect([...WHOLE_PIECES].sort()).toEqual(WHOLE);
+    for (const [unit, rule] of COUNT_RULES) {
+      const got = resolvePortion({ canonicalHint: "test food pieces", container: null, fillLevel: null, sizeClass: null, count: 4 }, [], { grams: 50, unit });
+      expect(got.pieces, unit).toBe(rule === "piece" && WHOLE.includes(unit) ? 4 : null);
+    }
+    for (const key of Object.keys(COUNTABLE_PRIORS)) {
+      const got = resolvePortion({ canonicalHint: `${key.replaceAll("_", " ")} pieces`, container: null, fillLevel: null, sizeClass: null, count: 4 }, [], { grams: 50, unit: "g" });
+      expect(got.pieces, key).toBe(WHOLE.includes(key) ? 4 : null);
+    }
+    expect(WHOLE.filter((piece) => COUNT_RULES.get(piece) !== "piece" && !(piece in COUNTABLE_PRIORS))).toEqual([]);
   });
 
   it("prompt bans nutrition arithmetic and cost math is integer micro-USD", () => {
@@ -255,6 +351,34 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(await p3.search("anything", 5)).toEqual([]);
     const p4 = createOpenFoodFactsProvider(() => Promise.resolve(new Response("not json", { status: 200 })));
     expect(await p4.search("anything", 5)).toEqual([]);
+  });
+
+  it("reads a label's serving as the grams it gives, by the pack or measure it names", async () => {
+    const labels: [string | undefined, number, string][] = [
+      // The pack a label names is its unit, and the grams or millilitres beside it the serving.
+      ["1 bottle (65 ml)", 65, "bottle"], ["1 can (250 ml)", 250, "can"], ["1 bar (68 g)", 68, "bar"],
+      ["1 pot (125g)", 125, "pot"], ["1 cup (240 ml)", 240, "cup"], ["65 ml (1 bottle)", 65, "bottle"],
+      ["one bar (40g)", 40, "bar"], ["1/2 cup (120 ml)", 120, "half cup"], ["½ cup (125 ml)", 125, "half cup"],
+      // Never the first number: an ounce, two spoonfuls or eight fluid ounces are not 1, 2 or 8 g.
+      ["1 oz (28 g)", 28, "oz"], ["28 g (1 oz)", 28, "oz"], ["2 tbsp (32 g)", 32, "2 tbsp"],
+      ["8 fl oz (240 ml)", 240, "8 fl oz"], ["2 biscuits (25 g)", 25, "2 biscuits"],
+      // Centilitres and ounces converted where the label gives no grams or millilitres.
+      ["33 cl", 330, "ml"], ["1 can (12 fl oz)", 354.9, "can"], ["1 oz", 28.3, "oz"],
+      ["30 g", 30, "g"], ["250ml", 250, "ml"], ["1,5 g", 1.5, "g"], ["Per 100g", 100, "g"],
+      // A glass or a grapefruit in the name is no gram or litre.
+      ["1 glass (200 ml)", 200, "glass"], ["1 grapefruit (123 g)", 123, "grapefruit"], ["30 gummies", 100, "g"],
+      // No weight, or more than a meal item may weigh, is no label: 100 g by the gram.
+      ["1 bottle", 100, "g"], ["", 100, "g"], [undefined, 100, "g"], ["99999 g", 100, "g"], ["0 g", 100, "g"],
+    ];
+    for (const [label, grams, unit] of labels) expect(servingOf(label), String(label)).toEqual({ grams, unit });
+    // The adapter serves each product by its label, so a scan's count of its bottles multiplies it.
+    const { createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
+    const yakult = { hits: [{ code: "4901392000034", product_name: "Yakult Original", brands: "Yakult", serving_size: "1 bottle (65 ml)", nutriments: { "energy-kcal_100g": 65 } }] };
+    const [product] = await createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(yakult), { status: 200 }))).search("yakult", 1);
+    expect(product).toMatchObject({ serving: 65, unit: "bottle" });
+    if (product === undefined) throw new Error("no product");
+    expect(resolvePortion({ canonicalHint: "bottles of yakult", container: null, fillLevel: null, sizeClass: null, count: 3 }, [], { grams: product.serving, unit: product.unit }))
+      .toEqual({ gramsPoint: 195, gramsRange: [195, 195], portionSource: "default", pieces: 3 });
   });
 
   // ── Vision model swap card (2026-07-16): the browser smoke proved BOTH real
