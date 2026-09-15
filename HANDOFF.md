@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · PR #72's second re-check fixed (1 Critical, 1 High, 2 Low, 4 weak tests); a re-check of these fixes next
+
+- Critical: @sentry/node 10.63 sent a request's body (first 10,000 characters), headers, cookies and query string, and each outgoing call's query string as a breadcrumb, whatever sendDefaultPii says. `src/sentry.ts` (the API and the worker) keeps no body and takes the request and the breadcrumbs off every event. The review's fix left the breadcrumbs: a food search's words still went (measured).
+- High: a scan that fails for anything but the photo (an outage, a refusal, a fault, one after the model answered too) gives back what it took, on the server: the scan it counted (`refundQuota`, a Lua decrement that never goes below zero nor makes a key), or a new free retry for a scan that rode one. Three failures in five minutes pause that person's scans in `validateScan`, before a free retry is spent or a scan counted. The review's fix (a free retry per failure) was not enough: that token lives in the open photo sheet for ten minutes, so closing the sheet still lost the scan.
+- The failure that starts the pause says "unavailable", not "in a minute"; the pause is shorter than a free retry lasts, so one given back as it begins outlives it.
+- Web: a 503 keeps the free retry held unless it brings a new one; a 400 `invalid_retake` drops it: "That free retry has run out. Pick the photo again."
+- Lows: a word that says there is none is never named under "Not in the total" (an item's reads as its hint); "The review's case:" gone from the test.
+- Tests: what Sentry is sent, through the real SDK on a real port with a recording transport (red on the old options: all seven kinds of request data went); the pause at 4:59.999 and 5:00 in literal minutes; the web's free retry through every answer; the prompt's no-value words read from the prompt.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 35/35 · entitlements unit 12/12 · nutrition routes 47/47 + sentry 1/1 on local Postgres · full local 1070/1070 (the run before: 1050 passed and `auth.routes`' setup failed at its `p21-%` user delete; 20/20 alone; ROADMAP 10) · shared tsc 0 · eslint 0 · 106/106 · web 47/47 in the five files that draw Nutrition (its 7 old lint errors, none on changed lines) · the Lua on the local Redis · 24 deliberate breaks each red, files restored identical.
+- Next: CI, the fresh-chat re-check of these fixes only, merge; then 7a-iii.
+
 ## 2026-09-16 · PR #72's re-check fixed (1 High, 5 Low, 4 weak tests); a re-check of these fixes next
 
 - High: an outage's free retry never ran out and every HTTP error was an outage, so a photo Google answers 400 bought endless provider calls for one scan. Now only 408, 429, a 5xx, the network, the timeout or a reply that is not the provider's is an outage, with a free retry at most 3 times per person in 10 minutes (`MAX_OUTAGE_RETRIES`, counted in Redis, fail closed); any other status is a refusal: 503 `nutrition_unavailable`, no free retry, logged as an error.
