@@ -6,8 +6,9 @@
 //   · expensive features (meal_scan vision, route_gen ORS) fail CLOSED —
 //     an unmetered hour of these is the actual bankruptcy scenario.
 // Increment-before-run (quotas.py:43-46): one atomic Redis op counts the use
-// before the work runs; a route whose work then fails through no fault of the
-// person's gives the use back with refundQuota (Part 8 §5.3).
+// before the work runs; a use refused over the limit is taken off again, and a
+// route whose work then fails through no fault of the person's gives the use
+// back with refundQuota (Part 8 §5.3).
 // Keys per v1 §7.2: quota:{feature}:{user}:{yyyymmdd} (day) / :{yyyymm}
 // (month); quotas stay UTC (Part 4 §3.1 note).
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -88,6 +89,11 @@ export function requireQuota(
     }
 
     if (count > limit) {
+      // A refused try leaves the count as it found it, so a use given back later
+      // (refundQuota) can be used again.
+      if ((await deps.redis.decrIfPositive(key)) !== true) {
+        req.log.warn({ event: "quota.refusal_not_uncounted", feature, userId }, "a refused use stayed counted");
+      }
       await reply.status(429).send({
         error: "quota_exceeded",
         message: `You've used all ${String(limit)} ${feature} uses for this ${window}.`,

@@ -10,7 +10,7 @@ import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { bustEntitlements } from "../src/modules/entitlements/service.js";
-import { requireQuota } from "../src/modules/quotas/service.js";
+import { quotaKey, requireQuota } from "../src/modules/quotas/service.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -144,6 +144,9 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     const body = blocked.json<{ error: string; resetsAt: string }>();
     expect(body.error).toBe("quota_exceeded");
     expect(new Date(body.resetsAt).getTime()).toBeGreaterThan(Date.now());
+    // A refused try takes nothing: however many are refused, the five used stay the count.
+    expect((await inject({ url: "/test/quota/coach", access: cookieA })).statusCode).toBe(429);
+    expect(await redis.get(quotaKey("coach", userA, "month", new Date()))).toBe("5");
   });
 
   it("Redis down: coach fails OPEN, meal_scan fails CLOSED 503 (quotas.py:7-11 verbatim)", { timeout: 30_000 }, async () => {

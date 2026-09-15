@@ -752,6 +752,35 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await s.app.close();}
   },30_000);
 
+  it("a try refused over the day's limit takes no scan, so the day's last scan given back after an outage can still be used",async()=>{
+    // A free person has 2 scans a day. The second waits at the scanner while they try again, then fails.
+    const hung={fail:(err:Error):void=>{throw err;}};
+    let reached=():void=>undefined;
+    const atScanner=new Promise<void>((resolve)=>{reached=resolve;});
+    const answers:(()=>Promise<VisionResult>)[]=[
+      ()=>Promise.resolve({evidence:goodEvidence,tokensIn:100,tokensOut:200}),
+      ()=>new Promise<VisionResult>((_resolve,reject)=>{hung.fail=reject;reached();}),
+      ()=>Promise.resolve({evidence:goodEvidence,tokensIn:100,tokensOut:200}),
+    ];
+    const google:VisionProvider={analyze:()=>answers.shift()?.()??Promise.reject(new Error("no answer left"))};
+    const s=await scanApp("p26a-over-limit@example.com",{vision:google});
+    try{
+      vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      expect((await s.scan()).statusCode).toBe(200);
+      const last=s.scan();
+      await atScanner;
+      const refused=await s.scan();
+      expect(refused.statusCode,refused.body).toBe(429);
+      expect(await s.scansUsed()).toBe("2");
+      hung.fail(new VisionProviderError("vision network failure","unavailable"));
+      expect(bodyOf(await last)).toEqual({error:"scanner_unavailable",message:BUSY});
+      expect(await s.scansUsed()).toBe("1");
+      const again=await s.scan();
+      expect(again.statusCode,again.body).toBe(200);
+      expect([answers.length,await s.scansUsed()]).toEqual([0,"2"]);
+    }finally{await s.app.close();}
+  },30_000);
+
   it("a photo Google refuses costs no scan: unavailable with nothing to retry, and after three refusals in five minutes Google is not called again",async()=>{
     // A file that starts with JPEG bytes and is no picture, which Google answers 400.
     let calls=0;
