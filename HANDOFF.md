@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #72 brought up to master, and its review fixed (1 High, 8 Low, 5 weak tests); the re-check of the fixes next
+
+- Master (#71) merged into the branch (4fe2bd9): a photo count left out reads as unknown, as every left-out field does; the scan response keeps #71's `pieces` and drops `cuisineGuess`. Proved: api tsc 0 · eslint 0 · unit 54/54 · local routes 44/44 · shared 106/106 · web 41/41.
+- H1: a scanner outage (an HTTP error such as a 429, a network failure, the 30 s timeout, a reply that is not the provider's, a bug) answers 503 `scanner_unavailable` with a fresh free retry every time, even on a retry, and logs `nutrition.scan_failed` with the reason; the photo sheet says "Meal scanning is busy right now — try again in a minute (free retry)" under "Try again". A reply the model sent that cannot be used keeps the photo wording and one retake, logged as a warning.
+- Lows: the prompt says every item has a name and a canonical_hint (L1); a reply naming no food is a poor photo (L2); a meal named "N/A", "none" or "null" is "Meal" (L3); a switched-off scanner answers 503 before a scan is counted (L4); temperature goes to Kd in 7a-iii's plan (L5); the scanner's reply schemas are in `@app/shared` (L6); the orgs comment says 7 vs 2 (L7); #72's entry below is ten lines (L8).
+- Weak tests: the real scanner wired with and without a key; the spare model's ledger row (660); the 30 s timeout on both providers; "Meal" for an unnamed plate; white painted before the photo, in order.
+- Verified: api tsc 0 · eslint 0 · unit 55/55 · local nutrition + entitlements routes 50/50 · shared tsc 0 · eslint 0 · 106/106 · web 44/44 (web lint is not a CI gate: 7 old errors in Nutrition.jsx, none on changed lines). 16 deliberate breaks, one per fix, each red; files restored identical.
+- Left as they are: the coach and Open Food Facts adapters still hold their own reply schemas (the coach is off; Stage 4 item 8 replaces the live search).
+- Next: CI, the fresh-chat re-check of these fixes and of the merge's conflict resolution, merge; then 7a-iii.
+
 ## 2026-09-15 · PR #71's last re-check: no Critical/High; three Lows and one weak test fixed; merged
 
 - The re-check of the kind-first fix found no Critical or High: three Lows in the records and one missing test. Kd: *"fix and merge"*; per §2.6 the fixes are not re-checked.
@@ -58,31 +68,15 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Records only, on this branch: RULINGS (Nutrition), ROADMAP 7a-i, 7a-iv and 10, this entry. No code changed; no suite run (nothing to prove). 7a-iii's line lives on PR #72's branch; the rebase after #71 puts 7a-iii above 7a-iv.
 - Next: a fresh chat fixes #71's four findings, a failing test first for each, proves them and hands Kd the re-check prompt; then #72's review; then 7a-iii.
 
-## 2026-09-15 · Stage 4 item 7: the meal scanner on Gemini 3.5 Flash-Lite, branch `gemini-meal-scanner` (worktree `D:\Projects\ai-home-gym-gemini`)
+## 2026-09-15 · Stage 4 item 7: the meal scanner on Gemini 3.5 Flash-Lite, branch `gemini-meal-scanner`, PR #72
 
-- Kd's rulings of 2026-09-15 written into RULINGS: 3.5 Flash-Lite (2.5 refused to new accounts), low picture detail, the reply trimmed to what the app reads
-  (*"lets do the trim"*); the app 18+; a gym member 7 scans a day; the $79 · $129 · $199 · $279 · $379 ladder; gym payment links for Stripe Connect;
-  subscriptions bought on the web; a sole proprietorship; no model or price swap unasked, one probe call. ROADMAP: Stage 4 items 7 and 9, Stage 3 and 5 amended.
-- Measured on his eight plates (32 calls, then 8 more with the trim; his page: claude.ai/artifact/2UHRMZ3Kv3vAHDMnmUExjA): Groq $0.00182 a scan · Gemini default
-  $0.00118 · medium $0.00102 · low $0.00093 · low with the trimmed reply $0.00068, the same foods found; every band covers 7 scans a day at that cost.
-- Built: `createGeminiVisionProvider` (key in a header, JSON mode, minimal thinking, `mediaResolution` low, 30 s timeout, thought tokens billed as output);
-  `createMealVisionProvider` picks by `MEAL_VISION_MODEL`; `MEAL_VISION_MODELS` prices each model and the ledger names it; a left-out field reads as null
-  and the retired fields are dropped; a no-meal photo is a poor photo (was a 502); `cuisineGuess` left the scan response; the browser shrinks the photo to
-  768 px JPEG (`utils/shrinkPhoto.js`); gym members 7 scans (seed + 3 tests); `infra/README.md` names `GEMINI_API_KEY`.
-- Verified: api tsc 0 · eslint 0 · nutrition + entitlements unit 35/35 · local Postgres nutrition.routes + entitlements.routes + db.migration 68/68 · orgs
-  "members get the gym plan" 1/1; shared tsc 0 · eslint 0 · 105/105; web shrinkPhoto + nutritionApi 35/35, eslint 0 on the four files.
-- This branch is off master at 870ed10, before PR #71: rebase after #71 merges (RULINGS, ROADMAP, HANDOFF and nutrition's service and tests will conflict).
-- Kd's GitHub bill is overdue (pay by 2026-09-16), most likely the Pro plan's auto-charge; he was given the steps and told to pay, not to go public early.
-  He pasted an unrecorded decision (repo renamed `tg`; public when the free minutes run out, six safeguards, told before each): now in RULINGS 2026-09-14.
-- The repository went PUBLIC on 2026-09-15 (Kd: *"go public, make sure everything is safe and the repository is not easily discoverable"*): logs of all 405 runs and all
-  405 stored reports deleted first; no secrets or real database addresses in the tree (the Neon step masks the password); Issues, Projects and Wiki off; no description,
-  topics, website, README or licence; the lock on master kept (6 checks, admins included); strangers' pull requests need approval before checks run; secret scanning
-  and push protection on. Kd downgraded Pro to Free himself; GitHub still showed the unpaid first $4 — pay it or ask support to void it, nothing we use depends on it.
-- Kd's click-through of #72 found the design flaw, not a #72 defect: two topped toasts came back as "Avocado", "Sandwich (turkey)" and a Nescafé sachet
-  (master's 131-food list and loose matcher; this branch predates #71). Asked plainly, Gemini listed all 14 foods with grams and calories (1 call).
-  Kd ruled the redesign (RULINGS 2026-08-24 amended; ROADMAP 7a-iii): every food kept, the whole USDA table (CC0), the model's estimate where the
-  table has nothing, marked. Built next, from master after #71 and #72 merge. No more click-through of #72 is needed; its review still is.
-- Next: the fresh-chat re-check of #71's third fixes; the fresh-chat review of #72 (say the matching redesign is 7a-iii); merge both; then 7a-iii.
+- Kd's rulings of 2026-09-15 are in RULINGS: 3.5 Flash-Lite at low picture detail (2.5 is refused to new accounts), the reply trimmed (*"lets do the trim"*), the app 18+, a gym member 7 scans a day, the $79–$379 ladder, gym payment links, subscriptions bought on the web, a sole proprietorship, no model or price swap unasked.
+- Measured on his eight plates (40 calls; his page: claude.ai/artifact/2UHRMZ3Kv3vAHDMnmUExjA): $0.00068 a scan at low detail with the trimmed reply, against $0.00093 untrimmed and $0.00182 on Groq, the same foods found.
+- Built: the Gemini provider (key in a header, JSON mode, minimal thinking, low detail, 30 s timeout, thought tokens billed as output); `MEAL_VISION_MODEL` picks the provider and `MEAL_VISION_MODELS` prices each model; a left-out field reads as unknown; a no-meal photo asks for a retake; `cuisineGuess` left the response; the browser sends a 768 px JPEG; gym members 7 scans.
+- Verified: api tsc 0 · eslint 0 · unit 35/35 · local routes + db.migration 68/68 · shared 105/105 · web 35/35.
+- The repository went public the same day, on Kd's word, with its safeguards (RULINGS 2026-09-14, amended).
+- Kd's click-through found the matching flaw, not a #72 defect (two topped toasts read as "Avocado", "Sandwich (turkey)" and a Nescafé sachet); he ruled the redesign, ROADMAP 7a-iii. No more click-through of #72 is needed.
+- Next: #71's re-check, #72's review, merge both; then 7a-iii.
 
 ## 2026-09-15 · 7a-i: PR #71's third re-check fixed (3 High, 4 Low, 5 weak tests); its re-check next
 
