@@ -24,7 +24,11 @@ entries move to `archive/records/` when this file passes forty entries. The reco
   405 stored reports deleted first; no secrets or real database addresses in the tree (the Neon step masks the password); Issues, Projects and Wiki off; no description,
   topics, website, README or licence; the lock on master kept (6 checks, admins included); strangers' pull requests need approval before checks run; secret scanning
   and push protection on. Kd downgraded Pro to Free himself; GitHub still showed the unpaid first $4 — pay it or ask support to void it, nothing we use depends on it.
-- Next: Kd's click-through (upload a gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then 18+ (Stage 4 item 9).
+- Kd's click-through of #72 found the design flaw, not a #72 defect: two topped toasts came back as "Avocado", "Sandwich (turkey)" and a Nescafé sachet
+  (master's 131-food list and loose matcher; this branch predates #71). Asked plainly, Gemini listed all 14 foods with grams and calories (1 call).
+  Kd ruled the redesign (RULINGS 2026-08-24 amended; ROADMAP 7a-iii): every food kept, the whole USDA table (CC0), the model's estimate where the
+  table has nothing, marked. Built next, from master after #71 and #72 merge. No more click-through of #72 is needed; its review still is.
+- Next: the fresh-chat re-check of #71's third fixes; the fresh-chat review of #72 (say the matching redesign is 7a-iii); merge both; then 7a-iii.
 
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
