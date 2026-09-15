@@ -3,6 +3,7 @@
 // promise the response makes about when a number exists.
 import { describe, expect, it } from "vitest";
 import {
+  dietAllows,
   dietSchema,
   equipmentSchema,
   fitnessGoalSchema,
@@ -17,6 +18,7 @@ import {
   putFitnessProfileRequestSchema,
   updateProfileRequestSchema,
   weightGoalSchema,
+  type Diet,
 } from "../src/index.js";
 
 /** Every subset of `options`, the empty one and the whole set included. */
@@ -195,6 +197,14 @@ describe("one screen's save", () => {
       expect(patchOnboardingRequestSchema.safeParse({ diet }).success, JSON.stringify(diet)).toBe(false);
       expect(putFitnessProfileRequestSchema.safeParse({ diet }).success, JSON.stringify(diet)).toBe(false);
     }
+  });
+
+  it("a diet eats its own rung and every rung below it, and nothing above (RULINGS 2026-09-13)", () => {
+    const eats = (diet: Diet): Diet[] => dietSchema.options.filter((food) => dietAllows(diet, food));
+    expect(eats("vegan").sort()).toEqual(["vegan"]);
+    expect(eats("vegetarian").sort()).toEqual(["vegan", "vegetarian"]);
+    expect(eats("vegetarian_eggs").sort()).toEqual(["vegan", "vegetarian", "vegetarian_eggs"]);
+    expect(eats("non_vegetarian").sort()).toEqual(["non_vegetarian", "vegan", "vegetarian", "vegetarian_eggs"]);
   });
 
   it("asks no cuisine, anywhere (RULINGS 2026-09-12)", () => {

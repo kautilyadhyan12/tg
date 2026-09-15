@@ -33,10 +33,22 @@ const dropFields = (fields: readonly string[]) => (v: unknown): unknown =>
     ? Object.fromEntries(Object.entries(v).filter(([k]) => !fields.includes(k)))
     : v;
 
+/** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
+export const MAX_PHOTO_COUNT = 30;
+const countSchema = z.preprocess(
+  // A count is a whole number of things from 1 to the sheet's stepper. Any other
+  // value the model gives (0, 2.5, 31, "3") is no reliable count, so it is
+  // UNKNOWN, as the prompt's "Count only reliably countable items" asks; the
+  // item stays on the sheet at its uncounted serving, and the paid scan is kept.
+  // A count left out is unknown too, as every field the model cannot fill is.
+  (v) => (v === null || (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_PHOTO_COUNT) ? v : null),
+  z.number().int().positive().max(MAX_PHOTO_COUNT).nullable(),
+).default(null);
+
 const itemSchema = z.preprocess(dropFields(RETIRED_ITEM_FIELDS), z.object({
   name: z.string().min(1), canonical_hint: z.string().min(1), container: optionalNameSchema,
   fill_level: fillLevelSchema, size_class: optionalNameSchema,
-  count: z.number().int().positive().nullable().default(null),
+  count: countSchema,
 }).strict());
 const evidenceSchema = z.preprocess(dropFields(RETIRED_EVIDENCE_FIELDS), z.object({
   // A photo with no meal on it has no meal name; the retake path answers it.
