@@ -1,13 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { findCurated } from "../src/modules/nutrition/foods.js";
 import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
 import {
-  MAX_PHOTO_COUNT,
   MEAL_SCAN_MEDIA_RESOLUTION,
   MEAL_VISION_MODELS,
   MEAL_VISION_PROMPT,
-  RETIRED_EVIDENCE_FIELDS,
-  RETIRED_ITEM_FIELDS,
+  VISION_TIMEOUT_MS,
   VisionProviderError,
   createGeminiVisionProvider,
   createGroqVisionProvider,
@@ -16,7 +14,7 @@ import {
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { visionCostMicro } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, RETIRED_EVIDENCE_FIELDS, RETIRED_ITEM_FIELDS, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -499,6 +497,8 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(MEAL_VISION_PROMPT).toContain("meal_name, items [{name,canonical_hint,container,fill_level,size_class,count}], unknown_items, photo_quality");
     for (const retired of [...RETIRED_EVIDENCE_FIELDS, ...RETIRED_ITEM_FIELDS]) expect(MEAL_VISION_PROMPT).not.toContain(retired);
     expect(MEAL_VISION_PROMPT).toContain("leave out any field you cannot fill");
+    // …but never the two fields the evidence contract requires of every item.
+    expect(MEAL_VISION_PROMPT).toContain("Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items.");
     // Kd's reading instructions, word for word (RULINGS 2026-08-24: the prompt is not shortened).
     expect(MEAL_VISION_PROMPT).toContain(
       'For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Never output calories, kcal, grams, quantities by weight, protein, carbohydrates, fat, fibre, or any nutrition arithmetic.',
@@ -672,6 +672,11 @@ describe("P2.6a nutrition pure pipeline", () => {
     });
     const bare = createGroqVisionProvider("dummy-key", "m", wrap({ photo_quality: "poor" })); // gitleaks:allow
     expect((await bare.analyze("AA==", "image/jpeg")).evidence).toEqual({ meal_name: null, items: [], unknown_items: [], photo_quality: "poor" });
+    // A meal name that says there is none is no name, as a container's is.
+    for (const none of ["N/A", "none", "null", "None", "", "  "]) {
+      const named = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: none, items: [{ name: "x", canonical_hint: "x" }], photo_quality: "good" })); // gitleaks:allow
+      expect((await named.analyze("AA==", "image/jpeg")).evidence.meal_name, JSON.stringify(none)).toBeNull();
+    }
   });
 
   it("passes reasoning_effort none ONLY for qwen/ models (T3 advisory: pin the prefix coupling)", async () => {
@@ -775,28 +780,70 @@ describe("P2.6a nutrition pure pipeline", () => {
   it("Gemini: thought parts are skipped and billed as output; a blocked prompt, an empty reply, broken JSON and a smuggled kcal each fail closed with the usage kept", async () => {
     const withThoughts = { candidates: [{ content: { parts: [{ text: "let me look", thought: true }, { text: '{"meal_name":"x","items":[],"unknown_items":[],"photo_quality":"good"}' }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 40, thoughtsTokenCount: 60 } };
     expect(await createGeminiVisionProvider("k", "m", geminiFetch(withThoughts).fetchImpl).analyze("AA==", "image/jpeg")).toMatchObject({ tokensIn: 500, tokensOut: 100, evidence: { meal_name: "x" } });
-    const cases: [string, unknown, number][] = [
-      ["vision blocked", { candidates: [], promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0],
-      ["vision empty completion", { candidates: [{ content: { parts: [] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0],
-      ["vision malformed evidence JSON", { candidates: [{ content: { parts: [{ text: "{not json" }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 5 } }, 5],
-      ["vision malformed evidence shape", { candidates: [{ content: { parts: [{ text: '{"meal_name":"x","items":[{"name":"x","canonical_hint":"x","kcal":100}],"unknown_items":[],"photo_quality":"good"}' }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 50 } }, 50],
-      ["vision malformed completion", { candidates: "nope" }, 0],
+    // What the model answered and cannot be used is "unreadable"; an envelope that is not Gemini's is no answer at all.
+    const cases: [string, unknown, number, VisionProviderError["kind"]][] = [
+      ["vision blocked", { candidates: [], promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0, "unreadable"],
+      ["vision empty completion", { candidates: [{ content: { parts: [] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0, "unreadable"],
+      ["vision malformed evidence JSON", { candidates: [{ content: { parts: [{ text: "{not json" }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 5 } }, 5, "unreadable"],
+      ["vision malformed evidence shape", { candidates: [{ content: { parts: [{ text: '{"meal_name":"x","items":[{"name":"x","canonical_hint":"x","kcal":100}],"unknown_items":[],"photo_quality":"good"}' }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 50 } }, 50, "unreadable"],
+      ["vision malformed completion", { candidates: "nope" }, 0, "unavailable"],
     ];
-    for (const [message, reply, tokensOut] of cases) {
+    for (const [message, reply, tokensOut, kind] of cases) {
       const err = await failure(createGeminiVisionProvider("k", "m", geminiFetch(reply).fetchImpl).analyze("AA==", "image/jpeg"));
       expect(err.message, message).toBe(message);
+      expect(err.kind, message).toBe(kind);
       expect(err.usage, message).toEqual({ tokensIn: message === "vision malformed completion" ? 0 : 500, tokensOut });
     }
   });
 
-  it("Gemini: an HTTP error and a network failure carry no usage — nothing was billed, nothing is ledgered", async () => {
-    const http = await failure(createGeminiVisionProvider("k", "m", geminiFetch({ error: { code: 429 } }, 429).fetchImpl).analyze("AA==", "image/jpeg"));
-    expect(http.message).toBe("vision HTTP 429");
-    expect(http.usage).toBeUndefined();
+  it("an HTTP error, a network failure and a reply that is not the provider's are the scanner's outage, on both providers; the first two carry no usage", async () => {
+    const notJson: typeof fetch = () => Promise.resolve(new Response("<html>busy</html>", { status: 200 }));
     const down: typeof fetch = () => Promise.reject(new Error("ECONNRESET"));
-    const network = await failure(createGeminiVisionProvider("k", "m", down).analyze("AA==", "image/jpeg"));
-    expect(network.message).toBe("vision network failure");
-    expect(network.usage).toBeUndefined();
+    const makers: [string, (f: typeof fetch) => ReturnType<typeof createGroqVisionProvider>][] = [
+      ["gemini", (f) => createGeminiVisionProvider("k", "m", f)],
+      ["groq", (f) => createGroqVisionProvider("k", "m", f)],
+    ];
+    for (const [provider, make] of makers) {
+      const http = await failure(make(geminiFetch({ error: { code: 429 } }, 429).fetchImpl).analyze("AA==", "image/jpeg"));
+      expect([http.message, http.kind, http.usage], provider).toEqual(["vision HTTP 429", "unavailable", undefined]);
+      const network = await failure(make(down).analyze("AA==", "image/jpeg"));
+      expect([network.message, network.kind, network.usage], provider).toEqual(["vision network failure", "unavailable", undefined]);
+      const html = await failure(make(notJson).analyze("AA==", "image/jpeg"));
+      expect([html.message, html.kind], provider).toEqual(["vision non-JSON response", "unavailable"]);
+      const envelope = await failure(make(geminiFetch({ choices: "nope", candidates: "nope" }).fetchImpl).analyze("AA==", "image/jpeg"));
+      expect([envelope.message, envelope.kind], provider).toEqual(["vision malformed completion", "unavailable"]);
+    }
+    // A Groq reply that breaks the evidence contract is the model's answer, as on Gemini.
+    const groqBroken = await failure(createGroqVisionProvider("k", "m", wrap({ meal_name: "x", items: [{ name: "x", canonical_hint: "x", kcal: 1 }], photo_quality: "good" })).analyze("AA==", "image/jpeg"));
+    expect([groqBroken.message, groqBroken.kind]).toEqual(["vision malformed evidence shape", "unreadable"]);
+  });
+
+  describe("a provider that never answers", () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+    it("is given up on after 30 seconds, on both providers, and reads as the scanner's outage", async () => {
+      expect(VISION_TIMEOUT_MS).toBe(30_000);
+      for (const make of [createGeminiVisionProvider, createGroqVisionProvider]) {
+        // The clock is the platform's: the timeout's own signal is handed back
+        // already fired, and the fetch below answers only when its signal fires.
+        const fired = AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"));
+        const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(fired);
+        const signals: (AbortSignal | null | undefined)[] = [];
+        const hangs: typeof fetch = (_input, init) => {
+          signals.push(init?.signal);
+          return new Promise((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal?.aborted === true) reject(new Error("aborted"));
+            signal?.addEventListener("abort", () => { reject(new Error("aborted")); });
+          });
+        };
+        const err = await failure(make("k", "m", hangs).analyze("AA==", "image/jpeg"));
+        expect([err.message, err.kind, err.usage], make.name).toEqual(["vision network failure", "unavailable", undefined]);
+        expect(timeout.mock.calls, make.name).toEqual([[30_000]]);
+        expect(signals, make.name).toHaveLength(1);
+        expect(signals[0], make.name).toBe(fired);
+        timeout.mockRestore();
+      }
+    });
   });
 
   it("createMealVisionProvider follows MEAL_VISION_MODEL and is null while that model's own key is unset", async () => {

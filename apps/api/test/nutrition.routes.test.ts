@@ -1,11 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
-import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
-import type { VisionEvidence, VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
+import { VisionProviderError, type VisionProvider, type VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
@@ -625,5 +625,144 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[],targetWrongSide:false});
     expect(theirs.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(u.access)));
     expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1267);
+  },30_000);
+
+  // ── What a failed scan costs the person, and what they are told ─────────────
+  /** A scanner that plays its steps in order: evidence, or a failure it throws. */
+  const scripted=(...steps:(VisionEvidence|Error)[]):VisionProvider=>({analyze(){const step=steps.shift()??goodEvidence;return step instanceof Error?Promise.reject(step):Promise.resolve({evidence:step,tokensIn:100,tokensOut:200} satisfies VisionResult);}});
+  /** An app of its own on this database, signed in as a new person. `fetchForScanner`
+   *  is the global fetch while the app is built, which is when the real scanner takes it. */
+  async function scanApp(email:string,options:{env?:Record<string,string>;vision?:VisionProvider;fetchForScanner?:typeof fetch}={}){
+    const scanRedis=createMemoryRedis();
+    if(options.fetchForScanner!==undefined)vi.stubGlobal("fetch",options.fetchForScanner);
+    let built:App;
+    try{built=await buildApp(loadConfig({...env,...options.env}),{redis:scanRedis,nutrition:{...(options.vision===undefined?{}:{visionProvider:options.vision}),foodSearchProvider:noExternal}});}
+    finally{vi.unstubAllGlobals();}
+    const post=(url:string,body:unknown,access?:string)=>built.inject({method:"POST",url,headers:{"content-type":"application/json"},...(access===undefined?{}:{cookies:{accessToken:access}}),payload:JSON.stringify(body)});
+    const reg=await post("/v1/auth/register",{email,password:PASSWORD,displayName:"P26a Scan"});
+    if(reg.statusCode!==201)throw new Error(reg.body);
+    const userId=reg.json<{userId:string}>().userId;
+    const access=(await post("/v1/auth/login",{email,password:PASSWORD})).cookies.find((c)=>c.name==="accessToken")?.value??"";
+    return{
+      app:built,userId,
+      scan:(retakeToken?:string)=>post("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",...(retakeToken===undefined?{}:{retakeToken})},access),
+      scansUsed:()=>scanRedis.get(quotaKey("meal_scan",userId,"day",new Date())),
+      costRows:async()=>(await sql<{provider:string;units:string|number;cost_micro:string|number}[]>`SELECT provider, units, cost_micro FROM api_cost_events WHERE user_id=${userId} AND feature='meal_scan' ORDER BY at`).map((r)=>({provider:r.provider,units:Number(r.units),costMicro:String(r.cost_micro)})),
+    };
+  }
+  type Failed={error:string;message:string;retakeToken?:string};
+  const loggedFailures=(calls:unknown[][])=>calls.map((c)=>c[0]).filter((o)=>typeof o==="object"&&o!==null&&"event" in o&&o.event==="nutrition.scan_failed");
+
+  it("a scanner outage is never blamed on the photo: 503 busy, a fresh free retry each time, one scan spent, nothing ledgered, and a log line",async()=>{
+    const s=await scanApp("p26a-outage@example.com",{vision:scripted(new VisionProviderError("vision HTTP 429","unavailable"),new VisionProviderError("vision network failure","unavailable"),new Error("boom"),goodEvidence)});
+    try{
+      const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      const busy="Meal scanning is busy right now. Please try again in a minute.";
+      const first=await s.scan();
+      expect(first.statusCode,first.body).toBe(503);
+      const one=first.json<Failed>();
+      expect(one).toMatchObject({error:"scanner_unavailable",message:busy});
+      expect(await s.scansUsed()).toBe("1");
+      // The free retry meets the outage again: another token, never a second scan.
+      const second=await s.scan(one.retakeToken);
+      expect(second.statusCode,second.body).toBe(503);
+      const two=second.json<Failed>();
+      expect(two).toMatchObject({error:"scanner_unavailable",message:busy});
+      expect(typeof two.retakeToken).toBe("string");
+      expect(two.retakeToken).not.toBe(one.retakeToken);
+      const third=await s.scan(two.retakeToken);
+      expect(third.json<Failed>()).toMatchObject({error:"scanner_unavailable"});
+      const good=await s.scan(third.json<Failed>().retakeToken);
+      expect(good.statusCode,good.body).toBe(200);
+      expect(await s.scansUsed()).toBe("1");
+      expect(loggedFailures(logged.mock.calls)).toEqual([
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"vision HTTP 429"},
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"vision network failure"},
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"Error"},
+      ]);
+      // Nothing was billed for the three failures: the one row is the good scan's.
+      expect((await s.costRows()).length).toBe(1);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a reply the model sent that cannot be used keeps the photo's wording and ONE free retake, ledgers its spend, and logs a warning",async()=>{
+    const unusable=()=>new VisionProviderError("vision malformed evidence shape","unreadable",{tokensIn:10,tokensOut:20});
+    const s=await scanApp("p26a-unusable@example.com",{vision:scripted(unusable(),unusable())});
+    try{
+      const warned=vi.spyOn(s.app.log,"warn").mockImplementation(()=>undefined);
+      const photo="We could not read that photo. Please retake it with the full plate in frame.";
+      const first=await s.scan();
+      expect(first.statusCode,first.body).toBe(422);
+      expect(first.json<Failed>()).toMatchObject({error:"retake_required",message:photo});expect(typeof first.json<Failed>().retakeToken).toBe("string");
+      const second=await s.scan(first.json<Failed>().retakeToken);
+      expect(second.statusCode,second.body).toBe(422);
+      expect(second.json<Failed>()).toMatchObject({error:"retake_required",message:photo});
+      expect(second.json<Failed>()).not.toHaveProperty("retakeToken");
+      expect(await s.scansUsed()).toBe("1");
+      const warning={event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unreadable",reason:"vision malformed evidence shape"};
+      expect(loggedFailures(warned.mock.calls)).toEqual([warning,warning]);
+      expect((await s.costRows()).map((r)=>r.units)).toEqual([30,30]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a reply that identifies no food is a poor photo: a free retake, never a charged draft with nothing on it",async()=>{
+    const s=await scanApp("p26a-nofood@example.com",{vision:scripted(
+      {meal_name:null,items:[],unknown_items:[],photo_quality:"good"},
+      {meal_name:"Plate",items:[],unknown_items:["something green"],photo_quality:"good"},
+    )});
+    try{
+      const first=await s.scan();
+      expect(first.statusCode,first.body).toBe(422);
+      expect(first.json<Failed>()).toMatchObject({error:"retake_required",message:"Please retake the photo in better light with the full plate visible."});expect(typeof first.json<Failed>().retakeToken).toBe("string");
+      const second=await s.scan(first.json<Failed>().retakeToken);
+      expect(second.statusCode,second.body).toBe(422);
+      expect(second.json<Failed>()).not.toHaveProperty("retakeToken");
+      expect(await s.scansUsed()).toBe("1");
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a good photo the model did not name is the meal \"Meal\"",async()=>{
+    const s=await scanApp("p26a-unnamed@example.com",{vision:scripted({...goodEvidence,meal_name:null})});
+    try{
+      const res=await s.scan();
+      expect(res.statusCode,res.body).toBe(200);
+      expect(res.json<{mealName:string;items:unknown[]}>()).toMatchObject({mealName:"Meal",items:[expect.anything(),expect.anything()]});
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("the real scanner is wired in: with no key the scan answers 503 before a scan is counted; with a key it calls Gemini",async()=>{
+    // The test config sets no GEMINI_API_KEY, and Gemini is the default model.
+    const off=await scanApp("p26a-nokey@example.com");
+    try{
+      const res=await off.scan();
+      expect(res.statusCode,res.body).toBe(503);
+      expect(res.json<Failed>()).toMatchObject({error:"nutrition_unavailable",message:"Meal scanning is temporarily unavailable."});
+      expect(await off.scansUsed()).toBeNull();
+    }finally{await off.app.close();}
+
+    const calls:{url:string;key:string|null}[]=[];
+    const gemini:typeof fetch=(input,init)=>{
+      calls.push({url:typeof input==="string"?input:input instanceof URL?input.href:input.url,key:new Headers(init?.headers).get("x-goog-api-key")});
+      const reply={candidates:[{content:{parts:[{text:JSON.stringify(goodEvidence)}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}};
+      return Promise.resolve(new Response(JSON.stringify(reply),{status:200,headers:{"content-type":"application/json"}}));
+    };
+    const on=await scanApp("p26a-realkey@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:gemini}); // gitleaks:allow
+    try{
+      const res=await on.scan();
+      expect(res.statusCode,res.body).toBe(200);
+      expect(calls).toEqual([{url:"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",key:"p26a-gemini-test-key"}]); // gitleaks:allow
+      expect(await on.scansUsed()).toBe("1");
+      // 400 in at $0.30 and 100 out at $2.50 per 1M: 120 + 250 micro-USD.
+      expect(await on.costRows()).toEqual([{provider:"gemini:gemini-3.5-flash-lite",units:500,costMicro:"370"}]);
+    }finally{await on.app.close();}
+  },30_000);
+
+  it("the spare model names and prices its own ledger rows when MEAL_VISION_MODEL picks it",async()=>{
+    const s=await scanApp("p26a-spare@example.com",{env:{MEAL_VISION_MODEL:"qwen/qwen3.6-27b"},vision:scripted(goodEvidence)});
+    try{
+      expect((await s.scan()).statusCode).toBe(200);
+      // 100 in at $0.60 and 200 out at $3.00 per 1M: 60 + 600 micro-USD.
+      expect(await s.costRows()).toEqual([{provider:"groq:qwen/qwen3.6-27b",units:300,costMicro:"660"}]);
+    }finally{await s.app.close();}
   },30_000);
 });

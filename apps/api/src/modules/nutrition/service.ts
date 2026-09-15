@@ -43,13 +43,17 @@ export class NutritionError extends Error {
 }
 
 /** §3.5: the route answers 422 with the single-use retake token (null when
- *  this attempt already rode a retake — tokens never chain). */
+ *  this attempt already rode a retake — tokens never chain for a photo). A
+ *  scanner outage answers 503 "scanner_unavailable" instead, and always with a
+ *  token, so the try after an outage is free whatever this one rode. */
 export class RetakeRequiredError extends NutritionError {
   constructor(
     readonly retakeToken: string | null,
     message: string,
+    statusCode: 422 | 503 = 422,
+    code: "retake_required" | "scanner_unavailable" = "retake_required",
   ) {
-    super(422, "retake_required", message);
+    super(statusCode, code, message);
     this.name = "RetakeRequiredError";
   }
 }
@@ -355,12 +359,35 @@ export async function analyzePhoto(
     // the provider reported usage. Network/HTTP failures carry no usage: no
     // completion, no ledger row (ruled — DECISIONS).
     if (err instanceof VisionProviderError && err.usage !== undefined) await ledger(deps, userId, err.usage);
+    // Anything but a model's own unusable answer is the scanner's fault (a
+    // 429 limit, a 5xx, the timeout, or a bug): the person is told the scanner
+    // is busy and gets a fresh free retry, even on a retry, and the log says why.
+    const kind = err instanceof VisionProviderError ? err.kind : "unavailable";
+    const failure = {
+      event: "nutrition.scan_failed",
+      userId,
+      model: deps.visionModel,
+      kind,
+      reason: err instanceof VisionProviderError ? err.message : err instanceof Error ? err.name : typeof err,
+    };
+    if (kind === "unavailable") {
+      deps.log.error(failure, "meal scanner unavailable");
+      throw new RetakeRequiredError(
+        await issueRetake(deps, userId),
+        "Meal scanning is busy right now. Please try again in a minute.",
+        503,
+        "scanner_unavailable",
+      );
+    }
+    deps.log.warn(failure, "meal scanner reply unusable");
     const rt = usedRetake ? null : await issueRetake(deps, userId);
     throw new RetakeRequiredError(rt, "We could not read that photo. Please retake it with the full plate in frame.");
   }
 
   await ledger(deps, userId, result);
-  if (result.evidence.photo_quality === "poor") {
+  // A reply that identifies no food is a poor photo, whatever it calls itself:
+  // a free retake, never a charged draft with nothing on it.
+  if (result.evidence.photo_quality === "poor" || result.evidence.items.length === 0) {
     const rt = usedRetake ? null : await issueRetake(deps, userId);
     throw new RetakeRequiredError(rt, "Please retake the photo in better light with the full plate visible.");
   }

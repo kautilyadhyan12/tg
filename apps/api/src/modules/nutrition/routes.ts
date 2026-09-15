@@ -1,5 +1,6 @@
 // P2.6a — nutrition routes (thin, R7.1). R3.3 order on the metered scan:
-// authn → validateScan (400 never meters; retake consumed here) → meter
+// authn → validateScan (a switched-off scanner 503s and 400 never meters;
+// retake consumed here) → meter
 // (skipped when riding a retake) → handler. Photos are request-only and
 // never logged/stored. Reformatted to house style at T3.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -114,6 +115,11 @@ export function registerNutritionRoutes(
    *  1 KB–10 MB decoded, magic bytes; a valid retakeToken is consumed here
    *  so the meter can skip the quota increment (§3.5). */
   const validateScan = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // A scanner switched off (its key unset) costs no scan and no retake.
+    if (nutritionDeps.vision === null) {
+      void reply.status(503).send({ error: "nutrition_unavailable", message: "Meal scanning is temporarily unavailable.", requestId: req.id });
+      return;
+    }
     const input = parse(analyzeMealPhotoRequestSchema, req.body, req, reply);
     if (input === null) return;
     if (input.imageBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.imageBase64)) {
@@ -159,7 +165,7 @@ export function registerNutritionRoutes(
         return await reply.status(200).send(draft);
       } catch (err) {
         if (err instanceof service.RetakeRequiredError) {
-          return await reply.status(422).send({
+          return await reply.status(err.statusCode).send({
             error: err.code,
             message: err.message,
             ...(err.retakeToken === null ? {} : { retakeToken: err.retakeToken }),

@@ -19,17 +19,17 @@ describe('fitWithin', () => {
   });
 });
 
-/** A window whose Image decodes to the given size and whose canvas records
- *  what is drawn on it and hands back a JPEG blob. */
+/** A window whose Image decodes to the given size and whose canvas records,
+ *  in order, what is done on it, and hands back a JPEG blob. */
 function fakeDom({ width, height, decodes = true, blob = new Blob(['jpeg-bytes'], { type: 'image/jpeg' }) }) {
-  const calls = { fills: [], draws: [], toBlob: [], revoked: [] };
+  const calls = { painted: [], toBlob: [], revoked: [] };
   const canvas = {
     width: 0,
     height: 0,
     getContext: () => ({
-      set fillStyle(v) { calls.fillStyle = v; },
-      fillRect: (...args) => calls.fills.push(args),
-      drawImage: (...args) => calls.draws.push(args),
+      set fillStyle(v) { calls.painted.push(['fillStyle', v]); },
+      fillRect: (...args) => calls.painted.push(['fillRect', ...args]),
+      drawImage: (...args) => calls.painted.push(['drawImage', ...args]),
     }),
     toBlob: (cb, type, quality) => { calls.toBlob.push([type, quality]); cb(blob); },
   };
@@ -56,11 +56,13 @@ describe('shrinkPhoto', () => {
     const out = await shrinkPhoto(new Blob(['raw'], { type: 'image/png' }), dom);
     expect(out.type).toBe('image/jpeg');
     expect([canvas.width, canvas.height]).toEqual([576, 768]);
-    expect(calls.fillStyle).toBe('#ffffff');
-    expect(calls.fills).toEqual([[0, 0, 576, 768]]);
-    expect(calls.draws).toHaveLength(1);
-    expect(calls.draws[0].slice(1)).toEqual([0, 0, 576, 768]);
-    expect(calls.draws[0][0]).toBeInstanceOf(dom.Image);
+    // White first, then the photo over it: the other way round, the white
+    // would cover the photo and every upload would be a blank JPEG.
+    expect(calls.painted.map(([step]) => step)).toEqual(['fillStyle', 'fillRect', 'drawImage']);
+    expect(calls.painted[0]).toEqual(['fillStyle', '#ffffff']);
+    expect(calls.painted[1]).toEqual(['fillRect', 0, 0, 576, 768]);
+    expect(calls.painted[2].slice(2)).toEqual([0, 0, 576, 768]);
+    expect(calls.painted[2][1]).toBeInstanceOf(dom.Image);
     expect(calls.toBlob).toEqual([['image/jpeg', JPEG_QUALITY]]);
     expect(calls.revoked).toEqual(['blob:fake']);
   });

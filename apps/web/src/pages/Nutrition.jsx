@@ -939,11 +939,22 @@ function PhotoModal({ open, onClose, onSave }) {
       if (err.response?.status === 422) {
         // Poor photo / unreadable — the retakeToken makes the next attempt free.
         setRetakeToken(err.response.data?.retakeToken || null);
-        setRetakeMsg(
-          err.response.data?.retakeToken
+        setRetakeMsg({
+          title: 'Try another photo',
+          text: err.response.data?.retakeToken
             ? "Couldn't read that photo — try again with better lighting (free retry)."
             : "Couldn't read that photo — please try another one.",
-        );
+        });
+        setPreview(null);
+      } else if (err.response?.status === 503 && err.response.data?.error === 'scanner_unavailable') {
+        // The scanner is down, not the photo: the same photo may go again, free.
+        setRetakeToken(err.response.data.retakeToken || null);
+        setRetakeMsg({
+          title: 'Try again',
+          text: err.response.data.retakeToken
+            ? 'Meal scanning is busy right now — try again in a minute (free retry).'
+            : 'Meal scanning is busy right now — try again in a minute.',
+        });
         setPreview(null);
       } else if (err.response?.status === 429) {
         toast.error('Daily photo-scan limit reached.');
@@ -1104,11 +1115,11 @@ function PhotoModal({ open, onClose, onSave }) {
                 <Camera className="w-8 h-8" style={{ color: '#FF8A1F' }} />
                 <div className="text-center">
                   <p className="text-sm font-semibold text-white">
-                    {retakeMsg ? 'Try another photo' : 'Snap or upload'}
+                    {retakeMsg ? retakeMsg.title : 'Snap or upload'}
                   </p>
                   <p className="text-xs mt-1"
                      style={{ color: retakeMsg ? 'rgba(251,191,36,0.85)' : 'rgba(255,255,255,0.50)' }}>
-                    {retakeMsg || 'AI estimates the portions — you confirm them'}
+                    {retakeMsg ? retakeMsg.text : 'AI estimates the portions — you confirm them'}
                   </p>
                 </div>
                 <input
