@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · 7a-i: PR #71's third re-check fixed (3 High, 4 Low, 5 weak tests); its re-check next
+
+- Why a High again: each rule was tried only on the unit or word its finding named. A count is now first read for what it counts (cut bits, "pieces", a vessel named before "of", or the food), then the unit's rule; a test runs every unit of every rule against every cut word, "pieces" and container.
+- H1: a cut word stops a count whatever the rule: beef stew chunks ×6 is one 255 g cup (was 1,530). H2: "pieces" is whole only for `WHOLE_PIECES` (nugget, meatball, slice, a label's piece, roti, chapati, puri, idli, medu vada, samosa): hot dog pieces ×8 is 102 g (was 816); dosa and paratha pieces now read as torn.
+- H3: `servingOf` reads a label's grams and its pack, pack words added to `COUNT_RULES`: "1 bottle (65 ml)" ×3 is 195 g (was 65), "1 oz (28 g)" 28 g (was 1; off ROADMAP 10).
+- Lows: a product's name must hold a noise word unless it measures the food before "of" (glass noodles is no Cup Noodles); accents folded; "Not in the total", the pointer gone when the meal is full; mugs of coffee ×2 650 g as mugs; cola by USDA's own 370 g can (SR portion "1 can or bottle (12 fl oz)").
+- From its security pass: a count over 30 reads as unknown; one weighing past `MAX_ITEM_GRAMS` (shared) is not used. Found and fixed, older: a photo container or size named "constructor" blanked the grams or crashed a paid scan (priors are Maps now).
+- Found fixing L4 and fixed: "cups of cornflakes" ×2 became 480 g (Appendix B's water cup); a container that is the food's own serving now weighs that serving × fill: 60 g.
+- Verified: api tsc 0 · eslint 0 · unit 24/24 · foods 22/22 · routes 34/34 · full local 1044/1044; shared tsc 0 · eslint 0 · 106/106; web nutrition 36/36, Nutrition.jsx its 7 lint errors as on master; 14 deliberate breaks each red on every targeted run, files restored identical.
+- Found, not fixed (ROADMAP 10): the list's matcher drops a noise word that is a food's own, so "peanut butter cups" is peanut butter and "tea leaves" tea.
+- Next: CI, the fresh-chat re-check of these fixes, merge.
+
 ## 2026-09-15 · 7a-i: PR #71's second re-check fixed (3 High, 2 Low, 3 weak tests); a re-check next, on Kd's word
 
 - Why every round found a High: each fix read a count from the words of the one example it was given. Now the food's serving unit decides (`COUNT_RULES`, every unit ruled in a test).
