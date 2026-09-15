@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #71's four fixes (H1, H2, L2, L4), the reviewer's way; the re-check of the four next
+
+- Kd asked for 7a-iv from master; master has neither #71 nor #72 and 7a-iii is unbuilt, so he kept his order: *"#71's fixes now (Recommended)"*.
+- H1: fill scales a food's own serving only where the serving is all its container holds (`WHOLE_VOLUME_UNITS`); red wine in a glass at 0.4 is 150 g, pho in a bowl at 0.6 400 g.
+- H2: a plural before "of" (no cut, no "pieces") counts those containers where the photo shows none or one of that name: stew-chunk bowls ×2 510 g, large bowls of dal ×2 550 g; unknown size and no vessel food: no count (plates of nuggets ×2 16 g). "A plate of nuggets" ×6 stays 96 g; "servings of" count servings.
+- Chosen over a vessel word list: an unlisted container ("trays of nuggets") would be read as nuggets again. Found by a before/after sweep and fixed: without the photo guard, scoops of ice cream in a cup were two cups.
+- L2: the cap reads the top of the range (29 mugs of coffee: 325 g). L4: 0, 2.5, 31, "3", true, {} read as unknown; a missing count still rejects.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 26/26 · foods 22/22 · with routes 82/82 · full local 1043/1046 (catalog.seed 3, 7/7 alone: ROADMAP 10's flake); 15 deliberate breaks each red, files restored identical.
+- Sweep of 518,976 old/new resolves over 318 foods × 24 phrasings × 9 containers × fill × count: every change is H1, H2 or L2, none elsewhere.
+- Left, not among Kd's four: the prototype test's piece line cannot fail (it goes with the resolver in 7a-iv); L3's water cup now multiplies by a plural count ("cups of rice" ×2 480 g), still 7a-iv's.
+- Next: CI, the fresh-chat re-check of these four fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
 ## 2026-09-15 · The portion is redesigned (7a-iv), Kd's ruling on PR #71's third re-check; #71's four fixes next
 
 - The third re-check found two more Highs (a poured serving shrunk by fill: red wine 150 → 60 g; a vessel before "of" never setting what the count counts: "bowls of beef stew chunks" ×2 got worse) and four Lows. Kd: *"i think serious design problem is there … too many crtical high coming constanly … forget about current set up"*.
