@@ -22,7 +22,7 @@ import {
   previewMealRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
-import { createVisionProvider, type VisionProvider } from "./vision.adapter.js";
+import { createMealVisionProvider, type VisionProvider } from "./vision.adapter.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -101,11 +101,8 @@ export function registerNutritionRoutes(
   const nutritionDeps: service.NutritionDeps = {
     sql: deps.sql,
     redis: deps.redis,
-    vision:
-      overrides.visionProvider ??
-      (deps.config.GROQ_API_KEY === undefined
-        ? null
-        : createVisionProvider(deps.config.GROQ_API_KEY, deps.config.MEAL_VISION_MODEL)),
+    vision: overrides.visionProvider ?? createMealVisionProvider(deps.config),
+    visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,
   };

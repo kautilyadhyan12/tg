@@ -34,10 +34,14 @@ const envSchema = z.object({
   // the deprecation email + console.groq.com supported-models page, the exact
   // id verified 2026-07-22). Overridable via COACH_MODEL.
   COACH_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
-  // Vision-swap card 2026-07-16 (supersedes the P2.6a Scout default): Groq
-  // decommissions Scout 2026-07-17; qwen3.6-27b is the only vision-capable
-  // replacement (console.groq.com/docs/vision, checked 2026-07-16).
-  MEAL_VISION_MODEL: z.string().min(1).default("qwen/qwen3.6-27b"),
+  // The meal scanner on Gemini (RULINGS 2026-08-24). Its 2.5 Flash-Lite
+  // answers "no longer available to new users" (HTTP 404, 2026-09-15), so it
+  // runs on 3.5 Flash-Lite, with Groq's qwen3.6-27b kept as the spare. A
+  // closed list, because each model is priced in vision.adapter.ts. The chosen
+  // model's key unset = scanning 503s cleanly, the rest of the app runs (the
+  // GROQ_API_KEY precedent).
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  MEAL_VISION_MODEL: z.enum(["gemini-3.5-flash-lite", "qwen/qwen3.6-27b"]).default("gemini-3.5-flash-lite"),
   // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
   // 503s cleanly (fail-closed, GROQ_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.

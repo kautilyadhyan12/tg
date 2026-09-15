@@ -16,13 +16,15 @@ import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
-import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
+import {
+  MEAL_VISION_MODELS,
+  VisionProviderError,
+  type MealVisionModel,
+  type VisionProvider,
+  type VisionResult,
+  type VisionUsage,
+} from "./vision.adapter.js";
 
-// Vision-swap card 2026-07-16: Qwen3.6 27B public list price, integer micro-USD
-// per 1M tokens ($0.60 in / $3.00 out, groq.com/pricing quoted 2026-07-16),
-// one-line updatable; BigInt end-to-end. (Supersedes the Scout $0.11/$0.34.)
-export const VISION_INPUT_MICRO_USD_PER_MILLION = 600_000n;
-export const VISION_OUTPUT_MICRO_USD_PER_MILLION = 3_000_000n;
 export const RETAKE_TTL_SECONDS = 10 * 60;
 const SCAN_TTL_SECONDS = RETAKE_TTL_SECONDS;
 const FOOD_CACHE_TTL_SECONDS = 24 * 60 * 60;
@@ -55,8 +57,10 @@ export class RetakeRequiredError extends NutritionError {
 export interface NutritionDeps {
   sql: Sql;
   redis: RedisLike;
-  /** null = GROQ_API_KEY unset → scanning 503s cleanly, rest of module works. */
+  /** null = the scanner model's key unset → scanning 503s cleanly, rest of module works. */
   vision: VisionProvider | null;
+  /** The configured scanner model: it prices and names every ledger row. */
+  visionModel: MealVisionModel;
   foods: FoodSearchProvider;
   log: FastifyBaseLogger;
 }
@@ -102,26 +106,25 @@ const digest = (v: string): string => createHash("sha256").update(v).digest("hex
 const retakeKey = (userId: string, v: string): string => `meal-retake:${userId}:${digest(v)}`;
 const scanKey = (userId: string, v: string): string => `meal-scan:${userId}:${digest(v)}`;
 
-export function visionCostMicro(tokensIn: number, tokensOut: number): bigint {
+/** A scan's cost in integer micro-USD at its model's list price; BigInt
+ *  end-to-end, rounded half up. */
+export function visionCostMicro(model: MealVisionModel, tokensIn: number, tokensOut: number): bigint {
+  const price = MEAL_VISION_MODELS[model];
   const raw =
-    BigInt(tokensIn) * VISION_INPUT_MICRO_USD_PER_MILLION +
-    BigInt(tokensOut) * VISION_OUTPUT_MICRO_USD_PER_MILLION;
+    BigInt(tokensIn) * price.inputMicroUsdPerMillion +
+    BigInt(tokensOut) * price.outputMicroUsdPerMillion;
   return (raw + 500_000n) / 1_000_000n; // round-half-up, no float near money
 }
 
 /** One ledger row per provider response (v1 §9.3). Standalone insert: a scan
  *  persists no companion rows at spend time (ruled — DECISIONS 2026-07-12). */
-async function ledger(
-  deps: NutritionDeps,
-  userId: string,
-  v: { model: string; tokensIn: number; tokensOut: number },
-): Promise<void> {
+async function ledger(deps: NutritionDeps, userId: string, usage: VisionUsage): Promise<void> {
   await repo.insertCostEvent(deps.sql, {
     userId,
     gymId: await repo.getLiveGymId(deps.sql, userId),
-    model: v.model,
-    tokens: v.tokensIn + v.tokensOut,
-    costMicro: visionCostMicro(v.tokensIn, v.tokensOut),
+    provider: `${MEAL_VISION_MODELS[deps.visionModel].provider}:${deps.visionModel}`,
+    tokens: usage.tokensIn + usage.tokensOut,
+    costMicro: visionCostMicro(deps.visionModel, usage.tokensIn, usage.tokensOut),
   });
 }
 
@@ -312,7 +315,6 @@ async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<voi
 export interface ScanDraftResponse {
   scanToken: string;
   mealName: string;
-  cuisineGuess: string | null;
   items: MealItem[];
   unknownItems: string[];
   photoQuality: "good";
@@ -379,14 +381,16 @@ export async function analyzePhoto(
   }
 
   const scanToken = token();
-  const draft: Draft = { userId, mealName: result.evidence.meal_name, foods, items: draftItems };
+  // A good photo the model did not name is "Meal", as a renamed-to-nothing
+  // meal is (patchMeal below); a photo with nothing to name is a poor one.
+  const mealName = result.evidence.meal_name ?? "Meal";
+  const draft: Draft = { userId, mealName, foods, items: draftItems };
   const stored = await deps.redis.setex(scanKey(userId, scanToken), SCAN_TTL_SECONDS, JSON.stringify(draft));
   if (!stored) throw new NutritionError(503, "nutrition_unavailable", "Meal scanning is temporarily unavailable.");
 
   return {
     scanToken,
-    mealName: result.evidence.meal_name,
-    cuisineGuess: result.evidence.cuisine_guess,
+    mealName,
     items,
     unknownItems: result.evidence.unknown_items,
     photoQuality: "good",

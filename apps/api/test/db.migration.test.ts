@@ -241,7 +241,7 @@ d("0001_init on a real database", () => {
       expect(r.trial_days, `${code} trial days`).toBe(30);
       expect(r.rank, `${code} rank`).toBe(10);
       expect(r.active, `${code} active`).toBe(true);
-      expect(r.member_entitlements?.["meal_scan"], `${code} member scans`).toEqual(day(5));
+      expect(r.member_entitlements?.["meal_scan"], `${code} member scans`).toEqual(day(7));
     }
 
     // WHAT A GYM CAN BE SOLD IS EXACTLY THESE TEN, AND THIS IS THE ASSERTION

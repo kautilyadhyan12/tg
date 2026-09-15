@@ -4,11 +4,18 @@
 // grams clamping to the contract bounds, base64 prefix stripping, and the
 // usage guard: no raw fetch / localStorage, and NO mlApi at all — the targets
 // card repointed getTargets, the file's last old-backend call.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { composeAddIngredient, dataUrlToBase64, missingAnswers, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
+import { shrinkPhoto } from '../utils/shrinkPhoto';
+import { bytesToBase64, composeAddIngredient, dataUrlToBase64, missingAnswers, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
+
+// The shrink draws on a canvas, which this node environment has none of; its
+// own test hands it a fake window. Here it is a stand-in that returns whatever
+// a test says the shrunk photo is.
+vi.mock('../utils/shrinkPhoto', () => ({ shrinkPhoto: vi.fn() }));
 
 function recordRequests(api) {
   const seen = [];
@@ -21,6 +28,7 @@ function recordRequests(api) {
 
 afterEach(() => {
   authApi.defaults.adapter = undefined;
+  vi.clearAllMocks();
 });
 
 describe('nutritionService repoint (Card 5a)', () => {
@@ -119,13 +127,35 @@ describe('nutritionService repoint (Card 5a)', () => {
       .toEqual([{ canonical: 'x', grams: 50 }]);
   });
 
-  it('analyzePhoto rejects wrong type / oversize before any request', async () => {
+  it('analyzePhoto refuses a wrong type before shrinking, and a shrunk photo over 10 MB before any request', async () => {
     const seen = recordRequests(authApi);
     await expect(nutritionService.analyzePhoto({ type: 'image/gif', size: 10 }))
       .rejects.toThrow(/JPEG, PNG, or WebP/);
-    await expect(nutritionService.analyzePhoto({ type: 'image/png', size: 10 * 1024 * 1024 + 1 }))
+    expect(shrinkPhoto).not.toHaveBeenCalled();
+    shrinkPhoto.mockResolvedValueOnce({ size: 10 * 1024 * 1024 + 1, type: 'image/jpeg' });
+    await expect(nutritionService.analyzePhoto({ type: 'image/png', size: 10 }))
       .rejects.toThrow(/10 MB/);
     expect(seen.length).toBe(0);
+  });
+
+  it('analyzePhoto sends the SHRUNK photo as base64 JPEG whatever the original was; retakeToken omitted when absent', async () => {
+    const seen = recordRequests(authApi);
+    const original = { type: 'image/png', size: 40 * 1024 * 1024 }; // a 40 MB phone photo is fine: it is shrunk first
+    const jpegStart = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' });
+    shrinkPhoto.mockResolvedValueOnce(jpegStart());
+    await nutritionService.analyzePhoto(original);
+    expect(shrinkPhoto).toHaveBeenCalledWith(original);
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/analyze-photo', method: 'post' });
+    expect(JSON.parse(seen[0].data)).toEqual({ imageBase64: '/9j/', mimeType: 'image/jpeg' });
+    shrinkPhoto.mockResolvedValueOnce(jpegStart());
+    await nutritionService.analyzePhoto(original, 'r'.repeat(40));
+    expect(JSON.parse(seen[1].data)).toEqual({ imageBase64: '/9j/', mimeType: 'image/jpeg', retakeToken: 'r'.repeat(40) });
+  });
+
+  it('bytesToBase64 encodes bytes the way the server decodes them, past one slice', () => {
+    expect(bytesToBase64(new Uint8Array([0xff, 0xd8, 0xff]))).toBe('/9j/');
+    const big = new Uint8Array(100_000).map((_, i) => i % 251);
+    expect(bytesToBase64(big)).toBe(Buffer.from(big).toString('base64'));
   });
 
   it('the module has no raw fetch/localStorage; mlApi remains ONLY for the documented interim', () => {

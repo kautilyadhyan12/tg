@@ -15,6 +15,7 @@
 // runs entirely on the new API — no mlApi import remains, pinned by the
 // usage-guard test.
 import authApi from './authApi';
+import { shrinkPhoto } from '../utils/shrinkPhoto';
 
 /** The Nutrition page's left column WAITS on the targets request (its spinner
  *  can no longer clear on the meals fetch alone, or the honest prompt would
@@ -110,13 +111,18 @@ export async function walkMealsForDay(fetchPage, dayStartMs, dayEndMs, maxPages 
   }
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(dataUrlToBase64(reader.result));
-    reader.onerror = () => reject(new Error('Could not read the image file'));
-    reader.readAsDataURL(file);
-  });
+/** Bytes → base64, in slices so a photo never overflows the call stack.
+ *  Exported for the unit test (pure). */
+export function bytesToBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function blobToBase64(blob) {
+  return bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
 }
 
 export const nutritionService = {
@@ -128,11 +134,15 @@ export const nutritionService = {
     if (!ALLOWED_MIME.includes(file.type)) {
       throw new Error('Please use a JPEG, PNG, or WebP image.');
     }
-    if (file.size > MAX_IMAGE_BYTES) {
+    // The photo goes up as the scanner reads it — 768 px on its longest side,
+    // as a JPEG (RULINGS 2026-08-24: photos are resized) — so a phone's
+    // multi-megabyte picture is about a hundred kilobytes on mobile data, and
+    // its location tags stay on the phone.
+    const photo = await shrinkPhoto(file);
+    if (photo.size > MAX_IMAGE_BYTES) {
       throw new Error('Image must be 10 MB or smaller.');
     }
-    const imageBase64 = await fileToBase64(file);
-    const body = { imageBase64, mimeType: file.type };
+    const body = { imageBase64: await blobToBase64(photo), mimeType: 'image/jpeg' };
     if (retakeToken) body.retakeToken = retakeToken; // .strict(): omit, never null
     return authApi.post('/v1/nutrition/analyze-photo', body);
   },

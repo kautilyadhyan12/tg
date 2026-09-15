@@ -140,13 +140,13 @@ const sources = (items: readonly MealItem[]): string[] => [...new Set(items.map(
 
 export async function insertCostEvent(
   sql: Sql,
-  input: { userId: string; gymId: string | null; model: string; tokens: number; costMicro: bigint },
+  input: { userId: string; gymId: string | null; provider: string; tokens: number; costMicro: bigint },
 ): Promise<void> {
   // cost_micro travels as text→::bigint (postgres.js doesn't parameterize
   // JS bigint by default); stays bigint in the TS domain (R6.1).
   await sql`
     INSERT INTO api_cost_events (user_id, gym_id, feature, provider, units, unit_type, cost_micro)
-    VALUES (${input.userId}, ${input.gymId}, 'meal_scan', ${`groq:${input.model}`},
+    VALUES (${input.userId}, ${input.gymId}, 'meal_scan', ${input.provider},
             ${input.tokens}, 'tokens', ${input.costMicro.toString()}::bigint)`;
 }
 

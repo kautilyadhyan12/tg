@@ -44,8 +44,11 @@ Only these are hard-required (no default, not optional):
 | `REDIS_URL` | Required **in production only**, via config's `.refine()`. Upstash in prod. |
 
 Everything else has a default or is optional; an unset `GROQ_API_KEY` cleanly
-disables the coach rather than breaking boot, and the same pattern covers
-`ORS_API_KEY` and the three `GOOGLE_*` values.
+disables the coach rather than breaking boot, an unset `GEMINI_API_KEY` does the
+same for the meal scanner (`MEAL_VISION_MODEL` names the model; Gemini 3.5
+Flash-Lite by default, Groq's `qwen/qwen3.6-27b` as the spare, which then needs
+`GROQ_API_KEY` instead), and the same pattern covers `ORS_API_KEY` and the three
+`GOOGLE_*` values.
 
 **Secrets never enter the repo or the image (R3.6).** Production values go in
 `infra/api.env` **on the host** — gitignored, dockerignored, and listed in the

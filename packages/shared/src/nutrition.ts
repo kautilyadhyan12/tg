@@ -33,7 +33,7 @@ export const analyzeMealPhotoRequestSchema = z.object({
 export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSchema>;
 
 export const mealPhotoAnalysisSchema = z.object({
-  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealItemSchema),
+  scanToken: z.string(), mealName: z.string(), items: z.array(mealItemSchema),
   unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
   confirmed: z.literal(false), retakeToken: z.string().optional(),
 });
