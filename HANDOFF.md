@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · The portion is redesigned (7a-iv), Kd's ruling on PR #71's third re-check; #71's four fixes next
+
+- The third re-check found two more Highs (a poured serving shrunk by fill: red wine 150 → 60 g; a vessel before "of" never setting what the count counts: "bowls of beef stew chunks" ×2 got worse) and four Lows. Kd: *"i think serious design problem is there … too many crtical high coming constanly … forget about current set up"*.
+- Root cause named: the server reads English (cut, piece, vessel, pack and unit words) to decide what a count counts and what a container holds, so every review finds the next phrase — the weight copy's shape (RULINGS 2026-09-10, six rounds).
+- The design, *"go"* (RULINGS 2026-09-15, ROADMAP 7a-iv): the model fills a form with fixed choices (its gram estimate, a count of whole pieces only, one vessel from a fixed list, fill); a five-rung ladder (saved dish · count × USDA piece weight · vessel × fill × USDA cup weight · the model's estimate marked "estimate" · the serving); one 3× cross-check against the estimate in place of every word list; the sheet names the measure; a fixed set of test plates in CI.
+- Measured: the USDA zips the food checker downloads carry `food_portion.csv` (SR in `modifier`, FNDDS in `portion_description`): 313 of 313 USDA-cited foods have a household weight, 258 a piece, size or cup weight — banana 118 g, egg 50 g, nugget 16 g, cornflakes cup 30 g, rice cup 158 g, cola can 370 g.
+- Order, Kd's: #71 takes only the two High fixes and Lows 2 and 4, the reviewer's way (on the 7a-i line), a re-check of the four, merge · #72 · 7a-iii with the form in its reply · 7a-iv. L1, L3 and item 10's cornflakes are on 7a-iv's line.
+- Records only, on this branch: RULINGS (Nutrition), ROADMAP 7a-i, 7a-iv and 10, this entry. No code changed; no suite run (nothing to prove). 7a-iii's line lives on PR #72's branch; the rebase after #71 puts 7a-iii above 7a-iv.
+- Next: a fresh chat fixes #71's four findings, a failing test first for each, proves them and hands Kd the re-check prompt; then #72's review; then 7a-iii.
+
 ## 2026-09-15 · 7a-i: PR #71's third re-check fixed (3 High, 4 Low, 5 weak tests); its re-check next
 
 - Why a High again: each rule was tried only on the unit or word its finding named. A count is now first read for what it counts (cut bits, "pieces", a vessel named before "of", or the food), then the unit's rule; a test runs every unit of every rule against every cut word, "pieces" and container.
