@@ -39,7 +39,7 @@ export const mealPhotoItemSchema = mealItemSchema.extend({ pieces: z.number().in
 export type MealPhotoItem = z.infer<typeof mealPhotoItemSchema>;
 
 export const mealPhotoAnalysisSchema = z.object({
-  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealPhotoItemSchema),
+  scanToken: z.string(), mealName: z.string(), items: z.array(mealPhotoItemSchema),
   unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
   confirmed: z.literal(false), retakeToken: z.string().optional(),
 });

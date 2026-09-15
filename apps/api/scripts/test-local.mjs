@@ -73,6 +73,10 @@ const COMPOSE_UP = "docker compose -f infra/docker-compose.dev.yml up -d postgre
  *  check somewhere the script is not looking. Caught by pointing the url at a
  *  dead port and reading what it printed. */
 const LOCAL_HOST = new URL(LOCAL_URL).host;
+/** The compose Redis (port 6380 on the host), for test/redis.scripts.test.ts, the
+ *  one test that runs the production Redis scripts; every other test keeps its
+ *  in-memory Redis. */
+const LOCAL_REDIS_URL = "redis://localhost:6380";
 
 const require = createRequire(resolve(API_DIR, "package.json"));
 const postgres = require("postgres");
@@ -169,7 +173,7 @@ const result = spawnSync(
   {
     cwd: API_DIR,
     stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: LOCAL_URL },
+    env: { ...process.env, DATABASE_URL: LOCAL_URL, TEST_REDIS_URL: LOCAL_REDIS_URL },
   },
 );
 

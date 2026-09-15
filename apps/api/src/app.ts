@@ -38,6 +38,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
+import { sentryOptions } from "./sentry.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
  *  nothing; tests inject a capturing EmailSender to reach raw one-time tokens
@@ -61,6 +62,9 @@ export interface BuildAppOverrides {
   /** orgs: tests inject a deterministic byte source to drive the join-code and
    *  slug collision retries; unset uses node:crypto. */
   orgs?: OrgRouteOverrides;
+  /** Tests read what Sentry would be sent through a transport that records it;
+   *  unset, the SDK sends to SENTRY_DSN. */
+  sentryTransport?: Sentry.NodeOptions["transport"];
 }
 
 declare module "fastify" {
@@ -74,13 +78,13 @@ export async function buildApp(
   overrides: BuildAppOverrides = {},
 ): Promise<FastifyInstance> {
   if (config.SENTRY_DSN !== undefined) {
-    // VERIFIED (P2.6a T3): no request-data integration is registered and
-    // sendDefaultPii stays default-false — captureException below attaches
-    // only {requestId}, never request bodies. This is load-bearing for the
-    // 2B §3.4 never-persisted photo guarantee (a body-attaching integration
-    // would leak imageBase64 on any 5xx from /v1/nutrition/analyze-photo).
-    Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV, sendDefaultPii: false });
+    Sentry.init(sentryOptions(config.SENTRY_DSN, config.NODE_ENV, overrides.sentryTransport));
   }
+  /** A fault nobody expected goes to Sentry with its request id, and with
+   *  nothing else from the request: sentryOptions takes the request off. */
+  const reportError = (err: unknown, requestId: string): void => {
+    if (config.SENTRY_DSN !== undefined) Sentry.captureException(err, { extra: { requestId } });
+  };
 
   const app = Fastify({
     trustProxy: true, // behind Caddy (R3.7); secure cookies depend on this
@@ -175,9 +179,7 @@ export async function buildApp(
     }
     if (status >= 500) {
       req.log.error({ err, requestId: req.id }, "unhandled error");
-      if (config.SENTRY_DSN !== undefined) {
-        Sentry.captureException(err, { extra: { requestId: req.id } });
-      }
+      reportError(err, req.id);
       void reply.status(500).send({
         error: "internal_error",
         message: "Something went wrong",
@@ -247,7 +249,7 @@ export async function buildApp(
   registerGamificationRoutes(app, { sql });
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
-  registerNutritionRoutes(app, { sql, redis, config }, overrides.nutrition ?? {});
+  registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   registerOrgRoutes(app, { sql, redis }, overrides.orgs ?? {});
 

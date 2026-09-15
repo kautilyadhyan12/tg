@@ -1,10 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
-import { MAX_PHOTO_COUNT, MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
-import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { findCurated } from "../src/modules/nutrition/foods.js";
-import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
-import { MAX_ITEM_GRAMS, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
+import {
+  MEAL_SCAN_MEDIA_RESOLUTION,
+  MEAL_VISION_MODELS,
+  MEAL_VISION_PROMPT,
+  VISION_TIMEOUT_MS,
+  VisionProviderError,
+  createGeminiVisionProvider,
+  createGroqVisionProvider,
+  createMealVisionProvider,
+} from "../src/modules/nutrition/vision.adapter.js";
+import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { visionCostMicro } from "../src/modules/nutrition/service.js";
+import { loadConfig, type AppConfig } from "../src/config.js";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, RETIRED_ITEM_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -399,17 +409,17 @@ describe("P2.6a nutrition pure pipeline", () => {
     // The scan reads a count that is not a whole number from 1 to the sheet's
     // stepper as unknown, and keeps the item: a bad count never loses a paid scan.
     expect(MAX_PHOTO_COUNT).toBe(30);
-    const reply = (items: unknown[]) => wrap({ meal_name: "x", cuisine_guess: null, scale_anchors: [], unknown_items: [], photo_quality: "good", items });
-    const item = { name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, confidence: "high" };
+    const reply = (items: unknown[]) => wrap({ meal_name: "x", unknown_items: [], photo_quality: "good", items });
+    const item = { name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null };
     const counts = async (...values: unknown[]) => {
-      const provider = createVisionProvider("dummy-key", "m", reply(values.map((count) => ({ ...item, count })))); // gitleaks:allow
+      const provider = createGroqVisionProvider("dummy-key", "m", reply(values.map((count) => ({ ...item, count })))); // gitleaks:allow
       return (await provider.analyze("AA==", "image/jpeg")).evidence.items.map((scanned) => scanned.count);
     };
     expect(await counts(1, 30, null)).toEqual([1, 30, null]);
     const bad = [31, 400, 0, -2, 2.5, 30.5, "3", "many", true, {}, []];
     expect(await counts(...bad)).toEqual(bad.map(() => null));
-    // A reply with no count at all is still malformed, as any missing field is.
-    await expect(createVisionProvider("dummy-key", "m", reply([item])).analyze("AA==", "image/jpeg")).rejects.toThrow("vision malformed evidence shape"); // gitleaks:allow
+    // A count left out is unknown, as every field the model cannot fill is (RULINGS 2026-09-15).
+    expect((await createGroqVisionProvider("dummy-key", "m", reply([item])).analyze("AA==", "image/jpeg")).evidence.items.map((scanned) => scanned.count)).toEqual([null]); // gitleaks:allow
   });
 
   it("reads a count of every serving unit the same way in every container: pieces, vessels, or not at all", () => {
@@ -464,12 +474,35 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(WHOLE.filter((piece) => COUNT_RULES.get(piece) !== "piece" && !(piece in COUNTABLE_PRIORS))).toEqual([]);
   });
 
-  it("prompt bans nutrition arithmetic and cost math is integer micro-USD", () => {
+  it("prompt bans nutrition arithmetic; every scanner model carries its list price; cost math is integer micro-USD per model", () => {
     expect(MEAL_VISION_PROMPT).toContain("Never output calories");
-    // Qwen3.6 27B (groq.com/pricing 2026-07-16): $0.60/1M in, $3.00/1M out.
-    expect(VISION_INPUT_MICRO_USD_PER_MILLION).toBe(600_000n);
-    expect(VISION_OUTPUT_MICRO_USD_PER_MILLION).toBe(3_000_000n);
-    expect(visionCostMicro(100, 200)).toBe(660n);
+    // Prices read 2026-09-15: Gemini 3.5 Flash-Lite $0.30 in / $2.50 out per
+    // 1M tokens (ai.google.dev/gemini-api/docs/pricing); Groq qwen3.6-27b
+    // $0.60 / $3.00 (console.groq.com/docs/models).
+    expect(MEAL_VISION_MODELS).toEqual({
+      "gemini-3.5-flash-lite": { provider: "gemini", inputMicroUsdPerMillion: 300_000n, outputMicroUsdPerMillion: 2_500_000n },
+      "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
+    });
+    // 530 in + 230 out on Gemini: 159 + 575 micro-USD.
+    expect(visionCostMicro("gemini-3.5-flash-lite", 530, 230)).toBe(734n);
+    expect(visionCostMicro("qwen/qwen3.6-27b", 100, 200)).toBe(660n);
+    // Rounded half up, never a float: one Gemini input token is 0.3 micro-USD → 0; two are 0.6 → 1.
+    expect(visionCostMicro("gemini-3.5-flash-lite", 1, 0)).toBe(0n);
+    expect(visionCostMicro("gemini-3.5-flash-lite", 2, 0)).toBe(1n);
+    expect(visionCostMicro("gemini-3.5-flash-lite", 0, 0)).toBe(0n);
+  });
+
+  it("the reply is trimmed to what the app reads (RULINGS 2026-09-15); the plate-reading instructions are whole", () => {
+    // Asked for: what the service reads. Not asked for: what nothing ever read.
+    expect(MEAL_VISION_PROMPT).toContain("meal_name, items [{name,canonical_hint,container,fill_level,size_class,count}], unknown_items, photo_quality");
+    for (const retired of [...RETIRED_EVIDENCE_FIELDS, ...RETIRED_ITEM_FIELDS]) expect(MEAL_VISION_PROMPT).not.toContain(retired);
+    expect(MEAL_VISION_PROMPT).toContain("leave out any field you cannot fill");
+    // …but never the two fields the evidence contract requires of every item.
+    expect(MEAL_VISION_PROMPT).toContain("Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items.");
+    // Kd's reading instructions, word for word (RULINGS 2026-08-24: the prompt is not shortened).
+    expect(MEAL_VISION_PROMPT).toContain(
+      'For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Never output calories, kcal, grams, quantities by weight, protein, carbohydrates, fat, fibre, or any nutrition arithmetic.',
+    );
   });
 
   it("resolver covers thali_section weight-prior and density-class branches (T3 R9 gap)", () => {
@@ -586,15 +619,17 @@ describe("P2.6a nutrition pure pipeline", () => {
   // Groq vision models return field formats the strict schema rejected, 422ing
   // every scan. These two fixtures are VERBATIM real completions captured that
   // day (Scout + Qwen on the same pizza photo); the adapter must normalize
-  // them. R9.5: written failing first.
+  // them — and, since the reply was trimmed (RULINGS 2026-09-15), drop the
+  // fields the scanner no longer asks for rather than fail a reply that still
+  // carries them. R9.5: written failing first.
   const wrap = (evidence: unknown) =>
     ((): typeof fetch => () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(evidence) } }],
       model: "m", usage: { prompt_tokens: 2002, completion_tokens: 130 },
     }), { status: 200, headers: { "content-type": "application/json" } })))();
 
-  it("normalizes the REAL Scout reply (numeric confidence, string fill_level/container)", async () => {
-    const provider = createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+  it("normalizes the REAL Scout reply (string fill_level/container) and drops the fields no longer asked for", async () => {
+    const provider = createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
       meal_name: "Pizza", cuisine_guess: "Italian",
       items: [{ name: "Pizza", canonical_hint: "Margherita Pizza", container: "None", fill_level: "full", size_class: "large", count: 1, confidence: 0.9 }],
       scale_anchors: [{ type: "plate", notes: "large pizza" }],
@@ -602,14 +637,17 @@ describe("P2.6a nutrition pure pipeline", () => {
     }));
     const result = await provider.analyze("AA==", "image/jpeg");
     const item = result.evidence.items[0];
-    expect(item?.confidence).toBe("high");   // 0.9 → high (≥0.75)
     expect(item?.fill_level).toBeNull();     // non-numeric string → unknown
     expect(item?.container).toBeNull();      // "None" → null
+    expect(item).not.toHaveProperty("confidence");
+    expect(result.evidence).not.toHaveProperty("cuisine_guess");
+    expect(result.evidence).not.toHaveProperty("scale_anchors");
     expect(result.evidence.photo_quality).toBe("good");
+    expect(result).toMatchObject({ tokensIn: 2002, tokensOut: 130 });
   });
 
   it("normalizes the REAL Qwen reply (capitalized photo_quality, N/A fill_level)", async () => {
-    const provider = createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+    const provider = createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
       meal_name: "Margherita Pizza", cuisine_guess: "Italian",
       items: [
         { name: "Pizza", canonical_hint: "Margherita Pizza", container: "none", fill_level: "N/A", size_class: "Large", count: 1, confidence: 0.95 },
@@ -620,20 +658,38 @@ describe("P2.6a nutrition pure pipeline", () => {
     }));
     const result = await provider.analyze("AA==", "image/jpeg");
     expect(result.evidence.items).toHaveLength(2);
-    expect(result.evidence.items[0]?.confidence).toBe("high");
+    expect(result.evidence.items[0]?.size_class).toBe("Large");
     expect(result.evidence.photo_quality).toBe("good");
   });
 
-  it("confidence bands: numbers map ≥0.75 high, ≥0.4 medium, else low; enum strings pass case-insensitively", async () => {
-    const mk = (confidence: unknown) => createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
-      meal_name: "x", cuisine_guess: null,
-      items: [{ name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, count: null, confidence }],
-      scale_anchors: [], unknown_items: [], photo_quality: "good",
-    })).analyze("AA==", "image/jpeg");
-    expect((await mk(0.75)).evidence.items[0]?.confidence).toBe("high");
-    expect((await mk(0.5)).evidence.items[0]?.confidence).toBe("medium");
-    expect((await mk(0.1)).evidence.items[0]?.confidence).toBe("low");
-    expect((await mk("Medium")).evidence.items[0]?.confidence).toBe("medium");
+  it("a field the model leaves out is unknown, never guessed: null; no unknown_items is none; no items is none", async () => {
+    const provider = createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+      meal_name: "x", items: [{ name: "x", canonical_hint: "x" }], photo_quality: "good",
+    }));
+    expect((await provider.analyze("AA==", "image/jpeg")).evidence).toEqual({
+      meal_name: "x", items: [{ name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, count: null }],
+      unknown_items: [], photo_quality: "good",
+    });
+    const bare = createGroqVisionProvider("dummy-key", "m", wrap({ photo_quality: "poor" })); // gitleaks:allow
+    expect((await bare.analyze("AA==", "image/jpeg")).evidence).toEqual({ meal_name: null, items: [], unknown_items: [], photo_quality: "poor" });
+    // A meal name, container or size that says there is none is no value, however it is spelled.
+    for (const word of NO_VALUE_WORDS) {
+      for (const spelled of [word, word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1), `  ${word} `]) {
+        const said = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: spelled, items: [{ name: "x", canonical_hint: "x", container: spelled, size_class: spelled }], photo_quality: "good" })); // gitleaks:allow
+        const { evidence } = await said.analyze("AA==", "image/jpeg");
+        expect([evidence.meal_name, evidence.items[0]?.container, evidence.items[0]?.size_class], JSON.stringify(spelled)).toEqual([null, null, null]);
+      }
+    }
+    // Every word the prompt gives the model for a value it does not have is one of them, read from
+    // the prompt itself: its "instead of writing …" list and its "Say … instead of guessing".
+    const writing = /instead of writing ([^.]+?)\. /.exec(MEAL_VISION_PROMPT)?.[1];
+    const said = /Say (\S+) instead of guessing/.exec(MEAL_VISION_PROMPT)?.[1];
+    const named = [...(writing ?? "").split(/,\s*|\s+or\s+/), said ?? ""].map((w) => w.replaceAll('"', "").trim());
+    expect(named).toEqual(["null", "none", "N/A", "unknown"]);
+    for (const word of named) expect(isNoValueWord(word), word).toBe(true);
+    // A real name that holds one of the words keeps it.
+    const real = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: "Unknown dish", items: [{ name: "x", canonical_hint: "x" }], photo_quality: "good" })); // gitleaks:allow
+    expect((await real.analyze("AA==", "image/jpeg")).evidence.meal_name).toBe("Unknown dish");
   });
 
   it("passes reasoning_effort none ONLY for qwen/ models (T3 advisory: pin the prefix coupling)", async () => {
@@ -642,32 +698,217 @@ describe("P2.6a nutrition pure pipeline", () => {
       if (typeof init?.body !== "string") throw new Error("expected string body");
       bodies.push(JSON.parse(init.body));
       return Promise.resolve(new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ meal_name: "x", cuisine_guess: null, items: [], scale_anchors: [], unknown_items: [], photo_quality: "good" }) } }],
+        choices: [{ message: { content: JSON.stringify({ meal_name: "x", items: [], unknown_items: [], photo_quality: "good" }) } }],
         model: "m", usage: { prompt_tokens: 1, completion_tokens: 1 },
       }), { status: 200, headers: { "content-type": "application/json" } }));
     };
-    await createVisionProvider("dummy-key", "qwen/qwen3.6-27b", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
-    await createVisionProvider("dummy-key", "meta-llama/other", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    await createGroqVisionProvider("dummy-key", "qwen/qwen3.6-27b", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    await createGroqVisionProvider("dummy-key", "meta-llama/other", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
     expect(bodies[0]).toMatchObject({ reasoning_effort: "none" });
     expect(bodies[1]).not.toHaveProperty("reasoning_effort");
   });
 
-  it("a numeric-STRING confidence still fails closed (T3 advisory: degrade, never guess)", async () => {
-    const provider = createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
-      meal_name: "x", cuisine_guess: null,
-      items: [{ name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, count: null, confidence: "0.9" }],
-      scale_anchors: [], unknown_items: [], photo_quality: "good",
-    }));
-    await expect(provider.analyze("AA==", "image/jpeg")).rejects.toThrow("vision malformed evidence shape");
-  });
-
-  it("strictly rejects a vision reply that smuggles kcal into an item and retains usage for ledger", async () => {
-    const fetchImpl: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ meal_name: "Dal", cuisine_guess: "north_indian", items: [{ name: "Dal", canonical_hint: "dal", container: null, fill_level: null, size_class: null, count: null, confidence: "high", kcal: 100 }], scale_anchors: [], unknown_items: [], photo_quality: "good" }) } }],
+  it("strictly rejects a vision reply that smuggles kcal into an item, or names no item, and retains usage for the ledger", async () => {
+    const groq = (evidence: unknown): typeof fetch => () => Promise.resolve(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(evidence) } }],
       model: "scout", usage: { prompt_tokens: 10, completion_tokens: 20 },
     }), { status: 200, headers: { "content-type": "application/json" } }));
-    const provider = createVisionProvider("dummy-key", "scout", fetchImpl); // gitleaks:allow
-    await expect(provider.analyze("AA==", "image/jpeg")).rejects.toMatchObject({ usage: { model: "scout", tokensIn: 10, tokensOut: 20 } });
+    const smuggled = createGroqVisionProvider("dummy-key", "scout", groq({ meal_name: "Dal", items: [{ name: "Dal", canonical_hint: "dal", kcal: 100 }], unknown_items: [], photo_quality: "good" })); // gitleaks:allow
+    await expect(smuggled.analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape", usage: { tokensIn: 10, tokensOut: 20 } });
+    const nameless = createGroqVisionProvider("dummy-key", "scout", groq({ meal_name: "Dal", items: [{ canonical_hint: "dal" }], unknown_items: [], photo_quality: "good" })); // gitleaks:allow
+    await expect(nameless.analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape", usage: { tokensIn: 10, tokensOut: 20 } });
+  });
+
+  // ── The scanner on Gemini (RULINGS 2026-08-24; 3.5 Flash-Lite since
+  // 2026-09-15). Two real replies captured on 2026-09-15, VERBATIM but for the
+  // thought signature, which nothing reads: Kd's salmon plate at low
+  // resolution with the trimmed prompt, and a 64×64 orange square — a photo
+  // with no meal on it — under the earlier prompt, so it still carries the
+  // fields that were retired.
+  const SALMON_REPLY = {
+    candidates: [{ content: { parts: [{ text: '{"meal_name": "salmon with roasted potatoes and broccoli", "items": [{"name": "salmon fillets", "canonical_hint": "salmon", "container": "plate", "size_class": "medium", "count": 2}, {"name": "roasted potatoes", "canonical_hint": "potatoes", "container": "plate", "size_class": "small", "count": 9}, {"name": "broccoli florets", "canonical_hint": "broccoli", "container": "plate", "size_class": "large", "count": 1}, {"name": "lemon wedges", "canonical_hint": "lemon", "container": "plate", "size_class": "small", "count": 2}], "photo_quality": "good"}', thoughtSignature: "(96 characters)" }], role: "model" }, finishReason: "STOP", index: 0 }],
+    usageMetadata: { promptTokenCount: 498, candidatesTokenCount: 166, totalTokenCount: 664, promptTokensDetails: [{ modality: "IMAGE", tokenCount: 256 }, { modality: "TEXT", tokenCount: 242 }], serviceTier: "standard" },
+    modelVersion: "gemini-3.5-flash-lite", responseId: "u8yoasTzFcXUqfkPq5SjoQM",
+  };
+  const NO_MEAL_REPLY = {
+    candidates: [{ content: { parts: [{ text: '{"meal_name": null, "cuisine_guess": null, "items": [], "scale_anchors": [], "unknown_items": [], "photo_quality": "poor"}', thoughtSignature: "(96 characters)" }], role: "model" }, finishReason: "STOP", index: 0 }],
+    usageMetadata: { promptTokenCount: 798, candidatesTokenCount: 39, totalTokenCount: 837, promptTokensDetails: [{ modality: "IMAGE", tokenCount: 529 }, { modality: "TEXT", tokenCount: 269 }], serviceTier: "standard" },
+    modelVersion: "gemini-3.5-flash-lite", responseId: "qMCoauvCBdaug8UPruDiyQY",
+  };
+  const urlOf = (input: Parameters<typeof fetch>[0]): string => (typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+  const geminiFetch = (reply: unknown, status = 200) => {
+    const seen: { url: string; init: RequestInit | undefined }[] = [];
+    const fetchImpl: typeof fetch = (input, init) => {
+      seen.push({ url: urlOf(input), init });
+      return Promise.resolve(new Response(JSON.stringify(reply), { status, headers: { "content-type": "application/json" } }));
+    };
+    return { seen, fetchImpl };
+  };
+  const failure = async (p: Promise<unknown>): Promise<VisionProviderError> => {
+    try { await p; } catch (err) { if (err instanceof VisionProviderError) return err; throw err; }
+    throw new Error("expected the scan to fail");
+  };
+  const sentBody = (call: { init: RequestInit | undefined } | undefined): unknown => {
+    if (typeof call?.init?.body !== "string") throw new Error("expected a string body");
+    return JSON.parse(call.init.body);
+  };
+
+  it("Gemini: the key rides in a header never the URL; prompt before photo, JSON mode, minimal thinking, low resolution, a timeout", async () => {
+    const { seen, fetchImpl } = geminiFetch(SALMON_REPLY);
+    await createGeminiVisionProvider("dummy-gemini-key", "gemini-3.5-flash-lite", fetchImpl).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    const [call] = seen;
+    expect(call?.url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent");
+    expect(call?.url).not.toContain("dummy-gemini-key");
+    expect(call?.init?.method).toBe("POST");
+    expect(call?.init?.headers).toEqual({ "content-type": "application/json", "x-goog-api-key": "dummy-gemini-key" }); // gitleaks:allow
+    expect(call?.init?.signal).toBeInstanceOf(AbortSignal);
+    const contents = [{ role: "user", parts: [{ text: MEAL_VISION_PROMPT }, { inlineData: { mimeType: "image/jpeg", data: "AA==" } }] }];
+    expect(sentBody(call)).toEqual({
+      contents,
+      generationConfig: { maxOutputTokens: 1000, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "minimal" }, mediaResolution: "MEDIA_RESOLUTION_LOW" },
+    });
+    expect(MEAL_SCAN_MEDIA_RESOLUTION).toBe("MEDIA_RESOLUTION_LOW");
+    // Left to the model when asked to be: no mediaResolution key at all.
+    const plain = geminiFetch(SALMON_REPLY);
+    await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", plain.fetchImpl, null).analyze("AA==", "image/jpeg");
+    expect(sentBody(plain.seen[0])).toEqual({
+      contents,
+      generationConfig: { maxOutputTokens: 1000, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "minimal" } },
+    });
+  });
+
+  it("Gemini: reads the REAL salmon-plate reply, and the REAL no-meal reply as a poor photo with its retired fields dropped", async () => {
+    const good = await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", geminiFetch(SALMON_REPLY).fetchImpl).analyze("AA==", "image/jpeg");
+    expect(good.evidence.meal_name).toBe("salmon with roasted potatoes and broccoli");
+    expect(good.evidence.items.map((i) => [i.canonical_hint, i.count, i.fill_level, i.container])).toEqual([
+      ["salmon", 2, null, "plate"], ["potatoes", 9, null, "plate"], ["broccoli", 1, null, "plate"], ["lemon", 2, null, "plate"],
+    ]);
+    expect(good.evidence.unknown_items).toEqual([]);
+    expect(good).toMatchObject({ tokensIn: 498, tokensOut: 166 });
+    const none = await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", geminiFetch(NO_MEAL_REPLY).fetchImpl).analyze("AA==", "image/png");
+    expect(none.evidence).toEqual({ meal_name: null, items: [], unknown_items: [], photo_quality: "poor" });
+    expect(none).toMatchObject({ tokensIn: 798, tokensOut: 39 });
+  });
+
+  it("Gemini: thought parts are skipped and billed as output; a blocked prompt, an empty reply, broken JSON and a smuggled kcal each fail closed with the usage kept", async () => {
+    const withThoughts = { candidates: [{ content: { parts: [{ text: "let me look", thought: true }, { text: '{"meal_name":"x","items":[],"unknown_items":[],"photo_quality":"good"}' }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 40, thoughtsTokenCount: 60 } };
+    expect(await createGeminiVisionProvider("k", "m", geminiFetch(withThoughts).fetchImpl).analyze("AA==", "image/jpeg")).toMatchObject({ tokensIn: 500, tokensOut: 100, evidence: { meal_name: "x" } });
+    // What the model answered and cannot be used is "unreadable", with the usage it reports.
+    const cases: [string, unknown, number][] = [
+      ["vision blocked", { candidates: [], promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0],
+      ["vision empty completion", { candidates: [{ content: { parts: [] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 0 } }, 0],
+      ["vision malformed evidence JSON", { candidates: [{ content: { parts: [{ text: "{not json" }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 5 } }, 5],
+      ["vision malformed evidence shape", { candidates: [{ content: { parts: [{ text: '{"meal_name":"x","items":[{"name":"x","canonical_hint":"x","kcal":100}],"unknown_items":[],"photo_quality":"good"}' }] } }], usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 50 } }, 50],
+    ];
+    for (const [message, reply, tokensOut] of cases) {
+      const err = await failure(createGeminiVisionProvider("k", "m", geminiFetch(reply).fetchImpl).analyze("AA==", "image/jpeg"));
+      expect([err.message, err.kind, err.usage], message).toEqual([message, "unreadable", { tokensIn: 500, tokensOut }]);
+    }
+  });
+
+  type MakeProvider = (f: typeof fetch) => ReturnType<typeof createGroqVisionProvider>;
+  const viaGemini: MakeProvider = (f) => createGeminiVisionProvider("k", "m", f);
+  const viaGroq: MakeProvider = (f) => createGroqVisionProvider("k", "m", f);
+  const makers: [string, MakeProvider][] = [["gemini", viaGemini], ["groq", viaGroq]];
+
+  it("an empty answer from the model is unreadable with its usage kept, on both providers", async () => {
+    const reply = (body: unknown): typeof fetch => () => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
+    const groqUsage = { prompt_tokens: 300, completion_tokens: 1000 };
+    const empties: [string, MakeProvider, unknown][] = [
+      ["gemini, no parts", viaGemini, { candidates: [{ content: { parts: [] } }], usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 1000 } }],
+      ["gemini, an empty part", viaGemini, { candidates: [{ content: { parts: [{ text: "" }] } }], usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 1000 } }],
+      ["groq, empty content", viaGroq, { choices: [{ message: { content: "" } }], usage: groqUsage }],
+      ["groq, null content", viaGroq, { choices: [{ message: { content: null } }], usage: groqUsage }],
+      ["groq, no content", viaGroq, { choices: [{ message: {} }], usage: groqUsage }],
+    ];
+    for (const [label, make, body] of empties) {
+      const err = await failure(make(reply(body)).analyze("AA==", "image/jpeg"));
+      expect([err.message, err.kind, err.usage], label).toEqual(["vision empty completion", "unreadable", { tokensIn: 300, tokensOut: 1000 }]);
+    }
+  });
+
+  it("no reply from the model carries no usage: 408, 429 and every 5xx are the scanner's outage, every other HTTP status a refusal, on both providers", async () => {
+    const outage = (status: number): boolean => status === 408 || status === 429 || status >= 500;
+    for (const [provider, make] of makers) {
+      for (let status = 300; status <= 599; status++) {
+        const answers: typeof fetch = () => Promise.resolve(new Response(status === 304 ? null : JSON.stringify({ error: { code: status } }), { status }));
+        const err = await failure(make(answers).analyze("AA==", "image/jpeg"));
+        expect([err.message, err.kind, err.usage], `${provider} ${String(status)}`).toEqual([`vision HTTP ${String(status)}`, outage(status) ? "unavailable" : "refused", undefined]);
+      }
+    }
+    expect([400, 401, 403, 404, 413].map(outage)).toEqual([false, false, false, false, false]);
+    expect([408, 429, 500, 502, 503, 504].map(outage)).toEqual([true, true, true, true, true, true]);
+  });
+
+  it("a network failure and a reply that is not the provider's are the scanner's outage, on both providers, with no usage", async () => {
+    const notJson: typeof fetch = () => Promise.resolve(new Response("<html>busy</html>", { status: 200 }));
+    const down: typeof fetch = () => Promise.reject(new Error("ECONNRESET"));
+    for (const [provider, make] of makers) {
+      const network = await failure(make(down).analyze("AA==", "image/jpeg"));
+      expect([network.message, network.kind, network.usage], provider).toEqual(["vision network failure", "unavailable", undefined]);
+      const html = await failure(make(notJson).analyze("AA==", "image/jpeg"));
+      expect([html.message, html.kind, html.usage], provider).toEqual(["vision non-JSON response", "unavailable", undefined]);
+      for (const envelope of [{ choices: "nope", candidates: "nope" }, { choices: [], candidates: "nope" }]) {
+        const broken = await failure(make(geminiFetch(envelope).fetchImpl).analyze("AA==", "image/jpeg"));
+        expect([broken.message, broken.kind, broken.usage], `${provider} ${JSON.stringify(envelope)}`).toEqual(["vision malformed completion", "unavailable", undefined]);
+      }
+    }
+    // A Groq reply that breaks the evidence contract is the model's answer, as on Gemini.
+    const groqBroken = await failure(createGroqVisionProvider("k", "m", wrap({ meal_name: "x", items: [{ name: "x", canonical_hint: "x", kcal: 1 }], photo_quality: "good" })).analyze("AA==", "image/jpeg"));
+    expect([groqBroken.message, groqBroken.kind, groqBroken.usage]).toEqual(["vision malformed evidence shape", "unreadable", { tokensIn: 2002, tokensOut: 130 }]);
+  });
+
+  describe("a provider that never answers", () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+    it("is given up on after 30 seconds, on both providers, and reads as the scanner's outage", async () => {
+      expect(VISION_TIMEOUT_MS).toBe(30_000);
+      for (const make of [createGeminiVisionProvider, createGroqVisionProvider]) {
+        // The clock is the platform's: the timeout's own signal is handed back
+        // already fired, and the fetch below answers only when its signal fires.
+        const fired = AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"));
+        const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(fired);
+        const signals: (AbortSignal | null | undefined)[] = [];
+        const hangs: typeof fetch = (_input, init) => {
+          signals.push(init?.signal);
+          return new Promise((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal?.aborted === true) reject(new Error("aborted"));
+            signal?.addEventListener("abort", () => { reject(new Error("aborted")); });
+          });
+        };
+        const err = await failure(make("k", "m", hangs).analyze("AA==", "image/jpeg"));
+        expect([err.message, err.kind, err.usage], make.name).toEqual(["vision network failure", "unavailable", undefined]);
+        expect(timeout.mock.calls, make.name).toEqual([[30_000]]);
+        expect(signals, make.name).toHaveLength(1);
+        expect(signals[0], make.name).toBe(fired);
+        timeout.mockRestore();
+      }
+    });
+  });
+
+  it("createMealVisionProvider follows MEAL_VISION_MODEL and is null while that model's own key is unset", async () => {
+    const base = { NODE_ENV: "test", DATABASE_URL: "postgres://x:y@localhost:5432/z", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "p26a-test-secret-0123456789abcdef-32" }; // gitleaks:allow
+    expect(loadConfig(base).MEAL_VISION_MODEL).toBe("gemini-3.5-flash-lite");
+    expect(createMealVisionProvider(loadConfig(base))).toBeNull();
+    expect(createMealVisionProvider(loadConfig({ ...base, GROQ_API_KEY: "g" }))).toBeNull(); // the spare's key does not run Gemini
+    expect(createMealVisionProvider(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b" }))).toBeNull();
+    expect(createMealVisionProvider(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b", GEMINI_API_KEY: "k" }))).toBeNull();
+    // Each model's provider calls its own host.
+    const urls: string[] = [];
+    const capture: typeof fetch = (input) => { urls.push(urlOf(input)); return Promise.resolve(new Response("{}", { status: 500 })); };
+    const run = async (config: AppConfig): Promise<void> => {
+      const provider = createMealVisionProvider(config, capture);
+      if (provider === null) throw new Error("expected a provider");
+      await provider.analyze("AA==", "image/jpeg").catch(() => undefined);
+    };
+    await run(loadConfig({ ...base, GEMINI_API_KEY: "k" }));
+    await run(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b", GROQ_API_KEY: "g" }));
+    expect(urls).toEqual([
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+      "https://api.groq.com/openai/v1/chat/completions",
+    ]);
+    // A model with no price row cannot be configured at all.
+    expect(() => loadConfig({ ...base, MEAL_VISION_MODEL: "gemini-2.5-flash-lite" })).toThrow(/MEAL_VISION_MODEL/);
   });
 });
 

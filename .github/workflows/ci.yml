@@ -227,8 +227,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # The route tests use an in-memory Redis; test/redis.scripts.test.ts runs
+      # the Lua production runs (the scan and coach counters) on this one.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      TEST_REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
         with:

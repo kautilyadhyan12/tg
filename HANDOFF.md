@@ -4,6 +4,57 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · PR #72's fourth re-check: no defects; its weak test and one Low test gap fixed; merged
+
+- The re-check found the High closed (a refused try takes off only its own count, in either order with a give-back) and no new defect. Still open: one weak test and one Low test gap.
+- Weak test: `test/redis.scripts.test.ts`, the only test of the counter scripts production runs, was skipped in CI (seen in 3240506's log), so a broken script could merge green. CI's database job now starts a Redis (`redis:7-alpine`) beside its Postgres and sets `TEST_REDIS_URL`.
+- Low: the test took any window from 1 to 90 s. Now a first count's window must read 85–90 s, and a later count or a take-off on a 30 s window 25–30 s.
+- Verified: api tsc 0 · eslint 0 · redis scripts 3/3 on the local Redis · three deliberate breaks (a fixed 30 s first window; a later count cutting it to 1 s; a take-off setting 5 s) each red on the new test and green on the old, `src/redis.ts` restored identical.
+- CI green on b8c9a9a (run 35028211311), the Redis test run there: 3 tests, 60 of 60 test files passed, none skipped.
+- Per §2.6 these fixes get no further re-check: no Critical or High is open. Kd: *"merge"*.
+- Next: 7a-iii, from master, its own chat.
+
+## 2026-09-16 · PR #72's third re-check fixed (1 High, 1 weak test); a re-check of that fix next
+
+- The re-check passed the Critical and the four weak tests and found one High: the quota check counted a try it refused over the limit and never took it off, so a scan given back after an outage was not free again. A free person (2 a day) whose last scan hung while they tried again (429) was told, after that scan failed, "Daily photo-scan limit reached" with one scan left.
+- Fix, the reviewer's: a refused try takes its count off (`decrIfPositive`, in `requireQuota`, so for the coach and routes too); a take-off that fails is logged `quota.refusal_not_uncounted`.
+- Tests: the review's sequence through the route (200 · a scan held at the scanner · 429, still 2 counted · the held scan busy, 1 counted · 200); a second refused coach question leaves the count at 5.
+- Weak test: the production Lua was run by nothing (every route test uses the in-memory Redis). `test/redis.scripts.test.ts` runs count, give-back and take on the compose Redis; `test:local` sets `TEST_REDIS_URL`; CI has no Redis and skips it (seen skipped without it).
+- Verified: api tsc 0 · eslint 0 · nutrition + entitlements routes + entitlements unit + redis scripts + sentry 73/73 on local Postgres and Redis · full local 1074/1074 · 6 deliberate breaks each red (no take-off: both route tests; `c >= 0`; a missing counter decremented; SET for DECR, the window lost; every count resetting the window; take keeping the value), files restored identical.
+- Next: CI, the fresh-chat re-check of this fix only, merge; then 7a-iii.
+
+## 2026-09-16 · PR #72's second re-check fixed (1 Critical, 1 High, 2 Low, 4 weak tests); a re-check of these fixes next
+
+- Critical: @sentry/node 10.63 sent a request's body (first 10,000 characters), headers, cookies and query string, and each outgoing call's query string as a breadcrumb, whatever sendDefaultPii says. `src/sentry.ts` (the API and the worker) keeps no body and takes the request and the breadcrumbs off every event. The review's fix left the breadcrumbs: a food search's words still went (measured).
+- High: a scan that fails for anything but the photo (an outage, a refusal, a fault, one after the model answered too) gives back what it took, on the server: the scan it counted (`refundQuota`, a Lua decrement that never goes below zero nor makes a key), or a new free retry for a scan that rode one. Three failures in five minutes pause that person's scans in `validateScan`, before a free retry is spent or a scan counted. The review's fix (a free retry per failure) was not enough: that token lives in the open photo sheet for ten minutes, so closing the sheet still lost the scan.
+- The failure that starts the pause says "unavailable", not "in a minute"; the pause is shorter than a free retry lasts, so one given back as it begins outlives it.
+- Web: a 503 keeps the free retry held unless it brings a new one; a 400 `invalid_retake` drops it: "That free retry has run out. Pick the photo again."
+- Lows: a word that says there is none is never named under "Not in the total" (an item's reads as its hint); "The review's case:" gone from the test.
+- Tests: what Sentry is sent, through the real SDK on a real port with a recording transport (red on the old options: all seven kinds of request data went); the pause at 4:59.999 and 5:00 in literal minutes; the web's free retry through every answer; the prompt's no-value words read from the prompt.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 35/35 · entitlements unit 12/12 · nutrition routes 47/47 + sentry 1/1 on local Postgres · full local 1070/1070 (the run before: 1050 passed and `auth.routes`' setup failed at its `p21-%` user delete; 20/20 alone; ROADMAP 10) · shared tsc 0 · eslint 0 · 106/106 · web 47/47 in the five files that draw Nutrition (its 7 old lint errors, none on changed lines) · the Lua on the local Redis · 24 deliberate breaks each red, files restored identical.
+- Next: CI, the fresh-chat re-check of these fixes only, merge; then 7a-iii.
+
+## 2026-09-16 · PR #72's re-check fixed (1 High, 5 Low, 4 weak tests); a re-check of these fixes next
+
+- High: an outage's free retry never ran out and every HTTP error was an outage, so a photo Google answers 400 bought endless provider calls for one scan. Now only 408, 429, a 5xx, the network, the timeout or a reply that is not the provider's is an outage, with a free retry at most 3 times per person in 10 minutes (`MAX_OUTAGE_RETRIES`, counted in Redis, fail closed); any other status is a refusal: 503 `nutrition_unavailable`, no free retry, logged as an error.
+- A fault (anything thrown that is not a `VisionProviderError`) is answered like a refusal, since a retry meets the same fault (it was "busy" with a free retry); it is logged with its error and sent to Sentry with the request id through app.ts's `reportError`, which the central error handler now uses too (L4).
+- Only the model's answer carries usage, and the error's constructor enforces it, so a reply that is not the provider's writes no zero-token ledger row (DECISIONS 2026-07-12: no completion, no row). Every `nutrition.scan_failed` line carries the request id.
+- Lows: "unknown" is no name for a meal, container or size (`NO_VALUE_WORDS`); Groq's empty or null content is "unreadable" with its usage; ROADMAP 7a-i's count line and item 7's line (what the scanner does, not the review story).
+- Web: a 503 other than "busy" reads "Try again later · Meal scanning is unavailable right now." with no free retry (it fell to the generic error toast).
+- Tests: the chain ends at the third free retry, per person, and starts again after 10 minutes; the review's case through the real Gemini adapter (a fetch answering 400: five tries 503, 503, 429, 429, 429 and 2 provider calls); a real 429 and a broken reply ledger nothing; a fault reaches Sentry with the response's request id; HTTP 300–599 on both providers; empty answers on both; 503 `nutrition_unavailable` and `quota_unavailable` never say busy.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 35/35 · full local 1065/1065 · shared tsc 0 · eslint 0 · 106/106 · web 49/49 in the six files that draw Nutrition (its 7 old lint errors, none on changed lines); every new test red before the fix; 15 deliberate breaks each red (the review's "any 503 is busy" among them), files restored identical.
+- Next: CI, the fresh-chat re-check of these fixes only, merge; then 7a-iii.
+
+## 2026-09-15 · PR #72 brought up to master, and its review fixed (1 High, 8 Low, 5 weak tests); the re-check of the fixes next
+
+- Master (#71) merged into the branch (4fe2bd9): a photo count left out reads as unknown, as every left-out field does; the scan response keeps #71's `pieces` and drops `cuisineGuess`. Proved: api tsc 0 · eslint 0 · unit 54/54 · local routes 44/44 · shared 106/106 · web 41/41.
+- H1: a scanner outage (an HTTP error such as a 429, a network failure, the 30 s timeout, a reply that is not the provider's, a bug) answers 503 `scanner_unavailable` with a fresh free retry every time, even on a retry, and logs `nutrition.scan_failed` with the reason; the photo sheet says "Meal scanning is busy right now — try again in a minute (free retry)" under "Try again". A reply the model sent that cannot be used keeps the photo wording and one retake, logged as a warning.
+- Lows: the prompt says every item has a name and a canonical_hint (L1); a reply naming no food is a poor photo (L2); a meal named "N/A", "none" or "null" is "Meal" (L3); a switched-off scanner answers 503 before a scan is counted (L4); temperature goes to Kd in 7a-iii's plan (L5); the scanner's reply schemas are in `@app/shared` (L6); the orgs comment says 7 vs 2 (L7); #72's entry below is ten lines (L8).
+- Weak tests: the real scanner wired with and without a key; the spare model's ledger row (660); the 30 s timeout on both providers; "Meal" for an unnamed plate; white painted before the photo, in order.
+- Verified: api tsc 0 · eslint 0 · unit 55/55 · local nutrition + entitlements routes 50/50 · shared tsc 0 · eslint 0 · 106/106 · web 44/44 (web lint is not a CI gate: 7 old errors in Nutrition.jsx, none on changed lines). 16 deliberate breaks, one per fix, each red; files restored identical.
+- Left as they are: the coach and Open Food Facts adapters still hold their own reply schemas (the coach is off; Stage 4 item 8 replaces the live search).
+- Next: CI, the fresh-chat re-check of these fixes and of the merge's conflict resolution, merge; then 7a-iii.
+
 ## 2026-09-15 · PR #71's last re-check: no Critical/High; three Lows and one weak test fixed; merged
 
 - The re-check of the kind-first fix found no Critical or High: three Lows in the records and one missing test. Kd: *"fix and merge"*; per §2.6 the fixes are not re-checked.
@@ -57,6 +108,16 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Order, Kd's: #71 takes only the two High fixes and Lows 2 and 4, the reviewer's way (on the 7a-i line), a re-check of the four, merge · #72 · 7a-iii with the form in its reply · 7a-iv. L1, L3 and item 10's cornflakes are on 7a-iv's line.
 - Records only, on this branch: RULINGS (Nutrition), ROADMAP 7a-i, 7a-iv and 10, this entry. No code changed; no suite run (nothing to prove). 7a-iii's line lives on PR #72's branch; the rebase after #71 puts 7a-iii above 7a-iv.
 - Next: a fresh chat fixes #71's four findings, a failing test first for each, proves them and hands Kd the re-check prompt; then #72's review; then 7a-iii.
+
+## 2026-09-15 · Stage 4 item 7: the meal scanner on Gemini 3.5 Flash-Lite, branch `gemini-meal-scanner`, PR #72
+
+- Kd's rulings of 2026-09-15 are in RULINGS: 3.5 Flash-Lite at low picture detail (2.5 is refused to new accounts), the reply trimmed (*"lets do the trim"*), the app 18+, a gym member 7 scans a day, the $79–$379 ladder, gym payment links, subscriptions bought on the web, a sole proprietorship, no model or price swap unasked.
+- Measured on his eight plates (40 calls; his page: claude.ai/artifact/2UHRMZ3Kv3vAHDMnmUExjA): $0.00068 a scan at low detail with the trimmed reply, against $0.00093 untrimmed and $0.00182 on Groq, the same foods found.
+- Built: the Gemini provider (key in a header, JSON mode, minimal thinking, low detail, 30 s timeout, thought tokens billed as output); `MEAL_VISION_MODEL` picks the provider and `MEAL_VISION_MODELS` prices each model; a left-out field reads as unknown; a no-meal photo asks for a retake; `cuisineGuess` left the response; the browser sends a 768 px JPEG; gym members 7 scans.
+- Verified: api tsc 0 · eslint 0 · unit 35/35 · local routes + db.migration 68/68 · shared 105/105 · web 35/35.
+- The repository went public the same day, on Kd's word, with its safeguards (RULINGS 2026-09-14, amended).
+- Kd's click-through found the matching flaw, not a #72 defect (two topped toasts read as "Avocado", "Sandwich (turkey)" and a Nescafé sachet); he ruled the redesign, ROADMAP 7a-iii. No more click-through of #72 is needed.
+- Next: #71's re-check, #72's review, merge both; then 7a-iii.
 
 ## 2026-09-15 · 7a-i: PR #71's third re-check fixed (3 High, 4 Low, 5 weak tests); its re-check next
 

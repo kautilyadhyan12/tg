@@ -115,6 +115,26 @@ describe("in-memory Redis adapter", () => {
     t += 61_000; // window passed
     expect(await r.incrWithTtl("k", 60)).toBe(1);
   });
+  it("decrIfPositive takes one off a live counter above zero and keeps its window; never below zero, never a counter that is gone", async () => {
+    let t = 1_000_000;
+    const r = createMemoryRedis(() => t);
+    expect(await r.decrIfPositive("k")).toBe(false);
+    expect(await r.get("k")).toBeNull();
+    await r.incrWithTtl("k", 60);
+    await r.incrWithTtl("k", 60);
+    expect(await r.decrIfPositive("k")).toBe(true);
+    expect(await r.get("k")).toBe("1");
+    expect(await r.decrIfPositive("k")).toBe(true);
+    expect(await r.decrIfPositive("k")).toBe(false);
+    expect(await r.get("k")).toBe("0");
+    t += 59_000; // still the window the first count opened
+    expect(await r.incrWithTtl("k", 60)).toBe(1);
+    t += 1_000; // that window has ended: nothing to take off, and nothing made
+    expect(await r.decrIfPositive("k")).toBe(false);
+    expect(await r.get("k")).toBeNull();
+    r.down = true;
+    expect(await r.decrIfPositive("k")).toBeNull();
+  });
   it("down switch simulates an outage: every op degrades to null/no-op", async () => {
     const r = createMemoryRedis();
     await r.setex("k", 60, "v");

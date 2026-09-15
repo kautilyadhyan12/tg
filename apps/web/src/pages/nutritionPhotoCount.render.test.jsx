@@ -24,7 +24,7 @@ beforeEach(() => {
   svc.previewMeal = vi.fn(async () => { throw new Error('no preview in this test'); });
   svc.analyzePhoto = vi.fn(async () => ({
     data: {
-      scanToken: 't'.repeat(40), mealName: 'Counted plate', cuisineGuess: null,
+      scanToken: 't'.repeat(40), mealName: 'Counted plate',
       items: [item('Chicken nuggets', 'chicken_nuggets', 96, 6), item('Grapes', 'grapes', 100, null), item('Meatballs (in sauce)', 'meatballs_in_sauce', 1720, 40)],
       unknownItems: ['mango lassi'], photoQuality: 'good',
       totals: { kcalPoint: 240, kcalLow: 240, kcalHigh: 240, proteinG: 10, carbsG: 10, fatG: 10 }, confirmed: false,
@@ -82,7 +82,7 @@ describe('the photo sheet count stepper', () => {
     const scan = (items, unknownItems) => {
       svc.analyzePhoto = vi.fn(async () => ({
         data: {
-          scanToken: 't'.repeat(40), mealName: 'Plate', cuisineGuess: null, items, unknownItems, photoQuality: 'good',
+          scanToken: 't'.repeat(40), mealName: 'Plate', items, unknownItems, photoQuality: 'good',
           totals: { kcalPoint: 240, kcalLow: 240, kcalHigh: 240, proteinG: 10, carbsG: 10, fatG: 10 }, confirmed: false,
         },
       }));

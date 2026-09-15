@@ -45,15 +45,17 @@ const proEntitlements = {
 } as const;
 
 /** What a MEMBER of a paying gym gets. **One difference from the paid consumer
- *  block and one only: 5 scans a day instead of 20** (Kd, :17366 §1, measured
- *  correct at §2 — 20/day for gym members puts three of five bands underwater,
- *  because an individual pays ~$10 a head and a gym ~$0.10). **The gap is an
- *  UPSELL, not a defect**: `mergeEntitlements` hands a member who also buys the
- *  individual plan the better of the two, which is the reason to buy.
- *  Nothing else is on record as differing, so nothing else differs (R0.2). */
+ *  block and one only: 7 scans a day instead of 20** (Kd, RULINGS 2026-09-15,
+ *  raised from the 5 of :17366 §1 when the gym price book was rebuilt to cover
+ *  every member scanning 7 times a day at the scanner's measured cost; 20/day
+ *  for gym members puts bands underwater, because an individual pays ~$10 a
+ *  head and a gym far less). **The gap is an UPSELL, not a defect**:
+ *  `mergeEntitlements` hands a member who also buys the individual plan the
+ *  better of the two, which is the reason to buy. Nothing else is on record as
+ *  differing, so nothing else differs (R0.2). */
 const gymMemberEntitlements = {
   ...proEntitlements,
-  meal_scan: { window: "day", limit: 5 },
+  meal_scan: { window: "day", limit: 7 },
 } as const;
 
 const freeEntitlements = {

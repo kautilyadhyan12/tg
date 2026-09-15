@@ -5808,8 +5808,8 @@ d("orgs routes (real Postgres)", () => {
    *  only differ if the trial genuinely busted it. Without that first read the
    *  assertion passes on a cold cache and proves nothing (:5543's fixture lesson).
    *
-   *  5 vs 2 is the observable, and it is Kd's own ruling twice over: a gym's
-   *  member gets 5 meal scans a day (:17366 §2) and the free tier gets 2. Read
+   *  7 vs 2 is the observable, and it is Kd's own ruling twice over: a gym's
+   *  member gets 7 meal scans a day (RULINGS 2026-09-15) and the free tier gets 2. Read
    *  through `/v1/entitlements/me` — the resolver — rather than out of the plans
    *  table, so it is the answer a screen would actually be given. */
   it("members get the gym plan the moment the trial starts", { timeout: 60_000 }, async () => {
@@ -5828,7 +5828,7 @@ d("orgs routes (real Postgres)", () => {
     const after = await get("/v1/entitlements/me", { cookies: owner.cookies });
     expect(after.statusCode).toBe(200);
     expect((JSON.parse(after.body) as { entitlements: { meal_scan: { limit: number } } })
-      .entitlements.meal_scan.limit).toBe(5);
+      .entitlements.meal_scan.limit).toBe(7);
   });
 
   /** A double tap is a person, not an error — and the assertion with teeth is the

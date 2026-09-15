@@ -10,7 +10,7 @@ import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { bustEntitlements } from "../src/modules/entitlements/service.js";
-import { requireQuota } from "../src/modules/quotas/service.js";
+import { quotaKey, requireQuota } from "../src/modules/quotas/service.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -144,6 +144,9 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     const body = blocked.json<{ error: string; resetsAt: string }>();
     expect(body.error).toBe("quota_exceeded");
     expect(new Date(body.resetsAt).getTime()).toBeGreaterThan(Date.now());
+    // A refused try takes nothing: however many are refused, the five used stay the count.
+    expect((await inject({ url: "/test/quota/coach", access: cookieA })).statusCode).toBe(429);
+    expect(await redis.get(quotaKey("coach", userA, "month", new Date()))).toBe("5");
   });
 
   it("Redis down: coach fails OPEN, meal_scan fails CLOSED 503 (quotas.py:7-11 verbatim)", { timeout: 30_000 }, async () => {
@@ -195,12 +198,12 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     // THE ONE NUMBER THAT SEPARATES THE GYM-MEMBER BLOCK FROM THE PAID ONE, and
     // until round 2 nothing outside the seed test observed it. **Every other
     // assertion here — `source`, `coach`, `history_days` — is IDENTICAL in both
-    // blocks**, so all of them stay green if 5 becomes 20, which is what round-1
+    // blocks**, so all of them stay green if 7 becomes 20, which is what round-1
     // claimed this test now covered and round-2 measured false.
-    // 5/day is Kd's, :17366 §1, and §2 measures WHY: 20/day for gym members is
-    // underwater in three of five bands. This asserts it through the resolver a
-    // real member's app reads, not off the plans table.
-    expect(me.entitlements["meal_scan"]).toEqual({ window: "day", limit: 5 });
+    // 7/day is Kd's (RULINGS 2026-09-15; 5 before, :17366 §1, whose §2 measures
+    // WHY 20/day for gym members is underwater). This asserts it through the
+    // resolver a real member's app reads, not off the plans table.
+    expect(me.entitlements["meal_scan"]).toEqual({ window: "day", limit: 7 });
   });
 
   it("history read-gate: free sees 90 days with limitedToDays; pro sees everything (§0.2, GAP-4)", { timeout: 60_000 }, async () => {

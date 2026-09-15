@@ -1,69 +1,88 @@
 // Part 2B §3.2 Stage 1: vision identifies evidence and never computes nutrition.
-import { z } from "zod";
+// The scanner runs on Gemini (RULINGS 2026-08-24); Groq stays as a switched-off
+// spare. MEAL_VISION_MODEL picks one at boot, and every model carries its price.
+// Every reply is parsed through the scanner's schemas in @app/shared.
+import { geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
+import type { AppConfig } from "../../config.js";
 
-// Vision-swap card 2026-07-16: real Groq completions (Scout AND Qwen, captured
-// verbatim in nutrition.unit.test.ts) return format variants the strict shapes
-// rejected — numeric confidence (0.9), string fill_level ("full"/"N/A"),
-// "None" containers, capitalized enums — which 422'd EVERY real scan while the
-// fake-provider tests stayed green. The preprocessors below normalize exactly
-// those observed variants; everything else (unknown keys, smuggled kcal,
-// missing fields) still fails .strict() as before.
-const confidenceSchema = z.preprocess((v) => {
-  if (typeof v === "string") return v.toLowerCase();
-  // Bands are a recorded judgment call (DECISIONS 2026-07-16): models emit
-  // 0–1 scores; ≥0.75 high · ≥0.4 medium · else low.
-  if (typeof v === "number" && Number.isFinite(v)) return v >= 0.75 ? "high" : v >= 0.4 ? "medium" : "low";
-  return v;
-}, z.enum(["high", "medium", "low"]));
-const fillLevelSchema = z.preprocess(
-  // Non-numeric fill levels ("full", "N/A") are UNKNOWN, never guessed at.
-  (v) => (typeof v === "string" ? null : v),
-  z.number().min(0).max(1).nullable(),
-);
-const optionalNameSchema = z.preprocess(
-  (v) => (typeof v === "string" && ["none", "n/a", "null", ""].includes(v.trim().toLowerCase()) ? null : v),
-  z.string().nullable(),
-);
+export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
 
-/** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
-export const MAX_PHOTO_COUNT = 30;
-const countSchema = z.preprocess(
-  // A count is a whole number of things from 1 to the sheet's stepper. Any other
-  // value the model gives (0, 2.5, 31, "3") is no reliable count, so it is
-  // UNKNOWN, as the prompt's "Count only reliably countable items" asks; the
-  // item stays on the sheet at its uncounted serving, and the paid scan is kept.
-  // A count left out is still a missing field.
-  (v) => (v === undefined || v === null || (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_PHOTO_COUNT) ? v : null),
-  z.number().int().positive().max(MAX_PHOTO_COUNT).nullable(),
-);
+/** Every model the scanner may run on: its provider, and its public list price
+ *  in integer micro-USD per 1M tokens (a photo is input tokens). A model the
+ *  config allows without a row here fails the type check, so no scan is ever
+ *  priced by guess.
+ *  gemini-3.5-flash-lite: $0.30 in, $2.50 out (ai.google.dev/gemini-api/docs/pricing, read 2026-09-15).
+ *  qwen/qwen3.6-27b: $0.60 in, $3.00 out (console.groq.com/docs/models, read 2026-09-15). */
+export const MEAL_VISION_MODELS: Readonly<Record<MealVisionModel, {
+  provider: "gemini" | "groq";
+  inputMicroUsdPerMillion: bigint;
+  outputMicroUsdPerMillion: bigint;
+}>> = {
+  "gemini-3.5-flash-lite": { provider: "gemini", inputMicroUsdPerMillion: 300_000n, outputMicroUsdPerMillion: 2_500_000n },
+  "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
+};
 
-const itemSchema = z.object({
-  name: z.string().min(1), canonical_hint: z.string().min(1), container: optionalNameSchema,
-  fill_level: fillLevelSchema, size_class: optionalNameSchema,
-  count: countSchema, confidence: confidenceSchema,
-}).strict();
-const evidenceSchema = z.object({
-  meal_name: z.string().min(1), cuisine_guess: z.string().nullable(), items: z.array(itemSchema).max(30),
-  scale_anchors: z.array(z.object({ type: z.string(), notes: z.string() }).strict()),
-  unknown_items: z.array(z.string()),
-  photo_quality: z.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v), z.enum(["good", "poor"])),
-}).strict();
-export type VisionEvidence = z.infer<typeof evidenceSchema>;
+/** A provider that never answers must not hold the scan request open. */
+export const VISION_TIMEOUT_MS = 30_000;
 
-const completionSchema = z.object({
-  choices: z.array(z.object({ message: z.object({ content: z.string().min(1) }) })).min(1),
-  model: z.string().default(""), usage: z.object({ prompt_tokens: z.number().int().nonnegative().default(0), completion_tokens: z.number().int().nonnegative().default(0) }).default({ prompt_tokens: 0, completion_tokens: 0 }),
-});
+/** How many tokens Gemini spends reading the photo. Gemini 3 reads a photo as
+ *  about 280 tokens at low, 560 at medium and 1,120 when left unset
+ *  (ai.google.dev/gemini-api/docs/media-resolution, read 2026-09-15); null
+ *  leaves it to the model. Low found every food the other two settings found
+ *  on Kd's eight plates (2026-09-15), so the cheapest setting is the one used. */
+export type GeminiMediaResolution = "MEDIA_RESOLUTION_LOW" | "MEDIA_RESOLUTION_MEDIUM" | "MEDIA_RESOLUTION_HIGH" | null;
+export const MEAL_SCAN_MEDIA_RESOLUTION: GeminiMediaResolution = "MEDIA_RESOLUTION_LOW";
 
-export interface VisionResult { evidence: VisionEvidence; model: string; tokensIn: number; tokensOut: number; }
+export interface VisionUsage { tokensIn: number; tokensOut: number; }
+export interface VisionResult extends VisionUsage { evidence: VisionEvidence; }
 export interface VisionProvider { analyze(imageBase64: string, mimeType: string): Promise<VisionResult>; }
+
+/** Why a scan failed, which decides what the person is told:
+ *  - "unavailable": the provider cannot answer for now (the network, the
+ *    timeout, an HTTP 408, 429 or 5xx, or a reply that is not the provider's)
+ *    — the scanner's fault, never the photo's, and a try soon may work;
+ *  - "refused": the provider refused this request (any other HTTP status), so
+ *    the same request is refused however often it is sent;
+ *  - "unreadable": the model answered, and its answer cannot be used (blocked,
+ *    empty, or breaking the evidence contract).
+ *  Only the model's answer carries usage; with no completion there is no
+ *  ledger row (ruled — DECISIONS). */
+export type VisionFailureKind = "unavailable" | "refused" | "unreadable";
 export class VisionProviderError extends Error {
-  constructor(message: string, readonly usage?: { model: string; tokensIn: number; tokensOut: number }) { super(message); this.name = "VisionProviderError"; }
+  readonly usage: VisionUsage | undefined;
+  constructor(message: string, kind: "unavailable" | "refused");
+  constructor(message: string, kind: "unreadable", usage: VisionUsage);
+  constructor(message: string, readonly kind: VisionFailureKind, usage?: VisionUsage) {
+    super(message);
+    this.name = "VisionProviderError";
+    this.usage = usage;
+  }
 }
 
-export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, cuisine_guess, items [{name,canonical_hint,container,fill_level,size_class,count,confidence}], scale_anchors [{type,notes}], unknown_items, photo_quality. Field formats are strict: confidence must be exactly one of the lowercase strings "high", "medium", "low" (never a number); fill_level must be a number between 0 and 1, or null when not applicable; container and size_class must be a string or null (null, not "none" or "N/A"); count must be a positive integer or null; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Never output calories, kcal, grams, quantities by weight, protein, carbohydrates, fat, fibre, or any nutrition arithmetic.`;
+/** An HTTP error the provider gets over on its own (a request timeout, its
+ *  rate limit, a fault of its own) is an outage; any other refuses the request. */
+const httpFailure = (status: number): VisionProviderError =>
+  new VisionProviderError(`vision HTTP ${String(status)}`, status === 408 || status === 429 || status >= 500 ? "unavailable" : "refused");
 
-export function createVisionProvider(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): VisionProvider {
+// The instructions on reading the plate are Kd's whole prompt (RULINGS
+// 2026-08-24). What the model writes back is trimmed to what the app reads
+// (RULINGS 2026-09-15): no cuisine guess, no scale anchors, no confidence
+// word, and a field it cannot fill is left out rather than written as null —
+// but never an item's name or canonical_hint, which the evidence contract
+// requires, so a food it cannot name goes in unknown_items.
+export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items [{name,canonical_hint,container,fill_level,size_class,count}], unknown_items, photo_quality. Write the JSON on one line, with no line breaks or indentation, and leave out any field you cannot fill instead of writing null, "none" or "N/A". Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. Field formats are strict: meal_name must be a short name for the meal; fill_level must be a number between 0 and 1; container and size_class must be strings; count must be a positive integer; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Never output calories, kcal, grams, quantities by weight, protein, carbohydrates, fat, fibre, or any nutrition arithmetic.`;
+
+/** The model's JSON text → evidence. A reply that breaks the contract fails
+ *  closed and keeps its usage, so the ledger still records the spend. */
+function parseEvidence(text: string, usage: VisionUsage): VisionResult {
+  let content: unknown;
+  try { content = JSON.parse(text); } catch { throw new VisionProviderError("vision malformed evidence JSON", "unreadable", usage); }
+  const evidence = mealVisionEvidenceSchema.safeParse(content);
+  if (!evidence.success) throw new VisionProviderError("vision malformed evidence shape", "unreadable", usage);
+  return { evidence: evidence.data, ...usage };
+}
+
+export function createGroqVisionProvider(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): VisionProvider {
   return { async analyze(imageBase64, mimeType) {
     let response: Response;
     try {
@@ -71,20 +90,76 @@ export function createVisionProvider(apiKey: string, model: string, fetchImpl: t
       // budget before the JSON; reasoning_effort:"none" disables it (Groq
       // docs/reasoning, checked 2026-07-16 — the parameter is Qwen-only).
       const qwenOpts = model.startsWith("qwen/") ? { reasoning_effort: "none" } : {};
-      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: 1000, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }) });
-    } catch { throw new VisionProviderError("vision network failure"); }
-    if (!response.ok) throw new VisionProviderError(`vision HTTP ${String(response.status)}`);
+      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: 1000, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
+    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
+    if (!response.ok) throw httpFailure(response.status);
     let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", { model, tokensIn: 0, tokensOut: 0 }); }
-    const completion = completionSchema.safeParse(raw);
-    if (!completion.success) throw new VisionProviderError("vision malformed completion", { model, tokensIn: 0, tokensOut: 0 });
-    const choice = completion.data.choices[0];
-    if (choice === undefined) throw new VisionProviderError("vision empty completion");
-    let content: unknown;
-    const usage = { model: completion.data.model || model, tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
-    try { content = JSON.parse(choice.message.content); } catch { throw new VisionProviderError("vision malformed evidence JSON", usage); }
-    const evidence = evidenceSchema.safeParse(content);
-    if (!evidence.success) throw new VisionProviderError("vision malformed evidence shape", usage);
-    return { evidence: evidence.data, ...usage };
+    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
+    const completion = groqCompletionSchema.safeParse(raw);
+    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
+    const [choice] = completion.data.choices;
+    const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
+    const text = choice.message.content ?? "";
+    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+    return parseEvidence(text, usage);
   } };
+}
+
+export function createGeminiVisionProvider(
+  apiKey: string,
+  model: string,
+  fetchImpl: typeof fetch = fetch,
+  mediaResolution: GeminiMediaResolution = MEAL_SCAN_MEDIA_RESOLUTION,
+): VisionProvider {
+  return { async analyze(imageBase64, mimeType) {
+    let response: Response;
+    try {
+      // The key rides in a header, never the URL, so nothing that logs a URL
+      // can carry it. The prompt goes before the photo, as Google's guide asks
+      // for a single image. Temperature stays at Gemini 3's default: Google's
+      // Gemini 3 guide warns that below 1.0 it can loop or degrade (Part 2B
+      // §3.2's temperature 0 was set for the earlier models; ROADMAP 7a-iii
+      // puts the choice to Kd). Thinking is pinned to "minimal", since thought
+      // tokens bill as output. No response schema: 3.5 Flash-Lite refuses the
+      // evidence contract's item shape with a 400, so JSON mode and the prompt
+      // carry the contract, and the evidence schema parses every reply, as on Groq.
+      response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: MEAL_VISION_PROMPT }, { inlineData: { mimeType, data: imageBase64 } }] }],
+          generationConfig: {
+            maxOutputTokens: 1000,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingLevel: "minimal" },
+            ...(mediaResolution === null ? {} : { mediaResolution }),
+          },
+        }),
+        signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
+      });
+    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
+    if (!response.ok) throw httpFailure(response.status);
+    let raw: unknown;
+    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
+    const reply = geminiReplySchema.safeParse(raw);
+    if (!reply.success) throw new VisionProviderError("vision malformed completion", "unavailable");
+    const meta = reply.data.usageMetadata;
+    // Thought tokens bill at the output price, so they count as output.
+    const usage = { tokensIn: meta.promptTokenCount, tokensOut: meta.candidatesTokenCount + meta.thoughtsTokenCount };
+    if (reply.data.promptFeedback?.blockReason !== undefined) throw new VisionProviderError("vision blocked", "unreadable", usage);
+    const parts = reply.data.candidates[0]?.content?.parts ?? [];
+    const text = parts.filter((p) => p.thought !== true).map((p) => p.text ?? "").join("");
+    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+    return parseEvidence(text, usage);
+  } };
+}
+
+/** The scanner the config names, or null when that provider's key is unset:
+ *  scanning then answers 503 and the rest of the app runs. */
+export function createMealVisionProvider(config: AppConfig, fetchImpl: typeof fetch = fetch): VisionProvider | null {
+  const model = config.MEAL_VISION_MODEL;
+  if (MEAL_VISION_MODELS[model].provider === "gemini") {
+    return config.GEMINI_API_KEY === undefined ? null : createGeminiVisionProvider(config.GEMINI_API_KEY, model, fetchImpl);
+  }
+  return config.GROQ_API_KEY === undefined ? null : createGroqVisionProvider(config.GROQ_API_KEY, model, fetchImpl);
 }

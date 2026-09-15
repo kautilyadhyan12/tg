@@ -5,8 +5,10 @@
 //     wins, worst case a few dollars;
 //   · expensive features (meal_scan vision, route_gen ORS) fail CLOSED —
 //     an unmetered hour of these is the actual bankruptcy scenario.
-// Increment-before-run (quotas.py:43-46): a request that fails later still
-// consumed a slot — acceptable, keeps it one atomic Redis op.
+// Increment-before-run (quotas.py:43-46): one atomic Redis op counts the use
+// before the work runs; a use refused over the limit is taken off again, and a
+// route whose work then fails through no fault of the person's gives the use
+// back with refundQuota (Part 8 §5.3).
 // Keys per v1 §7.2: quota:{feature}:{user}:{yyyymmdd} (day) / :{yyyymm}
 // (month); quotas stay UTC (Part 4 §3.1 note).
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -53,8 +55,13 @@ export interface QuotaDeps {
 
 /** preHandler factory — MUST be listed after app.authenticate (R3.3 order:
  *  authn → … → entitlement → quota). Wired to coach/meal/route routes when
- *  those modules land (P2.5/P2.6). */
-export function requireQuota(feature: MeteredFeatureName, deps: QuotaDeps) {
+ *  those modules land (P2.5/P2.6). `onCounted` hears the key a request's use
+ *  was counted under, for refundQuota. */
+export function requireQuota(
+  feature: MeteredFeatureName,
+  deps: QuotaDeps,
+  onCounted?: (req: FastifyRequest, key: string) => void,
+) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("requireQuota must run after app.authenticate");
@@ -63,10 +70,8 @@ export function requireQuota(feature: MeteredFeatureName, deps: QuotaDeps) {
     const { entitlements } = await getEntitlements(deps, userId);
     const { window, limit } = entitlements[feature];
 
-    const count = await deps.redis.incrWithTtl(
-      quotaKey(feature, userId, window, now),
-      window === "day" ? DAY_TTL_S : MONTH_TTL_S,
-    );
+    const key = quotaKey(feature, userId, window, now);
+    const count = await deps.redis.incrWithTtl(key, window === "day" ? DAY_TTL_S : MONTH_TTL_S);
 
     if (count === null) {
       // Redis down — cannot meter (quotas.py:49-58).
@@ -84,12 +89,28 @@ export function requireQuota(feature: MeteredFeatureName, deps: QuotaDeps) {
     }
 
     if (count > limit) {
+      // A refused try leaves the count as it found it, so a use given back later
+      // (refundQuota) can be used again.
+      if ((await deps.redis.decrIfPositive(key)) !== true) {
+        req.log.warn({ event: "quota.refusal_not_uncounted", feature, userId }, "a refused use stayed counted");
+      }
       await reply.status(429).send({
         error: "quota_exceeded",
         message: `You've used all ${String(limit)} ${feature} uses for this ${window}.`,
         resetsAt: resetsAt(window, now),
         requestId: req.id,
       });
+      return;
     }
+    onCounted?.(req, key);
   };
+}
+
+/** Gives back one use counted under `key` (the key requireQuota's onCounted
+ *  heard): work that failed through no fault of the person's costs them nothing
+ *  (Part 8 §5.3, "no quota consumed on failures"). The counter keeps its window
+ *  and never goes below zero, and a window that has ended is not brought back.
+ *  false = nothing given back (Redis down, or nothing left counted). */
+export async function refundQuota(redis: RedisLike, key: string): Promise<boolean> {
+  return (await redis.decrIfPositive(key)) === true;
 }

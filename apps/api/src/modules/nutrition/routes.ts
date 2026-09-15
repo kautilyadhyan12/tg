@@ -1,5 +1,6 @@
 // P2.6a — nutrition routes (thin, R7.1). R3.3 order on the metered scan:
-// authn → validateScan (400 never meters; retake consumed here) → meter
+// authn → validateScan (a switched-off or paused scanner 503s and a 400 never
+// meters; retake consumed here) → meter
 // (skipped when riding a retake) → handler. Photos are request-only and
 // never logged/stored. Reformatted to house style at T3.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -22,13 +23,15 @@ import {
   previewMealRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
-import { createVisionProvider, type VisionProvider } from "./vision.adapter.js";
+import { createMealVisionProvider, type VisionProvider } from "./vision.adapter.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by validateScan; present on the analyze-photo handler. */
     nutritionScanInput?: { imageBase64: string; mimeType: "image/jpeg" | "image/png" | "image/webp" };
     nutritionUsedRetake?: boolean;
+    /** Set by the meter: the quota key the scan was counted under. */
+    nutritionScanQuotaKey?: string;
   }
 }
 
@@ -95,28 +98,33 @@ function validMagic(bytes: Buffer, mime: string): boolean {
 
 export function registerNutritionRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; config: AppConfig },
+  deps: { sql: Sql; redis: RedisLike; config: AppConfig; reportError: (err: unknown, requestId: string) => void },
   overrides: NutritionRouteOverrides = {},
 ): void {
   const nutritionDeps: service.NutritionDeps = {
     sql: deps.sql,
     redis: deps.redis,
-    vision:
-      overrides.visionProvider ??
-      (deps.config.GROQ_API_KEY === undefined
-        ? null
-        : createVisionProvider(deps.config.GROQ_API_KEY, deps.config.MEAL_VISION_MODEL)),
+    vision: overrides.visionProvider ?? createMealVisionProvider(deps.config),
+    visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,
+    reportError: deps.reportError,
   };
   const readDeps = { sql: deps.sql };
   app.decorateRequest("nutritionScanInput", undefined);
   app.decorateRequest("nutritionUsedRetake", undefined);
+  app.decorateRequest("nutritionScanQuotaKey", undefined);
 
   /** Validation BEFORE the meter (P2.5b finding-1 precedent): base64 shape,
    *  1 KB–10 MB decoded, magic bytes; a valid retakeToken is consumed here
    *  so the meter can skip the quota increment (§3.5). */
   const validateScan = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // A scanner switched off (its key unset) costs no scan and no retake, and
+    // neither does one paused for this person after their scans kept failing.
+    if (nutritionDeps.vision === null || (await service.scannerPaused(nutritionDeps, authedUserId(req)))) {
+      void reply.status(503).send({ error: "nutrition_unavailable", message: "Meal scanning is temporarily unavailable.", requestId: req.id });
+      return;
+    }
     const input = parse(analyzeMealPhotoRequestSchema, req.body, req, reply);
     if (input === null) return;
     if (input.imageBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.imageBase64)) {
@@ -140,7 +148,9 @@ export function registerNutritionRoutes(
     }
   };
 
-  const quota = requireQuota("meal_scan", { sql: deps.sql, redis: deps.redis });
+  const quota = requireQuota("meal_scan", { sql: deps.sql, redis: deps.redis }, (req, key) => {
+    req.nutritionScanQuotaKey = key;
+  });
   const meter = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (req.nutritionUsedRetake !== true) await quota(req, reply);
   };
@@ -151,18 +161,23 @@ export function registerNutritionRoutes(
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");
+      const quotaKey = req.nutritionScanQuotaKey;
+      const paidWith: service.ScanPaidWith | null =
+        req.nutritionUsedRetake === true ? { retake: true } : quotaKey === undefined ? null : { quotaKey };
+      if (paidWith === null) throw new Error("the scan meter did not run");
       try {
         const draft = await service.analyzePhoto(
           nutritionDeps,
           authedUserId(req),
           input.imageBase64,
           input.mimeType,
-          req.nutritionUsedRetake === true,
+          paidWith,
+          req.id,
         );
         return await reply.status(200).send(draft);
       } catch (err) {
-        if (err instanceof service.RetakeRequiredError) {
-          return await reply.status(422).send({
+        if (err instanceof service.ScanFailedError) {
+          return await reply.status(err.statusCode).send({
             error: err.code,
             message: err.message,
             ...(err.retakeToken === null ? {} : { retakeToken: err.retakeToken }),
