@@ -216,7 +216,7 @@ the 8/day quota and the unit economics from the pricing doc are untouched.
 
 **Stage 1 — Vision: identify, never compute.** The prompt is rewritten so
 the model returns identification *evidence*, no nutrition math at all.
-Output contract (temperature 0; JSON only):
+Output contract (temperature 0; JSON only) — *temperature 0 AMENDED 2026-09-16 (RULINGS): the scanner runs at Google's default on Gemini 3, whose guide warns that below 1.0 the model can loop or degrade; the eight plates were measured at it*:
 
 ```json
 {
@@ -247,7 +247,7 @@ Rules encoded in the prompt: countable items get counts (rotis, idlis,
 eggs — counting is the one portion task vision does reliably); containers
 get a type + size class + fill level; the model must list visible scale
 anchors (plate rims, cutlery, hands, cans) and must say "unknown" rather
-than guess. **No kcal, no grams, no macros — ever.** The model naming a
+than guess. **No kcal, no grams, no macros — ever.** *(AMENDED 2026-09-15 and 2026-09-16, RULINGS: the model's own grams, calories and macros ARE asked for, as its estimate, and shown marked "estimate" only where no table has the food; the table's number wins wherever it exists.)* The model naming a
 *quantity in grams* is banned from the contract because that is arithmetic
 wearing a costume.
 

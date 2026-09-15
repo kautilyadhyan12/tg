@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · 7a-iii planned (Fable, plan only — no code): split into 7a-iii-a and 7a-iii-b; 7a-v, 7d and two after-launch lines; Kd: "go"
+
+- Kd asked, with 7a-iii, for what the market's scanners show (micronutrients, secondary macros, portion edits, cooking-method tags, rings, weekly trends, a diet-quality score) on one condition: model cost must not rise. Ruled (RULINGS 2026-09-16, three lines): every nutrient from the USDA table, never the model; 7a-v after 7a-iv; 7d after 7c; the score and the "Cooked how?" chip after launch; the scanner at Google's default temperature (spec Part 2B §3.2 carries the note).
+- Measured today: USDA SR Legacy 7,793 foods, FNDDS 5,432 (zips 5.8 MB and 3.2 MB); FNDDS carries all seventeen nutrient columns for 5,431 foods, SR 7,231–7,713 (vitamin D 5,185); household measures for 7,533 and 5,395. Licence read on fdc.nal.usda.gov: public domain, CC0 1.0, list the source.
+- The 2026-09-15 scanner chat's scratchpad still holds the eight plates and its scripts: `C:\Users\kautilya\AppData\Local\Temp\claude\D--Projects-ai-home-gym\e6003647-c0fd-4d45-9431-c2c0cfee53de\scratchpad\vision\` — `small\` the 768 px plates, `out-trimmed\results.json` the baseline (211 output tokens and $0.00068 a scan on average; the biggest plate, "download (2)", 301), `proof.mts` and `keys.mts` the measuring scripts. 7a-iii-b copies `small\` and `results.json` to `D:\Projects\ai-home-gym-plates\` first — never into the repository, which is public.
+- Reply shapes sized on that plate's measured reply (889 chars → 301 tokens, 2.95 a token): today's keys + five numbers ≈ 401 tokens, short keys ≈ 253, one array per food ≈ 168. Estimates until 7a-iii-b measures them.
+- Split, sizing being the chat's (RULINGS 2026-09-08): 7a-iii-a the USDA table in the food search (migration 0031, the import tool, search); 7a-iii-b the scanner (the compact reply, matching by rule with the 3× cross-check, estimate rows, tags, "Change", the cost gate at $0.00086).
+- Records only, committed on branch `usda-food-table`, not pushed: RULINGS, ROADMAP (7a-iii-a/b, 7a-v, 7d, Stage 4 item 1, After launch), the spec note, this entry. No code; no suite run (nothing to prove).
+- Next: an Opus chat builds 7a-iii-a on this branch (plan to Kd first, ten lines or fewer); then 7a-iii-b from master; then 7a-iv.
+
 ## 2026-09-16 · PR #72's fourth re-check: no defects; its weak test and one Low test gap fixed; merged
 
 - The re-check found the High closed (a refused try takes off only its own count, in either order with a give-back) and no new defect. Still open: one weak test and one Low test gap.
