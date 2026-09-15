@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #71's re-check of the four: two Highs in H2's fix, fixed; a re-check of the two next
+
+- The re-check passed H1, L2 and L4 and found two Highs in H2's fix; every number in it reproduced by a scratch run of HEAD first.
+- H1: a plural matched any word of the photo's container, so six "servings" of nuggets in a serving bowl were 2,100 g (96) and on a serving plate 16 g. A plural now counts the photo's container only where it is what the container is, the last word of its name or of each name an "or" joins: katoris or bowls in a katori or small bowl ×3 stay 525 g.
+- H2: any plural before "of" read as a container: stacks of roti ×8 were one roti (40 g, was 320), and piles of beef stew chunks ×6 1,530 g (found here). Where the photo shows none, only `CONTAINER_WORDS` (what each Appendix B container is, the vessel and pack units, plate, tray, the serving words) or a saved dish's name counts containers; any other plural reads as its singular.
+- Tests: the review's rows by the list's own servings; every word of every Appendix B name and four free-text names × every unit × cut tails; nine layout words equal their singular; the word list pinned. 8 deliberate breaks each red (the review's "last word only" among them), file restored identical.
+- Sweep, HEAD against the fix: 6,085,248 resolves (318 foods × 416 phrasings × 23 containers × no count or 3): 12,780 changed are H1's kind, 5,602 H2's, 0 elsewhere; every H2 change equals its singular's old reading.
+- The list's trade: a container not on it reads as its food's count, so pieces now count (baskets of nuggets ×3 48 g, was 16; thalis of roti ×2 80 g, was 40) and a cup-served food's cut bits do not (baskets of stew chunks ×3 255 g, was 765). 7a-iv's fixed vessel list replaces it.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
+- Next: CI, the fresh-chat re-check of these two fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
 ## 2026-09-15 · PR #71's four fixes (H1, H2, L2, L4), the reviewer's way; the re-check of the four next
 
 - Kd asked for 7a-iv from master; master has neither #71 nor #72 and 7a-iii is unbuilt, so he kept his order: *"#71's fixes now (Recommended)"*.
