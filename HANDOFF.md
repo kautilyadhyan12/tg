@@ -4,6 +4,23 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · Stage 4 item 7: the meal scanner on Gemini 3.5 Flash-Lite, branch `gemini-meal-scanner` (worktree `D:\Projects\ai-home-gym-gemini`)
+
+- Kd's rulings of 2026-09-15 written into RULINGS: 3.5 Flash-Lite (2.5 refused to new accounts), low picture detail, the reply trimmed to what the app reads
+  (*"lets do the trim"*); the app 18+; a gym member 7 scans a day; the $79 · $129 · $199 · $279 · $379 ladder; gym payment links for Stripe Connect;
+  subscriptions bought on the web; a sole proprietorship; no model or price swap unasked, one probe call. ROADMAP: Stage 4 items 7 and 9, Stage 3 and 5 amended.
+- Measured on his eight plates (32 calls, then 8 more with the trim; his page: claude.ai/artifact/2UHRMZ3Kv3vAHDMnmUExjA): Groq $0.00182 a scan · Gemini default
+  $0.00118 · medium $0.00102 · low $0.00093 · low with the trimmed reply $0.00068, the same foods found; every band covers 7 scans a day at that cost.
+- Built: `createGeminiVisionProvider` (key in a header, JSON mode, minimal thinking, `mediaResolution` low, 30 s timeout, thought tokens billed as output);
+  `createMealVisionProvider` picks by `MEAL_VISION_MODEL`; `MEAL_VISION_MODELS` prices each model and the ledger names it; a left-out field reads as null
+  and the retired fields are dropped; a no-meal photo is a poor photo (was a 502); `cuisineGuess` left the scan response; the browser shrinks the photo to
+  768 px JPEG (`utils/shrinkPhoto.js`); gym members 7 scans (seed + 3 tests); `infra/README.md` names `GEMINI_API_KEY`.
+- Verified: api tsc 0 · eslint 0 · nutrition + entitlements unit 35/35 · local Postgres nutrition.routes + entitlements.routes + db.migration 68/68 · orgs
+  "members get the gym plan" 1/1; shared tsc 0 · eslint 0 · 105/105; web shrinkPhoto + nutritionApi 35/35, eslint 0 on the four files.
+- This branch is off master at 870ed10, before PR #71: rebase after #71 merges (RULINGS, ROADMAP, HANDOFF and nutrition's service and tests will conflict).
+- Kd's GitHub bill is overdue (pay by 2026-09-16), most likely the Pro plan's auto-charge; he was given the steps. Next: CI; Kd's click-through (upload a
+  gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then the 18+ card (Stage 4 item 9).
+
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
 - Three Lows fixed: SignUpNote's header no longer says the console draws the note; the 4d entry below is ten lines; setup's test has its
