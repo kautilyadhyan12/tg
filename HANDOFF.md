@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · PR #72's re-check fixed (1 High, 5 Low, 4 weak tests); a re-check of these fixes next
+
+- High: an outage's free retry never ran out and every HTTP error was an outage, so a photo Google answers 400 bought endless provider calls for one scan. Now only 408, 429, a 5xx, the network, the timeout or a reply that is not the provider's is an outage, with a free retry at most 3 times per person in 10 minutes (`MAX_OUTAGE_RETRIES`, counted in Redis, fail closed); any other status is a refusal: 503 `nutrition_unavailable`, no free retry, logged as an error.
+- A fault (anything thrown that is not a `VisionProviderError`) is answered like a refusal, since a retry meets the same fault (it was "busy" with a free retry); it is logged with its error and sent to Sentry with the request id through app.ts's `reportError`, which the central error handler now uses too (L4).
+- Only the model's answer carries usage, and the error's constructor enforces it, so a reply that is not the provider's writes no zero-token ledger row (DECISIONS 2026-07-12: no completion, no row). Every `nutrition.scan_failed` line carries the request id.
+- Lows: "unknown" is no name for a meal, container or size (`NO_VALUE_WORDS`); Groq's empty or null content is "unreadable" with its usage; ROADMAP 7a-i's count line and item 7's line (what the scanner does, not the review story).
+- Web: a 503 other than "busy" reads "Try again later · Meal scanning is unavailable right now." with no free retry (it fell to the generic error toast).
+- Tests: the chain ends at the third free retry, per person, and starts again after 10 minutes; the review's case through the real Gemini adapter (a fetch answering 400: five tries 503, 503, 429, 429, 429 and 2 provider calls); a real 429 and a broken reply ledger nothing; a fault reaches Sentry with the response's request id; HTTP 300–599 on both providers; empty answers on both; 503 `nutrition_unavailable` and `quota_unavailable` never say busy.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 35/35 · full local 1065/1065 · shared tsc 0 · eslint 0 · 106/106 · web 49/49 in the six files that draw Nutrition (its 7 old lint errors, none on changed lines); every new test red before the fix; 15 deliberate breaks each red (the review's "any 503 is busy" among them), files restored identical.
+- Next: CI, the fresh-chat re-check of these fixes only, merge; then 7a-iii.
+
 ## 2026-09-15 · PR #72 brought up to master, and its review fixed (1 High, 8 Low, 5 weak tests); the re-check of the fixes next
 
 - Master (#71) merged into the branch (4fe2bd9): a photo count left out reads as unknown, as every left-out field does; the scan response keeps #71's `pieces` and drops `cuisineGuess`. Proved: api tsc 0 · eslint 0 · unit 54/54 · local routes 44/44 · shared 106/106 · web 41/41.
