@@ -96,7 +96,7 @@ function validMagic(bytes: Buffer, mime: string): boolean {
 
 export function registerNutritionRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; config: AppConfig },
+  deps: { sql: Sql; redis: RedisLike; config: AppConfig; reportError: (err: unknown, requestId: string) => void },
   overrides: NutritionRouteOverrides = {},
 ): void {
   const nutritionDeps: service.NutritionDeps = {
@@ -106,6 +106,7 @@ export function registerNutritionRoutes(
     visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,
+    reportError: deps.reportError,
   };
   const readDeps = { sql: deps.sql };
   app.decorateRequest("nutritionScanInput", undefined);
@@ -161,6 +162,7 @@ export function registerNutritionRoutes(
           input.imageBase64,
           input.mimeType,
           req.nutritionUsedRetake === true,
+          req.id,
         );
         return await reply.status(200).send(draft);
       } catch (err) {

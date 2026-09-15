@@ -1,6 +1,7 @@
 // A failed photo scan says why: a photo the scanner could not read asks for
 // another photo, and a scanner that is down says it is busy and lets the same
-// photo go again. Either way the free retry's token rides the next scan.
+// photo go again. Either way the free retry's token rides the next scan. A
+// scanner that cannot take the photo at all says it is unavailable, with none.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -74,6 +75,29 @@ describe('a photo scan that fails', () => {
     expect(await screen.findByText('Meal scanning is busy right now — try again in a minute.')).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
   });
+
+  // Switched off, refused by the provider, a fault, or no way to count scans:
+  // none of these is busy, and trying again in a minute would not help.
+  for (const [error, message] of [
+    ['nutrition_unavailable', 'Meal scanning is temporarily unavailable.'],
+    ['quota_unavailable', 'This feature is temporarily unavailable. Please try again in a few minutes.'],
+  ]) {
+    it(`says scanning is unavailable, never busy and with no free retry, on a 503 ${error}`, async () => {
+      svc.analyzePhoto = vi.fn()
+        .mockRejectedValueOnce(failure(503, { error, message, retakeToken: TOKEN }))
+        .mockResolvedValueOnce(goodScan);
+      await openPhotoSheet();
+      pickPhoto();
+      expect(await screen.findByText('Meal scanning is unavailable right now.')).toBeTruthy();
+      expect(screen.getByText('Try again later')).toBeTruthy();
+      expect(screen.queryByText(/busy/)).toBeNull();
+      expect(screen.queryByText(/free retry/)).toBeNull();
+
+      const photo = pickPhoto();
+      expect(await screen.findByText('Dal')).toBeTruthy();
+      expect(svc.analyzePhoto.mock.calls[1]).toEqual([photo, null]);
+    });
+  }
 
   it('asks for another photo when the photo could not be read, with its free retake', async () => {
     svc.analyzePhoto = vi.fn()

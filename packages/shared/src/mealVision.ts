@@ -20,8 +20,11 @@ const fillLevelSchema = z.preprocess(
   (v) => (typeof v === "string" ? null : v),
   z.number().min(0).max(1).nullable(),
 ).default(null);
+/** What a model writes for a name it does not have, however it is spelled: the
+ *  prompt's own null, "none", "N/A" and unknown, and nothing at all. */
+export const NO_VALUE_WORDS: readonly string[] = ["none", "n/a", "null", "unknown", ""];
 const optionalNameSchema = z.preprocess(
-  (v) => (typeof v === "string" && ["none", "n/a", "null", ""].includes(v.trim().toLowerCase()) ? null : v),
+  (v) => (typeof v === "string" && NO_VALUE_WORDS.includes(v.trim().toLowerCase()) ? null : v),
   z.string().nullable(),
 ).default(null);
 
@@ -62,9 +65,10 @@ export const mealVisionEvidenceSchema = z.preprocess(dropFields(RETIRED_EVIDENCE
 }).strict());
 export type VisionEvidence = z.infer<typeof mealVisionEvidenceSchema>;
 
-/** Groq's OpenAI-style chat completion, as far as the scanner reads it. */
+/** Groq's OpenAI-style chat completion, as far as the scanner reads it. A
+ *  choice whose content is empty or null is the model answering with nothing. */
 export const groqCompletionSchema = z.object({
-  choices: z.array(z.object({ message: z.object({ content: z.string().min(1) }) })).min(1),
+  choices: z.array(z.object({ message: z.object({ content: z.string().nullable().default(null) }) })).nonempty(),
   usage: z.object({ prompt_tokens: z.number().int().nonnegative().default(0), completion_tokens: z.number().int().nonnegative().default(0) }).default({ prompt_tokens: 0, completion_tokens: 0 }),
 });
 

@@ -38,18 +38,31 @@ export interface VisionResult extends VisionUsage { evidence: VisionEvidence; }
 export interface VisionProvider { analyze(imageBase64: string, mimeType: string): Promise<VisionResult>; }
 
 /** Why a scan failed, which decides what the person is told:
- *  - "unavailable": no reply from the model reached us (the network, the
- *    timeout, an HTTP error such as a 429 limit or a 5xx, or an envelope that
- *    is not the provider's) — the scanner's fault, never the photo's;
+ *  - "unavailable": the provider cannot answer for now (the network, the
+ *    timeout, an HTTP 408, 429 or 5xx, or a reply that is not the provider's)
+ *    — the scanner's fault, never the photo's, and a try soon may work;
+ *  - "refused": the provider refused this request (any other HTTP status), so
+ *    the same request is refused however often it is sent;
  *  - "unreadable": the model answered, and its answer cannot be used (blocked,
- *    empty, or breaking the evidence contract). */
-export type VisionFailureKind = "unavailable" | "unreadable";
+ *    empty, or breaking the evidence contract).
+ *  Only the model's answer carries usage; with no completion there is no
+ *  ledger row (ruled — DECISIONS). */
+export type VisionFailureKind = "unavailable" | "refused" | "unreadable";
 export class VisionProviderError extends Error {
-  constructor(message: string, readonly kind: VisionFailureKind, readonly usage?: VisionUsage) {
+  readonly usage: VisionUsage | undefined;
+  constructor(message: string, kind: "unavailable" | "refused");
+  constructor(message: string, kind: "unreadable", usage: VisionUsage);
+  constructor(message: string, readonly kind: VisionFailureKind, usage?: VisionUsage) {
     super(message);
     this.name = "VisionProviderError";
+    this.usage = usage;
   }
 }
+
+/** An HTTP error the provider gets over on its own (a request timeout, its
+ *  rate limit, a fault of its own) is an outage; any other refuses the request. */
+const httpFailure = (status: number): VisionProviderError =>
+  new VisionProviderError(`vision HTTP ${String(status)}`, status === 408 || status === 429 || status >= 500 ? "unavailable" : "refused");
 
 // The instructions on reading the plate are Kd's whole prompt (RULINGS
 // 2026-08-24). What the model writes back is trimmed to what the app reads
@@ -79,14 +92,16 @@ export function createGroqVisionProvider(apiKey: string, model: string, fetchImp
       const qwenOpts = model.startsWith("qwen/") ? { reasoning_effort: "none" } : {};
       response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: 1000, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
     } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
-    if (!response.ok) throw new VisionProviderError(`vision HTTP ${String(response.status)}`, "unavailable");
+    if (!response.ok) throw httpFailure(response.status);
     let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable", { tokensIn: 0, tokensOut: 0 }); }
+    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
     const completion = groqCompletionSchema.safeParse(raw);
-    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable", { tokensIn: 0, tokensOut: 0 });
-    const choice = completion.data.choices[0];
-    if (choice === undefined) throw new VisionProviderError("vision empty completion", "unavailable");
-    return parseEvidence(choice.message.content, { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens });
+    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
+    const [choice] = completion.data.choices;
+    const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
+    const text = choice.message.content ?? "";
+    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+    return parseEvidence(text, usage);
   } };
 }
 
@@ -123,11 +138,11 @@ export function createGeminiVisionProvider(
         signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
       });
     } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
-    if (!response.ok) throw new VisionProviderError(`vision HTTP ${String(response.status)}`, "unavailable");
+    if (!response.ok) throw httpFailure(response.status);
     let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable", { tokensIn: 0, tokensOut: 0 }); }
+    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
     const reply = geminiReplySchema.safeParse(raw);
-    if (!reply.success) throw new VisionProviderError("vision malformed completion", "unavailable", { tokensIn: 0, tokensOut: 0 });
+    if (!reply.success) throw new VisionProviderError("vision malformed completion", "unavailable");
     const meta = reply.data.usageMetadata;
     // Thought tokens bill at the output price, so they count as output.
     const usage = { tokensIn: meta.promptTokenCount, tokensOut: meta.candidatesTokenCount + meta.thoughtsTokenCount };

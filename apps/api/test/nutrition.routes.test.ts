@@ -5,8 +5,13 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
+import { RETAKE_TTL_SECONDS } from "../src/modules/nutrition/service.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+
+// Sentry is only ever called, never reached: a test that sets SENTRY_DSN reads what the app sent it.
+const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn() }));
+vi.mock("@sentry/node", () => sentry);
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
@@ -632,56 +637,148 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const scripted=(...steps:(VisionEvidence|Error)[]):VisionProvider=>({analyze(){const step=steps.shift()??goodEvidence;return step instanceof Error?Promise.reject(step):Promise.resolve({evidence:step,tokensIn:100,tokensOut:200} satisfies VisionResult);}});
   /** An app of its own on this database, signed in as a new person. `fetchForScanner`
    *  is the global fetch while the app is built, which is when the real scanner takes it. */
-  async function scanApp(email:string,options:{env?:Record<string,string>;vision?:VisionProvider;fetchForScanner?:typeof fetch}={}){
-    const scanRedis=createMemoryRedis();
+  async function scanApp(email:string,options:{env?:Record<string,string>;vision?:VisionProvider;fetchForScanner?:typeof fetch;clock?:()=>number}={}){
+    const scanRedis=createMemoryRedis(options.clock);
     if(options.fetchForScanner!==undefined)vi.stubGlobal("fetch",options.fetchForScanner);
     let built:App;
     try{built=await buildApp(loadConfig({...env,...options.env}),{redis:scanRedis,nutrition:{...(options.vision===undefined?{}:{visionProvider:options.vision}),foodSearchProvider:noExternal}});}
     finally{vi.unstubAllGlobals();}
     const post=(url:string,body:unknown,access?:string)=>built.inject({method:"POST",url,headers:{"content-type":"application/json"},...(access===undefined?{}:{cookies:{accessToken:access}}),payload:JSON.stringify(body)});
-    const reg=await post("/v1/auth/register",{email,password:PASSWORD,displayName:"P26a Scan"});
-    if(reg.statusCode!==201)throw new Error(reg.body);
-    const userId=reg.json<{userId:string}>().userId;
-    const access=(await post("/v1/auth/login",{email,password:PASSWORD})).cookies.find((c)=>c.name==="accessToken")?.value??"";
-    return{
-      app:built,userId,
-      scan:(retakeToken?:string)=>post("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",...(retakeToken===undefined?{}:{retakeToken})},access),
-      scansUsed:()=>scanRedis.get(quotaKey("meal_scan",userId,"day",new Date())),
-      costRows:async()=>(await sql<{provider:string;units:string|number;cost_micro:string|number}[]>`SELECT provider, units, cost_micro FROM api_cost_events WHERE user_id=${userId} AND feature='meal_scan' ORDER BY at`).map((r)=>({provider:r.provider,units:Number(r.units),costMicro:String(r.cost_micro)})),
+    /** A new person signed in on this app, sharing its scanner and its Redis. */
+    const person=async(personEmail:string)=>{
+      const reg=await post("/v1/auth/register",{email:personEmail,password:PASSWORD,displayName:"P26a Scan"});
+      if(reg.statusCode!==201)throw new Error(reg.body);
+      const userId=reg.json<{userId:string}>().userId;
+      const access=(await post("/v1/auth/login",{email:personEmail,password:PASSWORD})).cookies.find((c)=>c.name==="accessToken")?.value??"";
+      return{
+        userId,
+        scan:(retakeToken?:string)=>post("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",...(retakeToken===undefined?{}:{retakeToken})},access),
+        scansUsed:()=>scanRedis.get(quotaKey("meal_scan",userId,"day",new Date())),
+        costRows:async()=>(await sql<{provider:string;units:string|number;cost_micro:string|number}[]>`SELECT provider, units, cost_micro FROM api_cost_events WHERE user_id=${userId} AND feature='meal_scan' ORDER BY at`).map((r)=>({provider:r.provider,units:Number(r.units),costMicro:String(r.cost_micro)})),
+      };
     };
+    return{app:built,person,...(await person(email))};
   }
-  type Failed={error:string;message:string;retakeToken?:string};
+  type Failed={error:string;message:string;retakeToken?:string;requestId:string};
+  type Scanned=Awaited<ReturnType<Awaited<ReturnType<typeof scanApp>>["scan"]>>;
   const loggedFailures=(calls:unknown[][])=>calls.map((c)=>c[0]).filter((o)=>typeof o==="object"&&o!==null&&"event" in o&&o.event==="nutrition.scan_failed");
+  /** The free retry a failed scan came back with; a test that expects one fails here without it. */
+  const freeRetryOf=(res:Scanned):string=>{const t=res.json<Failed>().retakeToken;if(t===undefined)throw new Error(`no free retry: ${res.body}`);return t;};
+  const BUSY="Meal scanning is busy right now. Please try again in a minute.";
+  const UNAVAILABLE={error:"nutrition_unavailable",message:"Meal scanning is temporarily unavailable."};
+  /** A failed scan's body without its request id, which is checked to be there. */
+  const bodyOf=(res:Scanned)=>{const{requestId,...body}=res.json<Failed>();expect(typeof requestId).toBe("string");return body;};
+  const googleReply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 
-  it("a scanner outage is never blamed on the photo: 503 busy, a fresh free retry each time, one scan spent, nothing ledgered, and a log line",async()=>{
-    const s=await scanApp("p26a-outage@example.com",{vision:scripted(new VisionProviderError("vision HTTP 429","unavailable"),new VisionProviderError("vision network failure","unavailable"),new Error("boom"),goodEvidence)});
+  it("a scanner outage is never blamed on the photo: busy with a free retry, at most three in ten minutes; nothing ledgered; a log line each",async()=>{
+    let now=Date.now();
+    const s=await scanApp("p26a-outage@example.com",{clock:()=>now,vision:scripted(
+      new VisionProviderError("vision HTTP 429","unavailable"),
+      new VisionProviderError("vision network failure","unavailable"),
+      new VisionProviderError("vision malformed completion","unavailable"),
+      new VisionProviderError("vision HTTP 503","unavailable"),
+      new VisionProviderError("vision HTTP 429","unavailable"),
+      new VisionProviderError("vision network failure","unavailable"),
+      goodEvidence,
+    )});
     try{
       const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
-      const busy="Meal scanning is busy right now. Please try again in a minute.";
+      // A counted scan meets the outage, and so do its first, second and third free retries.
       const first=await s.scan();
-      expect(first.statusCode,first.body).toBe(503);
-      const one=first.json<Failed>();
-      expect(one).toMatchObject({error:"scanner_unavailable",message:busy});
+      const second=await s.scan(freeRetryOf(first));
+      const third=await s.scan(freeRetryOf(second));
+      const fourth=await s.scan(freeRetryOf(third));
+      for(const res of [first,second,third,fourth]){
+        expect(res.statusCode,res.body).toBe(503);
+        expect(res.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
+      }
+      expect(new Set([first,second,third].map(freeRetryOf)).size).toBe(3);
+      // The third free retry is the last in ten minutes: still busy, with no fourth.
+      expect(fourth.json<Failed>()).not.toHaveProperty("retakeToken");
       expect(await s.scansUsed()).toBe("1");
-      // The free retry meets the outage again: another token, never a second scan.
-      const second=await s.scan(one.retakeToken);
-      expect(second.statusCode,second.body).toBe(503);
-      const two=second.json<Failed>();
-      expect(two).toMatchObject({error:"scanner_unavailable",message:busy});
-      expect(typeof two.retakeToken).toBe("string");
-      expect(two.retakeToken).not.toBe(one.retakeToken);
-      const third=await s.scan(two.retakeToken);
-      expect(third.json<Failed>()).toMatchObject({error:"scanner_unavailable"});
-      const good=await s.scan(third.json<Failed>().retakeToken);
+      // The limit is this person's: someone else meeting the same outage still gets their free retry.
+      const other=await s.person("p26a-outage-other@example.com");
+      const theirs=await other.scan();
+      expect(theirs.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
+      freeRetryOf(theirs);
+      // Ten minutes on, the next try is a scan of its own, and its outage earns a free retry again.
+      now+=RETAKE_TTL_SECONDS*1000;
+      const fifth=await s.scan();
+      expect(fifth.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
+      expect(await s.scansUsed()).toBe("2");
+      const good=await s.scan(freeRetryOf(fifth));
       expect(good.statusCode,good.body).toBe(200);
-      expect(await s.scansUsed()).toBe("1");
+      expect(await s.scansUsed()).toBe("2");
+      const line=(res:Scanned,reason:string,userId=s.userId)=>({event:"nutrition.scan_failed",userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason,requestId:res.json<Failed>().requestId});
       expect(loggedFailures(logged.mock.calls)).toEqual([
-        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"vision HTTP 429"},
-        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"vision network failure"},
-        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason:"Error"},
+        line(first,"vision HTTP 429"),line(second,"vision network failure"),line(third,"vision malformed completion"),line(fourth,"vision HTTP 503"),
+        line(theirs,"vision HTTP 429",other.userId),line(fifth,"vision network failure"),
       ]);
-      // Nothing was billed for the three failures: the one row is the good scan's.
-      expect((await s.costRows()).length).toBe(1);
+      // An outage brings back no usage, so the one row is the good scan's.
+      expect((await s.costRows()).map((r)=>r.units)).toEqual([300]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a photo Google refuses is never sent for nothing: every try is a counted scan with no free retry, until the day's scans run out",async()=>{
+    // The review's case: a file that starts with JPEG bytes and is no picture, which Google answers 400.
+    let calls=0;
+    const refuses:typeof fetch=()=>{calls++;return Promise.resolve(googleReply(400,{error:{code:400,message:"Unable to process input image.",status:"INVALID_ARGUMENT"}}));};
+    const s=await scanApp("p26a-refused@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:refuses}); // gitleaks:allow
+    try{
+      const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      const tries:Scanned[]=[];
+      for(let i=0;i<5;i++)tries.push(await s.scan());
+      expect(tries.map((r)=>r.statusCode)).toEqual([503,503,429,429,429]);
+      for(const res of tries.slice(0,2))expect(bodyOf(res)).toEqual(UNAVAILABLE);
+      expect(tries.every((r)=>!("retakeToken" in r.json<object>()))).toBe(true);
+      expect(calls).toBe(2);
+      expect(loggedFailures(logged.mock.calls)).toEqual(tries.slice(0,2).map((res)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 400",requestId:res.json<Failed>().requestId})));
+      expect(await s.costRows()).toEqual([]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("through the real scanner, Google's 429 and a reply that is not Google's are busy with a free retry, and neither is ledgered",async()=>{
+    const answers=[
+      googleReply(429,{error:{code:429,status:"RESOURCE_EXHAUSTED"}}),
+      googleReply(200,{candidates:"not Gemini's"}),
+      googleReply(200,{candidates:[{content:{parts:[{text:JSON.stringify(goodEvidence)}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}}),
+    ];
+    const google:typeof fetch=()=>{const next=answers.shift();return next===undefined?Promise.reject(new Error("no answer left")):Promise.resolve(next);};
+    const s=await scanApp("p26a-google-busy@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:google}); // gitleaks:allow
+    try{
+      vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      const limited=await s.scan();
+      expect(limited.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
+      const broken=await s.scan(freeRetryOf(limited));
+      expect(broken.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
+      const good=await s.scan(freeRetryOf(broken));
+      expect(good.statusCode,good.body).toBe(200);
+      expect(answers).toEqual([]);
+      expect(await s.scansUsed()).toBe("1");
+      expect(await s.costRows()).toEqual([{provider:"gemini:gemini-3.5-flash-lite",units:500,costMicro:"370"}]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a fault in the scanner is never called busy: temporarily unavailable with no free retry, logged with its error and sent to Sentry with the request id; a refusal is not sent",async()=>{
+    const fault=new TypeError("Cannot read properties of undefined (reading 'parts')");
+    const s=await scanApp("p26a-fault@example.com",{env:{SENTRY_DSN:"https://public@sentry.example.com/1"},vision:scripted(fault,new VisionProviderError("vision HTTP 403","refused"))});
+    try{
+      sentry.captureException.mockClear();
+      const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      const res=await s.scan();
+      expect(res.statusCode,res.body).toBe(503);
+      expect(bodyOf(res)).toEqual(UNAVAILABLE);
+      const body=res.json<Failed>();
+      expect(sentry.captureException.mock.calls).toEqual([[fault,{extra:{requestId:body.requestId}}]]);
+      const refused=await s.scan();
+      expect(bodyOf(refused)).toEqual(UNAVAILABLE);
+      expect(sentry.captureException).toHaveBeenCalledTimes(1);
+      expect(await s.scansUsed()).toBe("2");
+      expect(loggedFailures(logged.mock.calls)).toEqual([
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"fault",reason:"TypeError",requestId:body.requestId,err:fault},
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 403",requestId:refused.json<Failed>().requestId},
+      ]);
+      expect(await s.costRows()).toEqual([]);
     }finally{await s.app.close();}
   },30_000);
 
@@ -699,8 +796,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(second.json<Failed>()).toMatchObject({error:"retake_required",message:photo});
       expect(second.json<Failed>()).not.toHaveProperty("retakeToken");
       expect(await s.scansUsed()).toBe("1");
-      const warning={event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unreadable",reason:"vision malformed evidence shape"};
-      expect(loggedFailures(warned.mock.calls)).toEqual([warning,warning]);
+      const warning=(res:Scanned)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unreadable",reason:"vision malformed evidence shape",requestId:res.json<Failed>().requestId});
+      expect(loggedFailures(warned.mock.calls)).toEqual([warning(first),warning(second)]);
       expect((await s.costRows()).map((r)=>r.units)).toEqual([30,30]);
     }finally{await s.app.close();}
   },30_000);

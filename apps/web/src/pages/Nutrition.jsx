@@ -956,6 +956,12 @@ function PhotoModal({ open, onClose, onSave }) {
             : 'Meal scanning is busy right now — try again in a minute.',
         });
         setPreview(null);
+      } else if (err.response?.status === 503) {
+        // Any other 503 (switched off, a refused request, a fault, scans that
+        // cannot be counted) is not busy, and no free retry comes with it.
+        setRetakeToken(null);
+        setRetakeMsg({ title: 'Try again later', text: 'Meal scanning is unavailable right now.' });
+        setPreview(null);
       } else if (err.response?.status === 429) {
         toast.error('Daily photo-scan limit reached.');
         setPreview(null);
