@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · PR #72's third re-check fixed (1 High, 1 weak test); a re-check of that fix next
+
+- The re-check passed the Critical and the four weak tests and found one High: the quota check counted a try it refused over the limit and never took it off, so a scan given back after an outage was not free again. A free person (2 a day) whose last scan hung while they tried again (429) was told, after that scan failed, "Daily photo-scan limit reached" with one scan left.
+- Fix, the reviewer's: a refused try takes its count off (`decrIfPositive`, in `requireQuota`, so for the coach and routes too); a take-off that fails is logged `quota.refusal_not_uncounted`.
+- Tests: the review's sequence through the route (200 · a scan held at the scanner · 429, still 2 counted · the held scan busy, 1 counted · 200); a second refused coach question leaves the count at 5.
+- Weak test: the production Lua was run by nothing (every route test uses the in-memory Redis). `test/redis.scripts.test.ts` runs count, give-back and take on the compose Redis; `test:local` sets `TEST_REDIS_URL`; CI has no Redis and skips it (seen skipped without it).
+- Verified: api tsc 0 · eslint 0 · nutrition + entitlements routes + entitlements unit + redis scripts + sentry 73/73 on local Postgres and Redis · full local 1074/1074 · 6 deliberate breaks each red (no take-off: both route tests; `c >= 0`; a missing counter decremented; SET for DECR, the window lost; every count resetting the window; take keeping the value), files restored identical.
+- Next: CI, the fresh-chat re-check of this fix only, merge; then 7a-iii.
+
 ## 2026-09-16 · PR #72's second re-check fixed (1 Critical, 1 High, 2 Low, 4 weak tests); a re-check of these fixes next
 
 - Critical: @sentry/node 10.63 sent a request's body (first 10,000 characters), headers, cookies and query string, and each outgoing call's query string as a breadcrumb, whatever sendDefaultPii says. `src/sentry.ts` (the API and the worker) keeps no body and takes the request and the breadcrumbs off every event. The review's fix left the breadcrumbs: a food search's words still went (measured).
