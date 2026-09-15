@@ -10,8 +10,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Test: a container named by a serving word alone is that serving: servings of rice in a "serving", portions in a "portion", helpings in a "helping" ×3 are 300 g. The reviewer's break (a serving word dropped from such a name) turns it red (100 g); file restored identical.
 - Records: the entry below says why "trays of chicken nuggets" never reaches a count (the list finds no food); 7a-i's line keeps the rule, not the rounds, and is ticked; 7a-iv's line describes the whole serving-word problem with each spelling its own test plate.
 - Measured by a scratch run: nuggets ×6 are 96 g in "serving", "portion", "helping" or nothing, 16 g in "1 serving", "one serving", "Serving", "single serving"; rice ×3 300 g in "serving", 100 g in "portion", "Portion", "1 portion". Left for 7a-iv, as ruled.
-- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 (outputs in the chat); CI on the pushed commit before merging.
-- Next: PR #72's fresh-chat review (rebase on master first: ROADMAP conflicts expected); then 7a-iii; then 7a-iv.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 (outputs in the chat); CI green on 603883e (run 34996184794).
+- Next: bring PR #72 up to master (a trial merge conflicts in HANDOFF, ROADMAP, RULINGS, nutrition service.ts and vision.adapter.ts), prove it, then its fresh-chat review; then 7a-iii; then 7a-iv.
 
 ## 2026-09-15 · PR #71's re-check of the two: one High in H1's fix, fixed; a re-check of that fix next
 
