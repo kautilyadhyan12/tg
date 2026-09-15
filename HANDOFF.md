@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #71's last re-check: no Critical/High; three Lows and one weak test fixed; merged
+
+- The re-check of the kind-first fix found no Critical or High: three Lows in the records and one missing test. Kd: *"fix and merge"*; per §2.6 the fixes are not re-checked.
+- Test: a container named by a serving word alone is that serving: servings of rice in a "serving", portions in a "portion", helpings in a "helping" ×3 are 300 g. The reviewer's break (a serving word dropped from such a name) turns it red (100 g); file restored identical.
+- Records: the entry below says why "trays of chicken nuggets" never reaches a count (the list finds no food); 7a-i's line keeps the rule, not the rounds, and is ticked; 7a-iv's line describes the whole serving-word problem with each spelling its own test plate.
+- Measured by a scratch run: nuggets ×6 are 96 g in "serving", "portion", "helping" or nothing, 16 g in "1 serving", "one serving", "Serving", "single serving"; rice ×3 300 g in "serving", 100 g in "portion", "Portion", "1 portion". Left for 7a-iv, as ruled.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 (outputs in the chat); CI on the pushed commit before merging.
+- Next: PR #72's fresh-chat review (rebase on master first: ROADMAP conflicts expected); then 7a-iii; then 7a-iv.
+
 ## 2026-09-15 · PR #71's re-check of the two: one High in H1's fix, fixed; a re-check of that fix next
 
 - The re-check passed H2's fix and found one High in H1's, three Lows and three weak tests; every number reproduced first by a scratch run of HEAD and 3fd14d4.
@@ -23,7 +32,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - H2: any plural before "of" read as a container: stacks of roti ×8 were one roti (40 g, was 320), and piles of beef stew chunks ×6 1,530 g (found here). Where the photo shows none, only `CONTAINER_WORDS` (what each Appendix B container is, the vessel and pack units, plate, tray, the serving words) or a saved dish's name counts containers; any other plural reads as its singular.
 - Tests: the review's rows by the list's own servings; every word of every Appendix B name and four free-text names × every unit × cut tails; nine layout words equal their singular; the word list pinned. 8 deliberate breaks each red (the review's "last word only" among them), file restored identical.
 - Sweep, HEAD against the fix: 6,085,248 resolves (318 foods × 416 phrasings × 23 containers × no count or 3): 12,780 changed are H1's kind, 5,602 H2's, 0 elsewhere; every H2 change equals its singular's old reading.
-- The list's trade: a plural it lacks (baskets, thalis, trays, boxes, platters) finds no food on the list. What users met was H1's cost: a container named kind first ("bowl with lid") read as its last word, so bowls of stew chunks ×2 were 255 g, not 510; fixed in the entry above.
+- The list's trade: a plural the food list's matcher does not skip (baskets, thalis, trays, boxes, platters) finds no food at all ("trays of chicken nuggets"), so no scan reaches its count. What users met was H1's cost: a container named kind first ("bowl with lid") read as its last word, so bowls of stew chunks ×2 were 255 g, not 510; fixed in the entry above.
 - Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
 - Next: CI, the fresh-chat re-check of these two fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
 

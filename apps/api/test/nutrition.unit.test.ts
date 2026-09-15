@@ -339,6 +339,12 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(at("servings of rice", "rice_white_cooked", 3, "serving_bowl")).toEqual({ gramsPoint: 350, gramsRange: [300, 400], portionSource: "regional_prior", pieces: null });
     expect(at("servings of pasta", "pasta_cooked", 2, "serving_bowl")).toEqual(at("pasta", "pasta_cooked", 2, "serving_bowl"));
     expect(at("servings of rice", "rice_white_cooked", 3)).toEqual(flat(3 * rice, 3));
+    // A container named by a serving word alone is that serving: three servings of
+    // rice in a "serving", portions in a "portion" or helpings in a "helping" are
+    // three of rice's servings, as on nothing.
+    for (const word of ["serving", "portion", "helping"]) {
+      expect(at(`${word}s of rice`, "rice_white_cooked", 3, word), word).toEqual(flat(3 * rice, 3));
+    }
     // Stacks and piles are how food lies, not what it sits in: eight rotis, six
     // pancakes and ten nuggets are that many, and six stew chunks one cup of stew.
     expect(at("stacks of roti", "roti_chapati", 8)).toEqual({ gramsPoint: 320, gramsRange: [280, 360], portionSource: "regional_prior", pieces: 8 });
