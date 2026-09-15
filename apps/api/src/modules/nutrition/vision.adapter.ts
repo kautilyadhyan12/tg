@@ -25,10 +25,22 @@ const optionalNameSchema = z.preprocess(
   z.string().nullable(),
 );
 
+/** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
+export const MAX_PHOTO_COUNT = 30;
+const countSchema = z.preprocess(
+  // A count is a whole number of things from 1 to the sheet's stepper. Any other
+  // value the model gives (0, 2.5, 31, "3") is no reliable count, so it is
+  // UNKNOWN, as the prompt's "Count only reliably countable items" asks; the
+  // item stays on the sheet at its uncounted serving, and the paid scan is kept.
+  // A count left out is still a missing field.
+  (v) => (v === undefined || v === null || (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_PHOTO_COUNT) ? v : null),
+  z.number().int().positive().max(MAX_PHOTO_COUNT).nullable(),
+);
+
 const itemSchema = z.object({
   name: z.string().min(1), canonical_hint: z.string().min(1), container: optionalNameSchema,
   fill_level: fillLevelSchema, size_class: optionalNameSchema,
-  count: z.number().int().positive().nullable(), confidence: confidenceSchema,
+  count: countSchema, confidence: confidenceSchema,
 }).strict();
 const evidenceSchema = z.object({
   meal_name: z.string().min(1), cuisine_guess: z.string().nullable(), items: z.array(itemSchema).max(30),

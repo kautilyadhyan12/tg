@@ -29,12 +29,7 @@
 // (R3.1). The old backend chose server-side too; a client that picked its own
 // meal ideas from a number it computed itself is the class of thing this
 // project keeps deleting.
-import { EXERCISE_CONTENT, type Diet, type MealSuggestion } from "@app/shared";
-
-/** The diets as a ladder, each allowing everything the one below it does and
- *  one thing more (`dietSchema`): vegan, then dairy, then eggs, then meat and
- *  fish. */
-const DIET_LADDER: Record<Diet, number> = { vegan: 0, vegetarian: 1, vegetarian_eggs: 2, non_vegetarian: 3 };
+import { DIET_LADDER, EXERCISE_CONTENT, type Diet, type MealSuggestion } from "@app/shared";
 
 /** One meal idea. `meal` is eaten as it is by `fitsFrom` and every diet above
  *  it; `swap` is the same idea for the diets below, with only the food they

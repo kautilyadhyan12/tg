@@ -4,6 +4,121 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #71's last re-check: no Critical/High; three Lows and one weak test fixed; merged
+
+- The re-check of the kind-first fix found no Critical or High: three Lows in the records and one missing test. Kd: *"fix and merge"*; per §2.6 the fixes are not re-checked.
+- Test: a container named by a serving word alone is that serving: servings of rice in a "serving", portions in a "portion", helpings in a "helping" ×3 are 300 g. The reviewer's break (a serving word dropped from such a name) turns it red (100 g); file restored identical.
+- Records: the entry below says why "trays of chicken nuggets" never reaches a count (the list finds no food); 7a-i's line keeps the rule, not the rounds, and is ticked; 7a-iv's line describes the whole serving-word problem with each spelling its own test plate.
+- Measured by a scratch run: nuggets ×6 are 96 g in "serving", "portion", "helping" or nothing, 16 g in "1 serving", "one serving", "Serving", "single serving"; rice ×3 300 g in "serving", 100 g in "portion", "Portion", "1 portion". Left for 7a-iv, as ruled.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 (outputs in the chat); CI green on 603883e (run 34996184794).
+- Next: bring PR #72 up to master (a trial merge conflicts in HANDOFF, ROADMAP, RULINGS, nutrition service.ts and vision.adapter.ts), prove it, then its fresh-chat review; then 7a-iii; then 7a-iv.
+
+## 2026-09-15 · PR #71's re-check of the two: one High in H1's fix, fixed; a re-check of that fix next
+
+- The re-check passed H2's fix and found one High in H1's, three Lows and three weak tests; every number reproduced first by a scratch run of HEAD and 3fd14d4.
+- High: H1 read a container by the last word of its name, so one named kind first was read as something else: bowls of stew chunks ×2 in a "bowl with lid" 255 g (was 510), plates of nuggets ×2 on a "plate with rice" 32 g ×2 (16), cups of palak paneer cubes ×2 in a "cup and saucer" 200 g (400).
+- Fix: a container is the words of its name that name a container, wherever they stand, never a serving word where another is; a name with none is its last word ("steel flask"). The review's own fix (the last word, or any container word) left "bowl (1 serving)" open: six servings of nuggets were 16 g, now 96.
+- Lows: the comment on servings in a serving bowl; "half cup" and "small" off `CONTAINER_WORDS` (a measure and a size name no container); the entry below no longer gives examples no user meets.
+- Tests: kind-first names, a trailing serving word, a size, a food and no container word in the word-by-word table; plural container names; the real-food test reads the list with `findCurated`. 9 deliberate breaks each red (the review's rule among them), files restored identical.
+- Sweep of 1,278,144 cells (22,824 hints the list resolves × 56 containers, count 3): against 3fd14d4 only H1's serving-word rows (3,703) and H2's (1,104, each its singular's old reading) differ; against the review's fix only the four names ending in a serving word (1,104).
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres; CI green on 2084a24.
+- Found, unchanged since 3fd14d4: a container named by a serving word alone ("single serving") is one of no known size, so six servings of nuggets in it are 16 g (96 in "serving" or in nothing); on 7a-iv's line, whose fixed vessel list reads it as unknown.
+- Next: the fresh-chat re-check of this fix only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
+## 2026-09-15 · PR #71's re-check of the four: two Highs in H2's fix, fixed; a re-check of the two next
+
+- The re-check passed H1, L2 and L4 and found two Highs in H2's fix; every number in it reproduced by a scratch run of HEAD first.
+- H1: a plural matched any word of the photo's container, so six "servings" of nuggets in a serving bowl were 2,100 g (96) and on a serving plate 16 g. A plural now counts the photo's container only where it is what the container is, the last word of its name or of each name an "or" joins: katoris or bowls in a katori or small bowl ×3 stay 525 g.
+- H2: any plural before "of" read as a container: stacks of roti ×8 were one roti (40 g, was 320), and piles of beef stew chunks ×6 1,530 g (found here). Where the photo shows none, only `CONTAINER_WORDS` (what each Appendix B container is, the vessel and pack units, plate, tray, the serving words) or a saved dish's name counts containers; any other plural reads as its singular.
+- Tests: the review's rows by the list's own servings; every word of every Appendix B name and four free-text names × every unit × cut tails; nine layout words equal their singular; the word list pinned. 8 deliberate breaks each red (the review's "last word only" among them), file restored identical.
+- Sweep, HEAD against the fix: 6,085,248 resolves (318 foods × 416 phrasings × 23 containers × no count or 3): 12,780 changed are H1's kind, 5,602 H2's, 0 elsewhere; every H2 change equals its singular's old reading.
+- The list's trade: a plural the food list's matcher does not skip (baskets, thalis, trays, boxes, platters) finds no food at all ("trays of chicken nuggets"), so no scan reaches its count. What users met was H1's cost: a container named kind first ("bowl with lid") read as its last word, so bowls of stew chunks ×2 were 255 g, not 510; fixed in the entry above.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
+- Next: CI, the fresh-chat re-check of these two fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
+## 2026-09-15 · PR #71's four fixes (H1, H2, L2, L4), the reviewer's way; the re-check of the four next
+
+- Kd asked for 7a-iv from master; master has neither #71 nor #72 and 7a-iii is unbuilt, so he kept his order: *"#71's fixes now (Recommended)"*.
+- H1: fill scales a food's own serving only where the serving is all its container holds (`WHOLE_VOLUME_UNITS`); red wine in a glass at 0.4 is 150 g, pho in a bowl at 0.6 400 g.
+- H2: a plural before "of" (no cut, no "pieces") counts those containers where the photo shows none or one of that name: stew-chunk bowls ×2 510 g, large bowls of dal ×2 550 g; unknown size and no vessel food: no count (plates of nuggets ×2 16 g). "A plate of nuggets" ×6 stays 96 g; "servings of" count servings.
+- Chosen over a vessel word list: an unlisted container ("trays of nuggets") would be read as nuggets again. Found by a before/after sweep and fixed: without the photo guard, scoops of ice cream in a cup were two cups.
+- L2: the cap reads the top of the range (29 mugs of coffee: 325 g). L4: 0, 2.5, 31, "3", true, {} read as unknown; a missing count still rejects.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 26/26 · foods 22/22 · with routes 82/82 · full local 1043/1046 (catalog.seed 3, 7/7 alone: ROADMAP 10's flake); 15 deliberate breaks each red, files restored identical.
+- Sweep of 518,976 old/new resolves over 318 foods × 24 phrasings × 9 containers × fill × count: every change is H1, H2 or L2, none elsewhere.
+- Left, not among Kd's four: the prototype test's piece line cannot fail (it goes with the resolver in 7a-iv); L3's water cup now multiplies by a plural count ("cups of rice" ×2 480 g), still 7a-iv's.
+- Next: CI, the fresh-chat re-check of these four fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
+## 2026-09-15 · The portion is redesigned (7a-iv), Kd's ruling on PR #71's third re-check; #71's four fixes next
+
+- The third re-check found two more Highs (a poured serving shrunk by fill: red wine 150 → 60 g; a vessel before "of" never setting what the count counts: "bowls of beef stew chunks" ×2 got worse) and four Lows. Kd: *"i think serious design problem is there … too many crtical high coming constanly … forget about current set up"*.
+- Root cause named: the server reads English (cut, piece, vessel, pack and unit words) to decide what a count counts and what a container holds, so every review finds the next phrase — the weight copy's shape (RULINGS 2026-09-10, six rounds).
+- The design, *"go"* (RULINGS 2026-09-15, ROADMAP 7a-iv): the model fills a form with fixed choices (its gram estimate, a count of whole pieces only, one vessel from a fixed list, fill); a five-rung ladder (saved dish · count × USDA piece weight · vessel × fill × USDA cup weight · the model's estimate marked "estimate" · the serving); one 3× cross-check against the estimate in place of every word list; the sheet names the measure; a fixed set of test plates in CI.
+- Measured: the USDA zips the food checker downloads carry `food_portion.csv` (SR in `modifier`, FNDDS in `portion_description`): 313 of 313 USDA-cited foods have a household weight, 258 a piece, size or cup weight — banana 118 g, egg 50 g, nugget 16 g, cornflakes cup 30 g, rice cup 158 g, cola can 370 g.
+- Order, Kd's: #71 takes only the two High fixes and Lows 2 and 4, the reviewer's way (on the 7a-i line), a re-check of the four, merge · #72 · 7a-iii with the form in its reply · 7a-iv. L1, L3 and item 10's cornflakes are on 7a-iv's line.
+- Records only, on this branch: RULINGS (Nutrition), ROADMAP 7a-i, 7a-iv and 10, this entry. No code changed; no suite run (nothing to prove). 7a-iii's line lives on PR #72's branch; the rebase after #71 puts 7a-iii above 7a-iv.
+- Next: a fresh chat fixes #71's four findings, a failing test first for each, proves them and hands Kd the re-check prompt; then #72's review; then 7a-iii.
+
+## 2026-09-15 · 7a-i: PR #71's third re-check fixed (3 High, 4 Low, 5 weak tests); its re-check next
+
+- Why a High again: each rule was tried only on the unit or word its finding named. A count is now first read for what it counts (cut bits, "pieces", a vessel named before "of", or the food), then the unit's rule; a test runs every unit of every rule against every cut word, "pieces" and container.
+- H1: a cut word stops a count whatever the rule: beef stew chunks ×6 is one 255 g cup (was 1,530). H2: "pieces" is whole only for `WHOLE_PIECES` (nugget, meatball, slice, a label's piece, roti, chapati, puri, idli, medu vada, samosa): hot dog pieces ×8 is 102 g (was 816); dosa and paratha pieces now read as torn.
+- H3: `servingOf` reads a label's grams and its pack, pack words added to `COUNT_RULES`: "1 bottle (65 ml)" ×3 is 195 g (was 65), "1 oz (28 g)" 28 g (was 1; off ROADMAP 10).
+- Lows: a product's name must hold a noise word unless it measures the food before "of" (glass noodles is no Cup Noodles); accents folded; "Not in the total", the pointer gone when the meal is full; mugs of coffee ×2 650 g as mugs; cola by USDA's own 370 g can (SR portion "1 can or bottle (12 fl oz)").
+- From its security pass: a count over 30 reads as unknown; one weighing past `MAX_ITEM_GRAMS` (shared) is not used. Found and fixed, older: a photo container or size named "constructor" blanked the grams or crashed a paid scan (priors are Maps now).
+- Found fixing L4 and fixed: "cups of cornflakes" ×2 became 480 g (Appendix B's water cup); a container that is the food's own serving now weighs that serving × fill: 60 g.
+- Verified: api tsc 0 · eslint 0 · unit 24/24 · foods 22/22 · routes 34/34 · full local 1044/1044; shared tsc 0 · eslint 0 · 106/106; web nutrition 36/36, Nutrition.jsx its 7 lint errors as on master; 14 deliberate breaks each red on every targeted run, files restored identical.
+- Found, not fixed (ROADMAP 10): the list's matcher drops a noise word that is a food's own, so "peanut butter cups" is peanut butter and "tea leaves" tea.
+- Next: CI, the fresh-chat re-check of these fixes, merge.
+
+## 2026-09-15 · 7a-i: PR #71's second re-check fixed (3 High, 2 Low, 3 weak tests); a re-check next, on Kd's word
+
+- Why every round found a High: each fix read a count from the words of the one example it was given. Now the food's serving unit decides (`COUNT_RULES`, every unit ruled in a test).
+- H1: "pieces" counts whole things (nuggets, pizza, roti, idli, samosa as Appendix B's), a cut only of `CUT_UP_PIECES` (fruit, potato, egg). Idli pieces ×4: 160 g, as idli ×4 (the review's 152 was four of the list's 38 g idli).
+- H2: a "vessel" serving (can, bottle, pot, glass, cup, bowl) is the count × one of what it is shown in: a saved dish, a known container, else its serving; a yogurt's "cup" is its pot, with or without a count.
+- H3: a packaged product prices a scanned item only where its name holds every word of the hint (`holdsEveryWord`, noise words aside). L1: a blank name reads as its hint; the model's own unknowns trimmed and deduplicated. L2: "Not in our food list".
+- Tests: the reviewer's rows; every unit × 7 containers × fill × count; every cut word; the scan reply parsed with `mealPhotoAnalysisSchema`; red wine, glasses of beer, samosa pieces now count. 7 deliberate breaks each red, files restored.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 41/41 · routes 34/34 · full local 1039/1039; shared tsc 0 · eslint 0 · 106/106; web nutrition 40/40, Nutrition.jsx its 7 lint errors as on master.
+- Found, older than this PR (ROADMAP 10): Open Food Facts' "1 oz (28 g)" is a 1 g serving; cornflakes in a cereal bowl weigh 375 g, and a count of two now 750 g.
+- A second chat was open on this branch in the same folder; Kd was asked to stop it. Next: CI, the fresh-chat re-check of these fixes (Kd, RULINGS 2026-09-15), merge.
+
+## 2026-09-15 · 7a-i: PR #71's re-check fixed (3 High, 5 Low, 1 weak test), a third round as §2.6 allows
+
+- H1: a count never multiplies a cut: banana slices ×10 is one banana's 120 g (was 1,200). A cut counts only as the serving itself ("pizza slices",
+  "bread slices"); `CUT_WORDS`/`VESSEL_WORDS` in portion-priors, and a test classes every word the matcher drops as a cut, a vessel or neither.
+- H2: a can, bottle or pot in a dish the person saved is the dish's (beer in a 568 ml glass: 568 g, was 350); another vessel beside a pack blocks its count.
+- H3 (its text was cut from Kd's paste; rebuilt from its title and the code): a scanned item no food matches is named in `unknownItems`, not dropped silently.
+- L1: two versions of one food are never told apart by bracket length: all 15 orders of roti/chapati/flatbread are the homemade roti (93 of 27,113 hints changed,
+  all roti; 13 more are spring rolls, L2). L3 milk chocolate by the ounce. L4 the scan sends `pieces`; the stepper starts there. L5 moved to 7a-i-b, as allowed.
+- Verified: shared tsc 0 · eslint 0 · 106/106; api tsc 0 · eslint 0 · unit 38/38 · routes 33/33 · full local 1035/1035; web nutrition 35/35 (Nutrition.jsx
+  its 7 lint errors, as on master); checker: 318 foods match; 14,826 matrix scans, no cut or saved-dish pack multiplied; 19 breaks red, files restored.
+- Next: CI; Kd's click-through (the photo sheet's count can't be clicked: tests only); the fresh-chat re-check of these fixes; merge.
+
+## 2026-09-14 · 7a-i: PR #71's review fixed (2 High, 9 Low, 3 weak tests); Kd on roti, paneer, English names, fruits
+
+- H1: a photo's count multiplies a food's own serving only where it is one piece or a sealed pack, and an Appendix B piece only for a hint ending in it:
+  six nuggets 96 g (was 16), a veggie burger its 100 g patty (was an egg's 50). The review's own fix, serving × count for every food, would log ten grapes as 1 kg.
+- H2 true (USDA has store-bought roti, naan and paratha). Kd, RULINGS 2026-09-14: both rotis, named; naan and paratha USDA's; paneer the UK table's; English
+  names beside Indian ones; fruits at 7a-i-b. Found fixing it: a saved roti_chapati would price as the store-bought roti, so a canonical is looked up first.
+- Lows: notice links (ODbL 4.3a, Open Food Facts' terms); Greek yogurt "(plain, nonfat)"; "Egg roll (vegetable, fried)"; jelly, chips, beans not aliases;
+  shepherds pie, chilli; code-less products keyed with their brand; RULINGS 2026-08-24 amended; the inventory doc archived; every diet written out in a test.
+- 318 foods (USDA SR 241, FNDDS 72, CoFID 5), every number matches its table; master's 131 all found, 55 with changed kcal, 187 new.
+- Verified: api tsc 0 · eslint 0; unit 36/36; nutrition routes 33/33; full local api 1033/1033; web nutrition 32/32; web eslint 0 on the test, Nutrition.jsx
+  its 7 as on master; 13 deliberate breaks each red (the scan-wiring break only in the route test), files restored byte for byte.
+- Next: CI; Kd's click-through (the names, the notice links); the fresh-chat re-check of the fixes; merge.
+
+## 2026-09-14 · 7a-i built: the food list from named tables, every food's diet, branch `bigger-food-list`
+
+- Next was 7a-i, not 5a as the entry below says: RULINGS 2026-09-12 puts the food list before goals. Kd said *"go"* to the plan (RULINGS 2026-09-14).
+- 317 foods, 131 kept under their canonicals and 186 new (44 meat, fish and eggs); each cites USDA SR Legacy (238), USDA FNDDS (72) or UK CoFID (7);
+  55 old foods' kcal per 100 g changed to their table's. Every food has `diet`; `DIET_LADDER`/`dietAllows` moved to `@app/shared`. Fibre may be null.
+- Matching by whole words: on master a search pick of peanut butter, orange juice, sweet potato, butter chicken and three more was priced as another
+  food, and the scan took "tea" for steak; of 637 hints, 56 are now found, 34 now the right food, 2 now none ("hot", "mango lassi").
+- `tools/check-food-sources.ts`: every number matches; a 1-kcal change and a wrong entry each reported, exit 1. The summary harness's M4 anchor re-anchored.
+- Verified: api tsc 0 · eslint 0; shared tsc 0 · eslint 0 · 106/106; unit 57/57; nutrition routes 32/32; full local api 1023/1026 (catalog.seed, 7/7
+  alone: ROADMAP 10's flake); 13 deliberate breaks each red (a 14th survived: a redundant lookup, removed), files restored byte for byte.
+- Kd's click-through passed (*"all the tests passed"*), and so did his second, of "name · brand" over "Packaged product · Open Food Facts" (RULINGS
+  2026-09-14); the licence notice came after it. Found: Stage 4 items 7 (the Gemini scanner unbuilt) and 8 (Open Food Facts' 10 searches a minute per IP).
+
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
 - Three Lows fixed: SignUpNote's header no longer says the console draws the note; the 4d entry below is ten lines; setup's test has its

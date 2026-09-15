@@ -32,8 +32,14 @@ export const analyzeMealPhotoRequestSchema = z.object({
 }).strict();
 export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSchema>;
 
+/** A scanned item as the photo sheet receives it. `pieces` is how many of what the
+ *  photo counted its grams stand for where the count set them (six nuggets, three
+ *  cans), and null where it did not, so one step of the sheet's stepper is one. */
+export const mealPhotoItemSchema = mealItemSchema.extend({ pieces: z.number().int().positive().nullable() });
+export type MealPhotoItem = z.infer<typeof mealPhotoItemSchema>;
+
 export const mealPhotoAnalysisSchema = z.object({
-  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealItemSchema),
+  scanToken: z.string(), mealName: z.string(), cuisineGuess: z.string().nullable(), items: z.array(mealPhotoItemSchema),
   unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
   confirmed: z.literal(false), retakeToken: z.string().optional(),
 });
@@ -48,6 +54,9 @@ const takenAtSchema = z
     message: "must not be more than 24h in the future",
   });
 
+/** The most one item of a meal may weigh, in grams. */
+export const MAX_ITEM_GRAMS = 10_000;
+
 // Card 5c2 — dishware portions. An item's amount is given EITHER as grams
 // directly, OR "measured with my dishware": a saved dish id + how full it was
 // (fillLevel in (0,1]; the UI offers ¼/½/¾/full). The SERVER turns the dishware
@@ -56,7 +65,7 @@ const takenAtSchema = z
 // nutrition arithmetic (2B). Both arms are .strict(), so a hybrid item
 // ({canonical, grams, dishwareId}) is rejected by the union — no ambiguity.
 const gramsItemSchema = z
-  .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(10_000) })
+  .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(MAX_ITEM_GRAMS) })
   .strict();
 const dishwareItemSchema = z
   .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })

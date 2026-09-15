@@ -251,6 +251,7 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
         {canAdd && (
           <button
             onClick={() => onAdd(mealType.id)}
+            aria-label={`Add to ${mealType.label}`}
             className="w-8 h-8 rounded-lg flex items-center justify-center
                        transition-all"
             style={{
@@ -531,6 +532,14 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
                   · Carbs {Math.round(r.carbsG)}g · Fat {Math.round(r.fatG)}g
                   <span className="ml-1" style={{ color: 'rgba(255,255,255,0.25)' }}>/ 100 g</span>
                 </p>
+                {/* A packaged product is one brand's jar, from Open Food Facts,
+                    whose free licence asks for attribution (RULINGS
+                    2026-09-14); the app's own foods carry no label. */}
+                {r.source === 'openfoodfacts' && (
+                  <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                    Packaged product · Open Food Facts
+                  </p>
+                )}
               </div>
               {selected?.canonical === r.canonical && (
                 <Check className="w-4 h-4 flex-shrink-0" style={{ color: '#FF8A1F' }} />
@@ -539,6 +548,19 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
           </button>
         ))}
       </div>
+      {/* The Open Database License's notice for showing its data (section 4.3a):
+          the database's name links to the database, and the licence's name to
+          its text, as Open Food Facts' terms of use also ask. */}
+      {shown.some((r) => r.source === 'openfoodfacts') && (
+        <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
+          Packaged products contain information from{' '}
+          <a href="https://openfoodfacts.org" target="_blank" rel="noreferrer" className="underline"
+             style={{ color: 'rgba(255,255,255,0.45)' }}>Open Food Facts</a>
+          , which is made available here under the{' '}
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer" className="underline"
+             style={{ color: 'rgba(255,255,255,0.45)' }}>Open Database License (ODbL)</a>.
+        </p>
+      )}
     </>
   );
 }
@@ -900,10 +922,15 @@ function PhotoModal({ open, onClose, onSave }) {
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
+      // An item the photo counted starts at its count, one piece a step (six
+      // nuggets read ×6, and + makes seven); any other starts at ×1.
       const g = {};
       const c = {};
       const b = {};
-      res.data.items.forEach((item, i) => { g[i] = String(item.gramsPoint); c[i] = 1; b[i] = item.gramsPoint; });
+      res.data.items.forEach((item, i) => {
+        const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
+        g[i] = String(item.gramsPoint); c[i] = pieces; b[i] = item.gramsPoint / pieces;
+      });
       setGrams(g);
       setCounts(c);
       setBases(b);
@@ -953,6 +980,9 @@ function PhotoModal({ open, onClose, onSave }) {
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
   const payloadItems = allValid ? resolved.map((r) => r.item) : [];
+  // "Add an ingredient" (or its open picker) shows unless the meal is full; what
+  // points at it says so only while it is there.
+  const canAdd = adding || payloadItems.length < MAX_ITEMS;
   // 5b T3 advisory: say WHY the button is dead — "Enter grams for every item"
   // is a lie when the user plainly entered 20000.
   const gramsTooLarge = resolved.some((r) => r.tooLarge);
@@ -1172,9 +1202,9 @@ function PhotoModal({ open, onClose, onSave }) {
                             </p>
                             {itemMeasures[i] === undefined ? (
                               <div className="flex items-center gap-2">
-                                {/* Count stepper: multiplies the AI's per-unit
-                                    grams (count × gramsPoint) — portion scaling
-                                    only; nutrition math stays on the server. */}
+                                {/* Count stepper: multiplies one piece's grams
+                                    (the scan's grams over its count) — portion
+                                    scaling only; nutrition math stays on the server. */}
                                 <div className="flex items-center gap-1 text-2xs"
                                      style={{ color: 'rgba(255,255,255,0.45)' }}>
                                   <button type="button"
@@ -1188,7 +1218,8 @@ function PhotoModal({ open, onClose, onSave }) {
                                   <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
                                   <button type="button"
                                     onClick={() => {
-                                      const n = Math.min(30, (counts[i] ?? 1) + 1);
+                                      // Never lower a scan's own count above the cap.
+                                      const n = Math.max(counts[i] ?? 1, Math.min(30, (counts[i] ?? 1) + 1));
                                       setCounts({ ...counts, [i]: n });
                                       setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
                                     }}
@@ -1333,7 +1364,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           placeholder="e.g. milk, sugar, oil..."
                         />
                       </div>
-                    ) : payloadItems.length < MAX_ITEMS ? (
+                    ) : canAdd ? (
                       <button
                         type="button"
                         onClick={() => setAdding(true)}
@@ -1353,11 +1384,15 @@ function PhotoModal({ open, onClose, onSave }) {
                       </p>
                     )}
 
+                    {/* Both what the photo could not identify and what matched no
+                        food are left out of the total. */}
                     {analysis.unknownItems?.length > 0 && (
                       <p className="text-2xs mb-4"
                          style={{ color: 'rgba(251,191,36,0.75)' }}>
-                        Couldn't identify: {analysis.unknownItems.join(', ')} —
-                        add them manually if needed.
+                        Not in the total: {analysis.unknownItems.join(', ')}
+                        {canAdd
+                          ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
+                          : '.'}
                       </p>
                     )}
 

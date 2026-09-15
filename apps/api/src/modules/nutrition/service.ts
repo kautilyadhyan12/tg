@@ -6,12 +6,12 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import type { ChosenItem, Meal, MealItem } from "@app/shared";
+import type { ChosenItem, Meal, MealItem, MealPhotoItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
+import { CURATED_FOODS, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
@@ -62,7 +62,7 @@ export interface NutritionDeps {
 }
 
 // Internal draft/cache parser consumes the stable nutrition fields and strips
-// curated inventory-only provenance such as sourceLine.
+// the curated list's own diet and citation.
 const foodSchema = z.object({
   canonical: z.string(),
   name: z.string(),
@@ -72,7 +72,7 @@ const foodSchema = z.object({
   proteinG: z.number().min(0).max(100),
   carbsG: z.number().min(0).max(100),
   fatG: z.number().min(0).max(100),
-  fiberG: z.number().min(0).max(100),
+  fiberG: z.number().min(0).max(100).nullable(),
   serving: z.number(),
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts"]),
@@ -191,8 +191,13 @@ async function cachedExternal(deps: NutritionDeps, query: string, limit: number)
   return found;
 }
 
+/** A curated food as the search box receives it: the fields every food has,
+ *  without the list's diet and citation, which no response contract carries. */
+const asReference = ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source }: FoodReference): FoodReference =>
+  ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source });
+
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
-  const local = searchCurated(query, limit);
+  const local = searchCurated(query, limit).map(asReference);
   if (local.length >= limit) return local;
   const external = await cachedExternal(deps, query, limit - local.length);
   return [...local, ...external].slice(0, limit);
@@ -211,6 +216,15 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
   return (await cachedExternal(deps, query, 1))[0] ?? null;
+}
+
+/** The food a scanned item names: the list's food for its hint, else a packaged
+ *  product (§3.5) only where the product's name holds every word of the hint.
+ *  The search's top product for other words is another food ("mystery sauce"
+ *  finds one named "Mystery"), and a wrong food is worse than an honest miss. */
+async function findScannedFood(deps: NutritionDeps, hint: string): Promise<FoodReference | null> {
+  const food = await findFood(deps, hint);
+  return food === null || food.source === "curated" || holdsEveryWord(food.name, hint) ? food : null;
 }
 
 // ── Stage-3 arithmetic + §3.3 display standard ───────────────────────────────
@@ -313,7 +327,7 @@ export interface ScanDraftResponse {
   scanToken: string;
   mealName: string;
   cuisineGuess: string | null;
-  items: MealItem[];
+  items: MealPhotoItem[];
   unknownItems: string[];
   photoQuality: "good";
   totals: ReturnType<typeof totals>;
@@ -358,10 +372,22 @@ export async function analyzePhoto(
   }));
   const foods: FoodReference[] = [];
   const draftItems: Draft["items"] = [];
-  const items: MealItem[] = [];
+  const items: MealPhotoItem[] = [];
+  // Honest unknown (§3.5): what the model could not identify, and each item seen
+  // but matching no food, stay out of the totals and are named once each on the
+  // sheet rather than dropped without a word. A blank name reads as its hint.
+  const unknownItems: string[] = [];
+  const nameUnknown = (label: string): void => {
+    const shown = label.replaceAll(/[_\s]+/g, " ").trim();
+    if (shown !== "" && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
+  };
+  for (const label of result.evidence.unknown_items) nameUnknown(label);
   for (const evidence of result.evidence.items) {
-    const food = await findFood(deps, evidence.canonical_hint);
-    if (food === null) continue; // honest unknown (§3.5) — stays in unknown_items
+    const food = await findScannedFood(deps, evidence.canonical_hint);
+    if (food === null) {
+      nameUnknown(evidence.name.trim() === "" ? evidence.canonical_hint : evidence.name);
+      continue;
+    }
     const portion = resolvePortion(
       {
         canonicalHint: evidence.canonical_hint,
@@ -371,11 +397,13 @@ export async function analyzePhoto(
         count: evidence.count,
       },
       savedDishware,
-      food.serving,
+      { grams: food.serving, unit: food.unit },
     );
     foods.push(food);
-    draftItems.push({ canonical: food.canonical, ...portion });
-    items.push(nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource));
+    // The stored draft keeps its strict shape: the count of pieces is only the
+    // sheet's, for its stepper.
+    draftItems.push({ canonical: food.canonical, gramsPoint: portion.gramsPoint, gramsRange: portion.gramsRange, portionSource: portion.portionSource });
+    items.push({ ...nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource), pieces: portion.pieces });
   }
 
   const scanToken = token();
@@ -388,7 +416,7 @@ export async function analyzePhoto(
     mealName: result.evidence.meal_name,
     cuisineGuess: result.evidence.cuisine_guess,
     items,
-    unknownItems: result.evidence.unknown_items,
+    unknownItems,
     photoQuality: "good",
     totals: totals(items),
     confirmed: false,

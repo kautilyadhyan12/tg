@@ -83,8 +83,8 @@ const MUTATIONS = [
     id: "M4",
     claim: "the meal bands' >400 boundary is EXCLUSIVE, as Python's is",
     file: "apps/api/src/modules/workouts/summaryContent.ts",
-    from: "  if (kcal > 400) {",
-    to: "  if (kcal >= 400) {",
+    from: "  const band = kcal > 400 ? HIGH_BAND : kcal > 200 ? MIDDLE_BAND : LOW_BAND;",
+    to: "  const band = kcal >= 400 ? HIGH_BAND : kcal > 200 ? MIDDLE_BAND : LOW_BAND;",
     suites: ["apiUnit"],
   },
   {

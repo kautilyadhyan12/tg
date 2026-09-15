@@ -148,6 +148,17 @@ export type Equipment = z.infer<typeof equipmentSchema>;
 export type WorkoutTime = z.infer<typeof workoutTimeSchema>;
 export type Diet = z.infer<typeof dietSchema>;
 
+/** The diet ladder as numbers, lowest first. A food is labelled with the lowest
+ *  diet that eats it, and every diet above that one eats it too. */
+export const DIET_LADDER: Readonly<Record<Diet, number>> = { vegan: 0, vegetarian: 1, vegetarian_eggs: 2, non_vegetarian: 3 };
+
+/** Whether a person on `diet` may be offered a food labelled `foodDiet`. The
+ *  diet is a ceiling, never a demand (RULINGS 2026-09-13): a non-vegetarian may
+ *  be offered a vegan dish, and a vegetarian is never offered meat. */
+export function dietAllows(diet: Diet, foodDiet: Diet): boolean {
+  return DIET_LADDER[foodDiet] <= DIET_LADDER[diet];
+}
+
 /** A set, not a list: duplicates are rejected rather than silently deduped, so
  *  the parsed value is a true multiset-free set (R2.3 parse-don't-validate) —
  *  a repeated goal would otherwise double-weight Part 2B §4's scorer. */
