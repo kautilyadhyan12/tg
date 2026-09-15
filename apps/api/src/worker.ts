@@ -28,20 +28,18 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
+import { sentryOptions } from "./sentry.js";
 
 const config = loadConfig(process.env);
 const log = pino({ level: config.LOG_LEVEL });
 
-// T3 round 2 (R8.1): Sentry.init lives in app.ts, which this entrypoint never
-// builds — so nothing from the worker reached alerting at all. Combined with
+// R8.1: this entrypoint never builds app.ts, so it starts Sentry itself; with
 // the throw-on-shortfall in the job handler below, a nightly purge that failed
-// for every user (or withheld every marker for schema drift) now reaches the
-// failed set AND Sentry. Same options as app.ts, including sendDefaultPii:
-// false (a purge logs user ids; none of it should leave). [round-4 V4: this
-// comment said "the errored-purge ack above" — the handler is BELOW, and it
-// throws, not acks; corrected.]
+// for every user (or withheld every marker for schema drift) reaches the failed
+// set AND Sentry. The API's own options (sentry.ts): a purge logs user ids, and
+// none of it should leave.
 if (config.SENTRY_DSN !== undefined) {
-  Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV, sendDefaultPii: false });
+  Sentry.init(sentryOptions(config.SENTRY_DSN, config.NODE_ENV));
 }
 
 // Config only *requires* REDIS_URL in production; a worker cannot run without

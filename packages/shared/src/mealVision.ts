@@ -23,8 +23,10 @@ const fillLevelSchema = z.preprocess(
 /** What a model writes for a name it does not have, however it is spelled: the
  *  prompt's own null, "none", "N/A" and unknown, and nothing at all. */
 export const NO_VALUE_WORDS: readonly string[] = ["none", "n/a", "null", "unknown", ""];
+/** Whether a name the model wrote is one of NO_VALUE_WORDS, in any case and spacing. */
+export const isNoValueWord = (name: string): boolean => NO_VALUE_WORDS.includes(name.trim().toLowerCase());
 const optionalNameSchema = z.preprocess(
-  (v) => (typeof v === "string" && NO_VALUE_WORDS.includes(v.trim().toLowerCase()) ? null : v),
+  (v) => (typeof v === "string" && isNoValueWord(v) ? null : v),
   z.string().nullable(),
 ).default(null);
 

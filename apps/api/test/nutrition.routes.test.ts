@@ -5,12 +5,13 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
-import { RETAKE_TTL_SECONDS } from "../src/modules/nutrition/service.js";
+import { RETAKE_TTL_SECONDS, SCANNER_PAUSE_SECONDS } from "../src/modules/nutrition/service.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
-// Sentry is only ever called, never reached: a test that sets SENTRY_DSN reads what the app sent it.
-const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn() }));
+// Sentry is only ever called, never reached: a test that sets SENTRY_DSN reads what the app
+// handed it. What the real SDK would send is test/sentry.test.ts's.
+const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), httpIntegration: vi.fn() }));
 vi.mock("@sentry/node", () => sentry);
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
@@ -320,6 +321,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     let blindGets=1; // blind for exactly the confirm's first draft get, then normal
     const flaky:RedisLike={
       incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
+      decrIfPositive:(k)=>base.decrIfPositive(k),
       // The draft key (`meal-scan:`) reads null once — the "Redis momentarily
       // down" moment. take() below still sees it: the flap recovered.
       get:(k)=>k.startsWith("meal-scan:")&&blindGets-->0?Promise.resolve(null):base.get(k),
@@ -633,15 +635,15 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   // ── What a failed scan costs the person, and what they are told ─────────────
-  /** A scanner that plays its steps in order: evidence, or a failure it throws. */
-  const scripted=(...steps:(VisionEvidence|Error)[]):VisionProvider=>({analyze(){const step=steps.shift()??goodEvidence;return step instanceof Error?Promise.reject(step):Promise.resolve({evidence:step,tokensIn:100,tokensOut:200} satisfies VisionResult);}});
+  /** A scanner that plays its steps in order: evidence, or a failure it throws. It counts the calls it is sent. */
+  const scripted=(...steps:(VisionEvidence|Error)[]):VisionProvider&{calls:number}=>({calls:0,analyze(){this.calls++;const step=steps.shift()??goodEvidence;return step instanceof Error?Promise.reject(step):Promise.resolve({evidence:step,tokensIn:100,tokensOut:200} satisfies VisionResult);}});
   /** An app of its own on this database, signed in as a new person. `fetchForScanner`
    *  is the global fetch while the app is built, which is when the real scanner takes it. */
-  async function scanApp(email:string,options:{env?:Record<string,string>;vision?:VisionProvider;fetchForScanner?:typeof fetch;clock?:()=>number}={}){
+  async function scanApp(email:string,options:{env?:Record<string,string>;vision?:VisionProvider;foods?:FoodSearchProvider;fetchForScanner?:typeof fetch;clock?:()=>number}={}){
     const scanRedis=createMemoryRedis(options.clock);
     if(options.fetchForScanner!==undefined)vi.stubGlobal("fetch",options.fetchForScanner);
     let built:App;
-    try{built=await buildApp(loadConfig({...env,...options.env}),{redis:scanRedis,nutrition:{...(options.vision===undefined?{}:{visionProvider:options.vision}),foodSearchProvider:noExternal}});}
+    try{built=await buildApp(loadConfig({...env,...options.env}),{redis:scanRedis,nutrition:{...(options.vision===undefined?{}:{visionProvider:options.vision}),foodSearchProvider:options.foods??noExternal}});}
     finally{vi.unstubAllGlobals();}
     const post=(url:string,body:unknown,access?:string)=>built.inject({method:"POST",url,headers:{"content-type":"application/json"},...(access===undefined?{}:{cookies:{accessToken:access}}),payload:JSON.stringify(body)});
     /** A new person signed in on this app, sharing its scanner and its Redis. */
@@ -670,57 +672,88 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const bodyOf=(res:Scanned)=>{const{requestId,...body}=res.json<Failed>();expect(typeof requestId).toBe("string");return body;};
   const googleReply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 
-  it("a scanner outage is never blamed on the photo: busy with a free retry, at most three in ten minutes; nothing ledgered; a log line each",async()=>{
+  it("a scanner outage is never blamed on the photo and costs no scan: busy twice, then unavailable and not called for five minutes; per person; nothing ledgered; a log line each",async()=>{
     let now=Date.now();
-    const s=await scanApp("p26a-outage@example.com",{clock:()=>now,vision:scripted(
+    const google=scripted(
       new VisionProviderError("vision HTTP 429","unavailable"),
       new VisionProviderError("vision network failure","unavailable"),
       new VisionProviderError("vision malformed completion","unavailable"),
       new VisionProviderError("vision HTTP 503","unavailable"),
-      new VisionProviderError("vision HTTP 429","unavailable"),
-      new VisionProviderError("vision network failure","unavailable"),
       goodEvidence,
-    )});
+    );
+    const s=await scanApp("p26a-outage@example.com",{clock:()=>now,vision:google});
     try{
       const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
-      // A counted scan meets the outage, and so do its first, second and third free retries.
       const first=await s.scan();
-      const second=await s.scan(freeRetryOf(first));
-      const third=await s.scan(freeRetryOf(second));
-      const fourth=await s.scan(freeRetryOf(third));
-      for(const res of [first,second,third,fourth]){
-        expect(res.statusCode,res.body).toBe(503);
-        expect(res.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
-      }
-      expect(new Set([first,second,third].map(freeRetryOf)).size).toBe(3);
-      // The third free retry is the last in ten minutes: still busy, with no fourth.
-      expect(fourth.json<Failed>()).not.toHaveProperty("retakeToken");
-      expect(await s.scansUsed()).toBe("1");
-      // The limit is this person's: someone else meeting the same outage still gets their free retry.
+      const second=await s.scan();
+      const third=await s.scan();
+      expect([first,second,third].map((r)=>r.statusCode)).toEqual([503,503,503]);
+      // A counted scan's failure hands out no free retry: the scan itself is given back.
+      expect(bodyOf(first)).toEqual({error:"scanner_unavailable",message:BUSY});
+      expect(bodyOf(second)).toEqual({error:"scanner_unavailable",message:BUSY});
+      // The third failure pauses this person's scans, so it no longer says "in a minute".
+      expect(bodyOf(third)).toEqual(UNAVAILABLE);
+      expect(await s.scansUsed()).toBe("0");
+      expect(google.calls).toBe(3);
+      // Paused: refused before it takes anything, and the scanner is not called.
+      expect(bodyOf(await s.scan())).toEqual(UNAVAILABLE);
+      expect([google.calls,await s.scansUsed()]).toEqual([3,"0"]);
+      // The pause is this person's: someone else meeting the same outage reaches the scanner, and is told it is busy.
       const other=await s.person("p26a-outage-other@example.com");
       const theirs=await other.scan();
-      expect(theirs.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
-      freeRetryOf(theirs);
-      // Ten minutes on, the next try is a scan of its own, and its outage earns a free retry again.
-      now+=RETAKE_TTL_SECONDS*1000;
-      const fifth=await s.scan();
-      expect(fifth.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
-      expect(await s.scansUsed()).toBe("2");
-      const good=await s.scan(freeRetryOf(fifth));
+      expect(bodyOf(theirs)).toEqual({error:"scanner_unavailable",message:BUSY});
+      expect(google.calls).toBe(4);
+      // A moment before five minutes from the first failure, still paused; at five minutes, the scan goes through and is counted.
+      now+=5*60_000-1;
+      expect(bodyOf(await s.scan())).toEqual(UNAVAILABLE);
+      expect(google.calls).toBe(4);
+      now+=1;
+      const good=await s.scan();
       expect(good.statusCode,good.body).toBe(200);
-      expect(await s.scansUsed()).toBe("2");
+      expect([google.calls,await s.scansUsed()]).toEqual([5,"1"]);
       const line=(res:Scanned,reason:string,userId=s.userId)=>({event:"nutrition.scan_failed",userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason,requestId:res.json<Failed>().requestId});
-      expect(loggedFailures(logged.mock.calls)).toEqual([
-        line(first,"vision HTTP 429"),line(second,"vision network failure"),line(third,"vision malformed completion"),line(fourth,"vision HTTP 503"),
-        line(theirs,"vision HTTP 429",other.userId),line(fifth,"vision network failure"),
-      ]);
+      expect(loggedFailures(logged.mock.calls)).toEqual([line(first,"vision HTTP 429"),line(second,"vision network failure"),line(third,"vision malformed completion"),line(theirs,"vision HTTP 503",other.userId)]);
       // An outage brings back no usage, so the one row is the good scan's.
       expect((await s.costRows()).map((r)=>r.units)).toEqual([300]);
     }finally{await s.app.close();}
   },30_000);
 
-  it("a photo Google refuses is never sent for nothing: every try is a counted scan with no free retry, until the day's scans run out",async()=>{
-    // The review's case: a file that starts with JPEG bytes and is no picture, which Google answers 400.
+  it("a scan that rode a free retry gets a new one back from any scanner failure, and one held through the pause still works after it",async()=>{
+    let now=Date.now();
+    const google=scripted({...goodEvidence,photo_quality:"poor"},new VisionProviderError("vision HTTP 429","unavailable"),new VisionProviderError("vision HTTP 403","refused"),new TypeError("a fault"),goodEvidence);
+    const s=await scanApp("p26a-retry-back@example.com",{clock:()=>now,vision:google});
+    try{
+      vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      // The photo's own failure is counted, with its one free retake (§3.5).
+      const poor=await s.scan();
+      expect(poor.statusCode,poor.body).toBe(422);
+      expect(await s.scansUsed()).toBe("1");
+      const busy=await s.scan(freeRetryOf(poor));
+      expect(bodyOf(busy)).toEqual({error:"scanner_unavailable",message:BUSY,retakeToken:freeRetryOf(busy)});
+      // The free retry it rode is spent; the one it got back is new.
+      expect(freeRetryOf(busy)).not.toBe(freeRetryOf(poor));
+      expect((await s.scan(freeRetryOf(poor))).json<Failed>()).toMatchObject({error:"invalid_retake"});
+      now+=60_000;
+      const refused=await s.scan(freeRetryOf(busy));
+      expect(bodyOf(refused)).toEqual({...UNAVAILABLE,retakeToken:freeRetryOf(refused)});
+      const fault=await s.scan(freeRetryOf(refused));
+      expect(bodyOf(fault)).toEqual({...UNAVAILABLE,retakeToken:freeRetryOf(fault)});
+      // Three failures: paused. The free retry held is not spent by the refusal, and no scan is counted.
+      const held=freeRetryOf(fault);
+      expect(bodyOf(await s.scan(held))).toEqual(UNAVAILABLE);
+      expect([google.calls,await s.scansUsed()]).toEqual([4,"1"]);
+      // Five minutes after the first failure the pause is over, and the free retry held still works.
+      now+=5*60_000-60_000;
+      const good=await s.scan(held);
+      expect(good.statusCode,good.body).toBe(200);
+      expect(await s.scansUsed()).toBe("1");
+      // A free retry outlives the pause, so one given back as the pause begins is never lost to it.
+      expect(SCANNER_PAUSE_SECONDS).toBeLessThan(RETAKE_TTL_SECONDS);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a photo Google refuses costs no scan: unavailable with nothing to retry, and after three refusals in five minutes Google is not called again",async()=>{
+    // A file that starts with JPEG bytes and is no picture, which Google answers 400.
     let calls=0;
     const refuses:typeof fetch=()=>{calls++;return Promise.resolve(googleReply(400,{error:{code:400,message:"Unable to process input image.",status:"INVALID_ARGUMENT"}}));};
     const s=await scanApp("p26a-refused@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:refuses}); // gitleaks:allow
@@ -728,16 +761,15 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       const tries:Scanned[]=[];
       for(let i=0;i<5;i++)tries.push(await s.scan());
-      expect(tries.map((r)=>r.statusCode)).toEqual([503,503,429,429,429]);
-      for(const res of tries.slice(0,2))expect(bodyOf(res)).toEqual(UNAVAILABLE);
-      expect(tries.every((r)=>!("retakeToken" in r.json<object>()))).toBe(true);
-      expect(calls).toBe(2);
-      expect(loggedFailures(logged.mock.calls)).toEqual(tries.slice(0,2).map((res)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 400",requestId:res.json<Failed>().requestId})));
+      expect(tries.map((r)=>r.statusCode)).toEqual([503,503,503,503,503]);
+      for(const res of tries)expect(bodyOf(res)).toEqual(UNAVAILABLE);
+      expect([calls,await s.scansUsed()]).toEqual([3,"0"]);
+      expect(loggedFailures(logged.mock.calls)).toEqual(tries.slice(0,3).map((res)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 400",requestId:res.json<Failed>().requestId})));
       expect(await s.costRows()).toEqual([]);
     }finally{await s.app.close();}
   },30_000);
 
-  it("through the real scanner, Google's 429 and a reply that is not Google's are busy with a free retry, and neither is ledgered",async()=>{
+  it("through the real scanner, Google's 429 and a reply that is not Google's are busy and cost no scan, and neither is ledgered",async()=>{
     const answers=[
       googleReply(429,{error:{code:429,status:"RESOURCE_EXHAUSTED"}}),
       googleReply(200,{candidates:"not Gemini's"}),
@@ -747,11 +779,10 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const s=await scanApp("p26a-google-busy@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:google}); // gitleaks:allow
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
-      const limited=await s.scan();
-      expect(limited.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
-      const broken=await s.scan(freeRetryOf(limited));
-      expect(broken.json<Failed>()).toMatchObject({error:"scanner_unavailable",message:BUSY});
-      const good=await s.scan(freeRetryOf(broken));
+      expect(bodyOf(await s.scan())).toEqual({error:"scanner_unavailable",message:BUSY});
+      expect(bodyOf(await s.scan())).toEqual({error:"scanner_unavailable",message:BUSY});
+      expect(await s.scansUsed()).toBe("0");
+      const good=await s.scan();
       expect(good.statusCode,good.body).toBe(200);
       expect(answers).toEqual([]);
       expect(await s.scansUsed()).toBe("1");
@@ -759,7 +790,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await s.app.close();}
   },30_000);
 
-  it("a fault in the scanner is never called busy: temporarily unavailable with no free retry, logged with its error and sent to Sentry with the request id; a refusal is not sent",async()=>{
+  it("a fault in the scanner is never called busy: temporarily unavailable, costing no scan, logged with its error and sent to Sentry with the request id; a refusal is not sent",async()=>{
     const fault=new TypeError("Cannot read properties of undefined (reading 'parts')");
     const s=await scanApp("p26a-fault@example.com",{env:{SENTRY_DSN:"https://public@sentry.example.com/1"},vision:scripted(fault,new VisionProviderError("vision HTTP 403","refused"))});
     try{
@@ -773,12 +804,38 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const refused=await s.scan();
       expect(bodyOf(refused)).toEqual(UNAVAILABLE);
       expect(sentry.captureException).toHaveBeenCalledTimes(1);
-      expect(await s.scansUsed()).toBe("2");
+      expect(await s.scansUsed()).toBe("0");
       expect(loggedFailures(logged.mock.calls)).toEqual([
         {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"fault",reason:"TypeError",requestId:body.requestId,err:fault},
         {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 403",requestId:refused.json<Failed>().requestId},
       ]);
       expect(await s.costRows()).toEqual([]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a fault after the model answered costs no scan either: unavailable, sent to Sentry with the request id, and the model's spend ledgered",async()=>{
+    const searchDown=new Error("food search down");
+    const unlisted={name:"Qwzx vlorp",canonical_hint:"qwzx vlorp",container:null,fill_level:null,size_class:null,count:null};
+    const s=await scanApp("p26a-late-fault@example.com",{env:{SENTRY_DSN:"https://public@sentry.example.com/1"},vision:scripted({...goodEvidence,items:[unlisted]}),foods:{search:()=>Promise.reject(searchDown)}});
+    try{
+      sentry.captureException.mockClear();
+      vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      const res=await s.scan();
+      expect(res.statusCode,res.body).toBe(503);
+      expect(bodyOf(res)).toEqual(UNAVAILABLE);
+      expect(sentry.captureException.mock.calls).toEqual([[searchDown,{extra:{requestId:res.json<Failed>().requestId}}]]);
+      expect(await s.scansUsed()).toBe("0");
+      expect((await s.costRows()).map((r)=>r.units)).toEqual([300]);
+    }finally{await s.app.close();}
+  },30_000);
+
+  it("a food left out of the total is never named by a word that says there is none; an item named so reads as its hint",async()=>{
+    const unlisted=(name:string,canonical_hint:string)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count:null});
+    const s=await scanApp("p26a-no-name@example.com",{vision:scripted({...goodEvidence,unknown_items:["none"," N/A ","NULL","Unknown","","Mystery sauce"],items:[unlisted("N/A","qwzx vlorp"),unlisted("none","unknown"),...goodEvidence.items]})});
+    try{
+      const res=await s.scan();
+      expect(res.statusCode,res.body).toBe(200);
+      expect(res.json<{unknownItems:string[]}>().unknownItems).toEqual(["Mystery sauce","qwzx vlorp"]);
     }finally{await s.app.close();}
   },30_000);
 

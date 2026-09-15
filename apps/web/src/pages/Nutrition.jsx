@@ -946,21 +946,26 @@ function PhotoModal({ open, onClose, onSave }) {
             : "Couldn't read that photo — please try another one.",
         });
         setPreview(null);
-      } else if (err.response?.status === 503 && err.response.data?.error === 'scanner_unavailable') {
-        // The scanner is down, not the photo: the same photo may go again, free.
-        setRetakeToken(err.response.data.retakeToken || null);
-        setRetakeMsg({
-          title: 'Try again',
-          text: err.response.data.retakeToken
-            ? 'Meal scanning is busy right now — try again in a minute (free retry).'
-            : 'Meal scanning is busy right now — try again in a minute.',
-        });
-        setPreview(null);
       } else if (err.response?.status === 503) {
-        // Any other 503 (switched off, a refused request, a fault, scans that
-        // cannot be counted) is not busy, and no free retry comes with it.
+        // The scanner failed, not the photo, and that costs no scan: the server
+        // gave back the scan it counted, or sends a new free retry for the one
+        // this scan rode. A 503 that took nothing (a scanner switched off, or
+        // paused after failing) brings none, and the free retry held stays.
+        if (err.response.data?.retakeToken) setRetakeToken(err.response.data.retakeToken);
+        setRetakeMsg(err.response.data?.error === 'scanner_unavailable'
+          ? {
+              title: 'Try again',
+              text: err.response.data.retakeToken
+                ? 'Meal scanning is busy right now — try again in a minute (free retry).'
+                : 'Meal scanning is busy right now — try again in a minute.',
+            }
+          : { title: 'Try again later', text: 'Meal scanning is unavailable right now.' });
+        setPreview(null);
+      } else if (err.response?.status === 400 && err.response.data?.error === 'invalid_retake') {
+        // A free retry that ran out (it lasts ten minutes) or was spent: the
+        // next photo is a scan of its own.
         setRetakeToken(null);
-        setRetakeMsg({ title: 'Try again later', text: 'Meal scanning is unavailable right now.' });
+        setRetakeMsg({ title: 'Try again', text: 'That free retry has run out. Pick the photo again.' });
         setPreview(null);
       } else if (err.response?.status === 429) {
         toast.error('Daily photo-scan limit reached.');

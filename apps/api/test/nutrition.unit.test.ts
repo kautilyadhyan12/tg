@@ -14,7 +14,7 @@ import {
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { visionCostMicro } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, RETIRED_ITEM_FIELDS, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, RETIRED_ITEM_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -680,11 +680,13 @@ describe("P2.6a nutrition pure pipeline", () => {
         expect([evidence.meal_name, evidence.items[0]?.container, evidence.items[0]?.size_class], JSON.stringify(spelled)).toEqual([null, null, null]);
       }
     }
-    // Every word the prompt names for a value the model does not have is one of them.
-    for (const word of ["null", "none", "N/A", "unknown"]) {
-      expect(MEAL_VISION_PROMPT).toContain(word);
-      expect(NO_VALUE_WORDS).toContain(word.toLowerCase());
-    }
+    // Every word the prompt gives the model for a value it does not have is one of them, read from
+    // the prompt itself: its "instead of writing …" list and its "Say … instead of guessing".
+    const writing = /instead of writing ([^.]+?)\. /.exec(MEAL_VISION_PROMPT)?.[1];
+    const said = /Say (\S+) instead of guessing/.exec(MEAL_VISION_PROMPT)?.[1];
+    const named = [...(writing ?? "").split(/,\s*|\s+or\s+/), said ?? ""].map((w) => w.replaceAll('"', "").trim());
+    expect(named).toEqual(["null", "none", "N/A", "unknown"]);
+    for (const word of named) expect(isNoValueWord(word), word).toBe(true);
     // A real name that holds one of the words keeps it.
     const real = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: "Unknown dish", items: [{ name: "x", canonical_hint: "x" }], photo_quality: "good" })); // gitleaks:allow
     expect((await real.analyze("AA==", "image/jpeg")).evidence.meal_name).toBe("Unknown dish");

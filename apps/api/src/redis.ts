@@ -10,6 +10,10 @@ import { Redis } from "ioredis";
 export interface RedisLike {
   /** Atomic INCR; sets `ttlSeconds` on first increment. null = backend down. */
   incrWithTtl(key: string, ttlSeconds: number): Promise<number | null>;
+  /** Atomic DECR of a live counter above zero, keeping its TTL; a missing or
+   *  zero counter is left as it is. true = one taken off, false = none to take,
+   *  null = backend down. */
+  decrIfPositive(key: string): Promise<boolean | null>;
   /** null = missing OR backend down (callers treat both as cache miss). */
   get(key: string): Promise<string | null>;
   /** true = stored; false = backend down. */
@@ -30,6 +34,15 @@ const TAKE_LUA = `
 local v = redis.call('GET', KEYS[1])
 if v then redis.call('DEL', KEYS[1]) end
 return v`;
+// GET + DECR in one step, so a counter is never taken below zero, and DECR
+// never runs on a missing key (it would make one at -1 with no TTL).
+const DECR_IF_POSITIVE_LUA = `
+local c = tonumber(redis.call('GET', KEYS[1]))
+if c and c > 0 then
+  redis.call('DECR', KEYS[1])
+  return 1
+end
+return 0`;
 
 export function createIoRedis(url: string): RedisLike {
   const client = new Redis(url, {
@@ -39,14 +52,23 @@ export function createIoRedis(url: string): RedisLike {
   });
   client.defineCommand("incrWithTtl", { numberOfKeys: 1, lua: INCR_TTL_LUA });
   client.defineCommand("take", { numberOfKeys: 1, lua: TAKE_LUA });
+  client.defineCommand("decrIfPositive", { numberOfKeys: 1, lua: DECR_IF_POSITIVE_LUA });
   const asIncr = client as Redis & {
     incrWithTtl(key: string, ttl: string): Promise<number>;
     take(key: string): Promise<string | null>;
+    decrIfPositive(key: string): Promise<number>;
   };
   return {
     async incrWithTtl(key, ttlSeconds) {
       try {
         return await asIncr.incrWithTtl(key, String(ttlSeconds));
+      } catch {
+        return null;
+      }
+    },
+    async decrIfPositive(key) {
+      try {
+        return (await asIncr.decrIfPositive(key)) === 1;
       } catch {
         return null;
       }
@@ -113,6 +135,13 @@ export function createMemoryRedis(clock: () => number = Date.now): RedisLike & {
       }
       e.value = String(Number(e.value) + 1);
       return Promise.resolve(Number(e.value));
+    },
+    async decrIfPositive(key) {
+      if (this.down) return null;
+      const e = live(key);
+      if (e === undefined || !(Number(e.value) > 0)) return Promise.resolve(false);
+      e.value = String(Number(e.value) - 1);
+      return Promise.resolve(true);
     },
     async get(key) {
       if (this.down) return null;

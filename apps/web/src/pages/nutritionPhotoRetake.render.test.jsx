@@ -1,7 +1,8 @@
 // A failed photo scan says why: a photo the scanner could not read asks for
 // another photo, and a scanner that is down says it is busy and lets the same
-// photo go again. Either way the free retry's token rides the next scan. A
-// scanner that cannot take the photo at all says it is unavailable, with none.
+// photo go again; one that cannot take the photo at all says it is unavailable.
+// The free retry the sheet holds rides the next scan, and changes only when the
+// server gives a new one, answers a photo, or refuses the one held.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -68,23 +69,28 @@ describe('a photo scan that fails', () => {
     expect(svc.analyzePhoto.mock.calls[1]).toEqual([photo, TOKEN]);
   });
 
-  it('says only that the scanner is busy when no free retry came with it', async () => {
-    svc.analyzePhoto = vi.fn().mockRejectedValueOnce(failure(503, { error: 'scanner_unavailable', message: 'Meal scanning is busy right now. Please try again in a minute.' }));
+  it('says only that the scanner is busy when no free retry came with it, and the next scan rides none', async () => {
+    svc.analyzePhoto = vi.fn()
+      .mockRejectedValueOnce(failure(503, { error: 'scanner_unavailable', message: 'Meal scanning is busy right now. Please try again in a minute.' }))
+      .mockResolvedValueOnce(goodScan);
     await openPhotoSheet();
     pickPhoto();
     expect(await screen.findByText('Meal scanning is busy right now — try again in a minute.')).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
+    const photo = pickPhoto();
+    expect(await screen.findByText('Dal')).toBeTruthy();
+    expect(svc.analyzePhoto.mock.calls[1]).toEqual([photo, null]);
   });
 
-  // Switched off, refused by the provider, a fault, or no way to count scans:
-  // none of these is busy, and trying again in a minute would not help.
+  // Switched off, paused, refused by the provider, a fault, or no way to count
+  // scans: none of these is busy, and trying again in a minute would not help.
   for (const [error, message] of [
     ['nutrition_unavailable', 'Meal scanning is temporarily unavailable.'],
     ['quota_unavailable', 'This feature is temporarily unavailable. Please try again in a few minutes.'],
   ]) {
-    it(`says scanning is unavailable, never busy and with no free retry, on a 503 ${error}`, async () => {
+    it(`says scanning is unavailable, never busy, on a 503 ${error}`, async () => {
       svc.analyzePhoto = vi.fn()
-        .mockRejectedValueOnce(failure(503, { error, message, retakeToken: TOKEN }))
+        .mockRejectedValueOnce(failure(503, { error, message }))
         .mockResolvedValueOnce(goodScan);
       await openPhotoSheet();
       pickPhoto();
@@ -92,12 +98,78 @@ describe('a photo scan that fails', () => {
       expect(screen.getByText('Try again later')).toBeTruthy();
       expect(screen.queryByText(/busy/)).toBeNull();
       expect(screen.queryByText(/free retry/)).toBeNull();
-
       const photo = pickPhoto();
       expect(await screen.findByText('Dal')).toBeTruthy();
       expect(svc.analyzePhoto.mock.calls[1]).toEqual([photo, null]);
     });
   }
+
+  it('keeps the free retry it holds through a 503 that brings none, so the scan after it is still free', async () => {
+    svc.analyzePhoto = vi.fn()
+      .mockRejectedValueOnce(failure(422, { error: 'retake_required', message: 'Please retake the photo in better light with the full plate visible.', retakeToken: TOKEN }))
+      .mockRejectedValueOnce(failure(503, { error: 'nutrition_unavailable', message: 'Meal scanning is temporarily unavailable.' }))
+      .mockResolvedValueOnce(goodScan);
+    await openPhotoSheet();
+    pickPhoto();
+    expect(await screen.findByText("Couldn't read that photo — try again with better lighting (free retry).")).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Meal scanning is unavailable right now.')).toBeTruthy();
+    const photo = pickPhoto();
+    expect(await screen.findByText('Dal')).toBeTruthy();
+    expect(svc.analyzePhoto.mock.calls.map((c) => c[1])).toEqual([null, TOKEN, TOKEN]);
+    expect(svc.analyzePhoto.mock.calls[2]).toEqual([photo, TOKEN]);
+  });
+
+  it('takes the new free retry a failed scan brings back in place of the one it rode, whether busy or unavailable', async () => {
+    const BUSY_TOKEN = 'b'.repeat(40);
+    const NEXT_TOKEN = 'n'.repeat(40);
+    svc.analyzePhoto = vi.fn()
+      .mockRejectedValueOnce(failure(422, { error: 'retake_required', message: 'Please retake the photo in better light with the full plate visible.', retakeToken: TOKEN }))
+      .mockRejectedValueOnce(failure(503, { error: 'scanner_unavailable', message: 'Meal scanning is busy right now. Please try again in a minute.', retakeToken: BUSY_TOKEN }))
+      .mockRejectedValueOnce(failure(503, { error: 'nutrition_unavailable', message: 'Meal scanning is temporarily unavailable.', retakeToken: NEXT_TOKEN }))
+      .mockResolvedValueOnce(goodScan);
+    await openPhotoSheet();
+    pickPhoto();
+    expect(await screen.findByText("Couldn't read that photo — try again with better lighting (free retry).")).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Meal scanning is busy right now — try again in a minute (free retry).')).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Meal scanning is unavailable right now.')).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Dal')).toBeTruthy();
+    expect(svc.analyzePhoto.mock.calls.map((c) => c[1])).toEqual([null, TOKEN, BUSY_TOKEN, NEXT_TOKEN]);
+  });
+
+  it('drops the free retry a photo it could not read spent, when no new one comes with it', async () => {
+    svc.analyzePhoto = vi.fn()
+      .mockRejectedValueOnce(failure(422, { error: 'retake_required', message: 'Please retake the photo in better light with the full plate visible.', retakeToken: TOKEN }))
+      .mockRejectedValueOnce(failure(422, { error: 'retake_required', message: 'Please retake the photo in better light with the full plate visible.' }))
+      .mockResolvedValueOnce(goodScan);
+    await openPhotoSheet();
+    pickPhoto();
+    expect(await screen.findByText("Couldn't read that photo — try again with better lighting (free retry).")).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText("Couldn't read that photo — please try another one.")).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Dal')).toBeTruthy();
+    expect(svc.analyzePhoto.mock.calls.map((c) => c[1])).toEqual([null, TOKEN, null]);
+  });
+
+  it('drops a free retry the server refuses as run out, and says so', async () => {
+    svc.analyzePhoto = vi.fn()
+      .mockRejectedValueOnce(failure(422, { error: 'retake_required', message: 'Please retake the photo in better light with the full plate visible.', retakeToken: TOKEN }))
+      .mockRejectedValueOnce(failure(400, { error: 'invalid_retake', message: 'Invalid or expired retake token.' }))
+      .mockResolvedValueOnce(goodScan);
+    await openPhotoSheet();
+    pickPhoto();
+    expect(await screen.findByText("Couldn't read that photo — try again with better lighting (free retry).")).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('That free retry has run out. Pick the photo again.')).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+    pickPhoto();
+    expect(await screen.findByText('Dal')).toBeTruthy();
+    expect(svc.analyzePhoto.mock.calls.map((c) => c[1])).toEqual([null, TOKEN, null]);
+  });
 
   it('asks for another photo when the photo could not be read, with its free retake', async () => {
     svc.analyzePhoto = vi.fn()

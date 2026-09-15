@@ -6,9 +6,10 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import type { ChosenItem, Meal, MealItem, MealPhotoItem } from "@app/shared";
+import { isNoValueWord, type ChosenItem, type Meal, type MealItem, type MealPhotoItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
+import { refundQuota } from "../quotas/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
@@ -42,22 +43,26 @@ export class NutritionError extends Error {
   }
 }
 
-/** §3.5: the route answers 422 with the single-use retake token (null when
- *  this attempt already rode a retake — tokens never chain for a photo). A
- *  scanner outage answers 503 "scanner_unavailable" instead, with a token
- *  whatever this attempt rode, until the person has had MAX_OUTAGE_RETRIES of
- *  them in a retake window (null after that). */
-export class RetakeRequiredError extends NutritionError {
+/** A scan that failed, with the free retry the person holds next. §3.5: a photo
+ *  the scanner could not read answers 422 "retake_required" with a single-use
+ *  retake token (null when this attempt already rode one — tokens never chain
+ *  for a photo). A scan the scanner failed answers 503, "scanner_unavailable"
+ *  (busy) or "nutrition_unavailable", with a new free retry only where the scan
+ *  rode one; a scan it counted is given back instead (scanFailed). */
+export class ScanFailedError extends NutritionError {
   constructor(
     readonly retakeToken: string | null,
     message: string,
     statusCode: 422 | 503 = 422,
-    code: "retake_required" | "scanner_unavailable" = "retake_required",
+    code: "retake_required" | "scanner_unavailable" | "nutrition_unavailable" = "retake_required",
   ) {
     super(statusCode, code, message);
-    this.name = "RetakeRequiredError";
+    this.name = "ScanFailedError";
   }
 }
+
+const SCAN_UNAVAILABLE = "Meal scanning is temporarily unavailable.";
+const SCAN_BUSY = "Meal scanning is busy right now. Please try again in a minute.";
 
 export interface NutritionDeps {
   sql: Sql;
@@ -142,18 +147,35 @@ async function issueRetake(deps: NutritionDeps, userId: string): Promise<string>
   return value;
 }
 
-/** The most free retries outages give one person in a retake window. Each
- *  one is a provider call no scan paid for, so a provider that keeps failing
- *  cannot be called for nothing without end, nor kept at its limit by one person. */
-export const MAX_OUTAGE_RETRIES = 3;
-const outageKey = (userId: string): string => `meal-outage:${userId}`;
+/** How many of one person's scans may fail at the scanner within
+ *  SCANNER_PAUSE_SECONDS of the first; after that their scans are refused before
+ *  they take anything until those seconds are up, so a scanner that keeps
+ *  failing is not called for nothing, nor kept at its limit by one person. The
+ *  pause is shorter than a free retry lasts, so one given back as it begins
+ *  outlives it. */
+export const MAX_SCANNER_FAILURES = 3;
+export const SCANNER_PAUSE_SECONDS = 5 * 60;
+const scannerFailuresKey = (userId: string): string => `meal-scanner-failures:${userId}`;
 
-/** A free retry after an outage, or null once this person has had
- *  MAX_OUTAGE_RETRIES in the window. Redis down → fail closed. */
-async function issueOutageRetry(deps: NutritionDeps, userId: string): Promise<string | null> {
-  const given = await deps.redis.incrWithTtl(outageKey(userId), RETAKE_TTL_SECONDS);
-  if (given === null) throw new NutritionError(503, "quota_unavailable", "Meal scanning is temporarily unavailable.");
-  return given > MAX_OUTAGE_RETRIES ? null : issueRetake(deps, userId);
+/** Whether this person's scans are paused. Redis down reads as not paused: the
+ *  free retry and the scan count that come next both fail closed. */
+export async function scannerPaused(deps: Pick<NutritionDeps, "redis">, userId: string): Promise<boolean> {
+  const failures = await deps.redis.get(scannerFailuresKey(userId));
+  return failures !== null && Number(failures) >= MAX_SCANNER_FAILURES;
+}
+
+/** What a scan took from the person before it ran: the free retry it rode, or
+ *  one of their scans, counted under its quota key. */
+export type ScanPaidWith = { retake: true } | { quotaKey: string };
+
+/** Gives the person back what a failed scan took: the scan it counted, or, for
+ *  a scan that rode a free retry, a new free retry, returned for the response. */
+async function giveBack(deps: NutritionDeps, userId: string, paidWith: ScanPaidWith): Promise<string | null> {
+  if ("retake" in paidWith) return await issueRetake(deps, userId);
+  if (!(await refundQuota(deps.redis, paidWith.quotaKey))) {
+    deps.log.warn({ event: "nutrition.scan_refund_failed", userId }, "a failed scan could not be given back");
+  }
+  return null;
 }
 
 /** Atomic single-use consume (Lua GET+DEL). Redis down → fail closed. */
@@ -362,57 +384,85 @@ export async function analyzePhoto(
   userId: string,
   imageBase64: string,
   mimeType: string,
-  usedRetake: boolean,
+  paidWith: ScanPaidWith,
   requestId: string,
 ): Promise<ScanDraftResponse> {
   if (deps.vision === null) {
-    throw new NutritionError(503, "nutrition_unavailable", "Meal scanning is temporarily unavailable.");
+    throw new NutritionError(503, "nutrition_unavailable", SCAN_UNAVAILABLE);
   }
+  try {
+    return await readMealPhoto(deps, deps.vision, userId, imageBase64, mimeType, "retake" in paidWith, requestId);
+  } catch (err) {
+    // A photo that asks for a retake is answered as it is, and so is a store
+    // that cannot be reached (its typed 503), where nothing could be given back.
+    if (err instanceof NutritionError) throw err;
+    throw await scanFailed(deps, userId, paidWith, requestId, err);
+  }
+}
 
+/** A scan that fails for anything but the photo — the provider down or refusing
+ *  it, or a fault anywhere in reading and resolving it — costs the person nothing
+ *  (Part 8 §5.3: no quota consumed on failures): what the scan took is given
+ *  back, and the failure counts toward this person's pause. They are told the
+ *  scanner is busy while a try soon may work (an outage, before the pause), and
+ *  that it is unavailable otherwise; never that the photo was bad. */
+async function scanFailed(
+  deps: NutritionDeps,
+  userId: string,
+  paidWith: ScanPaidWith,
+  requestId: string,
+  err: unknown,
+): Promise<ScanFailedError> {
+  // Anything thrown that is not a VisionProviderError is a fault in our own code or stores.
+  const kind = err instanceof VisionProviderError ? err.kind : "fault";
+  const failure = {
+    event: "nutrition.scan_failed",
+    userId,
+    model: deps.visionModel,
+    kind,
+    reason: err instanceof VisionProviderError ? err.message : err instanceof Error ? err.name : typeof err,
+    requestId,
+  };
+  if (kind === "fault") {
+    deps.log.error({ ...failure, err }, "meal scanner fault");
+    deps.reportError(err, requestId);
+  } else {
+    deps.log.error(failure, kind === "unavailable" ? "meal scanner unavailable" : "meal scanner request refused");
+  }
+  const retakeToken = await giveBack(deps, userId, paidWith);
+  const failures = await deps.redis.incrWithTtl(scannerFailuresKey(userId), SCANNER_PAUSE_SECONDS);
+  return kind === "unavailable" && failures !== null && failures < MAX_SCANNER_FAILURES
+    ? new ScanFailedError(retakeToken, SCAN_BUSY, 503, "scanner_unavailable")
+    : new ScanFailedError(retakeToken, SCAN_UNAVAILABLE, 503, "nutrition_unavailable");
+}
+
+/** Stages 1 and 2: the model reads the photo, and each food it names is resolved
+ *  to grams. A photo that cannot be read asks for a retake; any other failure is
+ *  thrown for analyzePhoto to answer. */
+async function readMealPhoto(
+  deps: NutritionDeps,
+  vision: VisionProvider,
+  userId: string,
+  imageBase64: string,
+  mimeType: string,
+  usedRetake: boolean,
+  requestId: string,
+): Promise<ScanDraftResponse> {
   let result: VisionResult;
   try {
-    result = await deps.vision.analyze(imageBase64, mimeType);
+    result = await vision.analyze(imageBase64, mimeType);
   } catch (err) {
-    // Money may have been spent even on a malformed reply — ledger it when
-    // the provider reported usage. Only the model's answer carries usage: no
-    // completion, no ledger row (ruled — DECISIONS).
-    if (err instanceof VisionProviderError && err.usage !== undefined) await ledger(deps, userId, err.usage);
-    // Anything thrown that is not a VisionProviderError is a fault in the scanner's own code.
-    const kind = err instanceof VisionProviderError ? err.kind : "fault";
-    const failure = {
-      event: "nutrition.scan_failed",
-      userId,
-      model: deps.visionModel,
-      kind,
-      reason: err instanceof VisionProviderError ? err.message : err instanceof Error ? err.name : typeof err,
-      requestId,
-    };
-    if (kind === "unreadable") {
-      deps.log.warn(failure, "meal scanner reply unusable");
-      const rt = usedRetake ? null : await issueRetake(deps, userId);
-      throw new RetakeRequiredError(rt, "We could not read that photo. Please retake it with the full plate in frame.");
-    }
-    if (kind === "unavailable") {
-      // The provider cannot answer for now: the person is told the scanner is
-      // busy, never the photo, and gets a free retry even on a retry, up to
-      // MAX_OUTAGE_RETRIES in a window.
-      deps.log.error(failure, "meal scanner unavailable");
-      throw new RetakeRequiredError(
-        await issueOutageRetry(deps, userId),
-        "Meal scanning is busy right now. Please try again in a minute.",
-        503,
-        "scanner_unavailable",
-      );
-    }
-    // A refused request, or a fault, fails the same way however often it is
-    // tried: no free retry, and the scanner is unavailable until it is fixed.
-    if (kind === "fault") {
-      deps.log.error({ ...failure, err }, "meal scanner fault");
-      deps.reportError(err, requestId);
-    } else {
-      deps.log.error(failure, "meal scanner request refused");
-    }
-    throw new NutritionError(503, "nutrition_unavailable", "Meal scanning is temporarily unavailable.");
+    if (!(err instanceof VisionProviderError) || err.kind !== "unreadable") throw err;
+    // The model answered, and its answer cannot be used. Money was spent, so it
+    // is ledgered (only the model's answer carries usage: no completion, no
+    // ledger row — ruled, DECISIONS), and the photo is asked for again.
+    if (err.usage !== undefined) await ledger(deps, userId, err.usage);
+    deps.log.warn(
+      { event: "nutrition.scan_failed", userId, model: deps.visionModel, kind: err.kind, reason: err.message, requestId },
+      "meal scanner reply unusable",
+    );
+    const rt = usedRetake ? null : await issueRetake(deps, userId);
+    throw new ScanFailedError(rt, "We could not read that photo. Please retake it with the full plate in frame.");
   }
 
   await ledger(deps, userId, result);
@@ -420,7 +470,7 @@ export async function analyzePhoto(
   // a free retake, never a charged draft with nothing on it.
   if (result.evidence.photo_quality === "poor" || result.evidence.items.length === 0) {
     const rt = usedRetake ? null : await issueRetake(deps, userId);
-    throw new RetakeRequiredError(rt, "Please retake the photo in better light with the full plate visible.");
+    throw new ScanFailedError(rt, "Please retake the photo in better light with the full plate visible.");
   }
 
   // Stage 2: resolve each identified item through the approved rungs.
@@ -435,17 +485,18 @@ export async function analyzePhoto(
   const items: MealPhotoItem[] = [];
   // Honest unknown (§3.5): what the model could not identify, and each item seen
   // but matching no food, stay out of the totals and are named once each on the
-  // sheet rather than dropped without a word. A blank name reads as its hint.
+  // sheet rather than dropped without a word. A name that says there is none
+  // (blank, "none", "N/A", "unknown") is never shown: an item's reads as its hint.
   const unknownItems: string[] = [];
   const nameUnknown = (label: string): void => {
     const shown = label.replaceAll(/[_\s]+/g, " ").trim();
-    if (shown !== "" && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
+    if (!isNoValueWord(shown) && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
   };
   for (const label of result.evidence.unknown_items) nameUnknown(label);
   for (const evidence of result.evidence.items) {
     const food = await findScannedFood(deps, evidence.canonical_hint);
     if (food === null) {
-      nameUnknown(evidence.name.trim() === "" ? evidence.canonical_hint : evidence.name);
+      nameUnknown(isNoValueWord(evidence.name) ? evidence.canonical_hint : evidence.name);
       continue;
     }
     const portion = resolvePortion(
@@ -472,7 +523,7 @@ export async function analyzePhoto(
   const mealName = result.evidence.meal_name ?? "Meal";
   const draft: Draft = { userId, mealName, foods, items: draftItems };
   const stored = await deps.redis.setex(scanKey(userId, scanToken), SCAN_TTL_SECONDS, JSON.stringify(draft));
-  if (!stored) throw new NutritionError(503, "nutrition_unavailable", "Meal scanning is temporarily unavailable.");
+  if (!stored) throw new NutritionError(503, "nutrition_unavailable", SCAN_UNAVAILABLE);
 
   return {
     scanToken,
