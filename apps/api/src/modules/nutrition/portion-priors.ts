@@ -206,10 +206,8 @@ function hintMeasure(words: readonly string[]): HintMeasure | null {
   return { container: word, word, plural };
 }
 
-/** What a container is: the last word of its name, or of each name an "or" joins
- *  ("katori_or_small_bowl" is a katori or a bowl), singular. The words before it
- *  say which kind: a serving bowl is a bowl, a chai cup a cup, a thali section a
- *  section, and none of them is a serving, a chai or a thali. */
+/** The last word of a container's name, or of each name an "or" joins
+ *  ("katori_or_small_bowl" is a katori or a bowl), singular. */
 const containerHeads = (name: string): string[] =>
   wordsOf(name).filter((word, at, words) => word !== "or" && (at === words.length - 1 || words[at + 1] === "or")).map(singular);
 
@@ -217,31 +215,47 @@ const containerHeads = (name: string): string[] =>
  *  rice" are two of rice's servings. */
 const SERVING_WORDS: ReadonlySet<string> = new Set(["serving", "portion", "helping"]);
 
+/** Sizes, which no container is named by. */
+const SIZE_WORDS: ReadonlySet<string> = new Set(["small", "medium", "large"]);
+
 /** The containers a plural before a hint's "of" can count where the photo shows
- *  none: what each Appendix B container is, the vessel and pack units, a plate, a
- *  tray, and the serving words. Any other plural ("stacks of roti", "piles of
- *  nuggets") says how the food lies, not what it sits in, and its count is read as
- *  its singular's is. */
+ *  none: what each Appendix B container is, the vessel and pack units that name a
+ *  container (one word, no size: not "half cup" or "small"), a plate, a tray, and
+ *  the serving words. Any other plural ("stacks of roti", "piles of nuggets") says
+ *  how the food lies, not what it sits in, and its count is read as its
+ *  singular's is. */
 export const CONTAINER_WORDS: ReadonlySet<string> = new Set([
   ...[...containerPriors.keys()].flatMap(containerHeads),
-  ...[...COUNT_RULES].filter(([, rule]) => rule === "vessel").map(([unit]) => unit),
+  ...[...COUNT_RULES].filter(([unit, rule]) => rule === "vessel" && !unit.includes(" ") && !SIZE_WORDS.has(unit)).map(([unit]) => unit),
   "plate", "tray", ...SERVING_WORDS,
 ]);
+
+/** What a photo's container is, singular: the words of its name that name a
+ *  container, wherever they stand ("bowl with lid", "cup and saucer" and "steel
+ *  plate (thali)" are a bowl, a cup and a plate), and never a serving word where
+ *  another word does ("serving bowl" and "bowl (1 serving)" are bowls, not
+ *  servings); a name with none is its last word, or each an "or" joins ("steel
+ *  flask" is a flask). The other words say which kind: a chai cup is no chai, and
+ *  a thali section no thali. */
+const containerKinds = (name: string): string[] => {
+  const named = wordsOf(name).map(singular).filter((word) => CONTAINER_WORDS.has(word) && !SERVING_WORDS.has(word));
+  return named.length > 0 ? named : containerHeads(name);
+};
 
 /** Whether a photo's count is of the things a hint names in the plural before its
  *  "of" rather than of the food: two "bowls of beef stew chunks" are two bowls,
  *  and two "plates of nuggets" two plates. It is where the photo shows the food
  *  in nothing and the plural names a container, or a dish the person saved
- *  ("flasks of coffee"); or where the photo's own container is what the plural
- *  names ("bowls" in a large bowl). Two "scoops of ice cream" in a cup are scoops
- *  in one cup, and three "servings" in a serving bowl servings in one bowl: each
- *  is counted as the same food shown in that container is. A count beside one
- *  container ("a plate of nuggets", six) is of what it holds, as a count of the
- *  same food shown in that container is, and one beside "slices of" or "pieces of"
- *  is of the slices or the pieces. */
+ *  ("flasks of coffee"); or where the plural names what the photo's own container
+ *  is (above: "bowls" in a large bowl or a bowl with lid). Two "scoops of ice
+ *  cream" in a cup, or three "servings" in a serving bowl, are counted as the same
+ *  food shown in that container is. A count beside one container ("a plate of
+ *  nuggets", six) is of what it holds, as a count of the same food shown in that
+ *  container is, and one beside "slices of" or "pieces of" is of the slices or
+ *  the pieces. */
 const countsWhatHintNames = (measure: HintMeasure | null, photoContainer: string | null, dishware: readonly SavedDishware[]): boolean => {
   if (measure === null || !measure.plural) return false;
-  if (photoContainer !== null) return containerHeads(photoContainer).includes(measure.word);
+  if (photoContainer !== null) return containerKinds(photoContainer).includes(measure.word);
   return CONTAINER_WORDS.has(measure.word) || dishware.some((d) => d.containerClass === measure.container);
 };
 
