@@ -18,8 +18,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: api tsc 0 · eslint 0 · nutrition + entitlements unit 35/35 · local Postgres nutrition.routes + entitlements.routes + db.migration 68/68 · orgs
   "members get the gym plan" 1/1; shared tsc 0 · eslint 0 · 105/105; web shrinkPhoto + nutritionApi 35/35, eslint 0 on the four files.
 - This branch is off master at 870ed10, before PR #71: rebase after #71 merges (RULINGS, ROADMAP, HANDOFF and nutrition's service and tests will conflict).
-- Kd's GitHub bill is overdue (pay by 2026-09-16), most likely the Pro plan's auto-charge; he was given the steps. Next: CI; Kd's click-through (upload a
-  gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then the 18+ card (Stage 4 item 9).
+- Kd's GitHub bill is overdue (pay by 2026-09-16), most likely the Pro plan's auto-charge; he was given the steps and told to pay, not to go public early.
+  He pasted an unrecorded decision (repo renamed `tg`; public when the free minutes run out, six safeguards, told before each): now in RULINGS 2026-09-14.
+- Next: CI; Kd's click-through (upload a gympic photo on Nutrition against the local API with `GEMINI_API_KEY`); the fresh-chat review; merge; then 18+ (Stage 4 item 9).
 
 ## 2026-09-14 · 4d merged (PR #70): the review's findings fixed (no Critical/High), no re-check on Kd's word
 
