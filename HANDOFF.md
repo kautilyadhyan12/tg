@@ -12,8 +12,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Lows: the comment on servings in a serving bowl; "half cup" and "small" off `CONTAINER_WORDS` (a measure and a size name no container); the entry below no longer gives examples no user meets.
 - Tests: kind-first names, a trailing serving word, a size, a food and no container word in the word-by-word table; plural container names; the real-food test reads the list with `findCurated`. 9 deliberate breaks each red (the review's rule among them), files restored identical.
 - Sweep of 1,278,144 cells (22,824 hints the list resolves × 56 containers, count 3): against 3fd14d4 only H1's serving-word rows (3,703) and H2's (1,104, each its singular's old reading) differ; against the review's fix only the four names ending in a serving word (1,104).
-- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
-- Next: CI, the fresh-chat re-check of this fix only, merge; then #72's review; then 7a-iii; then 7a-iv.
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres; CI green on 2084a24.
+- Found, unchanged since 3fd14d4: a container named by a serving word alone ("single serving") is one of no known size, so six servings of nuggets in it are 16 g (96 in "serving" or in nothing); on 7a-iv's line, whose fixed vessel list reads it as unknown.
+- Next: the fresh-chat re-check of this fix only, merge; then #72's review; then 7a-iii; then 7a-iv.
 
 ## 2026-09-15 · PR #71's re-check of the four: two Highs in H2's fix, fixed; a re-check of the two next
 
