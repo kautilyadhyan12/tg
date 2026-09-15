@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONTAINER_PRIORS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
+import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
 import { MAX_PHOTO_COUNT, MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
@@ -205,6 +205,16 @@ describe("P2.6a nutrition pure pipeline", () => {
     const dishware = [{ containerClass: "flask", volumeMl: 500, foodHint: null }, { containerClass: "my_plate", volumeMl: 600, foodHint: null }];
     const at = (canonicalHint: string, count: number | null, unit: string, container: string | null = null) =>
       resolvePortion({ canonicalHint, container, fillLevel: null, sizeClass: null, count }, dishware, { grams: 50, unit });
+    const plural = (word: string): string => (/(?:s|sh|ch|x)$/.test(word) ? `${word}es` : `${word}s`);
+    // What each container is, by hand: the words of its name a plural may count it by.
+    const APPENDIX_B_HEADS: Record<string, readonly string[]> = {
+      small_katori: ["katori"], katori_or_small_bowl: ["katori", "bowl"], standard_katori: ["katori"], large_katori: ["katori"],
+      large_bowl: ["bowl"], serving_bowl: ["bowl"], steel_tumbler: ["tumbler"], chai_cup: ["cup"], thali_section: ["section"],
+      cup: ["cup"], cereal_bowl: ["bowl"], mug: ["mug"], tablespoon: ["tablespoon"], teaspoon: ["teaspoon"],
+    };
+    const FREE_TEXT_HEADS: Record<string, readonly string[]> = {
+      "serving bowl": ["bowl"], serving_plate: ["plate"], "wine glass": ["glass"], "bowl or plate": ["bowl", "plate"],
+    };
     for (const [unit, rule] of COUNT_RULES) {
       // Where the rungs know one container's size (Appendix B's, a dish the person
       // saved, the photo's own of the same name), the count is that many
@@ -222,7 +232,7 @@ describe("P2.6a nutrition pure pipeline", () => {
       }
       // Where they do not, one is the serving of a food served by a vessel, and the
       // count is not used for any other food, nor its pieces counted.
-      for (const hint of ["bowls of test food", "plates of test food", "trays of test food"]) {
+      for (const hint of ["bowls of test food", "plates of test food", "trays of test food", "katoris of test food", "tumblers of test food", "jars of test food"]) {
         for (const tail of ["", " chunks", " pieces"]) {
           expect(at(`${hint}${tail}`, 3, unit), `${hint}${tail} by ${unit}`).toEqual(
             rule === "vessel"
@@ -246,8 +256,41 @@ describe("P2.6a nutrition pure pipeline", () => {
         expect(at(`scoops of test food${tail}`, 3, unit, "cup"), `scoops of test food${tail} by ${unit}`).toEqual(at(`test food${tail}`, 3, unit, "cup"));
         expect(at(`mugs of test food${tail}`, 3, unit, "standard_katori"), `mugs of test food${tail} by ${unit}`).toEqual(at(`test food${tail}`, 3, unit, "standard_katori"));
         expect(at(`handfuls of test food${tail}`, 3, unit, "my_plate"), `handfuls of test food${tail} by ${unit}`).toEqual(at(`test food${tail}`, 3, unit, "my_plate"));
+        // A plural that names no container says how the food lies, and its count is
+        // read as its singular's is: a stack of eight rotis is eight rotis either way.
+        for (const word of ["stack", "pile", "heap", "row", "layer", "handful", "plateful", "scoop", "bunch"]) {
+          expect(at(`${plural(word)} of test food${tail}`, 3, unit), `${plural(word)} of test food${tail} by ${unit}`).toEqual(at(`${word} of test food${tail}`, 3, unit));
+        }
+      }
+      // A plural counts the photo's containers only where it is what the container
+      // is: the last word of its name, or of each name an "or" joins. The words
+      // before it say which kind, so three servings in a serving bowl, or thalis in
+      // a thali section, are the food shown in it; three katoris or three bowls in
+      // a katori or small bowl are three of it.
+      for (const [names, sized] of [[APPENDIX_B_HEADS, true], [FREE_TEXT_HEADS, false]] as const) {
+        for (const [name, heads] of Object.entries(names)) {
+          for (const word of name.split(/[_ ]/).filter((w) => w !== "or")) {
+            for (const tail of ["", " chunks", " pieces"]) {
+              const hint = `${plural(word)} of test food${tail}`;
+              const one = at(hint, null, unit, name);
+              const containers = sized || rule === "vessel"
+                ? { gramsPoint: one.gramsPoint * 3, gramsRange: [one.gramsRange[0] * 3, one.gramsRange[1] * 3], portionSource: one.portionSource, pieces: 3 }
+                : one;
+              expect(at(hint, 3, unit, name), `${hint} in ${name} by ${unit}`).toEqual(heads.includes(word) ? containers : at(`test food${tail}`, 3, unit, name));
+            }
+          }
+        }
       }
     }
+    expect(Object.keys(APPENDIX_B_HEADS).sort()).toEqual(Object.keys(CONTAINER_PRIORS).sort());
+    // The containers a plural before "of" can count where the photo shows none: what
+    // each Appendix B container is, the vessel and pack units, a plate, a tray and
+    // the serving words. A dish the person saved counts by its own name ("flasks" above).
+    expect([...CONTAINER_WORDS].sort()).toEqual([
+      "bag", "bottle", "bowl", "box", "can", "carton", "container", "cup", "glass", "half cup", "helping", "jar", "katori",
+      "mug", "pack", "package", "packet", "plate", "portion", "pot", "pouch", "sachet", "section", "serving", "small",
+      "tablespoon", "teaspoon", "tray", "tub", "tumbler",
+    ]);
     // A cut or "pieces" before the "of" names the cut or the pieces, not a container,
     // and is read as the same word after the food is, by every unit.
     for (const unit of COUNT_RULES.keys()) {
@@ -257,6 +300,34 @@ describe("P2.6a nutrition pure pipeline", () => {
     }
     expect(at("slices of test food", 3, "cup")).toEqual({ gramsPoint: 50, gramsRange: [50, 50], portionSource: "default", pieces: null });
     expect(at("pieces of test food", 3, "nugget")).toEqual({ gramsPoint: 150, gramsRange: [150, 150], portionSource: "default", pieces: 3 });
+  });
+
+  it("reads servings in a serving bowl, and stacks and piles, by the food list's own servings", () => {
+    const at = (canonicalHint: string, count: number, serving: { grams: number; unit: string }, container: string | null = null) =>
+      resolvePortion({ canonicalHint, container, fillLevel: null, sizeClass: null, count }, [], serving);
+    const flat = (grams: number, pieces: number | null) => ({ gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces });
+    const nuggets = { grams: 16, unit: "nugget" };
+    const hundredGrams = { grams: 100, unit: "g" }; // rice's and pasta's serving
+    // Six servings of nuggets are six nuggets, in a serving bowl or on a serving
+    // plate as on nothing: a serving bowl is a bowl, not a serving.
+    for (const container of ["serving_bowl", "serving bowl", "serving_plate", null]) {
+      expect(at("servings of chicken nuggets", 6, nuggets, container), String(container)).toEqual(flat(96, 6));
+    }
+    // Three servings of rice, or two of pasta, in a serving bowl are that bowl, as
+    // rice shown in it is; on nothing, three of rice's servings.
+    expect(at("servings of rice", 3, hundredGrams, "serving_bowl")).toEqual({ gramsPoint: 350, gramsRange: [300, 400], portionSource: "regional_prior", pieces: null });
+    expect(at("servings of pasta", 2, hundredGrams, "serving_bowl")).toEqual(at("pasta", 2, hundredGrams, "serving_bowl"));
+    expect(at("servings of rice", 3, hundredGrams)).toEqual(flat(300, 3));
+    // Stacks and piles are how food lies, not what it sits in: eight rotis, six
+    // pancakes and ten nuggets are that many, and six stew chunks one cup of stew.
+    expect(at("stacks of roti", 8, { grams: 40, unit: "roti" })).toEqual({ gramsPoint: 320, gramsRange: [280, 360], portionSource: "regional_prior", pieces: 8 });
+    expect(at("stacks of pancakes", 6, { grams: 50, unit: "pancake" })).toEqual(flat(300, 6));
+    expect(at("piles of chicken nuggets", 10, nuggets)).toEqual(flat(160, 10));
+    expect(at("piles of beef stew chunks", 6, { grams: 255, unit: "cup" })).toEqual(flat(255, null));
+    // Katoris or bowls in a katori or small bowl are that many of it, 175 g each.
+    for (const hint of ["katoris of test food", "bowls of test food"]) {
+      expect(at(hint, 3, hundredGrams, "katori_or_small_bowl"), hint).toEqual({ gramsPoint: 525, gramsRange: [450, 600], portionSource: "regional_prior", pieces: 3 });
+    }
   });
 
   it("never finds a container, piece or mound on an object's prototype", () => {

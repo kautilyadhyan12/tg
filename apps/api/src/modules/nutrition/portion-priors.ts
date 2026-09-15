@@ -206,21 +206,44 @@ function hintMeasure(words: readonly string[]): HintMeasure | null {
   return { container: word, word, plural };
 }
 
-/** Whether a photo's count is of the things a hint names in the plural before its
- *  "of" rather than of the food: two "bowls of beef stew chunks" are two bowls,
- *  and two "plates of nuggets" two plates. It is where the photo shows the food
- *  in nothing, or in a container of that name ("bowls" in a large bowl): two
- *  "scoops of ice cream" in a cup are scoops in one cup, and are counted as the
- *  same food shown in a cup is. A count beside one container ("a plate of
- *  nuggets", six) is of what it holds, as a count of the same food shown in that
- *  container is, and one beside "slices of" or "pieces of" is of the slices or
- *  the pieces. */
-const countsWhatHintNames = (measure: HintMeasure | null, photoContainer: string | null): boolean =>
-  measure !== null && measure.plural && (photoContainer === null || wordsOf(photoContainer).map(singular).includes(measure.word));
+/** What a container is: the last word of its name, or of each name an "or" joins
+ *  ("katori_or_small_bowl" is a katori or a bowl), singular. The words before it
+ *  say which kind: a serving bowl is a bowl, a chai cup a cup, a thali section a
+ *  section, and none of them is a serving, a chai or a thali. */
+const containerHeads = (name: string): string[] =>
+  wordsOf(name).filter((word, at, words) => word !== "or" && (at === words.length - 1 || words[at + 1] === "or")).map(singular);
 
 /** The words that name a food's own serving, whatever its unit: two "servings of
  *  rice" are two of rice's servings. */
 const SERVING_WORDS: ReadonlySet<string> = new Set(["serving", "portion", "helping"]);
+
+/** The containers a plural before a hint's "of" can count where the photo shows
+ *  none: what each Appendix B container is, the vessel and pack units, a plate, a
+ *  tray, and the serving words. Any other plural ("stacks of roti", "piles of
+ *  nuggets") says how the food lies, not what it sits in, and its count is read as
+ *  its singular's is. */
+export const CONTAINER_WORDS: ReadonlySet<string> = new Set([
+  ...[...containerPriors.keys()].flatMap(containerHeads),
+  ...[...COUNT_RULES].filter(([, rule]) => rule === "vessel").map(([unit]) => unit),
+  "plate", "tray", ...SERVING_WORDS,
+]);
+
+/** Whether a photo's count is of the things a hint names in the plural before its
+ *  "of" rather than of the food: two "bowls of beef stew chunks" are two bowls,
+ *  and two "plates of nuggets" two plates. It is where the photo shows the food
+ *  in nothing and the plural names a container, or a dish the person saved
+ *  ("flasks of coffee"); or where the photo's own container is what the plural
+ *  names ("bowls" in a large bowl). Two "scoops of ice cream" in a cup are scoops
+ *  in one cup, and three "servings" in a serving bowl servings in one bowl: each
+ *  is counted as the same food shown in that container is. A count beside one
+ *  container ("a plate of nuggets", six) is of what it holds, as a count of the
+ *  same food shown in that container is, and one beside "slices of" or "pieces of"
+ *  is of the slices or the pieces. */
+const countsWhatHintNames = (measure: HintMeasure | null, photoContainer: string | null, dishware: readonly SavedDishware[]): boolean => {
+  if (measure === null || !measure.plural) return false;
+  if (photoContainer !== null) return containerHeads(photoContainer).includes(measure.word);
+  return CONTAINER_WORDS.has(measure.word) || dishware.some((d) => d.containerClass === measure.container);
+};
 
 /** Rung 4, the food's serving. The curated salvage row provides one serving value,
  *  not a sourced range; do not invent a ± percentage (R0.2). The UI still receives
@@ -295,7 +318,7 @@ export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishw
   const sized = measured(seen, dishware, serving);
   const one = sized ?? servingPortion(serving);
   if (e.count === null) return one;
-  const counted = countsWhatHintNames(measure, e.container)
+  const counted = countsWhatHintNames(measure, e.container, dishware)
     ? (sized !== null || COUNT_RULES.get(serving.unit) === "vessel" ? times(one, e.count) : one)
     : countedServings(words, e.count, one, serving);
   return counted.gramsRange[1] > MAX_ITEM_GRAMS ? one : counted;
