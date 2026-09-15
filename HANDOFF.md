@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-15 · PR #71's re-check of the two: one High in H1's fix, fixed; a re-check of that fix next
+
+- The re-check passed H2's fix and found one High in H1's, three Lows and three weak tests; every number reproduced first by a scratch run of HEAD and 3fd14d4.
+- High: H1 read a container by the last word of its name, so one named kind first was read as something else: bowls of stew chunks ×2 in a "bowl with lid" 255 g (was 510), plates of nuggets ×2 on a "plate with rice" 32 g ×2 (16), cups of palak paneer cubes ×2 in a "cup and saucer" 200 g (400).
+- Fix: a container is the words of its name that name a container, wherever they stand, never a serving word where another is; a name with none is its last word ("steel flask"). The review's own fix (the last word, or any container word) left "bowl (1 serving)" open: six servings of nuggets were 16 g, now 96.
+- Lows: the comment on servings in a serving bowl; "half cup" and "small" off `CONTAINER_WORDS` (a measure and a size name no container); the entry below no longer gives examples no user meets.
+- Tests: kind-first names, a trailing serving word, a size, a food and no container word in the word-by-word table; plural container names; the real-food test reads the list with `findCurated`. 9 deliberate breaks each red (the review's rule among them), files restored identical.
+- Sweep of 1,278,144 cells (22,824 hints the list resolves × 56 containers, count 3): against 3fd14d4 only H1's serving-word rows (3,703) and H2's (1,104, each its singular's old reading) differ; against the review's fix only the four names ending in a serving word (1,104).
+- Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
+- Next: CI, the fresh-chat re-check of this fix only, merge; then #72's review; then 7a-iii; then 7a-iv.
+
 ## 2026-09-15 · PR #71's re-check of the four: two Highs in H2's fix, fixed; a re-check of the two next
 
 - The re-check passed H1, L2 and L4 and found two Highs in H2's fix; every number in it reproduced by a scratch run of HEAD first.
@@ -11,7 +22,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - H2: any plural before "of" read as a container: stacks of roti ×8 were one roti (40 g, was 320), and piles of beef stew chunks ×6 1,530 g (found here). Where the photo shows none, only `CONTAINER_WORDS` (what each Appendix B container is, the vessel and pack units, plate, tray, the serving words) or a saved dish's name counts containers; any other plural reads as its singular.
 - Tests: the review's rows by the list's own servings; every word of every Appendix B name and four free-text names × every unit × cut tails; nine layout words equal their singular; the word list pinned. 8 deliberate breaks each red (the review's "last word only" among them), file restored identical.
 - Sweep, HEAD against the fix: 6,085,248 resolves (318 foods × 416 phrasings × 23 containers × no count or 3): 12,780 changed are H1's kind, 5,602 H2's, 0 elsewhere; every H2 change equals its singular's old reading.
-- The list's trade: a container not on it reads as its food's count, so pieces now count (baskets of nuggets ×3 48 g, was 16; thalis of roti ×2 80 g, was 40) and a cup-served food's cut bits do not (baskets of stew chunks ×3 255 g, was 765). 7a-iv's fixed vessel list replaces it.
+- The list's trade: a plural it lacks (baskets, thalis, trays, boxes, platters) finds no food on the list. What users met was H1's cost: a container named kind first ("bowl with lid") read as its last word, so bowls of stew chunks ×2 were 255 g, not 510; fixed in the entry above.
 - Verified: api tsc 0 · eslint 0 · nutrition unit 27/27 · foods 22/22 · with routes 83/83 on local Postgres.
 - Next: CI, the fresh-chat re-check of these two fixes only, merge; then #72's review; then 7a-iii; then 7a-iv.
 
