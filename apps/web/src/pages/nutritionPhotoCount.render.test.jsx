@@ -72,8 +72,31 @@ describe('the photo sheet count stepper', () => {
     expect(within(grapes).getByRole('spinbutton').value).toBe('100');
     fireEvent.click(within(grapes).getByRole('button', { name: '+' }));
     await waitFor(() => expect(within(grapes).getByRole('spinbutton').value).toBe('200'));
-    // What matched no food is named as not on the list, so the person knows to add it.
-    expect(screen.getByText(/Not in our food list: mango lassi — add them with “Add an ingredient” above/)).toBeTruthy();
+    // What is left out of the total is named, with the button above that adds it.
+    expect(screen.getByText('Not in the total: mango lassi — add it with “Add an ingredient” above if needed.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add an ingredient' })).toBeTruthy();
+  });
+
+  it('names what is left out of the total, and points at "Add an ingredient" only while it is there', async () => {
+    const many = Array.from({ length: 29 }, (_, i) => item(`Food ${i + 1}`, `food_${i + 1}`, 100, null));
+    const scan = (items, unknownItems) => {
+      svc.analyzePhoto = vi.fn(async () => ({
+        data: {
+          scanToken: 't'.repeat(40), mealName: 'Plate', cuisineGuess: null, items, unknownItems, photoQuality: 'good',
+          totals: { kcalPoint: 240, kcalLow: 240, kcalHigh: 240, proteinG: 10, carbsG: 10, fatG: 10 }, confirmed: false,
+        },
+      }));
+      return scanPlate();
+    };
+    // Two left out: "them".
+    await scan([item('Chicken nuggets', 'chicken_nuggets', 96, 6)], ['mango lassi', 'black garlic relish']);
+    expect(screen.getByText('Not in the total: mango lassi, black garlic relish — add them with “Add an ingredient” above if needed.')).toBeTruthy();
+    cleanup();
+    // A meal holding the most items has no "Add an ingredient" to point at.
+    await scan([item('Chicken nuggets', 'chicken_nuggets', 96, 6), ...many], ['mango lassi']);
+    expect(screen.queryByRole('button', { name: 'Add an ingredient' })).toBeNull();
+    expect(screen.getByText("That's the most items one meal can hold (30).")).toBeTruthy();
+    expect(screen.getByText('Not in the total: mango lassi.')).toBeTruthy();
   });
 
   it("never lowers a scan's own count that is above the stepper's cap of 30", async () => {

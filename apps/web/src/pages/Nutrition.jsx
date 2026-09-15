@@ -980,6 +980,9 @@ function PhotoModal({ open, onClose, onSave }) {
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
   const payloadItems = allValid ? resolved.map((r) => r.item) : [];
+  // "Add an ingredient" (or its open picker) shows unless the meal is full; what
+  // points at it says so only while it is there.
+  const canAdd = adding || payloadItems.length < MAX_ITEMS;
   // 5b T3 advisory: say WHY the button is dead — "Enter grams for every item"
   // is a lie when the user plainly entered 20000.
   const gramsTooLarge = resolved.some((r) => r.tooLarge);
@@ -1361,7 +1364,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           placeholder="e.g. milk, sugar, oil..."
                         />
                       </div>
-                    ) : payloadItems.length < MAX_ITEMS ? (
+                    ) : canAdd ? (
                       <button
                         type="button"
                         onClick={() => setAdding(true)}
@@ -1381,11 +1384,15 @@ function PhotoModal({ open, onClose, onSave }) {
                       </p>
                     )}
 
+                    {/* Both what the photo could not identify and what matched no
+                        food are left out of the total. */}
                     {analysis.unknownItems?.length > 0 && (
                       <p className="text-2xs mb-4"
                          style={{ color: 'rgba(251,191,36,0.75)' }}>
-                        Not in our food list: {analysis.unknownItems.join(', ')} —
-                        add them with “Add an ingredient” above if needed.
+                        Not in the total: {analysis.unknownItems.join(', ')}
+                        {canAdd
+                          ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
+                          : '.'}
                       </p>
                     )}
 
