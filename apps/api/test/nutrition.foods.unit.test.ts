@@ -160,8 +160,38 @@ describe("the curated food list", () => {
       // A food served by the cup, in a cup, is its own cup: cornflakes' is 30 g.
       ["cups of cornflakes", 2, null, ["cereal_cornflakes", 60, 2]],
       ["cornflakes", 2, "cup", ["cereal_cornflakes", 60, 2]],
+      // Containers named in the plural before "of" are what the count counts, whatever
+      // fills them; where one's size is unknown and the food is not served by a
+      // vessel, the count is not used.
+      ["bowls of beef stew chunks", 2, null, ["beef_stew", 510, 2]],
+      ["large bowls of dal", 2, null, ["dal_lentil_curry", 550, 2]],
+      ["bowls of pasta", 2, null, ["pasta_cooked", 100, null]],
+      ["plates of chicken nuggets", 2, null, ["chicken_nuggets", 16, null]],
+      ["bowls of meatballs", 2, null, ["meatballs_in_sauce", 43, null]],
+      ["bowls of beef stew chunks", 2, "large_bowl", ["beef_stew", 550, 2]],
+      ["servings of pasta", 2, null, ["pasta_cooked", 200, 2]],
+      ["servings of chicken nuggets", 6, null, ["chicken_nuggets", 96, 6]],
+      // A plural the photo's container is not counts no containers: handfuls in one cup.
+      ["handfuls of almonds", 2, "cup", ["almonds", 240, null]],
+      // …and one container's count is of what it holds.
+      ["a plate of chicken nuggets", 6, null, ["chicken_nuggets", 96, 6]],
+      ["a bowl of meatballs", 5, null, ["meatballs_in_sauce", 215, 5]],
     ];
     for (const [hint, count, container, expected] of plates) expect(scanned(hint, count, container), hint).toEqual(expected);
+    // A pour or a helping weighs its serving however full its glass or bowl looks; a
+    // food served by the cup is its cup as full as the photo shows.
+    const shown = (hint: string, count: number | null, container: string, fillLevel: number): [string, number, number | null] => {
+      const f = findCurated(hint);
+      if (f === null) throw new Error(`no food for ${hint}`);
+      const portion = resolvePortion({ canonicalHint: hint, container, fillLevel, sizeClass: null, count }, [], { grams: f.serving, unit: f.unit });
+      return [f.canonical, portion.gramsPoint, portion.pieces];
+    };
+    expect(shown("red wine", null, "glass", 0.4)).toEqual(["wine_red", 150, null]);
+    expect(shown("white wines", 2, "glass", 0.35)).toEqual(["wine_white", 300, 2]);
+    expect(shown("pho", null, "bowl", 0.6)).toEqual(["pho_beef", 400, null]);
+    expect(shown("smoothie", null, "glass", 0.8)).toEqual(["smoothie_fruit", 324, null]);
+    expect(shown("coffee", null, "cup", 0.5)).toEqual(["coffee_black", 120, null]);
+    expect(shown("cornflakes", 2, "cup", 0.5)).toEqual(["cereal_cornflakes", 30, 2]);
   });
 
   it("holds each word the matcher drops to the photo count's cuts, or to no cut", () => {

@@ -83,6 +83,17 @@ export const COUNT_RULES: ReadonlyMap<string, CountRule> = new Map([
   ...withRule("none", ["g", "oz", "tbsp", "2 tbsp", "tsp"]),
 ]);
 
+/** The vessel units whose serving is all its container holds, so a photo's fill
+ *  scales the serving: a cup of cornflakes, a can, a bottle, a pot, a tub, a pack.
+ *  The other vessel units (a glass of wine, a bowl of pho, a small, a portion) are
+ *  a pour or a helping served in a container bigger than it, and keep their
+ *  weight however full the container looks: Part 2B §3.5 applies fill to a
+ *  container's volume, never to a serving. */
+export const WHOLE_VOLUME_UNITS: ReadonlySet<string> = new Set([
+  "cup", "half cup", "can", "bottle", "container", "pot", "tub",
+  "bag", "box", "carton", "jar", "pack", "package", "packet", "pouch", "sachet",
+]);
+
 /** Words naming a cut of a food, each with the piece it names. A count beside one
  *  is of cut bits, which have no serving of their own: ten "banana slices" are
  *  not ten bananas, and six "beef stew chunks" not six cups of stew. A count
@@ -174,27 +185,56 @@ const times = (one: PortionResult, count: number): PortionResult => ({
   pieces: count,
 });
 
-/** The container a hint measures its food by: the words before its "of", as the
- *  longest Appendix B name they end in ("a large bowl of dal" is the large bowl),
- *  else the last of them ("two mugs of coffee" is a mug). A hint with no "of"
- *  names no container: "cup noodles" is a food, not a cup. */
-function hintContainer(words: readonly string[]): string | null {
+/** What a hint measures its food by, where it has an "of": the container its
+ *  words before the "of" name, as the longest Appendix B name they end in ("a
+ *  large bowl of dal" is the large bowl), else the last of them ("two mugs of
+ *  coffee" is a mug); that last word, singular; and whether it is a plural that
+ *  names no cut and no "pieces" (the count rule in `resolvePortion`). A hint with
+ *  no "of" names no container: "cup noodles" is a food, not a cup. */
+interface HintMeasure { container: string; word: string; plural: boolean }
+function hintMeasure(words: readonly string[]): HintMeasure | null {
   const at = words.indexOf("of");
   const last = words[at - 1];
   if (at < 1 || last === undefined) return null;
-  const named = [...words.slice(Math.max(0, at - LONGEST_CONTAINER_NAME), at - 1), singular(last)];
+  const word = singular(last);
+  const plural = word !== last && !CUT_WORDS.has(last) && !PIECE_WORDS.has(last);
+  const named = [...words.slice(Math.max(0, at - LONGEST_CONTAINER_NAME), at - 1), word];
   for (let from = 0; from < named.length - 1; from++) {
     const name = named.slice(from).join("_");
-    if (containerPriors.has(name)) return name;
+    if (containerPriors.has(name)) return { container: name, word, plural };
   }
-  return singular(last);
+  return { container: word, word, plural };
 }
 
-/** Rungs 1, 3 and 4, for no count: a saved dish; the food's own serving where the
- *  container is it, as full as the photo shows (its table weighs a cup of
- *  cornflakes at 30 g, where Appendix B's cup is 240 ml of water); a known
- *  container; a rice mound; the food's serving. */
-function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult {
+/** Whether a photo's count is of the things a hint names in the plural before its
+ *  "of" rather than of the food: two "bowls of beef stew chunks" are two bowls,
+ *  and two "plates of nuggets" two plates. It is where the photo shows the food
+ *  in nothing, or in a container of that name ("bowls" in a large bowl): two
+ *  "scoops of ice cream" in a cup are scoops in one cup, and are counted as the
+ *  same food shown in a cup is. A count beside one container ("a plate of
+ *  nuggets", six) is of what it holds, as a count of the same food shown in that
+ *  container is, and one beside "slices of" or "pieces of" is of the slices or
+ *  the pieces. */
+const countsWhatHintNames = (measure: HintMeasure | null, photoContainer: string | null): boolean =>
+  measure !== null && measure.plural && (photoContainer === null || wordsOf(photoContainer).map(singular).includes(measure.word));
+
+/** The words that name a food's own serving, whatever its unit: two "servings of
+ *  rice" are two of rice's servings. */
+const SERVING_WORDS: ReadonlySet<string> = new Set(["serving", "portion", "helping"]);
+
+/** Rung 4, the food's serving. The curated salvage row provides one serving value,
+ *  not a sourced range; do not invent a ± percentage (R0.2). The UI still receives
+ *  the range shape, collapsed honestly to the only sourced value. */
+const servingPortion = (serving: Serving): PortionResult =>
+  ({ gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default", pieces: null });
+
+/** Rungs 1 and 3, where they know how much of the food its container holds: a
+ *  saved dish; the food's serving where the container is a serving word; the
+ *  food's own serving where the container is it (its table weighs a cup of
+ *  cornflakes at 30 g, where Appendix B's cup is 240 ml of water), as full as the
+ *  photo shows only where the serving is all the container holds; a known
+ *  container; a rice mound. Null where none of them does. */
+function measured(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult | null {
   const saved = e.container === null
     ? undefined
     : dishware.find((d) => d.containerClass === e.container && (d.foodHint === null || e.canonicalHint.includes(d.foodHint)));
@@ -202,8 +242,10 @@ function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], servi
     const grams = dishwareGrams(saved.volumeMl, e.fillLevel ?? 1, e.canonicalHint);
     return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware", pieces: null };
   }
+  if (e.container !== null && SERVING_WORDS.has(e.container)) return servingPortion(serving);
   if (e.container !== null && isOwnServing(e.container, serving)) {
-    const grams = wholeGrams(serving.grams * (e.fillLevel ?? 1));
+    const fill = WHOLE_VOLUME_UNITS.has(serving.unit) ? (e.fillLevel ?? 1) : 1;
+    const grams = wholeGrams(serving.grams * fill);
     return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces: null };
   }
   const prior = e.container === null ? undefined : containerPriors.get(e.container);
@@ -214,38 +256,47 @@ function uncounted(e: PortionEvidence, dishware: readonly SavedDishware[], servi
   }
   const mound = e.sizeClass === null ? undefined : moundPriors.get(e.sizeClass);
   if (mound !== undefined) return { gramsPoint: point(mound), gramsRange: [...mound], portionSource: "regional_prior", pieces: null };
-  // The curated salvage row provides one serving value, not a sourced range;
-  // do not invent a ± percentage (R0.2). The UI still receives the range
-  // shape, collapsed honestly to the only sourced value.
-  return { gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default", pieces: null };
+  return null;
+}
+
+/** A count of servings, where the count is not of containers: never of bits cut
+ *  from one, whatever the food's rule (above); then the Appendix B piece a hint
+ *  ends in; then the food's count rule: pieces times the food's serving, whatever
+ *  they sit in; cans, glasses or bowls times `one` of what the photo shows them
+ *  in; and no count for a serving by weight or spoonful. */
+function countedServings(words: readonly string[], count: number, one: PortionResult, serving: Serving): PortionResult {
+  const key = countKey(words);
+  if (countsCutBits(words, key ?? serving.unit)) return one;
+  if (key !== null) {
+    const prior = countablePriors.get(key);
+    if (prior === undefined) throw new Error("countable prior key missing");
+    const range = scaled(prior, count);
+    return { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior", pieces: count };
+  }
+  const rule = COUNT_RULES.get(serving.unit) ?? "none";
+  if (rule === "piece") return times(servingPortion(serving), count);
+  if (rule === "vessel") return times(one, count);
+  return one;
 }
 
 /** Stage 2 approved rungs: reliable count, 1, 3, 4. Anchor scaling is deferred.
  *  The container a hint measures its food by stands for an empty container, so
- *  "mugs of coffee" weigh as coffee shown in mugs. A count is used only where it
- *  is a count of servings: never of bits cut from one, whatever the food's rule
- *  (above); then the Appendix B piece a hint ends in; then the food's count rule:
- *  pieces times the food's serving, whatever they sit in; cans, glasses or bowls
- *  times one of what the photo shows them in, weighed by the rungs below; and no
- *  count for a serving by weight or spoonful. A count that would weigh more than
- *  one item of a meal may is no count of servings on a plate, and is not used. */
+ *  "mugs of coffee" weigh as coffee shown in mugs. A count of what a hint names
+ *  (above) is that many of one container, whatever cut or pieces fill them, where
+ *  the rungs know what one holds or the food is served by a vessel; for any other
+ *  food it is not used, and the food's own pieces are never counted in its place.
+ *  Any other count is a count of servings (above). A count whose range would
+ *  reach past what one item of a meal may weigh is no count of servings on a
+ *  plate, and is not used. */
 export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishware[], serving: Serving): PortionResult {
   const words = wordsOf(e.canonicalHint);
-  const seen = e.container === null ? { ...e, container: hintContainer(words) } : e;
-  const one = uncounted(seen, dishware, serving);
+  const measure = hintMeasure(words);
+  const seen = e.container === null && measure !== null ? { ...e, container: measure.container } : e;
+  const sized = measured(seen, dishware, serving);
+  const one = sized ?? servingPortion(serving);
   if (e.count === null) return one;
-  const key = countKey(words);
-  if (countsCutBits(words, key ?? serving.unit)) return one;
-  let counted = one;
-  if (key !== null) {
-    const prior = countablePriors.get(key);
-    if (prior === undefined) throw new Error("countable prior key missing");
-    const range = scaled(prior, e.count);
-    counted = { gramsPoint: point(range), gramsRange: range, portionSource: "regional_prior", pieces: e.count };
-  } else {
-    const rule = COUNT_RULES.get(serving.unit) ?? "none";
-    if (rule === "piece") counted = times({ gramsPoint: serving.grams, gramsRange: [serving.grams, serving.grams], portionSource: "default", pieces: null }, e.count);
-    if (rule === "vessel") counted = times(one, e.count);
-  }
-  return counted.gramsPoint > MAX_ITEM_GRAMS ? one : counted;
+  const counted = countsWhatHintNames(measure, e.container)
+    ? (sized !== null || COUNT_RULES.get(serving.unit) === "vessel" ? times(one, e.count) : one)
+    : countedServings(words, e.count, one, serving);
+  return counted.gramsRange[1] > MAX_ITEM_GRAMS ? one : counted;
 }

@@ -28,10 +28,12 @@ const optionalNameSchema = z.preprocess(
 /** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
 export const MAX_PHOTO_COUNT = 30;
 const countSchema = z.preprocess(
-  // A count past what one plate can be counted by is no reliable count, so it is
+  // A count is a whole number of things from 1 to the sheet's stepper. Any other
+  // value the model gives (0, 2.5, 31, "3") is no reliable count, so it is
   // UNKNOWN, as the prompt's "Count only reliably countable items" asks; the
-  // item stays on the sheet at its uncounted serving.
-  (v) => (typeof v === "number" && Number.isInteger(v) && v > MAX_PHOTO_COUNT ? null : v),
+  // item stays on the sheet at its uncounted serving, and the paid scan is kept.
+  // A count left out is still a missing field.
+  (v) => (v === undefined || v === null || (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_PHOTO_COUNT) ? v : null),
   z.number().int().positive().max(MAX_PHOTO_COUNT).nullable(),
 );
 
