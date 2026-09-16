@@ -7,7 +7,10 @@
 // means a second run reports nothing changed and leaves no dead tuples behind.
 // That is what makes the tool safe to re-run against any environment.
 import type { Sql, TransactionSql } from "postgres";
-import { usdaServing, usdaWords, USDA_NUTRIENTS, type UsdaEntry, type UsdaRelease } from "./usda-files.js";
+// The word rule the SEARCH BOX folds a typed query with, so `first_word` and
+// `word_count` are stored in exactly the shape the search looks them up in.
+import { usdaWords } from "../src/modules/nutrition/usdaWords.js";
+import { usdaServing, USDA_NUTRIENTS, type UsdaEntry, type UsdaRelease } from "./usda-files.js";
 
 /** The seventeen nutrient columns, per 100 g, null where the release has no
  *  measured figure. */

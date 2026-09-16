@@ -132,8 +132,8 @@ d("a USDA food through the food routes (real Postgres)", () => {
     const rank = { curated: 0, usda: 1, openfoodfacts: 2 };
     return sources.every((s, at) => at === 0 || rank[sources[at - 1] ?? s] <= rank[s]);
   };
-  const sourcesFor = async (query: string): Promise<("curated" | "usda" | "openfoodfacts")[]> => {
-    const res = await inject("GET", `/v1/nutrition/foods?q=${encodeURIComponent(query)}&limit=10`, cookieA);
+  const sourcesFor = async (query: string, limit = 10): Promise<("curated" | "usda" | "openfoodfacts")[]> => {
+    const res = await inject("GET", `/v1/nutrition/foods?q=${encodeURIComponent(query)}&limit=${String(limit)}`, cookieA);
     expect(res.statusCode, res.body).toBe(200);
     return res.json<{ items: FoodReference[] }>().items.map((i) => i.source);
   };
@@ -158,6 +158,16 @@ d("a USDA food through the food routes (real Postgres)", () => {
     expect(sources).toContain("openfoodfacts");
     expect(sources[0]).toBe("usda");
     expect(inOrder(sources), sources.join(" ")).toBe(true);
+  });
+
+  it("still shows a packaged product when USDA has enough foods to fill the page", async () => {
+    // Two fixtures answer "zqxroute" and the page holds two: USDA can fill it
+    // on its own, and did, which left a real search for "milk" or "peanut
+    // butter" with no jar at all. The last places are held for one.
+    const sources = await sourcesFor("zqxroute", 2);
+    expect(sources).toEqual(["usda", "openfoodfacts"]);
+    // But it never takes the LAST place USDA has: one place is one USDA food.
+    expect(await sourcesFor("zqxroute", 1)).toEqual(["usda"]);
   });
 
   it("saves it by grams with the table's numbers scaled, and nothing else's", async () => {

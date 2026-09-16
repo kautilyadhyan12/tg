@@ -271,21 +271,33 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  the entry Kd rejected on 2026-09-14. USDA then fills what the list lacks,
  *  which is 13,225 foods of it.
  *
- *  WHAT THAT COSTS, measured 2026-09-16 against the loaded table: a GENERIC word
- *  fills the page with USDA and leaves no room for a packaged product ("milk"
- *  matches 370 USDA foods, "peanut butter" 84, against a box of 15), while a
- *  BRAND still reaches one, because USDA does not stock brands ("yakult" 0,
- *  "oreo" 2, "nutella" 2, "monster energy" 5). Nothing is removed — a jar is
- *  found by its brand, which is how a brand is looked for. If Kd would rather a
- *  jar always showed, the change is to keep the last few places for packaged
- *  products here; it is his call, not this file's. */
+ *  THE LAST FEW PLACES ARE HELD FOR A PACKAGED PRODUCT. Rank is not room: with
+ *  13,225 USDA foods a GENERIC word filled every place and a jar never appeared
+ *  at all (measured 2026-09-16 against the loaded table, in a box of 15: "milk"
+ *  10 curated + 5 USDA, "peanut butter" 2 + 13, "greek yogurt" 1 + 14 — nought
+ *  left over each time), which shrank a rung nobody ruled out. So USDA fills the
+ *  page only down to `PACKAGED_RESERVE`, and those places go to Open Food Facts
+ *  where it has something to put in them — still last, as Kd ruled. Nothing is
+ *  held back from a brand: a query USDA cannot answer ("yakult" 0 rows, "oreo"
+ *  2, "nutella" 2) still gives the whole page to packaged products.
+ *
+ *  The reserve never takes the LAST place USDA has. Where the curated list has
+ *  nearly filled the box ("bread" leaves two places), one goes to USDA and one
+ *  to a jar; a rung is held open, never closed. */
+const PACKAGED_RESERVE = 3;
+
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const local = searchCurated(query, limit).map(asReference);
   if (local.length >= limit) return local;
-  const usda = (await repo.searchUsdaFoods(deps.sql, query, limit - local.length)).map(asUsdaReference);
-  const room = limit - local.length - usda.length;
-  const external = room > 0 ? await cachedExternal(deps, query, room) : [];
-  return [...local, ...usda, ...external].slice(0, limit);
+  const room = limit - local.length;
+  const usda = (await repo.searchUsdaFoods(deps.sql, query, room)).map(asUsdaReference);
+  // What USDA leaves, or the reserve, whichever is larger. The reserve itself is
+  // never the whole of what is left.
+  const reserve = Math.min(PACKAGED_RESERVE, Math.max(0, room - 1));
+  const packagedRoom = Math.max(room - usda.length, reserve);
+  const external = packagedRoom > 0 ? await cachedExternal(deps, query, packagedRoom) : [];
+  const usdaKeeps = Math.max(0, room - external.length);
+  return [...local, ...usda.slice(0, usdaKeeps), ...external].slice(0, limit);
 }
 
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {

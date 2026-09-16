@@ -25,17 +25,26 @@ const FIRST_ID = 90_000_001;
 const LAST_ID = 90_000_099;
 
 /** Every figure filled, each with its own value, so a column read back from the
- *  wrong one cannot pass. */
-const figures = (kcal: number | null): Map<UsdaNutrient, number | null> => {
+ *  wrong one cannot pass — except the ones a fixture says are `unmeasured`,
+ *  which are the release's own "not measured" and must stay null. */
+const figures = (kcal: number | null, unmeasured: readonly UsdaNutrient[] = []): Map<UsdaNutrient, number | null> => {
   const map = new Map<UsdaNutrient, number | null>();
-  for (const [at, n] of USDA_NUTRIENTS.entries()) map.set(n.key, n.key === "kcal" ? kcal : at + 1);
+  for (const [at, n] of USDA_NUTRIENTS.entries()) {
+    map.set(n.key, unmeasured.includes(n.key) ? null : n.key === "kcal" ? kcal : at + 1);
+  }
   return map;
 };
 
-const entry = (fdcId: number, description: string, kcal: number | null = 100, portions: UsdaPortion[] = []): UsdaEntry => ({
+const entry = (
+  fdcId: number,
+  description: string,
+  kcal: number | null = 100,
+  portions: UsdaPortion[] = [],
+  unmeasured: readonly UsdaNutrient[] = [],
+): UsdaEntry => ({
   fdcId,
   description,
-  figures: figures(kcal),
+  figures: figures(kcal, unmeasured),
   portions,
 });
 
@@ -46,20 +55,35 @@ d("the USDA food table (real Postgres)", () => {
     await sql`DELETE FROM usda_foods WHERE fdc_id BETWEEN ${FIRST_ID} AND ${LAST_ID}`;
   };
 
-  /** The fixture foods the search rule is read off. */
-  const CATALOG: readonly (readonly [number, UsdaRelease, string, number | null])[] = [
+  /** The fixture foods the search rule is read off. The fifth member is the
+   *  nutrients the release never measured for that food. */
+  const CATALOG: readonly (readonly [number, UsdaRelease, string, number | null, (readonly UsdaNutrient[])?])[] = [
     [90_000_001, "fndds", "Zqxfixture, cappuccino", 27],
     [90_000_002, "sr_legacy", "Zqxfixture, cappuccino", 31],
     [90_000_003, "fndds", "Zqxfixture, cappuccino, decaffeinated, nonfat", 19],
     [90_000_004, "fndds", "Zqxfixture, tea", 2],
     // No energy figure: it cannot be priced into a meal, so it is never offered.
     [90_000_005, "fndds", "Zqxfixture, cappuccino, unmeasured", null],
+    // Nor can a food with no protein, no carbohydrate or no fat figure: each of
+    // the four guards gets a food of its own, so dropping any one of them shows.
+    [90_000_006, "fndds", "Zqxfixture, cappuccino, noprotein", 40, ["proteinG"]],
+    [90_000_007, "fndds", "Zqxfixture, cappuccino, nocarbs", 41, ["carbsG"]],
+    [90_000_008, "fndds", "Zqxfixture, cappuccino, nofat", 42, ["fatG"]],
+    // The plain food and the dishes made from it, for the search's order.
+    [90_000_011, "fndds", "Zqxplain split", 51],
+    [90_000_012, "fndds", "Zqxplain, cooked", 52],
+    [90_000_013, "fndds", "Muffin, zqxplain", 53],
+    // Ten words, for the cap on how many of them reach the index.
+    [90_000_014, "fndds", "Zqxlong alpha beta gamma delta epsilon zeta eta theta iota", 54],
+    // An accent the release spells, and a decimal in a name.
+    [90_000_015, "fndds", "Zqxcrème brûlée", 55],
+    [90_000_016, "fndds", "Zqxdecimal, 3.25% milkfat", 56],
   ];
 
   const load = async (): Promise<void> => {
     const byRelease = (release: UsdaRelease): UsdaEntry[] =>
-      CATALOG.filter(([, r]) => r === release).map(([id, , description, kcal]) =>
-        entry(id, description, kcal, [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 240 }]),
+      CATALOG.filter(([, r]) => r === release).map(([id, , description, kcal, unmeasured]) =>
+        entry(id, description, kcal, [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 240 }], unmeasured ?? []),
       );
     await importUsda(sql, [
       ["sr_legacy", byRelease("sr_legacy")],
@@ -132,7 +156,46 @@ d("the USDA food table (real Postgres)", () => {
       expect(await found("   ")).toEqual([]);
       expect(usdaTsQuery("of a the")).toBe("of & a & the:*");
       expect(usdaTsQuery("!!!")).toBeNull();
-      expect(usdaSearchWords("Crème Brûlée & cake")).toEqual(["creme", "brulee", "cake"]);
+      expect(usdaSearchWords("Crème Brûlée & cake")).toEqual(["crème", "brûlée", "cake"]);
+    });
+
+    it("puts the food itself above the dishes made from it", async () => {
+      // USDA names a food "head, then qualifiers": "Zqxplain, cooked" is the
+      // food, "Zqxplain split" is a dish that starts with its name, "Muffin,
+      // zqxplain" is a muffin. All three are two words in the same release, so
+      // without the head rule USDA's own id decides and the muffin can lead.
+      expect(await found("zqxplain")).toEqual([90_000_012, 90_000_011, 90_000_013]);
+      // Half-typed, the two that START with what is typed still lead.
+      expect(await found("zqxpl")).toEqual([90_000_011, 90_000_012, 90_000_013]);
+      // Typed in full, a two-word head is the food itself.
+      expect(await found("zqxplain split")).toEqual([90_000_011]);
+    });
+
+    it("never offers a food missing any of the four figures a meal is priced from", async () => {
+      // One food per guard: energy, protein, carbohydrate, fat.
+      for (const missing of ["unmeasured", "noprotein", "nocarbs", "nofat"]) {
+        expect(await found(`zqxfixture cappuccino ${missing}`), missing).toEqual([]);
+      }
+      expect(await found("zqxfixture cappuccino")).toEqual([90_000_001, 90_000_003, 90_000_002]);
+    });
+
+    it("takes the first ten words of a query and lets the rest go", async () => {
+      const ten = "zqxlong alpha beta gamma delta epsilon zeta eta theta iota";
+      expect(await found(ten)).toEqual([90_000_014]);
+      // The eleventh word is in no description at all; were it searched, every
+      // word having to match would leave nothing.
+      expect(await found(`${ten} zqxnotaword`)).toEqual([90_000_014]);
+      expect(usdaSearchWords(`${ten} zqxnotaword`)).toHaveLength(10);
+    });
+
+    it("finds a name the release spells with an accent, and a number with a decimal point in it", async () => {
+      // Postgres indexes 'zqxcrème', not 'zqxcreme': a query folded to plain
+      // letters would match nothing here, so the fold is not done.
+      expect(await found("zqxcrème brûlée")).toEqual([90_000_015]);
+      // And "3.25%" is one lexeme, 3.25 — typing the description back word for
+      // word has to find it.
+      expect(await found("Zqxdecimal, 3.25% milkfat")).toEqual([90_000_016]);
+      expect(await found("zqxdecimal 3.25")).toEqual([90_000_016]);
     });
 
     it("honours the limit it is given, and asks nothing of the database below one", async () => {

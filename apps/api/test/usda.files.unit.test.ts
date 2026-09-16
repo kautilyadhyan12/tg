@@ -1,14 +1,19 @@
 // ROADMAP 7a-iii-a — the USDA release readers and the row a food becomes, on a
 // few lines of CSV rather than the 40 MB archives. No network, no database.
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import {
+  download,
   usdaMeasureName,
   usdaServing,
   usdaTableFromCsv,
-  usdaWords,
   USDA_NUTRIENTS,
   type UsdaPortion,
 } from "../tools/usda-files.js";
+import { databaseUrlFrom } from "../tools/import-usda-args.js";
+import { usdaWords } from "../src/modules/nutrition/usdaWords.js";
 import { usdaFoodRow } from "../tools/usda-table.js";
 
 const FOOD_HEADER = `"fdc_id","data_type","description","food_category_id","publication_date"`;
@@ -166,11 +171,28 @@ describe("a food's serving", () => {
     expect(usdaServing([])).toEqual({ grams: 100, unit: "g" });
   });
 
-  it("a measure nobody could read is cut to 40 characters, never left to overflow the screen", () => {
-    // SR Legacy's longest first measure is 74 characters (measured 2026-09-16).
+  it("a measure nobody could read is cut at a space, never through a word", () => {
+    // SR Legacy's longest first measure is 74 characters (measured 2026-09-16),
+    // and a blind cut at forty left 110 of the table's 129 longest names ending
+    // mid-word and 19 ending in a space.
     const long = usdaMeasureName(portion(1, "serving serving size varied from 1 to 3 enchiladas and a half"));
-    expect(long.length).toBe(40);
-    expect(long).toBe("serving serving size varied from 1 to 3 ");
+    expect(long).toBe("serving serving size varied from 1 to 3");
+    expect(long.length).toBeLessThanOrEqual(40);
+
+    // Two of the table's own longest names, cut where the words end.
+    expect(usdaMeasureName(portion(1, "3 oz with bone, cooked (yield after bone and fat removed)"))).toBe("3 oz with bone, cooked (yield after");
+    expect(usdaMeasureName(portion(1, "serving (1 NLEA serving - about 4 crackers)"))).toBe("serving (1 NLEA serving - about 4");
+    // A dangling comma or dash goes with the cut.
+    expect(usdaMeasureName(portion(1, "slice of a very large loaf indeed, sliced thinly"))).toBe("slice of a very large loaf indeed");
+
+    // Nothing short is touched, and nothing keeps a trailing space.
+    expect(usdaMeasureName(portion(1, "cup"))).toBe("cup");
+    expect(usdaMeasureName(portion(1, "piece, 4 by 3 by 1 inch"))).toBe("piece, 4 by 3 by 1 inch");
+
+    // One word longer than the whole allowance has no space to cut at: it is cut
+    // where it must be rather than left to overflow the screen.
+    const unbroken = usdaMeasureName(portion(1, "a".repeat(60)));
+    expect(unbroken).toBe("a".repeat(40));
   });
 });
 
@@ -204,18 +226,117 @@ describe("the row a food becomes", () => {
   it("carries the description's first word, its word count and its serving", () => {
     const row = usdaFoodRow("fndds", entry("Milk, whole, 3.25% milkfat", "fndds"));
     expect(row?.first_word).toBe("milk");
-    expect(row?.word_count).toBe(usdaWords("Milk, whole, 3.25% milkfat").length);
+    // Four words — milk, whole, 3.25, milkfat — counted out rather than asked of
+    // the same function that stored it.
+    expect(row?.word_count).toBe(4);
     expect(row?.description).toBe("Milk, whole, 3.25% milkfat");
     expect(row?.release).toBe("fndds");
     expect(row?.serving_grams).toBe(158);
     expect(row?.serving_unit).toBe("cup");
   });
 
-  it("folds accents the way the food list folds a name", () => {
-    expect(usdaWords("Crème fraîche, cultured")).toEqual(["creme", "fraiche", "cultured"]);
+  it("cuts a description into the words Postgres indexes, accents and decimals kept", () => {
+    // Postgres's `english` configuration does NOT strip accents:
+    // to_tsvector('english', 'Crème fraîche, cultured') holds 'crème'. Folding
+    // the accent off here would store a first word the search can never match.
+    expect(usdaWords("Crème fraîche, cultured")).toEqual(["crème", "fraîche", "cultured"]);
+    // And it indexes "3.25%" as one lexeme, 3.25 — not 3 and 25.
+    expect(usdaWords("Milk, whole, 3.25% milkfat")).toEqual(["milk", "whole", "3.25", "milkfat"]);
+    expect(usdaWords("Beverage, 100%, NFS")).toEqual(["beverage", "100", "nfs"]);
+    // Anything that is not a letter or a digit separates, which is what keeps a
+    // typed query from ever becoming a tsquery operator.
+    expect(usdaWords("zqx & fix | ture:* !(no)")).toEqual(["zqx", "fix", "ture", "no"]);
+    expect(usdaWords("   ")).toEqual([]);
+  });
+
+  it("reads the shapes `check-food-sources.ts` depends on: numeric ids, trimmed names, an empty amount as null", () => {
+    // That checker is not run in CI (it needs the network), so the reader it
+    // shares with the importer is pinned here instead.
+    const table = usdaTableFromCsv(
+      csv(
+        [`"171287","sr_legacy_food","  Egg, whole, raw, fresh  ","100","2019-04-01"`],
+        [`"1","171287","1008","143","","","","","","",""`],
+        [`"81549","171287","1","","9999","","large","50","","",""`],
+      ),
+      "sr_legacy",
+    );
+    expect([...table.keys()]).toEqual([171_287]);
+    expect(table.get(171_287)).toEqual({
+      fdcId: 171_287,
+      description: "Egg, whole, raw, fresh",
+      figures: new Map([["kcal", 143]]),
+      // An empty `amount` is NULL, not the 0 that `Number("")` would make of it:
+      // the measure's own text carries the count instead.
+      portions: [{ seqNum: 1, amount: null, unit: "large", gramWeight: 50 }],
+    });
   });
 
   it("skips a description with no word in it, rather than storing a food nobody can find", () => {
     expect(usdaFoodRow("sr_legacy", { fdcId: 1, description: "- , -", figures: new Map(), portions: [] })).toBeNull();
+  });
+});
+
+describe("the cached release files", () => {
+  const cache = mkdtempSync(join(tmpdir(), "usda-cache-test-"));
+  afterAll(() => {
+    rmSync(cache, { recursive: true, force: true });
+  });
+
+  // The digest of "the real release", which is what these two calls agree on.
+  const REAL = "b1b58a80a7f2b42cb5e8abefe89c5ba85e6dd5577cd6b78df7a5f18b5e21a7ea";
+
+  it("reads a cached file only when its bytes are the ones the tool expects", async () => {
+    writeFileSync(join(cache, "release.zip"), "the real release");
+    // Nothing is downloaded: the file is already there, and it is checked anyway
+    // — the cache is a folder in the machine's shared temp directory.
+    const bytes = await download("https://example.invalid/never-fetched.zip", "release.zip", cache, REAL);
+    expect(bytes.toString("utf8")).toBe("the real release");
+  });
+
+  it("stops the run when a cached file is not the release, rather than importing it", async () => {
+    writeFileSync(join(cache, "release.zip"), "something else entirely");
+    await expect(download("https://example.invalid/never-fetched.zip", "release.zip", cache, REAL)).rejects.toThrow(
+      /release\.zip is not the file this tool expects/,
+    );
+  });
+
+  it("takes no digest as no check, for a file that has none published", async () => {
+    writeFileSync(join(cache, "other.xlsx"), "whatever this is");
+    const bytes = await download("https://example.invalid/never-fetched.xlsx", "other.xlsx", cache);
+    expect(bytes.toString("utf8")).toBe("whatever this is");
+  });
+});
+
+describe("the database `import-usda.ts` is pointed at", () => {
+  const EMPTY: Record<string, string | undefined> = {};
+
+  it("takes the address typed out", () => {
+    expect(databaseUrlFrom(["node", "tool", "--database-url=postgres://a:b@host:5432/db"], EMPTY)).toEqual({
+      url: "postgres://a:b@host:5432/db",
+    });
+  });
+
+  it("takes the address out of the variable the command NAMES", () => {
+    expect(databaseUrlFrom(["node", "tool", "--database-url-env=PROD_DATABASE_URL"], { PROD_DATABASE_URL: "postgres://named" })).toEqual({
+      url: "postgres://named",
+    });
+  });
+
+  it("never reads DATABASE_URL on its own — on this machine it is the real data", () => {
+    expect(databaseUrlFrom(["node", "tool"], { DATABASE_URL: "postgres://the-real-neon-data" })).toEqual({ problem: "none-given" });
+    expect(databaseUrlFrom(["node", "tool", "--cache=/tmp/x"], { DATABASE_URL: "postgres://the-real-neon-data" })).toEqual({
+      problem: "none-given",
+    });
+  });
+
+  it("stops when the variable it was told to read is empty or unset, rather than filling something else", () => {
+    expect(databaseUrlFrom(["node", "tool", "--database-url-env=PROD_DATABASE_URL"], EMPTY)).toEqual({
+      problem: "empty-variable",
+      variable: "PROD_DATABASE_URL",
+    });
+    expect(
+      databaseUrlFrom(["node", "tool", "--database-url-env=PROD_DATABASE_URL", "--database-url=postgres://typed"], { PROD_DATABASE_URL: "" }),
+    ).toEqual({ problem: "empty-variable", variable: "PROD_DATABASE_URL" });
+    expect(databaseUrlFrom(["node", "tool", "--database-url="], EMPTY)).toEqual({ problem: "none-given" });
   });
 });

@@ -94,8 +94,12 @@ function cofidTable(archive: Buffer): Map<string, Entry> {
 }
 
 const cache = arg("cache") ?? defaultCache();
-const srLegacy = usdaTable(await download(USDA_RELEASES.sr_legacy.url, USDA_RELEASES.sr_legacy.file, cache), "sr_legacy");
-const fndds = usdaTable(await download(USDA_RELEASES.fndds.url, USDA_RELEASES.fndds.file, cache), "fndds");
+const usdaZip = async (release: keyof typeof USDA_RELEASES): Promise<Buffer> => {
+  const { url, file, sha256 } = USDA_RELEASES[release];
+  return download(url, file, cache, sha256);
+};
+const srLegacy = usdaTable(await usdaZip("sr_legacy"), "sr_legacy");
+const fndds = usdaTable(await usdaZip("fndds"), "fndds");
 const cofid = cofidTable(
   await download(
     "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx",

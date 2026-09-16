@@ -14,15 +14,21 @@ upserts all 13,225 foods and their household measures into `usda_foods` and
 `usda_food_portions`, in one transaction. The data is public domain, CC0 1.0: no
 key, no account, no rate limit. The app credits USDA under the search results.
 
-**Run it.** The database address is the tool's own argument — it does not read
-`apps/api/.env` and does not fall back to `DATABASE_URL`, so the address is
-always typed out for the database that is meant.
+**Run it.** The tool is told which database to fill and never guesses: it does
+not read `apps/api/.env` and does not fall back to `DATABASE_URL`.
+
+For a real environment, put the address in a variable and pass the variable's
+NAME. Typing the address on the command line would put the database password
+into shell history and into the process list, where every other user of that
+machine can read it.
 
 ```bash
-corepack pnpm --filter api exec tsx tools/import-usda.ts --database-url=<the environment's DATABASE_URL>
+read -rs PROD_DATABASE_URL && export PROD_DATABASE_URL      # paste the address; it is not echoed
+corepack pnpm --filter api exec tsx tools/import-usda.ts --database-url-env=PROD_DATABASE_URL
+unset PROD_DATABASE_URL
 ```
 
-Local development, for reference:
+Local development, where the address is no secret:
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml up -d postgres redis
@@ -32,6 +38,12 @@ corepack pnpm --filter api exec tsx tools/import-usda.ts --database-url=postgres
 Add `--cache=<dir>` to keep the two zips somewhere other than the system temp
 folder. A re-run on a warm cache with nothing to change took 9.7 s (measured
 2026-09-16); a first load also writes 44,394 rows.
+
+**If it stops on a digest.** Each release is checked against its published
+SHA-256 on every run, cache included, and a mismatch stops the run before a
+single row is written. Delete the named file from the cache folder and run it
+again; if USDA has published a newer release, adopting it is a card of its own,
+not something to work around here.
 
 **Verify recovered.** The tool prints its own counts; they should read:
 

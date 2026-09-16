@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx (postgres.js's Sql and
@@ -601,19 +602,13 @@ export interface UsdaFoodRow {
  *  capped at 100 characters upstream, and ten words is far past a food's name. */
 const MAX_SEARCH_WORDS = 10;
 
-/** A query's words, folded the way `to_tsvector('english')` folds a description:
- *  accents dropped, lower case, and anything that is not a letter or digit is a
- *  separator. That is also what makes the tsquery safe — `&`, `|`, `!`, `(`,
- *  `)`, `:` and `*` are separators here, so no typed text can ever become a
- *  tsquery operator, and the result still crosses to Postgres as a parameter. */
-export const usdaSearchWords = (query: string): string[] =>
-  query
-    .normalize("NFKD")
-    .replaceAll(/\p{M}/gu, "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word !== "")
-    .slice(0, MAX_SEARCH_WORDS);
+/** A query's words, cut by the one rule that also stored the description's
+ *  (`usdaWords.ts`): lower case, letters and digits, a decimal point kept inside
+ *  a number, accents left exactly as the index holds them. That rule is what
+ *  makes the tsquery safe too — `&`, `|`, `!`, `(`, `)`, `:` and `*` separate
+ *  words here, so no typed text can ever become a tsquery operator, and the
+ *  result still crosses to Postgres as a parameter. */
+export const usdaSearchWords = (query: string): string[] => usdaWords(query).slice(0, MAX_SEARCH_WORDS);
 
 /** EVERY typed word must match, the last one as a prefix so the box answers
  *  while it is still being typed ("cappucc" finds "Coffee, Cappuccino").
@@ -650,20 +645,46 @@ type UsdaColumns = Parameters<typeof usdaRow>[0];
  *  ever offers one: exactly one food is in that state, FNDDS 2705383 "Milk,
  *  human" (measured 2026-09-16).
  *
- *  FNDDS before SR Legacy — the survey release
+ *  THE FOOD ITSELF FIRST, THEN THE DISHES MADE FROM IT. USDA names a food
+ *  "head, then qualifiers" — "Pumpkin, cooked" is the vegetable, "Muffin,
+ *  pumpkin" is a muffin — so what a person typed is matched against the head of
+ *  the description, in three steps, before anything else is considered:
+ *    1. the head IS what was typed ("pumpkin" → "Pumpkin, cooked"; "orange
+ *       juice" → "Orange juice, 100%, NFS", never "Orange, canned, juice pack");
+ *    2. failing that, the description STARTS with what was typed, which is what
+ *       keeps the answers steady while a word is still half-typed;
+ *    3. failing that, its first word is the first word typed ("Pumpkin seeds,
+ *       NFS" above "Soup, pumpkin").
+ *  Without this a two-word dish and a two-word ingredient tie, and USDA's own id
+ *  decides: "pumpkin" answered Muffin, Bread, Cookie, Pie and Pancakes before
+ *  the vegetable, and "banana" answered Banana split (measured 2026-09-16).
+ *
+ *  Then FNDDS before SR Legacy — the survey release
  *  describes food as people eat it — then the fewest-worded description, which
  *  is the plainest entry ("Coffee, Cappuccino" before "Coffee, Cappuccino,
  *  decaffeinated, with non-dairy milk"), then USDA's own id so two equal rows
- *  never swap places between searches. */
+ *  never swap places between searches.
+ *
+ *  The three head steps compare against `lower(description)`, and the words they
+ *  compare with hold nothing but letters, digits and a decimal point, so they
+ *  carry no `%` or `_` into `LIKE`. Measured through this function against the
+ *  loaded table 2026-09-16: a word a person really types answers in 6–9 ms, and
+ *  the widest word in either release ("cooked", 2,448 rows) in 20 ms. */
 export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number): Promise<UsdaFoodRow[]> {
+  const words = usdaSearchWords(query);
   const tsQuery = usdaTsQuery(query);
   if (tsQuery === null || limit < 1) return [];
+  const typed = words.join(" ");
+  const firstWord = words[0] ?? "";
   const rows = await sql<UsdaColumns[]>`
     SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
     FROM usda_foods
     WHERE search @@ to_tsquery('english', ${tsQuery})
       AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
-    ORDER BY (release = 'fndds') DESC, word_count ASC, fdc_id ASC
+    ORDER BY (lower(description) = ${typed} OR lower(description) LIKE ${`${typed},%`}) DESC,
+             (lower(description) LIKE ${`${typed}%`}) DESC,
+             (first_word = ${firstWord}) DESC,
+             (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT ${limit}`;
   return rows.map(usdaRow);
 }

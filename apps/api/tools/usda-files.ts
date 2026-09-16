@@ -5,6 +5,7 @@
 //
 // The data is public domain, CC0 1.0 (RULINGS 2026-09-16): no fee, no API key,
 // two files downloaded once and cached.
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,17 +17,28 @@ export const fail = (message: string): never => {
 
 /** The two releases. SR Legacy's `food_nutrient.csv` names a nutrient by its
  *  FDC id (1008 energy); the survey release reuses the same column for the
- *  nutrient NUMBER (208 energy), which is why each figure carries both. */
+ *  nutrient NUMBER (208 energy), which is why each figure carries both.
+ *
+ *  `sha256` is the published file's own digest, measured 2026-09-16 on the two
+ *  downloads this card was built from. It is checked on every read, download or
+ *  cache alike: the cache is a folder in the machine's shared temp directory and
+ *  `import-usda.ts` is a tool an operator points at PRODUCTION, so bytes nobody
+ *  vouched for must never become 13,225 food rows. A release that fails it stops
+ *  the run with the file's name — USDA publishes a dated file and does not
+ *  rewrite it, so a mismatch is a damaged download, a tampered cache, or a new
+ *  release that a card must adopt on purpose. */
 export const USDA_RELEASES = {
   sr_legacy: {
     url: "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip",
     file: "usda-sr-legacy-2018-04.zip",
+    sha256: "b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0",
     /** The citation prefix the curated list writes for this release. */
     citation: "usda-sr",
   },
   fndds: {
     url: "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_csv_2024-10-31.zip",
     file: "usda-fndds-2024-10-31.zip",
+    sha256: "5ccc25ec2777a8982fbb61378a42f415316173eb11e48c9a8ba4cb19f5a4f29c",
     citation: "usda-fndds",
   },
 } as const;
@@ -78,7 +90,10 @@ export interface UsdaEntry {
 
 export const defaultCache = (): string => join(tmpdir(), "ai-home-gym-food-tables");
 
-export async function download(url: string, file: string, cache: string): Promise<Buffer> {
+/** Downloaded once into `cache` and read. `sha256`, where a caller has one, is
+ *  checked on EVERY read — a file already in the cache is bytes from a shared
+ *  temp folder that nothing has vouched for since. */
+export async function download(url: string, file: string, cache: string, sha256?: string): Promise<Buffer> {
   mkdirSync(cache, { recursive: true });
   const path = join(cache, file);
   if (!existsSync(path)) {
@@ -87,7 +102,19 @@ export async function download(url: string, file: string, cache: string): Promis
     if (!response.ok) fail(`download failed (${String(response.status)}): ${url}`);
     writeFileSync(path, Buffer.from(await response.arrayBuffer()));
   }
-  return readFileSync(path);
+  const bytes = readFileSync(path);
+  if (sha256 !== undefined) {
+    const got = createHash("sha256").update(bytes).digest("hex");
+    if (got !== sha256) {
+      fail(
+        `${file} is not the file this tool expects.\n` +
+          `  expected sha256 ${sha256}\n  found    sha256 ${got}\n` +
+          `  at ${path}\n` +
+          "Delete it to download the release again. If USDA has published a new one, a card adopts it on purpose.",
+      );
+    }
+  }
+  return bytes;
 }
 
 /** The files of a zip archive whose names pass `wanted`, inflated. It reads the
@@ -249,18 +276,26 @@ export function usdaTableFromCsv(csv: UsdaCsv, release: UsdaRelease): Map<number
 // Pure, and here rather than in `import-usda.ts` so the tests can reach it
 // without running that script's top-level import.
 
-/** A description's words, folded the way the curated list folds a name: accents
- *  dropped, lower case, anything that is not a letter or digit a separator. */
-export const usdaWords = (description: string): string[] =>
-  description
-    .normalize("NFKD")
-    .replaceAll(/\p{M}/gu, "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word !== "");
-
 /** A measure's leading amount, where its text carries one ("1 cup", "1/2 cup"). */
 const LEADING_AMOUNT = /^(\d*\.?\d+|\d+\/\d+)\s+(\S.*)$/;
+
+/** A measure's name as the screen can hold it: at most forty characters, cut at
+ *  a SPACE and never through a word. SR Legacy writes whole sentences into the
+ *  column ("3 oz with bone, cooked (yield after bone and fat removed)"), and a
+ *  blind cut at forty left 110 of the table's 129 longest names ending mid-word
+ *  — "3 oz with bone, cooked (yield after bone" — and 19 ending in a space
+ *  (counted 2026-09-16 on the loaded table). A dangling comma or bracket goes
+ *  with the cut, so what is left reads as words. */
+const MEASURE_NAME_MAX = 40;
+const readable = (name: string): string => {
+  const trimmed = name.trim();
+  if (trimmed.length <= MEASURE_NAME_MAX) return trimmed;
+  const cut = trimmed.slice(0, MEASURE_NAME_MAX);
+  const lastSpace = cut.lastIndexOf(" ");
+  // One word longer than the whole allowance has no space to cut at; it is cut
+  // where it must be rather than left to overflow the screen.
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:([{-]+$/u, "");
+};
 
 /** What one of this measure is called, by the same rule the packaged-product
  *  reader uses for a label's serving (`openfoodfacts.adapter.ts`): one of it is
@@ -280,10 +315,10 @@ export function usdaMeasureName(portion: UsdaPortion): string {
         ? Number(fraction[0]) / Number(fraction[1])
         : Number(fraction[0]));
   const words = (led?.[2] ?? portion.unit).trim();
-  if (words === "" || !Number.isFinite(amount) || amount <= 0) return portion.unit.slice(0, 40);
-  if (amount === 1) return words.slice(0, 40);
-  if (amount === 0.5) return `half ${words}`.slice(0, 40);
-  return `${String(amount)} ${words}`.slice(0, 40);
+  if (words === "" || !Number.isFinite(amount) || amount <= 0) return readable(portion.unit);
+  if (amount === 1) return readable(words);
+  if (amount === 0.5) return readable(`half ${words}`);
+  return readable(`${String(amount)} ${words}`);
 }
 
 /** A food's serving: its first household measure with a gram weight, else 100 g
@@ -294,12 +329,13 @@ export function usdaServing(portions: readonly UsdaPortion[]): { grams: number; 
   return first === undefined ? { grams: 100, unit: "g" } : { grams: first.gramWeight, unit: usdaMeasureName(first) };
 }
 
-/** Both releases, downloaded (once) into `cache` and read. */
+/** Both releases, downloaded (once) into `cache`, checked against their own
+ *  digests and read. */
 export async function loadUsdaTables(cache: string): Promise<Map<UsdaRelease, Map<number, UsdaEntry>>> {
   const loaded = new Map<UsdaRelease, Map<number, UsdaEntry>>();
   for (const release of USDA_RELEASE_ORDER) {
-    const { url, file } = USDA_RELEASES[release];
-    loaded.set(release, usdaTable(await download(url, file, cache), release));
+    const { url, file, sha256 } = USDA_RELEASES[release];
+    loaded.set(release, usdaTable(await download(url, file, cache, sha256), release));
   }
   return loaded;
 }

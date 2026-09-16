@@ -100,10 +100,13 @@ describe('the Add food search box', () => {
     expect(credit).toHaveLength(1);
     expect(credit[0].getAttribute('href')).toBe('https://fdc.nal.usda.gov');
     expect(credit[0].getAttribute('target')).toBe('_blank');
-    // The three sources are shown in the order the server sent them.
+    // All four foods, in the order the server sent them — every place named, so
+    // two that swapped could not pass.
     const shown = screen.getAllByRole('button').map((b) => b.textContent).filter((t) => t.includes('kcal'));
+    expect(shown).toHaveLength(4);
     expect(shown[0]).toContain('Paneer');
     expect(shown[1]).toContain('Coffee, Cappuccino');
+    expect(shown[2]).toContain('Biscuits, refrigerated dough');
     expect(shown[3]).toContain('Bottled coffee');
   });
 
