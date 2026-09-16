@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · Review rounds ruled: re-checks in the same reviewer chat, a round ends with no Critical/High open (records only, uncommitted)
+
+- Kd, after nine hours for PR #73 and PR #74: *"yes record it and update the rulebook"*. Measured first from the commit times: building 2 h 37 min, review rounds 6 h 02 min, 3 and 4 rounds against the cap of 2, the building and reviewing chats all on Opus.
+- `RULINGS.md`: one new 2026-09-16 line under "How work is done"; the "Independent review is KEPT" line and the 2026-09-08 and 2026-09-15 lines carry an AMENDED marker.
+- `CLAUDE.md`: §2.6 rewritten (re-checks in the same reviewer chat, the round ends at no Critical/High, Lows never buy a round, risky code is RUN in round one); §4 Tests adds the picking-rule table test before review; §6 now holds two prompts, round one and the re-check.
+- Nothing else changed: no code, no tests, no commit. Records ride on the next feature's pull request (§2.8).
+- For the 7a-iv chat: `git status` shows `CLAUDE.md`, `RULINGS.md` and `HANDOFF.md` modified before you start. They are this ruling; add them to your first commit with your feature's files. The four dashboard images are still someone else's, uncommitted.
+- Next: 7a-iv, from master, its own chat.
+
 ## 2026-09-16 · 7a-iii-b: the last re-check's Lows fixed, merged on Kd's "fix and merge" (PR #74)
 
 - The re-check of 82d8a8d found no Critical or High; three Lows and one weak test, all fixed.
