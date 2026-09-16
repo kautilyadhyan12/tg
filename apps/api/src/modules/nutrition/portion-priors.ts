@@ -1,5 +1,5 @@
 // Part 2B Appendix B — India-first seed. Values are copied, never re-derived.
-import { MAX_ITEM_GRAMS } from "@app/shared";
+import { MAX_ITEM_GRAMS, type MealVessel } from "@app/shared";
 
 export const CONTAINER_PRIORS = {
   small_katori: [100, 150], katori_or_small_bowl: [150, 200], standard_katori: [150, 200],
@@ -17,6 +17,16 @@ export const COUNTABLE_PRIORS = {
 export const RICE_MOUND_PRIORS = { small_mound: [100, 100], medium_mound: [150, 150], large_mound: [250, 250] } as const;
 export const DENSITY_G_PER_ML = { thin: 0.95, medium: 1, thick: 1.1 } as const;
 export const GLOBAL_STARTERS = { dinnerPlateRimCm: [26, 27], cupMl: 240, tablespoonMl: 15, teaspoonMl: 5 } as const;
+/** The container this resolver reads for each vessel a scan may name
+ *  (`mealVesselSchema`, ROADMAP 7a-iii-b). A vessel Appendix B measures is its
+ *  Appendix B name — the katori is the standard katori and the tumbler the steel
+ *  tumbler — and every other vessel is its own name, as a container the photo
+ *  named in words always was. 7a-iv gives each vessel its volume and replaces this. */
+export const VESSEL_CONTAINERS: Readonly<Record<MealVessel, string>> = {
+  katori: "standard_katori", bowl: "bowl", "large bowl": "large_bowl", "thali section": "thali_section",
+  tumbler: "steel_tumbler", "chai cup": "chai_cup", cup: "cup", mug: "mug", glass: "glass", can: "can",
+  bottle: "bottle", pot: "pot", tablespoon: "tablespoon", teaspoon: "teaspoon", plate: "plate",
+};
 /** The priors as Maps, so a name the photo gives that every object answers to
  *  ("constructor", "toString") is no container, piece or mound. */
 const containerPriors: ReadonlyMap<string, readonly [number, number]> = new Map(Object.entries(CONTAINER_PRIORS));

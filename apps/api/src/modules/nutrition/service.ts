@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { isNoValueWord, type ChosenItem, type Meal, type MealItem, type MealPhotoItem } from "@app/shared";
+import { isNoValueWord, type ChosenItem, type Meal, type MealItem, type MealPhotoItem, type VisionEvidence, type VisionItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
@@ -14,12 +14,14 @@ import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { dishwareGrams, resolvePortion } from "./portion-priors.js";
+import { VESSEL_CONTAINERS, dishwareGrams, resolvePortion, type PortionResult, type SavedDishware } from "./portion-priors.js";
 import * as repo from "./repo.js";
+import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import {
   MEAL_VISION_MODELS,
   VisionProviderError,
+  visionCostMicro,
   type MealVisionModel,
   type VisionProvider,
   type VisionResult,
@@ -91,7 +93,7 @@ const foodSchema = z.object({
   fiberG: z.number().min(0).max(100).nullable(),
   serving: z.number(),
   unit: z.string(),
-  source: z.enum(["curated", "openfoodfacts", "usda"]),
+  source: z.enum(["curated", "openfoodfacts", "usda", "estimate"]),
 });
 
 const draftSchema = z
@@ -117,16 +119,6 @@ const token = (): string => randomBytes(32).toString("base64url");
 const digest = (v: string): string => createHash("sha256").update(v).digest("hex");
 const retakeKey = (userId: string, v: string): string => `meal-retake:${userId}:${digest(v)}`;
 const scanKey = (userId: string, v: string): string => `meal-scan:${userId}:${digest(v)}`;
-
-/** A scan's cost in integer micro-USD at its model's list price; BigInt
- *  end-to-end, rounded half up. */
-export function visionCostMicro(model: MealVisionModel, tokensIn: number, tokensOut: number): bigint {
-  const price = MEAL_VISION_MODELS[model];
-  const raw =
-    BigInt(tokensIn) * price.inputMicroUsdPerMillion +
-    BigInt(tokensOut) * price.outputMicroUsdPerMillion;
-  return (raw + 500_000n) / 1_000_000n; // round-half-up, no float near money
-}
 
 /** One ledger row per provider response (v1 §9.3). Standalone insert: a scan
  *  persists no companion rows at spend time (ruled — DECISIONS 2026-07-12). */
@@ -304,6 +296,10 @@ export async function searchFoods(deps: NutritionDeps, query: string, limit: num
 }
 
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
+  // An est_* canonical is a scan's own estimate, and lives only in that scan's
+  // draft and the meal saved from it: nothing may look one up by name, or a
+  // request could price a food at figures no table and no scan gave it.
+  if (query.startsWith(ESTIMATE_CANONICAL_PREFIX)) return null;
   // A usda_* canonical is one row of our own table and nothing else: it must
   // not reach findCurated's fuzzy match, and one the table does not hold must
   // not be handed to OpenFoodFacts as if it were a food's NAME (searching their
@@ -326,14 +322,24 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   return (await cachedExternal(deps, query, 1))[0] ?? null;
 }
 
-/** The food a scanned item names: the list's food for its hint, else a packaged
- *  product (§3.5) only where the product's name holds every word of the hint.
- *  The search's top product for other words is another food ("mystery sauce"
- *  finds one named "Mystery"), and a wrong food is worse than an honest miss. */
-async function findScannedFood(deps: NutritionDeps, hint: string): Promise<FoodReference | null> {
-  const food = await findFood(deps, hint);
-  return food === null || food.source === "curated" || holdsEveryWord(food.name, hint) ? food : null;
-}
+/** Where a scanned food's numbers come from (`scanMatch.ts`): our list by whole
+ *  words; the USDA table; a packaged product (§3.5) only where the product's name
+ *  holds every word of the hint — the search's top product for other words is
+ *  another food ("mystery sauce" finds one named "Mystery"). */
+const scanLookups = (deps: NutritionDeps): ScanLookups => ({
+  ourList: (hint) => {
+    const food = findCurated(hint);
+    return food === null ? null : asReference(food);
+  },
+  usda: async (hint) => {
+    const found = await repo.usdaFoodForScan(deps.sql, hint);
+    return found === null ? null : asUsdaReference(found.food);
+  },
+  packaged: async (hint) => {
+    const [product] = await cachedExternal(deps, hint, 1);
+    return product !== undefined && holdsEveryWord(product.name, hint) ? product : null;
+  },
+});
 
 // ── Stage-3 arithmetic + §3.3 display standard ───────────────────────────────
 
@@ -366,8 +372,18 @@ function nutritionItem(
     proteinG: round1(food.proteinG * scale),
     carbsG: round1(food.carbsG * scale),
     fatG: round1(food.fatG * scale),
+    // An estimate has no table to be priced again from, so its item carries its
+    // figures, and the saved meal can change its grams later (patchMeal).
+    ...(food.source === "estimate" ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
   };
 }
+
+/** The food an estimate item of a saved meal stands for, from the figures the
+ *  item carries — never from anything a request sends. */
+const estimateOf = (item: MealItem): FoodReference | null =>
+  item.nutritionSource === "estimate" && item.per100g !== undefined
+    ? { canonical: item.canonical, name: item.name, ...item.per100g, fiberG: null, serving: item.gramsPoint, unit: "g", source: "estimate" }
+    : null;
 
 const asMeal = (r: repo.MealRow): Meal => ({
   id: r.id,
@@ -430,6 +446,71 @@ async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<voi
 }
 
 // ── Stage 1+2: analyze ───────────────────────────────────────────────────────
+
+/** The photo sheet for what the model saw, once each food is priced (`prices[i]`
+ *  is `evidence.items[i]`'s): every food on it, by a table or by its estimate
+ *  (ROADMAP 7a-iii-b); the foods and portions the draft keeps for the confirm;
+ *  and what stays out of the total. Pure, so the eight plates can be run through
+ *  it (test/fixtures/plates).
+ *
+ *  Honest unknown (§3.5): what the model could not identify, and a food nothing
+ *  prices that the model gave no usable number for, stay out of the totals and
+ *  are named once each rather than dropped without a word. A name that says there
+ *  is none (blank, "none", "N/A", "unknown") is never shown: an item's reads as
+ *  its hint. */
+export function scanSheet(
+  evidence: VisionEvidence,
+  prices: readonly ScanPrice[],
+  savedDishware: readonly SavedDishware[],
+): { foods: FoodReference[]; draftItems: Draft["items"]; items: MealPhotoItem[]; unknownItems: string[] } {
+  const foods: FoodReference[] = [];
+  const draftItems: Draft["items"] = [];
+  const items: MealPhotoItem[] = [];
+  const unknownItems: string[] = [];
+  const nameUnknown = (label: string): void => {
+    const shown = label.replaceAll(/[_\s]+/g, " ").trim();
+    if (!isNoValueWord(shown) && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
+  };
+  const shownName = (item: VisionItem): string => (isNoValueWord(item.name) ? item.canonical_hint : item.name);
+  for (const label of evidence.unknown_items) nameUnknown(label);
+  const taken = new Set<string>();
+  for (const [at, item] of evidence.items.entries()) {
+    const price = prices[at];
+    if (price === undefined || price.kind === "none") {
+      nameUnknown(shownName(item));
+      continue;
+    }
+    let food: FoodReference;
+    let portion: PortionResult;
+    if (price.kind === "table") {
+      food = price.food;
+      // A table food's portion is resolved as it always was, until 7a-iv's form.
+      portion = resolvePortion(
+        {
+          canonicalHint: item.canonical_hint,
+          container: item.vessel === null ? null : VESSEL_CONTAINERS[item.vessel],
+          fillLevel: item.fill_level,
+          sizeClass: item.size_class,
+          count: item.count,
+        },
+        savedDishware,
+        { grams: food.serving, unit: food.unit },
+      );
+    } else {
+      // An estimate's portion is the grams the model saw, and its whole-piece
+      // count, where it gave one, is what the sheet's stepper steps by.
+      food = estimateFood(shownName(item), price.per100g, price.grams, taken);
+      portion = { gramsPoint: price.grams, gramsRange: [price.grams, price.grams], portionSource: "default", pieces: item.count };
+    }
+    taken.add(food.canonical);
+    foods.push(food);
+    // The stored draft keeps its strict shape: the count of pieces is only the
+    // sheet's, for its stepper.
+    draftItems.push({ canonical: food.canonical, gramsPoint: portion.gramsPoint, gramsRange: portion.gramsRange, portionSource: portion.portionSource });
+    items.push({ ...nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource), pieces: portion.pieces });
+  }
+  return { foods, draftItems, items, unknownItems };
+}
 
 export interface ScanDraftResponse {
   scanToken: string;
@@ -535,49 +616,18 @@ async function readMealPhoto(
     throw new ScanFailedError(rt, "Please retake the photo in better light with the full plate visible.");
   }
 
-  // Stage 2: resolve each identified item through the approved rungs.
+  // Stage 2: price each identified food, then resolve its portion. Each food is
+  // priced on its own, so they are asked together: a plate of unlisted foods waits
+  // for its slowest packaged-product search, not their sum.
   const dishware = await repo.listDishware(deps.sql, userId, 100, null);
   const savedDishware = dishware.map((d) => ({
     containerClass: d.containerClass,
     volumeMl: d.volumeMl,
     foodHint: d.foodHint,
   }));
-  const foods: FoodReference[] = [];
-  const draftItems: Draft["items"] = [];
-  const items: MealPhotoItem[] = [];
-  // Honest unknown (§3.5): what the model could not identify, and each item seen
-  // but matching no food, stay out of the totals and are named once each on the
-  // sheet rather than dropped without a word. A name that says there is none
-  // (blank, "none", "N/A", "unknown") is never shown: an item's reads as its hint.
-  const unknownItems: string[] = [];
-  const nameUnknown = (label: string): void => {
-    const shown = label.replaceAll(/[_\s]+/g, " ").trim();
-    if (!isNoValueWord(shown) && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
-  };
-  for (const label of result.evidence.unknown_items) nameUnknown(label);
-  for (const evidence of result.evidence.items) {
-    const food = await findScannedFood(deps, evidence.canonical_hint);
-    if (food === null) {
-      nameUnknown(isNoValueWord(evidence.name) ? evidence.canonical_hint : evidence.name);
-      continue;
-    }
-    const portion = resolvePortion(
-      {
-        canonicalHint: evidence.canonical_hint,
-        container: evidence.container,
-        fillLevel: evidence.fill_level,
-        sizeClass: evidence.size_class,
-        count: evidence.count,
-      },
-      savedDishware,
-      { grams: food.serving, unit: food.unit },
-    );
-    foods.push(food);
-    // The stored draft keeps its strict shape: the count of pieces is only the
-    // sheet's, for its stepper.
-    draftItems.push({ canonical: food.canonical, gramsPoint: portion.gramsPoint, gramsRange: portion.gramsRange, portionSource: portion.portionSource });
-    items.push({ ...nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource), pieces: portion.pieces });
-  }
+  const lookups = scanLookups(deps);
+  const prices = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
+  const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices, savedDishware);
 
   const scanToken = token();
   // A good photo the model did not name is "Meal", as a renamed-to-nothing
@@ -865,7 +915,10 @@ export async function patchMeal(
     items = [];
     for (const chosen of input.items) {
       const norm = await normalizeChosen(deps, userId, chosen);
-      const food = await findFood(deps, norm.canonical);
+      // A food the scan estimated is priced by the figures this meal's own item
+      // carries (it has no table); anything else by its table, as it was saved.
+      const saved = before.items.find((i) => i.canonical === norm.canonical);
+      const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, norm.canonical));
       if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
       // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
       // rung (same rule as confirmMeal) — only items new to the meal are

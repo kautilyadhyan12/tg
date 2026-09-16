@@ -216,7 +216,7 @@ the 8/day quota and the unit economics from the pricing doc are untouched.
 
 **Stage 1 — Vision: identify, never compute.** The prompt is rewritten so
 the model returns identification *evidence*, no nutrition math at all.
-Output contract (temperature 0; JSON only) — *temperature 0 AMENDED 2026-09-16 (RULINGS): the scanner runs at Google's default on Gemini 3, whose guide warns that below 1.0 the model can loop or degrade; the eight plates were measured at it*:
+Output contract (temperature 0; JSON only) — *temperature 0 AMENDED 2026-09-16 (RULINGS): the scanner runs at Google's default on Gemini 3, whose guide warns that below 1.0 the model can loop or degrade; the eight plates were measured at it. The shape below AMENDED 2026-09-16 (RULINGS, ROADMAP 7a-iii-b): each item is one list, `[name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]`, the vessel from a fixed list, the count of whole pieces only; no cuisine guess, scale anchors or confidence (trimmed 2026-09-15)*:
 
 ```json
 {

@@ -12,6 +12,7 @@ import {
   searchUsdaFoods,
   usdaCanonical,
   usdaFoodByCanonical,
+  usdaFoodForScan,
   usdaSearchWords,
   usdaTsQuery,
 } from "../src/modules/nutrition/repo.js";
@@ -89,6 +90,30 @@ d("the USDA food table (real Postgres)", () => {
     // An accented head, for the order steps reading the folded name.
     [90_000_018, "fndds", "Zqxpâté spread", 59],
     [90_000_019, "fndds", "Zqxpâté, liver", 60],
+    // A scan's food (ROADMAP 7a-iii-b), one row per rule; words "zqxs…", so the
+    // search tests above never see them.
+    // A whole description that IS the name, in SR Legacy, beside a survey-release head.
+    [90_000_040, "sr_legacy", "Zqxsname", 70],
+    [90_000_041, "fndds", "Zqxsname, cooked", 71],
+    // A head that IS the name, in SR Legacy, beside a survey-release dish.
+    [90_000_042, "sr_legacy", "Zqxshead, raw", 72],
+    [90_000_043, "fndds", "Zqxshead split", 73],
+    // Every word, three words each: the survey release first.
+    [90_000_044, "sr_legacy", "Zqxsdish, zqxsrel, baked", 74],
+    [90_000_045, "fndds", "Zqxsrel zqxsdish pie", 75],
+    // Every word, one release: the fewest words, then USDA's id.
+    [90_000_046, "fndds", "Zqxsfew, zqxsmore, fried, with oil", 76],
+    [90_000_047, "fndds", "Zqxsfew, zqxsmore, fried", 77],
+    [90_000_048, "fndds", "Zqxsfew, zqxsmore, baked", 78],
+    // A dish made from the food, whose first word is another food's.
+    [90_000_049, "fndds", "Bread, zqxsbanana", 79],
+    // One word of two.
+    [90_000_050, "fndds", "Zqxsone, raw", 80],
+    // A plural and a past tense, stemmed.
+    [90_000_051, "fndds", "Zqxsegg, scrambled", 81],
+    // No figure to price it by.
+    [90_000_052, "fndds", "Zqxsnofat, raw", 82, ["fatG"]],
+    [90_000_053, "fndds", "Zqxsnokcal, raw", null],
   ];
 
   const load = async (): Promise<void> => {
@@ -235,6 +260,44 @@ d("the USDA food table (real Postgres)", () => {
     it("honours the limit it is given, and asks nothing of the database below one", async () => {
       expect(await found("zqxfixture cappuccino", 2)).toEqual([90_000_001, 90_000_003]);
       expect(await found("zqxfixture cappuccino", 0)).toEqual([]);
+    });
+  });
+
+  describe("the USDA row a scanned food's name finds (ROADMAP 7a-iii-b)", () => {
+    const scanned = async (hint: string): Promise<[number, string] | null> => {
+      const found = await usdaFoodForScan(sql, hint);
+      return found === null ? null : [found.food.fdcId, found.match];
+    };
+
+    it("is the food itself by name first: the whole description, then its head, before any release rule", async () => {
+      // SR Legacy's "Zqxsname" is the name; the survey release's "Zqxsname, cooked" is only its head.
+      expect(await scanned("zqxsname")).toEqual([90_000_040, "name"]);
+      // SR Legacy's head "Zqxshead, raw" before the survey release's dish "Zqxshead split".
+      expect(await scanned("zqxshead")).toEqual([90_000_042, "head"]);
+    });
+
+    it("is then every word, starting with one of them: the survey release first, the fewest words, then USDA's id", async () => {
+      expect(await scanned("zqxsrel zqxsdish")).toEqual([90_000_045, "words"]);
+      expect(await scanned("zqxsmore zqxsfew")).toEqual([90_000_047, "words"]);
+    });
+
+    it("never is a dish that only holds the name after another food's", async () => {
+      expect(await scanned("zqxsbanana")).toBeNull();
+      expect(await scanned("zqxsone zqxstwo")).toBeNull();
+    });
+
+    it("stems both sides by the index's own dictionary, and folds accents", async () => {
+      expect(await scanned("scrambled zqxseggs")).toEqual([90_000_051, "words"]);
+      expect(await scanned("Zqxsnâme")).toEqual([90_000_040, "name"]);
+    });
+
+    it("never is a food it cannot price, and no text the model writes is an operator", async () => {
+      expect(await scanned("zqxsnofat")).toBeNull();
+      expect(await scanned("zqxsnokcal")).toBeNull();
+      expect(await scanned("zqxsname & | ! ( ) : * <->")).toEqual([90_000_040, "name"]);
+      expect(await scanned("zqxsname%")).toEqual([90_000_040, "name"]);
+      expect(await scanned("&& !!")).toBeNull();
+      expect(await scanned("of the")).toBeNull();
     });
   });
 

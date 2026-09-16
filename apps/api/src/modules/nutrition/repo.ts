@@ -692,6 +692,54 @@ export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number
   return rows.map(usdaRow);
 }
 
+/** How a scanned food's name found its USDA row: the whole description is that
+ *  name · the description's head (up to its first comma) is · every word of the
+ *  name is in the description, which starts with one of them. */
+export type UsdaScanMatch = "name" | "head" | "words";
+
+/** The USDA food a scan's canonical_hint names, or null (ROADMAP 7a-iii-b). One
+ *  row, not a list: a scan cannot ask the person which of ten they meant, and a
+ *  wrong food is worse than none, so the rule is narrower than the search box's.
+ *
+ *  1. THE FOOD ITSELF BY NAME: the whole description, or its head — USDA writes a
+ *     food "head, then qualifiers", so "Pumpkin, cooked" is the vegetable a hint
+ *     "pumpkin" means and "Banana, raw" the fruit, where "Banana split" is a dish.
+ *     The whole description first, then the head.
+ *  2. EVERY WORD: every word of the hint is in the description, and the
+ *     description's FIRST word is one of the hint's — both stemmed by Postgres's
+ *     English dictionary, which built the index, so "eggs" is "egg" and
+ *     "strawberries" "strawberry" on both sides. The first-word rule is what keeps
+ *     a dish made from a food from standing for it: "roasted potatoes" finds
+ *     "Potato, roasted, NFS", and "banana" alone never finds "Bread, banana".
+ *  Within either: the survey release (FNDDS) before SR Legacy, then the
+ *  fewest-worded description, then USDA's id, so a scan reads the same food every
+ *  time. A food with no energy or macro figure cannot be priced, and is never an
+ *  answer.
+ *
+ *  The words are cut by the one rule the search and the importer share
+ *  (`usdaWords.ts`): letters, digits and a decimal point, so neither `to_tsquery`
+ *  nor `LIKE` receives an operator from the model's text. */
+export async function usdaFoodForScan(sql: SqlOrTx, hint: string): Promise<{ food: UsdaFoodRow; match: UsdaScanMatch } | null> {
+  const words = usdaSearchWords(hint);
+  if (words.length === 0) return null;
+  const named = words.join(" ");
+  const rows = await sql<(UsdaColumns & { match: UsdaScanMatch })[]>`
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit,
+           CASE WHEN search_text = ${named} THEN 'name'
+                WHEN search_text LIKE ${`${named},%`} THEN 'head'
+                ELSE 'words' END AS match
+    FROM usda_foods
+    WHERE search @@ to_tsquery('english', ${words.join(" & ")})
+      AND (search_text = ${named} OR search_text LIKE ${`${named},%`}
+           OR to_tsvector('english', first_word) @@ to_tsquery('english', ${words.join(" | ")}))
+      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
+    ORDER BY (search_text = ${named}) DESC, (search_text LIKE ${`${named},%`}) DESC,
+             (release = 'fndds') DESC, word_count ASC, fdc_id ASC
+    LIMIT 1`;
+  const r = rows[0];
+  return r === undefined ? null : { food: usdaRow(r), match: r.match };
+}
+
 /** The release a canonical names. The table stores SR Legacy as `sr_legacy`;
  *  a canonical spells it `sr`, as the curated list's citations do. */
 const CANONICAL_RELEASES: ReadonlyMap<string, string> = new Map([

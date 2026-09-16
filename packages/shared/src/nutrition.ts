@@ -5,8 +5,11 @@ import { missingPlanInputSchema } from "./plan.js";
 export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "default", "legacy"]);
 /** Where an item's numbers per 100 g came from. `usda` is a food of the USDA
  *  FoodData Central table (ROADMAP 7a-iii-a) — public-domain data the app
- *  credits on screen; `openfoodfacts` is one brand's packaged product. */
-export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda"]);
+ *  credits on screen; `openfoodfacts` is one brand's packaged product;
+ *  `estimate` is the scanner's own figures for a food no table has (RULINGS
+ *  2026-09-15), shown marked "estimate". */
+export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate"]);
+export type NutritionSource = z.infer<typeof nutritionSourceSchema>;
 export const mealOriginSchema = z.enum(["photo", "manual"]);
 /** Kd ruling 2026-07-17 (Card-5b smoke; supersedes the D1 time-bucket
  *  interim): the section is a USER-CHOSEN label stored on the meal —
@@ -16,11 +19,22 @@ export type MealType = z.infer<typeof mealTypeSchema>;
 
 const gramRangeSchema = z.tuple([z.number().positive(), z.number().positive()]);
 
+/** A food's energy and macros per 100 g. */
+export const per100gSchema = z.object({
+  kcal: z.number().nonnegative().max(900), proteinG: z.number().nonnegative().max(100),
+  carbsG: z.number().nonnegative().max(100), fatG: z.number().nonnegative().max(100),
+}).strict();
+export type Per100g = z.infer<typeof per100gSchema>;
+
 export const mealItemSchema = z.object({
   name: z.string(), canonical: z.string(), gramsPoint: z.number().positive(), gramsRange: gramRangeSchema,
   portionSource: portionSourceSchema, nutritionSource: nutritionSourceSchema,
   kcalPoint: z.number().int().nonnegative(), kcalLow: z.number().int().nonnegative(), kcalHigh: z.number().int().nonnegative(),
   proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
+  /** An estimate row's own figures (ROADMAP 7a-iii-b). No table holds that food,
+   *  so the meal carries them, and its grams can be changed after saving without
+   *  a lookup; every other row is priced again from its table by canonical. */
+  per100g: per100gSchema.optional(),
 });
 export type MealItem = z.infer<typeof mealItemSchema>;
 

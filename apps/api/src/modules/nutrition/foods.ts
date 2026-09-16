@@ -39,7 +39,7 @@ export interface CuratedFood extends FoodReference {
 
 /** A name's words joined by "_", in lower case with accents folded, so "Müller"
  *  is "muller" and "crème fraîche" "creme_fraiche". */
-const slug = (v: string): string =>
+export const slug = (v: string): string =>
   v.normalize("NFKD").replaceAll(/\p{M}/gu, "").toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
 
 /** Foods renamed to say what their numbers are, or to carry an English name
