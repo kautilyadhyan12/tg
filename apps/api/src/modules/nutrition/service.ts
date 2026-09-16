@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { isNoValueWord, type ChosenItem, type Meal, type MealItem, type MealPhotoItem, type VisionEvidence, type VisionItem } from "@app/shared";
+import { isNoValueWord, shownFoodName, type ChosenItem, type Meal, type MealItem, type MealPhotoItem, type VisionEvidence } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
@@ -480,19 +480,18 @@ export function scanSheet(
     const shown = label.replaceAll(/[_\s]+/g, " ").trim();
     if (!isNoValueWord(shown) && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
   };
-  const shownName = (item: VisionItem): string => (isNoValueWord(item.name) ? item.canonical_hint : item.name);
   for (const label of evidence.unknown_items) nameUnknown(label);
   const taken = new Set<string>();
   for (const [at, item] of evidence.items.entries()) {
     const price = prices[at];
     if (price === undefined || price.kind === "none") {
-      nameUnknown(shownName(item));
+      nameUnknown(shownFoodName(item));
       continue;
     }
     let food: FoodReference;
     let portion: PortionResult;
     if (price.kind === "estimate") {
-      food = estimateFood(shownName(item), price.per100g, price.grams, taken);
+      food = estimateFood(shownFoodName(item), price.per100g, price.grams, taken);
       portion = seenPortion(price.grams, item.count);
     } else if (price.food.source === "usda") {
       // A USDA food is served as an estimate is, by the grams the model saw. Its

@@ -16,6 +16,8 @@ import {
   visionCostMicro,
 } from "../src/modules/nutrition/vision.adapter.js";
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import type { ScanPrice } from "../src/modules/nutrition/scanMatch.js";
+import { scanSheet } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
 import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, MEAL_VESSELS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
@@ -542,6 +544,16 @@ describe("P2.6a nutrition pure pipeline", () => {
       expect(evidence.items.map((i) => i.name), String(count)).toEqual(Array.from({ length: MAX_SCAN_FOODS }, (_, at) => `Food ${String(at + 1)}`));
       expect(evidence.unknown_items, String(count)).toEqual(["Mystery sauce", ...Array.from({ length: count - MAX_SCAN_FOODS }, (_, at) => `Food ${String(MAX_SCAN_FOODS + at + 1)}`)]);
     }
+    // A food past them whose name says there is none is named by its hint, as its row would be, and the sheet
+    // shows it under "Not in the total" beside the rest.
+    const nameless = ["N/A", "zqx vlorp", null, null, null, null, 100, 145, 9, 19, 4];
+    const { evidence: long } = await createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+      meal_name: "x", items: [...Array.from({ length: MAX_SCAN_FOODS }, (_, at) => food(at)), nameless, food(MAX_SCAN_FOODS + 1)], unknown_items: ["Mystery sauce"], photo_quality: "good",
+    })).analyze("AA==", "image/jpeg");
+    expect(long.unknown_items).toEqual(["Mystery sauce", "zqx vlorp", "Food 22"]);
+    const priced = long.items.map((): ScanPrice => ({ kind: "estimate", per100g: { kcal: 145, proteinG: 9, carbsG: 19, fatG: 4 }, grams: 100, overruled: null }));
+    const sheet = scanSheet(long, priced, []);
+    expect([sheet.items.length, sheet.unknownItems]).toEqual([MAX_SCAN_FOODS, ["Mystery sauce", "zqx vlorp", "Food 22"]]);
     // More than 30 is no plate's reply, as the contract has always said.
     await expect(reply(31).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
   });

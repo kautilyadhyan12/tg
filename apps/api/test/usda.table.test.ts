@@ -128,6 +128,13 @@ d("the USDA food table (real Postgres)", () => {
     [90_000_059, "fndds", "Zqxsgourd, canned, cooked", 56],
     [90_000_060, "sr_legacy", "Zqxsgourd, raw", 26],
     [90_000_061, "fndds", "Zqxsgourd pie", 80],
+    // Mushrooms, as USDA has them: a plain pickled entry and a longer one cooked
+    // with oil, 24 kcal apart.
+    [90_000_062, "fndds", "Zqxsmush, pickled", 46],
+    [90_000_063, "fndds", "Zqxsmush, fresh, cooked with oil", 70],
+    // A food whose two ways are 30 kcal apart, and both near 600.
+    [90_000_064, "fndds", "Zqxsnut, raw", 580],
+    [90_000_065, "fndds", "Zqxsnut, dry roasted, with salt added", 610],
   ];
 
   const load = async (): Promise<void> => {
@@ -323,6 +330,14 @@ d("the USDA food table (real Postgres)", () => {
       expect(await scanned("zqxsgourd", 75)).toEqual([90_000_058, "head"]);
       // 100, good to 30: neither is near, the canned one 4 kcal nearer.
       expect(await scanned("zqxsgourd", 100)).toEqual([90_000_058, "head"]);
+    });
+
+    it("never lets an entry past the estimate's error tie with one inside it by more than 10 kcal", async () => {
+      // 80, good to 24, and no entry is 80: cooked with oil (70) is 10 off, inside; pickled (46) is 34 off, outside and
+      // 24 further — within 24 of the nearest, but not as near.
+      expect(await scanned("zqxsmush", 80)).toEqual([90_000_063, "head"]);
+      // 610, good to 183: raw (580) and roasted (610) are both inside, 30 kcal apart, so as near: the plainest, raw.
+      expect(await scanned("zqxsnut", 610)).toEqual([90_000_064, "head"]);
     });
 
     it("measures the nearest within the name's own step, and never leaves that step for a nearer dish", async () => {

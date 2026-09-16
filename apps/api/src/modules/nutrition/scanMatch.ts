@@ -45,8 +45,9 @@ export function estimatePer100g(item: Pick<VisionItem, "grams" | "kcal" | "prote
 
 /** What the model saw a food's energy as, per 100 g, and how far off that estimate
  *  can be: 30 %, or 10 kcal — the same tolerance the model's own macros are held
- *  to against its kcal (above). Two USDA entries whose distances from the estimate
- *  differ by less than that cannot be told apart by it (`repo.usdaFoodForScan`). */
+ *  to against its kcal (above). Every USDA entry that close to the estimate is as
+ *  near as any other; so is one within 10 kcal of the nearest entry
+ *  (`repo.usdaFoodForScan`). */
 export interface EnergySeen { kcal: number; slack: number }
 
 export function energySeen(estimate: Per100g | null): EnergySeen | null {
@@ -75,7 +76,8 @@ export interface ScanLookups {
   /** Our own list, by whole words (`findCurated`). */
   ourList(hint: string): FoodReference | null;
   /** The USDA table: the food itself by name, then every word; among the entries
-   *  a name finds equally, one whose energy agrees with what the model saw. */
+   *  a name finds equally, the plainest of those as near to what the model saw as
+   *  its estimate can tell. */
   usda(hint: string, seen: EnergySeen | null): Promise<FoodReference | null>;
   /** A packaged product whose name holds every word. */
   packaged(hint: string): Promise<FoodReference | null>;

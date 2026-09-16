@@ -59,7 +59,8 @@ export const MAX_PHOTO_COUNT = 30;
  *  cap is 1,000 (`vision.adapter.ts`), so about 24 fit. A reply cut off at the cap
  *  is no JSON at all: the scan fails as unreadable, and so does its free retake. A
  *  reply that lists more anyway is still read: its first MAX_SCAN_FOODS foods are
- *  the sheet's rows and the rest are named in unknown_items. */
+ *  the sheet's rows and the rest are named in unknown_items, each by the name a row
+ *  would show (`shownFoodName`). */
 export const MAX_SCAN_FOODS = 20;
 
 /** The most foods a reply may list at all, the bound this contract has had since
@@ -103,6 +104,11 @@ const mealVisionItemSchema = z.tuple([
 /** A scanned item as the api reads it, by name. */
 export type VisionItem = z.infer<typeof mealVisionItemSchema>;
 
+/** The name a scanned food is shown by: its own, or its canonical_hint where its
+ *  name says there is none ("N/A"). */
+export const shownFoodName = (item: Pick<VisionItem, "name" | "canonical_hint">): string =>
+  isNoValueWord(item.name) ? item.canonical_hint : item.name;
+
 export const mealVisionEvidenceSchema = z.preprocess(dropFields(RETIRED_EVIDENCE_FIELDS), z.object({
   // A photo with no meal on it has no meal name; the retake path answers it.
   // "none", "N/A" and "null" are no name, as they are for a size.
@@ -113,7 +119,7 @@ export const mealVisionEvidenceSchema = z.preprocess(dropFields(RETIRED_EVIDENCE
 }).strict().transform((evidence) => (evidence.items.length <= MAX_SCAN_FOODS ? evidence : {
   ...evidence,
   items: evidence.items.slice(0, MAX_SCAN_FOODS),
-  unknown_items: [...evidence.unknown_items, ...evidence.items.slice(MAX_SCAN_FOODS).map((item) => item.name)],
+  unknown_items: [...evidence.unknown_items, ...evidence.items.slice(MAX_SCAN_FOODS).map(shownFoodName)],
 })));
 export type VisionEvidence = z.infer<typeof mealVisionEvidenceSchema>;
 

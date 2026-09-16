@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · 7a-iii-b: the re-check of 4dd4a3d fixed (1 High, 3 Low); the re-check of these fixes next (branch `scanner-prices-every-food`)
+
+- CI green on 4dd4a3d, all six checks (run 35100211807; migrations skipped).
+- High: an entry outside the model's error tied with one inside it (mushrooms at 80 → "Mushrooms, pickled" 46). Now the reviewer's rule: an entry ties if it is within the model's error (`EnergySeen.slack`) of what it saw, or within 10 kcal (`ENERGY_SLACK_KCAL`) of the nearest entry of its step. The real function on the loaded table (13,225 rows) gives the reviewer's simulated column on all 24 of its cases: mushrooms 80 and plantain 250 → "cooked with oil"; pumpkin 50/75/100/150 → "Pumpkin, cooked"; sweet corn 130 → "Corn, sweet, yellow, frozen, kernels on cob, unprepared" (98; was "white, raw" 86); apricots 77 → "frozen, sweetened" (98); the rest unchanged.
+- The reviewer's class sweep through the real function: 5,267 cases; an entry outside the error picked while one inside existed 110 times (732 before), none more than 10 kcal further than the nearest entry (the most 10.0).
+- Lows: a nameless food past the 20th is named by its hint, by one rule the sheet shares (`shownFoodName`); the spec's two lines say "calories per 100 g … more than three times, and more than 10 kcal" and "the plainest entry whose energy is near the model's"; `scanMatch.ts`'s two comments and the ROADMAP line say the rule as it now is.
+- Tests: `usda.table` +1 (mushrooms at 80; a food both of whose ways are inside a wide error) · `nutrition.unit`'s overflow test runs a nameless 21st food through `scanSheet`.
+- Verified: shared tsc 0 · eslint 0 · 107/107 · api tsc 0 · eslint src test tools 0 · `nutrition.scan.unit` + `nutrition.unit` + `usda.table` + `nutrition.scan.routes` 103/103 on local Postgres · 5 deliberate breaks each red (the old rule, no error margin, no 10 kcal, overflow named by `item.name`, the sheet dropping unknown_items), files restored identical (sha256). Full suite left to CI.
+- Next: push, CI, the fresh-chat re-check of these fixes only (§6), Kd's click-through, merge on Kd's word; then 7a-iv.
+
 ## 2026-09-16 · 7a-iii-b: the re-check of 23ba391 fixed (1 High, 2 Low); merge on Kd's word (branch `scanner-prices-every-food`)
 
 - CI green on 23ba391, all six checks (run 35096798653; migrations skipped, none changed).

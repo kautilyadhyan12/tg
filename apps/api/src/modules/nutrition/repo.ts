@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import { ENERGY_SLACK_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
@@ -714,19 +715,20 @@ export type UsdaScanMatch = "name" | "head" | "words";
  *  Within either step, the entries the name finds equally are the same food made
  *  different ways — "Radishes, raw" at 16 kcal per 100 g and "Radishes, pickled" at
  *  34 — and the model's own energy (`seen`) says which is on the plate:
- *  3. THE NEAREST, AS FAR AS THE ESTIMATE CAN TELL: every entry whose distance
- *     from the model's energy is within `seen.slack` of the nearest entry's is as
- *     near, since the estimate is no better than that, and the plainest of them
- *     wins, as below. So a few kcal never name a way of cooking the photo does
- *     not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not "Pumpkin,
- *     canned, cooked" (56) — and "egg" at 140 is never "Egg, whole, raw, frozen,
- *     salted, pasteurized" (138). An entry further off than that is not: radishes
- *     at 16 are "Radishes, raw" (16), never "Radishes, pickled" (34). The step
- *     still comes first, and the nearest is measured within it: the energy only
- *     chooses among entries the name supports, so "apple" at 52 is "Apple, raw"
- *     (61) where it was "Apple, dried" (243), and "orange" at 47 stays "Orange,
- *     raw" where the nearest of every match would be "Orange juice, 100%, NFS"
- *     (measured on the loaded table, 2026-09-16).
+ *  3. AS NEAR AS THE ESTIMATE CAN TELL: every entry within `seen.slack` of the
+ *     model's energy (its error), and every entry within 10 kcal of the nearest
+ *     one (the model's rounding, `ENERGY_SLACK_KCAL`), is as near, and the
+ *     plainest of them wins, as below. So a few kcal never name a way of cooking
+ *     the photo does not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not
+ *     "Pumpkin, canned, cooked" (56) — and "egg" at 140 is never "Egg, whole, raw,
+ *     frozen, salted, pasteurized" (138). An entry past both is not, however plain:
+ *     radishes at 16 are "Radishes, raw" (16), never "Radishes, pickled" (34), and
+ *     mushrooms at 80 "Mushrooms, fresh, cooked with oil" (70), never "Mushrooms,
+ *     pickled" (46). The step still comes first, and the nearest is measured within
+ *     it: the energy only chooses among entries the name supports, so "apple" at 52
+ *     is "Apple, raw" (61) where it was "Apple, dried" (243), and "orange" at 47
+ *     stays "Orange, raw" where the nearest of every match would be "Orange juice,
+ *     100%, NFS" (measured on the loaded table, 2026-09-16).
  *  Then the survey release (FNDDS) before SR Legacy, the fewest-worded description,
  *  and USDA's id, so a scan reads the same food every time. With no estimate
  *  (`seen` null) the order is that alone. A food with no energy or macro figure
@@ -763,7 +765,7 @@ export async function usdaFoodForScan(
            CASE step WHEN 0 THEN 'name' WHEN 1 THEN 'head' ELSE 'words' END AS match
     FROM matched
     ORDER BY step ASC,
-             (distance <= min(distance) OVER (PARTITION BY step) + ${slack}::float8) DESC,
+             (distance <= greatest(${slack}::float8, min(distance) OVER (PARTITION BY step) + ${ENERGY_SLACK_KCAL}::float8)) DESC,
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT 1`;
   const r = rows[0];
