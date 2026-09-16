@@ -350,20 +350,40 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
   });
 }
 
-/** What one chosen item comes to for its food: grams as sent · a saved dish of
- *  THIS person's (another's is refused, never priced) × how full, weighed by the
- *  food's own cup · one of the food's own measures × how many, looked up in the
- *  server's list for that food, so a measure the food does not have is refused
- *  and no request says what a measure weighs. The dish and the measure are kept
- *  on the item, by the name the list or the person gave them. */
+/** Every chosen item's food's measures, `[i]` for `foods[i]`, with ONE read of the
+ *  USDA measures they share, and none where every item is sent by the gram: the
+ *  review of PR #76 (L4) found a read per item, one after another, on every
+ *  preview of a photo sheet, whose rows all go by measure. */
+async function measuresForChosen(
+  deps: Pick<NutritionDeps, "sql">,
+  chosen: readonly ChosenItem[],
+  foods: readonly FoodReference[],
+): Promise<FoodMeasure[][]> {
+  if (chosen.every((item) => "grams" in item)) return foods.map(() => []);
+  return await measuresOf(deps, foods);
+}
+
+/** Each chosen item beside its food and that food's measures, in order. */
+const withFoods = <T>(chosen: readonly ChosenItem[], foods: readonly T[], measures: readonly FoodMeasure[][]): { chosen: ChosenItem; food: T; measures: readonly FoodMeasure[] }[] =>
+  chosen.flatMap((item, at) => {
+    const food = foods[at];
+    return food === undefined ? [] : [{ chosen: item, food, measures: measures[at] ?? [] }];
+  });
+
+/** What one chosen item comes to for its food, whose measures the caller has read
+ *  (`measuresForChosen`): grams as sent · a saved dish of THIS person's (another's
+ *  is refused, never priced) × how full, weighed by the food's own cup · one of the
+ *  food's own measures × how many, looked up in the server's list for that food, so
+ *  a measure the food does not have is refused and no request says what a measure
+ *  weighs. The dish and the measure are kept on the item, by the name the list or
+ *  the person gave them. */
 async function amountOf(
   deps: NutritionDeps,
   userId: string,
   chosen: ChosenItem,
-  food: FoodReference,
+  measures: readonly FoodMeasure[],
 ): Promise<{ grams: number; dishwareRung: "user_dishware" | null; measure: LoggedMeasure | null }> {
   if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
-  const [measures = []] = await measuresOf(deps, [food]);
   const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
   if ("dishwareId" in chosen) {
     const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
@@ -786,31 +806,38 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
  *  so it is EXCLUDED from the Stage-5 correction pair entirely — an addition is
  *  not an estimate error; DECISIONS 2026-07-17). ONE implementation for confirm
  *  and preview so live math cannot diverge from what is saved (T3). */
-async function resolveDraftItem(
+async function resolveDraftItems(
   deps: NutritionDeps,
   userId: string,
   draft: Draft,
-  chosen: ChosenItem,
-): Promise<{ item: MealItem; original: MealItem | null }> {
-  const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-  const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
-  if (food !== undefined && estimate !== undefined) {
-    // User-chosen amount collapses the range; a dishware measure overrides the
-    // rung to 'user_dishware', otherwise the estimate's rung is preserved.
-    const amount = await amountOf(deps, userId, chosen, food);
-    const rung = amount.dishwareRung ?? estimate.portionSource;
-    return {
-      item: nutritionItem(food, amount.grams, [amount.grams, amount.grams], rung, amount.measure),
-      original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
-    };
+  chosenItems: readonly ChosenItem[],
+): Promise<{ item: MealItem; original: MealItem | null }[]> {
+  const found: { food: FoodReference; estimate: Draft["items"][number] | null }[] = [];
+  for (const chosen of chosenItems) {
+    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
+    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
+    if (food !== undefined && estimate !== undefined) {
+      found.push({ food, estimate });
+      continue;
+    }
+    const extra = await findFood(deps, chosen.canonical);
+    if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+    found.push({ food: extra, estimate: null });
   }
-  const extra = await findFood(deps, chosen.canonical);
-  if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-  const amount = await amountOf(deps, userId, chosen, extra);
-  return {
-    item: nutritionItem(extra, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure),
-    original: null,
-  };
+  const measures = await measuresForChosen(deps, chosenItems, found.map((f) => f.food));
+  const resolved: { item: MealItem; original: MealItem | null }[] = [];
+  for (const { chosen, food: { food, estimate }, measures: own } of withFoods(chosenItems, found, measures)) {
+    const amount = await amountOf(deps, userId, chosen, own);
+    // User-chosen amount collapses the range; a dishware measure overrides the rung
+    // to 'user_dishware', otherwise the estimate's rung is preserved.
+    resolved.push(estimate === null
+      ? { item: nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure), original: null }
+      : {
+          item: nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? estimate.portionSource, amount.measure),
+          original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
+        });
+  }
+  return resolved;
 }
 
 /** Resolve every chosen item against the draft (extras included) into the meal
@@ -825,8 +852,7 @@ async function buildConfirmItems(
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
-  for (const chosen of input.items) {
-    const { item, original } = await resolveDraftItem(deps, userId, draft, chosen);
+  for (const { item, original } of await resolveDraftItems(deps, userId, draft, input.items)) {
     items.push(item);
     // Only ESTIMATED items form the Stage-5 correction pair. An added item was
     // never estimated, so it belongs to the meal but not to the estimate-error
@@ -893,11 +919,16 @@ async function resolveChosenItems(
   userId: string,
   chosenItems: readonly ChosenItem[],
 ): Promise<MealItem[]> {
-  const items: MealItem[] = [];
+  const foods: FoodReference[] = [];
   for (const chosen of chosenItems) {
     const food = await findFood(deps, chosen.canonical);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-    const amount = await amountOf(deps, userId, chosen, food);
+    foods.push(food);
+  }
+  const measures = await measuresForChosen(deps, chosenItems, foods);
+  const items: MealItem[] = [];
+  for (const { chosen, food, measures: own } of withFoods(chosenItems, foods, measures)) {
+    const amount = await amountOf(deps, userId, chosen, own);
     items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure));
   }
   return items;
@@ -935,12 +966,8 @@ export async function previewMeal(
     return { items, totals: totals(items) };
   }
   const draft = await peekDraft(deps, userId, input.scanToken);
-  const items: MealItem[] = [];
-  for (const chosen of input.items) {
-    // Same resolution as confirmMeal (extras + dishware included) so preview == save.
-    const { item } = await resolveDraftItem(deps, userId, draft, chosen);
-    items.push(item);
-  }
+  // Same resolution as confirmMeal (extras + dishware included) so preview == save.
+  const items = (await resolveDraftItems(deps, userId, draft, input.items)).map(({ item }) => item);
   return { items, totals: totals(items) };
 }
 
@@ -973,6 +1000,7 @@ export async function patchMeal(
   let items = before.items;
   if (input.items !== undefined) {
     items = [];
+    const found: { food: FoodReference; saved: MealItem | undefined }[] = [];
     for (const [at, chosen] of input.items.entries()) {
       // The saved item this one is: the one at the same place in the meal where it
       // is the same food — a meal can hold one food twice, and each keeps its own
@@ -985,7 +1013,11 @@ export async function patchMeal(
       // carries (it has no table); anything else by its table, as it was saved.
       const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, chosen.canonical));
       if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-      const amount = await amountOf(deps, userId, chosen, food);
+      found.push({ food, saved });
+    }
+    const measures = await measuresForChosen(deps, input.items, found.map((f) => f.food));
+    for (const { chosen, food: { food, saved }, measures: own } of withFoods(input.items, found, measures)) {
+      const amount = await amountOf(deps, userId, chosen, own);
       // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
       // rung (same rule as confirmMeal) — only items new to the meal are
       // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they

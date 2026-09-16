@@ -26,11 +26,18 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { VisionProvider } from "../src/modules/nutrition/vision.adapter.js";
+import * as repo from "../src/modules/nutrition/repo.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaPortion, type UsdaRelease } from "../tools/usda-files.js";
 
 const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), httpIntegration: vi.fn() }));
 vi.mock("@sentry/node", () => sentry);
+// The USDA measures read, counted and passed through to the real one: a photo sheet's
+// preview reads them once, not once a row (the review of PR #76, L4).
+vi.mock("../src/modules/nutrition/repo.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/modules/nutrition/repo.js")>();
+  return { ...real, usdaPortionsFor: vi.fn(real.usdaPortionsFor) };
+});
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -336,6 +343,13 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     const sheet = await scan(gus, plate(DAL));
     // The grams the model saw, as for a person with no dish saved: 150 g, not 400 × ¾ = 300.
     expect(sheet.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 150, portionSource: "default", startsAt: { measure: "g", amount: 150 } });
+    // Nor is the dish one of the measures a count starts a row at (the review of PR
+    // #76): one katori of dal the model saw at 350 g is within 30 % of the 400 g the
+    // dish holds of dal (its cup is 240 g, a gram a millilitre), and of no measure
+    // the dal has (one 240 g cup is 110 g off) — so it starts at the photo's grams.
+    const counted = await scan(gus, plate(seen("Dal", "dal", [350, 508, 21, 58, 9], { vessel: "katori", fill: 1, count: 1 })));
+    expect(counted.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 350, startsAt: { measure: "g", amount: 350 }, portionEstimated: true });
+    expect(counted.items[0]?.measures.map((m) => m.id)).not.toContain("dish");
   }, 60_000);
 
   it("gives a table food three times from the model's own energy way to the estimate", async () => {
@@ -549,8 +563,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         }
         // The draft behind the sheet holds the same foods and the same measures: sent as
         // the sheet sends each row, by the measure it starts at, each is what the sheet shows.
+        const portionReads = vi.mocked(repo.usdaPortionsFor);
+        portionReads.mockClear();
         const res = await injectOn(target, "POST", "/v1/nutrition/meals/preview", access, { scanToken: sheet.scanToken, items: sheet.items.map((i) => ({ canonical: i.canonical, measure: i.startsAt.measure, amount: i.startsAt.amount })) });
         expect(res.statusCode, res.body).toBe(200);
+        // Every row goes by measure, and all their measures are ONE read.
+        expect(portionReads).toHaveBeenCalledTimes(1);
         const preview = mealPreviewSchema.parse(res.json());
         expect(preview.items.map((i) => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint])).toEqual(rows.map(([name, source, , grams, kcal]) => [name, source, grams, kcal]));
       }, 60_000);

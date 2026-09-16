@@ -944,8 +944,11 @@ function PhotoModal({ open, onClose, onSave }) {
     ...rowCanonicals.filter((_, j) => j !== row),
     ...analysis.items.map((item) => item.canonical).filter((_, j) => j !== row),
   ]);
-  // The total is "about" while any food in it is the scanner's own estimate.
-  const aboutTotal = rowSources.includes('estimate');
+  // The total is "about" while any row is an estimate (RULINGS 2026-09-16): a food
+  // the scanner itself priced, or a portion still at the photo's own guess (the
+  // review of PR #76, L1).
+  const aboutTotal = rowSources.includes('estimate')
+    || (analysis !== null && analysis.items.some((item, i) => item.portionEstimated && rowAtScan(i)));
   // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
@@ -988,9 +991,27 @@ function PhotoModal({ open, onClose, onSave }) {
   // unusable) must NOT be shown — the card's rule is withhold-until-the-server-
   // answers, and with extras present a stale total is not what will be saved.
   const liveNow = live !== null && live.key === payloadKey ? live.data : null;
-  // The grams the server has worked out for row i as it stands, or the scan's
-  // while the row is as the scan started it; null while neither is known.
-  const rowGrams = (i) => liveNow?.items?.[i]?.gramsPoint ?? (rowAtScan(i) ? analysis.items[i].gramsPoint : null);
+  // The grams row i holds: the server's answer for the sheet as it stands; else —
+  // before it answers, or where it cannot — what the row's own measure weighs, how
+  // many times the grams one of it weighs on the server's own list, to the whole
+  // gram, as the server works it out. Null for a saved dish the server has not
+  // weighed, and for an amount that is no amount (the review of PR #76, H1: a row
+  // moved and not priced yet was taken at the scan's grams).
+  const rowGrams = (i) => {
+    const priced = liveNow?.items?.[i]?.gramsPoint;
+    if (Number.isFinite(priced)) return priced;
+    const choice = pickerChoices(rowFood(i), dishware).find((c) => c.key === amounts[i]?.key);
+    const amount = parseFloat(amounts[i]?.amount);
+    if (choice?.kind !== 'measure' || !Number.isFinite(amount) || amount <= 0) return null;
+    const grams = Math.round(amount * choice.grams);
+    return grams >= 1 && grams <= MAX_GRAMS ? grams : null;
+  };
+  // Why "Change food" waits, while the row's grams are not known.
+  const changeHold = (i) => {
+    const choice = pickerChoices(rowFood(i), dishware).find((c) => c.key === amounts[i]?.key);
+    if (choice?.kind !== 'dish') return 'Pick an amount first.';
+    return parseFloat(amounts[i]?.amount) > 0 ? 'Working out the grams…' : 'Pick how full it was first.';
+  };
 
   const handleConfirm = async () => {
     if (!analysis || saving || !allValid) return;
@@ -1066,9 +1087,12 @@ function PhotoModal({ open, onClose, onSave }) {
   const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setOpenRow(null); setLive(null); };
   // The food picked for a scanned row takes its place at the row's own grams, by the
   // gram: the measures the row had were the food it replaced. The server prices it
-  // (never the browser) once the preview asks.
+  // (never the browser) once the preview asks. With no grams to keep, nothing is
+  // changed ("Change food" waits for them).
   const changeRow = (i, food) => {
-    const at = { key: 'g', amount: String(Math.round(rowGrams(i) ?? analysis.items[i].gramsPoint)) };
+    const grams = rowGrams(i);
+    if (grams === null) return;
+    const at = { key: 'g', amount: String(grams) };
     // Undo gives back the scanned food as it stood before its first Change.
     setChangeUndo((prev) => ({ ...prev, [i]: { before: replaced[i] === undefined ? amounts[i] : prev[i]?.before ?? startingValue(analysis.items[i]), at } }));
     setReplaced((prev) => ({ ...prev, [i]: food }));
@@ -1079,16 +1103,17 @@ function PhotoModal({ open, onClose, onSave }) {
     setLive(null);
   };
   // Undo puts the scanned food back: at the measure and amount it held while the
-  // row is still at the grams Change kept, else at the grams the row holds now.
+  // row is still at the grams Change kept, else by the gram at the grams the row
+  // holds now — or as it held where those grams are not known (a dish not weighed).
   const undoChange = (i) => {
     const undo = changeUndo[i];
     const untouched = undo !== undefined && amounts[i]?.key === undo.at.key && amounts[i]?.amount === undo.at.amount;
-    const grams = liveNow?.items?.[i]?.gramsPoint ?? analysis.items[i].gramsPoint;
+    const grams = rowGrams(i);
     setReplaced((prev) => without(prev, i));
     setChangeUndo((prev) => without(prev, i));
     setDishUndo((prev) => without(prev, i));
     setBeforeDish((prev) => without(prev, i));
-    setAmounts((prev) => ({ ...prev, [i]: untouched ? undo.before : { key: 'g', amount: String(Math.round(grams)) } }));
+    setAmounts((prev) => ({ ...prev, [i]: untouched || grams === null ? undo?.before ?? startingValue(analysis.items[i]) : { key: 'g', amount: String(grams) } }));
     setLive(null);
   };
 
@@ -1399,7 +1424,12 @@ function PhotoModal({ open, onClose, onSave }) {
                       const choice = pickerChoices(food, dishware).find((c) => c.key === amounts[i]?.key) ?? null;
                       // A row started at the photo's own grams is the scanner's
                       // guess until the person sets an amount (ROADMAP 7a-iv-b).
-                      const portionMark = rowAtScan(i) && item.portionEstimated ? `~${item.gramsPoint} g · estimate` : null;
+                      // A start at a measure (no grams from the photo) reads that measure (the review of PR #76, L2).
+                      const portionMark = !(rowAtScan(i) && item.portionEstimated) ? null
+                        : item.startsAt.measure === 'g' ? `~${item.gramsPoint} g · estimate`
+                          : `~${amountSummary(choice, amounts[i]?.amount, item.gramsPoint)} · estimate`;
+                      // "Change food" keeps the row's grams, so it waits while they are not known (H1).
+                      const canChange = rowGrams(i) !== null;
                       return (
                         <div key={key} className="rounded-2xl" style={rowBox(isOpen, false)}>
                           <button type="button" aria-expanded={isOpen} onClick={() => toggleRow(key)}
@@ -1449,19 +1479,20 @@ function PhotoModal({ open, onClose, onSave }) {
                                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
                                   Kept the dish's {dishUndo[i].grams} g ·{' '}
                                   <button type="button" onClick={() => undoDishKept(i)}
-                                          className="underline decoration-dotted"
+                                          className="min-h-11 underline decoration-dotted"
                                           style={{ color: 'rgba(255,255,255,0.75)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                                     Undo
                                   </button>
                                 </p>
                               )}
                               <div className="flex items-center gap-4 text-xs">
-                                <button type="button"
+                                <button type="button" disabled={!canChange}
                                         onClick={() => setChanging(changing === i ? null : i)}
                                         className="min-h-11 font-semibold underline decoration-dotted"
-                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: canChange ? 'pointer' : 'default', opacity: canChange ? 1 : 0.5 }}>
                                   Change food
                                 </button>
+                                {!canChange && <span style={{ color: 'rgba(255,255,255,0.50)' }}>{changeHold(i)}</span>}
                                 {changed && (
                                   <button type="button"
                                           onClick={() => undoChange(i)}
@@ -1471,7 +1502,7 @@ function PhotoModal({ open, onClose, onSave }) {
                                   </button>
                                 )}
                               </div>
-                              {changing === i && (
+                              {changing === i && canChange && (
                                 <div className="p-2.5 rounded-xl space-y-2"
                                      style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
                                   <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>

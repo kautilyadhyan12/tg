@@ -121,9 +121,22 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     expect(lineOf(row('avocado toast')).textContent).toContain('Estimate · 150 g');
   });
 
+  it('reads "about" while a portion is still the photo’s own guess, and plainly once it is the person’s (the review of PR #76, L1)', async () => {
+    svc.previewMeal = vi.fn(async ({ items }) => ({ data: { items: items.map((i) => item(i.canonical, i.canonical, 'curated', i.amount, 100)), totals: totals(items.length * 100) } }));
+    scanReturns([scanned('Avocado', 'avocado', 'curated', 100, 160)]);
+    const row = await scanPlate();
+    expect(screen.getByText('about 160 kcal')).toBeTruthy();
+    open(row('Avocado'));
+    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'More' }));
+    expect(await screen.findByText('100 kcal', { selector: 'p' })).toBeTruthy();
+    expect(screen.queryByText(/about \d/)).toBeNull();
+  });
+
   it('reads a plain total, and credits no table, where every food is on our own list', async () => {
     svc.previewMeal = vi.fn(async () => { throw new Error('no preview'); });
-    scanReturns([scanned('Avocado', 'avocado', 'curated', 100, 160), scanned('Eggs (scrambled)', 'eggs_scrambled', 'curated', 50, 75)]);
+    // Both started at a measure the photo's count agreed with: nothing on the sheet is an estimate.
+    const atMeasure = (food, canonical, grams, kcal) => scanned(food, canonical, 'curated', grams, kcal, { measures: [{ id: 'serving', name: 'piece', grams }], startsAt: { measure: 'serving', amount: 1 }, portionEstimated: false });
+    scanReturns([atMeasure('Avocado', 'avocado', 100, 160), atMeasure('Eggs (scrambled)', 'eggs_scrambled', 50, 75)]);
     await scanPlate();
     expect(screen.getByText('235 kcal')).toBeTruthy();
     expect(screen.queryByText(/about/)).toBeNull();
@@ -165,8 +178,9 @@ describe('Change on a scanned row', () => {
       { canonical: 'off_4901392000034', measure: 'serving', amount: 1 }, { canonical: 'usda_fndds_123', measure: 'g', amount: 120 },
     ];
     await waitFor(() => expect(svc.previewMeal).toHaveBeenLastCalledWith({ scanToken: SCAN_TOKEN, items: sent }));
-    expect(await screen.findByText('400 kcal')).toBeTruthy();
-    expect(screen.queryByText(/about \d/)).toBeNull();
+    // The toast is no scanner's estimate any more, but the avocado and the pumpkin are still at
+    // the photo's own grams, so the total still reads "about" (the review of PR #76, L1).
+    expect(await screen.findByText('about 400 kcal')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm & log meal' }));
     await waitFor(() => expect(svc.confirmMeal).toHaveBeenCalledTimes(1));
@@ -234,6 +248,50 @@ describe('the measure on a changed row', () => {
     await waitFor(() => expect(within(row('Bagel, toasted')).getByText(/^Protein 5g/)).toBeTruthy());
     fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
     expect(pickerOf(row('bread'))).toEqual(['grams', '70']);
+  });
+
+  // The review of PR #76 (H1): a row moved and not priced yet — the server's answer
+  // still to come, or failing — is still the amount its own measure weighs.
+  describe('on a row moved before the server has priced it', () => {
+    beforeEach(() => {
+      svc.previewMeal = vi.fn(async () => { throw new Error('the server has not answered'); });
+    });
+
+    it('keeps the grams the row’s own measure weighs, never the scan’s', async () => {
+      const row = await scanPlate();
+      open(row('bread'));
+      fireEvent.change(within(row('bread')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '4' } });
+      expect(lineOf(row('bread')).textContent).toContain('4 × slice');
+      await changeTo(row, 'bread', bagel);
+      // Four 30 g slices are 120 g, not the scan's 60.
+      expect(pickerOf(row('Bagel, toasted'))).toEqual(['grams', '120']);
+    });
+
+    it('gives the scanned food back as it stood on Undo while the grams are what Change kept, and by the gram at the grams its measure weighs otherwise', async () => {
+      const row = await scanPlate();
+      open(row('bread'));
+      fireEvent.change(within(row('bread')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '4' } });
+      await changeTo(row, 'bread', bagel);
+      fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
+      expect(pickerOf(row('bread'))).toEqual(['slice · 30 g', '4']);
+      // Changed, moved to one 95 g bagel, and put back: by the gram at 95.
+      await changeTo(row, 'bread', bagel);
+      fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Measure' }));
+      fireEvent.click(within(row('Bagel, toasted')).getByRole('option', { name: 'bagel · 95 g' }));
+      fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
+      expect(pickerOf(row('bread'))).toEqual(['grams', '95']);
+    });
+
+    it('holds "Change food" while the row is a saved dish not weighed yet, and says why', async () => {
+      svc.listDishware = vi.fn(async () => ({ data: { items: [{ id: 'd-1', label: 'My blue bowl', containerClass: 'cereal_bowl', volumeMl: 360, foodHint: null, createdAt: '2026-09-16T10:00:00.000Z' }], nextCursor: null } }));
+      const row = await scanPlate();
+      open(row('bread'));
+      fireEvent.click(within(row('bread')).getByRole('button', { name: 'Measure' }));
+      fireEvent.click(await within(row('bread')).findByRole('option', { name: 'My blue bowl · 360 ml' }));
+      const change = within(row('bread')).getByRole('button', { name: 'Change food' });
+      expect(change.disabled).toBe(true);
+      expect(within(row('bread')).getByText('Pick how full it was first.')).toBeTruthy();
+    });
   });
 });
 

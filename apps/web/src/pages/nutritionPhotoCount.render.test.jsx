@@ -80,6 +80,15 @@ describe('the photo sheet as a short list', () => {
     expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
   });
 
+  it('reads a row the photo gave no grams by the measure it starts at, still an estimate (the review of PR #76, L2)', async () => {
+    const APPLE = item('Apple', 'apple', 180, { measures: [{ id: 'serving', name: 'apple', grams: 180 }], startsAt: { measure: 'serving', amount: 1 }, portionEstimated: true });
+    scanReturns([APPLE]);
+    const row = await scanPlate();
+    expect(lineOf(row('Apple')).textContent).toBe('AppleOur list · ~1 × apple · 180 g · estimate120 kcal');
+    open(row('Apple'));
+    expect(pickerOf(row('Apple'))).toEqual(['apple · 180 g', '1']);
+  });
+
   it('opens one food at a time, and closes it again on a second tap', async () => {
     const row = await scanPlate();
     open(row('Chicken nuggets'));
@@ -163,13 +172,14 @@ describe('where a scanned row starts', () => {
   it('shows the scan’s own numbers only while every row is as the scan started it', async () => {
     const row = await scanPlate();
     expect(within(row('Chicken nuggets')).getByText('120 kcal')).toBeTruthy();
-    expect(screen.getByText('240 kcal')).toBeTruthy();
+    // "about": the grapes are still at the photo's own grams (the review of PR #76, L1).
+    expect(screen.getByText('about 240 kcal')).toBeTruthy();
     // One row moved and no server answer: neither it, the other row nor the total is the scan's any more.
     open(row('Grapes'));
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'More' }));
     expect(within(row('Chicken nuggets')).queryByText('120 kcal')).toBeNull();
     expect(within(lineOf(row('Chicken nuggets'))).getByText('…')).toBeTruthy();
-    expect(screen.queryByText('240 kcal')).toBeNull();
+    expect(screen.queryByText(/240 kcal/)).toBeNull();
     expect(screen.getByText('Adding up your ingredients…')).toBeTruthy();
   });
 });
