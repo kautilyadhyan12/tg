@@ -44,6 +44,10 @@ const PORRIDGE = `usda_fndds_${String(PORRIDGE_ID)}`;
 /** SR Legacy nuts, whose half cup weighs 70 g: a millilitre of them is 70 / 120 g. */
 const NUTS_ID = 90_000_402;
 const NUTS = `usda_sr_${String(NUTS_ID)}`;
+/** Frozen greens as SR Legacy writes frozen kale (169239): a first row of amount 0,
+ *  94 g for a 10 oz package, beside the package's real 284 g. */
+const GREENS_ID = 90_000_403;
+const GREENS = `usda_sr_${String(GREENS_ID)}`;
 const APPLE_ID = 171_688;
 
 const entry = (fdcId: number, description: string, kcal: number, portions: UsdaPortion[]): UsdaEntry => {
@@ -104,6 +108,7 @@ d("adding a food by measure (real Postgres)", () => {
       ["fndds", [entry(PORRIDGE_ID, "Zqxmeasure porridge, cooked", 71, [at(1, "1 cup", 234, null), at(2, "1 tablespoon", 15, null)])]],
       ["sr_legacy", [
         entry(NUTS_ID, "Zqxmeasure nuts, raw", 607, [at(1, "cup", 70, 0.5), at(2, "nut", 1.2), at(3, "oz", 28.35)]),
+        entry(GREENS_ID, "Zqxmeasure greens, frozen", 29, [at(0, "package (10 oz)", 94, 0), at(1, "cup", 67, 0.33), at(2, "package (10 oz)", 284), at(3, "Guideline amount per cup of vegetable", 30, null)]),
         ...(wroteApple
           ? [entry(APPLE_ID, "Apples, raw, with skin (Includes foods for USDA's Food Distribution Program)", 52, [
               at(1, "cup, quartered or chopped", 125), at(2, "cup slices", 109), at(3, "large (3-1/4\" dia)", 223),
@@ -149,6 +154,12 @@ d("adding a food by measure (real Postgres)", () => {
     // A packaged product: its label's pack.
     const pot = (await search("zqxmeasure yogurt")).find((f) => f.canonical === "off_zqxmeasure_pot");
     expect(brief(pot)).toEqual([["serving pot 125", "g g 1", ounce], { measure: "serving", amount: 1 }]);
+
+    // Never a row of amount 0 whose text states none, nor a survey filler: the
+    // greens' package is its real 284 g, and the importer served it by its cup.
+    const greens = (await search("zqxmeasure greens")).find((f) => f.canonical === GREENS);
+    expect(brief(greens)).toEqual([["usda-1 0.33 cup 67", "usda-2 package (10 oz) 284", "g g 1", ounce], { measure: "usda-1", amount: 1 }]);
+    expect([greens?.serving, greens?.unit]).toEqual([67, "0.33 cup"]);
   }, 60_000);
 
   let mealId = "";
@@ -183,6 +194,9 @@ d("adding a food by measure (real Postgres)", () => {
     expect(errorOf(await manual(alice, [{ canonical: "apple", measure: "usda-99", amount: 1 }]))).toEqual([400, "unknown_measure"]);
     // USDA's porridge serves by its cup, which is its first measure, not a serving of its own.
     expect(errorOf(await manual(alice, [{ canonical: PORRIDGE, measure: "serving", amount: 1 }]))).toEqual([400, "unknown_measure"]);
+    // The greens' 94 g "package" row and their survey filler are no measures to log by.
+    expect(errorOf(await manual(alice, [{ canonical: GREENS, measure: "usda-0", amount: 1 }]))).toEqual([400, "unknown_measure"]);
+    expect(errorOf(await manual(alice, [{ canonical: GREENS, measure: "usda-3", amount: 1 }]))).toEqual([400, "unknown_measure"]);
     // Not a measure id at all, and no amount a meal item may weigh.
     expect(errorOf(await manual(alice, [{ canonical: "apple", measure: "cup", amount: 1 }]))).toEqual([400, "validation_error"]);
     expect(errorOf(await manual(alice, [{ canonical: "apple", measure: "g", amount: 10_001 }]))).toEqual([400, "validation_error"]);
@@ -234,6 +248,24 @@ d("adding a food by measure (real Postgres)", () => {
     expect(regrammed.statusCode, regrammed.body).toBe(200);
     const [apple] = mealOf(regrammed.body).items;
     expect([apple?.gramsPoint, apple?.measure]).toEqual([200, undefined]);
+
+    // A meal can hold one food twice: each keeps its own measure, matched by its
+    // place in the meal, whichever of the two is measured.
+    const twice = async (items: unknown[], resend: unknown[]) => {
+      const created = await manual(alice, items);
+      expect(created.statusCode, created.body).toBe(201);
+      const edited = await inject("PATCH", `/v1/nutrition/meals/${mealOf(created.body).id}`, alice, { items: resend });
+      expect(edited.statusCode, edited.body).toBe(200);
+      return mealOf(edited.body).items.map((i) => [i.canonical, i.gramsPoint, i.measure?.name ?? null]);
+    };
+    expect(await twice(
+      [{ canonical: "apple", grams: 100 }, { canonical: "apple", measure: "usda-4", amount: 1 }],
+      [{ canonical: "apple", grams: 100 }, { canonical: "apple", grams: 182 }, { canonical: NUTS, measure: "usda-2", amount: 10 }],
+    )).toEqual([["apple", 100, null], ["apple", 182, "medium (3\" dia)"], [NUTS, 12, "nut"]]);
+    expect(await twice(
+      [{ canonical: "apple", measure: "usda-4", amount: 1 }, { canonical: "apple", grams: 182 }],
+      [{ canonical: "apple", grams: 182 }, { canonical: "apple", grams: 182 }],
+    )).toEqual([["apple", 182, "medium (3\" dia)"], ["apple", 182, null]]);
 
     // A stranger can neither read the meal nor change it by a measure.
     expect((await inject("GET", `/v1/nutrition/meals/${mealId}`, bob)).statusCode).toBe(404);

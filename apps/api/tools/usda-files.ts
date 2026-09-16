@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { usdaMeasureName, type UsdaPortion } from "../src/modules/nutrition/measures.js";
+import { isHouseholdMeasure, usdaMeasureName, type UsdaPortion } from "../src/modules/nutrition/measures.js";
 
 // A household measure's name is the app's own rule (ROADMAP 7a-iv-a: the measures
 // a food is logged by), read by the importer for a food's serving and by the
@@ -292,7 +292,10 @@ export function usdaTableFromCsv(csv: UsdaCsv, release: UsdaRelease): Map<number
  *  by the gram (ROADMAP 7a-iii-a). `portions` arrives in USDA's own `seq_num`
  *  order, which is what "first" means — not the order the file lists them in. */
 export function usdaServing(portions: readonly UsdaPortion[]): { grams: number; unit: string } {
-  const first = portions[0];
+  // A row that is no household measure (an amount of 0 its text does not state,
+  // a survey filler) is never the serving: frozen kale was served by a
+  // "package (10 oz)" of 94 g.
+  const first = portions.find(isHouseholdMeasure);
   return first === undefined ? { grams: 100, unit: "g" } : { grams: first.gramWeight, unit: usdaMeasureName(first) };
 }
 

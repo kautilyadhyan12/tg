@@ -88,6 +88,24 @@ export function chosenItemFor(canonical, choice, amountText) {
   return amount <= MAX_AMOUNT ? { canonical, measure: choice.id, amount } : null;
 }
 
+/** Whether a measure's amount comes to less than a gram, which the server weighs
+ *  to the whole gram and refuses as nothing ("0.4" g, a quarter of a 1.2 g nut).
+ *  A dish's grams are the server's alone (the food's own cup), so its refusal
+ *  comes back from the preview instead (`amountRefusal`). */
+export function comesToUnderAGram(choice, amountText) {
+  const amount = parseFloat(amountText);
+  return choice?.kind === 'measure' && Number.isFinite(amount) && amount > 0 && Math.round(amount * choice.grams) < 1;
+}
+
+/** What the server's refusal of an amount says to the person, by its code, or
+ *  null for any other failure: never "try searching for it again" when the food
+ *  was found and the amount was the problem. */
+const AMOUNT_REFUSALS = new Map([
+  ['portion_out_of_range', 'That amount is too small or too large to log — pick another amount.'],
+  ['unknown_measure', "That measure isn't one of this food's — pick one from the list."],
+]);
+export const amountRefusal = (err) => AMOUNT_REFUSALS.get(err?.response?.data?.error) ?? null;
+
 /** An amount as a person reads it: no float noise ("1.5", "0.25"). */
 export const formatAmount = (amount) => String(Math.round(Number(amount) * 100) / 100);
 

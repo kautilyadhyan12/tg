@@ -29,25 +29,53 @@ export interface UsdaPortion {
 /** A measure's leading amount, where its text carries one ("1 cup", "1/2 cup"). */
 const LEADING_AMOUNT = /^(\d*\.?\d+|\d+\/\d+)\s+(\S.*)$/;
 
-/** A measure's name as the screen can hold it: at most forty characters, cut at
- *  a SPACE and never through a word. SR Legacy writes whole sentences into the
- *  column ("3 oz with bone, cooked (yield after bone and fat removed)"), and a
- *  blind cut at forty left 110 of the table's 129 longest names ending mid-word
- *  — "3 oz with bone, cooked (yield after bone" — and 19 ending in a space
- *  (counted 2026-09-16 on the loaded table). A dangling comma or bracket goes,
- *  from a short name as from a cut one, so what is left reads as words: SR
- *  Legacy's own "cup," (fdc 175258) is a cup. */
+/** A measure's name as the screen can hold it: at most forty characters. SR Legacy
+ *  writes whole sentences into the column ("3 oz with bone, cooked (yield after
+ *  bone and fat removed)"); 762 of the table's measures, in 692 foods, run past
+ *  forty (counted 2026-09-16). A long name is cut where a clause of it ends —
+ *  before a bracket or at a comma: "3 oz with bone, cooked" — never inside a
+ *  bracket it leaves open ("(yield after"), and never through a word. Nothing is
+ *  cut so short it cannot be told apart — a long "cup, chopped into …" must never
+ *  read as a plain "cup", the food's own cup (`gramsPerMl`): a clause end that
+ *  would leave fewer than half the allowance is passed over for the last space,
+ *  and a bracket whose dropping would do the same is closed instead ("unit (yield
+ *  from 1 lb ready-to-cook…)"). A dangling comma or bracket goes, from a short
+ *  name as from a cut one: SR Legacy's own "cup," (fdc 175258) is a cup. */
 const MEASURE_NAME_MAX = 40;
+const CLAUSE_MIN = MEASURE_NAME_MAX / 2;
 const DANGLING = /[\s,;:([{-]+$/u;
 const readable = (name: string): string => {
   const whole = name.trim().replace(DANGLING, "");
-  if (whole.length <= MEASURE_NAME_MAX) return whole;
+  // USDA's own text can leave a bracket open ("potato large (3" to 4-1/4" dia."):
+  // a short name gets it closed.
+  if (whole.length <= MEASURE_NAME_MAX) return whole.lastIndexOf("(") > whole.lastIndexOf(")") ? `${whole})` : whole;
   const cut = whole.slice(0, MEASURE_NAME_MAX);
+  const clauseEnd = Math.max(cut.lastIndexOf(" ("), cut.lastIndexOf(","));
   const lastSpace = cut.lastIndexOf(" ");
   // One word longer than the whole allowance has no space to cut at; it is cut
   // where it must be rather than left to overflow the screen.
-  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(DANGLING, "");
+  const piece = clauseEnd >= CLAUSE_MIN ? cut.slice(0, clauseEnd) : lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+  const open = piece.lastIndexOf("(");
+  if (open <= piece.lastIndexOf(")")) return piece.replace(DANGLING, "");
+  const before = piece.slice(0, open).replace(DANGLING, "");
+  return before.length >= CLAUSE_MIN ? before : `${piece.replace(DANGLING, "")}…)`;
 };
+
+/** The survey release's own filler rows, which name no amount anyone could pick:
+ *  "Guideline amount per fl oz of beverage" and its kind (315 rows in 192 foods,
+ *  counted 2026-09-16), and "Quantity not specified" (the importer drops those
+ *  already). Matched on the name, amount aside ("1 guideline amount per item"). */
+const SURVEY_FILLER = /^(?:guideline amount|quantity not specified)/i;
+
+/** Whether a USDA row is a household measure a person can pick: its amount is
+ *  known, and it is no survey filler. SR Legacy writes an amount of 0 on 18 rows
+ *  (counted 2026-09-16) whose gram weight is no amount of what the text names —
+ *  frozen kale's "package (10 oz)" at 94 g beside its real 284 g — so a row with
+ *  an amount of 0 is a measure only where its own text states the amount. */
+export function isHouseholdMeasure(portion: Pick<UsdaPortion, "amount" | "unit">): boolean {
+  if (portion.amount === 0 && !LEADING_AMOUNT.test(portion.unit.trim())) return false;
+  return !SURVEY_FILLER.test(usdaMeasureName(portion));
+}
 
 /** What one of this measure is called, by the same rule the packaged-product
  *  reader uses for a label's serving (`openfoodfacts.adapter.ts`): one of it is
@@ -76,11 +104,14 @@ export function usdaMeasureName(portion: Pick<UsdaPortion, "amount" | "unit">): 
 
 /** What a food's measures are made from: its own serving (grams of one `unit`)
  *  and the USDA household measures of the entry it is, or cites — none where it
- *  has no USDA entry, or the table is not loaded. */
+ *  has no USDA entry, or the table is not loaded. `ownServing` is false for a food
+ *  of the USDA table, whose serving is one of those measures by construction
+ *  (`usdaServing`), and so is never a measure of its own. */
 export interface MeasureSource {
   serving: number;
   unit: string;
   portions: readonly UsdaPortion[];
+  ownServing: boolean;
 }
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -90,28 +121,36 @@ const sameWeight = (a: number, b: number): boolean => Math.abs(a - b) < 0.05;
  *  gives only grams or millilitres are ("30 g", "250 ml"). */
 const byWeight = (unit: string): boolean => sameName(unit, "g") || sameName(unit, "ml");
 
+/** A serving of one ounce, as two tables round it (28 g on our list, 28.35 g on
+ *  USDA's): within half a gram of the international ounce. */
+const isOneOunce = (grams: number): boolean => Math.abs(grams - OUNCE.grams) <= 0.5;
+
 /** A food's own serving as a measure, or null where another measure already is
  *  it: grams cover a serving of 100 g by weight (and a label that gives no weight
- *  reads as that, `servingOf`), the ounce covers our list's "oz" servings, and a
- *  USDA measure of the same name and weight is the same measure. A serving by
- *  weight is called "serving". */
+ *  reads as that, `servingOf`), the ounce covers an "oz" serving, and a USDA
+ *  measure of the same NAME is that measure, whatever either table rounds its
+ *  weight to — our milk's "cup" of 240 g beside USDA's 244 was two cups on one
+ *  list. A serving by weight is called "serving". */
 function servingMeasure(source: MeasureSource, usda: readonly FoodMeasure[]): FoodMeasure | null {
   const { serving, unit } = source;
-  if (!(serving > 0 && serving <= MAX_ITEM_GRAMS)) return null;
+  if (!source.ownServing || !(serving > 0 && serving <= MAX_ITEM_GRAMS)) return null;
   if (byWeight(unit)) return serving === 100 ? null : { id: "serving", name: "serving", grams: serving };
   if (sameName(unit, OUNCE.name) || unit.trim() === "") return null;
-  if (usda.some((m) => sameName(m.name, unit) && sameWeight(m.grams, serving))) return null;
+  if (usda.some((m) => sameName(m.name, unit))) return null;
   return { id: "serving", name: unit.trim().slice(0, 60), grams: serving };
 }
 
 /** Every measure the food can be logged by, in the order a picker shows them: its
- *  own serving, USDA's measures in USDA's own order, grams, ounces. A USDA measure
- *  that weighs nothing or more than one item of a meal may, or is plainly grams or
- *  an ounce, or repeats an earlier one's name and weight (SR Legacy lists beef
- *  jerky's "oz" twice), is left out. */
+ *  own serving, USDA's measures in USDA's own order, grams, ounces. A USDA row that
+ *  is no household measure (`isHouseholdMeasure`), weighs nothing or more than one
+ *  item of a meal may, is plainly grams or an ounce, or repeats an earlier one's
+ *  name and weight (SR Legacy lists beef jerky's "oz" twice), is left out. Two USDA
+ *  measures of one name and two weights stay: they are USDA's own two sizes (a
+ *  granola bar of 21 g and one of 25), told apart by their grams. */
 export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   const usda: FoodMeasure[] = [];
   for (const portion of source.portions) {
+    if (!isHouseholdMeasure(portion)) continue;
     const name = usdaMeasureName(portion);
     if (!(portion.gramWeight > 0 && portion.gramWeight <= MAX_ITEM_GRAMS)) continue;
     if (sameName(name, GRAM.name) || sameName(name, OUNCE.name)) continue;
@@ -123,14 +162,19 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
 }
 
 /** The measure and amount a food starts at when it is picked: its own serving
- *  once, as the measure of that name and weight; grams of it, for a serving by
- *  weight; an ounce, for our list's "oz" servings. */
-export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
+ *  once; else the USDA measure its serving names — of the same weight first, then
+ *  of the same name (the one that took the serving's place); else a USDA food's
+ *  first measure; an ounce, for a serving of one ounce; else the serving's grams
+ *  (dark chocolate served by 30 g starts at 30 g, not at an ounce's 28). */
+export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
   const { serving, unit } = source;
+  const usda = measures.filter((m) => m.id.startsWith("usda-"));
   const own = measures.find((m) => m.id === "serving") ??
-    measures.find((m) => m.id.startsWith("usda-") && sameName(m.name, unit) && sameWeight(m.grams, serving));
+    usda.find((m) => sameName(m.name, unit) && sameWeight(m.grams, serving)) ??
+    usda.find((m) => sameName(m.name, unit)) ??
+    (source.ownServing ? undefined : usda[0]);
   if (own !== undefined) return { measure: own.id, amount: 1 };
-  if (sameName(unit, OUNCE.name)) return { measure: OUNCE.id, amount: 1 };
+  if (sameName(unit, OUNCE.name) && isOneOunce(serving)) return { measure: OUNCE.id, amount: 1 };
   return { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
 }
 

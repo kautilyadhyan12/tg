@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   FILL_CHOICES,
   MAX_AMOUNT,
+  amountRefusal,
   amountStep,
   choiceLabel,
   chosenItemFor,
+  comesToUnderAGram,
   itemText,
   pickerChoices,
   startingValue,
@@ -44,7 +46,10 @@ describe('what the picker offers', () => {
 describe('where a picked food starts', () => {
   it('at the measure and amount the server named', () => {
     expect(startingValue(apple)).toEqual({ key: 'serving', amount: '1' });
+    // Never simply the first measure: wherever in the list the named one is.
+    expect(startingValue({ ...apple, startsAt: { measure: 'usda-4', amount: 2 } })).toEqual({ key: 'usda-4', amount: '2' });
     expect(startingValue({ ...apple, startsAt: { measure: 'g', amount: 100 } })).toEqual({ key: 'g', amount: '100' });
+    expect(startingValue({ ...apple, startsAt: { measure: 'oz', amount: 1.5 } })).toEqual({ key: 'oz', amount: '1.5' });
   });
 
   it('at its first measure once, or its serving in grams, where the server named none it has', () => {
@@ -106,6 +111,49 @@ describe('what the picker sends', () => {
 
   it('a dish is filled a quarter at a time, never assumed full', () => {
     expect(FILL_CHOICES.map((f) => f.value)).toEqual([0.25, 0.5, 0.75, 1]);
+  });
+});
+
+describe('an amount that comes to less than a gram', () => {
+  const nut = { kind: 'measure', id: 'usda-1', name: 'nut', grams: 1.2 };
+  const grams = { kind: 'measure', id: 'g', name: 'g', grams: 1 };
+
+  // The server weighs to the whole gram: 0.4 g is nothing, 0.5 g rounds to 1 g.
+  it.each([
+    [grams, '0.4', true],
+    [grams, '0.49', true],
+    [grams, '0.5', false],
+    [grams, '1', false],
+    [nut, '0.25', true],
+    [nut, '0.42', false],
+    [nut, '0', false],
+    [nut, '', false],
+    [nut, 'abc', false],
+  ])('%o × %s: %s', (choice, typed, under) => {
+    expect(comesToUnderAGram(choice, typed)).toBe(under);
+  });
+
+  it('is never judged for a dish, whose grams are the server’s alone', () => {
+    expect(comesToUnderAGram(pickerChoices(apple, [bowl]).at(-1), '0.25')).toBe(false);
+    expect(comesToUnderAGram(null, '0.1')).toBe(false);
+  });
+});
+
+describe('what a refused amount says', () => {
+  const refusal = (error, status = 400) => ({ response: { status, data: { error } } });
+
+  it.each([
+    ['portion_out_of_range', 'That amount is too small or too large to log — pick another amount.'],
+    ['unknown_measure', "That measure isn't one of this food's — pick one from the list."],
+    ['unknown_food', null],
+    ['invalid_scan', null],
+  ])('%s: %j', (code, text) => {
+    expect(amountRefusal(refusal(code))).toBe(text);
+  });
+
+  it('says nothing of its own for a failure with no reply', () => {
+    expect(amountRefusal(new Error('Network Error'))).toBeNull();
+    expect(amountRefusal(undefined)).toBeNull();
   });
 });
 

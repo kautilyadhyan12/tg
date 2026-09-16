@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
 import { resetTimezoneSync, syncTimezone, userService } from '../api/userApi';
 import { forgetDoor, forgetJoinCode } from '../pages/landingRoute';
+import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -181,6 +182,8 @@ export function AuthProvider({ children }) {
       // A poster's code kept for this sign-in goes too, or the next person
       // finds it filled in, one tap from asking to join a gym they never chose.
       forgetJoinCode();
+      // And an unsaved meal scan: its photo and foods are this person's alone.
+      forgetUnsavedScan();
     }
   };
 

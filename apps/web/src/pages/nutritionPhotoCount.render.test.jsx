@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -31,7 +32,7 @@ beforeEach(() => {
     },
   }));
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); forgetUnsavedScan(); });
 
 async function scanPlate() {
   render(
@@ -92,6 +93,7 @@ describe('the photo sheet count stepper', () => {
     await scan([item('Chicken nuggets', 'chicken_nuggets', 96, 6)], ['mango lassi', 'black garlic relish']);
     expect(screen.getByText('Not in the total: mango lassi, black garlic relish — add them with “Add an ingredient” above if needed.')).toBeTruthy();
     cleanup();
+    forgetUnsavedScan(); // or Photo Log brings the unsaved scan above back
     // A meal holding the most items has no "Add an ingredient" to point at.
     await scan([item('Chicken nuggets', 'chicken_nuggets', 96, 6), ...many], ['mango lassi']);
     expect(screen.queryByRole('button', { name: 'Add an ingredient' })).toBeNull();

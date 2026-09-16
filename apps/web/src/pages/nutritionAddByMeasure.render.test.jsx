@@ -6,12 +6,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
 vi.mock('../api/nutritionApi', async (importOriginal) => ({ ...(await importOriginal()), nutritionService: svc }));
 
 const Nutrition = (await import('./Nutrition')).default;
+const toast = (await import('react-hot-toast')).default;
 
 const apple = {
   canonical: 'apple', name: 'Apple', kcal: 52, proteinG: 0.26, carbsG: 13.81, fatG: 0.17, fiberG: 2.4, serving: 180, unit: 'apple', source: 'curated',
@@ -73,7 +75,7 @@ const choose = (label) => {
   fireEvent.click(screen.getByRole('option', { name: label }));
 };
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.clearAllMocks(); forgetUnsavedScan(); });
 
 describe('adding a food by measure', () => {
   it("starts at the measure the server named, steps and switches measures, and sends the measure and how many", async () => {
@@ -162,6 +164,59 @@ describe('adding a food by measure', () => {
     expect(screen.getByText(/That is more than 10,000 g/)).toBeTruthy();
   });
 
+  it('starts a food at the measure the server named when that is not its first', async () => {
+    renderPage();
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [{ ...apple, startsAt: { measure: 'usda-4', amount: 0.5 } }] } }));
+    await pickApple();
+    expect(picked()).toBe('medium (3" dia) · 182 g');
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('0.5');
+    await waitFor(() => expect(svc.previewMeal).toHaveBeenCalledWith({ items: [{ canonical: 'apple', measure: 'usda-4', amount: 0.5 }] }));
+  });
+
+  it('refuses an amount that comes to less than a gram, and says so rather than that the food failed', async () => {
+    renderPage();
+    await pickApple();
+    choose('g');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
+    expect(screen.getByRole('button', { name: 'Amount is too small' }).disabled).toBe(true);
+    expect(screen.getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.5' } });
+    expect(screen.queryByText('That comes to less than 1 g — pick a larger amount.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add Apple' }).disabled).toBe(false);
+  });
+
+  it('says what the server refused in the amount it was asked to price, and holds Add until another is picked', async () => {
+    renderPage({ dishware: [bowl] });
+    // The server weighs a dish by the food's own cup: this one refuses a quarter bowl.
+    svc.previewMeal = vi.fn(async ({ items: [item] }) => {
+      if (item.fillLevel === 0.25) throw Object.assign(new Error('400'), { response: { status: 400, data: { error: 'portion_out_of_range' } } });
+      return previewOf(Math.round(360 * item.fillLevel));
+    });
+    await pickApple();
+    await waitFor(() => expect(offered()).toContain('My blue bowl · 360 ml'));
+    choose('My blue bowl · 360 ml');
+    fireEvent.click(screen.getByRole('button', { name: '¼' }));
+    expect(await screen.findByText('That amount is too small or too large to log — pick another amount.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pick another amount' }).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '½' }));
+    expect(await screen.findByText('= 180 g')).toBeTruthy();
+    expect(screen.queryByText('That amount is too small or too large to log — pick another amount.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add Apple' }).disabled).toBe(false);
+  });
+
+  it('says a refused amount on saving is the amount, not the food', async () => {
+    renderPage();
+    svc.logManualMeal = vi.fn(async () => {
+      throw Object.assign(new Error('400'), { response: { status: 400, data: { error: 'unknown_measure' } } });
+    });
+    await pickApple();
+    await screen.findByText('= 180 g');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Apple' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("That measure isn't one of this food's — pick one from the list."));
+  });
+
   it('reads a saved meal by the measure each food was logged by', async () => {
     const at = new Date();
     at.setHours(8, 30, 0, 0);
@@ -181,5 +236,57 @@ describe('adding a food by measure', () => {
       }],
     });
     expect(await screen.findByText('Apple: 1.5 × medium (3" dia), 273g · Oats 40g')).toBeTruthy();
+  });
+});
+
+describe('an ingredient added on the photo sheet', () => {
+  const dal = {
+    name: 'Dal (lentil curry)', canonical: 'dal_lentil_curry', gramsPoint: 132, gramsRange: [132, 132], portionSource: 'default', nutritionSource: 'curated',
+    kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4, pieces: null,
+  };
+
+  async function scanAndAddApple() {
+    renderPage();
+    URL.createObjectURL = vi.fn(() => 'blob:meal');
+    svc.analyzePhoto = vi.fn(async () => ({
+      data: {
+        scanToken: 't'.repeat(40), mealName: 'Dal plate', items: [dal], unknownItems: [], photoQuality: 'good',
+        totals: { kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4 }, confirmed: false,
+      },
+    }));
+    svc.previewMeal = vi.fn(async () => ({ data: { items: [dal], totals: dal } }));
+    svc.confirmMeal = vi.fn(async () => ({ data: {} }));
+    fireEvent.click(await screen.findByRole('button', { name: /Log meal from photo/ }));
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['x'], 'meal.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText('Dal plate');
+    fireEvent.click(screen.getByRole('button', { name: 'Add an ingredient' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. milk, sugar, oil...'), { target: { value: 'apple' } });
+    fireEvent.click((await screen.findByText('Apple')).closest('button'));
+    return screen.findByRole('button', { name: 'Measure' });
+  }
+
+  it('is picked by measure and saved as the measure and how many', async () => {
+    await scanAndAddApple();
+    expect(picked()).toBe('apple · 180 g');
+    choose('medium (3" dia) · 182 g');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & log meal' }));
+    await waitFor(() => expect(svc.confirmMeal).toHaveBeenCalledTimes(1));
+    expect(svc.confirmMeal.mock.calls[0][0].items).toEqual([
+      { canonical: 'dal_lentil_curry', grams: 132 },
+      { canonical: 'apple', measure: 'usda-4', amount: 1.5 },
+    ]);
+  });
+
+  it('says on its own row when it comes to less than a gram', async () => {
+    await scanAndAddApple();
+    choose('g');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
+    expect(screen.getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Confirm & log meal' })).toBeNull();
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1' } });
+    expect(screen.queryByText('That comes to less than 1 g — pick a larger amount.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Confirm & log meal' })).toBeTruthy();
   });
 });

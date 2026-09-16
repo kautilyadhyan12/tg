@@ -7,7 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { MEAL_SCAN_TTL_SECONDS } from '@app/shared';
+import { UNSAVED_SCAN_KEPT_MS, forgetUnsavedScan } from '../components/nutrition/unsavedScan';
+import { setCurrentUserId } from '../utils/storage';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -43,19 +44,29 @@ beforeEach(() => {
     },
   }));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); forgetUnsavedScan(); setCurrentUserId(null); });
 
 const openPhotoLog = async () => fireEvent.click(await screen.findByRole('button', { name: /Log meal from photo/ }));
+const renderPage = () => render(
+  <MemoryRouter initialEntries={['/nutrition']}>
+    <Nutrition />
+  </MemoryRouter>,
+);
+/** Scan a plate. Returns the window the scan came back in: its time is between
+ *  `before` and `after`, so a clock set from them is sure of the side it is on. */
 async function scanPlate() {
-  render(
-    <MemoryRouter initialEntries={['/nutrition']}>
-      <Nutrition />
-    </MemoryRouter>,
-  );
+  const before = Date.now();
+  renderPage();
   await openPhotoLog();
   fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['x'], 'meal.jpg', { type: 'image/jpeg' })] } });
   await screen.findByText('Dal plate');
+  return { before, after: Date.now() };
 }
+/** The X, then the question's own Close. */
+const closeWithoutSaving = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close' }));
+};
 const sheetOpen = () => screen.queryByText('AI Photo Log') !== null;
 /** The dim backdrop around a box, found from the box's own heading — the page has
  *  a fixed decoration of its own before the boxes, which is no backdrop. */
@@ -77,18 +88,40 @@ describe('the photo sheet keeps a scan that is not saved', () => {
     const question = screen.getByRole('alertdialog');
     expect(within(question).getByText('Close without saving?')).toBeTruthy();
     expect(within(question).getByText("This photo already used one of today's scans.")).toBeTruthy();
-    expect(within(question).getByText(`Open Photo Log again within ${MEAL_SCAN_TTL_SECONDS / 60} minutes to pick up where you left off.`)).toBeTruthy();
     fireEvent.click(within(question).getByRole('button', { name: 'Keep editing' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByText('Dal plate')).toBeTruthy();
   });
 
+  // What the question promises is what is left when the X is pressed, from the
+  // scan's own time, whole minutes never rounded up.
+  it.each([
+    [30_500, 'Open Photo Log again within 8 minutes to pick up where you left off.'],
+    [511_000, 'Less than a minute is left to open Photo Log again and pick up where you left off.'],
+  ])('%i ms after the scan, says %j', async (elapsed, text) => {
+    const { after } = await scanPlate();
+    vi.spyOn(Date, 'now').mockReturnValue(after + elapsed);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(within(screen.getByRole('alertdialog')).getByText(text)).toBeTruthy();
+  });
+
+  it('says a scan that can no longer be saved will not come back, and its Close lets it go', async () => {
+    const { after } = await scanPlate();
+    vi.spyOn(Date, 'now').mockReturnValue(after + UNSAVED_SCAN_KEPT_MS);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(within(screen.getByRole('alertdialog')).getByText('It can no longer be saved, so it will not come back.')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close' }));
+    expect(sheetOpen()).toBe(false);
+    // Back at the real time, when the scan was only moments ago: it was let go,
+    // not merely too old.
+    vi.restoreAllMocks();
+    await openPhotoLog();
+    expect(screen.queryByText('Dal plate')).toBeNull();
+    expect(screen.getByText('Snap or upload')).toBeTruthy();
+  });
+
   it('closes without asking when nothing is scanned', async () => {
-    render(
-      <MemoryRouter initialEntries={['/nutrition']}>
-        <Nutrition />
-      </MemoryRouter>,
-    );
+    renderPage();
     await openPhotoLog();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -98,8 +131,7 @@ describe('the photo sheet keeps a scan that is not saved', () => {
   it('brings the same sheet back while the scan can still be saved, with New photo to start over', async () => {
     await scanPlate();
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '150' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close' }));
+    closeWithoutSaving();
     expect(sheetOpen()).toBe(false);
 
     await openPhotoLog();
@@ -116,12 +148,48 @@ describe('the photo sheet keeps a scan that is not saved', () => {
     expect(sheetOpen()).toBe(false);
   });
 
-  it('starts fresh once the scan could no longer be saved', async () => {
+  // Kept for the scan's ten minutes less half a minute, so a sheet brought back
+  // can still be saved: at 569 s it comes back, at 571 s (where the server would
+  // still take it, but only just) it does not.
+  it.each([
+    [569_000, true],
+    [571_000, false],
+  ])('%i ms after the scan, brings it back: %s', async (elapsed, back) => {
+    const { before, after } = await scanPlate();
+    closeWithoutSaving();
+    vi.spyOn(Date, 'now').mockReturnValue(back ? before + elapsed : after + elapsed);
+    await openPhotoLog();
+    expect(screen.queryByText('Dal plate') !== null).toBe(back);
+    expect(screen.queryByText('Snap or upload') !== null).toBe(!back);
+  });
+
+  it('brings the sheet back after the Nutrition page was left, and never to another person', async () => {
     await scanPlate();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close' }));
-    const now = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(now + MEAL_SCAN_TTL_SECONDS * 1000);
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '150' } });
+    closeWithoutSaving();
+    cleanup(); // the page is left
+
+    renderPage();
+    await openPhotoLog();
+    expect(screen.getByText('Dal plate')).toBeTruthy();
+    expect(screen.getByRole('spinbutton').value).toBe('150');
+    expect(svc.analyzePhoto).toHaveBeenCalledTimes(1);
+    closeWithoutSaving();
+    cleanup();
+
+    // Someone else signs in on this tab.
+    setCurrentUserId('another-person');
+    renderPage();
+    await openPhotoLog();
+    expect(screen.queryByText('Dal plate')).toBeNull();
+    expect(screen.getByText('Snap or upload')).toBeTruthy();
+  });
+
+  it('lets a saved scan go', async () => {
+    svc.confirmMeal = vi.fn(async () => ({ data: {} }));
+    await scanPlate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & log meal' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
     await openPhotoLog();
     expect(screen.queryByText('Dal plate')).toBeNull();
     expect(screen.getByText('Snap or upload')).toBeTruthy();

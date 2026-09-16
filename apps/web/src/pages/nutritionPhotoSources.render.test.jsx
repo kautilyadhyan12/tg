@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -48,7 +49,7 @@ beforeEach(() => {
   svc.confirmMeal = vi.fn(async () => ({ data: {} }));
   scanReturns(PLATE);
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); forgetUnsavedScan(); });
 
 const draw = () =>
   render(

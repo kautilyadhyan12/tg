@@ -328,19 +328,24 @@ async function measuresOf(deps: Pick<NutritionDeps, "sql">, foods: readonly Food
   const portions = await repo.usdaPortionsFor(deps.sql, entries.filter((id): id is number => id !== null));
   return foods.map((food, at) => {
     const entry = entries[at] ?? null;
-    return foodMeasures({ serving: food.serving, unit: food.unit, portions: entry === null ? [] : (portions.get(entry) ?? []) });
+    return foodMeasures({ ...servingOfFood(food), portions: entry === null ? [] : (portions.get(entry) ?? []) });
   });
 }
+
+/** A food's serving as its measures read it: a USDA table food's serving is one of
+ *  its own USDA measures, never a measure of its own (`MeasureSource`). */
+const servingOfFood = (food: FoodReference): { serving: number; unit: string; ownServing: boolean } =>
+  ({ serving: food.serving, unit: food.unit, ownServing: food.source !== "usda" });
 
 /** The search box's foods, each with its measures and the one it starts at. */
 async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<FoodSearchItem[]> {
   const measures = await measuresOf(deps, foods);
   return foods.map((food, at) => {
-    const own = measures[at] ?? foodMeasures({ serving: food.serving, unit: food.unit, portions: [] });
+    const own = measures[at] ?? foodMeasures({ ...servingOfFood(food), portions: [] });
     return {
       ...asReference(food),
       measures: own,
-      startsAt: startingMeasure(food, own),
+      startsAt: startingMeasure(servingOfFood(food), own),
     };
   });
 }
@@ -985,10 +990,16 @@ export async function patchMeal(
   let items = before.items;
   if (input.items !== undefined) {
     items = [];
-    for (const chosen of input.items) {
+    for (const [at, chosen] of input.items.entries()) {
+      // The saved item this one is: the one at the same place in the meal where it
+      // is the same food — a meal can hold one food twice, and each keeps its own
+      // measure — else the meal's first of that food.
+      const inPlace = before.items[at];
+      const saved = inPlace !== undefined && inPlace.canonical === chosen.canonical
+        ? inPlace
+        : before.items.find((i) => i.canonical === chosen.canonical);
       // A food the scan estimated is priced by the figures this meal's own item
       // carries (it has no table); anything else by its table, as it was saved.
-      const saved = before.items.find((i) => i.canonical === chosen.canonical);
       const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, chosen.canonical));
       if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
       const amount = await amountOf(deps, userId, chosen, food);

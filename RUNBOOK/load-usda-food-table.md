@@ -2,7 +2,9 @@
 
 **When.** Once per environment, after the migrations have run and before anyone
 uses the food search there (ROADMAP Stage 4 item 1, and 7a-iii-a). Also after a
-future card moves to a newer FoodData Central release.
+future card moves to a newer FoodData Central release, and once again wherever it
+was loaded before 7a-iv-a: a food's serving now skips USDA's rows of amount 0 and
+its "Guideline amount" rows (frozen kale served by a 94 g "package (10 oz)").
 
 **Symptoms that it has not been run.** The food search finds the app's own 318
 foods and packaged products, but no USDA food; `SELECT count(*) FROM usda_foods`

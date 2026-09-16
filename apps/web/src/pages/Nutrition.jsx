@@ -10,17 +10,15 @@ import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker, { SaveDishForm } from '../components/nutrition/MeasurePicker';
-import { FILL_CHOICES, chosenItemFor, itemText, pickerChoices, startingValue } from '../components/nutrition/measures';
+import { FILL_CHOICES, amountRefusal, chosenItemFor, comesToUnderAGram, itemText, pickerChoices, startingValue } from '../components/nutrition/measures';
+import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
+import { getUserId } from '../utils/storage';
 
 // Quoted from @app/shared nutrition.ts chosenItemsSchema — the contract's own
 // bounds (grams .max(10_000), items .max(30)), never numbers invented here.
 // Display/affordance gates only: the server re-validates every request.
 const MAX_GRAMS = 10000;
 const MAX_ITEMS = 30;
-/** How long a closed photo sheet with an unsaved scan comes back when Photo Log is
- *  opened again: the scan's own lifetime on the server, less half a minute, so a
- *  sheet brought back can still be saved (RULINGS 2026-09-16). */
-const UNSAVED_SCAN_KEPT_MS = (MEAL_SCAN_TTL_SECONDS - 30) * 1000;
 
 // Where a scanned food's numbers came from, as the photo sheet tags its row
 // (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
@@ -569,10 +567,13 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   // 5b T3 advisory: say WHY the button is dead rather than just disabling it.
   const typed = parseFloat(amount?.amount);
   const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
+  const tooSmall = comesToUnderAGram(choice, amount?.amount);
 
   // Live server preview for the chosen amount (manual arm — no scanToken). The
   // server prices a measure OR a dish identically (2B). Stale responses dropped;
-  // failures degrade to no numbers.
+  // a refusal of the amount (too small, too large, a measure the food lacks) is
+  // kept with the payload it refused, said, and holds Add; any other failure
+  // degrades to no numbers.
   const chosenKey = JSON.stringify(chosenItem);
   useEffect(() => {
     if (chosenItem === null) { setLive(null); return undefined; }
@@ -583,8 +584,8 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         // Stamp with the payload it priced (T3 5c2) so a result for a PREVIOUS
         // amount/dish is never shown as current — displayed must equal saved.
         if (!stale) setLive({ data: res.data, key: chosenKey });
-      } catch {
-        if (!stale) setLive(null);
+      } catch (err) {
+        if (!stale) setLive(amountRefusal(err) === null ? null : { refusal: amountRefusal(err), key: chosenKey });
       }
     }, 300);
     return () => { stale = true; clearTimeout(timer); };
@@ -592,7 +593,9 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenKey]);
   // Only "live" when it priced the CURRENT payload; otherwise withhold ("…").
-  const shownLive = live?.key === chosenKey ? live.data : null;
+  const shownLive = live?.key === chosenKey && live.data ? live.data : null;
+  const refused = live?.key === chosenKey && live.refusal ? live.refusal : null;
+  const held = chosenItem === null || tooLarge || tooSmall || refused !== null;
 
   const pick = (food) => {
     setSelected(food);
@@ -601,7 +604,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   };
 
   const handleSave = async () => {
-    if (chosenItem === null || tooLarge || saving) return;
+    if (held || saving) return;
     setSaving(true);
     try {
       if (meal) {
@@ -627,15 +630,15 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
       onSave();
       onClose();
     } catch (err) {
-      // A 400 here is usually an item that can no longer be resolved by
-      // canonical — an OFF food picked >24h ago has aged out of the server's
-      // cache (the recorded residual). Say something actionable.
+      // A refused amount says so. Any other 400 is usually an item that can no
+      // longer be resolved by canonical — an OFF food picked >24h ago has aged
+      // out of the server's cache (the recorded residual). Say something actionable.
       toast.error(
-        err.response?.status === 400
+        amountRefusal(err) ?? (err.response?.status === 400
           ? meal
             ? "One of this meal's foods could not be re-checked — try searching for it again."
             : 'That food could not be logged.'
-          : meal ? 'Failed to add the ingredient' : 'Failed to log meal',
+          : meal ? 'Failed to add the ingredient' : 'Failed to log meal'),
       );
     } finally {
       setSaving(false);
@@ -734,6 +737,14 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
                   That is more than {MAX_GRAMS.toLocaleString()} g — pick a smaller amount.
                 </p>
               )}
+              {tooSmall && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                  That comes to less than 1 g — pick a larger amount.
+                </p>
+              )}
+              {!tooLarge && !tooSmall && refused && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>{refused}</p>
+              )}
               {choice?.kind === 'dish' && chosenItem === null && (
                 <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.50)' }}>
                   Pick how full it was — we'll work out the grams.
@@ -741,15 +752,19 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
               )}
               <button
                 onClick={handleSave}
-                disabled={saving || chosenItem === null || tooLarge}
+                disabled={saving || held}
                 className="w-full h-12 rounded-xl font-semibold text-base text-white"
                 style={{
                   background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                   boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
-                  opacity:    saving || chosenItem === null || tooLarge ? 0.6 : 1,
+                  opacity:    saving || held ? 0.6 : 1,
                 }}
               >
-                {saving ? 'Saving…' : tooLarge ? 'Amount is too large' : chosenItem !== null ? `Add ${selected.name}` : (choice?.kind === 'dish' ? 'Pick how full' : 'Enter an amount')}
+                {saving ? 'Saving…'
+                  : tooLarge ? 'Amount is too large'
+                    : tooSmall ? 'Amount is too small'
+                      : refused ? 'Pick another amount'
+                        : chosenItem !== null ? `Add ${selected.name}` : (choice?.kind === 'dish' ? 'Pick how full' : 'Enter an amount')}
               </button>
             </div>
           )}
@@ -797,11 +812,12 @@ function PhotoModal({ open, onClose, onSave }) {
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
   // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
-  // used one of the day's scans, so closing the sheet does not throw it away.
-  // scannedAt is when this sheet's scan came back; confirmingClose is the X's
-  // "Close without saving?" while a scan is unsaved.
+  // used one of the day's scans, so neither closing the sheet nor leaving the page
+  // throws it away (`unsavedScan.js`). scannedAt is when this sheet's scan came
+  // back; confirmingClose is the X's "Close without saving?" while a scan is
+  // unsaved, holding what was left of it (ms) when the X was pressed, or null.
   const [scannedAt,       setScannedAt]       = useState(null);
-  const [confirmingClose, setConfirmingClose] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(null);
   // A row taken from "my dish" back to grams keeps the dish's grams; undoGrams[i]
   // is what the row held before, for its Undo, as "Change" has one.
   const [undoGrams,       setUndoGrams]       = useState({});
@@ -828,27 +844,57 @@ function PhotoModal({ open, onClose, onSave }) {
     setReplaced({});
     setChanging(null);
     setScannedAt(null);
-    setConfirmingClose(false);
+    setConfirmingClose(null);
     setUndoGrams({});
+    forgetUnsavedScan();
+  };
+
+  // An unsaved sheet brought back, as it stood.
+  const loadSheet = ({ scannedAt: at, sheet }) => {
+    setAnalysis(sheet.analysis);
+    setPreview(sheet.preview);
+    setAnalyzing(false);
+    setGrams(sheet.grams);
+    setCounts(sheet.counts);
+    setBases(sheet.bases);
+    setLogAs(sheet.logAs);
+    setLive(null);
+    setRetakeToken(null);
+    setRetakeMsg(null);
+    setSaving(false);
+    setExtras(sheet.extras);
+    setAdding(false);
+    setItemMeasures(sheet.itemMeasures);
+    setReplaced(sheet.replaced);
+    setChanging(null);
+    setScannedAt(at);
+    setConfirmingClose(null);
+    setUndoGrams(sheet.undoGrams);
   };
 
   useEffect(() => {
     if (open) {
-      // An unsaved scan comes back while it can still be saved; anything else
-      // (nothing scanned, saved, or too old) starts a fresh sheet.
-      const unsaved = analysis !== null && scannedAt !== null && Date.now() - scannedAt < UNSAVED_SCAN_KEPT_MS;
-      if (!unsaved) resetSheet();
-      setConfirmingClose(false);
+      // This person's unsaved scan comes back while it can still be saved, from
+      // wherever they left it; anything else starts a fresh sheet.
+      const unsaved = unsavedScanFor(getUserId(), Date.now());
+      if (unsaved) loadSheet(unsaved);
+      else resetSheet();
       loadDishware();
     }
     // The sheet is judged as it stood when it was opened, not on every edit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // The X: a sheet holding an unsaved scan asks first. A click outside the box
-  // never closes it (Kd: only the cross should).
+  // Every change to an unsaved sheet is kept above the page, for its person.
+  useEffect(() => {
+    if (analysis !== null && scannedAt !== null) {
+      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams });
+    }
+  }, [analysis, scannedAt, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams]);
+
+  // The X: a sheet holding an unsaved scan asks first, saying how long it can be
+  // picked up again. A click outside the box never closes it (Kd: only the cross).
   const requestClose = () => {
-    if (analysis !== null && !saving) { setConfirmingClose(true); return; }
+    if (analysis !== null && scannedAt !== null && !saving) { setConfirmingClose(unsavedScanMsLeft(scannedAt, Date.now())); return; }
     onClose();
   };
 
@@ -955,7 +1001,9 @@ function PhotoModal({ open, onClose, onSave }) {
     const item = chosenItemFor(x.food.canonical, choice, x.amount?.amount);
     const typed = parseFloat(x.amount?.amount);
     const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
-    return { item: tooLarge ? null : item, valid: item !== null && !tooLarge, tooLarge };
+    const tooSmall = comesToUnderAGram(choice, x.amount?.amount);
+    const usable = item !== null && !tooLarge && !tooSmall;
+    return { item: usable ? item : null, valid: usable, tooLarge, tooSmall };
   };
   const resolved = analysis === null ? [] : [
     ...analysis.items.map((item, i) => resolveArm(replaced[i]?.canonical ?? item.canonical, grams[i], itemMeasures[i])),
@@ -1042,11 +1090,11 @@ function PhotoModal({ open, onClose, onSave }) {
       onClose();
     } catch (err) {
       toast.error(
-        err.response?.data?.error === 'invalid_scan'
+        amountRefusal(err) ?? (err.response?.data?.error === 'invalid_scan'
           ? `This scan can only be saved for ${MEAL_SCAN_TTL_SECONDS / 60} minutes — take the photo again.`
           : err.response?.status === 400
             ? 'One of the foods could not be logged — try removing or re-adding it.'
-            : 'Failed to log the meal',
+            : 'Failed to log the meal'),
       );
     } finally {
       setSaving(false);
@@ -1124,7 +1172,7 @@ function PhotoModal({ open, onClose, onSave }) {
           }}
         >
           {/* The X's question while a scan is unsaved (RULINGS 2026-09-16). */}
-          {confirmingClose && (
+          {confirmingClose !== null && (
             <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-3xl"
                  style={{ background: 'rgba(10,9,8,0.94)' }}>
               <div role="alertdialog" aria-labelledby="close-scan-title" className="w-full max-w-xs text-center">
@@ -1132,16 +1180,17 @@ function PhotoModal({ open, onClose, onSave }) {
                 <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.70)' }}>
                   This photo already used one of today's scans.
                 </p>
+                {/* What is truly left of the scan, never more. */}
                 <p className="text-xs mb-5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  Open Photo Log again within {MEAL_SCAN_TTL_SECONDS / 60} minutes to pick up where you left off.
+                  {timeLeftText(confirmingClose) ?? 'It can no longer be saved, so it will not come back.'}
                 </p>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setConfirmingClose(false)}
+                  <button type="button" onClick={() => setConfirmingClose(null)}
                           className="flex-1 min-h-11 rounded-xl text-sm font-semibold text-white"
                           style={{ background: 'linear-gradient(135deg, #FF8A1F, #FFB347)' }}>
                     Keep editing
                   </button>
-                  <button type="button" onClick={() => { setConfirmingClose(false); onClose(); }}
+                  <button type="button" onClick={() => { if (confirmingClose <= 0) resetSheet(); setConfirmingClose(null); onClose(); }}
                           className="flex-1 min-h-11 rounded-xl text-sm font-semibold"
                           style={{ color: 'rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
                     Close
@@ -1431,6 +1480,8 @@ function PhotoModal({ open, onClose, onSave }) {
                           Same grams/stepper rules; the SERVER prices them. */}
                       {extras.map((x, j) => {
                         const shown = liveNow?.items?.[analysis.items.length + j];
+                        // Confirm is hidden while any amount is unusable, so the row says why.
+                        const { tooLarge, tooSmall } = resolved[analysis.items.length + j];
                         return (
                           <div key={`${x.food.canonical}-${j}`} className="p-3.5 rounded-2xl"
                                style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
@@ -1465,6 +1516,13 @@ function PhotoModal({ open, onClose, onSave }) {
                                 onDishSaved={loadDishware}
                               />
                             </div>
+                            {(tooLarge || tooSmall) && (
+                              <p className="text-xs mt-2" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                                {tooSmall
+                                  ? 'That comes to less than 1 g — pick a larger amount.'
+                                  : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
