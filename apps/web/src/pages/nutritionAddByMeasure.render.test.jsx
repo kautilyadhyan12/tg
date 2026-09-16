@@ -4,7 +4,7 @@
 // is sent is the measure and how many (never grams the browser worked out), and a
 // saved meal reads by the measure each food was logged by.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
@@ -55,22 +55,38 @@ async function pickApple() {
   fireEvent.click(await screen.findByRole('button', { name: 'Add to Breakfast' }));
   fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'apple' } });
   fireEvent.click((await screen.findByText('Apple')).closest('button'));
-  return screen.findByRole('combobox', { name: 'Measure' });
+  return screen.findByRole('button', { name: 'Measure' });
 }
+
+/** The measure the dropdown shows as picked. */
+const picked = () => screen.getByRole('button', { name: 'Measure' }).textContent;
+/** Every choice the open dropdown lists, closing it again. */
+const offered = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Measure' }));
+  const labels = screen.getAllByRole('option').map((o) => o.textContent);
+  fireEvent.click(screen.getByRole('button', { name: 'Measure' }));
+  return labels;
+};
+/** A measure picked the way a person picks it: open the list, tap the choice. */
+const choose = (label) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Measure' }));
+  fireEvent.click(screen.getByRole('option', { name: label }));
+};
 
 afterEach(() => cleanup());
 
 describe('adding a food by measure', () => {
   it("starts at the measure the server named, steps and switches measures, and sends the measure and how many", async () => {
     renderPage();
-    const measure = await pickApple();
+    await pickApple();
     const amount = screen.getByRole('spinbutton', { name: 'Amount' });
-    expect(measure.value).toBe('serving');
+    expect(picked()).toBe('apple · 180 g');
     expect(amount.value).toBe('1');
+    // The app's own dark list, never a native <select>, whose popup Windows draws
+    // white with a blue bar (Kd's click-through of this card).
+    expect(screen.queryByRole('combobox')).toBeNull();
     // Every measure the food has is offered, by its name and weight.
-    expect(within(measure).getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'apple · 180 g', 'medium (3" dia) · 182 g', 'g', 'oz · 28.35 g', '+ Save a new dish…',
-    ]);
+    expect(offered()).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'g', 'oz · 28.35 g', '+ Save a new dish…']);
     // The grams shown are the server's answer for what was sent.
     expect(await screen.findByText('= 180 g')).toBeTruthy();
 
@@ -79,15 +95,16 @@ describe('adding a food by measure', () => {
     expect(await screen.findByText('= 270 g')).toBeTruthy();
 
     // Another measure starts at one of it.
-    fireEvent.change(measure, { target: { value: 'usda-4' } });
+    choose('medium (3" dia) · 182 g');
+    expect(picked()).toBe('medium (3" dia) · 182 g');
     expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('1');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
     expect(await screen.findByText('= 273 g')).toBeTruthy();
 
     // Grams start at what the item weighed.
-    fireEvent.change(measure, { target: { value: 'g' } });
+    choose('g');
     expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('273');
-    fireEvent.change(measure, { target: { value: 'usda-4' } });
+    choose('medium (3" dia) · 182 g');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Apple' }));
@@ -99,10 +116,10 @@ describe('adding a food by measure', () => {
 
   it('asks how full a saved dish was before anything can be added, and sends the dish and its fill', async () => {
     renderPage({ dishware: [bowl] });
-    const measure = await pickApple();
-    await waitFor(() => expect(within(measure).getAllByRole('option').map((o) => o.textContent)).toContain('My blue bowl · 360 ml'));
+    await pickApple();
+    await waitFor(() => expect(offered()).toContain('My blue bowl · 360 ml'));
 
-    fireEvent.change(measure, { target: { value: 'dish:d-1' } });
+    choose('My blue bowl · 360 ml');
     // No amount box for a dish, and no fill assumed: nothing can be added yet.
     expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
     const add = screen.getByRole('button', { name: 'Pick how full' });
@@ -118,8 +135,8 @@ describe('adding a food by measure', () => {
   it('saves a new dish from the picker at a size of the global starter set, then asks how full it was', async () => {
     renderPage();
     svc.createDishware = vi.fn(async (input) => ({ data: { dishware: { ...bowl, id: 'd-2', label: input.label, containerClass: input.containerClass, volumeMl: input.volumeMl } } }));
-    const measure = await pickApple();
-    fireEvent.change(measure, { target: { value: '__new_dish' } });
+    await pickApple();
+    choose('+ Save a new dish…');
     // Appendix B's global starter set: a cup, a mug, a cereal bowl; or any size in ml.
     for (const size of ['Cup240 ml', 'Mug325 ml', 'Bowl375 ml', 'Type ml']) {
       expect(screen.getByRole('button', { name: size })).toBeTruthy();
@@ -130,15 +147,15 @@ describe('adding a food by measure', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save this dish' }));
     await waitFor(() => expect(svc.createDishware).toHaveBeenCalledWith({ label: 'My bowl', containerClass: 'cereal_bowl', volumeMl: 375 }));
     // The new dish is picked, and nothing can be added until the fill is.
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Measure' }).value).toBe('dish:d-2'));
+    await waitFor(() => expect(picked()).toBe('My bowl · 375 ml'));
     expect(screen.getByRole('button', { name: 'Pick how full' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Full' })).toBeTruthy();
   });
 
   it('refuses to add an amount past what one food of a meal may weigh, and says why', async () => {
     renderPage();
-    const measure = await pickApple();
-    fireEvent.change(measure, { target: { value: 'usda-4' } });
+    await pickApple();
+    choose('medium (3" dia) · 182 g');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '60' } });
     const add = screen.getByRole('button', { name: 'Amount is too large' });
     expect(add.disabled).toBe(true);

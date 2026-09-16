@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { nutritionService } from '../../api/nutritionApi';
+import Select from '../common/Select';
 import { DISH_SIZES, FILL_CHOICES, MAX_AMOUNT, choiceLabel, pickerChoices, steppedAmount, valueForChoice } from './measures';
 
 const NEW_DISH = '__new_dish';
@@ -100,8 +101,12 @@ export default function MeasurePicker({ food, dishware, value, onChange, grams, 
   const [newDish, setNewDish] = useState(false);
   const choices = pickerChoices(food, dishware);
   const choice = choices.find((c) => c.key === value?.key) ?? null;
-  const measures = choices.filter((c) => c.kind === 'measure');
-  const dishes = choices.filter((c) => c.kind === 'dish');
+  // The app's own dark list, not a native <select>: Windows draws a native
+  // popup white, with a blue bar no CSS can change (common/Select.jsx).
+  const options = [
+    ...choices.map((c) => ({ value: c.key, label: choiceLabel(c) })),
+    { value: NEW_DISH, label: '+ Save a new dish…' },
+  ];
   const amount = value?.amount ?? '';
 
   const pick = (key) => {
@@ -128,21 +133,11 @@ export default function MeasurePicker({ food, dishware, value, onChange, grams, 
                     onClick={() => onChange({ key: value.key, amount: steppedAmount(amount, choice, 1) })}>+</button>
           </div>
         )}
-        <select
-          aria-label="Measure" value={value?.key ?? ''} onChange={(e) => pick(e.target.value)}
-          className="min-w-0 flex-1 px-2 py-1 rounded-lg text-xs focus:outline-none"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
-        >
-          <optgroup label="Measures">
-            {measures.map((c) => <option key={c.key} value={c.key}>{choiceLabel(c)}</option>)}
-          </optgroup>
-          {dishes.length > 0 && (
-            <optgroup label="My dishes">
-              {dishes.map((c) => <option key={c.key} value={c.key}>{choiceLabel(c)}</option>)}
-            </optgroup>
-          )}
-          <option value={NEW_DISH}>+ Save a new dish…</option>
-        </select>
+        <Select
+          ariaLabel="Measure" value={value?.key ?? ''} onChange={pick} options={options}
+          className="min-w-0 flex-1" maxListHeight={240}
+          style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
+        />
         <span className="text-2xs whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
           {grams === null || grams === undefined ? '…' : `= ${Math.round(grams)} g`}
         </span>

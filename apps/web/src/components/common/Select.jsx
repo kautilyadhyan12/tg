@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+/** One option's height (py-2 around a text-sm line) and the list's own padding
+ *  (py-1): what the list is expected to take before it is drawn. */
+const OPTION_HEIGHT_PX = 36;
+const LIST_PADDING_PX = 8;
+
 /**
  * Dark dropdown that replaces the native <select>.
  *
@@ -21,10 +26,28 @@ export default function Select({
   // here that deliberately starts empty, and a blank box with no words in it is
   // not a control a person can use.
   placeholder = '',
+  // The list's tallest, in px, scrolling past it. Unset, the list is as tall as
+  // its options, as every caller before the measure picker had it: a food can
+  // carry a dozen measures and more.
+  maxListHeight,
 }) {
   const [open, setOpen] = useState(false);
+  // Whether the list opens ABOVE the field: where it would run past the bottom of
+  // the window and there is more room above, as for the measure picker at the
+  // foot of Add food, whose list went off the screen (Kd's click-through, 7a-iv-a).
+  const [above, setAbove] = useState(false);
   const ref = useRef(null);
   const current = options.find((o) => o.value === value);
+
+  const toggle = () => {
+    if (!open && ref.current) {
+      const field = ref.current.getBoundingClientRect();
+      const listHeight = Math.min(maxListHeight ?? Number.POSITIVE_INFINITY, options.length * OPTION_HEIGHT_PX + LIST_PADDING_PX);
+      const roomBelow = window.innerHeight - field.bottom;
+      setAbove(listHeight > roomBelow && field.top > roomBelow);
+    }
+    setOpen((v) => !v);
+  };
 
   // Close on outside click or Escape — a dropdown that can only be dismissed by
   // picking something is a trap.
@@ -44,7 +67,7 @@ export default function Select({
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
@@ -64,11 +87,12 @@ export default function Select({
       {open && (
         <div
           role="listbox"
-          className="absolute z-50 mt-1 w-full rounded-xl overflow-hidden py-1"
+          className={`absolute z-50 w-full rounded-xl overflow-hidden py-1 ${above ? 'bottom-full mb-1' : 'mt-1'}`}
           style={{
             background: '#0A0908',
             border: '1px solid rgba(255,138,31,0.30)',
             boxShadow: '0 10px 30px rgba(0,0,0,0.60)',
+            ...(maxListHeight === undefined ? {} : { maxHeight: maxListHeight, overflowY: 'auto' }),
           }}
         >
           {options.map((o) => {
