@@ -6,9 +6,13 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PHOTO_SCAN_CAUTION } from '@app/shared';
+import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
+import MeasurePicker, { SaveDishForm } from '../components/nutrition/MeasurePicker';
+import { FILL_CHOICES, amountRefusal, chosenItemFor, comesToUnderAGram, itemText, pickerChoices, startingValue } from '../components/nutrition/measures';
+import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
+import { getUserId } from '../utils/storage';
 
 // Quoted from @app/shared nutrition.ts chosenItemsSchema — the contract's own
 // bounds (grams .max(10_000), items .max(30)), never numbers invented here.
@@ -16,16 +20,6 @@ import MacroRings from '../components/nutrition/MacroRings';
 const MAX_GRAMS = 10000;
 const MAX_ITEMS = 30;
 
-// Card 5c2 — "measure with my dish". The three save-a-bowl presets are the
-// MIDPOINTS of Part 2B Appendix B's katori/bowl volume classes (small katori
-// 100–150 · standard katori 150–200 · large katori/bowl 250–300 ml) — cited,
-// never invented. containerClass = the class name so the scan resolver's rung-1
-// can auto-match the same dish in a future photo.
-const BOWL_SIZES = [
-  { label: 'Small',  volumeMl: 125, containerClass: 'small_katori' },
-  { label: 'Medium', volumeMl: 175, containerClass: 'standard_katori' },
-  { label: 'Large',  volumeMl: 275, containerClass: 'large_katori' },
-];
 // Where a scanned food's numbers came from, as the photo sheet tags its row
 // (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
 // table has.
@@ -45,11 +39,6 @@ const stepperAtGrams = (gramsText, fallback) => {
   const typed = parseFloat(gramsText);
   return { count: 1, base: Number.isFinite(typed) && typed > 0 ? typed : fallback };
 };
-// Kd ruling: the user must say how full — no invented "full" default. ¼/½/¾/Full.
-const FILL_LEVELS = [
-  { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
-  { label: '¾', value: 0.75 }, { label: 'Full', value: 1 },
-];
 
 // ── Meal type config ──────────────────────────────────────────────────────────
 const MEAL_TYPES = [
@@ -170,7 +159,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
         {/* What's in it — so "add ingredient" has a visible before/after. */}
         {meal.items?.length > 0 && (
           <p className="text-2xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.28)' }}>
-            {meal.items.map((i) => `${i.name} ${Math.round(i.gramsPoint)}g${i.nutritionSource === 'estimate' ? ' (estimate)' : ''}`).join(' · ')}
+            {meal.items.map((i) => `${itemText(i)}${i.nutritionSource === 'estimate' ? ' (estimate)' : ''}`).join(' · ')}
           </p>
         )}
         {/* Card 5c: change the section label. null clears it — an unlabeled
@@ -311,37 +300,6 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
 // different bowl each meal.
 function DishMeasure({ dishware, value, onChange, onSaved }) {
   const [showSave, setShowSave] = useState(false);
-  const [name,     setName]     = useState('');
-  const [size,     setSize]     = useState(null); // a BOWL_SIZES entry, or 'custom'
-  const [customMl, setCustomMl] = useState('');
-  const [saving,   setSaving]   = useState(false);
-
-  const resetSave = () => { setShowSave(false); setName(''); setSize(null); setCustomMl(''); };
-
-  const saveBowl = async () => {
-    const volumeMl = size === 'custom' ? Math.round(parseFloat(customMl)) : size?.volumeMl;
-    if (!Number.isFinite(volumeMl) || volumeMl <= 0 || volumeMl > MAX_GRAMS || saving) return;
-    setSaving(true);
-    try {
-      const res = await nutritionService.createDishware({
-        label: name.trim() || `${size === 'custom' ? 'My dish' : size.label} bowl`,
-        containerClass: size === 'custom' ? 'custom' : size.containerClass,
-        volumeMl,
-      });
-      const saved = res.data.dishware;
-      onSaved(saved);                                   // parent refreshes the list
-      onChange({ dishwareId: saved.id, fillLevel: value?.fillLevel ?? null });
-      resetSave();
-    } catch {
-      toast.error('Could not save that dish');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const customValid = size === 'custom'
-    && Number.isFinite(parseFloat(customMl)) && parseFloat(customMl) > 0 && parseFloat(customMl) <= MAX_GRAMS;
-  const canSaveBowl = size !== null && (size !== 'custom' || customValid);
 
   return (
     <div className="rounded-xl p-3 mt-1"
@@ -377,60 +335,19 @@ function DishMeasure({ dishware, value, onChange, onSaved }) {
         </>
       )}
 
-      {/* Save a new bowl — auto-open when the user has none yet. */}
+      {/* Save a new dish — auto-open when the user has none yet. The form is the
+          measure picker's own (7a-iv-a), so a dish is saved one way everywhere. */}
       {(showSave || dishware.length === 0) && (
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              {dishware.length === 0 ? 'Save your first dish' : 'Save a new dish'}
-            </p>
-            {dishware.length > 0 && (
-              <button type="button" onClick={resetSave} className="p-0.5" style={{ color: 'rgba(255,255,255,0.40)' }}>
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <input
-            value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="Name (e.g. my dal katori)"
-            className="w-full px-2.5 py-1.5 rounded-lg text-2xs mb-2 focus:outline-none"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+          <SaveDishForm
+            title={dishware.length === 0 ? 'Save your first dish' : 'Save a new dish'}
+            onClose={dishware.length > 0 ? () => setShowSave(false) : undefined}
+            onSaved={(saved) => {
+              onSaved(saved);                                   // parent refreshes the list
+              onChange({ dishwareId: saved.id, fillLevel: value?.fillLevel ?? null });
+              setShowSave(false);
+            }}
           />
-          <div className="flex gap-1.5 mb-2">
-            {BOWL_SIZES.map((b) => (
-              <button key={b.label} type="button" onClick={() => setSize(b)}
-                      className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
-                      style={{
-                        background: size?.label === b.label ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                        border: size?.label === b.label ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                        color: size?.label === b.label ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
-                      }}>
-                {b.label}<br /><span style={{ opacity: 0.6 }}>{b.volumeMl} ml</span>
-              </button>
-            ))}
-            <button type="button" onClick={() => setSize('custom')}
-                    className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
-                    style={{
-                      background: size === 'custom' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                      border: size === 'custom' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                      color: size === 'custom' ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
-                    }}>
-              Type ml
-            </button>
-          </div>
-          {size === 'custom' && (
-            <input
-              type="number" value={customMl} min="1" max={MAX_GRAMS}
-              onChange={(e) => setCustomMl(e.target.value)} placeholder="Volume in ml"
-              className="w-full px-2.5 py-1.5 rounded-lg text-2xs mb-2 focus:outline-none"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
-            />
-          )}
-          <button type="button" onClick={saveBowl} disabled={!canSaveBowl || saving}
-                  className="w-full py-1.5 rounded-lg text-2xs font-semibold"
-                  style={{ background: 'rgba(255,138,31,0.15)', border: '1px solid rgba(255,138,31,0.30)', color: '#FF8A1F', opacity: !canSaveBowl || saving ? 0.5 : 1 }}>
-            {saving ? 'Saving…' : 'Save this dish'}
-          </button>
         </div>
       )}
 
@@ -439,7 +356,7 @@ function DishMeasure({ dishware, value, onChange, onSaved }) {
         <>
           <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>How full?</p>
           <div className="flex gap-1.5">
-            {FILL_LEVELS.map((f) => (
+            {FILL_CHOICES.map((f) => (
               <button key={f.value} type="button"
                       onClick={() => onChange({ dishwareId: value.dishwareId, fillLevel: f.value })}
                       className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
@@ -615,26 +532,22 @@ function SourceCredits({ sources }) {
 }
 
 // ── Food search & add modal ───────────────────────────────────────────────────
-// Card 5b: manual entry on the NEW /v1 API. The user picks GRAMS (seeded from
-// the food's serving size, ×N stepper); nutrition shown live from the server
+// Card 5b: manual entry on the NEW /v1 API; nutrition shown live from the server
 // preview and saved via ONE logManualMeal — the browser never computes
 // nutrition (2B).
+// ROADMAP 7a-iv-a: the amount is one of the food's own measures and how many of
+// it — or a saved dish and how full — picked in the measure picker; the SERVER
+// works out the grams from its own list of the food's measures.
 // Card 5c: DUAL MODE. With a `meal` prop the same modal adds an ingredient to
 // an already-saved meal — PATCH resends the meal's existing items plus the new
 // one (the API already accepts any searched food there; no new endpoint).
 function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   const [selected, setSelected] = useState(null);
-  const [grams,    setGrams]    = useState('');
-  const [count,    setCount]    = useState(1);
-  // Stepper base: the serving size, replaced by whatever the user last TYPED
-  // (T3 5b finding 2 — same rule as the photo modal's bases).
-  const [base,     setBase]     = useState(100);
+  // The picker's value: {key: a measure id or "dish:<id>", amount: as typed}.
+  const [amount,   setAmount]   = useState(null);
   const [live,     setLive]     = useState(null);
   const [saving,   setSaving]   = useState(false);
-  // Card 5c2: grams (default) vs "measure with my dish".
-  const [dishware,    setDishware]    = useState([]);
-  const [measureMode, setMeasureMode] = useState('grams'); // 'grams' | 'dish'
-  const [measure,     setMeasure]     = useState(null);     // {dishwareId, fillLevel}
+  const [dishware, setDishware] = useState([]);
 
   const loadDishware = () =>
     nutritionService.listDishware().then((r) => setDishware(r.data.items || [])).catch(() => {});
@@ -642,35 +555,25 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   useEffect(() => {
     if (open) {
       setSelected(null);
-      setGrams('');
-      setCount(1);
+      setAmount(null);
       setLive(null);
       setSaving(false);
-      setMeasureMode('grams');
-      setMeasure(null);
       loadDishware();
     }
   }, [open]);
 
-  const gramsNum   = parseFloat(grams);
-  const gramsValid = Number.isFinite(gramsNum) && gramsNum > 0 && gramsNum <= MAX_GRAMS;
+  const choice = selected && amount ? pickerChoices(selected, dishware).find((c) => c.key === amount.key) ?? null : null;
+  const chosenItem = selected && amount ? chosenItemFor(selected.canonical, choice, amount.amount) : null;
   // 5b T3 advisory: say WHY the button is dead rather than just disabling it.
-  const gramsError = Number.isFinite(gramsNum) && gramsNum > MAX_GRAMS
-    ? `Enter ${MAX_GRAMS.toLocaleString()} g or less`
-    : null;
-
-  // The payload item is EITHER the grams arm or the dishware arm (Card 5c2).
-  // Dish mode needs both a dish AND a fill (Kd: fill is required, no default).
-  const dishReady  = measureMode === 'dish' && !!measure?.dishwareId && !!measure?.fillLevel;
-  const chosenItem = !selected
-    ? null
-    : measureMode === 'dish'
-      ? (dishReady ? { canonical: selected.canonical, dishwareId: measure.dishwareId, fillLevel: measure.fillLevel } : null)
-      : (gramsValid ? { canonical: selected.canonical, grams: gramsNum } : null);
+  const typed = parseFloat(amount?.amount);
+  const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
+  const tooSmall = comesToUnderAGram(choice, amount?.amount);
 
   // Live server preview for the chosen amount (manual arm — no scanToken). The
-  // server prices grams OR the dishware measure identically (2B). Stale
-  // responses dropped; failures degrade to no numbers.
+  // server prices a measure OR a dish identically (2B). Stale responses dropped;
+  // a refusal of the amount (too small, too large, a measure the food lacks) is
+  // kept with the payload it refused, said, and holds Add; any other failure
+  // degrades to no numbers.
   const chosenKey = JSON.stringify(chosenItem);
   useEffect(() => {
     if (chosenItem === null) { setLive(null); return undefined; }
@@ -681,8 +584,8 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         // Stamp with the payload it priced (T3 5c2) so a result for a PREVIOUS
         // amount/dish is never shown as current — displayed must equal saved.
         if (!stale) setLive({ data: res.data, key: chosenKey });
-      } catch {
-        if (!stale) setLive(null);
+      } catch (err) {
+        if (!stale) setLive(amountRefusal(err) === null ? null : { refusal: amountRefusal(err), key: chosenKey });
       }
     }, 300);
     return () => { stale = true; clearTimeout(timer); };
@@ -690,25 +593,18 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenKey]);
   // Only "live" when it priced the CURRENT payload; otherwise withhold ("…").
-  const shownLive = live?.key === chosenKey ? live.data : null;
+  const shownLive = live?.key === chosenKey && live.data ? live.data : null;
+  const refused = live?.key === chosenKey && live.refusal ? live.refusal : null;
+  const held = chosenItem === null || tooLarge || tooSmall || refused !== null;
 
   const pick = (food) => {
     setSelected(food);
-    setCount(1);
+    setAmount(startingValue(food)); // the measure and amount the server says the food starts at
     setLive(null); // never show the previous food's numbers
-    setBase(food.serving || 100);
-    setGrams(String(food.serving || 100)); // seed with the serving size
-  };
-
-  const step = (delta) => {
-    if (!selected) return;
-    const n = Math.min(30, Math.max(1, count + delta));
-    setCount(n);
-    setGrams(String(Math.min(MAX_GRAMS, Math.round(n * base))));
   };
 
   const handleSave = async () => {
-    if (chosenItem === null || saving) return;
+    if (held || saving) return;
     setSaving(true);
     try {
       if (meal) {
@@ -734,15 +630,15 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
       onSave();
       onClose();
     } catch (err) {
-      // A 400 here is usually an item that can no longer be resolved by
-      // canonical — an OFF food picked >24h ago has aged out of the server's
-      // cache (the recorded residual). Say something actionable.
+      // A refused amount says so. Any other 400 is usually an item that can no
+      // longer be resolved by canonical — an OFF food picked >24h ago has aged
+      // out of the server's cache (the recorded residual). Say something actionable.
       toast.error(
-        err.response?.status === 400
+        amountRefusal(err) ?? (err.response?.status === 400
           ? meal
             ? "One of this meal's foods could not be re-checked — try searching for it again."
             : 'That food could not be logged.'
-          : meal ? 'Failed to add the ingredient' : 'Failed to log meal',
+          : meal ? 'Failed to add the ingredient' : 'Failed to log meal'),
       );
     } finally {
       setSaving(false);
@@ -757,20 +653,20 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        onClick={onClose}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        // Only the X closes it: a click outside once lost a half-picked food
+        // (Kd, 2026-09-16). On a phone it rises from the bottom, the full width.
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1,    y: 0  }}
           exit={{    opacity: 0, scale: 0.95, y: 20 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md rounded-3xl flex flex-col"
+          className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl flex flex-col"
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
-            maxHeight:  '85vh',
+            maxHeight:  '90vh',
           }}
         >
           {/* Header */}
@@ -783,10 +679,11 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
             </h3>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              aria-label="Close"
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <X className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.5)' }} />
             </button>
           </div>
 
@@ -806,86 +703,68 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
           {selected && (
             <div className="p-5"
                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              {/* Card 5c2: type grams, or measure with your dish. */}
-              <div className="flex gap-1.5 mb-3">
-                <button type="button" onClick={() => setMeasureMode('grams')}
-                        className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
-                        style={{
-                          background: measureMode === 'grams' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                          border: measureMode === 'grams' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                          color: measureMode === 'grams' ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
-                        }}>
-                  Type grams
-                </button>
-                <button type="button" onClick={() => setMeasureMode('dish')}
-                        className="flex-1 py-1.5 rounded-lg text-2xs font-semibold flex items-center justify-center gap-1"
-                        style={{
-                          background: measureMode === 'dish' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                          border: measureMode === 'dish' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                          color: measureMode === 'dish' ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
-                        }}>
-                  <CookingPot className="w-3 h-3" /> Measure with my dish
-                </button>
+              {/* ROADMAP 7a-iv-a: one of the food's own measures and how many, or a
+                  saved dish and how full; the grams and calories are the server's. */}
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.70)' }}>Amount</p>
+                <p className="text-lg font-bold" style={{ color: '#FF8A1F' }}>
+                  {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
+                </p>
+              </div>
+              <div className="mb-4">
+                <MeasurePicker
+                  food={selected}
+                  dishware={dishware}
+                  value={amount}
+                  onChange={setAmount}
+                  grams={shownLive?.items?.[0]?.gramsPoint ?? null}
+                  onDishSaved={loadDishware}
+                />
               </div>
 
-              {measureMode === 'grams' ? (
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.60)' }}>Amount:</p>
-                  <button type="button" onClick={() => step(-1)}
-                          className="w-6 h-6 rounded-md"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
-                  <span className="w-6 text-center text-xs text-white">×{count}</span>
-                  <button type="button" onClick={() => step(1)}
-                          className="w-6 h-6 rounded-md"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
-                  <input
-                    type="number" value={grams} min="1" max="10000"
-                    onChange={(e) => {
-                      setGrams(e.target.value);
-                      const typed = parseFloat(e.target.value);
-                      if (Number.isFinite(typed) && typed > 0) { setBase(typed); setCount(1); }
-                    }}
-                    className="w-20 px-3 py-1.5 rounded-lg text-sm text-right focus:outline-none"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
-                  />
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>g</p>
-                  <p className="ml-auto text-sm font-bold" style={{ color: '#FF8A1F' }}>
-                    {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
-                  </p>
-                </div>
-              ) : (
-                <DishMeasure dishware={dishware} value={measure} onChange={setMeasure} onSaved={loadDishware} />
-              )}
-
               {shownLive && (
-                <p className="text-2xs my-3"
-                   style={{ color: 'rgba(255,255,255,0.45)' }}>
+                <p className="text-xs mb-4"
+                   style={{ color: 'rgba(255,255,255,0.55)' }}>
                   {shownLive.totals.kcalPoint} kcal · Protein {Math.round(shownLive.totals.proteinG)}g
                   · Carbs {Math.round(shownLive.totals.carbsG)}g · Fat {Math.round(shownLive.totals.fatG)}g
-                  <span className="ml-1" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                  <span className="ml-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
                     — calculated by the server for your amount
                   </span>
                 </p>
               )}
-              {measureMode === 'grams' && gramsError && (
-                <p className="text-2xs mb-3" style={{ color: 'rgba(251,191,36,0.85)' }}>{gramsError}</p>
+              {tooLarge && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                  That is more than {MAX_GRAMS.toLocaleString()} g — pick a smaller amount.
+                </p>
               )}
-              {measureMode === 'dish' && !dishReady && (
-                <p className="text-2xs my-3" style={{ color: 'rgba(255,255,255,0.40)' }}>
-                  Pick a dish and how full it was — we'll work out the grams.
+              {tooSmall && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                  That comes to less than 1 g — pick a larger amount.
+                </p>
+              )}
+              {!tooLarge && !tooSmall && refused && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>{refused}</p>
+              )}
+              {choice?.kind === 'dish' && chosenItem === null && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                  Pick how full it was — we'll work out the grams.
                 </p>
               )}
               <button
                 onClick={handleSave}
-                disabled={saving || chosenItem === null}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white mt-1"
+                disabled={saving || held}
+                className="w-full h-12 rounded-xl font-semibold text-base text-white"
                 style={{
                   background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                   boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
-                  opacity:    saving || chosenItem === null ? 0.6 : 1,
+                  opacity:    saving || held ? 0.6 : 1,
                 }}
               >
-                {saving ? 'Saving…' : gramsError ? 'Amount is too large' : chosenItem !== null ? `Add ${selected.name}` : (measureMode === 'dish' ? 'Pick a dish & fill' : 'Enter grams')}
+                {saving ? 'Saving…'
+                  : tooLarge ? 'Amount is too large'
+                    : tooSmall ? 'Amount is too small'
+                      : refused ? 'Pick another amount'
+                        : chosenItem !== null ? `Add ${selected.name}` : (choice?.kind === 'dish' ? 'Pick how full' : 'Enter an amount')}
               </button>
             </div>
           )}
@@ -923,7 +802,7 @@ function PhotoModal({ open, onClose, onSave }) {
   const [adding,      setAdding]      = useState(false);
   // Card 5c2: per drafted-item "measure with my dish". itemMeasures[i] present
   // (even {}) means that item is in dish mode; its value is {dishwareId,
-  // fillLevel}. Extras carry their own `measure` on the extra object.
+  // fillLevel}. Extras carry the measure picker's value on the extra object.
   const [dishware,     setDishware]     = useState([]);
   const [itemMeasures, setItemMeasures] = useState({});
   // ROADMAP 7a-iii-b "Change": replaced[i] is the food the person picked in place
@@ -932,52 +811,116 @@ function PhotoModal({ open, onClose, onSave }) {
   // estimated it), so it forms no correction pair.
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
+  // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
+  // used one of the day's scans, so neither closing the sheet nor leaving the page
+  // throws it away (`unsavedScan.js`). scannedAt is when this sheet's scan came
+  // back; confirmingClose is the X's "Close without saving?" while a scan is
+  // unsaved, holding what was left of it (ms) when the X was pressed, or null.
+  const [scannedAt,       setScannedAt]       = useState(null);
+  const [confirmingClose, setConfirmingClose] = useState(null);
+  // A row taken from "my dish" back to grams keeps the dish's grams; undoGrams[i]
+  // is what the row held before, for its Undo, as "Change" has one.
+  const [undoGrams,       setUndoGrams]       = useState({});
   const fileRef = useRef(null);
 
   const loadDishware = () =>
     nutritionService.listDishware().then((r) => setDishware(r.data.items || [])).catch(() => {});
 
+  const resetSheet = () => {
+    setAnalysis(null);
+    setPreview(null);
+    setAnalyzing(false);
+    setGrams({});
+    setCounts({});
+    setBases({});
+    setLogAs(null);
+    setLive(null);
+    setRetakeToken(null);
+    setRetakeMsg(null);
+    setSaving(false);
+    setExtras([]);
+    setAdding(false);
+    setItemMeasures({});
+    setReplaced({});
+    setChanging(null);
+    setScannedAt(null);
+    setConfirmingClose(null);
+    setUndoGrams({});
+    forgetUnsavedScan();
+  };
+
+  // An unsaved sheet brought back, as it stood.
+  const loadSheet = ({ scannedAt: at, sheet }) => {
+    setAnalysis(sheet.analysis);
+    setPreview(sheet.preview);
+    setAnalyzing(false);
+    setGrams(sheet.grams);
+    setCounts(sheet.counts);
+    setBases(sheet.bases);
+    setLogAs(sheet.logAs);
+    setLive(null);
+    setRetakeToken(null);
+    setRetakeMsg(null);
+    setSaving(false);
+    setExtras(sheet.extras);
+    setAdding(false);
+    setItemMeasures(sheet.itemMeasures);
+    setReplaced(sheet.replaced);
+    setChanging(null);
+    setScannedAt(at);
+    setConfirmingClose(null);
+    setUndoGrams(sheet.undoGrams);
+  };
+
   useEffect(() => {
     if (open) {
-      setAnalysis(null);
-      setPreview(null);
-      setAnalyzing(false);
-      setGrams({});
-      setCounts({});
-      setBases({});
-      setLogAs(null);
-      setLive(null);
-      setRetakeToken(null);
-      setRetakeMsg(null);
-      setSaving(false);
-      setExtras([]);
-      setAdding(false);
-      setItemMeasures({});
-      setReplaced({});
-      setChanging(null);
+      // This person's unsaved scan comes back while it can still be saved, from
+      // wherever they left it; anything else starts a fresh sheet.
+      const unsaved = unsavedScanFor(getUserId(), Date.now());
+      if (unsaved) loadSheet(unsaved);
+      else resetSheet();
       loadDishware();
     }
+    // The sheet is judged as it stood when it was opened, not on every edit.
   }, [open]);
+
+  // Every change to an unsaved sheet is kept above the page, for its person.
+  useEffect(() => {
+    if (analysis !== null && scannedAt !== null) {
+      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams });
+    }
+  }, [analysis, scannedAt, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams]);
+
+  // The X: a sheet holding an unsaved scan asks first, saying how long it can be
+  // picked up again. A click outside the box never closes it (Kd: only the cross).
+  const requestClose = () => {
+    if (analysis !== null && scannedAt !== null && !saving) { setConfirmingClose(unsavedScanMsLeft(scannedAt, Date.now())); return; }
+    onClose();
+  };
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setPreview(URL.createObjectURL(file));
+    const photo = URL.createObjectURL(file);
+    // Whose scan this is, for a reply that comes back after they left.
+    const scanner = getUserId();
+    setPreview(photo);
     setAnalyzing(true);
     setAnalysis(null);
+    setScannedAt(null);
     setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
     setItemMeasures({}); // …and no dish measures from a previous photo
     setReplaced({});     // …and no changed foods
+    setUndoGrams({});
     setChanging(null);
     setRetakeMsg(null);
 
     try {
       const res = await nutritionService.analyzePhoto(file, retakeToken);
-      setRetakeToken(null);
-      setAnalysis(res.data);
+      const at = Date.now();
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
@@ -989,6 +932,18 @@ function PhotoModal({ open, onClose, onSave }) {
         const stepper = scannedStepper(item);
         g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
       });
+      // Kept the moment it returns, not only once a sheet shows it: a person who
+      // left the page while the photo was read still has the scan it counted.
+      // Never for someone else who has signed in since.
+      if (getUserId() === scanner) {
+        keepUnsavedScan(scanner, at, {
+          analysis: res.data, preview: photo, grams: g, counts: c, bases: b,
+          logAs: null, extras: [], itemMeasures: {}, replaced: {}, undoGrams: {},
+        });
+      }
+      setRetakeToken(null);
+      setAnalysis(res.data);
+      setScannedAt(at);
       setGrams(g);
       setCounts(c);
       setBases(b);
@@ -1052,9 +1007,20 @@ function PhotoModal({ open, onClose, onSave }) {
     const ok = Number.isFinite(g) && g > 0 && g <= MAX_GRAMS;
     return { item: ok ? { canonical, grams: g } : null, valid: ok, tooLarge: Number.isFinite(g) && g > MAX_GRAMS };
   };
+  // An added ingredient is measured in the measure picker (ROADMAP 7a-iv-a): one
+  // of its own measures and how many, or a saved dish and how full.
+  const resolveExtra = (x) => {
+    const choice = x.amount ? pickerChoices(x.food, dishware).find((c) => c.key === x.amount.key) ?? null : null;
+    const item = chosenItemFor(x.food.canonical, choice, x.amount?.amount);
+    const typed = parseFloat(x.amount?.amount);
+    const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
+    const tooSmall = comesToUnderAGram(choice, x.amount?.amount);
+    const usable = item !== null && !tooLarge && !tooSmall;
+    return { item: usable ? item : null, valid: usable, tooLarge, tooSmall };
+  };
   const resolved = analysis === null ? [] : [
     ...analysis.items.map((item, i) => resolveArm(replaced[i]?.canonical ?? item.canonical, grams[i], itemMeasures[i])),
-    ...extras.map((x) => resolveArm(x.food.canonical, x.grams, x.measure)),
+    ...extras.map(resolveExtra),
   ];
   // Every food the sheet prices now: a changed row by the food picked for it.
   const rowSources = analysis === null ? [] : [
@@ -1132,21 +1098,43 @@ function PhotoModal({ open, onClose, onSave }) {
         items: payloadItems,
       });
       toast.success(`Logged ${analysis.mealName || 'meal'}`);
+      resetSheet(); // saved: the next Photo Log starts fresh
       onSave();
       onClose();
     } catch (err) {
       toast.error(
-        err.response?.status === 400
-          ? 'One of the foods could not be logged — try removing or re-adding it.'
-          : 'Failed to log the meal',
+        amountRefusal(err) ?? (err.response?.data?.error === 'invalid_scan'
+          ? `This scan can only be saved for ${MEAL_SCAN_TTL_SECONDS / 60} minutes — take the photo again.`
+          : err.response?.status === 400
+            ? 'One of the foods could not be logged — try removing or re-adding it.'
+            : 'Failed to log the meal'),
       );
     } finally {
       setSaving(false);
     }
   };
 
+  // "my dish" back to grams: the row keeps the grams the server worked out for the
+  // dish (where it has answered for it), and can go back to what it held before.
+  const backToGrams = (idx) => {
+    const dish = itemMeasures[idx];
+    const dishGrams = liveNow?.items?.[idx]?.gramsPoint;
+    setItemMeasures((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+    if (!dish?.dishwareId || !dish?.fillLevel || !Number.isFinite(dishGrams)) return;
+    setUndoGrams((prev) => ({ ...prev, [idx]: { grams: grams[idx], count: counts[idx], base: bases[idx] } }));
+    setGrams((prev) => ({ ...prev, [idx]: String(dishGrams) }));
+    restartStepper(idx, { count: 1, base: dishGrams });
+  };
+  const undoGramsChange = (idx) => {
+    const before = undoGrams[idx];
+    if (!before) return;
+    setGrams((prev) => ({ ...prev, [idx]: before.grams }));
+    restartStepper(idx, { count: before.count, base: before.base });
+    setUndoGrams((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+  };
+
   const addExtra = (food) => {
-    setExtras((prev) => [...prev, { food, grams: String(food.serving || 100), count: 1, base: food.serving || 100 }]);
+    setExtras((prev) => [...prev, { food, amount: startingValue(food) }]);
     setAdding(false);
     setLive(null); // numbers are stale until the server re-prices the new list
   };
@@ -1182,7 +1170,6 @@ function PhotoModal({ open, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        onClick={onClose}
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
@@ -1190,14 +1177,41 @@ function PhotoModal({ open, onClose, onSave }) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1    }}
           exit={{    opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md rounded-3xl flex flex-col"
+          className="relative w-full max-w-md rounded-3xl flex flex-col"
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
             maxHeight:  '85vh',
           }}
         >
+          {/* The X's question while a scan is unsaved (RULINGS 2026-09-16). */}
+          {confirmingClose !== null && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-3xl"
+                 style={{ background: 'rgba(10,9,8,0.94)' }}>
+              <div role="alertdialog" aria-labelledby="close-scan-title" className="w-full max-w-xs text-center">
+                <p id="close-scan-title" className="text-base font-bold text-white mb-2">Close without saving?</p>
+                <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                  This photo already used one of today's scans.
+                </p>
+                {/* What is truly left of the scan, never more. */}
+                <p className="text-xs mb-5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {timeLeftText(confirmingClose) ?? 'It can no longer be saved, so it will not come back.'}
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setConfirmingClose(null)}
+                          className="flex-1 min-h-11 rounded-xl text-sm font-semibold text-white"
+                          style={{ background: 'linear-gradient(135deg, #FF8A1F, #FFB347)' }}>
+                    Keep editing
+                  </button>
+                  <button type="button" onClick={() => { if (confirmingClose <= 0) resetSheet(); setConfirmingClose(null); onClose(); }}
+                          className="flex-1 min-h-11 rounded-xl text-sm font-semibold"
+                          style={{ color: 'rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between px-5 py-4"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2">
@@ -1205,11 +1219,12 @@ function PhotoModal({ open, onClose, onSave }) {
               <h3 className="text-base font-bold text-white">AI Photo Log</h3>
             </div>
             <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              onClick={requestClose}
+              aria-label="Close"
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <X className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.5)' }} />
             </button>
           </div>
 
@@ -1245,6 +1260,20 @@ function PhotoModal({ open, onClose, onSave }) {
               </button>
             ) : (
               <div className="space-y-4">
+                {/* A scan not saved yet, perhaps brought back after a close: a new
+                    photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
+                {analysis && (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                      Not saved yet. This scan still counts as one of today's scans.
+                    </p>
+                    <button type="button" onClick={resetSheet}
+                            className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
+                            style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
+                      <Camera className="w-3.5 h-3.5" /> New photo
+                    </button>
+                  </div>
+                )}
                 <img
                   src={preview}
                   alt="Meal"
@@ -1431,13 +1460,23 @@ function PhotoModal({ open, onClose, onSave }) {
                               </div>
                             ) : (
                               <button type="button"
-                                      onClick={() => { const m = { ...itemMeasures }; delete m[i]; setItemMeasures(m); }}
+                                      onClick={() => backToGrams(i)}
                                       className="text-2xs font-semibold px-2 py-1 rounded-md"
                                       style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
                                 ← back to grams
                               </button>
                             )}
                           </div>
+                          {undoGrams[i] && itemMeasures[i] === undefined && (
+                            <p className="text-2xs mt-1 text-right" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                              Kept the dish's {grams[i]} g ·{' '}
+                              <button type="button" onClick={() => undoGramsChange(i)}
+                                      className="underline decoration-dotted"
+                                      style={{ color: 'rgba(255,255,255,0.65)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                Undo
+                              </button>
+                            </p>
+                          )}
                           {itemMeasures[i] !== undefined && (
                             <DishMeasure
                               dishware={dishware}
@@ -1454,64 +1493,49 @@ function PhotoModal({ open, onClose, onSave }) {
                           Same grams/stepper rules; the SERVER prices them. */}
                       {extras.map((x, j) => {
                         const shown = liveNow?.items?.[analysis.items.length + j];
+                        // Confirm is hidden while any amount is unusable, so the row says why.
+                        const { tooLarge, tooSmall } = resolved[analysis.items.length + j];
                         return (
-                          <div key={`${x.food.canonical}-${j}`} className="p-2.5 rounded-xl"
+                          <div key={`${x.food.canonical}-${j}`} className="p-3.5 rounded-2xl"
                                style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
-                            <div className="flex justify-between">
-                              <p className="text-sm font-semibold text-white">
-                                {x.food.name}
-                                <span className="ml-1.5 text-2xs font-normal"
-                                      style={{ color: 'rgba(255,138,31,0.75)' }}>
-                                  added by you
-                                </span>
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold" style={{ color: '#FF8A1F' }}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white">{x.food.name}</p>
+                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <p className="text-base font-bold" style={{ color: '#FF8A1F' }}>
                                   {shown ? `${shown.kcalPoint} kcal` : '…'}
                                 </p>
                                 <button type="button" onClick={() => removeExtra(j)}
-                                        title={`Remove ${x.food.name}`}
-                                        className="p-0.5 rounded" style={{ color: 'rgba(239,68,68,0.7)' }}>
-                                  <X className="w-3.5 h-3.5" />
+                                        title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
+                                        className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
+                                  <X className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                {shown
-                                  ? `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`
-                                  : 'Calculating…'}
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 text-2xs">
-                                  <button type="button"
-                                          onClick={() => { const n = Math.max(1, x.count - 1); patchExtra(j, { count: n, grams: String(Math.min(MAX_GRAMS, Math.round(n * x.base))) }); }}
-                                          className="w-6 h-6 rounded-md"
-                                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
-                                  <span className="w-6 text-center text-xs text-white">×{x.count}</span>
-                                  <button type="button"
-                                          onClick={() => { const n = Math.min(30, x.count + 1); patchExtra(j, { count: n, grams: String(Math.min(MAX_GRAMS, Math.round(n * x.base))) }); }}
-                                          className="w-6 h-6 rounded-md"
-                                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
-                                </div>
-                                <label className="flex items-center gap-1.5 text-2xs"
-                                       style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                  <input
-                                    type="number" value={x.grams} min="1" max={MAX_GRAMS}
-                                    onChange={(e) => {
-                                      const typed = parseFloat(e.target.value);
-                                      // Typed grams become the new ×1 base.
-                                      patchExtra(j, Number.isFinite(typed) && typed > 0
-                                        ? { grams: e.target.value, base: typed, count: 1 }
-                                        : { grams: e.target.value });
-                                    }}
-                                    className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
-                                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
-                                  />
-                                  g
-                                </label>
-                              </div>
+                            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                              {shown
+                                ? `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`
+                                : 'Calculating…'}
+                            </p>
+                            <div className="mt-3">
+                              <MeasurePicker
+                                food={x.food}
+                                dishware={dishware}
+                                value={x.amount}
+                                onChange={(next) => patchExtra(j, { amount: next })}
+                                grams={shown?.gramsPoint ?? null}
+                                onDishSaved={loadDishware}
+                              />
                             </div>
+                            {(tooLarge || tooSmall) && (
+                              <p className="text-xs mt-2" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                                {tooSmall
+                                  ? 'That comes to less than 1 g — pick a larger amount.'
+                                  : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
@@ -1675,7 +1699,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           ? `Amounts must be ${MAX_GRAMS.toLocaleString()} g or less`
                           : allValid
                             ? 'Confirm & log meal'
-                            : 'Pick grams or a dish for every item'}
+                            : 'Pick an amount for every item'}
                     </button>
                     </>)}
                     <SourceCredits sources={rowSources} />

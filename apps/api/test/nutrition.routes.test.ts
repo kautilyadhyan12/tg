@@ -160,7 +160,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
         ["banana",120,"default",null], // ten slices are one banana's serving, not ten bananas
         ["spring_roll",128,"default",2], // the egg roll, the closest entry, not dropped
         ["roti_chapati",80,"default",2], // the homemade roti, not the store-bought one
-        ["beer_regular",1136,"user_dishware",2], // two of the person's own 568 ml pint glasses, not one
+        ["beer_regular",700,"default",2], // two of beer's own servings: the pint glass saved above is never applied to a scan (RULINGS 2026-07-18)
         ["beer_regular",1050,"default",3], // three bottles, not one
         ["yogurt_plain_low_fat",340,"default",2], // two pots, not one
         ["beer_regular",975,"regional_prior",3], // three mugs
@@ -211,14 +211,15 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   // The curated list carries each food's diet and citation for the server's own
-  // use; the search box receives the fields every food has, as before.
-  it("search sends a curated food's reference fields, never the list's diet or citation",async()=>{
+  // use; the search box receives the fields every food has, and its measures
+  // (ROADMAP 7a-iv-a).
+  it("search sends a curated food's reference fields and measures, never the list's diet or citation",async()=>{
     const res=await inject("GET","/v1/nutrition/foods?q=ham&limit=3",cookieA);
     expect(res.statusCode,res.body).toBe(200);
     const items=res.json<{items:Record<string,unknown>[]}>().items;
     expect(items[0]?.["canonical"]).toBe("ham_sliced");
     expect(items.length).toBeGreaterThan(0);
-    for(const item of items)expect(Object.keys(item).sort()).toEqual(["canonical","carbsG","fatG","fiberG","kcal","name","proteinG","serving","source","unit"]);
+    for(const item of items)expect(Object.keys(item).sort()).toEqual(["canonical","carbsG","fatG","fiberG","kcal","measures","name","proteinG","serving","source","startsAt","unit"]);
   },30_000);
 
   // T3 (manual-off-foods) violation 1: an OFF slug EMBEDDING a curated
@@ -492,12 +493,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   // Card 5c2 — dishware portions: an item's amount can be "my dish, this full"
-  // instead of grams; the SERVER computes grams (volume × fill × density) at
-  // rung 'user_dishware', the same math the scan resolver uses.
+  // instead of grams; the SERVER computes grams (volume × fill × what a ml of the
+  // food weighs, by its own cup: ROADMAP 7a-iv-a) at rung 'user_dishware'.
   it("a manual/preview item measured with saved dishware is server-priced at rung user_dishware",async()=>{
     const {app:a,call}=await freshApp("p26a-dish1@example.com");
     try{
-      // dal density = medium (1.0); 180 ml × 0.75 full × 1.0 = 135 g.
+      // dal: a cup of it weighs 240 g, 1 g a ml, as Appendix B's medium density is; 180 ml × 0.75 full × 1.0 = 135 g.
       const dish=await call("POST","/v1/nutrition/dishware",{label:"My dal katori",containerClass:"standard_katori",volumeMl:180});
       const dishwareId=dish.json<{dishware:{id:string}}>().dishware.id;
       const item={canonical:"dal_lentil_curry",dishwareId,fillLevel:0.75};
@@ -536,14 +537,22 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   it("dishware arm is bounds-symmetric with the grams arm: a round-to-0 and an >10000g result both 400 (T3 F1)",async()=>{
     const {app:a,call}=await freshApp("p26a-dish5@example.com");
     try{
-      // 1 ml dish × 0.25 fill → rounds to 0 g → would breach mealItemSchema.positive.
+      const refusal=async(canonical:string,dishwareId:string,fillLevel:number)=>{
+        const res=await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical,dishwareId,fillLevel}]});
+        return [res.statusCode,res.json<{error:string}>().error];
+      };
+      // 1 ml dish × 0.25 fill of dal (a cup of it weighs 240 g, 1 g a ml) → rounds to 0 g → would breach mealItemSchema.positive.
       const tiny=await call("POST","/v1/nutrition/dishware",{label:"thimble",containerClass:"x",volumeMl:1});
       const tinyId=tiny.json<{dishware:{id:string}}>().dishware.id;
-      expect((await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",dishwareId:tinyId,fillLevel:0.25}]})).statusCode).toBe(400);
-      // 10000 ml × full × thick(1.1) = 11000 g → over the grams arm's 10000 cap.
+      expect(await refusal("dal_lentil_curry",tinyId,0.25)).toEqual([400,"portion_out_of_range"]);
+      // 10000 ml × full of beef stew, whose cup weighs 255 g (255 / 240 g a ml) = 10625 g → over the grams arm's 10000 cap.
       const huge=await call("POST","/v1/nutrition/dishware",{label:"vat",containerClass:"x",volumeMl:10000});
       const hugeId=huge.json<{dishware:{id:string}}>().dishware.id;
-      expect((await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical:"dry_sabzi",dishwareId:hugeId,fillLevel:1}]})).statusCode).toBe(400);
+      expect(await refusal("beef_stew",hugeId,1)).toEqual([400,"portion_out_of_range"]);
+      // At the cap exactly it is a portion: dal, 1 g a ml, full.
+      const created=await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",dishwareId:hugeId,fillLevel:1}]});
+      expect(created.statusCode,created.body).toBe(201);
+      expect(created.json<{meal:{items:{gramsPoint:number}[]}}>().meal.items[0]?.gramsPoint).toBe(10000);
     }finally{await a.close();}
   },30_000);
 

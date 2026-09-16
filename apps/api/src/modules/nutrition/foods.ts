@@ -554,6 +554,15 @@ const FOOD_WORDS: readonly FoodWords[] = CURATED_FOODS.map((food) => {
 
 const BY_CANONICAL: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map((food) => [food.canonical, food]));
 
+/** The FDC id of the USDA entry a food of the list copies its numbers from, or
+ *  null for a CoFID food and for any canonical not on the list. Its household
+ *  measures are that entry's (ROADMAP 7a-iv-a). */
+export function curatedUsdaFdcId(canonical: string): number | null {
+  const citation = BY_CANONICAL.get(canonical)?.citation;
+  const cited = citation === undefined ? null : /^usda-(?:sr|fndds):(\d+)$/.exec(citation);
+  return cited?.[1] === undefined ? null : Number(cited[1]);
+}
+
 /** The food a slugged name names word for word. First a food whose name outside
  *  its brackets is those words, in order ("tuna" is "Tuna (canned in water)"; the
  *  earlier of two such foods, so a plain food is listed before its variants).

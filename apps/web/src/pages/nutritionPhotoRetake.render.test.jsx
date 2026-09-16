@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 const svc = {};
@@ -34,7 +35,7 @@ beforeEach(() => {
   svc.getTargets = vi.fn(async () => ({ data: { targets: null, missing: ['goal'], targetWrongSide: false } }));
   svc.previewMeal = vi.fn(async () => { throw new Error('no preview in this test'); });
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); forgetUnsavedScan(); });
 
 async function openPhotoSheet() {
   render(

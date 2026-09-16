@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import type { UsdaPortion } from "./measures.js";
 import { USDA_TIE_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
@@ -791,14 +792,44 @@ const MAX_FDC_ID = 2_147_483_647;
 export const usdaCanonical = (row: { fdcId: number; release: string }): string =>
   `usda_${row.release === "fndds" ? "fndds" : "sr"}_${String(row.fdcId)}`;
 
-/** The one food a canonical names, or null. The release is part of the WHERE,
- *  not decoration: `usda_fndds_167512` must never answer with SR Legacy's
- *  167512 just because the id happens to exist. */
-export async function usdaFoodByCanonical(sql: SqlOrTx, canonical: string): Promise<UsdaFoodRow | null> {
+/** A canonical of the USDA table, read: its release and id, or null. */
+function usdaCanonicalParts(canonical: string): { release: string; fdcId: number } | null {
   const parsed = USDA_CANONICAL.exec(canonical);
   const release = CANONICAL_RELEASES.get(parsed?.[1] ?? "");
   const fdcId = Number(parsed?.[2] ?? NaN);
   if (release === undefined || !Number.isInteger(fdcId) || fdcId < 1 || fdcId > MAX_FDC_ID) return null;
+  return { release, fdcId };
+}
+
+/** The FDC id a canonical of the USDA table names, or null for any other. */
+export const usdaFdcId = (canonical: string): number | null => usdaCanonicalParts(canonical)?.fdcId ?? null;
+
+/** The household measures of these USDA entries, by FDC id, each in USDA's own
+ *  order (ROADMAP 7a-iv-a). An id the table does not hold has none. */
+export async function usdaPortionsFor(sql: SqlOrTx, fdcIds: readonly number[]): Promise<Map<number, UsdaPortion[]>> {
+  const ids = [...new Set(fdcIds)].filter((id) => Number.isInteger(id) && id >= 1 && id <= MAX_FDC_ID);
+  const byFood = new Map<number, UsdaPortion[]>();
+  if (ids.length === 0) return byFood;
+  const rows = await sql<{ fdc_id: number; seq_num: number; amount: number | null; unit: string; gram_weight: number }[]>`
+    SELECT fdc_id, seq_num, amount, unit, gram_weight
+    FROM usda_food_portions
+    WHERE fdc_id = ANY(${ids}::int[])
+    ORDER BY fdc_id, seq_num`;
+  for (const r of rows) {
+    const portions = byFood.get(r.fdc_id) ?? [];
+    portions.push({ seqNum: r.seq_num, amount: r.amount, unit: r.unit, gramWeight: r.gram_weight });
+    byFood.set(r.fdc_id, portions);
+  }
+  return byFood;
+}
+
+/** The one food a canonical names, or null. The release is part of the WHERE,
+ *  not decoration: `usda_fndds_167512` must never answer with SR Legacy's
+ *  167512 just because the id happens to exist. */
+export async function usdaFoodByCanonical(sql: SqlOrTx, canonical: string): Promise<UsdaFoodRow | null> {
+  const parts = usdaCanonicalParts(canonical);
+  if (parts === null) return null;
+  const { release, fdcId } = parts;
   const rows = await sql<UsdaColumns[]>`
     SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
     FROM usda_foods

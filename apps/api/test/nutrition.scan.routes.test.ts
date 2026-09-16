@@ -279,6 +279,17 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect(sheet.unknownItems).toEqual(["Qwzx vlorp", "Qwzx blank"]);
   }, 60_000);
 
+  it("never weighs a scanned food by a saved dish the person did not pick (RULINGS 2026-07-18)", async () => {
+    const gus = await session("scan7b-gus@example.com");
+    // The web's Medium bowl is saved as Appendix B's standard katori, which is what a
+    // katori the model names reads as — so a scan used to weigh this dal as 400 ml.
+    const dish = await inject("POST", "/v1/nutrition/dishware", gus, { label: "Medium bowl", containerClass: "standard_katori", volumeMl: 400 });
+    expect(dish.statusCode, dish.body).toBe(201);
+    const sheet = await scan(gus, plate(DAL));
+    // Appendix B's katori ¾ full, as for a person with no dish saved: 132 g, not 400 × ¾ = 300.
+    expect(sheet.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 132, portionSource: "regional_prior" });
+  }, 60_000);
+
   it("gives a table food three times from the model's own energy way to the estimate", async () => {
     // What the model called dal carries 450 kcal per 100 g; our list's dal carries 145.
     const sheet = await scan(await session("scan7b-dan@example.com"), plate(seen("Dal makhani", "dal", [100, 450, 10, 50, 23])));

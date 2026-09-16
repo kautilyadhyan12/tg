@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findCurated } from "../src/modules/nutrition/foods.js";
-import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, dishwareGrams, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
+import { dishwareGrams } from "../src/modules/nutrition/measures.js";
+import { CONTAINER_PRIORS, CONTAINER_WORDS, COUNTABLE_PRIORS, COUNT_RULES, CUT_WORDS, DENSITY_G_PER_ML, WHOLE_PIECES, WHOLE_VOLUME_UNITS, resolvePortion, type SavedDishware } from "../src/modules/nutrition/portion-priors.js";
 import {
   MEAL_SCAN_MEDIA_RESOLUTION,
   MEAL_VISION_MODELS,
@@ -28,24 +29,25 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(MEAL_VISION_PROMPT.toLowerCase()).toContain("roti");
   });
 
-  // Card 5c2: the confirm-time dishware arm and the scan-time rung-1 resolver
-  // MUST compute grams identically — dishwareGrams is the one shared formula
-  // (volume × fill × density), so a bowl measured in the photo flow and the
-  // same bowl chosen at confirm can never disagree.
-  it("dishwareGrams equals the resolver's saved-dishware rung for the same inputs (Card 5c2)", () => {
-    // dal = medium density (1.0): 180 × 0.75 × 1.0 = 135.
-    expect(dishwareGrams(180, 0.75, "dal")).toBe(135);
-    // thick sabzi density 1.1: 200 × 1 × 1.1 = 220; thin rasam 0.95: 150 × 0.5 × 0.95 = 71.
-    expect(dishwareGrams(200, 1, "dry_sabzi")).toBe(220);
-    expect(dishwareGrams(150, 0.5, "rasam")).toBe(71);
+  // dishwareGrams is the one saved-dish formula (volume × fill × what a ml of the
+  // food weighs): the dish measure a person picks and the old resolver's dish
+  // rung both read it, each with its own weight per ml.
+  it("dishwareGrams is volume × fill × grams per ml, and the resolver's dish rung reads it (Card 5c2)", () => {
+    // Medium density (1.0): 180 × 0.75 × 1.0 = 135.
+    expect(dishwareGrams(180, 0.75, DENSITY_G_PER_ML.medium)).toBe(135);
+    // Thick 1.1: 200 × 1 × 1.1 = 220; thin 0.95: 150 × 0.5 × 0.95 = 71.
+    expect(dishwareGrams(200, 1, DENSITY_G_PER_ML.thick)).toBe(220);
+    expect(dishwareGrams(150, 0.5, DENSITY_G_PER_ML.thin)).toBe(71);
+    // A cup of cornflakes weighs 30 g: 350 ml of them full is 44 g, not 350.
+    expect(dishwareGrams(350, 1, 30 / 240)).toBe(44);
     // Equality with the resolver's rung-1 branch on the SAME dish + fill + food.
-    for (const [vol, fill, hint] of [[180, 0.75, "dal"], [250, 0.5, "sabzi"], [150, 1, "rasam"]] as const) {
+    for (const [vol, fill, hint, density] of [[180, 0.75, "dal", DENSITY_G_PER_ML.medium], [250, 0.5, "sabzi", DENSITY_G_PER_ML.thick], [150, 1, "rasam", DENSITY_G_PER_ML.thin]] as const) {
       const viaResolver = resolvePortion(
         { canonicalHint: hint, container: "my_bowl", fillLevel: fill, sizeClass: null, count: null },
         [{ containerClass: "my_bowl", volumeMl: vol, foodHint: null }],
         { grams: 100, unit: "g" },
       );
-      expect(viaResolver.gramsPoint).toBe(dishwareGrams(vol, fill, hint));
+      expect(viaResolver.gramsPoint).toBe(dishwareGrams(vol, fill, density));
       expect(viaResolver.portionSource).toBe("user_dishware");
     }
   });
@@ -552,7 +554,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     })).analyze("AA==", "image/jpeg");
     expect(long.unknown_items).toEqual(["Mystery sauce", "zqx vlorp", "Food 22"]);
     const priced = long.items.map((): ScanPrice => ({ kind: "estimate", per100g: { kcal: 145, proteinG: 9, carbsG: 19, fatG: 4 }, grams: 100, overruled: null }));
-    const sheet = scanSheet(long, priced, []);
+    const sheet = scanSheet(long, priced);
     expect([sheet.items.length, sheet.unknownItems]).toEqual([MAX_SCAN_FOODS, ["Mystery sauce", "zqx vlorp", "Food 22"]]);
     // More than 30 is no plate's reply, as the contract has always said.
     await expect(reply(31).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });

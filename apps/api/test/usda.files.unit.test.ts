@@ -187,12 +187,16 @@ describe("a food's serving", () => {
     expect(usdaMeasureName(given)).toBe(expected);
   });
 
-  it("is the first measure with a gram weight, else 100 g by the gram", () => {
+  it("is the first household measure with a gram weight, else 100 g by the gram", () => {
     expect(usdaServing([portion(1, "cup", 158), { seqNum: 2, amount: 1, unit: "oz", gramWeight: 28 }])).toEqual({ grams: 158, unit: "cup" });
     expect(usdaServing([])).toEqual({ grams: 100, unit: "g" });
+    // Frozen kale's first row carries an amount of 0 and 94 g for a 10 oz package;
+    // a survey filler names no amount at all. Neither is the serving.
+    expect(usdaServing([{ seqNum: 0, amount: 0, unit: "package (10 oz)", gramWeight: 94 }, { seqNum: 2, amount: 1, unit: "package (10 oz)", gramWeight: 284 }])).toEqual({ grams: 284, unit: "package (10 oz)" });
+    expect(usdaServing([{ seqNum: 1, amount: null, unit: "Guideline amount per fl oz of beverage", gramWeight: 2.5 }])).toEqual({ grams: 100, unit: "g" });
   });
 
-  it("a measure nobody could read is cut at a space, never through a word", () => {
+  it("a measure nobody could read is cut where a clause ends, never through a word or inside a bracket", () => {
     // SR Legacy's longest first measure is 74 characters (measured 2026-09-16),
     // and a blind cut at forty left 110 of the table's 129 longest names ending
     // mid-word and 19 ending in a space.
@@ -200,9 +204,10 @@ describe("a food's serving", () => {
     expect(long).toBe("serving serving size varied from 1 to 3");
     expect(long.length).toBeLessThanOrEqual(40);
 
-    // Two of the table's own longest names, cut where the words end.
-    expect(usdaMeasureName(portion(1, "3 oz with bone, cooked (yield after bone and fat removed)"))).toBe("3 oz with bone, cooked (yield after");
-    expect(usdaMeasureName(portion(1, "serving (1 NLEA serving - about 4 crackers)"))).toBe("serving (1 NLEA serving - about 4");
+    // Two of the table's own longest names: cut before the bracket, or, where that
+    // would leave too little to tell apart, with the bracket closed.
+    expect(usdaMeasureName(portion(1, "3 oz with bone, cooked (yield after bone and fat removed)"))).toBe("3 oz with bone, cooked");
+    expect(usdaMeasureName(portion(1, "serving (1 NLEA serving - about 4 crackers)"))).toBe("serving (1 NLEA serving - about 4…)");
     // A dangling comma or dash goes with the cut.
     expect(usdaMeasureName(portion(1, "slice of a very large loaf indeed, sliced thinly"))).toBe("slice of a very large loaf indeed");
 

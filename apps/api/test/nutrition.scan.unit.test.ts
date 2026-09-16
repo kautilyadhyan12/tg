@@ -259,16 +259,16 @@ describe("the portion a priced food is served by on the photo sheet", () => {
   const pumpkin: VisionItem = { ...seen({ grams: 60, kcal: 30, protein_g: 1, carbs_g: 7, fat_g: 0 }, "pumpkin"), vessel: "plate", fill_level: 0.2, count: 2 };
 
   it("is the grams the model saw for a USDA food, its count what the stepper steps by — never USDA's cup times the count", () => {
-    const sheet = scanSheet(evidence(pumpkin), [{ kind: "table", food: usdaPumpkin }], []);
+    const sheet = scanSheet(evidence(pumpkin), [{ kind: "table", food: usdaPumpkin }]);
     expect(sheet.items[0]).toMatchObject({ name: "Pumpkin, cooked", nutritionSource: "usda", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default", pieces: 2, kcalPoint: 31 });
     expect(sheet.draftItems).toEqual([{ canonical: "usda_fndds_2709692", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default" }]);
-    // A saved dish the vessel names does not change it: that rule is our list's, until 7a-iv.
-    const dish = scanSheet(evidence({ ...pumpkin, vessel: "katori" }), [{ kind: "table", food: usdaPumpkin }], [{ containerClass: "standard_katori", volumeMl: 400, foodHint: null }]);
-    expect(dish.items[0]).toMatchObject({ gramsPoint: 60, portionSource: "default", pieces: 2 });
+    // A vessel the model names does not change it: that rule is our list's, until 7a-iv-b.
+    const inKatori = scanSheet(evidence({ ...pumpkin, vessel: "katori" }), [{ kind: "table", food: usdaPumpkin }]);
+    expect(inKatori.items[0]).toMatchObject({ gramsPoint: 60, portionSource: "default", pieces: 2 });
   });
 
   it("is USDA's own serving once, uncounted, where the model gave no grams", () => {
-    const sheet = scanSheet(evidence({ ...pumpkin, grams: null }), [{ kind: "table", food: usdaPumpkin }], []);
+    const sheet = scanSheet(evidence({ ...pumpkin, grams: null }), [{ kind: "table", food: usdaPumpkin }]);
     expect(sheet.items[0]).toMatchObject({ gramsPoint: 230, gramsRange: [230, 230], portionSource: "default", pieces: null, kcalPoint: 120 });
   });
 
@@ -276,12 +276,12 @@ describe("the portion a priced food is served by on the photo sheet", () => {
     // The same food served by the same cup, from our list: two pieces read as two cups.
     for (const source of ["curated", "openfoodfacts"] as const) {
       const food: FoodReference = { ...usdaPumpkin, canonical: `zqx_${source}`, name: `Zqx ${source}`, source };
-      expect(scanSheet(evidence(pumpkin), [{ kind: "table", food }], []).items[0], source).toMatchObject({ gramsPoint: 460, pieces: 2 });
+      expect(scanSheet(evidence(pumpkin), [{ kind: "table", food }]).items[0], source).toMatchObject({ gramsPoint: 460, pieces: 2 });
     }
   });
 
   it("is the model's grams for an estimate, with its count", () => {
-    const sheet = scanSheet(evidence({ ...pumpkin, canonical_hint: "zqxpumpkin" }), [{ kind: "estimate", per100g: { kcal: 50, proteinG: 1.7, carbsG: 11.7, fatG: 0 }, grams: 60, overruled: null }], []);
+    const sheet = scanSheet(evidence({ ...pumpkin, canonical_hint: "zqxpumpkin" }), [{ kind: "estimate", per100g: { kcal: 50, proteinG: 1.7, carbsG: 11.7, fatG: 0 }, grams: 60, overruled: null }]);
     expect(sheet.items[0]).toMatchObject({ nutritionSource: "estimate", gramsPoint: 60, pieces: 2, kcalPoint: 30 });
   });
 
@@ -304,7 +304,7 @@ describe("the portion a priced food is served by on the photo sheet", () => {
     expect(Object.keys(expected).sort()).toEqual([...mealVesselSchema.options].sort());
     for (const vessel of mealVesselSchema.options) {
       const item: VisionItem = { ...seen({ grams: null }, "zqxweighed"), vessel, fill_level: 1 };
-      const [row] = scanSheet(evidence(item), [{ kind: "table", food }], []).items;
+      const [row] = scanSheet(evidence(item), [{ kind: "table", food }]).items;
       expect([row?.gramsPoint, row?.gramsRange, row?.portionSource], vessel).toEqual(expected[vessel]);
     }
   });

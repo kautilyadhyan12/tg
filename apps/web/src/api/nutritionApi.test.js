@@ -222,6 +222,30 @@ describe('nutritionService repoint (Card 5a)', () => {
     ]);
   });
 
+  // ── 7a-iv-a: the measure arm ({measure, amount}) survives the helpers ─────────
+  it('toChosenItems keeps the measure arm as picked, dropping every other field', () => {
+    expect(toChosenItems([
+      { canonical: 'apple', measure: 'usda-4', amount: 1.5, grams: 999, name: 'Apple' },
+      { canonical: 'oats', measure: 'g', amount: '40' }, // typed text is a number on the wire
+      { canonical: 'dal', dishwareId: 'd-1', fillLevel: 0.5, measure: 'serving', amount: 2 }, // a dish wins: one arm only
+    ])).toEqual([
+      { canonical: 'apple', measure: 'usda-4', amount: 1.5 },
+      { canonical: 'oats', measure: 'g', amount: 40 },
+      { canonical: 'dal', dishwareId: 'd-1', fillLevel: 0.5 },
+    ]);
+  });
+
+  it('composeAddIngredient appends a measure-arm ingredient, the existing items at their stored grams', () => {
+    const out = composeAddIngredient(
+      [{ canonical: 'apple', gramsPoint: 273, measure: { id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 } }],
+      { canonical: 'peanut_butter', measure: 'usda-1', amount: 1 },
+    );
+    expect(out).toEqual([
+      { canonical: 'apple', grams: 273 },
+      { canonical: 'peanut_butter', measure: 'usda-1', amount: 1 },
+    ]);
+  });
+
   it('updateMeal sends the composed items to the meals PATCH (Card 5c wiring)', async () => {
     const seen = recordRequests(authApi);
     await nutritionService.updateMeal('m-1', {

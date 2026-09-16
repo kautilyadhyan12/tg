@@ -33,10 +33,16 @@ at a specific `[archive :line]` for detail. Never quote it as a rule.
 5. **Click-through for Kd**: five to ten numbered steps with what he should see at each,
    against the local servers. A card whose screen cannot be reached yet says so instead.
 6. **Independent review** — kept by Kd's ruling because it found real problems. A FRESH
-   chat reviews the diff (the review prompt is in §6). The building chat fixes every
-   finding, the reviewer re-checks only the fixes, and that is the end of the round.
-   No third round unless a Critical/High is still open. Two rounds of Criticals in the
-   same code means stop and ask Kd for a redesign.
+   chat reviews the diff (the round-one prompt is in §6). The building chat fixes every
+   finding. The re-check goes back to THAT SAME reviewer chat, never a fresh one: Kd
+   pastes the re-check prompt from §6 into it and it reads only the fixes. A High
+   found in a fix is fixed and confirmed in that same chat. The round ends when no
+   Critical/High is open: Lows found by a re-check are fixed and merged with no
+   further re-check and without asking (RULINGS 2026-09-16). Two rounds of Criticals
+   in the same code means stop and ask Kd for a redesign. Risky code — sign-in, money,
+   other people's data, uploads, anything that parses an outside reply or sends data
+   out — is reviewed by RUNNING it, not only by reading it: the real SDK, the real
+   Redis, a fixed address with several users.
 7. **Commit and open a pull request to `master`**; CI must be green; merge within a day
    or two; delete the branch. Small commits, explicit file lists (`git add <files>`,
    never `git add -A`). `master` takes pull requests only: GitHub refuses a direct
@@ -111,8 +117,10 @@ that involves food shows its allergens. Disclaimer text is never softened or rem
 **Tests.** Route tests via `fastify.inject` covering the happy path, a validation failure
 and the cross-tenant denial. Database-backed tests run against the local Postgres
 (`pnpm --filter api test:local`, Docker Desktop running). A bug fix starts with a failing
-test. Mutation harnesses (`apps/*/tools/mutate-*.mjs`) are run only when sign-in, money
-or other-people's-data code changes, never as a routine step and never in CI.
+test. A rule that picks, ranks or thresholds (which entry wins, which portion applies)
+ships with a table test over every class of case BEFORE review; the reviewer is never
+the first to sweep it. Mutation harnesses (`apps/*/tools/mutate-*.mjs`) are run only when
+sign-in, money or other-people's-data code changes, never as a routine step and never in CI.
 
 **Dependencies.** A new dependency needs Kd's yes in the plan, with the reason.
 
@@ -147,17 +155,30 @@ Dev servers: api from `apps/api` with `DATABASE_URL` pointing at the LOCAL datab
 (the `.env` there points at Kd's real Neon data; never run sweeps or seeds against it);
 web with `corepack pnpm --filter web dev`.
 
-## 6. The review prompt (paste into a fresh chat)
+## 6. The review prompts
+
+Round one, pasted into a FRESH chat:
 
 ```
 You are reviewing, not fixing. Read CLAUDE.md §4 and RULINGS.md. Audit the diff of
-<commits or branch> against them and the spec sections it touches. Report only:
+<commits or branch> against them and the spec sections it touches. Where it touches
+sign-in, money, other people's data, uploads, or anything that parses an outside
+reply or sends data out, RUN it (the real SDK, the real Redis, a fixed address with
+several users); do not only read it. Report only:
 (1) defects, each tagged Critical/High (security, data loss, privacy, money, a broken
 core flow, or anything a user can SEE that is FALSE) or Low (wording, naming, style),
 with file:line and a one-line fix; (2) a security pass: authentication, tenancy,
 input parsing, idempotency, secrets and logs, SQL; (3) tests that would stay green if
-the thing they claim to check were broken. No praise, no restating the diff. If this
-is a re-check, cover only the fixes.
+the thing they claim to check were broken. No praise, no restating the diff.
+```
+
+The re-check, pasted into THAT SAME reviewer chat, never a fresh one:
+
+```
+Re-check, in this chat: cover only the fixes in <commit>. For each of your findings
+say closed or still open, with file:line. Report anything a fix broke. No new sweep
+of the rest of the diff. If nothing Critical/High is open, say so in one line: the
+round ends there.
 ```
 
 ## 7. Layout
