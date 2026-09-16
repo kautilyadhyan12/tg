@@ -6,15 +6,28 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { isNoValueWord, shownFoodName, type ChosenItem, type Meal, type MealItem, type MealPhotoItem, type VisionEvidence } from "@app/shared";
+import {
+  MAX_ITEM_GRAMS,
+  isNoValueWord,
+  shownFoodName,
+  type ChosenItem,
+  type FoodMeasure,
+  type FoodSearchItem,
+  type LoggedMeasure,
+  type Meal,
+  type MealItem,
+  type MealPhotoItem,
+  type VisionEvidence,
+} from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedUsdaFdcId, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
+import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { VESSEL_CONTAINERS, dishwareGrams, resolvePortion, type PortionResult, type SavedDishware } from "./portion-priors.js";
+import { VESSEL_CONTAINERS, resolvePortion, type PortionResult } from "./portion-priors.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
@@ -281,7 +294,11 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  USDA's. */
 const PACKAGED_RESERVE = 3;
 
-export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
+export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodSearchItem[]> {
+  return await withMeasures(deps, await searchFoodReferences(deps, query, limit));
+}
+
+async function searchFoodReferences(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const local = searchCurated(query, limit).map(asReference);
   if (local.length >= limit) return local;
   const room = limit - local.length;
@@ -293,6 +310,75 @@ export async function searchFoods(deps: NutritionDeps, query: string, limit: num
   const external = packagedRoom > 0 ? await cachedExternal(deps, query, packagedRoom) : [];
   const usdaKeeps = Math.max(0, room - external.length);
   return [...local, ...usda.slice(0, usdaKeeps), ...external].slice(0, limit);
+}
+
+// ── measures (ROADMAP 7a-iv-a; RULINGS 2026-09-16, the portion redesign) ─────
+
+/** The USDA entry whose household measures a food has: the food itself, for one
+ *  of the USDA table's; the entry it cites, for one of our list's; none for a
+ *  packaged product or a scan's estimate. */
+const measuresEntry = (food: FoodReference): number | null =>
+  food.source === "usda" ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
+
+/** Every food's measures (`measures.ts`), `[i]` for `foods[i]`, with ONE read of
+ *  the USDA measures they share. */
+async function measuresOf(deps: Pick<NutritionDeps, "sql">, foods: readonly FoodReference[]): Promise<FoodMeasure[][]> {
+  const entries = foods.map(measuresEntry);
+  const portions = await repo.usdaPortionsFor(deps.sql, entries.filter((id): id is number => id !== null));
+  return foods.map((food, at) => {
+    const entry = entries[at] ?? null;
+    return foodMeasures({ serving: food.serving, unit: food.unit, portions: entry === null ? [] : (portions.get(entry) ?? []) });
+  });
+}
+
+/** The search box's foods, each with its measures and the one it starts at. */
+async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<FoodSearchItem[]> {
+  const measures = await measuresOf(deps, foods);
+  return foods.map((food, at) => {
+    const own = measures[at] ?? foodMeasures({ serving: food.serving, unit: food.unit, portions: [] });
+    return {
+      ...asReference(food),
+      measures: own,
+      startsAt: startingMeasure(food, own),
+    };
+  });
+}
+
+/** What one chosen item comes to for its food: grams as sent · a saved dish of
+ *  THIS person's (another's is refused, never priced) × how full, weighed by the
+ *  food's own cup · one of the food's own measures × how many, looked up in the
+ *  server's list for that food, so a measure the food does not have is refused
+ *  and no request says what a measure weighs. The dish and the measure are kept
+ *  on the item, by the name the list or the person gave them. */
+async function amountOf(
+  deps: NutritionDeps,
+  userId: string,
+  chosen: ChosenItem,
+  food: FoodReference,
+): Promise<{ grams: number; dishwareRung: "user_dishware" | null; measure: LoggedMeasure | null }> {
+  if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
+  const [measures = []] = await measuresOf(deps, [food]);
+  const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
+  if ("dishwareId" in chosen) {
+    const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
+    if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
+    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, gramsPerMl(measures));
+    // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):
+    // a round-to-0 (tiny dish × low fill) would persist a MealItem the shared
+    // contract declares impossible, and more than 10_000 would pass the cap the
+    // grams arm enforces at the schema.
+    if (tooSmallOrLarge(grams)) {
+      throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different fill or enter grams.");
+    }
+    return { grams, dishwareRung: "user_dishware", measure: { id: "dish", name: dish.label, amount: chosen.fillLevel } };
+  }
+  const measure = measures.find((m) => m.id === chosen.measure);
+  if (measure === undefined) throw new NutritionError(400, "unknown_measure", "That measure is not one of this food's.");
+  const grams = measureGrams(measure, chosen.amount);
+  if (tooSmallOrLarge(grams)) {
+    throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different amount.");
+  }
+  return { grams, dishwareRung: null, measure: { id: measure.id, name: measure.name, amount: chosen.amount } };
 }
 
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
@@ -350,6 +436,7 @@ function nutritionItem(
   gramsPoint: number,
   gramsRange: [number, number],
   portionSource: "user_dishware" | "regional_prior" | "default",
+  measure: LoggedMeasure | null = null,
 ): MealItem {
   const scale = gramsPoint / 100;
   // Kd DEVIATION ruling 2026-07-16 (supersedes §3.3's round-to-10 display
@@ -375,6 +462,7 @@ function nutritionItem(
     // An estimate has no table to be priced again from, so its item carries its
     // figures, and the saved meal can change its grams later (patchMeal).
     ...(food.source === "estimate" ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
+    ...(measure === null ? {} : { measure }),
   };
 }
 
@@ -470,7 +558,6 @@ const servingOnce = (food: FoodReference): PortionResult =>
 export function scanSheet(
   evidence: VisionEvidence,
   prices: readonly ScanPrice[],
-  savedDishware: readonly SavedDishware[],
 ): { foods: FoodReference[]; draftItems: Draft["items"]; items: MealPhotoItem[]; unknownItems: string[] } {
   const foods: FoodReference[] = [];
   const draftItems: Draft["items"] = [];
@@ -504,7 +591,9 @@ export function scanSheet(
     } else {
       food = price.food;
       // Our list's foods and packaged products keep the rule they were scanned by
-      // before this card, until 7a-iv's form (Kd, RULINGS 2026-09-16).
+      // before 7a-iii-b, until 7a-iv-b (Kd, RULINGS 2026-09-16) — with no saved
+      // dish: a dish is never chosen for the person, only picked by them as a
+      // measure (RULINGS 2026-07-18, and the portion redesign of 2026-09-16).
       portion = resolvePortion(
         {
           canonicalHint: item.canonical_hint,
@@ -513,7 +602,7 @@ export function scanSheet(
           sizeClass: item.size_class,
           count: item.count,
         },
-        savedDishware,
+        [],
         { grams: food.serving, unit: food.unit },
       );
     }
@@ -634,15 +723,9 @@ async function readMealPhoto(
   // Stage 2: price each identified food, then resolve its portion. Each food is
   // priced on its own, so they are asked together: a plate of unlisted foods waits
   // for its slowest packaged-product search, not their sum.
-  const dishware = await repo.listDishware(deps.sql, userId, 100, null);
-  const savedDishware = dishware.map((d) => ({
-    containerClass: d.containerClass,
-    volumeMl: d.volumeMl,
-    foodHint: d.foodHint,
-  }));
   const lookups = scanLookups(deps);
   const prices = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
-  const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices, savedDishware);
+  const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices);
 
   const scanToken = token();
   // A good photo the model did not name is "Meal", as a renamed-to-nothing
@@ -705,34 +788,6 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
   return draft;
 }
 
-/** Card 5c2: reduce a chosen item (grams arm OR dishware arm) to concrete
- *  grams. The dishware arm looks its dish up TENANT-SCOPED — a foreign or
- *  missing id 400s, never resolves another user's dish — and computes grams
- *  via the shared `dishwareGrams` helper (the same math the scan-time rung-1
- *  resolver uses), forcing rung 'user_dishware'. The grams arm passes through
- *  with no rung override (dishwareRung null → the caller's own rung applies). */
-async function normalizeChosen(
-  deps: NutritionDeps,
-  userId: string,
-  chosen: ChosenItem,
-): Promise<{ canonical: string; grams: number; dishwareRung: "user_dishware" | null }> {
-  if ("dishwareId" in chosen) {
-    const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
-    if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
-    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, chosen.canonical);
-    // Keep the dishware arm SYMMETRIC with the grams arm's bounds
-    // (chosenItemsSchema: positive, ≤10_000). A round-to-0 (tiny dish × low
-    // fill) would otherwise persist a MealItem the shared contract declares
-    // impossible (gramsPoint.positive) — unrenderable on read (T3 F1); an
-    // >10_000 result would bypass the cap the grams arm enforces at the schema.
-    if (grams < 1 || grams > 10_000) {
-      throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different fill or enter grams.");
-    }
-    return { canonical: chosen.canonical, grams, dishwareRung: "user_dishware" };
-  }
-  return { canonical: chosen.canonical, grams: chosen.grams, dishwareRung: null };
-}
-
 /** Photo confirm/preview item resolution (Card 5c — meal composition). A
  *  chosen item either belongs to the scan draft (its rung is preserved unless
  *  the user re-measured it with a dish) or is an EXTRA the user added by search
@@ -748,22 +803,23 @@ async function resolveDraftItem(
   draft: Draft,
   chosen: ChosenItem,
 ): Promise<{ item: MealItem; original: MealItem | null }> {
-  const norm = await normalizeChosen(deps, userId, chosen);
-  const food = draft.foods.find((f) => f.canonical === norm.canonical);
-  const estimate = draft.items.find((i) => i.canonical === norm.canonical);
+  const food = draft.foods.find((f) => f.canonical === chosen.canonical);
+  const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
   if (food !== undefined && estimate !== undefined) {
     // User-chosen amount collapses the range; a dishware measure overrides the
     // rung to 'user_dishware', otherwise the estimate's rung is preserved.
-    const rung = norm.dishwareRung ?? estimate.portionSource;
+    const amount = await amountOf(deps, userId, chosen, food);
+    const rung = amount.dishwareRung ?? estimate.portionSource;
     return {
-      item: nutritionItem(food, norm.grams, [norm.grams, norm.grams], rung),
+      item: nutritionItem(food, amount.grams, [amount.grams, amount.grams], rung, amount.measure),
       original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
     };
   }
-  const extra = await findFood(deps, norm.canonical);
+  const extra = await findFood(deps, chosen.canonical);
   if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+  const amount = await amountOf(deps, userId, chosen, extra);
   return {
-    item: nutritionItem(extra, norm.grams, [norm.grams, norm.grams], norm.dishwareRung ?? "default"),
+    item: nutritionItem(extra, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure),
     original: null,
   };
 }
@@ -850,10 +906,10 @@ async function resolveChosenItems(
 ): Promise<MealItem[]> {
   const items: MealItem[] = [];
   for (const chosen of chosenItems) {
-    const norm = await normalizeChosen(deps, userId, chosen);
-    const food = await findFood(deps, norm.canonical);
+    const food = await findFood(deps, chosen.canonical);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-    items.push(nutritionItem(food, norm.grams, [norm.grams, norm.grams], norm.dishwareRung ?? "default"));
+    const amount = await amountOf(deps, userId, chosen, food);
+    items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure));
   }
   return items;
 }
@@ -929,21 +985,25 @@ export async function patchMeal(
   if (input.items !== undefined) {
     items = [];
     for (const chosen of input.items) {
-      const norm = await normalizeChosen(deps, userId, chosen);
       // A food the scan estimated is priced by the figures this meal's own item
       // carries (it has no table); anything else by its table, as it was saved.
-      const saved = before.items.find((i) => i.canonical === norm.canonical);
-      const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, norm.canonical));
+      const saved = before.items.find((i) => i.canonical === chosen.canonical);
+      const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, chosen.canonical));
       if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+      const amount = await amountOf(deps, userId, chosen, food);
       // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
       // rung (same rule as confirmMeal) — only items new to the meal are
       // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they
       // normalize to 'default'. Card 5c2: re-measuring with a dish overrides
       // the rung to 'user_dishware'.
-      const prior = before.items.find((i) => i.canonical === norm.canonical)?.portionSource;
+      const prior = saved?.portionSource;
       const preserved = prior === "user_dishware" || prior === "regional_prior" ? prior : "default";
-      const rung = norm.dishwareRung ?? preserved;
-      items.push(nutritionItem(food, norm.grams, [norm.grams, norm.grams], rung));
+      const rung = amount.dishwareRung ?? preserved;
+      // An edit that sends an item back at the grams it holds (the web resends a
+      // meal's other items so to add one) keeps the measure it was logged by;
+      // any other grams are grams.
+      const kept = "grams" in chosen && saved?.measure !== undefined && saved.gramsPoint === chosen.grams ? saved.measure : null;
+      items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], rung, amount.measure ?? kept));
     }
   }
   const row = await repo.updateMeal(deps.sql, userId, id, {

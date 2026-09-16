@@ -26,6 +26,16 @@ export const per100gSchema = z.object({
 }).strict();
 export type Per100g = z.infer<typeof per100gSchema>;
 
+/** The measure a meal item was logged by (ROADMAP 7a-iv-a): the measure's id and
+ *  name as the food's list gave them when it was logged — or "dish" and the
+ *  person's own name for a saved dish — and how many of it. The item's grams are
+ *  `amount` of it, worked out by the server. An item logged by grams, or before
+ *  measures existed, has none. */
+export const loggedMeasureSchema = z.object({
+  id: z.string().min(1).max(40), name: z.string().min(1).max(100), amount: z.number().positive(),
+}).strict();
+export type LoggedMeasure = z.infer<typeof loggedMeasureSchema>;
+
 export const mealItemSchema = z.object({
   name: z.string(), canonical: z.string(), gramsPoint: z.number().positive(), gramsRange: gramRangeSchema,
   portionSource: portionSourceSchema, nutritionSource: nutritionSourceSchema,
@@ -35,6 +45,7 @@ export const mealItemSchema = z.object({
    *  so the meal carries them, and its grams can be changed after saving without
    *  a lookup; every other row is priced again from its table by canonical. */
   per100g: per100gSchema.optional(),
+  measure: loggedMeasureSchema.optional(),
 });
 export type MealItem = z.infer<typeof mealItemSchema>;
 
@@ -87,7 +98,24 @@ const gramsItemSchema = z
 const dishwareItemSchema = z
   .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })
   .strict();
-export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema]);
+
+// ROADMAP 7a-iv-a — a food logged by one of its own measures (RULINGS 2026-09-16,
+// the portion redesign): the measure's id in the food's list and how many of it.
+// The SERVER looks the measure up in its own list for that food and works out the
+// grams, so a client never says what a measure weighs.
+/** Grams, ounces, the food's own serving, and a USDA household measure by its
+ *  `seq_num` in the USDA entry the food is, or cites. */
+export const measureIdSchema = z.string().regex(/^(?:g|oz|serving|usda-\d{1,4})$/);
+/** One measure of a food, as the food search sends it: its id, its name, and the
+ *  grams ONE of it weighs. */
+export const foodMeasureSchema = z.object({
+  id: measureIdSchema, name: z.string().min(1).max(60), grams: z.number().positive().max(MAX_ITEM_GRAMS),
+}).strict();
+export type FoodMeasure = z.infer<typeof foodMeasureSchema>;
+const measureItemSchema = z
+  .object({ canonical: z.string().min(1).max(120), measure: measureIdSchema, amount: z.number().positive().max(MAX_ITEM_GRAMS) })
+  .strict();
+export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, measureItemSchema]);
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
 const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
 
@@ -186,6 +214,22 @@ export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();
+
+/** One food the search box offers: its figures per 100 g, its serving, where it
+ *  comes from, the measures it can be logged by (ROADMAP 7a-iv-a) and the one and
+ *  amount it starts at. */
+export const foodSearchItemSchema = z.object({
+  canonical: z.string().min(1), name: z.string().min(1),
+  kcal: z.number().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
+  fiberG: z.number().nonnegative().nullable(), serving: z.number().positive(), unit: z.string(),
+  source: nutritionSourceSchema,
+  measures: z.array(foodMeasureSchema).min(1),
+  startsAt: z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict(),
+}).strict().refine((food) => food.measures.some((m) => m.id === food.startsAt.measure), {
+  message: "a food starts at one of its own measures",
+});
+export type FoodSearchItem = z.infer<typeof foodSearchItemSchema>;
+export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItemSchema) }).strict();
 
 // ── Daily calorie + macro targets: the macro rings' numbers ─────────────────
 // These ARE the plan's numbers (plan.ts; ROADMAP 4a-iii): the same stored

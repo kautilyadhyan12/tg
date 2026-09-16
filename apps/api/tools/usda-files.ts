@@ -10,6 +10,12 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
+import { usdaMeasureName, type UsdaPortion } from "../src/modules/nutrition/measures.js";
+
+// A household measure's name is the app's own rule (ROADMAP 7a-iv-a: the measures
+// a food is logged by), read by the importer for a food's serving and by the
+// server for every measure it offers.
+export { usdaMeasureName, type UsdaPortion };
 
 export const fail = (message: string): never => {
   throw new Error(message);
@@ -73,16 +79,6 @@ export const USDA_NUTRIENTS = [
   { key: "vitaminCMg", sr: "1162", fndds: "401", column: "vitamin_c_mg" },
 ] as const;
 export type UsdaNutrient = (typeof USDA_NUTRIENTS)[number]["key"];
-
-/** A household measure of one food: "1 cup · 246 g". `amount` is the release's
- *  own number where it gives one (SR) and null where the measure's text carries
- *  it instead (FNDDS's "1 cup"). */
-export interface UsdaPortion {
-  seqNum: number;
-  amount: number | null;
-  unit: string;
-  gramWeight: number;
-}
 
 export interface UsdaEntry {
   fdcId: number;
@@ -291,53 +287,6 @@ export function usdaTableFromCsv(csv: UsdaCsv, release: UsdaRelease): Map<number
 // ── the row a food becomes ───────────────────────────────────────────────────
 // Pure, and here rather than in `import-usda.ts` so the tests can reach it
 // without running that script's top-level import.
-
-/** A measure's leading amount, where its text carries one ("1 cup", "1/2 cup"). */
-const LEADING_AMOUNT = /^(\d*\.?\d+|\d+\/\d+)\s+(\S.*)$/;
-
-/** A measure's name as the screen can hold it: at most forty characters, cut at
- *  a SPACE and never through a word. SR Legacy writes whole sentences into the
- *  column ("3 oz with bone, cooked (yield after bone and fat removed)"), and a
- *  blind cut at forty left 110 of the table's 129 longest names ending mid-word
- *  — "3 oz with bone, cooked (yield after bone" — and 19 ending in a space
- *  (counted 2026-09-16 on the loaded table). A dangling comma or bracket goes,
- *  from a short name as from a cut one, so what is left reads as words: SR
- *  Legacy's own "cup," (fdc 175258) is a cup. */
-const MEASURE_NAME_MAX = 40;
-const DANGLING = /[\s,;:([{-]+$/u;
-const readable = (name: string): string => {
-  const whole = name.trim().replace(DANGLING, "");
-  if (whole.length <= MEASURE_NAME_MAX) return whole;
-  const cut = whole.slice(0, MEASURE_NAME_MAX);
-  const lastSpace = cut.lastIndexOf(" ");
-  // One word longer than the whole allowance has no space to cut at; it is cut
-  // where it must be rather than left to overflow the screen.
-  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(DANGLING, "");
-};
-
-/** What one of this measure is called, by the same rule the packaged-product
- *  reader uses for a label's serving (`openfoodfacts.adapter.ts`): one of it is
- *  named by its own words ("cup"), a half is "half cup", and any other count
- *  keeps its number ("2 tbsp"). SR Legacy states the amount in its own column
- *  and the words in `modifier`; the survey release writes both together in
- *  `portion_description`, so the amount is read off the front of the text. */
-export function usdaMeasureName(portion: UsdaPortion): string {
-  const stated = portion.amount !== null && portion.amount > 0 ? portion.amount : null;
-  const led = stated === null ? LEADING_AMOUNT.exec(portion.unit) : null;
-  const fraction = led?.[1]?.split("/");
-  const amount =
-    stated ??
-    (fraction === undefined
-      ? 1
-      : fraction.length === 2
-        ? Number(fraction[0]) / Number(fraction[1])
-        : Number(fraction[0]));
-  const words = (led?.[2] ?? portion.unit).trim();
-  if (words === "" || !Number.isFinite(amount) || amount <= 0) return readable(portion.unit);
-  if (amount === 1) return readable(words);
-  if (amount === 0.5) return readable(`half ${words}`);
-  return readable(`${String(amount)} ${words}`);
-}
 
 /** A food's serving: its first household measure with a gram weight, else 100 g
  *  by the gram (ROADMAP 7a-iii-a). `portions` arrives in USDA's own `seq_num`

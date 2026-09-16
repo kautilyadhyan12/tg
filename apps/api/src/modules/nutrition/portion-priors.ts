@@ -1,5 +1,6 @@
 // Part 2B Appendix B — India-first seed. Values are copied, never re-derived.
 import { MAX_ITEM_GRAMS, type MealVessel } from "@app/shared";
+import { dishwareGrams } from "./measures.js";
 
 export const CONTAINER_PRIORS = {
   small_katori: [100, 150], katori_or_small_bowl: [150, 200], standard_katori: [150, 200],
@@ -176,14 +177,6 @@ const PACK_NAMED_AS_CONTAINER: ReadonlyMap<string, ReadonlySet<string>> = new Ma
 const isOwnServing = (container: string, serving: Serving): boolean =>
   container === serving.unit || (PACK_NAMED_AS_CONTAINER.get(serving.unit)?.has(container) ?? false);
 
-/** Grams from a saved dish: volume(ml) × fill(0–1) × food density. The ONE
- *  place both the scan-time rung-1 resolver (below) and the confirm-time
- *  dishware arm (service.ts, Card 5c2) compute this, so a bowl measured in the
- *  photo flow and the same bowl chosen at confirm can never disagree. */
-export function dishwareGrams(volumeMl: number, fillLevel: number, canonicalHint: string): number {
-  return Math.round(volumeMl * fillLevel * density(canonicalHint));
-}
-
 /** Whole grams, never under one: a label's "0.25 cup" is still some food. */
 const wholeGrams = (grams: number): number => Math.max(1, Math.round(grams));
 
@@ -286,7 +279,7 @@ function measured(e: PortionEvidence, dishware: readonly SavedDishware[], servin
     ? undefined
     : dishware.find((d) => d.containerClass === e.container && (d.foodHint === null || e.canonicalHint.includes(d.foodHint)));
   if (saved !== undefined) {
-    const grams = dishwareGrams(saved.volumeMl, e.fillLevel ?? 1, e.canonicalHint);
+    const grams = dishwareGrams(saved.volumeMl, e.fillLevel ?? 1, density(e.canonicalHint));
     return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware", pieces: null };
   }
   if (e.container !== null && SERVING_WORDS.has(e.container)) return servingPortion(serving);
