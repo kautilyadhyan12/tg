@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Trash2, Camera, X, Loader2,
   Flame, Coffee, UtensilsCrossed, Sandwich, Cookie,
-  Sparkles, Check, Tag, Pencil,
+  Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
@@ -11,7 +11,7 @@ import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTarget
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
 import {
-  amountRefusal, chosenItemFor, comesToUnderAGram, isStartingValue, itemText, pickerChoices, startingValue, valueKeepingGrams,
+  amountRefusal, amountSummary, chosenItemFor, comesToUnderAGram, isStartingValue, itemText, pickerChoices, startingValue, valueKeepingGrams,
 } from '../components/nutrition/measures';
 import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
 import { getUserId } from '../utils/storage';
@@ -718,6 +718,10 @@ function PhotoModal({ open, onClose, onSave }) {
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
   const [changeUndo,   setChangeUndo]   = useState({});
+  // The sheet is a short list, one line a food, and a tap opens that food's
+  // picker (Kd's pick, RULINGS 2026-09-17): openRow is the open one — "s2" for
+  // scanned row 2, "x0" for added ingredient 0 — or null.
+  const [openRow,      setOpenRow]      = useState(null);
   // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
   // used one of the day's scans, so neither closing the sheet nor leaving the page
   // throws it away (`unsavedScan.js`). scannedAt is when this sheet's scan came
@@ -751,6 +755,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setReplaced({});
     setChanging(null);
     setChangeUndo({});
+    setOpenRow(null);
     setScannedAt(null);
     setConfirmingClose(null);
     setDishUndo({});
@@ -774,6 +779,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setReplaced(sheet.replaced);
     setChanging(null);
     setChangeUndo(sheet.changeUndo);
+    setOpenRow(null);
     setScannedAt(at);
     setConfirmingClose(null);
     setDishUndo(sheet.dishUndo);
@@ -825,6 +831,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setDishUndo({});     // …and no dish measures
     setBeforeDish({});
     setChanging(null);
+    setOpenRow(null);
     setRetakeMsg(null);
 
     try {
@@ -1050,12 +1057,13 @@ function PhotoModal({ open, onClose, onSave }) {
   };
 
   const addExtra = (food) => {
+    setOpenRow(`x${extras.length}`);
     setExtras((prev) => [...prev, { food, amount: startingValue(food) }]);
     setAdding(false);
     setLive(null); // numbers are stale until the server re-prices the new list
   };
   const patchExtra = (idx, next) => setExtras((prev) => prev.map((x, i) => (i === idx ? { ...x, ...next } : x)));
-  const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setLive(null); };
+  const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setOpenRow(null); setLive(null); };
   // The food picked for a scanned row takes its place at the row's own grams, by the
   // gram: the measures the row had were the food it replaced. The server prices it
   // (never the browser) once the preview asks.
@@ -1086,29 +1094,56 @@ function PhotoModal({ open, onClose, onSave }) {
 
   if (!open) return null;
 
+  const amber = { color: 'rgba(251,191,36,0.85)' };
+  const toggleRow = (key) => setOpenRow((current) => (current === key ? null : key));
+  // Why a row cannot be saved as it stands, said under it whether it is open or not:
+  // nothing can be confirmed until it is fixed.
+  const unusableLine = ({ tooLarge, tooSmall }) => ((tooLarge || tooSmall) && (
+    <p className="text-xs px-3.5 pb-2.5" style={amber}>
+      {tooSmall
+        ? 'That comes to less than 1 g — pick a larger amount.'
+        : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
+    </p>
+  ));
+  const macrosLine = (shown) => (
+    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+      {shown === null || shown === undefined
+        ? 'Calculating…'
+        : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
+    </p>
+  );
+  const rowBox = (isOpen, added) => ({
+    background: added ? 'rgba(255,138,31,0.05)' : isOpen ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.02)',
+    border: added ? '1px solid rgba(255,138,31,0.15)' : `1px solid rgba(255,255,255,${isOpen ? '0.10' : '0.05'})`,
+  });
+  const withSheet = analysis !== null;
+
   return (
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
+        {/* A phone: the whole screen once a scan is on it. A computer: wide, the
+            photo and the total beside the list (Kd's pick, RULINGS 2026-09-17). */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1    }}
           exit={{    opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-md rounded-3xl flex flex-col"
+          className={`relative w-full flex flex-col rounded-t-3xl sm:rounded-3xl ${withSheet
+            ? 'h-[100dvh] sm:h-[90vh] sm:max-w-2xl lg:max-w-5xl'
+            : 'max-h-[100dvh] sm:max-h-[85vh] sm:max-w-md'}`}
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
-            maxHeight:  '85vh',
           }}
         >
           {/* The X's question while a scan is unsaved (RULINGS 2026-09-16). */}
           {confirmingClose !== null && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-3xl"
+            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-t-3xl sm:rounded-3xl"
                  style={{ background: 'rgba(10,9,8,0.94)' }}>
               <div role="alertdialog" aria-labelledby="close-scan-title" className="w-full max-w-xs text-center">
                 <p id="close-scan-title" className="text-base font-bold text-white mb-2">Close without saving?</p>
@@ -1134,7 +1169,7 @@ function PhotoModal({ open, onClose, onSave }) {
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between px-5 py-4"
+          <div className="flex items-center justify-between px-5 py-3 flex-shrink-0"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" style={{ color: '#FF8A1F' }} />
@@ -1150,8 +1185,8 @@ function PhotoModal({ open, onClose, onSave }) {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
-            {!preview ? (
+          {!preview ? (
+            <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
               <button
                 onClick={() => fileRef.current?.click()}
                 className="w-full py-12 rounded-2xl border-2 border-dashed
@@ -1180,314 +1215,80 @@ function PhotoModal({ open, onClose, onSave }) {
                   className="hidden"
                 />
               </button>
-            ) : (
-              <div className="space-y-4">
-                {/* A scan not saved yet, perhaps brought back after a close: a new
-                    photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
-                {analysis && (
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                      Not saved yet. This scan still counts as one of today's scans.
-                    </p>
-                    <button type="button" onClick={resetSheet}
-                            className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
-                            style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
-                      <Camera className="w-3.5 h-3.5" /> New photo
-                    </button>
-                  </div>
-                )}
-                <img
-                  src={preview}
-                  alt="Meal"
-                  className="w-full rounded-2xl object-cover"
-                  style={{ maxHeight: 240 }}
-                />
-
-                {analyzing && (
-                  <div className="flex items-center justify-center gap-2 py-6"
-                       style={{
-                         background: 'rgba(255,138,31,0.05)',
-                         border:     '1px solid rgba(255,138,31,0.15)',
-                         borderRadius: 16,
-                       }}>
-                    <Loader2 className="w-4 h-4 animate-spin"
-                             style={{ color: '#FF8A1F' }} />
-                    <p className="text-sm font-medium"
-                       style={{ color: 'rgba(255,138,31,0.85)' }}>
-                      Analyzing your meal...
-                    </p>
-                  </div>
-                )}
-
-                {analysis && (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2"
-                       style={{ color: '#FF8A1F' }}>
-                      AI Analysis · {analysis.photoQuality === 'good' ? 'clear photo' : 'low confidence'}
-                    </p>
-                    <p className="text-base font-bold text-white mb-1">
-                      {analysis.mealName}
-                    </p>
-                    <p className="text-xs mb-1"
-                       style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      Check the amounts below — you can change them before
-                      saving.
-                    </p>
-                    {/* RULINGS 2026-09-09: photo scans say they estimate calories
-                        and cannot detect allergens. Never softened or removed. */}
-                    <p className="text-xs mb-4"
-                       style={{ color: 'rgba(251,191,36,0.85)' }}>
-                      {PHOTO_SCAN_CAUTION}
-                    </p>
-
-                    <div className="space-y-2 mb-4">
-                      {analysis.items.map((item, i) => {
-                        // Server-computed live numbers for the CURRENT amounts
-                        // (2B: never computed in the browser). The scan's own
-                        // numbers stand in only while the meal is still exactly
-                        // what the scan saw: every row as it started, nothing
-                        // added and nothing changed (T3 5c, 5c2 F1) — a row
-                        // measured any other way, or a changed food, waits for
-                        // the server rather than show a price that will not be saved.
-                        const food = rowFood(i);
-                        const changed = replaced[i];
-                        const shown = liveNow?.items?.[i] ?? (mealAtScan ? item : null);
-                        const source = changed?.source ?? item.nutritionSource;
-                        const amber = { color: 'rgba(251,191,36,0.85)' };
-                        // A row started at the photo's own grams is the scanner's
-                        // guess until the person sets an amount (ROADMAP 7a-iv-b).
-                        const portionMark = rowAtScan(i) && item.portionEstimated ? `~${item.gramsPoint} g · estimate` : null;
-                        const inDish = pickerChoices(food, dishware).find((c) => c.key === amounts[i]?.key)?.kind === 'dish';
-                        const { tooLarge, tooSmall } = resolved[i];
-                        return (
-                        <div key={i}
-                             className="p-3.5 rounded-2xl"
-                             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">
-                                {food.name}
-                              </p>
-                              <p className="text-xs mt-0.5 flex flex-wrap items-center gap-x-1.5"
-                                 style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                {/* An estimate's figures and its grams are both the scanner's: one mark says so. */}
-                                {source === 'estimate' && portionMark !== null
-                                  ? <span style={amber}>{portionMark}</span>
-                                  : <span style={source === 'estimate' ? amber : undefined}>{SOURCE_TAGS[source] ?? source}</span>}
-                                {source !== 'estimate' && portionMark !== null && (
-                                  <>
-                                    <span aria-hidden="true">·</span>
-                                    <span style={amber}>{portionMark}</span>
-                                  </>
-                                )}
-                                <span aria-hidden="true">·</span>
-                                <button type="button"
-                                        onClick={() => setChanging(changing === i ? null : i)}
-                                        className="font-semibold underline decoration-dotted"
-                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                  Change
-                                </button>
-                                {changed && (
-                                  <button type="button"
-                                          onClick={() => undoChange(i)}
-                                          className="underline decoration-dotted"
-                                          style={{ color: 'rgba(255,255,255,0.50)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                    Undo
-                                  </button>
-                                )}
-                              </p>
-                            </div>
-                            <p className="text-base font-bold flex-shrink-0"
-                               style={{ color: '#FF8A1F' }}>
-                              {shown === null
-                                ? '…'
-                                : shown.kcalLow === shown.kcalHigh
-                                  ? `${shown.kcalPoint} kcal`
-                                  : `${shown.kcalLow}–${shown.kcalHigh} kcal`}
-                            </p>
-                          </div>
-                          {changing === i && (
-                            <div className="mt-2 p-2.5 rounded-xl space-y-2"
-                                 style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                              <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
-                                Pick the right food for {food.name}. The amount stays the same.
-                              </p>
-                              <FoodPicker
-                                selected={null}
-                                onPick={(picked) => changeRow(i, picked)}
-                                autoFocus
-                                exclude={onSheet(i)}
-                                placeholder="Search the right food..."
-                              />
-                            </div>
-                          )}
-                          <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                            {shown === null
-                              ? 'Calculating…'
-                              : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
-                          </p>
-                          {/* The food's own measures and the person's saved dishes, as
-                              Add food offers them (ROADMAP 7a-iv-a, 7a-iv-b). */}
-                          <div className="mt-3">
-                            <MeasurePicker
-                              food={food}
-                              dishware={dishware}
-                              value={amounts[i]}
-                              onChange={(next) => setRowAmount(i, next)}
-                              grams={shown?.gramsPoint ?? null}
-                              onDishSaved={loadDishware}
-                            />
-                          </div>
-                          {dishUndo[i] && !inDish && (
-                            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                              Kept the dish's {dishUndo[i].grams} g ·{' '}
-                              <button type="button" onClick={() => undoDishKept(i)}
-                                      className="underline decoration-dotted"
-                                      style={{ color: 'rgba(255,255,255,0.75)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                Undo
-                              </button>
-                            </p>
-                          )}
-                          {(tooLarge || tooSmall) && (
-                            <p className="text-xs mt-2" style={amber}>
-                              {tooSmall
-                                ? 'That comes to less than 1 g — pick a larger amount.'
-                                : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
-                            </p>
-                          )}
-                        </div>
-                        );
-                      })}
-
-                      {/* Card 5c: ingredients the AI never saw (oats → milk).
-                          The same measure picker; the SERVER prices them. */}
-                      {extras.map((x, j) => {
-                        const shown = liveNow?.items?.[analysis.items.length + j];
-                        // Confirm is hidden while any amount is unusable, so the row says why.
-                        const { tooLarge, tooSmall } = resolved[analysis.items.length + j];
-                        return (
-                          <div key={`${x.food.canonical}-${j}`} className="p-3.5 rounded-2xl"
-                               style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white">{x.food.name}</p>
-                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</p>
-                              </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <p className="text-base font-bold" style={{ color: '#FF8A1F' }}>
-                                  {shown ? `${shown.kcalPoint} kcal` : '…'}
-                                </p>
-                                <button type="button" onClick={() => removeExtra(j)}
-                                        title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
-                                        className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                              {shown
-                                ? `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`
-                                : 'Calculating…'}
-                            </p>
-                            <div className="mt-3">
-                              <MeasurePicker
-                                food={x.food}
-                                dishware={dishware}
-                                value={x.amount}
-                                onChange={(next) => patchExtra(j, { amount: next })}
-                                grams={shown?.gramsPoint ?? null}
-                                onDishSaved={loadDishware}
-                              />
-                            </div>
-                            {(tooLarge || tooSmall) && (
-                              <p className="text-xs mt-2" style={{ color: 'rgba(251,191,36,0.85)' }}>
-                                {tooSmall
-                                  ? 'That comes to less than 1 g — pick a larger amount.'
-                                  : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* + Add ingredient — in the flow, where the mistake is
-                        visible (Kd: features live inside the flow they serve). */}
-                    {adding ? (
-                      <div className="mb-4 p-3 rounded-xl space-y-3"
-                           style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
-                            Add an ingredient the photo missed
-                          </p>
-                          <button type="button" onClick={() => setAdding(false)}
-                                  className="p-1 rounded" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <FoodPicker
-                          selected={null}
-                          onPick={addExtra}
-                          autoFocus
-                          exclude={onSheet()}
-                          placeholder="e.g. milk, sugar, oil..."
-                        />
-                      </div>
-                    ) : canAdd ? (
-                      <button
-                        type="button"
-                        onClick={() => setAdding(true)}
-                        className="w-full mb-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
-                        style={{
-                          background:  'rgba(255,255,255,0.03)',
-                          border:      '1px dashed rgba(255,138,31,0.35)',
-                          color:       '#FF8A1F',
-                        }}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add an ingredient
+            </div>
+          ) : (
+            // One scroll on a phone: the photo and name, the list, then the total and
+            // Confirm. On a computer, two columns that scroll on their own.
+            <div className={`flex-1 min-h-0 overflow-y-auto no-scrollbar p-4 sm:p-5 flex flex-col gap-4 ${withSheet
+              ? 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-6 lg:overflow-hidden'
+              : ''}`}>
+              <div className="contents lg:flex lg:flex-col lg:gap-4 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
+                <div className="order-1 space-y-3">
+                  {/* A scan not saved yet, perhaps brought back after a close: a new
+                      photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
+                  {analysis && (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                        Not saved yet. This scan still counts as one of today's scans.
+                      </p>
+                      <button type="button" onClick={resetSheet}
+                              className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
+                              style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
+                        <Camera className="w-3.5 h-3.5" /> New photo
                       </button>
-                    ) : (
-                      <p className="text-2xs mb-4 text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                        That's the most items one meal can hold ({MAX_ITEMS}).
-                      </p>
-                    )}
-
-                    {/* Both what the photo could not identify and what matched no
-                        food are left out of the total. */}
-                    {analysis.unknownItems?.length > 0 && (
-                      <p className="text-2xs mb-4"
-                         style={{ color: 'rgba(251,191,36,0.75)' }}>
-                        Not in the total: {analysis.unknownItems.join(', ')}
-                        {canAdd
-                          ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
-                          : '.'}
-                      </p>
-                    )}
-
-                    {/* Card-5b smoke (Kd): AI saw food but NOTHING matched our
-                        food data ("Flatbread Stack" ≠ Roti) — say so honestly
-                        instead of a 0-kcal box + dead Confirm. Card 5c: the
-                        user can now fix it right here, so point at the button
-                        above rather than sending them to another screen. */}
-                    {analysis.items.length === 0 && extras.length === 0 && (
-                      <div className="rounded-xl p-4 mb-4 text-center"
-                           style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.20)' }}>
-                        <p className="text-sm font-semibold mb-1"
-                           style={{ color: 'rgba(251,191,36,0.85)' }}>
-                          We saw the food but couldn't match it to our
-                          nutrition data.
+                    </div>
+                  )}
+                  <div className={withSheet ? 'flex gap-3 items-start lg:block' : ''}>
+                    <img
+                      src={preview}
+                      alt="Meal"
+                      className={withSheet
+                        ? 'w-24 h-24 sm:w-28 sm:h-28 lg:w-full lg:h-auto lg:max-h-52 rounded-2xl object-cover flex-shrink-0'
+                        : 'w-full rounded-2xl object-cover max-h-60'}
+                    />
+                    {analysis && (
+                      <div className="min-w-0 lg:mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-1"
+                           style={{ color: '#FF8A1F' }}>
+                          AI Analysis · {analysis.photoQuality === 'good' ? 'clear photo' : 'low confidence'}
                         </p>
-                        <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                          Add it yourself with “Add an ingredient” above — we're
-                          improving name matching.
+                        <p className="text-base font-bold text-white mb-1">
+                          {analysis.mealName}
+                        </p>
+                        <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                          Tap a food to change its amount before saving.
+                        </p>
+                        {/* RULINGS 2026-09-09: photo scans say they estimate calories
+                            and cannot detect allergens. Never softened or removed. */}
+                        <p className="text-xs" style={amber}>
+                          {PHOTO_SCAN_CAUTION}
                         </p>
                       </div>
                     )}
+                  </div>
 
+                  {analyzing && (
+                    <div className="flex items-center justify-center gap-2 py-6"
+                         style={{
+                           background: 'rgba(255,138,31,0.05)',
+                           border:     '1px solid rgba(255,138,31,0.15)',
+                           borderRadius: 16,
+                         }}>
+                      <Loader2 className="w-4 h-4 animate-spin"
+                               style={{ color: '#FF8A1F' }} />
+                      <p className="text-sm font-medium"
+                         style={{ color: 'rgba(255,138,31,0.85)' }}>
+                        Analyzing your meal...
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {analysis && (
+                  <div className="order-3">
                     {payloadItems.length > 0 && (<>
                     <div
-                      className="rounded-xl p-3 mb-4"
+                      className="rounded-xl p-3 mb-3"
                       style={{
                         background: 'rgba(255,138,31,0.08)',
                         border:     '1px solid rgba(255,138,31,0.20)',
@@ -1535,7 +1336,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           key={mt.id}
                           type="button"
                           onClick={() => setLogAs(logAs === mt.id ? null : mt.id)}
-                          className="flex-1 py-1.5 rounded-lg text-2xs font-semibold transition-all"
+                          className="flex-1 min-h-11 rounded-xl text-xs font-semibold transition-all"
                           style={{
                             background: logAs === mt.id ? `${mt.color}20` : 'rgba(255,255,255,0.03)',
                             border: logAs === mt.id ? `1px solid ${mt.color}50` : '1px solid rgba(255,255,255,0.05)',
@@ -1551,13 +1352,13 @@ function PhotoModal({ open, onClose, onSave }) {
                        style={{ color: 'rgba(255,255,255,0.40)' }}>
                       {liveNow
                         ? 'All numbers are calculated by the server for your chosen amounts.'
-                        : "Numbers above are the AI's first estimate — final nutrition is recalculated from your amounts when you save."}
+                        : "Numbers here are the AI's first estimate — final nutrition is recalculated from your amounts when you save."}
                     </p>
 
                     <button
                       onClick={handleConfirm}
                       disabled={saving || !allValid}
-                      className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
+                      className="w-full h-12 rounded-xl font-semibold text-sm text-white"
                       style={{
                         background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                         boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
@@ -1577,8 +1378,249 @@ function PhotoModal({ open, onClose, onSave }) {
                   </div>
                 )}
               </div>
-            )}
-          </div>
+
+              {analysis && (
+                <div className="order-2 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
+                  <div className="space-y-2 mb-3">
+                    {analysis.items.map((item, i) => {
+                      // Server-computed live numbers for the CURRENT amounts
+                      // (2B: never computed in the browser). The scan's own
+                      // numbers stand in only while the meal is still exactly
+                      // what the scan saw: every row as it started, nothing
+                      // added and nothing changed (T3 5c, 5c2 F1) — a row
+                      // measured any other way, or a changed food, waits for
+                      // the server rather than show a price that will not be saved.
+                      const key = `s${i}`;
+                      const isOpen = openRow === key;
+                      const food = rowFood(i);
+                      const changed = replaced[i];
+                      const shown = liveNow?.items?.[i] ?? (mealAtScan ? item : null);
+                      const source = changed?.source ?? item.nutritionSource;
+                      const choice = pickerChoices(food, dishware).find((c) => c.key === amounts[i]?.key) ?? null;
+                      // A row started at the photo's own grams is the scanner's
+                      // guess until the person sets an amount (ROADMAP 7a-iv-b).
+                      const portionMark = rowAtScan(i) && item.portionEstimated ? `~${item.gramsPoint} g · estimate` : null;
+                      return (
+                        <div key={key} className="rounded-2xl" style={rowBox(isOpen, false)}>
+                          <button type="button" aria-expanded={isOpen} onClick={() => toggleRow(key)}
+                                  className="w-full min-h-14 px-3.5 py-2.5 flex items-center gap-3 text-left">
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-semibold text-white truncate">{food.name}</span>
+                              <span className="block text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                                {/* An estimate's figures and its grams are both the scanner's: one mark says so. */}
+                                {source === 'estimate' && portionMark !== null
+                                  ? <span style={amber}>{portionMark}</span>
+                                  : (
+                                    <>
+                                      <span style={source === 'estimate' ? amber : undefined}>{SOURCE_TAGS[source] ?? source}</span>
+                                      {' · '}
+                                      {portionMark !== null
+                                        ? <span style={amber}>{portionMark}</span>
+                                        : amountSummary(choice, amounts[i]?.amount, shown?.gramsPoint)}
+                                    </>
+                                  )}
+                              </span>
+                            </span>
+                            <span className="text-base font-bold flex-shrink-0 tabular-nums" style={{ color: '#FF8A1F' }}>
+                              {shown === null
+                                ? '…'
+                                : shown.kcalLow === shown.kcalHigh
+                                  ? `${shown.kcalPoint} kcal`
+                                  : `${shown.kcalLow}–${shown.kcalHigh} kcal`}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                                         style={{ color: 'rgba(255,255,255,0.40)' }} />
+                          </button>
+                          {unusableLine(resolved[i])}
+                          {isOpen && (
+                            <div className="px-3.5 pb-3.5 space-y-3">
+                              {macrosLine(shown)}
+                              {/* The food's own measures and the person's saved dishes, as
+                                  Add food offers them (ROADMAP 7a-iv-a, 7a-iv-b). */}
+                              <MeasurePicker
+                                food={food}
+                                dishware={dishware}
+                                value={amounts[i]}
+                                onChange={(next) => setRowAmount(i, next)}
+                                grams={shown?.gramsPoint ?? null}
+                                onDishSaved={loadDishware}
+                              />
+                              {dishUndo[i] && choice?.kind !== 'dish' && (
+                                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                  Kept the dish's {dishUndo[i].grams} g ·{' '}
+                                  <button type="button" onClick={() => undoDishKept(i)}
+                                          className="underline decoration-dotted"
+                                          style={{ color: 'rgba(255,255,255,0.75)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                    Undo
+                                  </button>
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 text-xs">
+                                <button type="button"
+                                        onClick={() => setChanging(changing === i ? null : i)}
+                                        className="min-h-11 font-semibold underline decoration-dotted"
+                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                  Change food
+                                </button>
+                                {changed && (
+                                  <button type="button"
+                                          onClick={() => undoChange(i)}
+                                          className="min-h-11 underline decoration-dotted"
+                                          style={{ color: 'rgba(255,255,255,0.60)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                              {changing === i && (
+                                <div className="p-2.5 rounded-xl space-y-2"
+                                     style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                                    Pick the right food for {food.name}. The amount stays the same.
+                                  </p>
+                                  <FoodPicker
+                                    selected={null}
+                                    onPick={(picked) => changeRow(i, picked)}
+                                    autoFocus
+                                    exclude={onSheet(i)}
+                                    placeholder="Search the right food..."
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Card 5c: ingredients the AI never saw (oats → milk).
+                        The same measure picker; the SERVER prices them. */}
+                    {extras.map((x, j) => {
+                      const key = `x${j}`;
+                      const isOpen = openRow === key;
+                      const shown = liveNow?.items?.[analysis.items.length + j];
+                      const choice = pickerChoices(x.food, dishware).find((c) => c.key === x.amount?.key) ?? null;
+                      return (
+                        <div key={`${x.food.canonical}-${j}`} className="rounded-2xl" style={rowBox(isOpen, true)}>
+                          <div className="flex items-center">
+                            <button type="button" aria-expanded={isOpen} onClick={() => toggleRow(key)}
+                                    className="flex-1 min-w-0 min-h-14 pl-3.5 py-2.5 flex items-center gap-3 text-left">
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-semibold text-white truncate">{x.food.name}</span>
+                                <span className="block text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                                  <span style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</span>
+                                  {' · '}
+                                  {amountSummary(choice, x.amount?.amount, shown?.gramsPoint)}
+                                </span>
+                              </span>
+                              <span className="text-base font-bold flex-shrink-0 tabular-nums" style={{ color: '#FF8A1F' }}>
+                                {shown ? `${shown.kcalPoint} kcal` : '…'}
+                              </span>
+                              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                                           style={{ color: 'rgba(255,255,255,0.40)' }} />
+                            </button>
+                            <button type="button" onClick={() => removeExtra(j)}
+                                    title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
+                                    className="w-11 h-11 mr-1 flex-shrink-0 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* Confirm is hidden while any amount is unusable, so the row says why. */}
+                          {unusableLine(resolved[analysis.items.length + j])}
+                          {isOpen && (
+                            <div className="px-3.5 pb-3.5 space-y-3">
+                              {macrosLine(shown)}
+                              <MeasurePicker
+                                food={x.food}
+                                dishware={dishware}
+                                value={x.amount}
+                                onChange={(next) => patchExtra(j, { amount: next })}
+                                grams={shown?.gramsPoint ?? null}
+                                onDishSaved={loadDishware}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* + Add ingredient — in the flow, where the mistake is
+                      visible (Kd: features live inside the flow they serve). */}
+                  {adding ? (
+                    <div className="mb-3 p-3 rounded-xl space-y-3"
+                         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                          Add an ingredient the photo missed
+                        </p>
+                        <button type="button" onClick={() => setAdding(false)} aria-label="Stop adding"
+                                className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <FoodPicker
+                        selected={null}
+                        onPick={addExtra}
+                        autoFocus
+                        exclude={onSheet()}
+                        placeholder="e.g. milk, sugar, oil..."
+                      />
+                    </div>
+                  ) : canAdd ? (
+                    <button
+                      type="button"
+                      onClick={() => setAdding(true)}
+                      className="w-full mb-3 min-h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                      style={{
+                        background:  'rgba(255,255,255,0.03)',
+                        border:      '1px dashed rgba(255,138,31,0.35)',
+                        color:       '#FF8A1F',
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add an ingredient
+                    </button>
+                  ) : (
+                    <p className="text-2xs mb-3 text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      That's the most items one meal can hold ({MAX_ITEMS}).
+                    </p>
+                  )}
+
+                  {/* Both what the photo could not identify and what matched no
+                      food are left out of the total. */}
+                  {analysis.unknownItems?.length > 0 && (
+                    <p className="text-2xs mb-3"
+                       style={{ color: 'rgba(251,191,36,0.75)' }}>
+                      Not in the total: {analysis.unknownItems.join(', ')}
+                      {canAdd
+                        ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
+                        : '.'}
+                    </p>
+                  )}
+
+                  {/* Card-5b smoke (Kd): AI saw food but NOTHING matched our
+                      food data ("Flatbread Stack" ≠ Roti) — say so honestly
+                      instead of a 0-kcal box + dead Confirm. Card 5c: the
+                      user can now fix it right here, so point at the button
+                      above rather than sending them to another screen. */}
+                  {analysis.items.length === 0 && extras.length === 0 && (
+                    <div className="rounded-xl p-4 mb-3 text-center"
+                         style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.20)' }}>
+                      <p className="text-sm font-semibold mb-1"
+                         style={{ color: 'rgba(251,191,36,0.85)' }}>
+                        We saw the food but couldn't match it to our
+                        nutrition data.
+                      </p>
+                      <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                        Add it yourself with “Add an ingredient” above — we're
+                        improving name matching.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>

@@ -9,7 +9,7 @@ import { Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { nutritionService } from '../../api/nutritionApi';
 import Select from '../common/Select';
-import { DISH_SIZES, FILL_CHOICES, MAX_AMOUNT, choiceLabel, pickerChoices, steppedAmount, valueForChoice } from './measures';
+import { DISH_SIZES, FILL_CHOICES, MAX_AMOUNT, choiceLabel, pickerChoices, steppedAmount, unitLabel, valueForChoice } from './measures';
 
 const NEW_DISH = '__new_dish';
 
@@ -132,12 +132,17 @@ export default function MeasurePicker({ food, dishware, value, onChange, grams, 
           <input
             type="number" aria-label="Amount" value={amount} min="0" step="any" inputMode="decimal"
             onChange={(e) => onChange({ key: value.key, amount: e.target.value })}
-            className="w-24 h-11 px-3 rounded-xl text-base text-center focus:outline-none"
+            className="w-20 h-11 px-2 rounded-xl text-base text-center focus:outline-none flex-shrink-0"
             style={field}
           />
+          {/* What the amount counts, beside it: never a bare number. */}
+          <span className="min-w-0 max-w-[9rem] truncate text-sm" style={{ color: 'rgba(255,255,255,0.75)' }} title={unitLabel(choice)}>
+            {unitLabel(choice)}
+          </span>
           <button type="button" aria-label="More" className="w-11 h-11 rounded-xl text-xl leading-none flex-shrink-0" style={field}
                   onClick={() => onChange({ key: value.key, amount: steppedAmount(amount, choice, 1) })}>+</button>
-          <span className="ml-auto">{gramsText}</span>
+          {/* Grams by the gram say nothing more than the amount does. */}
+          {choice?.id !== 'g' && <span className="ml-auto flex-shrink-0">{gramsText}</span>}
         </div>
       )}
       <Select

@@ -77,6 +77,9 @@ async function scanPlate() {
   await screen.findByText('Avocado');
   return (name) => screen.getByText(name).closest('.rounded-2xl');
 }
+/** A row's own line, the button that opens and closes it; the sheet is a short list (RULINGS 2026-09-17). */
+const lineOf = (rowEl) => rowEl.querySelector('button[aria-expanded]');
+const open = (rowEl) => { if (lineOf(rowEl).getAttribute('aria-expanded') !== 'true') fireEvent.click(lineOf(rowEl)); };
 /** What a row's picker holds: the measure it shows as picked, and the amount. */
 const pickerOf = (rowEl) => [
   within(rowEl).getByRole('button', { name: 'Measure' }).textContent,
@@ -101,7 +104,8 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     expect(within(row('Avocado')).getByText('~100 g · estimate')).toBeTruthy();
     expect(within(row('Yakult Original · Yakult')).queryByText(/estimate/)).toBeNull();
     for (const name of ['Avocado', 'Pumpkin, cooked', 'Yakult Original · Yakult', 'avocado toast']) {
-      expect(within(row(name)).getByRole('button', { name: 'Change' })).toBeTruthy();
+      open(row(name));
+      expect(within(row(name)).getByRole('button', { name: 'Change food' })).toBeTruthy();
     }
     expect(screen.getByText('about 513 kcal')).toBeTruthy();
     // Photo scans say they estimate calories and cannot detect allergens (RULINGS 2026-09-09), in these words.
@@ -114,6 +118,7 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     fireEvent.change(within(row('avocado toast')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '150' } });
     expect(within(row('avocado toast')).queryByText(/~120 g/)).toBeNull();
     expect(within(row('avocado toast')).getByText('Estimate')).toBeTruthy();
+    expect(lineOf(row('avocado toast')).textContent).toContain('Estimate · 150 g');
   });
 
   it('reads a plain total, and credits no table, where every food is on our own list', async () => {
@@ -133,7 +138,8 @@ describe('Change on a scanned row', () => {
     const avocado = { ...bread, canonical: 'avocado', name: 'Avocado (searched)', source: 'curated' };
     svc.searchFoods = vi.fn(async () => ({ data: { items: [bread, avocado] } }));
     const row = await scanPlate();
-    fireEvent.click(within(row('avocado toast')).getByRole('button', { name: 'Change' }));
+    open(row('avocado toast'));
+    fireEvent.click(within(row('avocado toast')).getByRole('button', { name: 'Change food' }));
     const box = await screen.findByPlaceholderText('Search the right food...');
     fireEvent.change(box, { target: { value: 'toast' } });
     const result = await screen.findByText('Bread, toasted');
@@ -148,7 +154,7 @@ describe('Change on a scanned row', () => {
     // The row is the new food now, from its own table, by the gram at the row's grams, and can be put back.
     const changed = row('Bread, toasted');
     expect(within(changed).getByText('USDA')).toBeTruthy();
-    expect(pickerOf(changed)).toEqual(['g', '120']);
+    expect(pickerOf(changed)).toEqual(['grams', '120']);
     expect(screen.queryByText('avocado toast')).toBeNull();
     expect(screen.queryByPlaceholderText('Search the right food...')).toBeNull();
     expect(svc.searchFoods).toHaveBeenCalledWith('toast', 15);
@@ -170,7 +176,8 @@ describe('Change on a scanned row', () => {
   it('puts the scanned food back with Undo', async () => {
     svc.searchFoods = vi.fn(async () => ({ data: { items: [bread] } }));
     const row = await scanPlate();
-    fireEvent.click(within(row('avocado toast')).getByRole('button', { name: 'Change' }));
+    open(row('avocado toast'));
+    fireEvent.click(within(row('avocado toast')).getByRole('button', { name: 'Change food' }));
     fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
     fireEvent.click((await screen.findByText('Bread, toasted')).closest('button'));
     fireEvent.click(within(row('Bread, toasted')).getByRole('button', { name: 'Undo' }));
@@ -189,7 +196,8 @@ describe('the measure on a changed row', () => {
   // Two slices the scan counted, at 60 g: its row starts at two of its 30 g slices.
   const TWO_SLICES = scanned('bread', 'est_bread', 'estimate', 60, 160, { measures: [SLICE], startsAt: { measure: 'usda-1', amount: 2 }, portionEstimated: false });
   const changeTo = async (row, from, food) => {
-    fireEvent.click(within(row(from)).getByRole('button', { name: 'Change' }));
+    open(row(from));
+    fireEvent.click(within(row(from)).getByRole('button', { name: 'Change food' }));
     fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
     fireEvent.click((await screen.findByText(food.name)).closest('button'));
   };
@@ -203,12 +211,13 @@ describe('the measure on a changed row', () => {
 
   it('starts the new food by the gram at the row’s grams, never by the measure of the food it replaced', async () => {
     const row = await scanPlate();
+    open(row('bread'));
     expect(pickerOf(row('bread'))).toEqual(['slice · 30 g', '2']);
     await changeTo(row, 'bread', bagel);
-    expect(pickerOf(row('Bagel, toasted'))).toEqual(['g', '60']);
+    expect(pickerOf(row('Bagel, toasted'))).toEqual(['grams', '60']);
     // Ten grams a step, not another slice.
     plus(row('Bagel, toasted'));
-    expect(pickerOf(row('Bagel, toasted'))).toEqual(['g', '70']);
+    expect(pickerOf(row('Bagel, toasted'))).toEqual(['grams', '70']);
   });
 
   it('gives the scanned food back its own measure on Undo while the grams are what Change kept, and those grams otherwise', async () => {
@@ -220,9 +229,11 @@ describe('the measure on a changed row', () => {
     // Changed, stepped to other grams the server has priced, and put back: by the gram at those grams.
     await changeTo(row, 'bread', bagel);
     plus(row('Bagel, toasted'));
-    await waitFor(() => expect(within(row('Bagel, toasted')).getByText('= 70 g')).toBeTruthy());
+    // The server has priced the 70 g: the row reads its numbers, no longer "Calculating…".
+    await waitFor(() => expect(svc.previewMeal.mock.lastCall?.[0].items[1]).toEqual({ canonical: 'usda_fndds_456', measure: 'g', amount: 70 }));
+    await waitFor(() => expect(within(row('Bagel, toasted')).getByText(/^Protein 5g/)).toBeTruthy());
     fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
-    expect(pickerOf(row('bread'))).toEqual(['g', '70']);
+    expect(pickerOf(row('bread'))).toEqual(['grams', '70']);
   });
 });
 
@@ -237,18 +248,20 @@ describe('what a search on the sheet offers', () => {
     svc.searchFoods = vi.fn(async () => ({ data: { items: [bread] } }));
     const row = await scanPlate();
     // The pumpkin row becomes bread.
-    fireEvent.click(within(row('Pumpkin, cooked')).getByRole('button', { name: 'Change' }));
+    open(row('Pumpkin, cooked'));
+    fireEvent.click(within(row('Pumpkin, cooked')).getByRole('button', { name: 'Change food' }));
     fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
     fireEvent.click((await screen.findByText('Bread, toasted')).closest('button'));
 
     // The avocado row's search finds the pumpkin the scan saw, the bread now on the sheet, and rye.
     svc.searchFoods = vi.fn(async () => ({ data: { items: [pumpkinAgain, breadAgain, rye] } }));
-    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change' }));
+    open(row('Avocado'));
+    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change food' }));
     fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'food' } });
     expect(await screen.findByText('Rye bread')).toBeTruthy();
     expect(screen.queryByText('Pumpkin, found again')).toBeNull();
     expect(screen.queryByText('Bread, found again')).toBeNull();
-    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change' }));
+    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change food' }));
 
     // "Add an ingredient" offers none of them, nor the avocado — while an amount box is empty, too.
     fireEvent.change(within(row('Avocado')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '' } });

@@ -129,11 +129,41 @@ export const amountRefusal = (err) => AMOUNT_REFUSALS.get(err?.response?.data?.e
 /** An amount as a person reads it: no float noise ("1.5", "0.25"). */
 export const formatAmount = (amount) => String(Math.round(Number(amount) * 100) / 100);
 
-/** A measure as the picker lists it: its name and what one of it weighs. */
+/** A measure as the picker lists it: its name and what one of it weighs. Grams and
+ *  ounces are spelled out (Kd's click-through of 7a-iv-b: "g" and "oz" alone read
+ *  as nothing to someone who does not weigh food). */
 export function choiceLabel(choice) {
   if (choice.kind === 'dish') return `${choice.name} · ${choice.volumeMl} ml`;
-  if (choice.id === 'g') return 'g';
+  if (choice.id === 'g') return 'grams';
+  if (choice.id === 'oz') return `ounces · ${formatAmount(choice.grams)} g`;
   return `${choice.name} · ${formatAmount(choice.grams)} g`;
+}
+
+/** What the amount beside − and + counts, so a number never stands alone: "60"
+ *  of grams read as sixty avocados (Kd's click-through of 7a-iv-b). */
+export function unitLabel(choice) {
+  if (!choice) return '';
+  if (choice.id === 'g') return 'grams';
+  if (choice.id === 'oz') return 'ounces';
+  return choice.name;
+}
+
+/** A row's amount as a short list line reads it: the amount of its measure and
+ *  what the server says that weighs ("2 × slice cooked · 16 g", "60 g",
+ *  "3 oz · 85 g", "My blue bowl, ½ full · 180 g"), or what is still to pick. */
+export function amountSummary(choice, amountText, grams) {
+  const amount = parseFloat(amountText);
+  const weighed = Number.isFinite(grams) && grams > 0 ? ` · ${Math.round(grams)} g` : '';
+  if (!choice) return 'Pick an amount';
+  if (choice.kind === 'dish') {
+    const fill = FILL_CHOICES.find((f) => f.value === amount);
+    if (!fill) return `${choice.name} · how full?`;
+    return `${choice.name}, ${fill.value === 1 ? 'full' : `${fill.label} full`}${weighed}`;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) return 'Pick an amount';
+  if (choice.id === 'g') return `${formatAmount(amount)} g`;
+  if (choice.id === 'oz') return `${formatAmount(amount)} oz${weighed}`;
+  return `${formatAmount(amount)} × ${choice.name}${weighed}`;
 }
 
 /** A saved item as the meal list reads it: by the measure it was logged by

@@ -88,7 +88,7 @@ describe('adding a food by measure', () => {
     // white with a blue bar (Kd's click-through of this card).
     expect(screen.queryByRole('combobox')).toBeNull();
     // Every measure the food has is offered, by its name and weight.
-    expect(offered()).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'g', 'oz · 28.35 g', '+ Save a new dish…']);
+    expect(offered()).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'grams', 'ounces · 28.35 g', '+ Save a new dish…']);
     // The grams shown are the server's answer for what was sent.
     expect(await screen.findByText('= 180 g')).toBeTruthy();
 
@@ -104,7 +104,7 @@ describe('adding a food by measure', () => {
     expect(await screen.findByText('= 273 g')).toBeTruthy();
 
     // Grams start at what the item weighed.
-    choose('g');
+    choose('grams');
     expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('273');
     choose('medium (3" dia) · 182 g');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
@@ -176,7 +176,9 @@ describe('adding a food by measure', () => {
   it('refuses an amount that comes to less than a gram, and says so rather than that the food failed', async () => {
     renderPage();
     await pickApple();
-    choose('g');
+    choose('grams');
+    // The amount says what it counts, beside it.
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).nextElementSibling.textContent).toBe('grams');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
     expect(screen.getByRole('button', { name: 'Amount is too small' }).disabled).toBe(true);
     expect(screen.getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
@@ -288,7 +290,7 @@ describe('an ingredient added on the photo sheet', () => {
 
   it('says on its own row when it comes to less than a gram', async () => {
     await scanAndAddApple();
-    chooseIn(appleCard(), 'g');
+    chooseIn(appleCard(), 'grams');
     fireEvent.change(appleCard().getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
     expect(appleCard().getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Confirm & log meal' })).toBeNull();

@@ -2,7 +2,9 @@
 // row starts where the server started it, at one of its food's own measures the
 // photo's count agreed with ("6 × nugget") or at the photo's own grams, marked an
 // estimate until the person sets an amount; it is corrected in the same measure
-// picker Add food has, and sent as the measure and how many.
+// picker Add food has, and sent as the measure and how many. The sheet is a short
+// list, one line a food, and a tap opens that food's picker (Kd's pick, RULINGS
+// 2026-09-17).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -60,32 +62,65 @@ async function scanPlate() {
   await screen.findByText('Counted plate');
   return (name) => screen.getAllByText(name)[0].closest('.rounded-2xl');
 }
+/** A row's own line, the button that opens and closes it. */
+const lineOf = (rowEl) => rowEl.querySelector('button[aria-expanded]');
+const open = (rowEl) => { if (lineOf(rowEl).getAttribute('aria-expanded') !== 'true') fireEvent.click(lineOf(rowEl)); };
 /** What a row's picker holds: the measure it shows as picked, and the amount. */
 const pickerOf = (rowEl) => [
   within(rowEl).getByRole('button', { name: 'Measure' }).textContent,
   within(rowEl).getByRole('spinbutton', { name: 'Amount' }).value,
 ];
 
+describe('the photo sheet as a short list', () => {
+  it('shows every food on one line, closed, with its amount in words and its calories', async () => {
+    const row = await scanPlate();
+    expect(lineOf(row('Chicken nuggets')).textContent).toBe('Chicken nuggetsOur list · 6 × nugget · 96 g120 kcal');
+    expect(lineOf(row('Grapes')).textContent).toBe('GrapesOur list · ~50 g · estimate120 kcal');
+    // Closed: no picker on the sheet at all.
+    expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
+  });
+
+  it('opens one food at a time, and closes it again on a second tap', async () => {
+    const row = await scanPlate();
+    open(row('Chicken nuggets'));
+    expect(pickerOf(row('Chicken nuggets'))).toEqual(['nugget · 16 g', '6']);
+    // The number says what it counts, beside it.
+    expect(within(row('Chicken nuggets')).getByRole('spinbutton', { name: 'Amount' }).nextElementSibling.textContent).toBe('nugget');
+    open(row('Grapes'));
+    expect(within(row('Chicken nuggets')).queryByRole('spinbutton')).toBeNull();
+    expect(pickerOf(row('Grapes'))).toEqual(['grams', '50']);
+    fireEvent.click(lineOf(row('Grapes')));
+    expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
+  });
+});
+
 describe('where a scanned row starts', () => {
   it("starts a row at the measure the photo's count agreed with, and one at the photo's own grams marked an estimate", async () => {
     const row = await scanPlate();
+    open(row('Chicken nuggets'));
     expect(pickerOf(row('Chicken nuggets'))).toEqual(['nugget · 16 g', '6']);
     expect(within(row('Chicken nuggets')).queryByText(/estimate/)).toBeNull();
-    expect(pickerOf(row('Grapes'))).toEqual(['g', '50']);
+    open(row('Grapes'));
+    expect(pickerOf(row('Grapes'))).toEqual(['grams', '50']);
     expect(within(row('Grapes')).getByText('~50 g · estimate')).toBeTruthy();
     // Every row lists its food's own measures, as Add food does.
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Measure' }));
-    expect(within(row('Grapes')).getAllByRole('option').map((o) => o.textContent)).toEqual(['cup · 151 g', 'g', 'oz · 28.35 g', '+ Save a new dish…']);
+    expect(within(row('Grapes')).getAllByRole('option').map((o) => o.textContent)).toEqual(['cup · 151 g', 'grams', 'ounces · 28.35 g', '+ Save a new dish…']);
     expect(svc.analyzePhoto).toHaveBeenCalledTimes(1);
   });
 
   it('steps a counted row by half its measure and a row in grams by ten, and the estimate mark goes once the amount is the person’s', async () => {
     const row = await scanPlate();
+    open(row('Chicken nuggets'));
     fireEvent.click(within(row('Chicken nuggets')).getByRole('button', { name: 'More' }));
     expect(pickerOf(row('Chicken nuggets'))).toEqual(['nugget · 16 g', '6.5']);
+    // The server has not answered for 6.5: the line says the amount and no grams.
+    expect(lineOf(row('Chicken nuggets')).textContent).toContain('Our list · 6.5 × nugget');
+    open(row('Grapes'));
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'More' }));
-    expect(pickerOf(row('Grapes'))).toEqual(['g', '60']);
+    expect(pickerOf(row('Grapes'))).toEqual(['grams', '60']);
     expect(within(row('Grapes')).queryByText(/estimate/)).toBeNull();
+    expect(lineOf(row('Grapes')).textContent).toContain('Our list · 60 g');
     // Back at the start, it is the scanner's guess again.
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Less' }));
     expect(within(row('Grapes')).getByText('~50 g · estimate')).toBeTruthy();
@@ -93,7 +128,9 @@ describe('where a scanned row starts', () => {
 
   it('sends every row as the measure and how many it shows, never grams the browser worked out', async () => {
     const row = await scanPlate();
+    open(row('Chicken nuggets'));
     fireEvent.change(within(row('Chicken nuggets')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '8' } });
+    open(row('Grapes'));
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Measure' }));
     fireEvent.click(within(row('Grapes')).getByRole('option', { name: 'cup · 151 g' }));
     expect(pickerOf(row('Grapes'))).toEqual(['cup · 151 g', '1']);
@@ -105,12 +142,16 @@ describe('where a scanned row starts', () => {
     ]);
   });
 
-  it('says on its own row when an amount weighs more than one item of a meal may, or less than a gram', async () => {
+  it('says under its line, open or closed, when an amount weighs more than one item of a meal may, or less than a gram', async () => {
     const row = await scanPlate();
+    open(row('Grapes'));
     fireEvent.change(within(row('Grapes')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '20000' } });
     expect(within(row('Grapes')).getByText('That is more than 10,000 g — pick a smaller amount.')).toBeTruthy();
-    // Nothing can be saved while an amount is unusable, and the row says why.
+    // Nothing can be saved while an amount is unusable, and the row says why, even closed.
     expect(screen.queryByRole('button', { name: /Confirm/ })).toBeNull();
+    fireEvent.click(lineOf(row('Grapes')));
+    expect(within(row('Grapes')).getByText('That is more than 10,000 g — pick a smaller amount.')).toBeTruthy();
+    open(row('Grapes'));
     fireEvent.change(within(row('Grapes')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
     expect(within(row('Grapes')).getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Confirm/ })).toBeNull();
@@ -124,9 +165,10 @@ describe('where a scanned row starts', () => {
     expect(within(row('Chicken nuggets')).getByText('120 kcal')).toBeTruthy();
     expect(screen.getByText('240 kcal')).toBeTruthy();
     // One row moved and no server answer: neither it, the other row nor the total is the scan's any more.
+    open(row('Grapes'));
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'More' }));
     expect(within(row('Chicken nuggets')).queryByText('120 kcal')).toBeNull();
-    expect(within(row('Chicken nuggets')).getByText('Calculating…')).toBeTruthy();
+    expect(within(lineOf(row('Chicken nuggets'))).getByText('…')).toBeTruthy();
     expect(screen.queryByText('240 kcal')).toBeNull();
     expect(screen.getByText('Adding up your ingredients…')).toBeTruthy();
   });
