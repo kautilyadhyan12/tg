@@ -11,7 +11,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - A place Open Food Facts leaves empty (its deadline passed) goes back to USDA: the test's provider answers nothing for one query, and the box of 15 must hold 15 USDA foods.
 - Verified: api tsc 0 · eslint 0 on both files · `usda.table` + `nutrition.usda.routes` 30/30 on local Postgres · two deliberate breaks (the equals half deleted; empty places not given back), each red on its own test, files restored identical.
 - Three dashboard images (`Screenshot (221).png`, `latestbadges.png`, `weeklychallenges.png`) changed in the folder from another session; untouched and uncommitted.
-- Open: CI on this push, then merge on Kd's word. Next: 7a-iii-b, from master, its own chat.
+- CI green on 25525c8 (run 35076157262; the Neon migration job skipped, no migration changed). Kd: *"mergee"*; merged (PR #73), branch deleted. Next: 7a-iii-b, from master, its own chat.
 
 ## 2026-09-16 · 7a-iii-a: the review of d0042c3 fixed (2 High, 3 Low, 4 weak tests); the re-check of these fixes next (branch `usda-food-table`)
 
