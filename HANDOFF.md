@@ -13,7 +13,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Weak tests: the order fixtures now make each of the three steps red when deleted (the review proved step 2 was not; step 3 was not either); the reserve through the route at 15, 6, 5, 4, 3, 2 and 1 places; accents in both directions and in the head steps. The pinned digests stay untestable in CI (no network): every import and checker run checks them, and both passed today.
 - Verified: api tsc 0 · eslint 0 · the four touched files 102/102 · full local 1133/1141, the 8 all `workouts.sync` (a login 500, then 401s; 23/23 alone; ROADMAP 10) · import 13,225 foods and 44,394 rows, a second run `nothing changed` · `check-food-sources` 318 foods, every number matching · 16 deliberate breaks, each red on its own test, files restored identical.
 - Not this chat's: two images in `apps/web/public/images/dashboard/` (`Screenshot (221).png` at 13:49, `weeklychallenges.png`) changed while two other sessions were open on this folder; left untouched and uncommitted.
-- Open: CI on this push, the fresh-chat re-check of these fixes only, merge on Kd's word. Next: 7a-iii-b, from master, its own chat.
+- CI green on 0dd5ba1, all six checks (run 35074076850): gitleaks 20s · what changed 4s · engine grep 10s · the edited 0031 on a Neon branch 65s · api tests on local Postgres 105s (`workouts.sync` green there) · typecheck/lint/test 211s. Open: the fresh-chat re-check of these fixes only, merge on Kd's word. Next: 7a-iii-b, from master, its own chat.
 
 ## 2026-09-16 · 7a-iii-a: the plain food ranks above the dishes made from it, and a jar has room again (branch `usda-food-table`)
 
