@@ -36,13 +36,14 @@ beforeEach(() => {
     });
     return { data: { items: priced, totals: { kcalPoint: priced.reduce((n, i) => n + i.kcalPoint, 0), kcalLow: 0, kcalHigh: 0, proteinG: 0, carbsG: 0, fatG: 0 } } };
   });
-  svc.analyzePhoto = vi.fn(async () => ({
-    data: {
-      scanToken: 't'.repeat(40), mealName: 'Dal plate', items: [item('Dal (lentil curry)', 'dal_lentil_curry', 132)],
-      unknownItems: [], photoQuality: 'good',
-      totals: { kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4 }, confirmed: false,
-    },
-  }));
+  svc.analyzePhoto = vi.fn(async () => scanReply());
+});
+const scanReply = () => ({
+  data: {
+    scanToken: 't'.repeat(40), mealName: 'Dal plate', items: [item('Dal (lentil curry)', 'dal_lentil_curry', 132)],
+    unknownItems: [], photoQuality: 'good',
+    totals: { kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4 }, confirmed: false,
+  },
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); forgetUnsavedScan(); setCurrentUserId(null); });
 
@@ -183,6 +184,31 @@ describe('the photo sheet keeps a scan that is not saved', () => {
     await openPhotoLog();
     expect(screen.queryByText('Dal plate')).toBeNull();
     expect(screen.getByText('Snap or upload')).toBeTruthy();
+  });
+
+  // The page left while the photo is still being read: the scan still counts, so
+  // its reply is kept when it comes back — but only for the person still signed in
+  // who took it, never once they signed out and someone else signed in.
+  it.each([
+    ['still signed in', null, true],
+    ['signed out, someone else in when it came back', 'another-person', false],
+  ])('a reply that came back after the page was left, its person %s (%s): kept is %s', async (_, signedInWhenBack, back) => {
+    let reply;
+    svc.analyzePhoto = vi.fn(() => new Promise((resolve) => { reply = resolve; }));
+    renderPage();
+    await openPhotoLog();
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['x'], 'meal.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(svc.analyzePhoto).toHaveBeenCalledTimes(1));
+    cleanup(); // the page is left mid-read
+    if (signedInWhenBack) setCurrentUserId(signedInWhenBack);
+    reply(scanReply());
+    await new Promise((settle) => setTimeout(settle, 0));
+
+    // The one who took the photo, signed in (again).
+    setCurrentUserId(null);
+    renderPage();
+    await openPhotoLog();
+    expect(screen.queryByText('Dal plate') !== null).toBe(back);
   });
 
   it('lets a saved scan go', async () => {

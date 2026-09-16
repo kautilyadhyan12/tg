@@ -902,7 +902,10 @@ function PhotoModal({ open, onClose, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setPreview(URL.createObjectURL(file));
+    const photo = URL.createObjectURL(file);
+    // Whose scan this is, for a reply that comes back after they left.
+    const scanner = getUserId();
+    setPreview(photo);
     setAnalyzing(true);
     setAnalysis(null);
     setScannedAt(null);
@@ -917,9 +920,7 @@ function PhotoModal({ open, onClose, onSave }) {
 
     try {
       const res = await nutritionService.analyzePhoto(file, retakeToken);
-      setRetakeToken(null);
-      setAnalysis(res.data);
-      setScannedAt(Date.now());
+      const at = Date.now();
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
@@ -931,6 +932,18 @@ function PhotoModal({ open, onClose, onSave }) {
         const stepper = scannedStepper(item);
         g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
       });
+      // Kept the moment it returns, not only once a sheet shows it: a person who
+      // left the page while the photo was read still has the scan it counted.
+      // Never for someone else who has signed in since.
+      if (getUserId() === scanner) {
+        keepUnsavedScan(scanner, at, {
+          analysis: res.data, preview: photo, grams: g, counts: c, bases: b,
+          logAs: null, extras: [], itemMeasures: {}, replaced: {}, undoGrams: {},
+        });
+      }
+      setRetakeToken(null);
+      setAnalysis(res.data);
+      setScannedAt(at);
       setGrams(g);
       setCounts(c);
       setBases(b);

@@ -84,9 +84,26 @@ describe("the measures a food carries", () => {
       ["usda-1 cup 30", "usda-2 prepackaged single serving 30", "g g 1", OZ],
     ],
     [
-      "no serving of its own where a USDA measure has its name at another weight (our milk's cup of 240 g, USDA's 244)",
+      "no serving of its own where a USDA measure has its name near its weight (our milk's cup of 240 g, USDA's 244)",
       own(240, "cup", [portion(1, "cup", 244)]),
       ["usda-1 cup 244", "g g 1", OZ],
+    ],
+    ["a tenth off is near (a cup of 240 g, USDA's 264)", own(240, "cup", [portion(1, "cup", 264)]), ["usda-1 cup 264", "g g 1", OZ]],
+    ["a tenth below is near (a cup of 240 g, USDA's 216)", own(240, "cup", [portion(1, "cup", 216)]), ["usda-1 cup 216", "g g 1", OZ]],
+    [
+      "just past a tenth is another size: both stay (a cup of 240 g, USDA's 265)",
+      own(240, "cup", [portion(1, "cup", 265)]),
+      ["serving cup 240", "usda-1 cup 265", "g g 1", OZ],
+    ],
+    [
+      "our serving stays beside USDA's measure of its name at another size (our blueberry muffin of 113 g, USDA's 31 g muffin)",
+      own(113, "muffin", [portion(1, "muffin", 31), portion(2, "medium", 113)]),
+      ["serving muffin 113", "usda-1 muffin 31", "usda-2 medium 113", "g g 1", OZ],
+    ],
+    [
+      "one of two USDA measures of its name near its weight is enough to drop it",
+      own(240, "cup", [portion(1, "cup", 150), portion(2, "cup", 244)]),
+      ["usda-1 cup 150", "usda-2 cup 244", "g g 1", OZ],
     ],
     [
       "a USDA food's serving is never a measure of its own, even one its measures no longer hold",
@@ -113,11 +130,15 @@ describe("the measures a food carries", () => {
   ])("%s", (_, source, expected) => {
     const measures = foodMeasures(source);
     expect(brief(measures)).toEqual(expected);
-    // Every measure crosses the contract, and no two share an id or, from two tables, a name.
+    // Every measure crosses the contract, no two share an id, and a serving of our
+    // own never sits beside a USDA measure of its name near its weight.
     for (const m of measures) expect(foodMeasureSchema.safeParse(m).success, m.id).toBe(true);
     expect(new Set(measures.map((m) => m.id)).size).toBe(measures.length);
     const own = measures.find((m) => m.id === "serving");
-    if (own !== undefined) expect(measures.filter((m) => m.name.toLowerCase() === own.name.toLowerCase())).toHaveLength(1);
+    if (own !== undefined) {
+      const twins = measures.filter((m) => m.id !== own.id && m.name.toLowerCase() === own.name.toLowerCase() && Math.abs(m.grams - own.grams) <= own.grams / 10);
+      expect(twins).toEqual([]);
+    }
   });
 });
 
@@ -171,7 +192,10 @@ describe("the measure a food starts at", () => {
   it.each<[string, MeasureSource, { measure: string; amount: number }]>([
     ["its own serving, once", own(180, "apple", APPLE_PORTIONS), { measure: "serving", amount: 1 }],
     ["USDA's measure of its serving's name and weight, once", own(30, "cup", [portion(1, "1 cup", 30, null)]), { measure: "usda-1", amount: 1 }],
-    ["USDA's measure of its serving's name at another weight, once", own(240, "cup", [portion(1, "cup", 244)]), { measure: "usda-1", amount: 1 }],
+    ["USDA's measure of its serving's name near its weight, once", own(240, "cup", [portion(1, "cup", 244)]), { measure: "usda-1", amount: 1 }],
+    ["of two USDA measures of its name, the one near its weight", own(240, "cup", [portion(1, "cup", 150), portion(2, "cup", 244)]), { measure: "usda-2", amount: 1 }],
+    ["of two near its weight, the nearer", own(240, "cup", [portion(1, "cup", 262), portion(2, "cup", 236)]), { measure: "usda-2", amount: 1 }],
+    ["its own serving beside USDA's measure of its name at another size (the 113 g muffin)", own(113, "muffin", [portion(1, "muffin", 31)]), { measure: "serving", amount: 1 }],
     ["a USDA food's first measure, once", usdaFood(70, "half cup", [portion(1, "cup", 70, 0.5), portion(2, "nut", 1.2)]), { measure: "usda-1", amount: 1 }],
     ["frozen kale's real package, not the 94 g row", usdaFood(94, "package (10 oz)", KALE_PORTIONS), { measure: "usda-2", amount: 1 }],
     ["a USDA food whose serving row is no measure: its first measure", usdaFood(142, "cup", [portion(0, "cup", 142, 0), portion(1, "tbsp", 9)]), { measure: "usda-1", amount: 1 }],
@@ -180,8 +204,14 @@ describe("the measure a food starts at", () => {
     ["a label's weight, as its serving", own(30, "g"), { measure: "serving", amount: 1 }],
     ["an ounce, for a serving of one ounce", own(28, "oz"), { measure: "oz", amount: 1 }],
     ["an ounce, for USDA's own ounce of 28.35 g", usdaFood(28.35, "oz", [portion(1, "oz", 28.35)]), { measure: "oz", amount: 1 }],
+    [
+      "an ounce, for a USDA food served by one, never its first measure (a graham cracker crust of 183 g)",
+      usdaFood(28.35, "oz", [portion(1, "oz", 28.35), portion(2, "crust, single 9\"", 183)]),
+      { measure: "oz", amount: 1 },
+    ],
     ["the grams, for an 'oz' serving that is no ounce (dark chocolate by 30 g)", own(30, "oz"), { measure: "g", amount: 30 }],
     ["the grams, for a USDA 'oz' row of 31 g", usdaFood(31, "oz", [portion(1, "oz", 31)]), { measure: "g", amount: 31 }],
+    ["the grams, for a USDA 'oz' row of 31 g, never its first measure", usdaFood(31, "oz", [portion(1, "oz", 31), portion(2, "bar", 40)]), { measure: "g", amount: 31 }],
     ["100 g, where the serving weighs nothing", own(0, "g"), { measure: "g", amount: 100 }],
   ])("%s", (_, source, expected) => {
     const measures = foodMeasures(source);

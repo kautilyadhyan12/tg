@@ -125,18 +125,25 @@ const byWeight = (unit: string): boolean => sameName(unit, "g") || sameName(unit
  *  USDA's): within half a gram of the international ounce. */
 const isOneOunce = (grams: number): boolean => Math.abs(grams - OUNCE.grams) <= 0.5;
 
+/** A measure of the serving's own name is that serving, as another table weighs
+ *  it, where it is within a tenth of the serving's weight: our milk's "cup" of
+ *  240 g and USDA's 244, almond milk's 240 and 262. Further off it is another size
+ *  of that name — our blueberry muffin of 113 g and USDA's "muffin" of 31 g. */
+const nearServing = (serving: number, grams: number): boolean => Math.abs(grams - serving) <= serving / 10;
+
 /** A food's own serving as a measure, or null where another measure already is
  *  it: grams cover a serving of 100 g by weight (and a label that gives no weight
  *  reads as that, `servingOf`), the ounce covers an "oz" serving, and a USDA
- *  measure of the same NAME is that measure, whatever either table rounds its
- *  weight to — our milk's "cup" of 240 g beside USDA's 244 was two cups on one
- *  list. A serving by weight is called "serving". */
+ *  measure of the same NAME near its weight (`nearServing`) is that measure — two
+ *  cups of 240 and 244 g on one list are one cup. A same-named USDA measure of
+ *  another size stays beside it, told apart by its grams. A serving by weight is
+ *  called "serving". */
 function servingMeasure(source: MeasureSource, usda: readonly FoodMeasure[]): FoodMeasure | null {
   const { serving, unit } = source;
   if (!source.ownServing || !(serving > 0 && serving <= MAX_ITEM_GRAMS)) return null;
   if (byWeight(unit)) return serving === 100 ? null : { id: "serving", name: "serving", grams: serving };
   if (sameName(unit, OUNCE.name) || unit.trim() === "") return null;
-  if (usda.some((m) => sameName(m.name, unit))) return null;
+  if (usda.some((m) => sameName(m.name, unit) && nearServing(serving, m.grams))) return null;
   return { id: "serving", name: unit.trim().slice(0, 60), grams: serving };
 }
 
@@ -161,21 +168,26 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   return [...(own === null ? [] : [own]), ...usda, GRAM, OUNCE];
 }
 
-/** The measure and amount a food starts at when it is picked: its own serving
- *  once; else the USDA measure its serving names — of the same weight first, then
- *  of the same name (the one that took the serving's place); else a USDA food's
- *  first measure; an ounce, for a serving of one ounce; else the serving's grams
- *  (dark chocolate served by 30 g starts at 30 g, not at an ounce's 28). */
+/** The measure and amount a food starts at when it is picked — its serving, by
+ *  whichever measure is it: its own serving once; else the USDA measure of its
+ *  serving's name nearest its weight (the one that took the serving's place, or,
+ *  where the serving's own row is no measure, the nearest size of that name). A
+ *  serving of "oz" starts at one ounce where it weighs one, else at its grams (dark
+ *  chocolate served by 30 g starts at 30 g, not at an ounce's 28), never at another
+ *  measure: a graham cracker crust served by the ounce is not its 183 g crust. Only
+ *  then a USDA food's first measure; else the serving's grams. */
 export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
   const { serving, unit } = source;
   const usda = measures.filter((m) => m.id.startsWith("usda-"));
-  const own = measures.find((m) => m.id === "serving") ??
-    usda.find((m) => sameName(m.name, unit) && sameWeight(m.grams, serving)) ??
-    usda.find((m) => sameName(m.name, unit)) ??
-    (source.ownServing ? undefined : usda[0]);
+  const nearest = usda
+    .filter((m) => sameName(m.name, unit))
+    .sort((a, b) => Math.abs(a.grams - serving) - Math.abs(b.grams - serving))[0];
+  const own = measures.find((m) => m.id === "serving") ?? nearest;
   if (own !== undefined) return { measure: own.id, amount: 1 };
-  if (sameName(unit, OUNCE.name) && isOneOunce(serving)) return { measure: OUNCE.id, amount: 1 };
-  return { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
+  const grams = { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
+  if (sameName(unit, OUNCE.name)) return isOneOunce(serving) ? { measure: OUNCE.id, amount: 1 } : grams;
+  const first = source.ownServing ? undefined : usda[0];
+  return first === undefined ? grams : { measure: first.id, amount: 1 };
 }
 
 /** The grams `amount` of a measure weighs, to the whole gram. */
