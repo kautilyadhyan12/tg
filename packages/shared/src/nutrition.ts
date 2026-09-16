@@ -60,6 +60,11 @@ export const analyzeMealPhotoRequestSchema = z.object({
 }).strict();
 export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSchema>;
 
+/** How long a photo scan's sheet can still be saved, and its free retake used:
+ *  the server keeps the scan's draft this long, and the web brings an unsaved
+ *  sheet back when Photo Log is opened again within it (RULINGS 2026-09-16). */
+export const MEAL_SCAN_TTL_SECONDS = 10 * 60;
+
 /** A scanned item as the photo sheet receives it. `pieces` is how many of what the
  *  photo counted its grams stand for where the count set them (six nuggets, three
  *  cans), and null where it did not, so one step of the sheet's stepper is one. */

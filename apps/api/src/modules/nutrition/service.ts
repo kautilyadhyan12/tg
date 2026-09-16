@@ -8,6 +8,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   MAX_ITEM_GRAMS,
+  MEAL_SCAN_TTL_SECONDS,
   isNoValueWord,
   shownFoodName,
   type ChosenItem,
@@ -41,8 +42,8 @@ import {
   type VisionUsage,
 } from "./vision.adapter.js";
 
-export const RETAKE_TTL_SECONDS = 10 * 60;
-const SCAN_TTL_SECONDS = RETAKE_TTL_SECONDS;
+export const RETAKE_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
+const SCAN_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
 const FOOD_CACHE_TTL_SECONDS = 24 * 60 * 60;
 const CALC_VERSION = 1;
 

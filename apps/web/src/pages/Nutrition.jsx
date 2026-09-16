@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PHOTO_SCAN_CAUTION } from '@app/shared';
+import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker, { SaveDishForm } from '../components/nutrition/MeasurePicker';
@@ -17,6 +17,10 @@ import { FILL_CHOICES, chosenItemFor, itemText, pickerChoices, startingValue } f
 // Display/affordance gates only: the server re-validates every request.
 const MAX_GRAMS = 10000;
 const MAX_ITEMS = 30;
+/** How long a closed photo sheet with an unsaved scan comes back when Photo Log is
+ *  opened again: the scan's own lifetime on the server, less half a minute, so a
+ *  sheet brought back can still be saved (RULINGS 2026-09-16). */
+const UNSAVED_SCAN_KEPT_MS = (MEAL_SCAN_TTL_SECONDS - 30) * 1000;
 
 // Where a scanned food's numbers came from, as the photo sheet tags its row
 // (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
@@ -646,20 +650,20 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        onClick={onClose}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        // Only the X closes it: a click outside once lost a half-picked food
+        // (Kd, 2026-09-16). On a phone it rises from the bottom, the full width.
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1,    y: 0  }}
           exit={{    opacity: 0, scale: 0.95, y: 20 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md rounded-3xl flex flex-col"
+          className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl flex flex-col"
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
-            maxHeight:  '85vh',
+            maxHeight:  '90vh',
           }}
         >
           {/* Header */}
@@ -672,10 +676,11 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
             </h3>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              aria-label="Close"
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <X className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.5)' }} />
             </button>
           </div>
 
@@ -697,13 +702,13 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
               {/* ROADMAP 7a-iv-a: one of the food's own measures and how many, or a
                   saved dish and how full; the grams and calories are the server's. */}
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.60)' }}>Amount</p>
-                <p className="text-sm font-bold" style={{ color: '#FF8A1F' }}>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.70)' }}>Amount</p>
+                <p className="text-lg font-bold" style={{ color: '#FF8A1F' }}>
                   {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
                 </p>
               </div>
-              <div className="mb-3">
+              <div className="mb-4">
                 <MeasurePicker
                   food={selected}
                   dishware={dishware}
@@ -715,29 +720,29 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
               </div>
 
               {shownLive && (
-                <p className="text-2xs my-3"
-                   style={{ color: 'rgba(255,255,255,0.45)' }}>
+                <p className="text-xs mb-4"
+                   style={{ color: 'rgba(255,255,255,0.55)' }}>
                   {shownLive.totals.kcalPoint} kcal · Protein {Math.round(shownLive.totals.proteinG)}g
                   · Carbs {Math.round(shownLive.totals.carbsG)}g · Fat {Math.round(shownLive.totals.fatG)}g
-                  <span className="ml-1" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                  <span className="ml-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
                     — calculated by the server for your amount
                   </span>
                 </p>
               )}
               {tooLarge && (
-                <p className="text-2xs mb-3" style={{ color: 'rgba(251,191,36,0.85)' }}>
+                <p className="text-xs mb-4" style={{ color: 'rgba(251,191,36,0.85)' }}>
                   That is more than {MAX_GRAMS.toLocaleString()} g — pick a smaller amount.
                 </p>
               )}
               {choice?.kind === 'dish' && chosenItem === null && (
-                <p className="text-2xs my-3" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.50)' }}>
                   Pick how full it was — we'll work out the grams.
                 </p>
               )}
               <button
                 onClick={handleSave}
                 disabled={saving || chosenItem === null || tooLarge}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white mt-1"
+                className="w-full h-12 rounded-xl font-semibold text-base text-white"
                 style={{
                   background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                   boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
@@ -791,32 +796,61 @@ function PhotoModal({ open, onClose, onSave }) {
   // estimated it), so it forms no correction pair.
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
+  // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
+  // used one of the day's scans, so closing the sheet does not throw it away.
+  // scannedAt is when this sheet's scan came back; confirmingClose is the X's
+  // "Close without saving?" while a scan is unsaved.
+  const [scannedAt,       setScannedAt]       = useState(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  // A row taken from "my dish" back to grams keeps the dish's grams; undoGrams[i]
+  // is what the row held before, for its Undo, as "Change" has one.
+  const [undoGrams,       setUndoGrams]       = useState({});
   const fileRef = useRef(null);
 
   const loadDishware = () =>
     nutritionService.listDishware().then((r) => setDishware(r.data.items || [])).catch(() => {});
 
+  const resetSheet = () => {
+    setAnalysis(null);
+    setPreview(null);
+    setAnalyzing(false);
+    setGrams({});
+    setCounts({});
+    setBases({});
+    setLogAs(null);
+    setLive(null);
+    setRetakeToken(null);
+    setRetakeMsg(null);
+    setSaving(false);
+    setExtras([]);
+    setAdding(false);
+    setItemMeasures({});
+    setReplaced({});
+    setChanging(null);
+    setScannedAt(null);
+    setConfirmingClose(false);
+    setUndoGrams({});
+  };
+
   useEffect(() => {
     if (open) {
-      setAnalysis(null);
-      setPreview(null);
-      setAnalyzing(false);
-      setGrams({});
-      setCounts({});
-      setBases({});
-      setLogAs(null);
-      setLive(null);
-      setRetakeToken(null);
-      setRetakeMsg(null);
-      setSaving(false);
-      setExtras([]);
-      setAdding(false);
-      setItemMeasures({});
-      setReplaced({});
-      setChanging(null);
+      // An unsaved scan comes back while it can still be saved; anything else
+      // (nothing scanned, saved, or too old) starts a fresh sheet.
+      const unsaved = analysis !== null && scannedAt !== null && Date.now() - scannedAt < UNSAVED_SCAN_KEPT_MS;
+      if (!unsaved) resetSheet();
+      setConfirmingClose(false);
       loadDishware();
     }
+    // The sheet is judged as it stood when it was opened, not on every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // The X: a sheet holding an unsaved scan asks first. A click outside the box
+  // never closes it (Kd: only the cross should).
+  const requestClose = () => {
+    if (analysis !== null && !saving) { setConfirmingClose(true); return; }
+    onClose();
+  };
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
@@ -825,11 +859,13 @@ function PhotoModal({ open, onClose, onSave }) {
     setPreview(URL.createObjectURL(file));
     setAnalyzing(true);
     setAnalysis(null);
+    setScannedAt(null);
     setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
     setItemMeasures({}); // …and no dish measures from a previous photo
     setReplaced({});     // …and no changed foods
+    setUndoGrams({});
     setChanging(null);
     setRetakeMsg(null);
 
@@ -837,6 +873,7 @@ function PhotoModal({ open, onClose, onSave }) {
       const res = await nutritionService.analyzePhoto(file, retakeToken);
       setRetakeToken(null);
       setAnalysis(res.data);
+      setScannedAt(Date.now());
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
@@ -1000,17 +1037,39 @@ function PhotoModal({ open, onClose, onSave }) {
         items: payloadItems,
       });
       toast.success(`Logged ${analysis.mealName || 'meal'}`);
+      resetSheet(); // saved: the next Photo Log starts fresh
       onSave();
       onClose();
     } catch (err) {
       toast.error(
-        err.response?.status === 400
-          ? 'One of the foods could not be logged — try removing or re-adding it.'
-          : 'Failed to log the meal',
+        err.response?.data?.error === 'invalid_scan'
+          ? `This scan can only be saved for ${MEAL_SCAN_TTL_SECONDS / 60} minutes — take the photo again.`
+          : err.response?.status === 400
+            ? 'One of the foods could not be logged — try removing or re-adding it.'
+            : 'Failed to log the meal',
       );
     } finally {
       setSaving(false);
     }
+  };
+
+  // "my dish" back to grams: the row keeps the grams the server worked out for the
+  // dish (where it has answered for it), and can go back to what it held before.
+  const backToGrams = (idx) => {
+    const dish = itemMeasures[idx];
+    const dishGrams = liveNow?.items?.[idx]?.gramsPoint;
+    setItemMeasures((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+    if (!dish?.dishwareId || !dish?.fillLevel || !Number.isFinite(dishGrams)) return;
+    setUndoGrams((prev) => ({ ...prev, [idx]: { grams: grams[idx], count: counts[idx], base: bases[idx] } }));
+    setGrams((prev) => ({ ...prev, [idx]: String(dishGrams) }));
+    restartStepper(idx, { count: 1, base: dishGrams });
+  };
+  const undoGramsChange = (idx) => {
+    const before = undoGrams[idx];
+    if (!before) return;
+    setGrams((prev) => ({ ...prev, [idx]: before.grams }));
+    restartStepper(idx, { count: before.count, base: before.base });
+    setUndoGrams((prev) => { const next = { ...prev }; delete next[idx]; return next; });
   };
 
   const addExtra = (food) => {
@@ -1050,7 +1109,6 @@ function PhotoModal({ open, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        onClick={onClose}
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
@@ -1058,14 +1116,40 @@ function PhotoModal({ open, onClose, onSave }) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1    }}
           exit={{    opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md rounded-3xl flex flex-col"
+          className="relative w-full max-w-md rounded-3xl flex flex-col"
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
             maxHeight:  '85vh',
           }}
         >
+          {/* The X's question while a scan is unsaved (RULINGS 2026-09-16). */}
+          {confirmingClose && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-3xl"
+                 style={{ background: 'rgba(10,9,8,0.94)' }}>
+              <div role="alertdialog" aria-labelledby="close-scan-title" className="w-full max-w-xs text-center">
+                <p id="close-scan-title" className="text-base font-bold text-white mb-2">Close without saving?</p>
+                <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                  This photo already used one of today's scans.
+                </p>
+                <p className="text-xs mb-5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  Open Photo Log again within {MEAL_SCAN_TTL_SECONDS / 60} minutes to pick up where you left off.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setConfirmingClose(false)}
+                          className="flex-1 min-h-11 rounded-xl text-sm font-semibold text-white"
+                          style={{ background: 'linear-gradient(135deg, #FF8A1F, #FFB347)' }}>
+                    Keep editing
+                  </button>
+                  <button type="button" onClick={() => { setConfirmingClose(false); onClose(); }}
+                          className="flex-1 min-h-11 rounded-xl text-sm font-semibold"
+                          style={{ color: 'rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between px-5 py-4"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2">
@@ -1073,11 +1157,12 @@ function PhotoModal({ open, onClose, onSave }) {
               <h3 className="text-base font-bold text-white">AI Photo Log</h3>
             </div>
             <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              onClick={requestClose}
+              aria-label="Close"
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <X className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.5)' }} />
             </button>
           </div>
 
@@ -1113,6 +1198,20 @@ function PhotoModal({ open, onClose, onSave }) {
               </button>
             ) : (
               <div className="space-y-4">
+                {/* A scan not saved yet, perhaps brought back after a close: a new
+                    photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
+                {analysis && (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                      Not saved yet. This scan still counts as one of today's scans.
+                    </p>
+                    <button type="button" onClick={resetSheet}
+                            className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
+                            style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
+                      <Camera className="w-3.5 h-3.5" /> New photo
+                    </button>
+                  </div>
+                )}
                 <img
                   src={preview}
                   alt="Meal"
@@ -1299,13 +1398,23 @@ function PhotoModal({ open, onClose, onSave }) {
                               </div>
                             ) : (
                               <button type="button"
-                                      onClick={() => { const m = { ...itemMeasures }; delete m[i]; setItemMeasures(m); }}
+                                      onClick={() => backToGrams(i)}
                                       className="text-2xs font-semibold px-2 py-1 rounded-md"
                                       style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
                                 ← back to grams
                               </button>
                             )}
                           </div>
+                          {undoGrams[i] && itemMeasures[i] === undefined && (
+                            <p className="text-2xs mt-1 text-right" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                              Kept the dish's {grams[i]} g ·{' '}
+                              <button type="button" onClick={() => undoGramsChange(i)}
+                                      className="underline decoration-dotted"
+                                      style={{ color: 'rgba(255,255,255,0.65)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                Undo
+                              </button>
+                            </p>
+                          )}
                           {itemMeasures[i] !== undefined && (
                             <DishMeasure
                               dishware={dishware}
@@ -1323,33 +1432,30 @@ function PhotoModal({ open, onClose, onSave }) {
                       {extras.map((x, j) => {
                         const shown = liveNow?.items?.[analysis.items.length + j];
                         return (
-                          <div key={`${x.food.canonical}-${j}`} className="p-2.5 rounded-xl"
+                          <div key={`${x.food.canonical}-${j}`} className="p-3.5 rounded-2xl"
                                style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
-                            <div className="flex justify-between">
-                              <p className="text-sm font-semibold text-white">
-                                {x.food.name}
-                                <span className="ml-1.5 text-2xs font-normal"
-                                      style={{ color: 'rgba(255,138,31,0.75)' }}>
-                                  added by you
-                                </span>
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold" style={{ color: '#FF8A1F' }}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white">{x.food.name}</p>
+                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <p className="text-base font-bold" style={{ color: '#FF8A1F' }}>
                                   {shown ? `${shown.kcalPoint} kcal` : '…'}
                                 </p>
                                 <button type="button" onClick={() => removeExtra(j)}
-                                        title={`Remove ${x.food.name}`}
-                                        className="p-0.5 rounded" style={{ color: 'rgba(239,68,68,0.7)' }}>
-                                  <X className="w-3.5 h-3.5" />
+                                        title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
+                                        className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
+                                  <X className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
-                            <p className="text-2xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
                               {shown
                                 ? `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`
                                 : 'Calculating…'}
                             </p>
-                            <div className="mt-1.5">
+                            <div className="mt-3">
                               <MeasurePicker
                                 food={x.food}
                                 dishware={dishware}
