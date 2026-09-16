@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx (postgres.js's Sql and
@@ -573,4 +574,157 @@ export async function deleteMeasurement(sql: Sql, userId: string, id: string): P
       DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
     return rows.length > 0;
   });
+}
+
+// ── the USDA food table (ROADMAP 7a-iii-a) ───────────────────────────────────
+// PUBLIC DATA, NO OWNER: `usda_foods` is the one table here whose rows belong to
+// nobody, so these are the only queries in this file with no tenancy WHERE.
+// Nothing a person owns is reachable through them, and nothing here writes —
+// `tools/import-usda.ts` is the table's only writer.
+
+/** A USDA food as the search box and the food resolver read it. A figure the
+ *  release does not measure is null; 7a-v shows the twelve beyond the macros,
+ *  which is why only what a `FoodReference` carries is selected here. */
+export interface UsdaFoodRow {
+  fdcId: number;
+  release: string;
+  description: string;
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG: number | null;
+  servingGrams: number;
+  servingUnit: string;
+}
+
+/** At most this many words of a query reach the index; a search box query is
+ *  capped at 100 characters upstream, and ten words is far past a food's name. */
+const MAX_SEARCH_WORDS = 10;
+
+/** A query's words, cut by the one rule that also stored the description's
+ *  (`usdaWords.ts`): accents folded, lower case, letters and digits, a decimal
+ *  point kept inside a number — the index is built from the description folded
+ *  the same way (`search_text`), so "jalapeño" typed finds "Jalapeno". That rule
+ *  is what makes the tsquery safe too — `&`, `|`, `!`, `(`, `)`, `:` and `*`
+ *  separate words here, so no typed text can ever become a tsquery operator, and
+ *  the result still crosses to Postgres as a parameter. */
+export const usdaSearchWords = (query: string): string[] => usdaWords(query).slice(0, MAX_SEARCH_WORDS);
+
+/** EVERY typed word must match, the last one as a prefix so the box answers
+ *  while it is still being typed ("cappucc" finds "Coffee, Cappuccino").
+ *  Null where nothing typed is searchable. English stop words are not in the
+ *  index at all, so Postgres drops them from the query too: "milk of a cow"
+ *  searches milk and cow, and a query of nothing but stop words matches
+ *  nothing rather than everything. */
+export function usdaTsQuery(query: string): string | null {
+  const words = usdaSearchWords(query);
+  if (words.length === 0) return null;
+  return words.map((word, at) => (at === words.length - 1 ? `${word}:*` : word)).join(" & ");
+}
+
+const usdaRow = (r: {
+  fdc_id: number; release: string; description: string; kcal: number; protein_g: number;
+  carbs_g: number; fat_g: number; fiber_g: number | null; serving_grams: number; serving_unit: string;
+}): UsdaFoodRow => ({
+  fdcId: r.fdc_id, release: r.release, description: r.description, kcal: r.kcal,
+  proteinG: r.protein_g, carbsG: r.carbs_g, fatG: r.fat_g, fiberG: r.fiber_g,
+  servingGrams: r.serving_grams, servingUnit: r.serving_unit,
+});
+
+type UsdaColumns = Parameters<typeof usdaRow>[0];
+
+/** The search box's USDA rung. These rows carry no physical sanity bound, as a
+ *  packaged product does (`openfoodfacts.adapter.ts` refuses over 1,000 kcal or
+ *  a macro over 100 g per 100 g): Open Food Facts is crowd-edited and a prank
+ *  value can be written into it, while these are a government release loaded by
+ *  one tool. Measured over both releases on 2026-09-16: the highest is 902 kcal
+ *  per 100 g (beef tallow, and lard), and no macro exceeds 100 g.
+ *
+ *  A food with no energy, protein, carbohydrate or
+ *  fat figure cannot be priced into a meal, so neither this nor the lookup below
+ *  ever offers one: exactly one food is in that state, FNDDS 2705383 "Milk,
+ *  human" (measured 2026-09-16).
+ *
+ *  THE FOOD ITSELF FIRST, THEN THE DISHES MADE FROM IT. USDA names a food
+ *  "head, then qualifiers" — "Pumpkin, cooked" is the vegetable, "Muffin,
+ *  pumpkin" is a muffin — so what a person typed is matched against the head of
+ *  the description, in three steps, before anything else is considered:
+ *    1. the head IS what was typed ("pumpkin" → "Pumpkin, cooked"; "orange
+ *       juice" → "Orange juice, 100%, NFS", never "Orange, canned, juice pack");
+ *    2. failing that, the description STARTS with what was typed, which is what
+ *       keeps the answers steady while a word is still half-typed;
+ *    3. failing that, its first word is the first word typed, which is what
+ *       orders a query of two words USDA writes with a comma between them
+ *       ("rice brown" → "Rice, brown, cooked, …", never "Beans and brown rice").
+ *  Without this a two-word dish and a two-word ingredient tie, and USDA's own id
+ *  decides: "pumpkin" answered Muffin, Bread, Cookie, Pie and Pancakes before
+ *  the vegetable, and "banana" answered Banana split (measured 2026-09-16).
+ *
+ *  Then FNDDS before SR Legacy — the survey release
+ *  describes food as people eat it — then the fewest-worded description, which
+ *  is the plainest entry ("Coffee, Cappuccino" before "Coffee, Cappuccino,
+ *  decaffeinated, with non-dairy milk"), then USDA's own id so two equal rows
+ *  never swap places between searches.
+ *
+ *  The three head steps compare against `search_text` and `first_word`, which the
+ *  importer folded by the same rule as the typed words, so an accent on either
+ *  side changes no step. The words hold nothing but letters, digits and a decimal
+ *  point, so they carry no `%` or `_` into `LIKE`. Measured through this function against the
+ *  loaded table 2026-09-16: a word a person really types answers in 6–9 ms, and
+ *  the widest word in either release ("cooked", 2,448 rows) in 20 ms. */
+export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number): Promise<UsdaFoodRow[]> {
+  const words = usdaSearchWords(query);
+  const tsQuery = usdaTsQuery(query);
+  if (tsQuery === null || limit < 1) return [];
+  const typed = words.join(" ");
+  const firstWord = words[0] ?? "";
+  const rows = await sql<UsdaColumns[]>`
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
+    FROM usda_foods
+    WHERE search @@ to_tsquery('english', ${tsQuery})
+      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
+    ORDER BY (search_text = ${typed} OR search_text LIKE ${`${typed},%`}) DESC,
+             (search_text LIKE ${`${typed}%`}) DESC,
+             (first_word = ${firstWord}) DESC,
+             (release = 'fndds') DESC, word_count ASC, fdc_id ASC
+    LIMIT ${limit}`;
+  return rows.map(usdaRow);
+}
+
+/** The release a canonical names. The table stores SR Legacy as `sr_legacy`;
+ *  a canonical spells it `sr`, as the curated list's citations do. */
+const CANONICAL_RELEASES: ReadonlyMap<string, string> = new Map([
+  ["sr", "sr_legacy"],
+  ["fndds", "fndds"],
+]);
+
+const USDA_CANONICAL = /^usda_(sr|fndds)_(\d{1,10})$/;
+
+/** `usda_foods.fdc_id` is an `integer` column, so an id past its range is not a
+ *  food — and asking anyway is not a miss but a database error ("value
+ *  2147483648 is out of range for type integer"), which would reach a person as
+ *  a 500 for a canonical anyone can type. */
+const MAX_FDC_ID = 2_147_483_647;
+
+/** `usda_sr_167512` / `usda_fndds_2710472`. A saved meal keeps this, and comes
+ *  back to the same row for as long as the release carries it. */
+export const usdaCanonical = (row: { fdcId: number; release: string }): string =>
+  `usda_${row.release === "fndds" ? "fndds" : "sr"}_${String(row.fdcId)}`;
+
+/** The one food a canonical names, or null. The release is part of the WHERE,
+ *  not decoration: `usda_fndds_167512` must never answer with SR Legacy's
+ *  167512 just because the id happens to exist. */
+export async function usdaFoodByCanonical(sql: SqlOrTx, canonical: string): Promise<UsdaFoodRow | null> {
+  const parsed = USDA_CANONICAL.exec(canonical);
+  const release = CANONICAL_RELEASES.get(parsed?.[1] ?? "");
+  const fdcId = Number(parsed?.[2] ?? NaN);
+  if (release === undefined || !Number.isInteger(fdcId) || fdcId < 1 || fdcId > MAX_FDC_ID) return null;
+  const rows = await sql<UsdaColumns[]>`
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
+    FROM usda_foods
+    WHERE fdc_id = ${fdcId} AND release = ${release}
+      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL`;
+  const r = rows[0];
+  return r === undefined ? null : usdaRow(r);
 }

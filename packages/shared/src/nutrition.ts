@@ -3,7 +3,10 @@ import { z } from "zod";
 import { missingPlanInputSchema } from "./plan.js";
 
 export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "default", "legacy"]);
-export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts"]);
+/** Where an item's numbers per 100 g came from. `usda` is a food of the USDA
+ *  FoodData Central table (ROADMAP 7a-iii-a) — public-domain data the app
+ *  credits on screen; `openfoodfacts` is one brand's packaged product. */
+export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda"]);
 export const mealOriginSchema = z.enum(["photo", "manual"]);
 /** Kd ruling 2026-07-17 (Card-5b smoke; supersedes the D1 time-bucket
  *  interim): the section is a USER-CHOSEN label stored on the meal —

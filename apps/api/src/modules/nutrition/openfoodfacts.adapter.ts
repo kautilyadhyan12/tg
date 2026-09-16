@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MAX_ITEM_GRAMS } from "@app/shared";
 
 /** `fiberG` is null where a curated food's table has no measured figure. */
-export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: "curated" | "openfoodfacts"; }
+export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: "curated" | "openfoodfacts" | "usda"; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
 const searchSchema = z.object({ hits: z.array(productSchema).optional(), products: z.array(productSchema).optional() }).passthrough();
@@ -70,12 +70,21 @@ function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   const shown = withBrand(name, p.brands);
   return { canonical: code === "" ? `off_${canonicalize(shown)}` : `off_${code}`, name: shown, kcal, proteinG, carbsG, fatG, fiberG, serving: serving.grams, unit: serving.unit, source: "openfoodfacts" };
 }
+/** How long one search waits for packaged products, both addresses together.
+ *  The search box's other foods answer in milliseconds and are held until this
+ *  does, so a slow or silent Open Food Facts must not hold the box: over three
+ *  searches it answered in 0.8 to 2.0 s, and its fallback address failed with a
+ *  503 after 2.5 s (measured 2026-09-16). */
+export const OFF_SEARCH_TIMEOUT_MS = 3_000;
+
 export function createOpenFoodFactsProvider(fetchImpl: typeof fetch = fetch): FoodSearchProvider {
   return { async search(query, limit) {
+    // One deadline for the whole search: the fallback address gets what is left of it, never a wait of its own.
+    const deadline = AbortSignal.timeout(OFF_SEARCH_TIMEOUT_MS);
     const urls = [new URL("https://search.openfoodfacts.org/search"), new URL("https://world.openfoodfacts.org/cgi/search.pl")];
     urls[0]?.searchParams.set("q", query); urls[0]?.searchParams.set("page_size", String(limit)); urls[0]?.searchParams.set("fields", "code,product_name,brands,serving_size,nutriments,generic_name");
     urls[1]?.searchParams.set("search_terms", query); urls[1]?.searchParams.set("search_simple", "1"); urls[1]?.searchParams.set("action", "process"); urls[1]?.searchParams.set("json", "1"); urls[1]?.searchParams.set("page_size", String(limit));
-    for (const url of urls) { try { const response = await fetchImpl(url, { headers: { "user-agent": "AIHomeGym/1.0" } }); if (!response.ok) continue; const parsed = searchSchema.safeParse(await response.json()); if (!parsed.success) continue; const foods = (parsed.data.hits ?? parsed.data.products ?? []).map(mapProduct).filter((v): v is FoodReference => v !== null).slice(0, limit); if (foods.length > 0) return foods; } catch { /* defined degrade: try fallback, then empty */ } }
+    for (const url of urls) { try { const response = await fetchImpl(url, { headers: { "user-agent": "AIHomeGym/1.0" }, signal: deadline }); if (!response.ok) continue; const parsed = searchSchema.safeParse(await response.json()); if (!parsed.success) continue; const foods = (parsed.data.hits ?? parsed.data.products ?? []).map(mapProduct).filter((v): v is FoodReference => v !== null).slice(0, limit); if (foods.length > 0) return foods; } catch { /* defined degrade: try fallback, then empty */ } }
     return [];
   } };
 }

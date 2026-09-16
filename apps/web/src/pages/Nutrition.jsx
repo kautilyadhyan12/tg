@@ -534,10 +534,16 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
                 </p>
                 {/* A packaged product is one brand's jar, from Open Food Facts,
                     whose free licence asks for attribution (RULINGS
-                    2026-09-14); the app's own foods carry no label. */}
+                    2026-09-14); a USDA food reads its own source the same way
+                    (7a-iii-a); the app's own foods carry no label. */}
                 {r.source === 'openfoodfacts' && (
                   <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.30)' }}>
                     Packaged product · Open Food Facts
+                  </p>
+                )}
+                {r.source === 'usda' && (
+                  <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                    USDA FoodData Central
                   </p>
                 )}
               </div>
@@ -548,6 +554,17 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
           </button>
         ))}
       </div>
+      {/* USDA FoodData Central is public domain (CC0 1.0) and asks for no
+          permission, only that it be listed as the source (fdc.nal.usda.gov,
+          read 2026-09-16; RULINGS the same day). */}
+      {shown.some((r) => r.source === 'usda') && (
+        <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
+          Food data from{' '}
+          <a href="https://fdc.nal.usda.gov" target="_blank" rel="noreferrer" className="underline"
+             style={{ color: 'rgba(255,255,255,0.45)' }}>USDA FoodData Central</a>
+          , U.S. Department of Agriculture, Agricultural Research Service.
+        </p>
+      )}
       {/* The Open Database License's notice for showing its data (section 4.3a):
           the database's name links to the database, and the licence's name to
           its text, as Open Food Facts' terms of use also ask. */}

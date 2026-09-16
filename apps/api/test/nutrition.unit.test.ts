@@ -884,6 +884,30 @@ describe("P2.6a nutrition pure pipeline", () => {
         timeout.mockRestore();
       }
     });
+
+    it("is given up on after 3 seconds for a packaged-product search, both addresses together, with no products", async () => {
+      const { OFF_SEARCH_TIMEOUT_MS, createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
+      expect(OFF_SEARCH_TIMEOUT_MS).toBe(3_000);
+      // As above: the deadline's own signal is handed back already fired, and
+      // each address answers only when its signal fires.
+      const fired = AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"));
+      const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(fired);
+      const signals: (AbortSignal | null | undefined)[] = [];
+      const hangs: typeof fetch = (_input, init) => {
+        signals.push(init?.signal);
+        return new Promise((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal?.aborted === true) reject(new Error("aborted"));
+          signal?.addEventListener("abort", () => { reject(new Error("aborted")); });
+        });
+      };
+      expect(await createOpenFoodFactsProvider(hangs).search("milk", 3)).toEqual([]);
+      // ONE deadline for the search: the fallback address is tried under the
+      // same one, never given three seconds of its own.
+      expect(timeout.mock.calls).toEqual([[3_000]]);
+      expect(signals).toHaveLength(2);
+      expect(signals.every((signal) => signal === fired)).toBe(true);
+    });
   });
 
   it("createMealVisionProvider follows MEAL_VISION_MODEL and is null while that model's own key is unset", async () => {
