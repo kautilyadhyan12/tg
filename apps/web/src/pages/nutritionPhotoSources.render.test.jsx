@@ -78,6 +78,8 @@ describe('the photo sheet names where each food’s numbers come from', () => {
       expect(within(row(name)).getByRole('button', { name: 'Change' })).toBeTruthy();
     }
     expect(screen.getByText('about 513 kcal')).toBeTruthy();
+    // Photo scans say they estimate calories and cannot detect allergens (RULINGS 2026-09-09), in these words.
+    expect(screen.getByText('Calories from a photo are an estimate. A photo cannot detect allergens.')).toBeTruthy();
     // The two tables that ask to be credited are, under the sheet.
     expect(screen.getByRole('link', { name: 'USDA FoodData Central' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open Food Facts' })).toBeTruthy();
@@ -152,6 +154,90 @@ describe('Change on a scanned row', () => {
       scanToken: SCAN_TOKEN,
       items: [{ canonical: 'avocado', grams: 100 }, { canonical: 'usda_fndds_2709692', grams: 60 }, { canonical: 'off_4901392000034', grams: 65 }, { canonical: 'est_avocado_toast', grams: 120 }],
     }));
+  });
+});
+
+describe('the count stepper on a changed row', () => {
+  const bread = { canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice' };
+  // Two slices the scan counted, at 60 g: its stepper steps by 30 g.
+  const TWO_SLICES = { ...item('bread', 'est_bread', 'estimate', 60, 160), pieces: 2 };
+  const stepper = (rowEl) => ({
+    count: within(rowEl).getByText(/^×\d+$/).textContent,
+    grams: within(rowEl).getByRole('spinbutton').value,
+  });
+  const changeTo = async (row, from, food) => {
+    fireEvent.click(within(row(from)).getByRole('button', { name: 'Change' }));
+    fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
+    fireEvent.click((await screen.findByText(food.name)).closest('button'));
+  };
+  const plus = (rowEl) => fireEvent.click(within(rowEl).getByRole('button', { name: '+' }));
+
+  beforeEach(() => {
+    scanReturns([item('Avocado', 'avocado', 'curated', 100, 160), TWO_SLICES]);
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [bread] } }));
+  });
+
+  it('starts the new food at ×1 on the row’s grams, never by the pieces the scan counted of the food it replaced', async () => {
+    const row = await scanPlate();
+    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '60' });
+    await changeTo(row, 'bread', bread);
+    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×1', grams: '60' });
+    // Two of the whole 60 g, not three 30 g slices.
+    plus(row('Bread, toasted'));
+    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×2', grams: '120' });
+  });
+
+  it('gives the scanned food back its own count on Undo while the grams are the scan’s, and ×1 on the grams set since otherwise', async () => {
+    const row = await scanPlate();
+    // Changed and put back untouched: the scan's two slices, 30 g a step.
+    await changeTo(row, 'bread', bread);
+    fireEvent.click(within(row('Bread, toasted')).getByRole('button', { name: 'Undo' }));
+    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '60' });
+    plus(row('bread'));
+    expect(stepper(row('bread'))).toEqual({ count: '×3', grams: '90' });
+    // Changed, stepped to other grams, and put back: ×1 on those grams.
+    await changeTo(row, 'bread', bread);
+    plus(row('Bread, toasted'));
+    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×2', grams: '180' });
+    fireEvent.click(within(row('Bread, toasted')).getByRole('button', { name: 'Undo' }));
+    expect(stepper(row('bread'))).toEqual({ count: '×1', grams: '180' });
+    plus(row('bread'));
+    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '360' });
+  });
+});
+
+describe('what a search on the sheet offers', () => {
+  const bread = { canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice' };
+  const rye = { ...bread, canonical: 'usda_fndds_456', name: 'Rye bread' };
+  // Each food already on the sheet, as a search would find it again under another name.
+  const pumpkinAgain = { ...bread, canonical: 'usda_fndds_2709692', name: 'Pumpkin, found again' };
+  const breadAgain = { ...bread, name: 'Bread, found again' };
+  const avocadoAgain = { ...bread, canonical: 'avocado', name: 'Avocado, found again', source: 'curated' };
+
+  it('never offers a scanned food again, for another row or as an added ingredient, even once its own row has changed', async () => {
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [bread] } }));
+    const row = await scanPlate();
+    // The pumpkin row becomes bread.
+    fireEvent.click(within(row('Pumpkin, cooked')).getByRole('button', { name: 'Change' }));
+    fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
+    fireEvent.click((await screen.findByText('Bread, toasted')).closest('button'));
+
+    // The avocado row's search finds the pumpkin the scan saw, the bread now on the sheet, and rye.
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [pumpkinAgain, breadAgain, rye] } }));
+    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change' }));
+    fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'food' } });
+    expect(await screen.findByText('Rye bread')).toBeTruthy();
+    expect(screen.queryByText('Pumpkin, found again')).toBeNull();
+    expect(screen.queryByText('Bread, found again')).toBeNull();
+    fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change' }));
+
+    // "Add an ingredient" offers none of them, nor the avocado — while a grams box is empty, too.
+    fireEvent.change(within(row('Avocado')).getByRole('spinbutton'), { target: { value: '' } });
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [pumpkinAgain, breadAgain, avocadoAgain, rye] } }));
+    fireEvent.click(screen.getByRole('button', { name: /Add an ingredient/ }));
+    fireEvent.change(await screen.findByPlaceholderText('e.g. milk, sugar, oil...'), { target: { value: 'food' } });
+    expect(await screen.findByText('Rye bread')).toBeTruthy();
+    for (const name of ['Pumpkin, found again', 'Bread, found again', 'Avocado, found again']) expect(screen.queryByText(name), name).toBeNull();
   });
 });
 

@@ -5,7 +5,7 @@
 // switched-off spare. MEAL_VISION_MODEL picks one at boot, and every model
 // carries its price. Every reply is parsed through the scanner's schemas in
 // @app/shared.
-import { MEAL_VESSELS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
+import { MAX_SCAN_FOODS, MEAL_VESSELS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
@@ -38,6 +38,10 @@ export function visionCostMicro(model: MealVisionModel, tokensIn: number, tokens
 
 /** A provider that never answers must not hold the scan request open. */
 export const VISION_TIMEOUT_MS = 30_000;
+
+/** The most output tokens one reply may bill: the most a scan can cost. The
+ *  number of foods a reply may list (`MAX_SCAN_FOODS`) is sized to fit inside it. */
+export const VISION_MAX_OUTPUT_TOKENS = 1000;
 
 /** How many tokens Gemini spends reading the photo. Gemini 3 reads a photo as
  *  about 280 tokens at low, 560 at medium and 1,120 when left unset
@@ -92,8 +96,10 @@ const httpFailure = (status: number): VisionProviderError =>
 //   in .0 is for the bill: the shape check wrote "150.0" for every whole number,
 //   and each ".0" is output tokens (the shape check, HANDOFF 2026-09-16);
 // - a vessel from a fixed list, and a count of whole pieces only (the form
-//   ROADMAP 7a-iv reads).
-export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]. Write the JSON on one line, with no line breaks or indentation, and write null in any slot you cannot fill. Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. Field formats are strict: meal_name must be a short name for the meal; vessel must be exactly one of ${MEAL_VESSELS.join(", ")}; fill_level must be a number between 0 and 1; size_class must be a string; count must be a positive integer; grams, kcal, protein_g, carbs_g and fat_g must be numbers, your own estimate for the portion shown, always filled, and never end in .0; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Count whole pieces only, never slices, chunks or pieces cut from a bigger item.`;
+//   ROADMAP 7a-iv reads);
+// - at most MAX_SCAN_FOODS items, any other food named in unknown_items, so a
+//   crowded plate's reply ends inside the output cap instead of being cut off.
+export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]. Write the JSON on one line, with no line breaks or indentation, and write null in any slot you cannot fill. Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items. Field formats are strict: meal_name must be a short name for the meal; vessel must be exactly one of ${MEAL_VESSELS.join(", ")}; fill_level must be a number between 0 and 1; size_class must be a string; count must be a positive integer; grams, kcal, protein_g, carbs_g and fat_g must be numbers, your own estimate for the portion shown, always filled, and never end in .0; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Count whole pieces only, never slices, chunks or pieces cut from a bigger item.`;
 
 /** The model's JSON text → evidence. A reply that breaks the contract fails
  *  closed and keeps its usage, so the ledger still records the spend. */
@@ -113,7 +119,7 @@ export function createGroqVisionProvider(apiKey: string, model: string, fetchImp
       // budget before the JSON; reasoning_effort:"none" disables it (Groq
       // docs/reasoning, checked 2026-07-16 — the parameter is Qwen-only).
       const qwenOpts = model.startsWith("qwen/") ? { reasoning_effort: "none" } : {};
-      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: 1000, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
+      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: VISION_MAX_OUTPUT_TOKENS, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
     } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
     if (!response.ok) throw httpFailure(response.status);
     let raw: unknown;
@@ -152,7 +158,7 @@ export function createGeminiVisionProvider(
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: MEAL_VISION_PROMPT }, { inlineData: { mimeType, data: imageBase64 } }] }],
           generationConfig: {
-            maxOutputTokens: 1000,
+            maxOutputTokens: VISION_MAX_OUTPUT_TOKENS,
             responseMimeType: "application/json",
             thinkingConfig: { thinkingLevel: "minimal" },
             ...(mediaResolution === null ? {} : { mediaResolution }),

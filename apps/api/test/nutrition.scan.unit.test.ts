@@ -1,12 +1,10 @@
 // ROADMAP 7a-iii-b — what each food a scan sees is priced by: the model's own
-// estimate and when it is no number, the 3× wrong-food check, the order of the
-// tables, the estimate row, and Kd's eight plates run through the photo sheet, so
-// a change in any of those rules shows here as a diff.
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+// estimate and when it is no number, the 3× wrong-food check, the energy a USDA
+// entry must agree with, the order of the tables, the estimate row, and the
+// portion each priced food is served by. Kd's eight plates run through the real
+// lookups in nutrition.scan.routes.test.ts.
 import { describe, expect, it } from "vitest";
-import { mealVisionEvidenceSchema, type VisionItem } from "@app/shared";
-import { findCurated } from "../src/modules/nutrition/foods.js";
+import { mealVesselSchema, per100gSchema, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
 import type { FoodReference } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import {
   ENERGY_SLACK_KCAL,
@@ -15,10 +13,12 @@ import {
   MAX_ESTIMATE_KCAL_PER_100G,
   WRONG_FOOD_MIN_GAP_KCAL,
   WRONG_FOOD_RATIO,
+  energySeen,
   estimateFood,
   estimatePer100g,
   isWrongFood,
   priceScannedFood,
+  type EnergySeen,
   type ScanLookups,
 } from "../src/modules/nutrition/scanMatch.js";
 import { scanSheet } from "../src/modules/nutrition/service.js";
@@ -65,17 +65,41 @@ describe("the model's own estimate", () => {
     expect(estimatePer100g(seen({ kcal: 500, carbs_g: 0 }))).toBeNull();
   });
 
-  it("is no number past the energy food carries, or with a macro heavier than the food", () => {
+  it("is no number past the energy food carries", () => {
     expect(MAX_ESTIMATE_KCAL_PER_100G).toBe(900);
     // 10 g of pure fat is 90 kcal: 900 per 100 g, the most there is.
     expect(estimatePer100g(seen({ grams: 10, kcal: 90, protein_g: 0, carbs_g: 0, fat_g: 10 }))).toEqual({ kcal: 900, proteinG: 0, carbsG: 0, fatG: 100 });
     // 91 kcal from the same 10 g of fat: the macros still make it within rounding,
-    // and no macro outweighs the food, so the 900 is the only rule that refuses it.
+    // and they weigh no more than the food, so the 900 is the only rule that refuses it.
     expect(estimatePer100g(seen({ grams: 10, kcal: 91, protein_g: 0, carbs_g: 0, fat_g: 10 }))).toBeNull();
-    for (const macro of ["protein_g", "carbs_g"] as const) {
-      expect(estimatePer100g(seen({ grams: 10, kcal: 44, protein_g: 0, carbs_g: 0, fat_g: 0, [macro]: 11 })), macro).toBeNull();
-      expect(estimatePer100g(seen({ grams: 10, kcal: 40, protein_g: 0, carbs_g: 0, fat_g: 0, [macro]: 10 })), macro).not.toBeNull();
-    }
+  });
+
+  it("is no number where its protein, carbohydrate and fat together weigh more than the food", () => {
+    // Every case below passes the other rules — its macros make its kcal, and it is
+    // under 900 kcal per 100 g — so the weight is the only rule that decides it.
+    const cases: [string, Partial<Pick<VisionItem, "grams" | "kcal" | "protein_g" | "carbs_g" | "fat_g">>, boolean][] = [
+      // Each macro alone: a gram over the food's weight, and at it.
+      ["protein over", { grams: 10, kcal: 44, protein_g: 11, carbs_g: 0, fat_g: 0 }, false],
+      ["protein at", { grams: 10, kcal: 40, protein_g: 10, carbs_g: 0, fat_g: 0 }, true],
+      ["carbohydrate over", { grams: 10, kcal: 44, protein_g: 0, carbs_g: 11, fat_g: 0 }, false],
+      ["carbohydrate at", { grams: 10, kcal: 40, protein_g: 0, carbs_g: 10, fat_g: 0 }, true],
+      ["fat over", { grams: 10, kcal: 90, protein_g: 0, carbs_g: 0, fat_g: 11 }, false],
+      ["fat at", { grams: 10, kcal: 90, protein_g: 0, carbs_g: 0, fat_g: 10 }, true],
+      // None heavier than the food alone, together heavier: 60 g of protein and 60 g
+      // of carbohydrate in 100 g at 480 kcal, and all three.
+      ["two together over", { grams: 100, kcal: 480, protein_g: 60, carbs_g: 60, fat_g: 0 }, false],
+      ["three together over", { grams: 10, kcal: 59, protein_g: 4, carbs_g: 4, fat_g: 3 }, false],
+      ["three together at", { grams: 10, kcal: 55, protein_g: 4, carbs_g: 3, fat_g: 3 }, true],
+    ];
+    for (const [label, figures, isNumber] of cases) expect(estimatePer100g(seen(figures)) !== null, label).toBe(isNumber);
+  });
+
+  it("reads a macro exactly as heavy as the food at 100 g per 100 g, never a rounding past what a saved meal accepts", () => {
+    // 0.69 g of protein in 0.69 g: multiplied before dividing, this reads
+    // 100.00000000000001 g, which the meal's own contract (at most 100) refuses.
+    const estimate = estimatePer100g(seen({ grams: 0.69, kcal: 2.76, protein_g: 0.69, carbs_g: 0, fat_g: 0 }));
+    expect(estimate?.proteinG).toBe(100);
+    expect(per100gSchema.safeParse(estimate).success).toBe(true);
   });
 });
 
@@ -102,20 +126,49 @@ describe("a table food the model's energy says is another food", () => {
   });
 });
 
+describe("the energy a USDA entry must agree with to be the food on the plate", () => {
+  const at = (kcal: number): EnergySeen | null => energySeen({ kcal, proteinG: 0, carbsG: 0, fatG: 0 });
+  const band = (kcal: number): [number, number, number] => {
+    const s = at(kcal);
+    if (s === null) throw new Error("expected a band");
+    return [s.kcal, s.low, s.high];
+  };
+
+  it("is 30 % of the model's energy either way, or 10 kcal per 100 g where that is more", () => {
+    // 100 kcal: 70 to 130.
+    const [k100, low100, high100] = band(100);
+    expect(k100).toBe(100);
+    expect(low100).toBeCloseTo(70, 9);
+    expect(high100).toBeCloseTo(130, 9);
+    // A raw radish at 16: 30 % is under 5, so 10 holds — 6 to 26, which a pickled one at 34 is not in.
+    expect(band(16)).toEqual([16, 6, 26]);
+    // Nothing at all: 10 either way.
+    expect(band(0)).toEqual([0, -10, 10]);
+  });
+
+  it("is none where the model gave no usable number", () => {
+    expect(energySeen(null)).toBeNull();
+  });
+});
+
 describe("the order a scanned food is priced in", () => {
-  /** Lookups that answer from the given foods and say which were asked. */
+  /** Lookups that answer from the given foods and say which were asked, and with what energy. */
   const lookups = (answers: { ourList?: FoodReference; usda?: FoodReference; packaged?: FoodReference }) => {
     const asked: string[] = [];
+    const usdaSaw: (EnergySeen | null)[] = [];
     const ask = (rung: keyof typeof answers) => (hint: string): FoodReference | null => {
       asked.push(`${rung}:${hint}`);
       return answers[rung] ?? null;
     };
     const table: ScanLookups = {
       ourList: ask("ourList"),
-      usda: (hint) => Promise.resolve(ask("usda")(hint)),
+      usda: (hint, energy) => {
+        usdaSaw.push(energy);
+        return Promise.resolve(ask("usda")(hint));
+      },
       packaged: (hint) => Promise.resolve(ask("packaged")(hint)),
     };
-    return { asked, table };
+    return { asked, usdaSaw, table };
   };
   const plate = seen({ grams: 200, kcal: 200, protein_g: 0, carbs_g: 50, fat_g: 0 }, "zqxdish");
   const ours = tableFood("ours", 110);
@@ -134,6 +187,19 @@ describe("the order a scanned food is priced in", () => {
     expect(onlyPackaged.asked).toEqual(["ourList:zqxdish", "usda:zqxdish", "packaged:zqxdish"]);
   });
 
+  it("asks USDA with the energy the model saw, and with none where it gave no usable number", async () => {
+    const withNumbers = lookups({});
+    await priceScannedFood(plate, withNumbers.table);
+    // 200 kcal in 200 g is 100 per 100 g: 70 to 130.
+    expect(withNumbers.usdaSaw).toHaveLength(1);
+    expect(withNumbers.usdaSaw[0]?.kcal).toBe(100);
+    expect(withNumbers.usdaSaw[0]?.low).toBeCloseTo(70, 9);
+    expect(withNumbers.usdaSaw[0]?.high).toBeCloseTo(130, 9);
+    const noNumber = lookups({});
+    await priceScannedFood({ ...plate, fat_g: null }, noNumber.table);
+    expect(noNumber.usdaSaw).toEqual([null]);
+  });
+
   it("is the model's estimate where no table has the food, and nothing where it gave no number either", async () => {
     expect(await priceScannedFood(plate, lookups({}).table)).toEqual({ kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200, overruled: null });
     expect(await priceScannedFood({ ...plate, kcal: null }, lookups({}).table)).toEqual({ kind: "none" });
@@ -149,6 +215,26 @@ describe("the order a scanned food is priced in", () => {
     // Where the model gave no usable number, the table food stands however far off.
     const noNumber = { ...plate, protein_g: null };
     expect(await priceScannedFood(noNumber, lookups({ ourList: tableFood("ours far", 301) }).table)).toEqual({ kind: "table", food: tableFood("ours far", 301) });
+  });
+
+  it("never asks a table by a name that says there is none, and prices no item that has no name at all", async () => {
+    // Every table answers anything here, as a live search answers almost any word.
+    const answering = { ourList: ours, usda, packaged };
+    for (const word of ["unknown", "N/A", " none ", "null", ""]) {
+      // A real name over a hint that says there is none: the model's own figures, shown by that name.
+      const named = lookups(answering);
+      expect(await priceScannedFood({ ...plate, name: "Zqx fritter", canonical_hint: word }, named.table), JSON.stringify(word))
+        .toEqual({ kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200, overruled: null });
+      expect(named.asked, JSON.stringify(word)).toEqual([]);
+      // No name either: no food, whatever figures it carries, and nothing is asked.
+      const nameless = lookups(answering);
+      expect(await priceScannedFood({ ...plate, name: "Unknown", canonical_hint: word }, nameless.table), JSON.stringify(word)).toEqual({ kind: "none" });
+      expect(nameless.asked, JSON.stringify(word)).toEqual([]);
+    }
+    // A name that says there is none over a real hint is still asked by the hint.
+    const hinted = lookups(answering);
+    expect(await priceScannedFood({ ...plate, name: "unknown", canonical_hint: "zqxdish" }, hinted.table)).toEqual({ kind: "table", food: ours });
+    expect(hinted.asked).toEqual(["ourList:zqxdish"]);
   });
 });
 
@@ -174,103 +260,61 @@ describe("an estimate row", () => {
   });
 });
 
-// ── Kd's eight plates (2026-09-16) ───────────────────────────────────────────
-// The model's replies to his eight photos, as it wrote them on 2026-09-16 with
-// this card's prompt (the text only; no photo is in the repository). Each goes
-// through the reply's schema and the photo sheet with our list as it is, no
-// packaged products, and the three USDA foods the loaded table gave these plates'
-// unlisted foods that day (`usdaFoodForScan`, figures copied from FoodData
-// Central): so a rule that changes what a plate shows changes this test.
-const PLATES = join(import.meta.dirname, "fixtures", "plates");
+describe("the portion a priced food is served by on the photo sheet", () => {
+  const evidence = (...items: VisionItem[]): VisionEvidence => ({ meal_name: "Zqx plate", items, unknown_items: [], photo_quality: "good" });
+  // USDA's own row, as the loaded table holds it: served by the cup.
+  const usdaPumpkin: FoodReference = { canonical: "usda_fndds_2709692", name: "Pumpkin, cooked", kcal: 52, proteinG: 1.05, carbsG: 6.77, fatG: 2.84, fiberG: 0.5, serving: 230, unit: "cup", source: "usda" };
+  // Kd's plate "download (3)": 60 g of pumpkin in two pieces, at 30 kcal.
+  const pumpkin: VisionItem = { ...seen({ grams: 60, kcal: 30, protein_g: 1, carbs_g: 7, fat_g: 0 }, "pumpkin"), vessel: "plate", fill_level: 0.2, count: 2 };
 
-const USDA_THAT_DAY: ReadonlyMap<string, FoodReference> = new Map([
-  ["pumpkin", { canonical: "usda_fndds_2709692", name: "Pumpkin, cooked", kcal: 52, proteinG: 1.05, carbsG: 6.77, fatG: 2.84, fiberG: 0.5, serving: 230, unit: "cup", source: "usda" }],
-  ["lemon", { canonical: "usda_fndds_2709168", name: "Lemon, raw", kcal: 29, proteinG: 1.1, carbsG: 9.32, fatG: 0.3, fiberG: 2.8, serving: 65, unit: "fruit", source: "usda" }],
-  ["iced coffee", { canonical: "usda_fndds_2710428", name: "Iced Coffee, brewed", kcal: 1, proteinG: 0.09, carbsG: 0, fatG: 0.02, fiberG: 0, serving: 30, unit: "fl oz", source: "usda" }],
-]);
-
-const plateLookups: ScanLookups = {
-  ourList: (hint) => {
-    const food = findCurated(hint);
-    return food === null ? null : { canonical: food.canonical, name: food.name, kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG, fiberG: food.fiberG, serving: food.serving, unit: food.unit, source: "curated" };
-  },
-  usda: (hint) => Promise.resolve(USDA_THAT_DAY.get(hint) ?? null),
-  packaged: () => Promise.resolve(null),
-};
-
-/** Each row as the sheet shows it: name, tag, grams, kcal, the stepper's pieces. */
-type Row = [string, string, number, number, number | null];
-
-const EXPECTED: Record<string, { rows: Row[]; unknown: string[] }> = {
-  // The toast plate: every food is on the sheet, and the latte, which no table
-  // names, is the model's own figures.
-  "download-1.json": { rows: [
-    ["French bread / sourdough", "curated", 100, 272, 2], ["Avocado", "curated", 100, 160, null], ["Egg (fried)", "curated", 50, 98, 1],
-    ["Bacon (cooked)", "curated", 100, 548, null], ["Brie", "curated", 28, 94, null], ["Ham (sliced)", "curated", 28, 46, 1],
-    ["Apple", "curated", 180, 94, 1], ["Almonds", "curated", 28, 162, null], ["latte", "estimate", 240, 130, 1],
-  ], unknown: [] },
-  // USDA's brewed iced coffee is 1 kcal per 100 g and the model saw 40: another food.
-  "download-2.json": { rows: [
-    ["avocado toast with egg", "estimate", 220, 380, 1], ["Asparagus (cooked)", "curated", 100, 22, null], ["cherry tomatoes", "estimate", 60, 11, 6],
-    ["Pork sausage (cooked)", "curated", 46, 150, 2], ["Shrimp (cooked)", "curated", 100, 99, null], ["iced coffee", "estimate", 200, 80, 1],
-  ], unknown: [] },
-  "download-3.json": { rows: [
-    ["Chicken breast (cooked)", "curated", 100, 165, null], ["Shrimp (cooked)", "curated", 100, 99, null], ["Egg (whole, large)", "curated", 50, 72, 1],
-    ["Broccoli (cooked)", "curated", 100, 35, null], ["Corn (cooked)", "curated", 100, 96, null], ["Pumpkin, cooked", "usda", 460, 239, 2],
-    ["Orange juice", "curated", 240, 108, 1],
-  ], unknown: [] },
-  "download-4.json": { rows: [
-    ["Salmon (cooked)", "curated", 100, 206, null], ["Roast potatoes", "curated", 100, 126, null], ["Broccoli (cooked)", "curated", 100, 35, null],
-    ["Lemon, raw", "usda", 65, 19, null],
-  ], unknown: [] },
-  "download-5.json": { rows: [
-    ["avocado toast", "estimate", 120, 280, 1], ["Eggs (scrambled)", "curated", 50, 75, 1], ["Strawberries", "curated", 100, 32, null],
-  ], unknown: [] },
-  "download-6.json": { rows: [
-    ["bread", "estimate", 60, 160, 2], ["Peanut butter", "curated", 32, 191, null], ["Jam", "curated", 20, 56, null],
-    ["Avocado", "curated", 100, 160, null], ["Eggs (scrambled)", "curated", 50, 75, 1], ["Blueberries", "curated", 100, 57, null],
-    ["Raspberries", "curated", 100, 52, null],
-  ], unknown: [] },
-  "download.json": { rows: [
-    ["banana toast", "estimate", 220, 450, 1], ["egg bacon toast", "estimate", 250, 420, 1], ["iced coffee", "estimate", 250, 110, 1],
-  ], unknown: [] },
-  "minimalist-meal-planner-inspiration-idea-120.json": { rows: [
-    ["Egg (hard-boiled)", "curated", 150, 233, 3], ["Roast potatoes", "curated", 100, 126, null], ["Chicken breast (cooked)", "curated", 100, 165, null],
-    ["Corn (cooked)", "curated", 100, 96, null], ["Broccoli (cooked)", "curated", 100, 35, null],
-  ], unknown: [] },
-};
-
-describe("Kd's eight plates through the photo sheet", () => {
-  const files = readdirSync(PLATES).filter((name) => name.endsWith(".json")).sort();
-
-  it("are all here, each a reply the schema reads", () => {
-    expect(files).toEqual(Object.keys(EXPECTED).sort());
-    for (const file of files) expect(mealVisionEvidenceSchema.safeParse(JSON.parse(readFileSync(join(PLATES, file), "utf8"))).success, file).toBe(true);
+  it("is the grams the model saw for a USDA food, its count what the stepper steps by — never USDA's cup times the count", () => {
+    const sheet = scanSheet(evidence(pumpkin), [{ kind: "table", food: usdaPumpkin }], []);
+    expect(sheet.items[0]).toMatchObject({ name: "Pumpkin, cooked", nutritionSource: "usda", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default", pieces: 2, kcalPoint: 31 });
+    expect(sheet.draftItems).toEqual([{ canonical: "usda_fndds_2709692", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default" }]);
+    // A saved dish the vessel names does not change it: that rule is our list's, until 7a-iv.
+    const dish = scanSheet(evidence({ ...pumpkin, vessel: "katori" }), [{ kind: "table", food: usdaPumpkin }], [{ containerClass: "standard_katori", volumeMl: 400, foodHint: null }]);
+    expect(dish.items[0]).toMatchObject({ gramsPoint: 60, portionSource: "default", pieces: 2 });
   });
 
-  for (const [file, expected] of Object.entries(EXPECTED)) {
-    it(`${file}: every food the model saw is on the sheet or named, as pinned`, async () => {
-      const evidence = mealVisionEvidenceSchema.parse(JSON.parse(readFileSync(join(PLATES, file), "utf8")));
-      const prices = await Promise.all(evidence.items.map((item) => priceScannedFood(item, plateLookups)));
-      const sheet = scanSheet(evidence, prices, []);
-      expect(sheet.items.map((i): Row => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint, i.pieces])).toEqual(expected.rows);
-      expect(sheet.unknownItems).toEqual(expected.unknown);
-      // Nothing is dropped: every item is a row or named under "Not in the total".
-      expect(sheet.items.length + sheet.unknownItems.length).toBe(evidence.items.length + evidence.unknown_items.length);
-      // The draft holds exactly the foods and portions the sheet shows, in order.
-      expect(sheet.draftItems.map((d) => [d.canonical, d.gramsPoint])).toEqual(sheet.items.map((i) => [i.canonical, i.gramsPoint]));
-      expect(sheet.foods.map((f) => f.canonical)).toEqual(sheet.items.map((i) => i.canonical));
-      // An estimate row carries its figures, and at the model's grams its kcal is the model's own.
-      for (const [at, row] of sheet.items.entries()) {
-        const seenItem = evidence.items.filter((_, i) => prices[i]?.kind !== "none")[at];
-        if (row.nutritionSource === "estimate") {
-          expect(row.canonical.startsWith("est_"), row.name).toBe(true);
-          expect(row.per100g, row.name).toBeDefined();
-          expect(row.kcalPoint, row.name).toBe(seenItem?.kcal);
-        } else {
-          expect(row.per100g, row.name).toBeUndefined();
-        }
-      }
-    });
-  }
+  it("is USDA's own serving once, uncounted, where the model gave no grams", () => {
+    const sheet = scanSheet(evidence({ ...pumpkin, grams: null }), [{ kind: "table", food: usdaPumpkin }], []);
+    expect(sheet.items[0]).toMatchObject({ gramsPoint: 230, gramsRange: [230, 230], portionSource: "default", pieces: null, kcalPoint: 120 });
+  });
+
+  it("is the rule our list's foods and packaged products were scanned by before this card, until 7a-iv (Kd, 2026-09-16)", () => {
+    // The same food served by the same cup, from our list: two pieces read as two cups.
+    for (const source of ["curated", "openfoodfacts"] as const) {
+      const food: FoodReference = { ...usdaPumpkin, canonical: `zqx_${source}`, name: `Zqx ${source}`, source };
+      expect(scanSheet(evidence(pumpkin), [{ kind: "table", food }], []).items[0], source).toMatchObject({ gramsPoint: 460, pieces: 2 });
+    }
+  });
+
+  it("is the model's grams for an estimate, with its count", () => {
+    const sheet = scanSheet(evidence({ ...pumpkin, canonical_hint: "zqxpumpkin" }), [{ kind: "estimate", per100g: { kcal: 50, proteinG: 1.7, carbsG: 11.7, fatG: 0 }, grams: 60, overruled: null }], []);
+    expect(sheet.items[0]).toMatchObject({ nutritionSource: "estimate", gramsPoint: 60, pieces: 2, kcalPoint: 30 });
+  });
+
+  it("reaches Appendix B's own container for every vessel Appendix B measures, and the food's serving for every other", () => {
+    // A food of our list served by 100 g, at medium density, in each vessel full.
+    const food: FoodReference = { canonical: "zqx_weighed", name: "Zqx weighed", kcal: 100, proteinG: 0, carbsG: 25, fatG: 0, fiberG: null, serving: 100, unit: "g", source: "curated" };
+    const serving: [number, [number, number], string] = [100, [100, 100], "default"];
+    const expected: Record<MealVessel, [number, [number, number], string]> = {
+      katori: [175, [150, 200], "regional_prior"], // the standard katori, 150–200 ml
+      "large bowl": [275, [250, 300], "regional_prior"],
+      "thali section": [125, [100, 150], "regional_prior"], // grams, never ml × density
+      tumbler: [175, [150, 200], "regional_prior"], // the steel tumbler
+      "chai cup": [125, [100, 150], "regional_prior"],
+      cup: [240, [240, 240], "regional_prior"],
+      mug: [325, [300, 350], "regional_prior"],
+      tablespoon: [15, [15, 15], "regional_prior"],
+      teaspoon: [5, [5, 5], "regional_prior"],
+      bowl: serving, glass: serving, can: serving, bottle: serving, pot: serving, plate: serving,
+    };
+    expect(Object.keys(expected).sort()).toEqual([...mealVesselSchema.options].sort());
+    for (const vessel of mealVesselSchema.options) {
+      const item: VisionItem = { ...seen({ grams: null }, "zqxweighed"), vessel, fill_level: 1 };
+      const [row] = scanSheet(evidence(item), [{ kind: "table", food }], []).items;
+      expect([row?.gramsPoint, row?.gramsRange, row?.portionSource], vessel).toEqual(expected[vessel]);
+    }
+  });
 });

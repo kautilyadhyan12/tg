@@ -331,8 +331,8 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
     const food = findCurated(hint);
     return food === null ? null : asReference(food);
   },
-  usda: async (hint) => {
-    const found = await repo.usdaFoodForScan(deps.sql, hint);
+  usda: async (hint, seen) => {
+    const found = await repo.usdaFoodForScan(deps.sql, hint, seen);
     return found === null ? null : asUsdaReference(found.food);
   },
   packaged: async (hint) => {
@@ -447,6 +447,15 @@ async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<voi
 
 // ── Stage 1+2: analyze ───────────────────────────────────────────────────────
 
+/** The grams the model saw, and its count of whole pieces where it gave one,
+ *  which the sheet's stepper steps by. */
+const seenPortion = (grams: number, count: number | null): PortionResult =>
+  ({ gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces: count });
+
+/** One of the food's own serving, uncounted. */
+const servingOnce = (food: FoodReference): PortionResult =>
+  ({ gramsPoint: food.serving, gramsRange: [food.serving, food.serving], portionSource: "default", pieces: null });
+
 /** The photo sheet for what the model saw, once each food is priced (`prices[i]`
  *  is `evidence.items[i]`'s): every food on it, by a table or by its estimate
  *  (ROADMAP 7a-iii-b); the foods and portions the draft keeps for the confirm;
@@ -482,9 +491,21 @@ export function scanSheet(
     }
     let food: FoodReference;
     let portion: PortionResult;
-    if (price.kind === "table") {
+    if (price.kind === "estimate") {
+      food = estimateFood(shownName(item), price.per100g, price.grams, taken);
+      portion = seenPortion(price.grams, item.count);
+    } else if (price.food.source === "usda") {
+      // A USDA food is served as an estimate is, by the grams the model saw. Its
+      // serving is USDA's first household measure ("1 cup, 230 g"), which the rules
+      // below were written without: they read a count of two pumpkin pieces as two
+      // cups, 460 g where the model saw 60. Where the model gave no grams, USDA's
+      // serving once. 7a-iv weighs every food by its USDA piece and cup weights.
       food = price.food;
-      // A table food's portion is resolved as it always was, until 7a-iv's form.
+      portion = item.grams === null ? servingOnce(food) : seenPortion(item.grams, item.count);
+    } else {
+      food = price.food;
+      // Our list's foods and packaged products keep the rule they were scanned by
+      // before this card, until 7a-iv's form (Kd, RULINGS 2026-09-16).
       portion = resolvePortion(
         {
           canonicalHint: item.canonical_hint,
@@ -496,11 +517,6 @@ export function scanSheet(
         savedDishware,
         { grams: food.serving, unit: food.unit },
       );
-    } else {
-      // An estimate's portion is the grams the model saw, and its whole-piece
-      // count, where it gave one, is what the sheet's stepper steps by.
-      food = estimateFood(shownName(item), price.per100g, price.grams, taken);
-      portion = { gramsPoint: price.grams, gramsRange: [price.grams, price.grams], portionSource: "default", pieces: item.count };
     }
     taken.add(food.canonical);
     foods.push(food);

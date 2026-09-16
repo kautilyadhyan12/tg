@@ -7,6 +7,7 @@ import {
   MEAL_SCAN_MEDIA_RESOLUTION,
   MEAL_VISION_MODELS,
   MEAL_VISION_PROMPT,
+  VISION_MAX_OUTPUT_TOKENS,
   VISION_TIMEOUT_MS,
   VisionProviderError,
   createGeminiVisionProvider,
@@ -16,7 +17,7 @@ import {
 } from "../src/modules/nutrition/vision.adapter.js";
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MEAL_VESSELS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, MEAL_VESSELS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -518,6 +519,23 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(MEAL_VISION_PROMPT).toContain(
       'For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing.',
     );
+  });
+
+  it("lists no more foods than the reply's output cap holds, and names any other food in unknown_items", async () => {
+    expect([MAX_SCAN_FOODS, VISION_MAX_OUTPUT_TOKENS]).toEqual([20, 1000]);
+    expect(MEAL_VISION_PROMPT).toContain(`List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items.`);
+    // Measured on Kd's plates (HANDOFF 2026-09-16): 155 output tokens for the 3 foods of
+    // "download", 393 for the 9 of "download (1)" — about 40 a food. A full list stays
+    // under nine tenths of the cap, so a reply is never cut off into JSON nothing reads.
+    const perFood = (393 - 155) / (9 - 3);
+    expect(155 + perFood * (MAX_SCAN_FOODS - 3)).toBeLessThan(0.9 * VISION_MAX_OUTPUT_TOKENS);
+    // The contract holds the model to it: the most foods read, one more breaks the reply.
+    const food = ["Dal", "dal", null, null, null, null, 100, 145, 9, 19, 4];
+    const reply = (count: number) => createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+      meal_name: "x", items: Array.from({ length: count }, () => food), unknown_items: ["the rest"], photo_quality: "good",
+    }));
+    expect((await reply(MAX_SCAN_FOODS).analyze("AA==", "image/jpeg")).evidence.items).toHaveLength(MAX_SCAN_FOODS);
+    await expect(reply(MAX_SCAN_FOODS + 1).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
   });
 
   it("resolver covers thali_section weight-prior and density-class branches (T3 R9 gap)", () => {

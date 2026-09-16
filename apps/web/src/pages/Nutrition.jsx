@@ -6,6 +6,7 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 
@@ -32,6 +33,18 @@ const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Package
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
+// Where a photo row's count stepper starts. The scan's own count, one piece a step
+// (six nuggets read ×6, and + makes seven), belongs to the food the scan saw at the
+// grams it saw; any other food, or other grams, starts at ×1 on the grams the row
+// holds (or the scan's grams while the box holds no usable number).
+const scannedStepper = (item) => {
+  const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
+  return { count: pieces, base: item.gramsPoint / pieces };
+};
+const stepperAtGrams = (gramsText, fallback) => {
+  const typed = parseFloat(gramsText);
+  return { count: 1, base: Number.isFinite(typed) && typed > 0 ? typed : fallback };
+};
 // Kd ruling: the user must say how full — no invented "full" default. ¼/½/¾/Full.
 const FILL_LEVELS = [
   { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
@@ -968,14 +981,13 @@ function PhotoModal({ open, onClose, onSave }) {
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
-      // An item the photo counted starts at its count, one piece a step (six
-      // nuggets read ×6, and + makes seven); any other starts at ×1.
+      // An item the photo counted starts at its count (scannedStepper).
       const g = {};
       const c = {};
       const b = {};
       res.data.items.forEach((item, i) => {
-        const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
-        g[i] = String(item.gramsPoint); c[i] = pieces; b[i] = item.gramsPoint / pieces;
+        const stepper = scannedStepper(item);
+        g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
       });
       setGrams(g);
       setCounts(c);
@@ -1053,6 +1065,16 @@ function PhotoModal({ open, onClose, onSave }) {
     ...analysis.items.map((item, i) => replaced[i]?.canonical ?? item.canonical),
     ...extras.map((x) => x.food.canonical),
   ];
+  // What no search on this sheet may offer: every food on it now, and every food
+  // the scan put on it, even on a row since changed. The server reads a food by
+  // its canonical, so a scanned food sent for another row, or as an added
+  // ingredient, is taken for that scanned row — a correction the person never
+  // made — and a later Undo would send the same food twice. `row` is the row whose
+  // own foods, as scanned and as it is now, its Change may pick again.
+  const onSheet = (row = null) => (analysis === null ? [] : [
+    ...rowCanonicals.filter((_, j) => j !== row),
+    ...analysis.items.map((item) => item.canonical).filter((_, j) => j !== row),
+  ]);
   // The total is "about" while any food in it is the scanner's own estimate.
   const aboutTotal = rowSources.includes('estimate');
   const anyReplaced = Object.keys(replaced).length > 0;
@@ -1131,14 +1153,24 @@ function PhotoModal({ open, onClose, onSave }) {
   const patchExtra = (idx, next) => setExtras((prev) => prev.map((x, i) => (i === idx ? { ...x, ...next } : x)));
   const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setLive(null); };
   // The food picked for a scanned row takes its place at the row's own grams; the
-  // server prices it (never the browser) once the preview asks.
+  // server prices it (never the browser) once the preview asks. Its stepper starts
+  // at ×1 on those grams: the pieces the scan counted were of the food it replaced.
+  const restartStepper = (idx, stepper) => {
+    setCounts((prev) => ({ ...prev, [idx]: stepper.count }));
+    setBases((prev) => ({ ...prev, [idx]: stepper.base }));
+  };
   const changeRow = (idx, food) => {
     setReplaced((prev) => ({ ...prev, [idx]: food }));
+    restartStepper(idx, stepperAtGrams(grams[idx], analysis.items[idx].gramsPoint));
     setChanging(null);
     setLive(null);
   };
+  // Undo puts the scanned food back, with the scan's own count while the grams are
+  // still the scan's.
   const undoChange = (idx) => {
+    const item = analysis.items[idx];
     setReplaced((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+    restartStepper(idx, grams[idx] === String(item.gramsPoint) ? scannedStepper(item) : stepperAtGrams(grams[idx], item.gramsPoint));
     setLive(null);
   };
 
@@ -1245,10 +1277,16 @@ function PhotoModal({ open, onClose, onSave }) {
                     <p className="text-base font-bold text-white mb-1">
                       {analysis.mealName}
                     </p>
-                    <p className="text-xs mb-4"
+                    <p className="text-xs mb-1"
                        style={{ color: 'rgba(255,255,255,0.45)' }}>
                       Check the portion sizes below — you can adjust the grams
                       before saving.
+                    </p>
+                    {/* RULINGS 2026-09-09: photo scans say they estimate calories
+                        and cannot detect allergens. Never softened or removed. */}
+                    <p className="text-xs mb-4"
+                       style={{ color: 'rgba(251,191,36,0.85)' }}>
+                      {PHOTO_SCAN_CAUTION}
                     </p>
 
                     <div className="space-y-2 mb-4">
@@ -1325,7 +1363,7 @@ function PhotoModal({ open, onClose, onSave }) {
                                 selected={null}
                                 onPick={(food) => changeRow(i, food)}
                                 autoFocus
-                                exclude={rowCanonicals.filter((_, j) => j !== i)}
+                                exclude={onSheet(i)}
                                 placeholder="Search the right food..."
                               />
                             </div>
@@ -1497,7 +1535,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           selected={null}
                           onPick={addExtra}
                           autoFocus
-                          exclude={payloadItems.map((it) => it.canonical)}
+                          exclude={onSheet()}
                           placeholder="e.g. milk, sugar, oil..."
                         />
                       </div>

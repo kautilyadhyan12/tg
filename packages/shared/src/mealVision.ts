@@ -52,6 +52,15 @@ const orUnknown = <O>(schema: z.ZodType<O, z.ZodTypeDef, unknown>) =>
 /** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
 export const MAX_PHOTO_COUNT = 30;
 
+/** The most foods one reply may list; the prompt asks the model to name any other
+ *  food it sees in unknown_items, so it still shows under "Not in the total". It is
+ *  what the reply's output cap holds with room to spare: each food costs about 40
+ *  output tokens (155 for a plate of 3, 393 for a plate of 9; HANDOFF 2026-09-16)
+ *  and the cap is 1,000 (`vision.adapter.ts`), so about 24 fit. A reply cut off at
+ *  the cap is no JSON at all: the scan fails as unreadable, and so does its free
+ *  retake. */
+export const MAX_SCAN_FOODS = 20;
+
 /** No figure past this is an estimate of one item: ten kilos at 900 kcal per 100 g,
  *  the most energy a food carries (pure fat). The bounds per 100 g are the
  *  service's; this only keeps an absurd number out of the arithmetic. */
@@ -93,7 +102,7 @@ export const mealVisionEvidenceSchema = z.preprocess(dropFields(RETIRED_EVIDENCE
   // A photo with no meal on it has no meal name; the retake path answers it.
   // "none", "N/A" and "null" are no name, as they are for a size.
   meal_name: optionalNameSchema.default(null),
-  items: z.array(mealVisionItemSchema).max(30).default([]),
+  items: z.array(mealVisionItemSchema).max(MAX_SCAN_FOODS).default([]),
   unknown_items: z.array(z.string()).default([]),
   photo_quality: z.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v), z.enum(["good", "poor"])),
 }).strict());

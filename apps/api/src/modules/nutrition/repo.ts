@@ -711,18 +711,38 @@ export type UsdaScanMatch = "name" | "head" | "words";
  *     "strawberries" "strawberry" on both sides. The first-word rule is what keeps
  *     a dish made from a food from standing for it: "roasted potatoes" finds
  *     "Potato, roasted, NFS", and "banana" alone never finds "Bread, banana".
- *  Within either: the survey release (FNDDS) before SR Legacy, then the
- *  fewest-worded description, then USDA's id, so a scan reads the same food every
- *  time. A food with no energy or macro figure cannot be priced, and is never an
- *  answer.
+ *  Within either step, the entries the name finds equally are the same food made
+ *  different ways — "Radishes, raw" at 16 kcal per 100 g and "Radishes, pickled" at
+ *  34 — and the model's own energy (`seen`) says which is on the plate:
+ *  3. AN ENTRY THAT AGREES with what the model saw (`seen.low`–`seen.high`, the
+ *     band `scanMatch.ts` sets) before one that does not, and among those that
+ *     agree the plainest, as below — not merely the nearest, which for "egg" at
+ *     140 names "Egg, whole, raw, frozen, salted, pasteurized" (138); where none
+ *     agrees, the nearest. The step still comes first: the energy only chooses among entries
+ *     the name supports, so "apple" at 52 kcal is "Apple, raw" (61) where it was
+ *     "Apple, dried" (243), and "orange" at 47 stays "Orange, raw" where the
+ *     nearest of every match would be "Orange juice, 100%, NFS" (measured on the
+ *     loaded table, 2026-09-16).
+ *  Then the survey release (FNDDS) before SR Legacy, the fewest-worded description,
+ *  and USDA's id, so a scan reads the same food every time. With no estimate
+ *  (`seen` null) the order is that alone. A food with no energy or macro figure
+ *  cannot be priced, and is never an answer.
  *
  *  The words are cut by the one rule the search and the importer share
  *  (`usdaWords.ts`): letters, digits and a decimal point, so neither `to_tsquery`
  *  nor `LIKE` receives an operator from the model's text. */
-export async function usdaFoodForScan(sql: SqlOrTx, hint: string): Promise<{ food: UsdaFoodRow; match: UsdaScanMatch } | null> {
+export async function usdaFoodForScan(
+  sql: SqlOrTx,
+  hint: string,
+  seen: { kcal: number; low: number; high: number } | null,
+): Promise<{ food: UsdaFoodRow; match: UsdaScanMatch } | null> {
   const words = usdaSearchWords(hint);
   if (words.length === 0) return null;
   const named = words.join(" ");
+  // With no estimate each is null, which orders every row alike.
+  const kcal = seen?.kcal ?? null;
+  const low = seen?.low ?? null;
+  const high = seen?.high ?? null;
   const rows = await sql<(UsdaColumns & { match: UsdaScanMatch })[]>`
     SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit,
            CASE WHEN search_text = ${named} THEN 'name'
@@ -734,6 +754,8 @@ export async function usdaFoodForScan(sql: SqlOrTx, hint: string): Promise<{ foo
            OR to_tsvector('english', first_word) @@ to_tsquery('english', ${words.join(" | ")}))
       AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
     ORDER BY (search_text = ${named}) DESC, (search_text LIKE ${`${named},%`}) DESC,
+             -- Every entry that agrees is 0 apart; one that does not, its distance.
+             (CASE WHEN kcal BETWEEN ${low}::float8 AND ${high}::float8 THEN 0 ELSE abs(kcal - ${kcal}::float8) END) ASC,
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT 1`;
   const r = rows[0];

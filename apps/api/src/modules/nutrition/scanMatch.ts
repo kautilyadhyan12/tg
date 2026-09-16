@@ -6,7 +6,7 @@
 //
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
-import type { Per100g, VisionItem } from "@app/shared";
+import { isNoValueWord, type Per100g, type VisionItem } from "@app/shared";
 import { slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
@@ -23,20 +23,35 @@ export const ENERGY_TOLERANCE = 0.3;
 export const ENERGY_SLACK_KCAL = 10;
 
 /** The model's own figures for one food, per 100 g, or null where they are no
- *  number: a slot left empty, energy past what food carries, a macro heavier than
- *  the food, or macros whose energy (4 kcal a gram of protein and carbohydrate, 9
- *  of fat) is not the kcal it gave. An estimate that contradicts itself is not
- *  shown as one. */
+ *  number: a slot left empty, protein, carbohydrate and fat that together weigh
+ *  more than the food they are part of, energy past what food carries, or macros
+ *  whose energy (4 kcal a gram of protein and carbohydrate, 9 of fat) is not the
+ *  kcal it gave. An estimate that contradicts itself is not shown as one. */
 export function estimatePer100g(item: Pick<VisionItem, "grams" | "kcal" | "protein_g" | "carbs_g" | "fat_g">): Per100g | null {
   const { grams, kcal, protein_g: protein, carbs_g: carbs, fat_g: fat } = item;
   if (grams === null || kcal === null || protein === null || carbs === null || fat === null) return null;
+  // One weight, not three: 60 g of protein and 60 g of carbohydrate are no 100 g
+  // food, though neither is heavier than it alone.
+  if (protein + carbs + fat > grams) return null;
   const energy = 4 * protein + 4 * carbs + 9 * fat;
   if (Math.abs(energy - kcal) > Math.max(ENERGY_TOLERANCE * kcal, ENERGY_SLACK_KCAL)) return null;
-  const per100 = (v: number): number => (v * 100) / grams;
+  // Divided before it is multiplied, so a macro no heavier than the food is never
+  // read past 100 g per 100 g by the rounding of its last digit.
+  const per100 = (v: number): number => (v / grams) * 100;
   const figures = { kcal: per100(kcal), proteinG: per100(protein), carbsG: per100(carbs), fatG: per100(fat) };
   if (figures.kcal > MAX_ESTIMATE_KCAL_PER_100G) return null;
-  if (figures.proteinG > 100 || figures.carbsG > 100 || figures.fatG > 100) return null;
   return figures;
+}
+
+/** What the model saw a food's energy as, per 100 g, and the band a table entry
+ *  must fall in to agree with it: 30 %, or 10 kcal, either way — the same
+ *  tolerance the model's own macros are held to against its kcal (above). */
+export interface EnergySeen { kcal: number; low: number; high: number }
+
+export function energySeen(estimate: Per100g | null): EnergySeen | null {
+  if (estimate === null) return null;
+  const slack = Math.max(ENERGY_TOLERANCE * estimate.kcal, ENERGY_SLACK_KCAL);
+  return { kcal: estimate.kcal, low: estimate.kcal - slack, high: estimate.kcal + slack };
 }
 
 /** A table food more than three times from the model's own energy per 100 g,
@@ -59,8 +74,9 @@ export function isWrongFood(tableKcalPer100g: number, estimate: Per100g | null):
 export interface ScanLookups {
   /** Our own list, by whole words (`findCurated`). */
   ourList(hint: string): FoodReference | null;
-  /** The USDA table: the food itself by name, then every word. */
-  usda(hint: string): Promise<FoodReference | null>;
+  /** The USDA table: the food itself by name, then every word; among the entries
+   *  a name finds equally, one whose energy agrees with what the model saw. */
+  usda(hint: string, seen: EnergySeen | null): Promise<FoodReference | null>;
   /** A packaged product whose name holds every word. */
   packaged(hint: string): Promise<FoodReference | null>;
 }
@@ -77,11 +93,21 @@ export type ScanPrice =
  *  asked only when the one above has nothing, and whichever answers is checked
  *  against the model's own energy; one that fails gives way to the estimate, not
  *  to the next table, since the next table's answer to the same name is the same
- *  guess made worse. */
+ *  guess made worse.
+ *
+ *  A table is asked by a name only. A canonical_hint that says there is none
+ *  ("unknown", "N/A") would find whatever a table happens to call by that word, so
+ *  no table is asked: the model's own figures price the food, shown by its name.
+ *  An item with no name either is no food anyone can be shown, and nothing prices
+ *  it — the prompt puts a food the model cannot name in unknown_items. */
 export async function priceScannedFood(item: VisionItem, lookups: ScanLookups): Promise<ScanPrice> {
   const estimate = estimatePer100g(item);
   const hint = item.canonical_hint;
-  const food = lookups.ourList(hint) ?? (await lookups.usda(hint)) ?? (await lookups.packaged(hint));
+  const hinted = !isNoValueWord(hint);
+  if (!hinted && isNoValueWord(item.name)) return { kind: "none" };
+  const food = hinted
+    ? (lookups.ourList(hint) ?? (await lookups.usda(hint, energySeen(estimate))) ?? (await lookups.packaged(hint)))
+    : null;
   if (food !== null && !isWrongFood(food.kcal, estimate)) return { kind: "table", food };
   if (estimate !== null && item.grams !== null) return { kind: "estimate", per100g: estimate, grams: item.grams, overruled: food };
   return { kind: "none" };

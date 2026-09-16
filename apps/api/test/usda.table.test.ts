@@ -16,6 +16,7 @@ import {
   usdaSearchWords,
   usdaTsQuery,
 } from "../src/modules/nutrition/repo.js";
+import { energySeen } from "../src/modules/nutrition/scanMatch.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaPortion, type UsdaRelease } from "../tools/usda-files.js";
 
@@ -114,6 +115,13 @@ d("the USDA food table (real Postgres)", () => {
     // No figure to price it by.
     [90_000_052, "fndds", "Zqxsnofat, raw", 82, ["fatG"]],
     [90_000_053, "fndds", "Zqxsnokcal, raw", null],
+    // One food made three ways, all heads of the same name, and a dish of it: the
+    // survey release's pickled one leads by the release rule; SR Legacy's raw one
+    // is the plainest of the other two, a calorie from the longer one.
+    [90_000_054, "fndds", "Zqxsprep, pickled", 34],
+    [90_000_055, "sr_legacy", "Zqxsprep, raw", 16],
+    [90_000_056, "sr_legacy", "Zqxsprep, oriental, cooked, boiled, drained", 17],
+    [90_000_057, "fndds", "Zqxsprep pie", 300],
   ];
 
   const load = async (): Promise<void> => {
@@ -264,8 +272,9 @@ d("the USDA food table (real Postgres)", () => {
   });
 
   describe("the USDA row a scanned food's name finds (ROADMAP 7a-iii-b)", () => {
-    const scanned = async (hint: string): Promise<[number, string] | null> => {
-      const found = await usdaFoodForScan(sql, hint);
+    const scanned = async (hint: string, kcalSeen: number | null = null): Promise<[number, string] | null> => {
+      const seen = kcalSeen === null ? null : energySeen({ kcal: kcalSeen, proteinG: 0, carbsG: 0, fatG: 0 });
+      const found = await usdaFoodForScan(sql, hint, seen);
       return found === null ? null : [found.food.fdcId, found.match];
     };
 
@@ -289,6 +298,22 @@ d("the USDA food table (real Postgres)", () => {
     it("stems both sides by the index's own dictionary, and folds accents", async () => {
       expect(await scanned("scrambled zqxseggs")).toEqual([90_000_051, "words"]);
       expect(await scanned("Zqxsnâme")).toEqual([90_000_040, "name"]);
+    });
+
+    it("is, among the entries the name finds equally, the plainest one whose energy agrees with what the model saw", async () => {
+      // No energy to go by: the release rule alone.
+      expect(await scanned("zqxsprep")).toEqual([90_000_054, "head"]);
+      // 17 kcal per 100 g agrees with raw (16) and the oriental one (17): the plainest, not the nearest.
+      expect(await scanned("zqxsprep", 17)).toEqual([90_000_055, "head"]);
+      // 30 agrees with the pickled one alone.
+      expect(await scanned("zqxsprep", 30)).toEqual([90_000_054, "head"]);
+    });
+
+    it("is the nearest where none agrees, and never leaves the name's own step for a nearer dish", async () => {
+      // 5 agrees with nothing (its band ends at 15): the nearest, raw (16), not the survey release's pickled one.
+      expect(await scanned("zqxsprep", 5)).toEqual([90_000_055, "head"]);
+      // 300 is the pie's energy exactly, but the pie only starts with the name: the nearest head, pickled (34).
+      expect(await scanned("zqxsprep", 300)).toEqual([90_000_054, "head"]);
     });
 
     it("never is a food it cannot price, and no text the model writes is an operator", async () => {

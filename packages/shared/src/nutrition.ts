@@ -241,3 +241,8 @@ export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSc
  *  wording, read by every screen that suggests food — the meal ideas after a
  *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
 export const FOOD_ALLERGY_CAUTION = "If you have any food allergy, take care and check the labels.";
+
+/** The line a photo scan's sheet carries (RULINGS 2026-09-07, kept 2026-09-09):
+ *  photo scans say they estimate calories and cannot detect allergens. One
+ *  wording, for the web's sheet and the phone app's. */
+export const PHOTO_SCAN_CAUTION = "Calories from a photo are an estimate. A photo cannot detect allergens.";
