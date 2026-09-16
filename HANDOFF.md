@@ -16,7 +16,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - FOR KD, measured, not blocking: a GENERIC word now fills the box with USDA and leaves no room for a packaged product ("milk" matches 370 USDA foods, "peanut butter" 84, in a box of 15); a BRAND still reaches its jar, because USDA stocks no brands ("yakult" 0, "oreo" 2, "nutella" 2, "monster energy" 5). Nothing was removed. If he would rather a jar always showed, the change is to keep the last few places for packaged products — his call, noted in `service.ts` beside the rung.
 - Pre-existing and NOT this diff: `apps/web/src/hooks/poseAssets.contract.test.js` fails to parse on this machine (valid UTF-8, unmodified since 2026-08-18, imports nothing of this card); the rest of the web suite is 2,158 passed. Proven local-only, not inferred: CI's `typecheck / lint / test` job runs the web suite on Linux and passed on this branch.
 - CI green on 2cb23eb, all six checks (run 35061848022): what changed 9s · gitleaks 16s · engine grep 10s · drizzle migrations on a Neon branch 59s · api tests on local Postgres 1m58s · typecheck/lint/test 3m23s. PR #73.
-- Open: Kd's click-through, then the §6 review round, then the pull request. The two zips are cached at `%TEMP%i-home-gym-food-tables`.
+- Kd's click-through PASSED, all nine steps (2026-09-16): our Cappuccino above USDA's, the source line under each USDA food, both credits under the list, paneer at 1 g of carbohydrate against USDA's 22 g, and a USDA food added at its own 30 g measure and saved.
+- Open: the §6 review round on PR #73, then merge on Kd's word. The two zips are cached at `%TEMP%\ai-home-gym-food-tables`.
 - Next: 7a-iii-b (the scanner prices every food it sees), from master, its own chat.
 
 ## 2026-09-16 · 7a-iii planned (Fable, plan only — no code): split into 7a-iii-a and 7a-iii-b; 7a-v, 7d and two after-launch lines; Kd: "go"
