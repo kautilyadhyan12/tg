@@ -1,0 +1,109 @@
+// ROADMAP 7a-iv-a — adding a food by measure (RULINGS 2026-09-16, the portion
+// redesign). Pure helpers the measure picker and the meal list share. The SERVER
+// works out every gram and calorie from its own list of the food's measures:
+// these only shape what the picker offers, what it sends, and how an item reads.
+
+/** The contract's own bound (@app/shared chosenItemsSchema: a measure's amount,
+ *  like an item's grams, is at most 10,000). */
+export const MAX_AMOUNT = 10000;
+
+/** A saved dish's choice key, beside the measure ids ("g", "usda-4", "serving"). */
+export const DISH_KEY_PREFIX = 'dish:';
+
+/** The sizes a new dish can be saved at in one tap: the midpoints of Part 2B
+ *  Appendix B's global starter set — cup 240 ml, mug 300–350 ml, cereal bowl
+ *  350–400 ml — beside any size typed in millilitres. */
+export const DISH_SIZES = [
+  { label: 'Cup', volumeMl: 240, containerClass: 'cup' },
+  { label: 'Mug', volumeMl: 325, containerClass: 'mug' },
+  { label: 'Bowl', volumeMl: 375, containerClass: 'cereal_bowl' },
+];
+
+/** How full a dish was: the amount a dish takes, and nothing is picked until the
+ *  person picks it (Kd, 2026-07-18: no invented "full"). */
+export const FILL_CHOICES = [
+  { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
+  { label: '¾', value: 0.75 }, { label: 'Full', value: 1 },
+];
+
+const GRAMS = { id: 'g', name: 'g', grams: 1 };
+
+/** Every choice the picker offers for a food: its own measures, as the search
+ *  sent them, then the person's saved dishes. A food with no measures (an older
+ *  answer) is offered by the gram. */
+export function pickerChoices(food, dishware) {
+  const measures = Array.isArray(food?.measures) && food.measures.length > 0 ? food.measures : [GRAMS];
+  return [
+    ...measures.map((m) => ({ key: m.id, kind: 'measure', id: m.id, name: m.name, grams: m.grams })),
+    ...(Array.isArray(dishware) ? dishware : []).map((d) => ({
+      key: `${DISH_KEY_PREFIX}${d.id}`, kind: 'dish', dishwareId: d.id, name: d.label, volumeMl: d.volumeMl,
+    })),
+  ];
+}
+
+/** The choice and amount a picked food starts at: the measure the server named,
+ *  else its first measure once (grams: its serving's weight). */
+export function startingValue(food) {
+  const [first] = pickerChoices(food, []);
+  const start = food?.startsAt;
+  const named = start ? pickerChoices(food, []).find((c) => c.id === start.measure) : undefined;
+  if (named && Number.isFinite(start.amount) && start.amount > 0) return { key: named.key, amount: String(start.amount) };
+  return { key: first.key, amount: first.id === 'g' ? String(food?.serving || 100) : '1' };
+}
+
+/** The value after the person picks another choice: a dish starts with no fill
+ *  picked; grams start at what the item weighed where that is known; any other
+ *  measure starts at one. */
+export function valueForChoice(choice, currentGrams) {
+  if (!choice) return null;
+  if (choice.kind === 'dish') return { key: choice.key, amount: '' };
+  if (choice.id === 'g') {
+    const grams = Math.round(Number(currentGrams));
+    return { key: choice.key, amount: Number.isFinite(grams) && grams > 0 ? String(Math.min(MAX_AMOUNT, grams)) : '100' };
+  }
+  return { key: choice.key, amount: '1' };
+}
+
+/** How far − and + move an amount: ten grams, or half of any other measure. */
+export const amountStep = (choice) => (choice?.id === 'g' ? 10 : 0.5);
+
+/** An amount one step of − (direction −1) or + (+1) away, on the step's grid,
+ *  never past the contract's bound, and never below one step — or below a smaller
+ *  amount the person typed, which − leaves as it is. */
+export function steppedAmount(amountText, choice, direction) {
+  const step = amountStep(choice);
+  const current = parseFloat(amountText);
+  const from = Number.isFinite(current) && current > 0 ? current : 0;
+  const next = direction > 0 ? Math.floor(from / step + 1e-9) * step + step : Math.ceil(from / step - 1e-9) * step - step;
+  const lowest = from > 0 && from < step ? from : step;
+  return String(Math.min(MAX_AMOUNT, Math.max(lowest, next)));
+}
+
+/** What the picker sends for a food: the measure arm, or a saved dish's arm, or
+ *  null while the amount is no amount (a dish needs a fill of ¼ to full). */
+export function chosenItemFor(canonical, choice, amountText) {
+  const amount = parseFloat(amountText);
+  if (!canonical || !choice || !Number.isFinite(amount) || amount <= 0) return null;
+  if (choice.kind === 'dish') return amount <= 1 ? { canonical, dishwareId: choice.dishwareId, fillLevel: amount } : null;
+  return amount <= MAX_AMOUNT ? { canonical, measure: choice.id, amount } : null;
+}
+
+/** An amount as a person reads it: no float noise ("1.5", "0.25"). */
+export const formatAmount = (amount) => String(Math.round(Number(amount) * 100) / 100);
+
+/** A measure as the picker lists it: its name and what one of it weighs. */
+export function choiceLabel(choice) {
+  if (choice.kind === 'dish') return `${choice.name} · ${choice.volumeMl} ml`;
+  if (choice.id === 'g') return 'g';
+  return `${choice.name} · ${formatAmount(choice.grams)} g`;
+}
+
+/** A saved item as the meal list reads it: by the measure it was logged by
+ *  ("Apple: 1.5 × medium (3" dia), 273g"), else by its grams ("Apple 273g"). */
+export function itemText(item) {
+  const grams = `${Math.round(item.gramsPoint)}g`;
+  const m = item.measure;
+  if (!m || m.id === 'g') return `${item.name} ${grams}`;
+  if (m.id === 'oz') return `${item.name}: ${formatAmount(m.amount)} oz, ${grams}`;
+  return `${item.name}: ${formatAmount(m.amount)} × ${m.name}, ${grams}`;
+}

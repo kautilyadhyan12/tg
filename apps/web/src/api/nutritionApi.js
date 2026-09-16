@@ -40,9 +40,11 @@ export function dataUrlToBase64(dataUrl) {
 
 /** Clamp/normalise each item to ONE of the .strict() contract arms
  *  (@app/shared chosenItemsSchema): the grams arm {canonical, grams} (positive
- *  ≤10000, rounded) OR the Card-5c2 dishware arm {canonical, dishwareId,
- *  fillLevel} (measure with a saved dish; the SERVER turns it into grams). An
- *  item carrying a dishwareId takes the dishware arm; anything else takes
+ *  ≤10000, rounded), the Card-5c2 dishware arm {canonical, dishwareId,
+ *  fillLevel} (measure with a saved dish), OR the 7a-iv-a measure arm
+ *  {canonical, measure, amount} (one of the food's own measures, how many). The
+ *  SERVER turns a dish or a measure into grams. An item carrying a dishwareId
+ *  takes the dishware arm, one carrying a measure the measure arm, anything else
  *  grams. Exported for the unit test (pure). */
 export function toChosenItems(items) {
   // Clamp fill into the contract's (0,1]. Invalid/missing → the minimum, NEVER
@@ -52,11 +54,12 @@ export function toChosenItems(items) {
     const f = Number(v);
     return Number.isFinite(f) && f > 0 ? Math.min(1, f) : 0.01;
   };
-  return items.map((it) =>
-    it.dishwareId
-      ? { canonical: it.canonical, dishwareId: it.dishwareId, fillLevel: clampFill(it.fillLevel) }
-      : { canonical: it.canonical, grams: Math.min(10000, Math.max(1, Math.round(Number(it.grams) || 0))) },
-  );
+  return items.map((it) => {
+    if (it.dishwareId) return { canonical: it.canonical, dishwareId: it.dishwareId, fillLevel: clampFill(it.fillLevel) };
+    // A measure's amount is sent as picked: the server refuses one that is no amount.
+    if (it.measure) return { canonical: it.canonical, measure: it.measure, amount: Number(it.amount) };
+    return { canonical: it.canonical, grams: Math.min(10000, Math.max(1, Math.round(Number(it.grams) || 0))) };
+  });
 }
 
 /** Card 5c add-ingredient: the meals PATCH replaces the WHOLE items array, so
@@ -64,15 +67,17 @@ export function toChosenItems(items) {
  *  the newly picked one. Pure + unit-tested precisely because a bug here —
  *  dropping or mis-mapping an existing item — would silently REWRITE a saved
  *  meal, not just fail loudly. `existing` is the Meal.items shape from the API
- *  ({canonical, gramsPoint, …}); `added` is {canonical, grams} OR the Card-5c2
- *  dishware arm {canonical, dishwareId, fillLevel}. */
+ *  ({canonical, gramsPoint, …}), sent back at its grams, which keeps the measure
+ *  each was logged by (the server's rule); `added` is {canonical, grams}, the
+ *  Card-5c2 dishware arm {canonical, dishwareId, fillLevel}, or the 7a-iv-a
+ *  measure arm {canonical, measure, amount}. */
 export function composeAddIngredient(existing, added) {
-  return [
-    ...(existing || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
-    added.dishwareId
-      ? { canonical: added.canonical, dishwareId: added.dishwareId, fillLevel: added.fillLevel }
-      : { canonical: added.canonical, grams: added.grams },
-  ];
+  const next = added.dishwareId
+    ? { canonical: added.canonical, dishwareId: added.dishwareId, fillLevel: added.fillLevel }
+    : added.measure
+      ? { canonical: added.canonical, measure: added.measure, amount: added.amount }
+      : { canonical: added.canonical, grams: added.grams };
+  return [...(existing || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })), next];
 }
 
 // ── Card 5d: previous-days view ───────────────────────────────────────────────
