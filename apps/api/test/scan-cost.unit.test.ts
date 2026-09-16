@@ -1,11 +1,15 @@
 // ROADMAP 7a-iii-b — the cost-measuring tool's pure half: what its command line
 // asks for, the scanner's key out of an env file, and a run's average against
 // Kd's gate. The run itself makes paid calls, so it is never part of a test.
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_COST_GATE_MICRO_USD, geminiKeyFrom, scanCostArgs, summarizeScanCost } from "../tools/scan-cost.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
+/** Folders outside the repository on any system: beside it, and the system's own temp folder. */
+const PLATES = resolve(REPO, "../plates");
+const OUT = resolve(REPO, "../plates/out");
 /** What is wrong with a command line, or "" where nothing is. */
 const problemOf = (argv: string[]): string => {
   const read = scanCostArgs(argv, REPO);
@@ -14,21 +18,23 @@ const problemOf = (argv: string[]): string => {
 
 describe("the command line", () => {
   it("needs the env file, the output folder and at least one photo", () => {
-    expect(scanCostArgs(["--env=.env", "--out=D:/plates/out", "D:/plates"], REPO)).toEqual({ envFile: ".env", outDir: "D:/plates/out", paths: ["D:/plates"] });
-    expect(problemOf(["--out=D:/plates/out", "D:/plates"])).toContain("--env");
-    expect(problemOf(["--env=", "--out=D:/plates/out", "D:/plates"])).toContain("--env");
-    expect(problemOf(["--env=.env", "D:/plates"])).toContain("--out");
-    expect(problemOf(["--env=.env", "--out=D:/plates/out"])).toContain("photo");
+    expect(scanCostArgs(["--env=.env", `--out=${OUT}`, PLATES], REPO)).toEqual({ envFile: ".env", outDir: OUT, paths: [PLATES] });
+    expect(problemOf([`--out=${OUT}`, PLATES])).toContain("--env");
+    expect(problemOf(["--env=", `--out=${OUT}`, PLATES])).toContain("--env");
+    expect(problemOf(["--env=.env", PLATES])).toContain("--out");
+    expect(problemOf(["--env=.env", `--out=${OUT}`])).toContain("photo");
   });
 
   it("never writes inside the repository, which is public", () => {
     for (const inside of [REPO, resolve(REPO, "apps/api/test/fixtures"), resolve(REPO, "tmp/../plates-out")]) {
-      expect(problemOf(["--env=.env", `--out=${inside}`, "D:/plates"]), inside).toContain("inside the repository");
+      expect(problemOf(["--env=.env", `--out=${inside}`, PLATES]), inside).toContain("inside the repository");
     }
-    // Beside it, or on another drive, is outside.
-    for (const outside of [resolve(REPO, "../ai-home-gym-plates/out"), resolve(REPO, "../ai-home-gym-2"), "Z:/plates/out"]) {
-      expect(scanCostArgs(["--env=.env", `--out=${outside}`, "D:/plates"], REPO), outside).toMatchObject({ outDir: outside });
+    // Beside it, a folder whose name only starts like it, or the system's temp folder, is outside.
+    for (const outside of [resolve(REPO, "../ai-home-gym-plates/out"), `${REPO}-2`, resolve(tmpdir(), "plates-out")]) {
+      expect(scanCostArgs(["--env=.env", `--out=${outside}`, PLATES], REPO), outside).toMatchObject({ outDir: outside });
     }
+    // On Windows another drive is outside too; relative() answers it with an absolute path.
+    if (process.platform === "win32") expect(scanCostArgs(["--env=.env", "--out=Z:/plates/out", PLATES], REPO)).toMatchObject({ outDir: "Z:/plates/out" });
   });
 
   it("takes at most ten photos a run, of the kinds the scanner takes", () => {
