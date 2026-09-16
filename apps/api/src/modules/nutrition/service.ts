@@ -266,7 +266,7 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  order costs nothing in accuracy and puts a plain name ("Paneer") ahead of a
  *  technical one; the five that do not are the foods where USDA's own entry is
  *  wrong for how they are made here (its paneer is worked out from milk and
- *  vinegar and keeps the milk's sugar, 22 g of carbohydrate per 100 g, against
+ *  vinegar and keeps the milk's sugar, 22.5 g of carbohydrate per 100 g, against
  *  CoFID's nine analysed samples at 0.9 g), and those must not be outranked by
  *  the entry Kd rejected on 2026-09-14. USDA then fills what the list lacks,
  *  which is 13,225 foods of it.
