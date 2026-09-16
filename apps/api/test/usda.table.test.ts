@@ -135,6 +135,12 @@ d("the USDA food table (real Postgres)", () => {
     // A food whose two ways are 30 kcal apart, and both near 600.
     [90_000_064, "fndds", "Zqxsnut, raw", 580],
     [90_000_065, "fndds", "Zqxsnut, dry roasted, with salt added", 610],
+    // Two foods at the tie's edge: a long entry near the estimate, and a plain one
+    // past the estimate's error by exactly 10 kcal more than it, or by 11.
+    [90_000_066, "fndds", "Zqxsleaf, frozen, cooked, boiled, drained", 125],
+    [90_000_067, "fndds", "Zqxsleaf, raw", 135],
+    [90_000_068, "fndds", "Zqxsroot, frozen, cooked, boiled, drained", 125],
+    [90_000_069, "fndds", "Zqxsroot, raw", 136],
   ];
 
   const load = async (): Promise<void> => {
@@ -338,6 +344,14 @@ d("the USDA food table (real Postgres)", () => {
       expect(await scanned("zqxsmush", 80)).toEqual([90_000_063, "head"]);
       // 610, good to 183: raw (580) and roasted (610) are both inside, 30 kcal apart, so as near: the plainest, raw.
       expect(await scanned("zqxsnut", 610)).toEqual([90_000_064, "head"]);
+    });
+
+    it("ties an entry past the estimate's error with the nearest up to 10 kcal further, and not 11", async () => {
+      // 100, good to 30: the frozen entry (125) is 25 off, inside. Raw at 135 is 35 off, outside the error but exactly
+      // 10 further than the nearest, so as near, and the plainer wins.
+      expect(await scanned("zqxsleaf", 100)).toEqual([90_000_067, "head"]);
+      // Raw at 136 is 36 off, 11 further: not as near, however plain.
+      expect(await scanned("zqxsroot", 100)).toEqual([90_000_068, "head"]);
     });
 
     it("measures the nearest within the name's own step, and never leaves that step for a nearer dish", async () => {

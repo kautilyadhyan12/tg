@@ -46,9 +46,16 @@ export function estimatePer100g(item: Pick<VisionItem, "grams" | "kcal" | "prote
 /** What the model saw a food's energy as, per 100 g, and how far off that estimate
  *  can be: 30 %, or 10 kcal — the same tolerance the model's own macros are held
  *  to against its kcal (above). Every USDA entry that close to the estimate is as
- *  near as any other; so is one within 10 kcal of the nearest entry
+ *  near as any other; so is one within `USDA_TIE_KCAL` of the nearest entry
  *  (`repo.usdaFoodForScan`). */
 export interface EnergySeen { kcal: number; slack: number }
+
+/** How close, in kcal per 100 g, a USDA entry must be to the nearest entry of its
+ *  name to be as near, wherever the estimate's error ends: a gap this small is two
+ *  ways of making one food, not a photo telling them apart — "Pumpkin, cooked"
+ *  (52) and "Pumpkin, canned, cooked" (56). Its own rule, not the macros' rounding
+ *  above, though both are 10 today. */
+export const USDA_TIE_KCAL = 10;
 
 export function energySeen(estimate: Per100g | null): EnergySeen | null {
   if (estimate === null) return null;

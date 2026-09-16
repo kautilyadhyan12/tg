@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · 7a-iii-b: the last re-check's Lows fixed, merged on Kd's "fix and merge" (PR #74)
+
+- The re-check of 82d8a8d found no Critical or High; three Lows and one weak test, all fixed.
+- The USDA tie margin is its own constant, `USDA_TIE_KCAL` (10), apart from the macros' rounding `ENERGY_SLACK_KCAL`; the spec's amendment line adds "or within 10 kcal of the nearest entry's".
+- The subject of 82d8a8d leaves out "by more than 10 kcal"; the fix commit and the merge message say the rule whole.
+- Test: `usda.table` +1, two foods at the tie's edge (an entry outside the error exactly 10 kcal further than the nearest ties and wins as the plainer; 11 further loses).
+- Verified: api tsc 0 · eslint src test tools 0 · `usda.table` + `nutrition.scan.unit` + `nutrition.unit` + `nutrition.scan.routes` 104/104 on local Postgres · the SQL margin set to 9 and to 11 each turns the new test red, file restored identical (sha256).
+- Not this chat's: the four dashboard images still changed on disk, uncommitted.
+- Next: 7a-iv, from master, its own chat.
+
 ## 2026-09-16 · 7a-iii-b: the re-check of 4dd4a3d fixed (1 High, 3 Low); the re-check of these fixes next (branch `scanner-prices-every-food`)
 
 - CI green on 4dd4a3d, all six checks (run 35100211807; migrations skipped).

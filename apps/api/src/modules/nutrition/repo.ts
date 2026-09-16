@@ -9,7 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
-import { ENERGY_SLACK_KCAL } from "./scanMatch.js";
+import { USDA_TIE_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
@@ -717,9 +717,8 @@ export type UsdaScanMatch = "name" | "head" | "words";
  *  34 — and the model's own energy (`seen`) says which is on the plate:
  *  3. AS NEAR AS THE ESTIMATE CAN TELL: every entry within `seen.slack` of the
  *     model's energy (its error), and every entry within 10 kcal of the nearest
- *     one (the model's rounding, `ENERGY_SLACK_KCAL`), is as near, and the
- *     plainest of them wins, as below. So a few kcal never name a way of cooking
- *     the photo does not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not
+ *     one (`USDA_TIE_KCAL`), is as near, and the plainest of them wins, as below.
+ *     So a few kcal never name a way of cooking the photo does not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not
  *     "Pumpkin, canned, cooked" (56) — and "egg" at 140 is never "Egg, whole, raw,
  *     frozen, salted, pasteurized" (138). An entry past both is not, however plain:
  *     radishes at 16 are "Radishes, raw" (16), never "Radishes, pickled" (34), and
@@ -765,7 +764,7 @@ export async function usdaFoodForScan(
            CASE step WHEN 0 THEN 'name' WHEN 1 THEN 'head' ELSE 'words' END AS match
     FROM matched
     ORDER BY step ASC,
-             (distance <= greatest(${slack}::float8, min(distance) OVER (PARTITION BY step) + ${ENERGY_SLACK_KCAL}::float8)) DESC,
+             (distance <= greatest(${slack}::float8, min(distance) OVER (PARTITION BY step) + ${USDA_TIE_KCAL}::float8)) DESC,
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT 1`;
   const r = rows[0];
