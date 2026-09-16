@@ -126,24 +126,16 @@ describe("a table food the model's energy says is another food", () => {
   });
 });
 
-describe("the energy a USDA entry must agree with to be the food on the plate", () => {
+describe("the energy a scan saw, which chooses among USDA entries of one name", () => {
   const at = (kcal: number): EnergySeen | null => energySeen({ kcal, proteinG: 0, carbsG: 0, fatG: 0 });
-  const band = (kcal: number): [number, number, number] => {
-    const s = at(kcal);
-    if (s === null) throw new Error("expected a band");
-    return [s.kcal, s.low, s.high];
-  };
 
-  it("is 30 % of the model's energy either way, or 10 kcal per 100 g where that is more", () => {
-    // 100 kcal: 70 to 130.
-    const [k100, low100, high100] = band(100);
-    expect(k100).toBe(100);
-    expect(low100).toBeCloseTo(70, 9);
-    expect(high100).toBeCloseTo(130, 9);
-    // A raw radish at 16: 30 % is under 5, so 10 holds — 6 to 26, which a pickled one at 34 is not in.
-    expect(band(16)).toEqual([16, 6, 26]);
-    // Nothing at all: 10 either way.
-    expect(band(0)).toEqual([0, -10, 10]);
+  it("is the model's energy per 100 g, good to 30 %, or to 10 kcal where that is more", () => {
+    const hundred = at(100);
+    expect(hundred?.kcal).toBe(100);
+    expect(hundred?.slack).toBeCloseTo(30, 9);
+    // A raw radish at 16: 30 % is under 5, so 10 holds.
+    expect(at(16)).toEqual({ kcal: 16, slack: 10 });
+    expect(at(0)).toEqual({ kcal: 0, slack: 10 });
   });
 
   it("is none where the model gave no usable number", () => {
@@ -190,11 +182,10 @@ describe("the order a scanned food is priced in", () => {
   it("asks USDA with the energy the model saw, and with none where it gave no usable number", async () => {
     const withNumbers = lookups({});
     await priceScannedFood(plate, withNumbers.table);
-    // 200 kcal in 200 g is 100 per 100 g: 70 to 130.
+    // 200 kcal in 200 g is 100 per 100 g, good to 30.
     expect(withNumbers.usdaSaw).toHaveLength(1);
     expect(withNumbers.usdaSaw[0]?.kcal).toBe(100);
-    expect(withNumbers.usdaSaw[0]?.low).toBeCloseTo(70, 9);
-    expect(withNumbers.usdaSaw[0]?.high).toBeCloseTo(130, 9);
+    expect(withNumbers.usdaSaw[0]?.slack).toBeCloseTo(30, 9);
     const noNumber = lookups({});
     await priceScannedFood({ ...plate, fat_g: null }, noNumber.table);
     expect(noNumber.usdaSaw).toEqual([null]);

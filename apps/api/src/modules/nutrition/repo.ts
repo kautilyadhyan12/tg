@@ -714,15 +714,19 @@ export type UsdaScanMatch = "name" | "head" | "words";
  *  Within either step, the entries the name finds equally are the same food made
  *  different ways — "Radishes, raw" at 16 kcal per 100 g and "Radishes, pickled" at
  *  34 — and the model's own energy (`seen`) says which is on the plate:
- *  3. AN ENTRY THAT AGREES with what the model saw (`seen.low`–`seen.high`, the
- *     band `scanMatch.ts` sets) before one that does not, and among those that
- *     agree the plainest, as below — not merely the nearest, which for "egg" at
- *     140 names "Egg, whole, raw, frozen, salted, pasteurized" (138); where none
- *     agrees, the nearest. The step still comes first: the energy only chooses among entries
- *     the name supports, so "apple" at 52 kcal is "Apple, raw" (61) where it was
- *     "Apple, dried" (243), and "orange" at 47 stays "Orange, raw" where the
- *     nearest of every match would be "Orange juice, 100%, NFS" (measured on the
- *     loaded table, 2026-09-16).
+ *  3. THE NEAREST, AS FAR AS THE ESTIMATE CAN TELL: every entry whose distance
+ *     from the model's energy is within `seen.slack` of the nearest entry's is as
+ *     near, since the estimate is no better than that, and the plainest of them
+ *     wins, as below. So a few kcal never name a way of cooking the photo does
+ *     not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not "Pumpkin,
+ *     canned, cooked" (56) — and "egg" at 140 is never "Egg, whole, raw, frozen,
+ *     salted, pasteurized" (138). An entry further off than that is not: radishes
+ *     at 16 are "Radishes, raw" (16), never "Radishes, pickled" (34). The step
+ *     still comes first, and the nearest is measured within it: the energy only
+ *     chooses among entries the name supports, so "apple" at 52 is "Apple, raw"
+ *     (61) where it was "Apple, dried" (243), and "orange" at 47 stays "Orange,
+ *     raw" where the nearest of every match would be "Orange juice, 100%, NFS"
+ *     (measured on the loaded table, 2026-09-16).
  *  Then the survey release (FNDDS) before SR Legacy, the fewest-worded description,
  *  and USDA's id, so a scan reads the same food every time. With no estimate
  *  (`seen` null) the order is that alone. A food with no energy or macro figure
@@ -734,28 +738,32 @@ export type UsdaScanMatch = "name" | "head" | "words";
 export async function usdaFoodForScan(
   sql: SqlOrTx,
   hint: string,
-  seen: { kcal: number; low: number; high: number } | null,
+  seen: { kcal: number; slack: number } | null,
 ): Promise<{ food: UsdaFoodRow; match: UsdaScanMatch } | null> {
   const words = usdaSearchWords(hint);
   if (words.length === 0) return null;
   const named = words.join(" ");
-  // With no estimate each is null, which orders every row alike.
+  // With no estimate both are null, so every distance is null and every row ties.
   const kcal = seen?.kcal ?? null;
-  const low = seen?.low ?? null;
-  const high = seen?.high ?? null;
+  const slack = seen?.slack ?? null;
   const rows = await sql<(UsdaColumns & { match: UsdaScanMatch })[]>`
+    WITH matched AS (
+      SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit, word_count,
+             CASE WHEN search_text = ${named} THEN 0
+                  WHEN search_text LIKE ${`${named},%`} THEN 1
+                  ELSE 2 END AS step,
+             abs(kcal - ${kcal}::float8) AS distance
+      FROM usda_foods
+      WHERE search @@ to_tsquery('english', ${words.join(" & ")})
+        AND (search_text = ${named} OR search_text LIKE ${`${named},%`}
+             OR to_tsvector('english', first_word) @@ to_tsquery('english', ${words.join(" | ")}))
+        AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
+    )
     SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit,
-           CASE WHEN search_text = ${named} THEN 'name'
-                WHEN search_text LIKE ${`${named},%`} THEN 'head'
-                ELSE 'words' END AS match
-    FROM usda_foods
-    WHERE search @@ to_tsquery('english', ${words.join(" & ")})
-      AND (search_text = ${named} OR search_text LIKE ${`${named},%`}
-           OR to_tsvector('english', first_word) @@ to_tsquery('english', ${words.join(" | ")}))
-      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
-    ORDER BY (search_text = ${named}) DESC, (search_text LIKE ${`${named},%`}) DESC,
-             -- Every entry that agrees is 0 apart; one that does not, its distance.
-             (CASE WHEN kcal BETWEEN ${low}::float8 AND ${high}::float8 THEN 0 ELSE abs(kcal - ${kcal}::float8) END) ASC,
+           CASE step WHEN 0 THEN 'name' WHEN 1 THEN 'head' ELSE 'words' END AS match
+    FROM matched
+    ORDER BY step ASC,
+             (distance <= min(distance) OVER (PARTITION BY step) + ${slack}::float8) DESC,
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT 1`;
   const r = rows[0];

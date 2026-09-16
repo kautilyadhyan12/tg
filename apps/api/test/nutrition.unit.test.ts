@@ -529,13 +529,21 @@ describe("P2.6a nutrition pure pipeline", () => {
     // under nine tenths of the cap, so a reply is never cut off into JSON nothing reads.
     const perFood = (393 - 155) / (9 - 3);
     expect(155 + perFood * (MAX_SCAN_FOODS - 3)).toBeLessThan(0.9 * VISION_MAX_OUTPUT_TOKENS);
-    // The contract holds the model to it: the most foods read, one more breaks the reply.
-    const food = ["Dal", "dal", null, null, null, null, 100, 145, 9, 19, 4];
+    // A reply that lists more anyway is still read, never failed: its first foods are the
+    // rows, and every food past them is named after what the model named itself.
+    const food = (at: number) => [`Food ${String(at + 1)}`, "dal", null, null, null, null, 100, 145, 9, 19, 4];
     const reply = (count: number) => createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
-      meal_name: "x", items: Array.from({ length: count }, () => food), unknown_items: ["the rest"], photo_quality: "good",
+      meal_name: "x", items: Array.from({ length: count }, (_, at) => food(at)), unknown_items: ["Mystery sauce"], photo_quality: "good",
     }));
-    expect((await reply(MAX_SCAN_FOODS).analyze("AA==", "image/jpeg")).evidence.items).toHaveLength(MAX_SCAN_FOODS);
-    await expect(reply(MAX_SCAN_FOODS + 1).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
+    const exactly = (await reply(MAX_SCAN_FOODS).analyze("AA==", "image/jpeg")).evidence;
+    expect([exactly.items.length, exactly.unknown_items]).toEqual([MAX_SCAN_FOODS, ["Mystery sauce"]]);
+    for (const count of [MAX_SCAN_FOODS + 1, 30]) {
+      const { evidence } = await reply(count).analyze("AA==", "image/jpeg");
+      expect(evidence.items.map((i) => i.name), String(count)).toEqual(Array.from({ length: MAX_SCAN_FOODS }, (_, at) => `Food ${String(at + 1)}`));
+      expect(evidence.unknown_items, String(count)).toEqual(["Mystery sauce", ...Array.from({ length: count - MAX_SCAN_FOODS }, (_, at) => `Food ${String(MAX_SCAN_FOODS + at + 1)}`)]);
+    }
+    // More than 30 is no plate's reply, as the contract has always said.
+    await expect(reply(31).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
   });
 
   it("resolver covers thali_section weight-prior and density-class branches (T3 R9 gap)", () => {

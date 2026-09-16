@@ -4,6 +4,14 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · 7a-iii-b: the re-check of 23ba391 fixed (1 High, 2 Low); merge on Kd's word (branch `scanner-prices-every-food`)
+
+- CI green on 23ba391, all six checks (run 35096798653; migrations skipped, none changed).
+- High: the band's edge and the "nearest" fallback named a way of cooking by a few kcal (pumpkin at 75–150 → "Pumpkin, canned, cooked" 56 over "Pumpkin, cooked" 52). Now, as the reviewer measured: every entry within the model's error (`EnergySeen.slack`, 30 % or 10 kcal) of the nearest entry of its own name step ties, and the plainest wins. On the loaded table: pumpkin 50/75/100/150 → "Pumpkin, cooked"; sweet corn 130 → "Corn, sweet, white, raw"; papaya 120 → "Papaya, raw"; unchanged: radishes 16 raw and 60 pickled, apple 52 raw and 120 baked, iced coffee 5 brewed and 40/44 pre-lightened, tofu 80, water 0, lemon 30, egg 140, mango 60, turnip 70, orange 47; the known cost, plantain 250 → "Plantain, raw" (122).
+- Low: a reply of 21–30 foods is read again, its first 20 the rows and the rest named in unknown_items (31 still breaks the contract, as before). Low: the spec's two amendment lines say the table wins "unless its calories are more than three times from the model's own".
+- Verified: shared tsc 0 · eslint 0 · 107/107 · api tsc 0 · eslint 0 · `nutrition.scan.unit` + `nutrition.unit` 58/58 · `usda.table` + `nutrition.scan.routes` 44/44 on local Postgres · 4 deliberate breaks (no slack, no tie key, the nearest across every step, foods past 20 kept) each red, files restored identical. Full suite left to CI.
+- The local API runs on port 3000 against the local database for Kd's click-through; the web server on 5173 was already running.
+
 ## 2026-09-16 · 7a-iii-b: the review of PR #74 fixed (2 High, 6 Low, 4 weak tests); the re-check of these fixes next (branch `scanner-prices-every-food`)
 
 - Kd ruled one thing (RULINGS): our list's foods keep the old portion rule until 7a-iv — *"Wait for 7a-iv (Recommended)"*. Bacon still reads 100 g on the toast plate.

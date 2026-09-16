@@ -43,15 +43,15 @@ export function estimatePer100g(item: Pick<VisionItem, "grams" | "kcal" | "prote
   return figures;
 }
 
-/** What the model saw a food's energy as, per 100 g, and the band a table entry
- *  must fall in to agree with it: 30 %, or 10 kcal, either way — the same
- *  tolerance the model's own macros are held to against its kcal (above). */
-export interface EnergySeen { kcal: number; low: number; high: number }
+/** What the model saw a food's energy as, per 100 g, and how far off that estimate
+ *  can be: 30 %, or 10 kcal — the same tolerance the model's own macros are held
+ *  to against its kcal (above). Two USDA entries whose distances from the estimate
+ *  differ by less than that cannot be told apart by it (`repo.usdaFoodForScan`). */
+export interface EnergySeen { kcal: number; slack: number }
 
 export function energySeen(estimate: Per100g | null): EnergySeen | null {
   if (estimate === null) return null;
-  const slack = Math.max(ENERGY_TOLERANCE * estimate.kcal, ENERGY_SLACK_KCAL);
-  return { kcal: estimate.kcal, low: estimate.kcal - slack, high: estimate.kcal + slack };
+  return { kcal: estimate.kcal, slack: Math.max(ENERGY_TOLERANCE * estimate.kcal, ENERGY_SLACK_KCAL) };
 }
 
 /** A table food more than three times from the model's own energy per 100 g,

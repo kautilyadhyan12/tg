@@ -216,7 +216,7 @@ the 8/day quota and the unit economics from the pricing doc are untouched.
 
 **Stage 1 — Vision: identify, never compute.** The prompt is rewritten so
 the model returns identification *evidence*, no nutrition math at all.
-*("Never compute" and "no nutrition math at all" AMENDED 2026-09-15 and 2026-09-16, RULINGS: the model also gives its own grams, calories and macros for each food, as its estimate, shown marked "estimate" only where no food table has the food; the table's number wins wherever it exists. Since 2026-09-16 the estimate's energy also chooses among USDA entries of one name, the one made the way the plate shows. The rules paragraph below carries the same amendment.)*
+*("Never compute" and "no nutrition math at all" AMENDED 2026-09-15 and 2026-09-16, RULINGS: the model also gives its own grams, calories and macros for each food, as its estimate, shown marked "estimate" only where no food table has the food; the table's number wins wherever it exists, unless the table's calories are more than three times from the model's own. Since 2026-09-16 the estimate's energy also chooses among USDA entries of one name, the one made the way the plate shows. The rules paragraph below carries the same amendment.)*
 Output contract (temperature 0; JSON only) — *temperature 0 AMENDED 2026-09-16 (RULINGS): the scanner runs at Google's default on Gemini 3, whose guide warns that below 1.0 the model can loop or degrade; the eight plates were measured at it. The shape below AMENDED 2026-09-16 (RULINGS, ROADMAP 7a-iii-b): each item is one list, `[name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]`, the vessel from a fixed list, the count of whole pieces only; no cuisine guess, scale anchors or confidence (trimmed 2026-09-15)*:
 
 ```json
@@ -248,7 +248,7 @@ Rules encoded in the prompt: countable items get counts (rotis, idlis,
 eggs — counting is the one portion task vision does reliably); containers
 get a type + size class + fill level; the model must list visible scale
 anchors (plate rims, cutlery, hands, cans) and must say "unknown" rather
-than guess. **No kcal, no grams, no macros — ever.** *(AMENDED 2026-09-15 and 2026-09-16, RULINGS: the model's own grams, calories and macros ARE asked for, as its estimate, and shown marked "estimate" only where no table has the food; the table's number wins wherever it exists.)* The model naming a
+than guess. **No kcal, no grams, no macros — ever.** *(AMENDED 2026-09-15 and 2026-09-16, RULINGS: the model's own grams, calories and macros ARE asked for, as its estimate, and shown marked "estimate" only where no table has the food; the table's number wins wherever it exists, unless the table's calories are more than three times from the model's own.)* The model naming a
 *quantity in grams* is banned from the contract because that is arithmetic
 wearing a costume.
 

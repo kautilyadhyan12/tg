@@ -122,6 +122,12 @@ d("the USDA food table (real Postgres)", () => {
     [90_000_055, "sr_legacy", "Zqxsprep, raw", 16],
     [90_000_056, "sr_legacy", "Zqxsprep, oriental, cooked, boiled, drained", 17],
     [90_000_057, "fndds", "Zqxsprep pie", 300],
+    // Kd's pumpkin, as USDA has it: the plain cooked entry and a canned one 4 kcal
+    // from it, a raw one, and a dish of it that only starts with its name.
+    [90_000_058, "fndds", "Zqxsgourd, cooked", 52],
+    [90_000_059, "fndds", "Zqxsgourd, canned, cooked", 56],
+    [90_000_060, "sr_legacy", "Zqxsgourd, raw", 26],
+    [90_000_061, "fndds", "Zqxsgourd pie", 80],
   ];
 
   const load = async (): Promise<void> => {
@@ -300,19 +306,30 @@ d("the USDA food table (real Postgres)", () => {
       expect(await scanned("Zqxsnâme")).toEqual([90_000_040, "name"]);
     });
 
-    it("is, among the entries the name finds equally, the plainest one whose energy agrees with what the model saw", async () => {
+    it("is, among the entries the name finds equally, the plainest of those as near to the model's energy as it can tell", async () => {
       // No energy to go by: the release rule alone.
       expect(await scanned("zqxsprep")).toEqual([90_000_054, "head"]);
-      // 17 kcal per 100 g agrees with raw (16) and the oriental one (17): the plainest, not the nearest.
+      // 17, good to 10: raw (16) and the oriental one (17) are as near, so the plainest, raw — not the
+      // nearest; pickled (34) is 17 further, past what the estimate can tell, though the release rule puts it first.
       expect(await scanned("zqxsprep", 17)).toEqual([90_000_055, "head"]);
-      // 30 agrees with the pickled one alone.
+      // 5, good to 10: raw (16) is nearest, the oriental one (17) as near, pickled (34) not.
+      expect(await scanned("zqxsprep", 5)).toEqual([90_000_055, "head"]);
+      // 30: pickled (34) is nearest, and raw and the oriental one within 10 of it: the release rule, pickled.
       expect(await scanned("zqxsprep", 30)).toEqual([90_000_054, "head"]);
     });
 
-    it("is the nearest where none agrees, and never leaves the name's own step for a nearer dish", async () => {
-      // 5 agrees with nothing (its band ends at 15): the nearest, raw (16), not the survey release's pickled one.
-      expect(await scanned("zqxsprep", 5)).toEqual([90_000_055, "head"]);
-      // 300 is the pie's energy exactly, but the pie only starts with the name: the nearest head, pickled (34).
+    it("never names a way of cooking by a few kcal: a canned entry 4 kcal nearer is as near as the plain one", async () => {
+      // 75, good to 22.5: the canned entry (56) is 19 off and inside a band around 75; the plain one (52) is 23 off, just outside it.
+      expect(await scanned("zqxsgourd", 75)).toEqual([90_000_058, "head"]);
+      // 100, good to 30: neither is near, the canned one 4 kcal nearer.
+      expect(await scanned("zqxsgourd", 100)).toEqual([90_000_058, "head"]);
+    });
+
+    it("measures the nearest within the name's own step, and never leaves that step for a nearer dish", async () => {
+      // 80 is the pie's energy exactly, but the pie only starts with the name. Measured from the pie (0 off), only the
+      // canned entry (24 off) would be as near; measured within the heads, the plain one (28 off) is as near too.
+      expect(await scanned("zqxsgourd", 80)).toEqual([90_000_058, "head"]);
+      // 300 is the pie's energy exactly: still a head, the plainest of them, pickled (34).
       expect(await scanned("zqxsprep", 300)).toEqual([90_000_054, "head"]);
     });
 
