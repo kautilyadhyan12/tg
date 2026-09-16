@@ -253,7 +253,7 @@ than guess. **No kcal, no grams, no macros — ever.** *(AMENDED 2026-09-15 and 
 wearing a costume.
 
 **Stage 2 — Deterministic portion resolver (grams + a gram-range per
-item).** Pure code, fully testable, applies the first matching rung:
+item).** *(AMENDED 2026-09-16 and 2026-09-17, RULINGS, the portion redesign; built at ROADMAP 7a-iv-b: the rungs below, and every rule that read a food's name, a container or a serving word, are gone. Every food carries its own measures — USDA's household measures, a packaged product's label serving, grams and ounces — and a scanned row starts at the photo's count of one of them only where that weighs within 30 % of the grams the model saw, else at those grams, marked estimate; a saved dish is never chosen for the person. Stage 4's sheet corrects each row with the same measure picker Add food has.)* Pure code, fully testable, applies the first matching rung:
 
 1. **User's saved dishware** (§3.4): if the user has confirmed "my dal
 katori ≈ 180 ml" before, that beats everything.
@@ -287,7 +287,7 @@ with mobile). Every item's result carries its source. Same photo + same
 confirmed portions now produce the same numbers every single time, and
 every number has a citation.
 
-**Stage 4 — The confirmation moment (three seconds, one tap).** Before
+**Stage 4 — The confirmation moment (three seconds, one tap).** *(AMENDED 2026-09-16, RULINGS, the portion redesign; built at ROADMAP 7a-iv-b: each item starts at one of its food's measures or at the photo's grams marked "~120 g · estimate", and is corrected in the measure picker — a measure and how many, or a saved dish and how full — never S/M/L cards; the total is a single number, "about" while an estimate is in it.)* Before
 anything is saved, one compact sheet: each item as a chip with its portion
 pre-selected by the resolver — *"Dal — medium katori (~110 g)"* — tappable
 to S/M/L cards (with gram labels and relatable visuals) or a gram stepper;

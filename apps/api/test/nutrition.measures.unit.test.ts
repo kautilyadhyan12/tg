@@ -10,23 +10,27 @@ import {
   GRAM,
   MEDIUM_G_PER_ML,
   OUNCE,
+  SCAN_START_TOLERANCE_PERCENT,
   dishwareGrams,
   foodMeasures,
   gramsPerMl,
   isHouseholdMeasure,
   measureGrams,
+  scanStart,
   startingMeasure,
   usdaMeasureName,
   type MeasureSource,
+  type ScanStart,
   type UsdaPortion,
 } from "../src/modules/nutrition/measures.js";
+import { MAX_ITEM_GRAMS } from "@app/shared";
 
 const portion = (seqNum: number, unit: string, gramWeight: number, amount: number | null = 1): UsdaPortion => ({ seqNum, amount, unit, gramWeight });
 const brief = (measures: readonly FoodMeasure[]): string[] => measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`);
 const OZ = `oz oz ${String(OUNCE.grams)}`;
-/** A food of our list, a packaged product or an estimate: its serving is its own. */
+/** A food of our list or a packaged product: its serving is its own. */
 const own = (serving: number, unit: string, portions: UsdaPortion[] = []): MeasureSource => ({ serving, unit, portions, ownServing: true });
-/** A food of the USDA table: its serving is one of its USDA measures. */
+/** A food of the USDA table, or a scan's estimate: its serving is no measure of its own. */
 const usdaFood = (serving: number, unit: string, portions: UsdaPortion[]): MeasureSource => ({ serving, unit, portions, ownServing: false });
 
 // USDA's own rows for an apple (SR Legacy 171688, the entry our list's Apple cites).
@@ -227,6 +231,102 @@ describe("the measure a food starts at", () => {
       const source = own(food.serving, food.unit);
       const measures = foodMeasures(source);
       expect(measures.map((m) => m.id), food.canonical).toContain(startingMeasure(source, measures).measure);
+    }
+  });
+});
+
+describe("where a food the photo scan saw starts on the photo sheet (RULINGS 2026-09-16)", () => {
+  /** A food whose measures are the USDA rows given, plus grams and ounces. */
+  const fed = (...portions: UsdaPortion[]): MeasureSource => usdaFood(portions[0]?.gramWeight ?? 100, portions[0]?.unit ?? "g", portions);
+  const at = (measure: string, amount: number, grams: number): ScanStart => ({ measure, amount, grams, estimated: false });
+  const estimate = (measure: string, amount: number, grams: number): ScanStart => ({ measure, amount, grams, estimated: true });
+
+  it("holds a count to 30 % of the photo's grams, and no more for a small food (RULINGS 2026-09-17)", () => {
+    expect(SCAN_START_TOLERANCE_PERCENT).toBe(30);
+  });
+
+  it.each<[string, MeasureSource, number | null, number | null, ScanStart]>([
+    // A count of a measure that weighs what the photo saw.
+    ["two slices at the photo's 60 g", fed(portion(1, "slice", 30)), 2, 60, at("usda-1", 2, 60)],
+    ["six nuggets of 16 g at 96 g, never six of a 96 g serving", own(96, "serving", [portion(1, "nugget", 16)]), 6, 96, at("usda-1", 6, 96)],
+    ["two cups of stew at 510 g: whatever the count names, the grams agree", fed(portion(1, "cup", 255)), 2, 510, at("usda-1", 2, 510)],
+    ["three 65 g bottles of a label's pack at 195 g", own(65, "bottle"), 3, 195, at("serving", 3, 195)],
+    // 30 % of the photo's grams, each way: at the edge is near, past it is not.
+    ["30 % over is near", fed(portion(1, "piece", 130)), 1, 100, at("usda-1", 1, 130)],
+    ["past 30 % over is not", fed(portion(1, "piece", 131)), 1, 100, estimate("g", 100, 100)],
+    ["30 % under is near", fed(portion(1, "piece", 70)), 1, 100, at("usda-1", 1, 70)],
+    ["past 30 % under is not", fed(portion(1, "piece", 69)), 1, 100, estimate("g", 100, 100)],
+    // A small food is held to the same 30 %, never to a fixed number of grams:
+    // 10 g of almonds, counted 1, are no one 1 g almond (Kd, RULINGS 2026-09-17).
+    ["10 g of almonds counted 1 are no one almond", fed(portion(1, "cup, whole", 143), portion(2, "almond", 1.2)), 1, 10, estimate("g", 10, 10)],
+    ["30 % over a small food is near", fed(portion(1, "piece", 26)), 1, 20, at("usda-1", 1, 26)],
+    ["past it is not, though only 7 g", fed(portion(1, "piece", 27)), 1, 20, estimate("g", 20, 20)],
+    ["30 % under a small food is near", fed(portion(1, "piece", 14)), 1, 20, at("usda-1", 1, 14)],
+    ["past it under is not, though only 7 g", fed(portion(1, "piece", 13)), 1, 20, estimate("g", 20, 20)],
+    ["30 % of 200 g is exactly 60 g, and near", fed(portion(1, "cup, chopped", 140)), 1, 200, at("usda-1", 1, 140)],
+    // Compared as the row will weigh it, to the whole gram.
+    ["26.4 g is the row's 26 g, 30 % over", fed(portion(1, "piece", 26.4)), 1, 20, at("usda-1", 1, 26)],
+    ["26.6 g is the row's 27 g, past it", fed(portion(1, "piece", 26.6)), 1, 20, estimate("g", 20, 20)],
+    // Of several near, the nearest; of two as near, the earlier in the food's list.
+    ["the nearest size", fed(portion(1, "small", 101), portion(2, "medium", 118), portion(3, "large", 136)), 1, 120, at("usda-2", 1, 118)],
+    ["the earlier of two as near", fed(portion(1, "short", 110), portion(2, "tall", 130)), 1, 120, at("usda-1", 1, 110)],
+    ["our own serving is as good a measure as USDA's, and comes first", own(180, "apple", [portion(4, "medium (3\" dia)", 182)]), 1, 181, at("serving", 1, 180)],
+    // Grams and ounces are weights, never what a photo counts.
+    ["never an ounce, even at the photo's grams", fed(), 1, 28, estimate("g", 28, 28)],
+    ["never an ounce beside a measure too far off", fed(portion(1, "bar", 40)), 1, 29, estimate("g", 29, 29)],
+    // No count, nothing to multiply; no grams, nothing to check a count against.
+    ["no count: the photo's grams, even where a measure weighs them", fed(portion(1, "cup", 158)), null, 158, estimate("g", 158, 158)],
+    ["no grams: our food's own serving, as Add food starts it", own(180, "apple", [portion(4, "medium (3\" dia)", 182)]), 2, null, estimate("serving", 1, 180)],
+    ["no grams: a USDA food's first measure, as Add food starts it", fed(portion(1, "1 cup", 230, null), portion(2, "1 piece", 45, null)), 2, null, estimate("usda-1", 1, 230)],
+    // The photo's own grams, to the whole gram and never under one.
+    ["the photo's grams to the whole gram", fed(), null, 12.4, estimate("g", 12, 12)],
+    ["never under a gram", fed(), null, 0.3, estimate("g", 1, 1)],
+    // Only a start the save would take.
+    ["a count that weighs under a gram is no start, even at the photo's gram", fed(portion(1, "leaf", 0.4)), 1, 1, estimate("g", 1, 1)],
+    ["three of it weigh the photo's gram", fed(portion(1, "leaf", 0.4)), 3, 1, at("usda-1", 3, 1)],
+    ["past what one item of a meal may weigh is no start", fed(portion(1, "tray", 400)), 30, MAX_ITEM_GRAMS, estimate("g", MAX_ITEM_GRAMS, MAX_ITEM_GRAMS)],
+    ["what one item may weigh, exactly, is", fed(portion(1, "tray", 400)), 25, MAX_ITEM_GRAMS, at("usda-1", 25, MAX_ITEM_GRAMS)],
+    // Kd's plates and PR #71's review cases, as the form writes them.
+    ["100 g of scrambled eggs are no large egg of 61 g", fed(portion(1, "large", 61), portion(2, "cup", 220)), 1, 100, estimate("g", 100, 100)],
+    ["a 250 g mug of iced coffee is no 496 g medium", fed(portion(1, "fl oz", 30), portion(2, "medium", 496)), 1, 250, estimate("g", 250, 250)],
+    ["ten banana slices are no ten bananas", own(120, "banana", [portion(1, "cup, sliced", 150), portion(2, "medium", 118)]), 10, 60, estimate("g", 60, 60)],
+    ["a cereal bowl of cornflakes is no 30 g cup, nor 375 g of water", fed(portion(1, "cup", 30)), 1, 45, estimate("g", 45, 45)],
+    ["two bowls of them are no two cups", fed(portion(1, "cup", 30)), 2, 90, estimate("g", 90, 90)],
+    ["a cup of almonds is their own 143 g cup, not 240 g", fed(portion(1, "cup, whole", 143), portion(2, "almond", 1.2)), 1, 143, at("usda-1", 1, 143)],
+    ["twenty almonds are twenty almonds", fed(portion(1, "cup, whole", 143), portion(2, "almond", 1.2)), 20, 26, at("usda-2", 20, 24)],
+  ])("%s", (_, source, count, seenGrams, expected) => {
+    const measures = foodMeasures(source);
+    const start = scanStart(source, measures, count, seenGrams);
+    expect(start).toEqual(expected);
+  });
+
+  it("always starts at one of the food's own measures, at what that amount of it weighs, and only at a count near the photo's grams", () => {
+    const sources: MeasureSource[] = [
+      usdaFood(100, "g", []),
+      own(180, "apple", [portion(1, "cup slices", 109), portion(2, "medium", 182), portion(3, "small", 149)]),
+      usdaFood(30, "slice", [portion(1, "slice", 30), portion(2, "cup, crumbs", 108), portion(3, "leaf", 0.4)]),
+      own(65, "bottle"),
+      own(30, "g"),
+    ];
+    for (const source of sources) {
+      const measures = foodMeasures(source);
+      for (const count of [null, 1, 2, 3, 6, 30]) {
+        for (const seen of [null, 0.4, 1, 9.5, 20, 64, 100, 181, 2000, MAX_ITEM_GRAMS]) {
+          const label = `${source.unit} ×${String(count)} at ${String(seen)}`;
+          const start = scanStart(source, measures, count, seen);
+          const measure = measures.find((m) => m.id === start.measure);
+          expect(measure, label).toBeDefined();
+          if (measure === undefined) continue;
+          expect(start.grams, label).toBe(measureGrams(measure, start.amount));
+          expect(start.grams, label).toBeGreaterThanOrEqual(1);
+          expect(start.grams, label).toBeLessThanOrEqual(MAX_ITEM_GRAMS);
+          if (start.estimated) continue;
+          // A start that is no estimate is the photo's own count of a counted measure, near its grams.
+          expect([start.amount, measure.id === GRAM.id || measure.id === OUNCE.id], label).toEqual([count, false]);
+          expect(seen, label).not.toBeNull();
+          expect(100 * Math.abs(start.grams - (seen ?? 0)), label).toBeLessThanOrEqual(SCAN_START_TOLERANCE_PERCENT * (seen ?? 0));
+        }
+      }
     }
   });
 });

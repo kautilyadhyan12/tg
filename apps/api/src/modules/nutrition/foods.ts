@@ -501,9 +501,9 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
  *  is, so dropping them can only reveal the food's own name ("flatbread stack",
  *  "sliced banana", "glass of milk"). Words that change what a food is stay out:
  *  hot, warm, iced, fresh, plain and homemade ("hot chocolate" is not chocolate,
- *  "iced coffee" is not black coffee), and so do cooking words. Exported for the
- *  test that holds each cut among them to the photo count's own list, because a
- *  food found by dropping "slices" must not be counted whole. */
+ *  "iced coffee" is not black coffee), and so do cooking words. Only the food is
+ *  found by them: how much of it a photo shows is read from the grams the photo
+ *  saw, never from these words (ROADMAP 7a-iv-b). */
 export const NOISE_WORDS: ReadonlySet<string> = new Set([
   "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
   "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",

@@ -1,0 +1,19 @@
+{
+  "meal_name": "Cut plate",
+  "items": [
+    ["Banana slices","banana slices","bowl",null,null,10,60,53,1,14,0],
+    ["Sliced banana","sliced banana","bowl",null,null,10,60,53,1,14,0],
+    ["Hot dog pieces","hot dog pieces","plate",null,null,8,100,296,11,24,17],
+    ["Beef stew chunks","beef stew chunks","bowl",0.8,null,6,255,273,22,16,13],
+    ["Tortilla pieces","tortilla pieces","plate",null,null,12,48,147,4,24,4],
+    ["Orange segments","orange segments","plate",null,null,6,130,61,1,15,0],
+    ["Cheese cubes","cheese cubes","plate",null,null,10,30,121,7,1,10],
+    ["Halved boiled eggs","halved boiled eggs","plate",null,null,4,100,155,13,1,11],
+    ["Plates of chicken nuggets","plates of chicken nuggets","plate",null,null,2,190,583,30,28,39],
+    ["Palak paneer cubes","palak paneer cubes","bowl",null,null,8,200,202,11,9,14],
+    ["Apple slices","apple slices","plate",null,null,8,150,78,0,21,0],
+    ["Constructor","constructor","constructor",null,"constructor",2,50,50,1,10,1]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

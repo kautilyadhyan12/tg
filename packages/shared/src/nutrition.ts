@@ -65,19 +65,6 @@ export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSche
  *  sheet back when Photo Log is opened again within it (RULINGS 2026-09-16). */
 export const MEAL_SCAN_TTL_SECONDS = 10 * 60;
 
-/** A scanned item as the photo sheet receives it. `pieces` is how many of what the
- *  photo counted its grams stand for where the count set them (six nuggets, three
- *  cans), and null where it did not, so one step of the sheet's stepper is one. */
-export const mealPhotoItemSchema = mealItemSchema.extend({ pieces: z.number().int().positive().nullable() });
-export type MealPhotoItem = z.infer<typeof mealPhotoItemSchema>;
-
-export const mealPhotoAnalysisSchema = z.object({
-  scanToken: z.string(), mealName: z.string(), items: z.array(mealPhotoItemSchema),
-  unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
-  confirmed: z.literal(false), retakeToken: z.string().optional(),
-});
-export type MealPhotoAnalysis = z.infer<typeof mealPhotoAnalysisSchema>;
-
 /** GAP-3 ruling: client-supplied, bounded to ≤24 h in the future (offline
  *  backfill of past meals is legitimate; future meals are not). */
 const takenAtSchema = z
@@ -117,6 +104,8 @@ export const foodMeasureSchema = z.object({
   id: measureIdSchema, name: z.string().min(1).max(60), grams: z.number().positive().max(MAX_ITEM_GRAMS),
 }).strict();
 export type FoodMeasure = z.infer<typeof foodMeasureSchema>;
+/** The measure and amount a food starts at where the person has not picked one. */
+export const measureStartSchema = z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict();
 const measureItemSchema = z
   .object({ canonical: z.string().min(1).max(120), measure: measureIdSchema, amount: z.number().positive().max(MAX_ITEM_GRAMS) })
   .strict();
@@ -229,12 +218,35 @@ export const foodSearchItemSchema = z.object({
   fiberG: z.number().nonnegative().nullable(), serving: z.number().positive(), unit: z.string(),
   source: nutritionSourceSchema,
   measures: z.array(foodMeasureSchema).min(1),
-  startsAt: z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict(),
+  startsAt: measureStartSchema,
 }).strict().refine((food) => food.measures.some((m) => m.id === food.startsAt.measure), {
   message: "a food starts at one of its own measures",
 });
 export type FoodSearchItem = z.infer<typeof foodSearchItemSchema>;
 export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItemSchema) }).strict();
+
+/** A scanned item as the photo sheet receives it (ROADMAP 7a-iv-b; RULINGS
+ *  2026-09-16, the portion redesign): its food's own measures and the one and
+ *  amount the row starts at, as a food the search returns carries them, so the
+ *  sheet corrects it with the same picker. `portionEstimated` is true where the
+ *  row starts at no measure the photo's count agreed with — at the grams the photo
+ *  saw, or at the food's serving where the photo gave no weight — and the sheet
+ *  marks that an estimate. `gramsPoint` is what the start weighs. */
+export const mealPhotoItemSchema = mealItemSchema.extend({
+  measures: z.array(foodMeasureSchema).min(1),
+  startsAt: measureStartSchema,
+  portionEstimated: z.boolean(),
+}).refine((item) => item.measures.some((m) => m.id === item.startsAt.measure), {
+  message: "a scanned item starts at one of its own measures",
+});
+export type MealPhotoItem = z.infer<typeof mealPhotoItemSchema>;
+
+export const mealPhotoAnalysisSchema = z.object({
+  scanToken: z.string(), mealName: z.string(), items: z.array(mealPhotoItemSchema),
+  unknownItems: z.array(z.string()), photoQuality: z.enum(["good", "poor"]), totals: mealTotalsSchema,
+  confirmed: z.literal(false), retakeToken: z.string().optional(),
+});
+export type MealPhotoAnalysis = z.infer<typeof mealPhotoAnalysisSchema>;
 
 // ── Daily calorie + macro targets: the macro rings' numbers ─────────────────
 // These ARE the plan's numbers (plan.ts; ROADMAP 4a-iii): the same stored

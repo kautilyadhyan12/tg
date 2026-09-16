@@ -1,28 +1,33 @@
 // ROADMAP 7a-iii-b — the scanner prices every food it sees, through the routes a
-// person uses: scanned, stepped, saved, edited later, and unreachable by anyone
+// person uses: scanned, corrected, saved, edited later, and unreachable by anyone
 // else. A food no table has is the model's own estimate; a table food whose
 // energy is three times from what the model saw is another food, and gives way.
-// Kd's eight plates run through the same route and the same lookups.
+// ROADMAP 7a-iv-b — each row starts at one of its food's own measures where the
+// photo's count of it weighs near what the photo saw, else at the photo's grams.
+// The test plates — Kd's eight and PR #71's review cases — run through the same
+// route and the same lookups.
 //
 // The foods here carry nonsense words ("qwzx…", "zqxscanroute"), and every USDA
 // fixture is keyed above 90,000,000, so this file answers the same whether or not
 // the machine has had `tools/import-usda.ts` run against it. The eight plates'
 // USDA rows are the real ones, copied whole (below): on a machine with the table
 // loaded, a real row and its copy tie on everything but the id, and the sheet
-// shows the same food either way.
+// shows the same food either way. The USDA entries our list's foods on the plates
+// cite are the real ones under their own ids (fixtures/usda-plate-foods.json),
+// written only where the table does not hold them and removed only if written.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
-import { mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
+import { mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealPhotoItem, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { VisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { importUsda } from "../tools/usda-table.js";
-import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaRelease } from "../tools/usda-files.js";
+import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaPortion, type UsdaRelease } from "../tools/usda-files.js";
 
 const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), httpIntegration: vi.fn() }));
 vi.mock("@sentry/node", () => sentry);
@@ -109,13 +114,36 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["sr_legacy", "Pumpkin, canned, with salt", 34, 1.1, 8.09, 0.28, 2.9, 245, "cup"],
 ];
 
+/** Every household measure, as the loaded table holds them, of the three USDA foods
+ *  the eight plates' sheets show: a row starts at one of them, so the copy carries
+ *  them all, under USDA's own numbers. */
+const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Map([
+  ["Pumpkin, cooked", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 230 }, { seqNum: 2, amount: null, unit: "1 cup, mashed", gramWeight: 250 }]],
+  ["Lemon, raw", [{ seqNum: 1, amount: null, unit: "1 fruit", gramWeight: 65 }, { seqNum: 2, amount: null, unit: "1 slice or wedge", gramWeight: 8 }, { seqNum: 3, amount: null, unit: "1 cup", gramWeight: 200 }]],
+  ["Iced Coffee, pre-lightened and pre-sweetened", [
+    { seqNum: 1, amount: null, unit: "1 fl oz", gramWeight: 31 }, { seqNum: 2, amount: null, unit: "1 cup (8 fl oz)", gramWeight: 248 },
+    { seqNum: 3, amount: null, unit: "1 small", gramWeight: 372 }, { seqNum: 4, amount: null, unit: "1 medium", gramWeight: 496 },
+    { seqNum: 5, amount: null, unit: "1 large", gramWeight: 620 },
+  ]],
+]);
+
 /** A USDA fixture: the four figures a meal is priced from and fibre, the rest
- *  unmeasured, served by one household measure. */
-const usdaFixture = (fdcId: number, description: string, [kcal, protein, carbs, fat, fiber]: readonly [number, number, number, number, number | null], [grams, unit]: readonly [number, string]): UsdaEntry => {
+ *  unmeasured, served by one household measure, or by the measures given. */
+const usdaFixture = (fdcId: number, description: string, [kcal, protein, carbs, fat, fiber]: readonly [number, number, number, number, number | null], [grams, unit]: readonly [number, string], portions?: readonly UsdaPortion[]): UsdaEntry => {
   const figures = new Map<UsdaNutrient, number | null>(USDA_NUTRIENTS.map((n) => [n.key, null]));
   for (const [key, value] of [["kcal", kcal], ["proteinG", protein], ["carbsG", carbs], ["fatG", fat], ["fiberG", fiber]] as const) figures.set(key, value);
-  return { fdcId, description, figures, portions: [{ seqNum: 1, amount: 1, unit, gramWeight: grams }] };
+  return { fdcId, description, figures, portions: portions === undefined ? [{ seqNum: 1, amount: 1, unit, gramWeight: grams }] : [...portions] };
 };
+
+/** The USDA entries our list's foods on the plates cite (fixtures/usda-plate-foods.json). */
+const citedUsdaSchema = z.object({
+  foods: z.array(z.object({
+    fdcId: z.number().int(), release: z.enum(["fndds", "sr_legacy"]), description: z.string(),
+    figures: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number().nullable()]),
+    portions: z.array(z.tuple([z.number().int(), z.number().nullable(), z.string(), z.number()])),
+  }).strict()),
+});
+const CITED_USDA = citedUsdaSchema.parse(JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "usda-plate-foods.json"), "utf8"))).foods;
 
 /** No packaged product for any food scanned here — but a search for an estimate's
  *  canonical answers, as the live search answers almost any text, so a request that
@@ -149,8 +177,8 @@ function scripted(): VisionProvider & { queue: VisionEvidence[] } {
 // 120 g of a fritter no table has, at 300 kcal: 6 g protein, 30 g carbohydrate and
 // 17 g fat make 297 kcal, so it is an estimate — 250 kcal, 5 g, 25 g and 14.17 g per 100 g.
 const FRITTER = seen("Qwzx fritter", "qwzx fritter", [120, 300, 6, 30, 17], { count: 2 });
-// Our list's dal (145 kcal per 100 g) in a katori ¾ full, which the model saw at 113. Appendix B's
-// katori holds 150–200 ml, so ¾ full is 113–150 g and the portion 132 g, 191 kcal.
+// Our list's dal (145 kcal per 100 g) in a katori ¾ full, which the model saw at 150 g and
+// did not count: the row starts at those 150 g, 218 kcal — never Appendix B's katori.
 const DAL = seen("Dal", "dal", [150, 170, 9, 25, 4], { vessel: "katori", fill: 0.75 });
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -184,12 +212,19 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   };
   const scan = (access: string, evidence: VisionEvidence): Promise<MealPhotoAnalysis> => scanOn(api(), access, evidence);
   const mealOf = (body: string): Meal => mealSchema.parse(z.object({ meal: z.unknown() }).parse(JSON.parse(body)).meal);
+  /** The cited entries this run wrote, because the table did not hold them. */
+  let wroteCited: number[] = [];
   const clean = async (): Promise<void> => {
     await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'scan7b-%@example.com')`;
     await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'scan7b-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'scan7b-%@example.com'`;
     await sql`DELETE FROM usda_food_portions WHERE fdc_id BETWEEN ${USDA_ID} AND ${LAST_ID}`;
     await sql`DELETE FROM usda_foods WHERE fdc_id BETWEEN ${USDA_ID} AND ${LAST_ID}`;
+    if (wroteCited.length > 0) {
+      await sql`DELETE FROM usda_food_portions WHERE fdc_id = ANY(${wroteCited}::int[])`;
+      await sql`DELETE FROM usda_foods WHERE fdc_id = ANY(${wroteCited}::int[])`;
+      wroteCited = [];
+    }
   };
 
   beforeAll(async () => {
@@ -197,14 +232,21 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     const figures = new Map<UsdaNutrient, number | null>(USDA_NUTRIENTS.map((n, at) => [n.key, at + 1]));
     for (const [key, value] of [["kcal", 213], ["proteinG", 11.5], ["carbsG", 27.3], ["fatG", 6.4]] as const) figures.set(key, value);
     const plateRows = (release: UsdaRelease): UsdaEntry[] => PLATE_USDA_ROWS.flatMap(([r, description, kcal, protein, carbs, fat, fiber, grams, unit], at) =>
-      r === release ? [usdaFixture(PLATE_ROWS_FROM + at, description, [kcal, protein, carbs, fat, fiber], [grams, unit])] : []);
+      r === release ? [usdaFixture(PLATE_ROWS_FROM + at, description, [kcal, protein, carbs, fat, fiber], [grams, unit], PICKED_USDA_PORTIONS.get(description))] : []);
+    const held = new Set((await sql<{ fdc_id: number }[]>`SELECT fdc_id FROM usda_foods WHERE fdc_id = ANY(${CITED_USDA.map((f) => f.fdcId)}::int[])`).map((r) => r.fdc_id));
+    const cited = CITED_USDA.filter((f) => !held.has(f.fdcId));
+    wroteCited = cited.map((f) => f.fdcId);
+    const citedRows = (release: UsdaRelease): UsdaEntry[] => cited.flatMap((f) => (f.release !== release ? [] : [
+      usdaFixture(f.fdcId, f.description, f.figures, [0, ""], f.portions.map(([seqNum, amount, unit, gramWeight]) => ({ seqNum, amount, unit, gramWeight }))),
+    ]));
     await importUsda(sql, [
       ["fndds", [
         { fdcId: USDA_ID, description: "Zqxscanroute, cooked", figures, portions: [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 240 }] },
         usdaFixture(PICKLED_ID, "Zqxscanpick, pickled", [34, 0.9, 7, 0.2, 1.6], [150, "cup"]),
         ...plateRows("fndds"),
+        ...citedRows("fndds"),
       ]],
-      ["sr_legacy", [usdaFixture(RAW_ID, "Zqxscanpick, raw", [16, 0.68, 3.4, 0.1, 1.6], [116, "cup slices"]), ...plateRows("sr_legacy")]],
+      ["sr_legacy", [usdaFixture(RAW_ID, "Zqxscanpick, raw", [16, 0.68, 3.4, 0.1, 1.6], [116, "cup slices"]), ...plateRows("sr_legacy"), ...citedRows("sr_legacy")]],
     ]);
     app = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } });
     alice = await session("scan7b-alice@example.com");
@@ -217,40 +259,46 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     await sql.end({ timeout: 5 });
   });
 
-  it("lists a food no table has as the model's estimate, stepped, saved and changed later at its own figures", async () => {
+  it("lists a food no table has as the model's estimate, corrected, saved and changed later at its own figures", async () => {
     const sheet = await scan(alice, plate(FRITTER, DAL));
     expect(sheet.unknownItems).toEqual([]);
     const [fritter, dal] = sheet.items;
+    // An estimate has only grams and ounces, so it starts at the grams the model saw.
     expect(fritter).toMatchObject({
       name: "Qwzx fritter", canonical: "est_qwzx_fritter", nutritionSource: "estimate", portionSource: "default",
-      gramsPoint: 120, gramsRange: [120, 120], kcalPoint: 300, proteinG: 6, carbsG: 30, fatG: 17, pieces: 2,
+      gramsPoint: 120, gramsRange: [120, 120], kcalPoint: 300, proteinG: 6, carbsG: 30, fatG: 17,
+      measures: [{ id: "g", name: "g", grams: 1 }, { id: "oz", name: "oz", grams: 28.349523125 }], startsAt: { measure: "g", amount: 120 }, portionEstimated: true,
     });
     expect(fritter?.per100g?.kcal).toBe(250);
-    // Our list's dal is still our list's, portioned as it always was (Appendix B's katori).
-    expect(dal).toMatchObject({ name: "Dal (lentil curry)", canonical: "dal_lentil_curry", nutritionSource: "curated", gramsPoint: 132, kcalPoint: 191 });
+    // Our list's dal starts at the grams the model saw too: nothing counted, and no katori read.
+    expect(dal).toMatchObject({ name: "Dal (lentil curry)", canonical: "dal_lentil_curry", nutritionSource: "curated", gramsPoint: 150, kcalPoint: 218, startsAt: { measure: "g", amount: 150 }, portionEstimated: true });
     expect(dal?.per100g).toBeUndefined();
 
-    // The stepper halves the fritters: the server prices the estimate at its own figures.
-    const preview = await inject("POST", "/v1/nutrition/meals/preview", alice, { scanToken: sheet.scanToken, items: [{ canonical: "est_qwzx_fritter", grams: 60 }, { canonical: "dal_lentil_curry", grams: 132 }] });
+    // Half the fritters, by the measure the sheet sends: the server prices the estimate at its own figures.
+    const preview = await inject("POST", "/v1/nutrition/meals/preview", alice, { scanToken: sheet.scanToken, items: [{ canonical: "est_qwzx_fritter", measure: "g", amount: 60 }, { canonical: "dal_lentil_curry", measure: "g", amount: 150 }] });
     expect(preview.statusCode, preview.body).toBe(200);
     expect(preview.json<{ items: { kcalPoint: number; proteinG: number; fatG: number }[] }>().items[0]).toMatchObject({ kcalPoint: 150, proteinG: 3, fatG: 8.5 });
+    // An estimate is served by the grams the photo saw, which no measure of it names.
+    const byServing = await inject("POST", "/v1/nutrition/meals/preview", alice, { scanToken: sheet.scanToken, items: [{ canonical: "est_qwzx_fritter", measure: "serving", amount: 1 }] });
+    expect([byServing.statusCode, byServing.json<{ error: string }>().error]).toEqual([400, "unknown_measure"]);
 
     // An estimate the scan never gave is no food: the confirm is refused, and the scan survives it.
     const forged = await inject("POST", "/v1/nutrition/meals", alice, { scanToken: sheet.scanToken, takenAt: new Date().toISOString(), items: [{ canonical: "est_qwzx_fritter", grams: 180 }, { canonical: "est_qwzx_forged", grams: 100 }] });
     expect(forged.statusCode, forged.body).toBe(400);
     expect(forged.json<{ error: string }>().error).toBe("unknown_food");
 
-    const saved = await inject("POST", "/v1/nutrition/meals", alice, { scanToken: sheet.scanToken, takenAt: new Date().toISOString(), items: [{ canonical: "est_qwzx_fritter", grams: 180 }, { canonical: "dal_lentil_curry", grams: 132 }] });
+    const saved = await inject("POST", "/v1/nutrition/meals", alice, { scanToken: sheet.scanToken, takenAt: new Date().toISOString(), items: [{ canonical: "est_qwzx_fritter", measure: "oz", amount: 6 }, { canonical: "dal_lentil_curry", measure: "g", amount: 150 }] });
     expect(saved.statusCode, saved.body).toBe(201);
     const meal = mealOf(saved.body);
-    expect(meal.items[0]).toMatchObject({ canonical: "est_qwzx_fritter", nutritionSource: "estimate", gramsPoint: 180, kcalPoint: 450, proteinG: 9, carbsG: 45, fatG: 25.5 });
+    // Six ounces are 170 g of fritter at 250 kcal per 100 g.
+    expect(meal.items[0]).toMatchObject({ canonical: "est_qwzx_fritter", nutritionSource: "estimate", gramsPoint: 170, kcalPoint: 425, proteinG: 8.5, carbsG: 42.5, fatG: 24.1, measure: { id: "oz", name: "oz", amount: 6 } });
     expect(meal.nutritionSources.sort()).toEqual(["curated", "estimate"]);
 
     // Its grams changed a day later: priced from the figures the meal carries, with no table to ask.
-    const edited = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: "est_qwzx_fritter", grams: 240 }, { canonical: "dal_lentil_curry", grams: 132 }] });
+    const edited = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: "est_qwzx_fritter", grams: 240 }, { canonical: "dal_lentil_curry", grams: 150 }] });
     expect(edited.statusCode, edited.body).toBe(200);
     expect(mealOf(edited.body).items[0]).toMatchObject({ gramsPoint: 240, kcalPoint: 600, proteinG: 12, carbsG: 60, fatG: 34, per100g: meal.items[0]?.per100g });
-    expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).json<{ meal: Meal }>().meal.totals.kcalPoint).toBe(600 + 191);
+    expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).json<{ meal: Meal }>().meal.totals.kcalPoint).toBe(600 + 218);
 
     // A stranger can neither read the meal nor change it.
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, bob)).statusCode).toBe(404);
@@ -286,8 +334,8 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     const dish = await inject("POST", "/v1/nutrition/dishware", gus, { label: "Medium bowl", containerClass: "standard_katori", volumeMl: 400 });
     expect(dish.statusCode, dish.body).toBe(201);
     const sheet = await scan(gus, plate(DAL));
-    // Appendix B's katori ¾ full, as for a person with no dish saved: 132 g, not 400 × ¾ = 300.
-    expect(sheet.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 132, portionSource: "regional_prior" });
+    // The grams the model saw, as for a person with no dish saved: 150 g, not 400 × ¾ = 300.
+    expect(sheet.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 150, portionSource: "default", startsAt: { measure: "g", amount: 150 } });
   }, 60_000);
 
   it("gives a table food three times from the model's own energy way to the estimate", async () => {
@@ -297,19 +345,30 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect(sheet.items[0]).toMatchObject({ name: "Dal makhani", canonical: "est_dal_makhani", nutritionSource: "estimate", gramsPoint: 100, kcalPoint: 450 });
   }, 60_000);
 
-  it("prices a food our list lacks from the USDA table, served by the grams the model saw, not by USDA's measure", async () => {
+  it("prices a food our list lacks from the USDA table, and starts it at USDA's own measure only where the photo's count of it agrees with the grams", async () => {
     const erin = await session("scan7b-erin@example.com");
-    // Three pieces the model saw at 180 g: USDA's own measure is one cup of 240 g, so
-    // the old rule's cup times the count would read 720 g, and the measure alone 240.
-    const sheet = await scan(erin, plate(seen("Zqxscanroute", "zqxscanroute", [180, 380, 19, 48, 12], { vessel: "plate", count: 3 })));
-    expect(sheet.items).toHaveLength(1);
+    const route = `usda_fndds_${String(USDA_ID)}`;
+    const measures = [{ id: "usda-1", name: "cup", grams: 240 }, { id: "g", name: "g", grams: 1 }, { id: "oz", name: "oz", grams: 28.349523125 }];
+    // Three pieces the model saw at 180 g, and one at 250 g, in one photo: three of
+    // USDA's 240 g cup are 720 g, so the first starts at its 180 g, an estimate; one
+    // cup is near 250 g, so the second starts at it.
+    const sheet = await scan(erin, plate(
+      seen("Zqxscanroute", "zqxscanroute", [180, 380, 19, 48, 12], { vessel: "plate", count: 3 }),
+      seen("Zqxscanroute", "zqxscanroute", [250, 530, 27, 67, 17], { vessel: "bowl", count: 1 }),
+    ));
+    expect(sheet.items).toHaveLength(2);
     expect(sheet.items[0]).toMatchObject({
-      name: "Zqxscanroute, cooked", canonical: `usda_fndds_${String(USDA_ID)}`, nutritionSource: "usda",
-      gramsPoint: 180, gramsRange: [180, 180], portionSource: "default", pieces: 3, kcalPoint: 383,
+      name: "Zqxscanroute, cooked", canonical: route, nutritionSource: "usda",
+      gramsPoint: 180, gramsRange: [180, 180], portionSource: "default", kcalPoint: 383, measures, startsAt: { measure: "g", amount: 180 }, portionEstimated: true,
     });
-    // With no grams from the model, USDA's measure, once, whatever the count.
+    expect(sheet.items[1]).toMatchObject({ canonical: route, gramsPoint: 240, kcalPoint: 511, measures, startsAt: { measure: "usda-1", amount: 1 }, portionEstimated: false });
+    // Priced as the sheet sends it, by the measure each row starts at, each is what the sheet shows.
+    const preview = await inject("POST", "/v1/nutrition/meals/preview", erin, { scanToken: sheet.scanToken, items: sheet.items.map((i) => ({ canonical: i.canonical, measure: i.startsAt.measure, amount: i.startsAt.amount })) });
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(mealPreviewSchema.parse(preview.json()).items.map((i) => [i.gramsPoint, i.kcalPoint])).toEqual([[180, 383], [240, 511]]);
+    // With no grams from the model, where Add food starts it — USDA's first measure, once, whatever the count — marked an estimate.
     const unweighed = await scan(erin, plate(seen("Zqxscanroute", "zqxscanroute", null, { vessel: "plate", count: 2 })));
-    expect(unweighed.items[0]).toMatchObject({ canonical: `usda_fndds_${String(USDA_ID)}`, gramsPoint: 240, pieces: null, kcalPoint: 511 });
+    expect(unweighed.items[0]).toMatchObject({ canonical: route, gramsPoint: 240, kcalPoint: 511, startsAt: { measure: "usda-1", amount: 1 }, portionEstimated: true });
   }, 60_000);
 
   it("asks the USDA table with the energy the model saw, so the entry it names is the one made the way the plate shows", async () => {
@@ -322,70 +381,144 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect(unseen.items[0]).toMatchObject({ name: "Zqxscanpick, pickled", canonical: `usda_fndds_${String(PICKLED_ID)}` });
   }, 60_000);
 
-  // ── Kd's eight plates (2026-09-16) ─────────────────────────────────────────
-  // The model's replies to his eight photos, as it wrote them on 2026-09-16 with
-  // this card's prompt (the text only; no photo is in the repository), scanned
-  // through the route: our list as it is, no packaged products, and the USDA rows
-  // above — so a change to how a food is looked up, priced or portioned shows here
-  // as a diff. Our list's portions keep the rule they had before this card until
-  // 7a-iv (Kd, RULINGS 2026-09-16): bacon 100 g where the model saw 30.
-  describe("Kd's eight plates", () => {
+  // ── The test plates ─────────────────────────────────────────────────────────
+  // Kd's eight plates are the model's replies to his eight photos, as it wrote them
+  // on 2026-09-16 with 7a-iii-b's prompt (the text only; no photo is in the
+  // repository). The review plates are the cases PR #71's four reviews found in the
+  // old portion code, which read the words of a food's name, written as the model's
+  // form writes them: a count of whole pieces and the grams it saw. What a count of
+  // cut bits, a container or a serving word once did to a portion is now the grams'
+  // to say (ROADMAP 7a-iv-b). Each plate is scanned through the route — our list as
+  // it is, no packaged products, and the USDA rows above — so a change to how a food
+  // is looked up, priced or started shows here as a diff, and a new finding is a new
+  // plate, never a new word list (RULINGS 2026-09-15).
+  describe("the test plates", () => {
     const PLATES = join(import.meta.dirname, "fixtures", "plates");
-    /** Each row as the sheet shows it: name, tag, grams, kcal, the stepper's pieces. */
-    type Row = [string, string, number, number, number | null];
+    /** Each row as the sheet shows it: name, tag, where it starts — "2 × slice", or
+     *  "~60 g" at the photo's own grams, an estimate — and its grams and kcal. */
+    type Row = [string, string, string, number, number];
+    const startOf = (row: MealPhotoItem): string => {
+      const measure = row.measures.find((m) => m.id === row.startsAt.measure);
+      return row.portionEstimated ? `~${String(row.gramsPoint)} g` : `${String(row.startsAt.amount)} × ${measure?.name ?? "no measure"}`;
+    };
     const EXPECTED: Record<string, Row[]> = {
       // The toast plate: every food is on the sheet, and the latte, which no table
-      // names, is the model's own figures.
+      // names, is the model's own figures. Bacon starts at the 30 g the photo saw, no
+      // longer our list's 100 g (RULINGS 2026-09-16); ten grams of almonds counted 1
+      // are no one 1 g almond (RULINGS 2026-09-17).
       "download-1.json": [
-        ["French bread / sourdough", "curated", 100, 272, 2], ["Avocado", "curated", 100, 160, null], ["Egg (fried)", "curated", 50, 98, 1],
-        ["Bacon (cooked)", "curated", 100, 548, null], ["Brie", "curated", 28, 94, null], ["Ham (sliced)", "curated", 28, 46, 1],
-        ["Apple", "curated", 180, 94, 1], ["Almonds", "curated", 28, 162, null], ["latte", "estimate", 240, 130, 1],
+        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["Bacon (cooked)", "curated", "~30 g", 30, 164], ["Brie", "curated", "~50 g", 50, 167], ["Ham (sliced)", "curated", "1 × slice", 28, 46],
+        ["Apple", "curated", "~40 g", 40, 21], ["Almonds", "curated", "~10 g", 10, 58], ["latte", "estimate", "~240 g", 240, 130],
       ],
       // The model saw iced coffee at 40 kcal per 100 g: USDA's brewed one (1) and its
-      // decaffeinated one (0) are other drinks, and the pre-lightened one (31) agrees.
+      // decaffeinated one (0) are other drinks, and the pre-lightened one (31) agrees;
+      // one of its 248 g cups is near the 200 g the photo saw.
       "download-2.json": [
-        ["avocado toast with egg", "estimate", 220, 380, 1], ["Asparagus (cooked)", "curated", 100, 22, null], ["cherry tomatoes", "estimate", 60, 11, 6],
-        ["Pork sausage (cooked)", "curated", 46, 150, 2], ["Shrimp (cooked)", "curated", 100, 99, null], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", 200, 62, 1],
+        ["avocado toast with egg", "estimate", "~220 g", 220, 380], ["Asparagus (cooked)", "curated", "~60 g", 60, 13], ["cherry tomatoes", "estimate", "~60 g", 60, 11],
+        ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Shrimp (cooked)", "curated", "~75 g", 75, 74], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
-      // Pumpkin at the 60 g the model saw, in its two pieces — not USDA's cup twice (460 g).
+      // Pumpkin at the 60 g the model saw in its two pieces: two of USDA's cups are 460 g.
       "download-3.json": [
-        ["Chicken breast (cooked)", "curated", 100, 165, null], ["Shrimp (cooked)", "curated", 100, 99, null], ["Egg (whole, large)", "curated", 50, 72, 1],
-        ["Broccoli (cooked)", "curated", 100, 35, null], ["Corn (cooked)", "curated", 100, 96, null], ["Pumpkin, cooked", "usda", 60, 31, 2],
-        ["Orange juice", "curated", 240, 108, 1],
+        ["Chicken breast (cooked)", "curated", "~150 g", 150, 248], ["Shrimp (cooked)", "curated", "~90 g", 90, 89], ["Egg (whole, large)", "curated", "1 × egg", 50, 72],
+        ["Broccoli (cooked)", "curated", "~60 g", 60, 21], ["Corn (cooked)", "curated", "~50 g", 50, 48], ["Pumpkin, cooked", "usda", "~60 g", 60, 31],
+        ["Orange juice", "curated", "1 × cup", 248, 112],
       ],
-      // Two lemon wedges at 40 g, not USDA's whole fruit (65 g).
+      // Two lemon wedges at 40 g: two of USDA's 8 g wedges are 16 g.
       "download-4.json": [
-        ["Salmon (cooked)", "curated", 100, 206, null], ["Roast potatoes", "curated", 100, 126, null], ["Broccoli (cooked)", "curated", 100, 35, null],
-        ["Lemon, raw", "usda", 40, 12, 2],
+        ["Salmon (cooked)", "curated", "2 × half fillet", 356, 733], ["Roast potatoes", "curated", "~200 g", 200, 252], ["Broccoli (cooked)", "curated", "~150 g", 150, 53],
+        ["Lemon, raw", "usda", "~40 g", 40, 12],
       ],
+      // 100 g of scrambled eggs are no large egg of 61 g (RULINGS 2026-09-16).
       "download-5.json": [
-        ["avocado toast", "estimate", 120, 280, 1], ["Eggs (scrambled)", "curated", 50, 75, 1], ["Strawberries", "curated", 100, 32, null],
+        ["avocado toast", "estimate", "~120 g", 120, 280], ["Eggs (scrambled)", "curated", "~100 g", 100, 149], ["Strawberries", "curated", "1 × cup, halves", 152, 49],
       ],
       "download-6.json": [
-        ["bread", "estimate", 60, 160, 2], ["Peanut butter", "curated", 32, 191, null], ["Jam", "curated", 20, 56, null],
-        ["Avocado", "curated", 100, 160, null], ["Eggs (scrambled)", "curated", 50, 75, 1], ["Blueberries", "curated", 100, 57, null],
-        ["Raspberries", "curated", 100, 52, null],
+        ["bread", "estimate", "~60 g", 60, 160], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "1 × tbsp", 20, 56],
+        ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179], ["Blueberries", "curated", "~50 g", 50, 29],
+        ["Raspberries", "curated", "~40 g", 40, 21],
       ],
+      // A 250 g mug of iced coffee is one of its 248 g cups, never USDA's 496 g "medium".
       "download.json": [
-        ["banana toast", "estimate", 220, 450, 1], ["egg bacon toast", "estimate", 250, 420, 1], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", 250, 78, 1],
+        ["banana toast", "estimate", "~220 g", 220, 450], ["egg bacon toast", "estimate", "~250 g", 250, 420], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
       "minimalist-meal-planner-inspiration-idea-120.json": [
-        ["Egg (hard-boiled)", "curated", 150, 233, 3], ["Roast potatoes", "curated", 100, 126, null], ["Chicken breast (cooked)", "curated", 100, 165, null],
-        ["Corn (cooked)", "curated", 100, 96, null], ["Broccoli (cooked)", "curated", 100, 35, null],
+        ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
+        ["Corn (cooked)", "curated", "1 × ear medium (6-3/4\" to 7-1/2\" long)", 103, 99], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27],
+      ],
+      // Whole pieces whose count agrees with the grams start at that many.
+      "review-counts.json": [
+        ["Chicken nuggets", "curated", "6 × nugget", 96, 295], // six 16 g nuggets, not one
+        ["Chicken nuggets", "curated", "6 × nugget", 96, 295], // "nugget pieces" are nuggets
+        ["Pizza (cheese)", "curated", "3 × slice", 321, 854],
+        ["Egg (hard-boiled)", "curated", "2 × egg", 100, 155],
+        ["Roti / Chapati (homemade flatbread, no fat)", "curated", "8 × roti", 320, 646], // a stack of eight is eight
+        ["Almonds", "curated", "20 × almond", 24, 139],
+        ["Grapes", "curated", "~50 g", 50, 35], // ten grapes are no ten of USDA's "10 grapes"
+        ["Coke / cola", "curated", "3 × can", 1110, 466],
+        ["Pancakes", "curated", "3 × pancake", 150, 423],
+        ["Ham (sliced)", "curated", "3 × slice", 84, 138],
+        ["Whole wheat bread", "curated", "2 × slice", 64, 161],
+        ["Banana bread", "curated", "2 × slice", 120, 391], // slices, not bananas
+        ["Egg roll (vegetable, fried)", "curated", "2 × roll", 128, 346],
+        ["Roti / Chapati (homemade flatbread, no fat)", "curated", "2 × roti", 80, 162], // the homemade one
+        ["Veggie burger", "curated", "1 × patty", 100, 177], // its own patty, not an egg
+      ],
+      // A count of bits cut from a food, or of plates, is no count of the food: the grams say.
+      "review-cut-bits.json": [
+        ["Banana", "curated", "~60 g", 60, 53], // banana slices ×10, not ten bananas
+        ["Banana", "curated", "~60 g", 60, 53], // sliced banana ×10
+        ["Hot dog", "curated", "~100 g", 100, 296], // eight hot dog pieces, not eight hot dogs
+        ["Beef stew", "curated", "~255 g", 255, 273], // six chunks, not six cups
+        ["Tortilla (flour)", "curated", "~48 g", 48, 147], // twelve pieces of one tortilla
+        ["Orange", "curated", "~130 g", 130, 61], // six segments of one orange
+        ["Cheddar cheese", "curated", "~30 g", 30, 121], // ten cubes, not ten slices
+        ["Egg (hard-boiled)", "curated", "~100 g", 100, 155], // four halves of two eggs
+        ["Chicken nuggets", "curated", "~190 g", 190, 583], // two plates of nuggets, not two nuggets
+        ["Palak paneer (spinach and cheese curry)", "curated", "~200 g", 200, 202], // eight cubes, not eight cups
+        ["Apple", "curated", "~150 g", 150, 78], // eight slices, not eight apples
+        ["Constructor", "estimate", "~50 g", 50, 50], // a name, vessel and size every object answers to
+      ],
+      // A vessel, how full it looked and a serving word change nothing: the grams say.
+      "review-vessels.json": [
+        ["Wine (red)", "curated", "1 × glass", 150, 128], // a glass 0.4 full is still its 150 g pour
+        ["Coffee (black)", "curated", "~120 g", 120, 1], // a cup half full: its 240 g cup is far
+        ["Coffee (black)", "curated", "2 × cup", 480, 5], // two mugs at 650 g: two cups are within 30 %
+        ["Beer (regular)", "curated", "3 × can", 1068, 459], // three mugs at 975 g
+        ["Yogurt (plain, low-fat)", "curated", "2 × container", 340, 214], // two pots shown as cups
+        ["Cereal (cornflakes)", "curated", "~45 g", 45, 164], // a bowl, never 375 g of water
+        ["Cereal (cornflakes)", "curated", "~90 g", 90, 329], // two bowls, never 750 g
+        ["Almonds", "curated", "1 × cup, whole", 143, 828], // their own cup, not 240 g
+        ["Rice (white, cooked)", "curated", "1 × cup", 158, 205], // its own cup, not 240 g
+        ["Dal (lentil curry)", "curated", "2 × cup", 480, 696], // two large bowls at 550 g
+        ["Rice (white, cooked)", "curated", "~300 g", 300, 390], // three servings in a bowl
+        ["Chicken nuggets", "curated", "6 × nugget", 96, 295], // six servings of nuggets are six nuggets
+        ["Beef stew", "curated", "2 × cup", 510, 546], // two bowls of stew chunks at 510 g
+        ["Ramen bowl", "curated", "~9800 g", 9800, 12446], // 25 bowls would weigh more than an item may
+        ["Pho (beef)", "curated", "1 × bowl", 400, 308], // a bowl 0.6 full is still its bowl
+        ["Smoothie (fruit)", "curated", "1 × glass", 324, 214],
       ],
     };
     const files = readdirSync(PLATES).filter((name) => name.endsWith(".json")).sort();
     const replyOf = (file: string): VisionEvidence => mealVisionEvidenceSchema.parse(JSON.parse(readFileSync(join(PLATES, file), "utf8")));
-    // An app of their own, over the same database and the same model replies: a store
-    // of its own, so the eight people scanning here count against no sign-in limit the
-    // tests above share (twenty requests an address).
+    // Apps of their own, over the same database and the same model replies: a store
+    // each, so the people scanning here count against no sign-in limit the tests
+    // above share (twenty requests an address) — Kd's eight on one, the review
+    // plates on the other.
     let platesApp: App | undefined;
-    const plates = (): App => { if (platesApp === undefined) throw new Error("beforeAll did not run"); return platesApp; };
+    let reviewApp: App | undefined;
+    const appFor = (file: string): App => {
+      const target = file.startsWith("review-") ? reviewApp : platesApp;
+      if (target === undefined) throw new Error("beforeAll did not run");
+      return target;
+    };
     beforeAll(async () => {
       platesApp = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } });
+      reviewApp = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } });
     }, 60_000);
     afterAll(async () => {
       if (platesApp !== undefined) await platesApp.close();
+      if (reviewApp !== undefined) await reviewApp.close();
     });
 
     it("are all here, each a reply the schema reads", () => {
@@ -396,9 +529,11 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     for (const [at, [file, rows]] of Object.entries(EXPECTED).entries()) {
       it(`${file}: every food the model saw is on the sheet, as pinned, and priced as the confirm will price it`, async () => {
         const evidence = replyOf(file);
-        const access = await sessionOn(plates(), `scan7b-plate-${String(at)}@example.com`);
-        const sheet = await scanOn(plates(), access, evidence);
-        expect(sheet.items.map((i): Row => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint, i.pieces])).toEqual(rows);
+        const target = appFor(file);
+        const access = await sessionOn(target, `scan7b-plate-${String(at)}@example.com`);
+        const sheet = await scanOn(target, access, evidence);
+        if (process.env["PRINT_PLATES"] === "1") console.log(`PLATE ${file} ${JSON.stringify(sheet.items.map((i): Row => [i.name, i.nutritionSource, startOf(i), i.gramsPoint, i.kcalPoint]))}`);
+        expect(sheet.items.map((i): Row => [i.name, i.nutritionSource, startOf(i), i.gramsPoint, i.kcalPoint])).toEqual(rows);
         // Nothing is dropped: every food the model listed is a row, and nothing is named as left out.
         expect(sheet.unknownItems).toEqual([]);
         expect(sheet.items).toHaveLength(evidence.items.length);
@@ -412,11 +547,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
             expect(row.per100g, row.name).toBeUndefined();
           }
         }
-        // The draft behind the sheet holds the same foods: priced at the sheet's grams, each row is what the sheet shows.
-        const res = await injectOn(plates(), "POST", "/v1/nutrition/meals/preview", access, { scanToken: sheet.scanToken, items: sheet.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) });
+        // The draft behind the sheet holds the same foods and the same measures: sent as
+        // the sheet sends each row, by the measure it starts at, each is what the sheet shows.
+        const res = await injectOn(target, "POST", "/v1/nutrition/meals/preview", access, { scanToken: sheet.scanToken, items: sheet.items.map((i) => ({ canonical: i.canonical, measure: i.startsAt.measure, amount: i.startsAt.amount })) });
         expect(res.statusCode, res.body).toBe(200);
         const preview = mealPreviewSchema.parse(res.json());
-        expect(preview.items.map((i) => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint])).toEqual(rows.map(([name, source, grams, kcal]) => [name, source, grams, kcal]));
+        expect(preview.items.map((i) => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint])).toEqual(rows.map(([name, source, , grams, kcal]) => [name, source, grams, kcal]));
       }, 60_000);
     }
   });

@@ -1,0 +1,23 @@
+{
+  "meal_name": "Vessel plate",
+  "items": [
+    ["Red wine","red wine","glass",0.4,null,1,150,128,0,4,0],
+    ["Coffee","coffee","cup",0.5,null,1,120,1,0,0,0],
+    ["Mugs of coffee","mugs of coffee","mug",null,null,2,650,7,1,0,0],
+    ["Beer","beer","mug",null,null,3,975,419,4,35,0],
+    ["Yogurt cups","yogurt cups","cup",null,null,2,340,214,18,24,5],
+    ["Cornflakes","cornflakes","bowl",0.8,null,1,45,164,3,36,1],
+    ["Bowls of cornflakes","cornflakes","bowl",null,null,2,90,329,6,72,1],
+    ["Cup of almonds","a cup of almonds","cup",1,null,1,143,828,30,31,71],
+    ["Cup of rice","a cup of rice","cup",1,null,1,158,205,4,45,0],
+    ["Large bowls of dal","large bowls of dal","large bowl",1,null,2,550,798,47,105,24],
+    ["Servings of rice","servings of rice","bowl",null,null,3,300,390,8,85,1],
+    ["Servings of chicken nuggets","servings of chicken nuggets","bowl",null,null,6,96,295,15,14,20],
+    ["Bowls of beef stew","bowls of beef stew chunks","bowl",null,null,2,510,546,45,32,26],
+    ["Ramen bowls","ramen bowl","bowl",null,null,25,9800,12446,699,1367,448],
+    ["Pho","pho","bowl",0.6,null,1,400,308,23,22,13],
+    ["Smoothie","smoothie","glass",0.8,null,1,324,214,8,39,4]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

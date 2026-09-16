@@ -26,9 +26,8 @@ import { refundQuota } from "../quotas/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedUsdaFdcId, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
-import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, startingMeasure } from "./measures.js";
+import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { VESSEL_CONTAINERS, resolvePortion, type PortionResult } from "./portion-priors.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
@@ -333,9 +332,10 @@ async function measuresOf(deps: Pick<NutritionDeps, "sql">, foods: readonly Food
 }
 
 /** A food's serving as its measures read it: a USDA table food's serving is one of
- *  its own USDA measures, never a measure of its own (`MeasureSource`). */
+ *  its own USDA measures, and a scan's estimate is served by the grams the photo
+ *  saw, which no measure names — neither is a measure of its own (`MeasureSource`). */
 const servingOfFood = (food: FoodReference): { serving: number; unit: string; ownServing: boolean } =>
-  ({ serving: food.serving, unit: food.unit, ownServing: food.source !== "usda" });
+  ({ serving: food.serving, unit: food.unit, ownServing: food.source !== "usda" && food.source !== "estimate" });
 
 /** The search box's foods, each with its measures and the one it starts at. */
 async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<FoodSearchItem[]> {
@@ -541,20 +541,13 @@ async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<voi
 
 // ── Stage 1+2: analyze ───────────────────────────────────────────────────────
 
-/** The grams the model saw, and its count of whole pieces where it gave one,
- *  which the sheet's stepper steps by. */
-const seenPortion = (grams: number, count: number | null): PortionResult =>
-  ({ gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", pieces: count });
-
-/** One of the food's own serving, uncounted. */
-const servingOnce = (food: FoodReference): PortionResult =>
-  ({ gramsPoint: food.serving, gramsRange: [food.serving, food.serving], portionSource: "default", pieces: null });
-
 /** The photo sheet for what the model saw, once each food is priced (`prices[i]`
  *  is `evidence.items[i]`'s): every food on it, by a table or by its estimate
- *  (ROADMAP 7a-iii-b); the foods and portions the draft keeps for the confirm;
- *  and what stays out of the total. Pure, so the eight plates can be run through
- *  it (test/fixtures/plates).
+ *  (ROADMAP 7a-iii-b), each with its own measures (`measuresFor`) and where its row
+ *  starts (`scanStart`, ROADMAP 7a-iv-b) — the same for every food, whichever table
+ *  prices it; the foods and portions the draft keeps for the confirm; and what
+ *  stays out of the total. Pure, so the plates can be run through it
+ *  (test/fixtures/plates).
  *
  *  Honest unknown (§3.5): what the model could not identify, and a food nothing
  *  prices that the model gave no usable number for, stay out of the totals and
@@ -564,6 +557,7 @@ const servingOnce = (food: FoodReference): PortionResult =>
 export function scanSheet(
   evidence: VisionEvidence,
   prices: readonly ScanPrice[],
+  measuresFor: (food: FoodReference) => readonly FoodMeasure[],
 ): { foods: FoodReference[]; draftItems: Draft["items"]; items: MealPhotoItem[]; unknownItems: string[] } {
   const foods: FoodReference[] = [];
   const draftItems: Draft["items"] = [];
@@ -581,45 +575,34 @@ export function scanSheet(
       nameUnknown(shownFoodName(item));
       continue;
     }
-    let food: FoodReference;
-    let portion: PortionResult;
-    if (price.kind === "estimate") {
-      food = estimateFood(shownFoodName(item), price.per100g, price.grams, taken);
-      portion = seenPortion(price.grams, item.count);
-    } else if (price.food.source === "usda") {
-      // A USDA food is served as an estimate is, by the grams the model saw. Its
-      // serving is USDA's first household measure ("1 cup, 230 g"), which the rules
-      // below were written without: they read a count of two pumpkin pieces as two
-      // cups, 460 g where the model saw 60. Where the model gave no grams, USDA's
-      // serving once. 7a-iv weighs every food by its USDA piece and cup weights.
-      food = price.food;
-      portion = item.grams === null ? servingOnce(food) : seenPortion(item.grams, item.count);
-    } else {
-      food = price.food;
-      // Our list's foods and packaged products keep the rule they were scanned by
-      // before 7a-iii-b, until 7a-iv-b (Kd, RULINGS 2026-09-16) — with no saved
-      // dish: a dish is never chosen for the person, only picked by them as a
-      // measure (RULINGS 2026-07-18, and the portion redesign of 2026-09-16).
-      portion = resolvePortion(
-        {
-          canonicalHint: item.canonical_hint,
-          container: item.vessel === null ? null : VESSEL_CONTAINERS[item.vessel],
-          fillLevel: item.fill_level,
-          sizeClass: item.size_class,
-          count: item.count,
-        },
-        [],
-        { grams: food.serving, unit: food.unit },
-      );
-    }
+    const food = price.kind === "estimate" ? estimateFood(shownFoodName(item), price.per100g, price.grams, taken) : price.food;
+    // Its measures: an estimate has only grams and ounces. A saved dish is never
+    // one of them here — a dish is picked by the person, never for them (RULINGS
+    // 2026-07-18).
+    const measures = [...measuresFor(food)];
+    const start = scanStart(servingOfFood(food), measures, item.count, price.kind === "estimate" ? price.grams : item.grams);
+    const grams: [number, number] = [start.grams, start.grams];
     taken.add(food.canonical);
     foods.push(food);
-    // The stored draft keeps its strict shape: the count of pieces is only the
-    // sheet's, for its stepper.
-    draftItems.push({ canonical: food.canonical, gramsPoint: portion.gramsPoint, gramsRange: portion.gramsRange, portionSource: portion.portionSource });
-    items.push({ ...nutritionItem(food, portion.gramsPoint, portion.gramsRange, portion.portionSource), pieces: portion.pieces });
+    draftItems.push({ canonical: food.canonical, gramsPoint: start.grams, gramsRange: grams, portionSource: "default" });
+    items.push({
+      ...nutritionItem(food, start.grams, grams, "default"),
+      measures,
+      startsAt: { measure: start.measure, amount: start.amount },
+      portionEstimated: start.estimated,
+    });
   }
   return { foods, draftItems, items, unknownItems };
+}
+
+/** Every priced food's measures, with ONE read of the USDA measures they share:
+ *  a table food's are its own (`measuresOf`), and an estimate's, which no table
+ *  holds, only grams and ounces. */
+async function scanMeasures(deps: NutritionDeps, prices: readonly ScanPrice[]): Promise<(food: FoodReference) => readonly FoodMeasure[]> {
+  const tableFoods = prices.flatMap((price) => (price.kind === "table" ? [price.food] : []));
+  const measures = await measuresOf(deps, tableFoods);
+  const byCanonical = new Map(tableFoods.map((food, at) => [food.canonical, measures[at] ?? []]));
+  return (food) => byCanonical.get(food.canonical) ?? foodMeasures({ ...servingOfFood(food), portions: [] });
 }
 
 export interface ScanDraftResponse {
@@ -726,12 +709,12 @@ async function readMealPhoto(
     throw new ScanFailedError(rt, "Please retake the photo in better light with the full plate visible.");
   }
 
-  // Stage 2: price each identified food, then resolve its portion. Each food is
-  // priced on its own, so they are asked together: a plate of unlisted foods waits
-  // for its slowest packaged-product search, not their sum.
+  // Stage 2: price each identified food, then start its row at one of its own
+  // measures. Each food is priced on its own, so they are asked together: a plate
+  // of unlisted foods waits for its slowest packaged-product search, not their sum.
   const lookups = scanLookups(deps);
   const prices = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
-  const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices);
+  const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices, await scanMeasures(deps, prices));
 
   const scanToken = token();
   // A good photo the model did not name is "Meal", as a renamed-to-nothing
