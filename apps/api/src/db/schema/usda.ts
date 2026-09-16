@@ -8,7 +8,7 @@
 import { sql } from "drizzle-orm";
 import { check, customType, doublePrecision, index, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 
-/** Postgres' full-text type. The column is GENERATED from `description`, so it
+/** Postgres' full-text type. The column is GENERATED from `search_text`, so it
  *  can never drift from the words it indexes, and nothing writes it by hand. */
 const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => "tsvector",
@@ -22,6 +22,10 @@ export const usdaFoods = pgTable(
     fdcId: integer("fdc_id").primaryKey(),
     release: text("release").notNull(), // sr_legacy | fndds
     description: text("description").notNull(),
+    /** The description as the search reads it, accents folded and in lower case
+     *  (`usdaSearchText`, which reads a typed query too). The index is built
+     *  from this, never from `description`. */
+    searchText: text("search_text").notNull(),
     /** The description's first word, for 7a-iii-b's matching rung. */
     firstWord: text("first_word").notNull(),
     /** How many words the description has — the search shows the fewest first. */
@@ -49,7 +53,7 @@ export const usdaFoods = pgTable(
      *  never null, because the food search's contract gives every food one. */
     servingGrams: doublePrecision("serving_grams").notNull(),
     servingUnit: text("serving_unit").notNull(),
-    search: tsvector("search").generatedAlwaysAs(sql`to_tsvector('english', "description")`),
+    search: tsvector("search").generatedAlwaysAs(sql`to_tsvector('english', "search_text")`),
   },
   (t) => [
     check("usda_foods_release_check", sql`${t.release} IN ('sr_legacy', 'fndds')`),

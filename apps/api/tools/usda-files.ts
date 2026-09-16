@@ -6,7 +6,7 @@
 // The data is public domain, CC0 1.0 (RULINGS 2026-09-16): no fee, no API key,
 // two files downloaded once and cached.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -19,14 +19,17 @@ export const fail = (message: string): never => {
  *  FDC id (1008 energy); the survey release reuses the same column for the
  *  nutrient NUMBER (208 energy), which is why each figure carries both.
  *
- *  `sha256` is the published file's own digest, measured 2026-09-16 on the two
- *  downloads this card was built from. It is checked on every read, download or
- *  cache alike: the cache is a folder in the machine's shared temp directory and
- *  `import-usda.ts` is a tool an operator points at PRODUCTION, so bytes nobody
- *  vouched for must never become 13,225 food rows. A release that fails it stops
- *  the run with the file's name — USDA publishes a dated file and does not
- *  rewrite it, so a mismatch is a damaged download, a tampered cache, or a new
- *  release that a card must adopt on purpose. */
+ *  `sha256` is the digest this tool was built against: measured 2026-09-16 on the
+ *  two files as downloaded that day. It is NOT a checksum USDA publishes — its
+ *  download page shows none (read 2026-09-16) — so it pins these tools to the
+ *  bytes they were built and tested on, which is a weaker promise than a
+ *  publisher's signature and is written as one. It is checked on every read,
+ *  download or cache alike: the cache is a folder in the machine's shared temp
+ *  directory and `import-usda.ts` is a tool an operator points at PRODUCTION, so
+ *  bytes nobody vouched for must never become 13,225 food rows. A release that
+ *  fails it stops the run with the file's name — USDA publishes a dated file and
+ *  does not rewrite it, so a mismatch is a damaged download, a tampered cache, or
+ *  a new release that a card must adopt on purpose. */
 export const USDA_RELEASES = {
   sr_legacy: {
     url: "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip",
@@ -92,29 +95,37 @@ export const defaultCache = (): string => join(tmpdir(), "ai-home-gym-food-table
 
 /** Downloaded once into `cache` and read. `sha256`, where a caller has one, is
  *  checked on EVERY read — a file already in the cache is bytes from a shared
- *  temp folder that nothing has vouched for since. */
+ *  temp folder that nothing has vouched for since — and a download is checked
+ *  BEFORE it reaches the cache, so a damaged one never sits there failing every
+ *  later run. It is written under a temporary name and renamed once whole, so a
+ *  run killed mid-write leaves no half file under the release's name either. */
 export async function download(url: string, file: string, cache: string, sha256?: string): Promise<Buffer> {
   mkdirSync(cache, { recursive: true });
   const path = join(cache, file);
-  if (!existsSync(path)) {
-    console.log(`downloading ${url}`);
-    const response = await fetch(url);
-    if (!response.ok) fail(`download failed (${String(response.status)}): ${url}`);
-    writeFileSync(path, Buffer.from(await response.arrayBuffer()));
+  if (existsSync(path)) {
+    return checked(readFileSync(path), file, sha256, `at ${path}\nDelete it to download the release again.`);
   }
-  const bytes = readFileSync(path);
-  if (sha256 !== undefined) {
-    const got = createHash("sha256").update(bytes).digest("hex");
-    if (got !== sha256) {
-      fail(
-        `${file} is not the file this tool expects.\n` +
-          `  expected sha256 ${sha256}\n  found    sha256 ${got}\n` +
-          `  at ${path}\n` +
-          "Delete it to download the release again. If USDA has published a new one, a card adopts it on purpose.",
-      );
-    }
-  }
+  console.log(`downloading ${url}`);
+  const response = await fetch(url);
+  if (!response.ok) fail(`download failed (${String(response.status)}): ${url}`);
+  const bytes = checked(Buffer.from(await response.arrayBuffer()), file, sha256, `downloaded from ${url}\nNothing was cached.`);
+  const partial = `${path}.partial`;
+  writeFileSync(partial, bytes);
+  renameSync(partial, path);
   return bytes;
+}
+
+/** `bytes`, when they are the file `sha256` names or there is no digest to check. */
+function checked(bytes: Buffer, file: string, sha256: string | undefined, where: string): Buffer {
+  if (sha256 === undefined) return bytes;
+  const got = createHash("sha256").update(bytes).digest("hex");
+  if (got === sha256) return bytes;
+  return fail(
+    `${file} is not the file this tool expects.\n` +
+      `  expected sha256 ${sha256}\n  found    sha256 ${got}\n` +
+      `  ${where}\n` +
+      "If USDA has published a new release, a card adopts it on purpose.",
+  );
 }
 
 /** The files of a zip archive whose names pass `wanted`, inflated. It reads the
@@ -195,6 +206,11 @@ const figure = (raw: string | undefined): number | null => {
  *  never a household measure anyone can picture. */
 const NOT_A_MEASURE = /^(quantity not specified|not specified)$/i;
 
+/** A household measure is named in words. A name with no letter in it ("1", ",")
+ *  names nothing a person could picture, and would read as nothing once its
+ *  dangling punctuation goes. Neither release has one (counted 2026-09-16). */
+const NAMES_SOMETHING = /\p{L}/u;
+
 /** One release, by FDC id, with every figure of `USDA_NUTRIENTS` and every
  *  household measure that names a real amount. Both `food_nutrient.csv` files
  *  key the nutrient in the same column; the release decides how it is numbered. */
@@ -262,7 +278,7 @@ export function usdaTableFromCsv(csv: UsdaCsv, release: UsdaRelease): Map<number
     // `portion_description` and puts a survey code in `modifier`.
     const unit = ((release === "fndds" ? description : modifier) ?? "").trim();
     if (entry === undefined || grams === null || grams <= 0 || !Number.isInteger(seqNum)) continue;
-    if (unit === "" || NOT_A_MEASURE.test(unit)) continue;
+    if (!NAMES_SOMETHING.test(unit) || NOT_A_MEASURE.test(unit)) continue;
     entry.portions.push({ seqNum, amount: figure(amount), unit, gramWeight: grams });
   }
   // The survey release does not write its portions in `seq_num` order (fdc
@@ -284,17 +300,19 @@ const LEADING_AMOUNT = /^(\d*\.?\d+|\d+\/\d+)\s+(\S.*)$/;
  *  column ("3 oz with bone, cooked (yield after bone and fat removed)"), and a
  *  blind cut at forty left 110 of the table's 129 longest names ending mid-word
  *  — "3 oz with bone, cooked (yield after bone" — and 19 ending in a space
- *  (counted 2026-09-16 on the loaded table). A dangling comma or bracket goes
- *  with the cut, so what is left reads as words. */
+ *  (counted 2026-09-16 on the loaded table). A dangling comma or bracket goes,
+ *  from a short name as from a cut one, so what is left reads as words: SR
+ *  Legacy's own "cup," (fdc 175258) is a cup. */
 const MEASURE_NAME_MAX = 40;
+const DANGLING = /[\s,;:([{-]+$/u;
 const readable = (name: string): string => {
-  const trimmed = name.trim();
-  if (trimmed.length <= MEASURE_NAME_MAX) return trimmed;
-  const cut = trimmed.slice(0, MEASURE_NAME_MAX);
+  const whole = name.trim().replace(DANGLING, "");
+  if (whole.length <= MEASURE_NAME_MAX) return whole;
+  const cut = whole.slice(0, MEASURE_NAME_MAX);
   const lastSpace = cut.lastIndexOf(" ");
   // One word longer than the whole allowance has no space to cut at; it is cut
   // where it must be rather than left to overflow the screen.
-  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:([{-]+$/u, "");
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(DANGLING, "");
 };
 
 /** What one of this measure is called, by the same rule the packaged-product

@@ -7,9 +7,10 @@
 // means a second run reports nothing changed and leaves no dead tuples behind.
 // That is what makes the tool safe to re-run against any environment.
 import type { Sql, TransactionSql } from "postgres";
-// The word rule the SEARCH BOX folds a typed query with, so `first_word` and
-// `word_count` are stored in exactly the shape the search looks them up in.
-import { usdaWords } from "../src/modules/nutrition/usdaWords.js";
+// The rule the SEARCH BOX reads a typed query with, so `search_text`,
+// `first_word` and `word_count` are stored in exactly the shape the search looks
+// them up in.
+import { usdaSearchText, usdaWords } from "../src/modules/nutrition/usdaWords.js";
 import { usdaServing, USDA_NUTRIENTS, type UsdaEntry, type UsdaRelease } from "./usda-files.js";
 
 /** The seventeen nutrient columns, per 100 g, null where the release has no
@@ -20,6 +21,7 @@ export type UsdaFoodRow = UsdaFigures & {
   fdc_id: number;
   release: UsdaRelease;
   description: string;
+  search_text: string;
   first_word: string;
   word_count: number;
   serving_grams: number;
@@ -38,6 +40,7 @@ const FOOD_COLUMNS: (keyof UsdaFoodRow)[] = [
   "fdc_id",
   "release",
   "description",
+  "search_text",
   "first_word",
   "word_count",
   ...USDA_NUTRIENTS.map((n) => n.column),
@@ -83,6 +86,7 @@ export function usdaFoodRow(release: UsdaRelease, entry: UsdaEntry): UsdaFoodRow
     fdc_id: entry.fdcId,
     release,
     description: entry.description,
+    search_text: usdaSearchText(entry.description),
     first_word: firstWord,
     word_count: words.length,
     serving_grams: serving.grams,
@@ -99,8 +103,8 @@ export const usdaPortionRows = (entry: UsdaEntry): UsdaPortionRow[] =>
     gram_weight: p.gramWeight,
   }));
 
-// Postgres takes at most 65,535 parameters in one statement: 24 columns × 1,000
-// foods is 24,000, and 5 × 2,000 is 10,000.
+// Postgres takes at most 65,535 parameters in one statement: 25 columns × 1,000
+// foods is 25,000, and 5 × 2,000 is 10,000.
 const FOOD_CHUNK = 1000;
 const PORTION_CHUNK = 2000;
 
@@ -119,6 +123,7 @@ export async function upsertUsdaFoods(sql: TransactionSql, rows: readonly UsdaFo
       ON CONFLICT (fdc_id) DO UPDATE SET
         release = excluded.release,
         description = excluded.description,
+        search_text = excluded.search_text,
         first_word = excluded.first_word,
         word_count = excluded.word_count,
         kcal = excluded.kcal,
@@ -141,14 +146,14 @@ export async function upsertUsdaFoods(sql: TransactionSql, rows: readonly UsdaFo
         serving_grams = excluded.serving_grams,
         serving_unit = excluded.serving_unit
       WHERE (
-        usda_foods.release, usda_foods.description, usda_foods.first_word, usda_foods.word_count,
+        usda_foods.release, usda_foods.description, usda_foods.search_text, usda_foods.first_word, usda_foods.word_count,
         usda_foods.kcal, usda_foods.protein_g, usda_foods.carbs_g, usda_foods.fat_g, usda_foods.fiber_g,
         usda_foods.sugars_g, usda_foods.sat_fat_g, usda_foods.mono_fat_g, usda_foods.poly_fat_g,
         usda_foods.cholesterol_mg, usda_foods.sodium_mg, usda_foods.potassium_mg, usda_foods.calcium_mg,
         usda_foods.iron_mg, usda_foods.magnesium_mg, usda_foods.vitamin_d_ug, usda_foods.vitamin_c_mg,
         usda_foods.serving_grams, usda_foods.serving_unit
       ) IS DISTINCT FROM (
-        excluded.release, excluded.description, excluded.first_word, excluded.word_count,
+        excluded.release, excluded.description, excluded.search_text, excluded.first_word, excluded.word_count,
         excluded.kcal, excluded.protein_g, excluded.carbs_g, excluded.fat_g, excluded.fiber_g,
         excluded.sugars_g, excluded.sat_fat_g, excluded.mono_fat_g, excluded.poly_fat_g,
         excluded.cholesterol_mg, excluded.sodium_mg, excluded.potassium_mg, excluded.calcium_mg,

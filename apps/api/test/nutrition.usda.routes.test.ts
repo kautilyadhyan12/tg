@@ -50,14 +50,24 @@ const fixture = (fdcId: number, description: string): UsdaEntry => {
 };
 
 /** A packaged-product provider that says which queries reached it — a usda_*
- *  canonical must never be one of them. */
+ *  canonical must never be one of them — and has as many products as it is
+ *  asked for, so the room it is given is what the page shows. */
 function recordingOff(): FoodSearchProvider & { asked: string[] } {
-  const product: FoodReference = {
-    canonical: "off_zqxroute", name: "Zqxroute bottled coffee", kcal: 44, proteinG: 1, carbsG: 8,
+  const product = (at: number): FoodReference => ({
+    canonical: `off_zqxroute_${String(at)}`, name: `Zqxroute bottled coffee ${String(at)}`, kcal: 44, proteinG: 1, carbsG: 8,
     fatG: 1, fiberG: 0, serving: 250, unit: "bottle", source: "openfoodfacts",
+  });
+  return {
+    asked: [],
+    search(query, limit) {
+      this.asked.push(query);
+      return Promise.resolve(Array.from({ length: limit }, (_, at) => product(at)));
+    },
   };
-  return { asked: [], search(query) { this.asked.push(query); return Promise.resolve([product]); } };
 }
+
+/** More USDA foods for one word than the web's box of 15 holds. */
+const RESERVE_FIXTURES = 16;
 
 d("a USDA food through the food routes (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
@@ -96,6 +106,7 @@ d("a USDA food through the food routes (real Postgres)", () => {
           // "paneer" is on the curated list too, which is how the order test
           // reaches the USDA rung with a word a person would really type.
           fixture(90_000_202, "Paneer, zqxroute style"),
+          ...Array.from({ length: RESERVE_FIXTURES }, (_, at) => fixture(90_000_210 + at, `Zqxreserve food ${String(at)}`)),
         ],
       ],
     ]);
@@ -160,14 +171,24 @@ d("a USDA food through the food routes (real Postgres)", () => {
     expect(inOrder(sources), sources.join(" ")).toBe(true);
   });
 
-  it("still shows a packaged product when USDA has enough foods to fill the page", async () => {
-    // Two fixtures answer "zqxroute" and the page holds two: USDA can fill it
-    // on its own, and did, which left a real search for "milk" or "peanut
-    // butter" with no jar at all. The last places are held for one.
-    const sources = await sourcesFor("zqxroute", 2);
-    expect(sources).toEqual(["usda", "openfoodfacts"]);
-    // But it never takes the LAST place USDA has: one place is one USDA food.
-    expect(await sourcesFor("zqxroute", 1)).toEqual(["usda"]);
+  it("holds three places of the web's box of 15 for packaged products when USDA could fill it", async () => {
+    // Sixteen fixtures answer "zqxreserve", so USDA alone could fill the box the
+    // web asks for — as a real "milk" or "peanut butter" did, leaving no jar at
+    // all. The last three places go to packaged products.
+    const usda = (n: number) => Array.from({ length: n }, () => "usda");
+    const packaged = (n: number) => Array.from({ length: n }, () => "openfoodfacts");
+    expect(await sourcesFor("zqxreserve", 15)).toEqual([...usda(12), ...packaged(3)]);
+    expect(await sourcesFor("zqxreserve", 6)).toEqual([...usda(3), ...packaged(3)]);
+  });
+
+  it("never gives packaged products more of a small box than USDA keeps", async () => {
+    // At most half of the places left: four read two and two, not one and three.
+    expect(await sourcesFor("zqxreserve", 5)).toEqual(["usda", "usda", "usda", "openfoodfacts", "openfoodfacts"]);
+    expect(await sourcesFor("zqxreserve", 4)).toEqual(["usda", "usda", "openfoodfacts", "openfoodfacts"]);
+    expect(await sourcesFor("zqxreserve", 3)).toEqual(["usda", "usda", "openfoodfacts"]);
+    expect(await sourcesFor("zqxreserve", 2)).toEqual(["usda", "openfoodfacts"]);
+    // And a single place is USDA's.
+    expect(await sourcesFor("zqxreserve", 1)).toEqual(["usda"]);
   });
 
   it("saves it by grams with the table's numbers scaled, and nothing else's", async () => {

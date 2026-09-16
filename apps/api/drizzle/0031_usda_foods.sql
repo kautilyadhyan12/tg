@@ -41,14 +41,24 @@
 -- by the importer, so the rule that makes them is a pure function with a table
 -- test rather than SQL nobody can test.
 --
--- `search` IS A GENERATED COLUMN, so it can never drift from the description it
--- indexes. `to_tsvector(regconfig, text)` is immutable, which is what a STORED
--- generated column requires; the one-argument form is not, and would be
+-- `search_text` is the description as the search reads it: accents folded, in
+-- lower case. The importer writes it with the same function the search box reads
+-- a typed query with (`src/modules/nutrition/usdaWords.ts`), so the two sides
+-- always fold alike — "jalapeño" typed finds USDA's "Jalapeno", and a release
+-- that spells "Crème fraîche" is found by "creme fraiche". Postgres folds an
+-- accent only through the `unaccent` extension, a new dependency whose function
+-- is not immutable and so cannot build a generated column; one TypeScript rule
+-- with a table test does it instead, as it does `first_word` and `word_count`.
+--
+-- `search` IS A GENERATED COLUMN over `search_text`, so it can never drift from
+-- the text it indexes. `to_tsvector(regconfig, text)` is immutable, which is what
+-- a STORED generated column requires; the one-argument form is not, and would be
 -- rejected here.
 CREATE TABLE "usda_foods" (
 	"fdc_id" integer PRIMARY KEY NOT NULL,
 	"release" text NOT NULL,
 	"description" text NOT NULL,
+	"search_text" text NOT NULL,
 	"first_word" text NOT NULL,
 	"word_count" integer NOT NULL,
 	"kcal" double precision,
@@ -70,7 +80,7 @@ CREATE TABLE "usda_foods" (
 	"vitamin_c_mg" double precision,
 	"serving_grams" double precision NOT NULL,
 	"serving_unit" text NOT NULL,
-	"search" tsvector GENERATED ALWAYS AS (to_tsvector('english', "description")) STORED,
+	"search" tsvector GENERATED ALWAYS AS (to_tsvector('english', "search_text")) STORED,
 	CONSTRAINT "usda_foods_release_check" CHECK ("release" IN ('sr_legacy', 'fndds')),
 	CONSTRAINT "usda_foods_word_count_check" CHECK ("word_count" > 0),
 	CONSTRAINT "usda_foods_serving_grams_check" CHECK ("serving_grams" > 0)

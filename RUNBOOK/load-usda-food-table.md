@@ -39,11 +39,16 @@ Add `--cache=<dir>` to keep the two zips somewhere other than the system temp
 folder. A re-run on a warm cache with nothing to change took 9.7 s (measured
 2026-09-16); a first load also writes 44,394 rows.
 
-**If it stops on a digest.** Each release is checked against its published
-SHA-256 on every run, cache included, and a mismatch stops the run before a
-single row is written. Delete the named file from the cache folder and run it
-again; if USDA has published a newer release, adopting it is a card of its own,
-not something to work around here.
+**If it stops on a digest.** Each release is checked against the SHA-256 this
+tool was built against — measured on the two files as downloaded on 2026-09-16
+and written into `apps/api/tools/usda-files.ts`. USDA publishes no checksum of
+its own (its download page shows none, read 2026-09-16), so this proves the
+files are the ones the tool was built and tested on, not that USDA signed them.
+The check runs on every run, cache included, and a mismatch stops the run before
+a single row is written. A download that fails it is never written to the cache,
+so running again downloads afresh. A cached file that fails it: delete the named
+file from the cache folder and run again. If USDA has published a newer release,
+adopting it is a card of its own, not something to work around here.
 
 **Verify recovered.** The tool prints its own counts; they should read:
 

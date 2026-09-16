@@ -281,9 +281,12 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  held back from a brand: a query USDA cannot answer ("yakult" 0 rows, "oreo"
  *  2, "nutella" 2) still gives the whole page to packaged products.
  *
- *  The reserve never takes the LAST place USDA has. Where the curated list has
- *  nearly filled the box ("bread" leaves two places), one goes to USDA and one
- *  to a jar; a rung is held open, never closed. */
+ *  The reserve is never more of the box than USDA keeps: at most half of the
+ *  places left, so a rung below never outnumbers the one above it when both
+ *  could fill the box. Four places left read two USDA foods and two jars, not
+ *  one and three; where the curated list has nearly filled the box ("bread"
+ *  leaves two places), one goes to USDA and one to a jar; and a single place is
+ *  USDA's. */
 const PACKAGED_RESERVE = 3;
 
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
@@ -292,8 +295,8 @@ export async function searchFoods(deps: NutritionDeps, query: string, limit: num
   const room = limit - local.length;
   const usda = (await repo.searchUsdaFoods(deps.sql, query, room)).map(asUsdaReference);
   // What USDA leaves, or the reserve, whichever is larger. The reserve itself is
-  // never the whole of what is left.
-  const reserve = Math.min(PACKAGED_RESERVE, Math.max(0, room - 1));
+  // never more than half of what is left.
+  const reserve = Math.min(PACKAGED_RESERVE, Math.floor(room / 2));
   const packagedRoom = Math.max(room - usda.length, reserve);
   const external = packagedRoom > 0 ? await cachedExternal(deps, query, packagedRoom) : [];
   const usdaKeeps = Math.max(0, room - external.length);

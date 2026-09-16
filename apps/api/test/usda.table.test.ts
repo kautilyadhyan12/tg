@@ -69,15 +69,22 @@ d("the USDA food table (real Postgres)", () => {
     [90_000_006, "fndds", "Zqxfixture, cappuccino, noprotein", 40, ["proteinG"]],
     [90_000_007, "fndds", "Zqxfixture, cappuccino, nocarbs", 41, ["carbsG"]],
     [90_000_008, "fndds", "Zqxfixture, cappuccino, nofat", 42, ["fatG"]],
-    // The plain food and the dishes made from it, for the search's order.
+    // The plain food and the dishes made from it, for the search's order. The
+    // muffin holds the lowest id and the fewest words, so it is the row that
+    // rises wherever one of the three head steps goes missing.
+    [90_000_010, "fndds", "Muffin, zqxplain", 53],
     [90_000_011, "fndds", "Zqxplain split", 51],
     [90_000_012, "fndds", "Zqxplain, cooked", 52],
-    [90_000_013, "fndds", "Muffin, zqxplain", 53],
+    [90_000_013, "fndds", "Zqxplain, muffin mix", 57],
     // Ten words, for the cap on how many of them reach the index.
     [90_000_014, "fndds", "Zqxlong alpha beta gamma delta epsilon zeta eta theta iota", 54],
-    // An accent the release spells, and a decimal in a name.
+    // An accent the release spells, one it does not, and a decimal in a name.
     [90_000_015, "fndds", "Zqxcrème brûlée", 55],
     [90_000_016, "fndds", "Zqxdecimal, 3.25% milkfat", 56],
+    [90_000_017, "fndds", "Zqxjalapeno, raw", 58],
+    // An accented head, for the order steps reading the folded name.
+    [90_000_018, "fndds", "Zqxpâté spread", 59],
+    [90_000_019, "fndds", "Zqxpâté, liver", 60],
   ];
 
   const load = async (): Promise<void> => {
@@ -156,17 +163,25 @@ d("the USDA food table (real Postgres)", () => {
       expect(await found("   ")).toEqual([]);
       expect(usdaTsQuery("of a the")).toBe("of & a & the:*");
       expect(usdaTsQuery("!!!")).toBeNull();
-      expect(usdaSearchWords("Crème Brûlée & cake")).toEqual(["crème", "brûlée", "cake"]);
+      expect(usdaSearchWords("Crème Brûlée & cake")).toEqual(["creme", "brulee", "cake"]);
     });
 
-    it("puts the food itself above the dishes made from it", async () => {
+    it("puts the food itself above the dishes made from it, each of the three steps on its own", async () => {
       // USDA names a food "head, then qualifiers": "Zqxplain, cooked" is the
-      // food, "Zqxplain split" is a dish that starts with its name, "Muffin,
-      // zqxplain" is a muffin. All three are two words in the same release, so
-      // without the head rule USDA's own id decides and the muffin can lead.
-      expect(await found("zqxplain")).toEqual([90_000_012, 90_000_011, 90_000_013]);
-      // Half-typed, the two that START with what is typed still lead.
-      expect(await found("zqxpl")).toEqual([90_000_011, 90_000_012, 90_000_013]);
+      // food, "Zqxplain split" a dish that starts with its name, "Muffin,
+      // zqxplain" a muffin. All are in one release, so without the head steps
+      // the fewest words and then USDA's own id decide, and each line below
+      // changes if its step is taken out.
+      //
+      // Step 1, the head IS what was typed. Without it "Zqxplain split" (as few
+      // words, a lower id) leads.
+      expect(await found("zqxplain")).toEqual([90_000_012, 90_000_013, 90_000_011, 90_000_010]);
+      // Step 2, the description STARTS with what was typed, half-typed as it is.
+      // Without it nothing separates the four, and the muffin leads.
+      expect(await found("zqxpl")).toEqual([90_000_011, 90_000_012, 90_000_013, 90_000_010]);
+      // Step 3, its first word is the first word typed, where USDA puts a comma
+      // between the words typed. Without it the muffin, a word shorter, leads.
+      expect(await found("zqxplain muffin")).toEqual([90_000_013, 90_000_010]);
       // Typed in full, a two-word head is the food itself.
       expect(await found("zqxplain split")).toEqual([90_000_011]);
     });
@@ -188,11 +203,23 @@ d("the USDA food table (real Postgres)", () => {
       expect(usdaSearchWords(`${ten} zqxnotaword`)).toHaveLength(10);
     });
 
-    it("finds a name the release spells with an accent, and a number with a decimal point in it", async () => {
-      // Postgres indexes 'zqxcrème', not 'zqxcreme': a query folded to plain
-      // letters would match nothing here, so the fold is not done.
+    it("folds accents on both sides, so neither USDA's spelling nor the person's hides a food", async () => {
+      // What the release holds today: spelt plain, typed accented on a phone.
+      expect(await found("zqxjalapeño")).toEqual([90_000_017]);
+      expect(await found("zqxjalapeno")).toEqual([90_000_017]);
+      // What a later release could hold: spelt with its accents, typed plain,
+      // typed as spelt, or in capitals.
+      expect(await found("zqxcreme brulee")).toEqual([90_000_015]);
       expect(await found("zqxcrème brûlée")).toEqual([90_000_015]);
-      // And "3.25%" is one lexeme, 3.25 — typing the description back word for
+      expect(await found("ZQXCRÈME BRÛLÉE")).toEqual([90_000_015]);
+      // The head steps read the folded name as well: typed either way, the pâté
+      // itself ranks above the spread, whose id is lower.
+      expect(await found("zqxpate")).toEqual([90_000_019, 90_000_018]);
+      expect(await found("zqxpâté")).toEqual([90_000_019, 90_000_018]);
+    });
+
+    it("finds a number with a decimal point in it", async () => {
+      // "3.25%" is one lexeme, 3.25 — typing the description back word for
       // word has to find it.
       expect(await found("Zqxdecimal, 3.25% milkfat")).toEqual([90_000_016]);
       expect(await found("zqxdecimal 3.25")).toEqual([90_000_016]);
@@ -261,9 +288,10 @@ d("the USDA food table (real Postgres)", () => {
     it("writes exactly the row that differs, and nothing beside it", async () => {
       const changedRun = await importUsda(sql, [["fndds", [entry(90_000_001, "Zqxfixture, cappuccino, extra hot", 27, [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 240 }])]]]);
       expect(changedRun.changed).toBe(1);
-      const [row] = await sql<{ description: string; word_count: number; first_word: string }[]>`
-        SELECT description, word_count, first_word FROM usda_foods WHERE fdc_id = ${90_000_001}`;
+      const [row] = await sql<{ description: string; search_text: string; word_count: number; first_word: string }[]>`
+        SELECT description, search_text, word_count, first_word FROM usda_foods WHERE fdc_id = ${90_000_001}`;
       expect(row?.description).toBe("Zqxfixture, cappuccino, extra hot");
+      expect(row?.search_text).toBe("zqxfixture, cappuccino, extra hot");
       expect(row?.word_count).toBe(4);
       expect(row?.first_word).toBe("zqxfixture");
       // The generated search column follows the description it indexes.

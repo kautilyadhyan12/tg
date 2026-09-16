@@ -1,9 +1,9 @@
 // ROADMAP 7a-iii-a — the USDA release readers and the row a food becomes, on a
 // few lines of CSV rather than the 40 MB archives. No network, no database.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   download,
   usdaMeasureName,
@@ -13,7 +13,7 @@ import {
   type UsdaPortion,
 } from "../tools/usda-files.js";
 import { databaseUrlFrom } from "../tools/import-usda-args.js";
-import { usdaWords } from "../src/modules/nutrition/usdaWords.js";
+import { usdaSearchText, usdaWords } from "../src/modules/nutrition/usdaWords.js";
 import { usdaFoodRow } from "../tools/usda-table.js";
 
 const FOOD_HEADER = `"fdc_id","data_type","description","food_category_id","publication_date"`;
@@ -142,6 +142,22 @@ describe("reading a release's CSVs", () => {
     );
     expect(table.get(2705504)?.portions).toEqual([{ seqNum: 2, amount: null, unit: "1 cup", gramWeight: 224 }]);
   });
+
+  it("a measure whose name holds no letter is dropped, since it would read as nothing", () => {
+    const table = usdaTableFromCsv(
+      csv(
+        [`"167512","sr_legacy_food","Test food","18","2019-04-01"`],
+        [],
+        [
+          `"1","167512","1","1","9999","",",","30","","",""`,
+          `"2","167512","2","1","9999","","12","40","","",""`,
+          `"3","167512","3","1","9999","","cup,","144","","",""`,
+        ],
+      ),
+      "sr_legacy",
+    );
+    expect(table.get(167512)?.portions).toEqual([{ seqNum: 3, amount: 1, unit: "cup,", gramWeight: 144 }]);
+  });
 });
 
 describe("a food's serving", () => {
@@ -162,6 +178,11 @@ describe("a food's serving", () => {
     // Nothing to read an amount from: the text is the measure.
     [portion(null, "cup"), "cup"],
     [portion(0, "oz"), "oz"],
+    // A short name loses its dangling comma as a cut one does: SR Legacy's own
+    // "cup," (fdc 175258), and the same in the survey release's shape.
+    [portion(1, "cup,"), "cup"],
+    [portion(null, "1 cup,"), "cup"],
+    [portion(2, "slices (, "), "2 slices"],
   ])("%o is called %s", (given, expected) => {
     expect(usdaMeasureName(given)).toBe(expected);
   });
@@ -223,23 +244,38 @@ describe("the row a food becomes", () => {
     expect(USDA_NUTRIENTS.map((n) => row?.[n.column])).toEqual(USDA_NUTRIENTS.map((_, at) => at + 1));
   });
 
-  it("carries the description's first word, its word count and its serving", () => {
+  it("carries the description's first word, its word count, its search text and its serving", () => {
     const row = usdaFoodRow("fndds", entry("Milk, whole, 3.25% milkfat", "fndds"));
     expect(row?.first_word).toBe("milk");
     // Four words — milk, whole, 3.25, milkfat — counted out rather than asked of
     // the same function that stored it.
     expect(row?.word_count).toBe(4);
     expect(row?.description).toBe("Milk, whole, 3.25% milkfat");
+    expect(row?.search_text).toBe("milk, whole, 3.25% milkfat");
     expect(row?.release).toBe("fndds");
     expect(row?.serving_grams).toBe(158);
     expect(row?.serving_unit).toBe("cup");
   });
 
-  it("cuts a description into the words Postgres indexes, accents and decimals kept", () => {
-    // Postgres's `english` configuration does NOT strip accents:
-    // to_tsvector('english', 'Crème fraîche, cultured') holds 'crème'. Folding
-    // the accent off here would store a first word the search can never match.
-    expect(usdaWords("Crème fraîche, cultured")).toEqual(["crème", "fraîche", "cultured"]);
+  it("stores an accented name as USDA spells it, and its search text and first word folded", () => {
+    const row = usdaFoodRow("sr_legacy", entry("Jalapeño peppers, RAW"));
+    // The screen shows USDA's own spelling; the index and the ranking read the fold.
+    expect(row?.description).toBe("Jalapeño peppers, RAW");
+    expect(row?.search_text).toBe("jalapeno peppers, raw");
+    expect(row?.first_word).toBe("jalapeno");
+    expect(row?.word_count).toBe(3);
+  });
+
+  it("cuts a description into words with its accents folded, and a decimal kept inside its number", () => {
+    // Folded on BOTH sides of the search: the importer stores these, and the
+    // search box reads a typed query with the same function.
+    expect(usdaWords("Crème fraîche, cultured")).toEqual(["creme", "fraiche", "cultured"]);
+    expect(usdaSearchText("Crème Fraîche, cultured")).toBe("creme fraiche, cultured");
+    // An accent typed as a mark of its own (as some keyboards send it) is folded
+    // before the words are cut, so it never splits its word in two.
+    expect(usdaWords("crème fraîche")).toEqual(["creme", "fraiche"]);
+    // A full-width letter is its letter, and a full-width sign still separates.
+    expect(usdaWords("ｍｉｌｋ％ｆａｔ＆ｃｏ")).toEqual(["milk", "fat", "co"]);
     // And it indexes "3.25%" as one lexeme, 3.25 — not 3 and 25.
     expect(usdaWords("Milk, whole, 3.25% milkfat")).toEqual(["milk", "whole", "3.25", "milkfat"]);
     expect(usdaWords("Beverage, 100%, NFS")).toEqual(["beverage", "100", "nfs"]);
@@ -304,6 +340,38 @@ describe("the cached release files", () => {
     writeFileSync(join(cache, "other.xlsx"), "whatever this is");
     const bytes = await download("https://example.invalid/never-fetched.xlsx", "other.xlsx", cache);
     expect(bytes.toString("utf8")).toBe("whatever this is");
+  });
+
+  describe("a download", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+    const serving = (body: string) => {
+      const fetched = vi.fn(() => Promise.resolve(new Response(body, { status: 200 })));
+      vi.stubGlobal("fetch", fetched);
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      return fetched;
+    };
+
+    it("that is not the release is never written to the cache, so the next run downloads again", async () => {
+      serving("a damaged download");
+      await expect(download("https://example.invalid/release.zip", "damaged.zip", cache, REAL)).rejects.toThrow(
+        /damaged\.zip is not the file this tool expects[\s\S]*Nothing was cached/,
+      );
+      // Neither the release's name nor a half-written file is left behind.
+      expect(existsSync(join(cache, "damaged.zip"))).toBe(false);
+      expect(readdirSync(cache).filter((name) => name.startsWith("damaged"))).toEqual([]);
+    });
+
+    it("that is the release is cached whole, and read from the cache after", async () => {
+      const fetched = serving("the real release");
+      expect((await download("https://example.invalid/release.zip", "fresh.zip", cache, REAL)).toString("utf8")).toBe("the real release");
+      expect(readFileSync(join(cache, "fresh.zip"), "utf8")).toBe("the real release");
+      expect(readdirSync(cache).filter((name) => name.startsWith("fresh"))).toEqual(["fresh.zip"]);
+      await download("https://example.invalid/release.zip", "fresh.zip", cache, REAL);
+      expect(fetched).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

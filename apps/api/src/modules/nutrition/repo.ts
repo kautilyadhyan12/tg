@@ -603,11 +603,12 @@ export interface UsdaFoodRow {
 const MAX_SEARCH_WORDS = 10;
 
 /** A query's words, cut by the one rule that also stored the description's
- *  (`usdaWords.ts`): lower case, letters and digits, a decimal point kept inside
- *  a number, accents left exactly as the index holds them. That rule is what
- *  makes the tsquery safe too — `&`, `|`, `!`, `(`, `)`, `:` and `*` separate
- *  words here, so no typed text can ever become a tsquery operator, and the
- *  result still crosses to Postgres as a parameter. */
+ *  (`usdaWords.ts`): accents folded, lower case, letters and digits, a decimal
+ *  point kept inside a number — the index is built from the description folded
+ *  the same way (`search_text`), so "jalapeño" typed finds "Jalapeno". That rule
+ *  is what makes the tsquery safe too — `&`, `|`, `!`, `(`, `)`, `:` and `*`
+ *  separate words here, so no typed text can ever become a tsquery operator, and
+ *  the result still crosses to Postgres as a parameter. */
 export const usdaSearchWords = (query: string): string[] => usdaWords(query).slice(0, MAX_SEARCH_WORDS);
 
 /** EVERY typed word must match, the last one as a prefix so the box answers
@@ -653,8 +654,9 @@ type UsdaColumns = Parameters<typeof usdaRow>[0];
  *       juice" → "Orange juice, 100%, NFS", never "Orange, canned, juice pack");
  *    2. failing that, the description STARTS with what was typed, which is what
  *       keeps the answers steady while a word is still half-typed;
- *    3. failing that, its first word is the first word typed ("Pumpkin seeds,
- *       NFS" above "Soup, pumpkin").
+ *    3. failing that, its first word is the first word typed, which is what
+ *       orders a query of two words USDA writes with a comma between them
+ *       ("rice brown" → "Rice, brown, cooked, …", never "Beans and brown rice").
  *  Without this a two-word dish and a two-word ingredient tie, and USDA's own id
  *  decides: "pumpkin" answered Muffin, Bread, Cookie, Pie and Pancakes before
  *  the vegetable, and "banana" answered Banana split (measured 2026-09-16).
@@ -665,9 +667,10 @@ type UsdaColumns = Parameters<typeof usdaRow>[0];
  *  decaffeinated, with non-dairy milk"), then USDA's own id so two equal rows
  *  never swap places between searches.
  *
- *  The three head steps compare against `lower(description)`, and the words they
- *  compare with hold nothing but letters, digits and a decimal point, so they
- *  carry no `%` or `_` into `LIKE`. Measured through this function against the
+ *  The three head steps compare against `search_text` and `first_word`, which the
+ *  importer folded by the same rule as the typed words, so an accent on either
+ *  side changes no step. The words hold nothing but letters, digits and a decimal
+ *  point, so they carry no `%` or `_` into `LIKE`. Measured through this function against the
  *  loaded table 2026-09-16: a word a person really types answers in 6–9 ms, and
  *  the widest word in either release ("cooked", 2,448 rows) in 20 ms. */
 export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number): Promise<UsdaFoodRow[]> {
@@ -681,8 +684,8 @@ export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number
     FROM usda_foods
     WHERE search @@ to_tsquery('english', ${tsQuery})
       AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
-    ORDER BY (lower(description) = ${typed} OR lower(description) LIKE ${`${typed},%`}) DESC,
-             (lower(description) LIKE ${`${typed}%`}) DESC,
+    ORDER BY (search_text = ${typed} OR search_text LIKE ${`${typed},%`}) DESC,
+             (search_text LIKE ${`${typed}%`}) DESC,
              (first_word = ${firstWord}) DESC,
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT ${limit}`;
