@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-16 · 7a-iii-a: the re-check of 0dd5ba1 found no Critical or High; its two test gaps fixed; merge on Kd's word (branch `usda-food-table`)
+
+- The re-check found no defect at any severity and two Low test gaps; per §2.6 these fixes get no further re-check.
+- Step 1's first half, a whole name that IS what was typed, was untested: an SR Legacy "Zqxhead" now must rank above the survey release's "Zqxhead split", which the release rule would otherwise put first.
+- A place Open Food Facts leaves empty (its deadline passed) goes back to USDA: the test's provider answers nothing for one query, and the box of 15 must hold 15 USDA foods.
+- Verified: api tsc 0 · eslint 0 on both files · `usda.table` + `nutrition.usda.routes` 30/30 on local Postgres · two deliberate breaks (the equals half deleted; empty places not given back), each red on its own test, files restored identical.
+- Three dashboard images (`Screenshot (221).png`, `latestbadges.png`, `weeklychallenges.png`) changed in the folder from another session; untouched and uncommitted.
+- Open: CI on this push, then merge on Kd's word. Next: 7a-iii-b, from master, its own chat.
+
 ## 2026-09-16 · 7a-iii-a: the review of d0042c3 fixed (2 High, 3 Low, 4 weak tests); the re-check of these fixes next (branch `usda-food-table`)
 
 - H1: an accented query found nothing ("jalapeño", "purée", "soufflé" 0 rows each) — the index is plain and the entry below took the fold off the query. The review's fix (fold the query alone) would hide every name a later release spells with an accent, so BOTH sides fold with one rule (`usdaWords.ts`): the importer stores `search_text` (the description folded, lower case), 0031 builds the index from it, the head steps read it, `first_word` is folded. Rebuilt local table: jalapeño 4 = jalapeno 4, purée 5, soufflé 8, sautéed 14, açaí 3, pâté 6; pumpkin, banana, oats, orange juice and cappuccino still lead with the same food.

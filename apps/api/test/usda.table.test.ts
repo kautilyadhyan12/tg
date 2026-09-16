@@ -76,6 +76,10 @@ d("the USDA food table (real Postgres)", () => {
     [90_000_011, "fndds", "Zqxplain split", 51],
     [90_000_012, "fndds", "Zqxplain, cooked", 52],
     [90_000_013, "fndds", "Zqxplain, muffin mix", 57],
+    // A name that IS the word typed, in SR Legacy, beside a longer survey-release
+    // name that the release rule would otherwise put first.
+    [90_000_020, "sr_legacy", "Zqxhead", 61],
+    [90_000_021, "fndds", "Zqxhead split", 62],
     // Ten words, for the cap on how many of them reach the index.
     [90_000_014, "fndds", "Zqxlong alpha beta gamma delta epsilon zeta eta theta iota", 54],
     // An accent the release spells, one it does not, and a decimal in a name.
@@ -176,6 +180,9 @@ d("the USDA food table (real Postgres)", () => {
       // Step 1, the head IS what was typed. Without it "Zqxplain split" (as few
       // words, a lower id) leads.
       expect(await found("zqxplain")).toEqual([90_000_012, 90_000_013, 90_000_011, 90_000_010]);
+      // Its other half: a whole name that is exactly what was typed. Without it
+      // the survey release's "Zqxhead split" leads, as FNDDS ranks before SR.
+      expect(await found("zqxhead")).toEqual([90_000_020, 90_000_021]);
       // Step 2, the description STARTS with what was typed, half-typed as it is.
       // Without it nothing separates the four, and the muffin leads.
       expect(await found("zqxpl")).toEqual([90_000_011, 90_000_012, 90_000_013, 90_000_010]);

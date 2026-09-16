@@ -51,16 +51,19 @@ const fixture = (fdcId: number, description: string): UsdaEntry => {
 
 /** A packaged-product provider that says which queries reached it — a usda_*
  *  canonical must never be one of them — and has as many products as it is
- *  asked for, so the room it is given is what the page shows. */
-function recordingOff(): FoodSearchProvider & { asked: string[] } {
+ *  asked for, so the room it is given is what the page shows. A query in
+ *  `silent` gets none, as the real one answers when its deadline passes. */
+function recordingOff(): FoodSearchProvider & { asked: string[]; silent: string[] } {
   const product = (at: number): FoodReference => ({
     canonical: `off_zqxroute_${String(at)}`, name: `Zqxroute bottled coffee ${String(at)}`, kcal: 44, proteinG: 1, carbsG: 8,
     fatG: 1, fiberG: 0, serving: 250, unit: "bottle", source: "openfoodfacts",
   });
   return {
     asked: [],
+    silent: [],
     search(query, limit) {
       this.asked.push(query);
+      if (this.silent.includes(query)) return Promise.resolve([]);
       return Promise.resolve(Array.from({ length: limit }, (_, at) => product(at)));
     },
   };
@@ -106,7 +109,7 @@ d("a USDA food through the food routes (real Postgres)", () => {
           // "paneer" is on the curated list too, which is how the order test
           // reaches the USDA rung with a word a person would really type.
           fixture(90_000_202, "Paneer, zqxroute style"),
-          ...Array.from({ length: RESERVE_FIXTURES }, (_, at) => fixture(90_000_210 + at, `Zqxreserve food ${String(at)}`)),
+          ...Array.from({ length: RESERVE_FIXTURES }, (_, at) => fixture(90_000_210 + at, `Zqxreserve zqxspare ${String(at)}`)),
         ],
       ],
     ]);
@@ -189,6 +192,13 @@ d("a USDA food through the food routes (real Postgres)", () => {
     expect(await sourcesFor("zqxreserve", 2)).toEqual(["usda", "openfoodfacts"]);
     // And a single place is USDA's.
     expect(await sourcesFor("zqxreserve", 1)).toEqual(["usda"]);
+  });
+
+  it("gives USDA back the places packaged products leave empty, as when Open Food Facts times out", async () => {
+    // A query of its own, so no answer cached by the tests above can stand in.
+    off.silent.push("zqxreserve zqxspare");
+    expect(await sourcesFor("zqxreserve zqxspare", 15)).toEqual(Array.from({ length: 15 }, () => "usda"));
+    expect(off.asked).toContain("zqxreserve zqxspare");
   });
 
   it("saves it by grams with the table's numbers scaled, and nothing else's", async () => {
