@@ -2,8 +2,8 @@
 // already used one of the day's scans, so the photo sheet does not lose it — a
 // click outside never closes the sheet, the X asks first, and Photo Log opened
 // again while the scan can still be saved brings the same sheet back, with "New
-// photo" to start over. And "my dish" taken back to grams keeps the dish's grams,
-// with an Undo, as "Change" has one.
+// photo" to start over. And a scanned row taken from a saved dish to another
+// measure keeps the dish's grams, with an Undo, as "Change" has one.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -18,7 +18,14 @@ const Nutrition = (await import('./Nutrition')).default;
 
 const item = (name, canonical, gramsPoint) => ({
   name, canonical, gramsPoint, gramsRange: [gramsPoint, gramsPoint], portionSource: 'default', nutritionSource: 'curated',
-  kcalPoint: 145, kcalLow: 145, kcalHigh: 145, proteinG: 9, carbsG: 19, fatG: 4, pieces: null,
+  kcalPoint: 145, kcalLow: 145, kcalHigh: 145, proteinG: 9, carbsG: 19, fatG: 4,
+});
+/** Our list's dal as the scan starts it: at the 132 g the photo saw, beside its 240 g cup. */
+const CUP = { id: 'usda-1', name: 'cup', grams: 240 };
+const scannedDal = () => ({
+  ...item('Dal (lentil curry)', 'dal_lentil_curry', 132),
+  measures: [CUP, { id: 'g', name: 'g', grams: 1 }, { id: 'oz', name: 'oz', grams: 28.349523125 }],
+  startsAt: { measure: 'g', amount: 132 }, portionEstimated: true,
 });
 const bowl = { id: 'd-1', label: 'My blue bowl', containerClass: 'cereal_bowl', volumeMl: 360, foodHint: null, createdAt: '2026-09-16T10:00:00.000Z' };
 
@@ -28,10 +35,10 @@ beforeEach(() => {
   svc.listDishware = vi.fn(async () => ({ data: { items: [bowl], nextCursor: null } }));
   svc.getTargets = vi.fn(async () => ({ data: { targets: null, missing: ['goal'], targetWrongSide: false } }));
   svc.searchFoods = vi.fn(async () => ({ data: { items: [] } }));
-  // The server's preview: a dish half full is 180 g; grams are as sent.
+  // The server's preview: the blue bowl half full is 180 g, a cup 240 g, grams as sent.
   svc.previewMeal = vi.fn(async ({ items }) => {
     const priced = items.map((i) => {
-      const grams = i.dishwareId ? Math.round(360 * i.fillLevel) : i.grams;
+      const grams = i.dishwareId ? Math.round(360 * i.fillLevel) : i.measure === 'usda-1' ? Math.round(i.amount * 240) : Math.round(i.amount);
       return { ...item('Dal (lentil curry)', i.canonical, grams), kcalPoint: Math.round(grams * 1.45) };
     });
     return { data: { items: priced, totals: { kcalPoint: priced.reduce((n, i) => n + i.kcalPoint, 0), kcalLow: 0, kcalHigh: 0, proteinG: 0, carbsG: 0, fatG: 0 } } };
@@ -40,7 +47,7 @@ beforeEach(() => {
 });
 const scanReply = () => ({
   data: {
-    scanToken: 't'.repeat(40), mealName: 'Dal plate', items: [item('Dal (lentil curry)', 'dal_lentil_curry', 132)],
+    scanToken: 't'.repeat(40), mealName: 'Dal plate', items: [scannedDal()],
     unknownItems: [], photoQuality: 'good',
     totals: { kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4 }, confirmed: false,
   },
@@ -69,6 +76,8 @@ const closeWithoutSaving = () => {
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close' }));
 };
 const sheetOpen = () => screen.queryByText('AI Photo Log') !== null;
+/** The dal row opened, as a tap on its line opens it: the sheet is a short list (RULINGS 2026-09-17). */
+const openDal = () => fireEvent.click(screen.getByText('Dal (lentil curry)').closest('button'));
 /** The dim backdrop around a box, found from the box's own heading — the page has
  *  a fixed decoration of its own before the boxes, which is no backdrop. */
 const backdropOf = (heading) => heading.closest('.fixed.inset-0');
@@ -131,12 +140,16 @@ describe('the photo sheet keeps a scan that is not saved', () => {
 
   it('brings the same sheet back while the scan can still be saved, with New photo to start over', async () => {
     await scanPlate();
+    openDal();
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '150' } });
     closeWithoutSaving();
     expect(sheetOpen()).toBe(false);
 
     await openPhotoLog();
     expect(screen.getByText('Dal plate')).toBeTruthy();
+    // Brought back closed, at the amount it held.
+    expect(screen.getByText('Dal (lentil curry)').closest('button').textContent).toContain('150 g');
+    openDal();
     expect(screen.getByRole('spinbutton').value).toBe('150');
     expect(screen.getByText("Not saved yet. This scan still counts as one of today's scans.")).toBeTruthy();
     expect(svc.analyzePhoto).toHaveBeenCalledTimes(1);
@@ -166,6 +179,7 @@ describe('the photo sheet keeps a scan that is not saved', () => {
 
   it('brings the sheet back after the Nutrition page was left, and never to another person', async () => {
     await scanPlate();
+    openDal();
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '150' } });
     closeWithoutSaving();
     cleanup(); // the page is left
@@ -173,6 +187,9 @@ describe('the photo sheet keeps a scan that is not saved', () => {
     renderPage();
     await openPhotoLog();
     expect(screen.getByText('Dal plate')).toBeTruthy();
+    // Brought back closed, at the amount it held.
+    expect(screen.getByText('Dal (lentil curry)').closest('button').textContent).toContain('150 g');
+    openDal();
     expect(screen.getByRole('spinbutton').value).toBe('150');
     expect(svc.analyzePhoto).toHaveBeenCalledTimes(1);
     closeWithoutSaving();
@@ -222,31 +239,63 @@ describe('the photo sheet keeps a scan that is not saved', () => {
   });
 });
 
-describe('"my dish" back to grams', () => {
-  it("keeps the grams the server worked out for the dish, and Undo puts back what the row held", async () => {
-    await scanPlate();
-    fireEvent.click(screen.getByTitle('Measure with my dish instead of grams'));
-    fireEvent.click(await screen.findByRole('button', { name: 'My blue bowl · 360 ml' }));
+describe('a saved dish on a scanned row', () => {
+  /** A measure picked the way a person picks it: open the list, tap the choice. */
+  const choose = async (label) => {
+    if (screen.queryByRole('button', { name: 'Measure' }) === null) openDal();
+    fireEvent.click(await screen.findByRole('button', { name: 'Measure' }));
+    fireEvent.click(await screen.findByRole('option', { name: label }));
+  };
+  const picked = () => {
+    if (screen.queryByRole('button', { name: 'Measure' }) === null) openDal();
+    return screen.getByRole('button', { name: 'Measure' }).textContent;
+  };
+  /** The dish picked, half full, and the server's answer for it. */
+  const halfBowl = async () => {
+    await choose('My blue bowl · 360 ml');
     fireEvent.click(screen.getByRole('button', { name: '½' }));
-    // The server's answer for the dish half full.
     await waitFor(() => expect(svc.previewMeal.mock.calls.some(([body]) => body.items[0]?.dishwareId === 'd-1')).toBe(true));
-    await waitFor(() => expect(screen.getAllByText('261 kcal').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText('= 180 g')).toBeTruthy());
+  };
 
-    fireEvent.click(screen.getByRole('button', { name: '← back to grams' }));
-    expect(screen.getByRole('spinbutton').value).toBe('180');
+  it('is one of the measures, and a scan never picks it for the person', async () => {
+    await scanPlate();
+    expect(picked()).toBe('grams');
+    fireEvent.click(screen.getByRole('button', { name: 'Measure' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['cup · 240 g', 'grams', 'ounces · 28.35 g', 'My blue bowl · 360 ml', '+ Save a new dish…']);
+  });
+
+  it("keeps the grams the server worked out for the dish when another measure is picked, and Undo puts the dish back", async () => {
+    await scanPlate();
+    await halfBowl();
+
+    await choose('grams');
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('180');
     expect(screen.getByText(/Kept the dish's 180 g/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-    expect(screen.getByRole('spinbutton').value).toBe('132');
+    expect(picked()).toBe('My blue bowl · 360 ml');
     expect(screen.queryByText(/Kept the dish's/)).toBeNull();
+    // Still half full, so the server's grams for the dish come back too.
+    await waitFor(() => expect(screen.getByText('= 180 g')).toBeTruthy());
+
+    // To the food's own cup: as many cups as weigh the dish's grams.
+    await choose('cup · 240 g');
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('0.75');
+    expect(screen.getByText(/Kept the dish's 180 g/)).toBeTruthy();
+    await waitFor(() => expect(svc.previewMeal).toHaveBeenLastCalledWith({ scanToken: 't'.repeat(40), items: [{ canonical: 'dal_lentil_curry', measure: 'usda-1', amount: 0.75 }] }));
   });
 
-  it('goes back to the grams it held where no dish and fill were picked', async () => {
+  it('goes back to what the row held where the dish was never weighed', async () => {
     await scanPlate();
-    fireEvent.click(screen.getByTitle('Measure with my dish instead of grams'));
-    fireEvent.click(screen.getByRole('button', { name: '← back to grams' }));
-    expect(screen.getByRole('spinbutton').value).toBe('132');
+    await choose('My blue bowl · 360 ml');
+    await choose('grams');
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('132');
     expect(screen.queryByText(/Kept the dish's/)).toBeNull();
+    // And to another measure: the grams it held, as that measure.
+    await choose('My blue bowl · 360 ml');
+    await choose('cup · 240 g');
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('0.55');
   });
 });
 

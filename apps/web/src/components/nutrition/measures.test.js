@@ -1,19 +1,25 @@
 // ROADMAP 7a-iv-a — the measure picker's pure rules: what it offers, where a food
-// starts, how − and + move an amount, what it sends, and how a saved item reads.
+// starts, how − and + move an amount, what it sends, and how a saved item reads;
+// and ROADMAP 7a-iv-b — a scanned row still where it started, and a measure that
+// keeps what a dish weighed.
 import { describe, expect, it } from 'vitest';
 import {
   FILL_CHOICES,
   MAX_AMOUNT,
   amountRefusal,
   amountStep,
+  amountSummary,
   choiceLabel,
   chosenItemFor,
   comesToUnderAGram,
+  isStartingValue,
   itemText,
   pickerChoices,
   startingValue,
   steppedAmount,
+  unitLabel,
   valueForChoice,
+  valueKeepingGrams,
 } from './measures';
 
 const apple = {
@@ -34,7 +40,8 @@ describe('what the picker offers', () => {
     expect(choices.map((c) => [c.key, c.kind])).toEqual([
       ['serving', 'measure'], ['usda-4', 'measure'], ['g', 'measure'], ['oz', 'measure'], ['dish:d-1', 'dish'],
     ]);
-    expect(choices.map(choiceLabel)).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'g', 'oz · 28.35 g', 'My blue bowl · 360 ml']);
+    // Grams and ounces spelled out (Kd's click-through of 7a-iv-b).
+    expect(choices.map(choiceLabel)).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'grams', 'ounces · 28.35 g', 'My blue bowl · 360 ml']);
   });
 
   it('offers grams alone for a food that came with no measures', () => {
@@ -168,5 +175,71 @@ describe('how a saved item reads in the meal list', () => {
     expect(itemText(item(null))).toBe('Apple 273g');
     // No float noise in an amount.
     expect(itemText(item({ id: 'serving', name: 'apple', amount: 0.1 + 0.2 }))).toBe('Apple: 0.3 × apple, 273g');
+  });
+});
+
+describe('a scanned row still where the scan started it', () => {
+  // A row the server started at two of its 30 g slices.
+  const bread = { canonical: 'usda_fndds_1', measures: [{ id: 'usda-1', name: 'slice', grams: 30 }, { id: 'g', name: 'g', grams: 1 }], startsAt: { measure: 'usda-1', amount: 2 } };
+
+  it('is its starting measure and amount, however the amount is written', () => {
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2' })).toBe(true);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2.0' })).toBe(true);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2.5' })).toBe(false);
+    expect(isStartingValue(bread, { key: 'g', amount: '2' })).toBe(false);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '' })).toBe(false);
+    expect(isStartingValue(bread, undefined)).toBe(false);
+  });
+});
+
+describe('a measure that keeps what a dish weighed', () => {
+  const [serving, medium, grams, ounce] = pickerChoices(apple, []);
+  const [dish] = pickerChoices(apple, [bowl]).filter((c) => c.kind === 'dish');
+
+  it('is the grams, or as many of the measure as weigh them, to a hundredth', () => {
+    expect(valueKeepingGrams(grams, 180)).toEqual({ key: 'g', amount: '180' });
+    expect(valueKeepingGrams(grams, 180.6)).toEqual({ key: 'g', amount: '181' });
+    expect(valueKeepingGrams(serving, 180)).toEqual({ key: 'serving', amount: '1' });
+    expect(valueKeepingGrams(medium, 273)).toEqual({ key: 'usda-4', amount: '1.5' });
+    expect(valueKeepingGrams(ounce, 100)).toEqual({ key: 'oz', amount: '3.53' });
+  });
+
+  it('is nothing for a dish, whose amount is how full it was, or where nothing is weighed yet', () => {
+    expect(valueKeepingGrams(dish, 180)).toBeNull();
+    for (const none of [null, undefined, 0, -5, Number.NaN]) expect(valueKeepingGrams(grams, none), String(none)).toBeNull();
+    expect(valueKeepingGrams(undefined, 180)).toBeNull();
+  });
+
+  it('never keeps an amount the contract would refuse, nor grams past it', () => {
+    // A gram of a 5,000 g measure is 0.0002 of it: no hundredth to keep.
+    expect(valueKeepingGrams({ key: 'usda-9', kind: 'measure', id: 'usda-9', name: 'whole cake', grams: 5000 }, 1)).toBeNull();
+    expect(valueKeepingGrams(grams, MAX_AMOUNT + 500)).toEqual({ key: 'g', amount: String(MAX_AMOUNT) });
+  });
+});
+
+describe('what an amount counts, beside it, and each food on one line', () => {
+  const [serving, medium, grams, ounce] = pickerChoices(apple, []);
+  const [dish] = pickerChoices(apple, [bowl]).filter((c) => c.kind === 'dish');
+
+  it('names what the amount counts, so a number never stands alone', () => {
+    expect([grams, ounce, serving, medium].map(unitLabel)).toEqual(['grams', 'ounces', 'apple', 'medium (3" dia)']);
+    expect(unitLabel(null)).toBe('');
+  });
+
+  it('reads a row as the amount of its measure and what the server says it weighs', () => {
+    expect(amountSummary(grams, '60', 60)).toBe('60 g');
+    expect(amountSummary(grams, '60', null)).toBe('60 g');
+    expect(amountSummary(ounce, '3', 85.05)).toBe('3 oz · 85 g');
+    expect(amountSummary(medium, '1.5', 273)).toBe('1.5 × medium (3" dia) · 273 g');
+    // The server has not answered yet: no grams, never grams the browser worked out.
+    expect(amountSummary(serving, '2', null)).toBe('2 × apple');
+    expect(amountSummary(dish, '0.5', 180)).toBe('My blue bowl, ½ full · 180 g');
+    expect(amountSummary(dish, '1', 360)).toBe('My blue bowl, full · 360 g');
+  });
+
+  it('says what is still to pick', () => {
+    expect(amountSummary(dish, '', null)).toBe('My blue bowl · how full?');
+    for (const none of ['', '0', '-1', 'abc']) expect(amountSummary(medium, none, null), none).toBe('Pick an amount');
+    expect(amountSummary(null, '1', 100)).toBe('Pick an amount');
   });
 });

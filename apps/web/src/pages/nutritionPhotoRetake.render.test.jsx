@@ -21,7 +21,8 @@ const goodScan = {
     scanToken: 't'.repeat(40), mealName: 'Dal and roti',
     items: [{
       name: 'Dal', canonical: 'dal_lentil_curry', gramsPoint: 150, gramsRange: [150, 150], portionSource: 'default', nutritionSource: 'curated',
-      kcalPoint: 218, kcalLow: 218, kcalHigh: 218, proteinG: 9, carbsG: 30, fatG: 6, pieces: null,
+      kcalPoint: 218, kcalLow: 218, kcalHigh: 218, proteinG: 9, carbsG: 30, fatG: 6,
+      measures: [{ id: 'g', name: 'g', grams: 1 }, { id: 'oz', name: 'oz', grams: 28.349523125 }], startsAt: { measure: 'g', amount: 150 }, portionEstimated: true,
     }],
     unknownItems: [], photoQuality: 'good',
     totals: { kcalPoint: 218, kcalLow: 218, kcalHigh: 218, proteinG: 9, carbsG: 30, fatG: 6 }, confirmed: false,

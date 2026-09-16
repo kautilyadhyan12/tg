@@ -126,13 +126,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(res.json<{items:{canonical:string}[]}>().items.map((i)=>i.canonical)).toEqual(picked);
   },30_000);
 
-  // A photo's count: pieces times the food's own piece (the Appendix B piece for a
-  // hint that ends in it), vessels times one of what the photo shows them in, and
-  // a serving by weight or a count of cut bits never multiplied.
-  it("a photo's count multiplies pieces and vessels, never a weight or cut bits, and what matches no food is named",async()=>{
+  // What a photo's count and grams start each row at is the test plates' (nutrition.scan.routes.test.ts,
+  // ROADMAP 7a-iv-b), where the count cases this plate held became review plates with the grams the model writes.
+  it("names what matches no food beside what the model could not identify, and the draft it leaves confirms as the sheet starts it",async()=>{
     const counted=fakeVision();
     const item=(canonical_hint:string,count:number,vessel:MealVessel|null=null)=>seen({name:canonical_hint,canonical_hint,vessel,fill_level:vessel===null?null:1,count});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),item("hot dog pieces",8),item("beef stew chunks",6),item("mugs of coffee",2),item("cans of coke",3),item("ramen bowl",25),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("beer",2,"glass"),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";
@@ -140,43 +139,18 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const login=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});
       const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";
       const call=(url:string,body:unknown)=>a.inject({method:"POST",url,cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify(body)});
-      const dish=await call("/v1/nutrition/dishware",{label:"My pint glass",containerClass:"glass",volumeMl:568});
-      expect(dish.statusCode,dish.body).toBe(201);
       const scan=await call("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
       expect(scan.statusCode,scan.body).toBe(200);
       const draft=mealPhotoAnalysisSchema.parse(scan.json());
-      expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.portionSource,i.pieces])).toEqual([
-        ["chicken_nuggets",96,"default",6], // six 16 g nuggets, not one
-        ["chicken_nuggets",96,"default",6], // six nugget pieces are six nuggets
-        ["pizza_cheese",321,"default",3], // three slices, not one
-        ["roti_chapati",120,"regional_prior",3], // three rotis, as "roti ×3" is
-        ["veggie_burger",100,"default",1], // its own patty, not an egg's 50 g
-        ["eggplant_cooked",100,"default",null], // a serving by weight, not an egg
-        ["apple",360,"default",2],
-        ["grapes",100,"default",null], // ten grapes are not ten 100 g servings
-        ["banana_bread",120,"default",2], // two slices, not two bananas
-        ["egg_hard_boiled",100,"regional_prior",2],
-        ["roti_chapati",120,"regional_prior",3],
-        ["banana",120,"default",null], // ten slices are one banana's serving, not ten bananas
-        ["spring_roll",128,"default",2], // the egg roll, the closest entry, not dropped
-        ["roti_chapati",80,"default",2], // the homemade roti, not the store-bought one
-        ["beer_regular",700,"default",2], // two of beer's own servings: the pint glass saved above is never applied to a scan (RULINGS 2026-07-18)
-        ["beer_regular",1050,"default",3], // three bottles, not one
-        ["yogurt_plain_low_fat",340,"default",2], // two pots, not one
-        ["beer_regular",975,"regional_prior",3], // three mugs
-        ["beer_regular",975,"regional_prior",3], // three mugs, however the hint names them
-        ["hot_dog",102,"default",null], // pieces cut from one hot dog, not eight hot dogs
-        ["beef_stew",255,"default",null], // chunks of one cup of stew, not six cups
-        ["coffee_black",650,"regional_prior",2], // two mugs, as the hint names them
-        ["coke_cola",1110,"default",3], // three 370 g cans
-        ["ramen_bowl",490,"default",null], // 25 bowls would pass what one item may weigh
-      ]);
+      // The model gave these no grams, so each starts where Add food starts it, an estimate.
+      expect(draft.items.map((i)=>[i.canonical,i.portionEstimated])).toEqual([["chicken_nuggets",true],["beer_regular",true]]);
       // What matches no food is named beside what the model could not identify, once
       // each, by its name as written (a blank name by its hint), never a blank entry.
       expect(draft.unknownItems).toEqual(["Mystery sauce","Mango Lassi","black garlic relish"]);
-      // The stored draft still loads: the count of pieces is the sheet's, never the draft's.
-      const confirmed=await call("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint}))});
+      // The stored draft loads, and takes each row as the sheet sends it: by the measure it starts at.
+      const confirmed=await call("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,measure:i.startsAt.measure,amount:i.startsAt.amount}))});
       expect(confirmed.statusCode,confirmed.body).toBe(201);
+      expect(confirmed.json<{meal:{items:{gramsPoint:number}[]}}>().meal.items.map((i)=>i.gramsPoint)).toEqual(draft.items.map((i)=>i.gramsPoint));
     }finally{await a.close();}
   },30_000);
 
@@ -193,7 +167,9 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const answersEverything=createOpenFoodFactsProvider((input)=>Promise.resolve(new Response(JSON.stringify({hits:[top(input instanceof URL?(input.searchParams.get("q")??"").toLowerCase():"")]}),{status:200})));
     const scanned=fakeVision();
     const item=(name:string,canonical_hint:string,count:number|null=null)=>seen({name,canonical_hint,count});
-    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult",3),item("Chips","qwzxchips"),item("Glass noodles","glass noodles")]});
+    // Three bottles the model saw at 195 g, 127 kcal: Yakult's own 65 kcal per 100 g.
+    const yakult=seen({name:"Yakult",canonical_hint:"bottles of yakult",count:3,grams:195,kcal:127,protein_g:2,carbs_g:30,fat_g:0});
+    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),yakult,item("Chips","qwzxchips"),item("Glass noodles","glass noodles")]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:scanned,foodSearchProvider:answersEverything}});
     try{
       const email="p26a-packaged@example.com";
@@ -203,8 +179,9 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const scan=await a.inject({method:"POST",url:"/v1/nutrition/analyze-photo",cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});
       expect(scan.statusCode,scan.body).toBe(200);
       const draft=mealPhotoAnalysisSchema.parse(scan.json());
-      // Three 65 g bottles, by the label's own pack.
-      expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.pieces])).toEqual([["off_4901392000034",195,3]]);
+      // Three 65 g bottles, by the label's own pack, which the photo's count and grams agree on.
+      expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.startsAt,i.portionEstimated])).toEqual([["off_4901392000034",195,{measure:"serving",amount:3},false]]);
+      expect(draft.items[0]?.measures.map((m)=>[m.id,m.name,m.grams])).toEqual([["serving","bottle",65],["g","g",1],["oz","oz",28.349523125]]);
       // Cup Noodles is no glass noodles: "glass" is the food's own word, not a measure.
       expect(draft.unknownItems).toEqual(["Mystery sauce","Chips","Glass noodles"]);
     }finally{await a.close();}
@@ -372,9 +349,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(row?.original.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
       expect(row?.corrected.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
       expect(row?.corrected.some((i)=>i.canonical==="milk_whole")).toBe(false);
-      // stamped with the ESTIMATE's rung (dal/roti resolve via regional priors),
-      // never the added item's 'default'.
-      expect(row?.portion_source).toBe("regional_prior");
+      // Stamped with the estimate's rung. Since ROADMAP 7a-iv-b a scanned row starts at
+      // the photo's grams or a measure its count agrees with, never a regional prior, so
+      // that rung is 'default', as an added item's is: the canonicals above are what
+      // tell the estimate from the addition.
+      expect(row?.portion_source).toBe("default");
     }finally{await a.close();}
   },30_000);
 
@@ -433,9 +412,9 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const confirmed=await inject("POST","/v1/nutrition/meals",e.access,{scanToken:body1.scanToken,takenAt:new Date().toISOString(),items:body1.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint+37}))});
     expect(confirmed.statusCode,confirmed.body).toBe(201);
     const eMealId=confirmed.json<{meal:{id:string}}>().meal.id;
-    // Confirm-time originalItems diff, stamped with the ORIGINAL rung.
+    // Confirm-time originalItems diff, stamped with the ORIGINAL rung ('default' for every scanned row since ROADMAP 7a-iv-b).
     const conf=await sql<{field:string;portion_source:string|null}[]>`SELECT field,portion_source FROM meal_log_corrections WHERE meal_log_id=${eMealId}`;
-    expect(conf.some((r)=>r.field==="items"&&r.portion_source==="regional_prior")).toBe(true);
+    expect(conf.some((r)=>r.field==="items"&&r.portion_source==="default")).toBe(true);
     // Edit-time: items + taken_at PATCH each write a correction row.
     const newTime=new Date(Date.now()-60*60*1000).toISOString();
     const patch=await inject("PATCH",`/v1/nutrition/meals/${eMealId}`,e.access,{takenAt:newTime,items:[{canonical:"dal_lentil_curry",grams:250}]});

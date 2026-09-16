@@ -106,7 +106,8 @@ export function usdaMeasureName(portion: Pick<UsdaPortion, "amount" | "unit">): 
  *  and the USDA household measures of the entry it is, or cites — none where it
  *  has no USDA entry, or the table is not loaded. `ownServing` is false for a food
  *  of the USDA table, whose serving is one of those measures by construction
- *  (`usdaServing`), and so is never a measure of its own. */
+ *  (`usdaServing`), and for a scan's estimate, whose serving is only the grams the
+ *  photo saw: neither is ever a measure of its own. */
 export interface MeasureSource {
   serving: number;
   unit: string;
@@ -193,6 +194,57 @@ export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" |
 /** The grams `amount` of a measure weighs, to the whole gram. */
 export const measureGrams = (measure: FoodMeasure, amount: number): number => Math.round(amount * measure.grams);
 
+/** How near the grams the photo saw a scanned food's count of one of its measures
+ *  must come for its row to start at that measure, in percent of those grams
+ *  (RULINGS 2026-09-16, the portion redesign). Kd picked 30 % over three times: on
+ *  his eight plates the model writes a count of 1 for almost every food, and within
+ *  3× his 100 g of scrambled eggs was one large egg (61 g) and his 250 g mug of iced
+ *  coffee USDA's "medium" (496 g). The "or 10 g" that came with it went on
+ *  2026-09-17 (RULINGS): it started 10 g of almonds, counted 1, at one 1 g almond. */
+export const SCAN_START_TOLERANCE_PERCENT = 30;
+
+/** Where a scanned row starts: the measure and amount, what they weigh, and whether
+ *  that is an estimate — no measure the photo's count agreed with. */
+export interface ScanStart { measure: string; amount: number; grams: number; estimated: boolean }
+
+/** Where a food the photo scan saw starts on the photo sheet (RULINGS 2026-09-16):
+ *  at the photo's count of one of its own measures where that weighs within
+ *  `SCAN_START_TOLERANCE_PERCENT` of the grams the photo saw, as the row will weigh
+ *  it (to the whole gram) — the nearest such measure, the earlier in the food's
+ *  list where two are as near — else at those grams, an estimate, so no row starts
+ *  further than that from what the photo saw. Grams and ounces are units of weight, not
+ *  anything a photo counts, so a count is never of them. A measure's count is only
+ *  a start the save would take: no more than one item of a meal may weigh (one
+ *  that rounds to no gram at all is 100 % from any grams, so never near). Where
+ *  the photo gave no count there is nothing to multiply; where
+ *  it gave no weight there is nothing to check a count against, so the food starts
+ *  where Add food starts it (`startingMeasure`), an estimate too. No word of the
+ *  food's name, its vessel or how full it looked is read: the grams decide. */
+export function scanStart(
+  source: Pick<MeasureSource, "serving" | "unit" | "ownServing">,
+  measures: readonly FoodMeasure[],
+  count: number | null,
+  seenGrams: number | null,
+): ScanStart {
+  if (seenGrams === null) {
+    const start = startingMeasure(source, measures);
+    const measure = measures.find((m) => m.id === start.measure) ?? GRAM;
+    return { ...start, grams: measureGrams(measure, start.amount), estimated: true };
+  }
+  let best: (ScanStart & { off: number }) | null = null;
+  for (const measure of measures) {
+    if (count === null || measure.id === GRAM.id || measure.id === OUNCE.id) continue;
+    const grams = measureGrams(measure, count);
+    const off = Math.abs(grams - seenGrams);
+    // In whole percents, so 30 % of whole grams is exact: 60 g off 200 g is near.
+    if (grams > MAX_ITEM_GRAMS || 100 * off > SCAN_START_TOLERANCE_PERCENT * seenGrams) continue;
+    if (best === null || off < best.off) best = { measure: measure.id, amount: count, grams, estimated: false, off };
+  }
+  if (best !== null) return { measure: best.measure, amount: best.amount, grams: best.grams, estimated: false };
+  const seen = Math.min(MAX_ITEM_GRAMS, Math.max(1, Math.round(seenGrams)));
+  return { measure: GRAM.id, amount: seen, grams: seen, estimated: true };
+}
+
 /** A cup, in millilitres: Appendix B's global starter set (Part 2B). */
 export const CUP_ML = 240;
 /** Appendix B's "medium" density class — dal, sambar and most curries — which a
@@ -211,8 +263,9 @@ export function gramsPerMl(measures: readonly FoodMeasure[]): number {
 }
 
 /** Grams from a saved dish: volume (ml) × how full (0–1) × what a millilitre of
- *  the food weighs. The ONE saved-dish formula: the dish measure a person picks
- *  (service.ts) and the photo resolver's dish rung (portion-priors.ts) both read it. */
+ *  the food weighs. The ONE saved-dish formula, read wherever a person picks a
+ *  dish as a measure (service.ts); a scan never picks one for them (RULINGS
+ *  2026-07-18). */
 export function dishwareGrams(volumeMl: number, fillLevel: number, gramsPerMlOfFood: number): number {
   return Math.round(volumeMl * fillLevel * gramsPerMlOfFood);
 }

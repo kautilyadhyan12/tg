@@ -30,10 +30,10 @@ const NO_LABEL = { grams: 100, unit: "g" } as const;
  *  gives (a drink's millilitres weigh as grams; centilitres and ounces are
  *  converted), by the pack or measure it names beside them, so "1 bottle (65 ml)"
  *  is a 65 g bottle, "1 oz (28 g)" 28 g by the ounce, "2 tbsp (32 g)" 32 g by two
- *  spoonfuls and "30 g" 30 g by the gram. A photo's count of bottles, cans, bars or
- *  pots then multiplies it by the pack's count rule (portion-priors.ts). A label
- *  giving no weight, or more than one item of a meal may weigh, is read as no
- *  label: 100 g by the gram. */
+ *  spoonfuls and "30 g" 30 g by the gram. The label's pack is then one of the
+ *  product's measures (measures.ts), so a photo's count of three bottles can start
+ *  its row at three of them. A label giving no weight, or more than one item of a
+ *  meal may weigh, is read as no label: 100 g by the gram. */
 export function servingOf(label: string | undefined): { grams: number; unit: string } {
   const text = (label ?? "").toLowerCase().slice(0, 120);
   const metric = METRIC.exec(text);

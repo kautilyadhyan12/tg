@@ -49,7 +49,8 @@ const orUnknown = <O>(schema: z.ZodType<O, z.ZodTypeDef, unknown>) =>
     return read.success ? read.data : null;
   });
 
-/** The most of one item a photo's count may say, where the photo sheet's stepper stops. */
+/** The most of one item a photo's count may say: a count the photo sheet may start a
+ *  row at (ROADMAP 7a-iv-b), never more than one meal can hold. */
 export const MAX_PHOTO_COUNT = 30;
 
 /** The most foods the prompt asks one reply to list, naming any other food it sees
@@ -81,9 +82,9 @@ const MAX_ESTIMATE = 90_000;
  *  - a vessel off the list, in any case, spacing or with "_" for a space;
  *  - a fill that is no number from 0 to 1 ("full", "N/A", 75);
  *  - a size that says there is none;
- *  - a count that is no whole number from 1 to the sheet's stepper (0, 2.5, 31,
- *    "3"), as the prompt's "Count only reliably countable items" asks — the item
- *    stays on the sheet at its uncounted serving;
+ *  - a count that is no whole number from 1 to MAX_PHOTO_COUNT (0, 2.5, 31, "3"),
+ *    as the prompt's "Count only reliably countable items" asks — the item stays on
+ *    the sheet, started at the photo's own grams, as an item with no count is;
  *  - grams that are none, or more than a meal item may weigh, and kcal or macros
  *    below zero. */
 const mealVisionItemSchema = z.tuple([

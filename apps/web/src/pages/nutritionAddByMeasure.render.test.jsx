@@ -4,7 +4,7 @@
 // is sent is the measure and how many (never grams the browser worked out), and a
 // saved meal reads by the measure each food was logged by.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 
@@ -88,7 +88,7 @@ describe('adding a food by measure', () => {
     // white with a blue bar (Kd's click-through of this card).
     expect(screen.queryByRole('combobox')).toBeNull();
     // Every measure the food has is offered, by its name and weight.
-    expect(offered()).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'g', 'oz · 28.35 g', '+ Save a new dish…']);
+    expect(offered()).toEqual(['apple · 180 g', 'medium (3" dia) · 182 g', 'grams', 'ounces · 28.35 g', '+ Save a new dish…']);
     // The grams shown are the server's answer for what was sent.
     expect(await screen.findByText('= 180 g')).toBeTruthy();
 
@@ -104,7 +104,7 @@ describe('adding a food by measure', () => {
     expect(await screen.findByText('= 273 g')).toBeTruthy();
 
     // Grams start at what the item weighed.
-    choose('g');
+    choose('grams');
     expect(screen.getByRole('spinbutton', { name: 'Amount' }).value).toBe('273');
     choose('medium (3" dia) · 182 g');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
@@ -176,7 +176,9 @@ describe('adding a food by measure', () => {
   it('refuses an amount that comes to less than a gram, and says so rather than that the food failed', async () => {
     renderPage();
     await pickApple();
-    choose('g');
+    choose('grams');
+    // The amount says what it counts, beside it.
+    expect(screen.getByRole('spinbutton', { name: 'Amount' }).nextElementSibling.textContent).toBe('grams');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
     expect(screen.getByRole('button', { name: 'Amount is too small' }).disabled).toBe(true);
     expect(screen.getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
@@ -240,10 +242,14 @@ describe('adding a food by measure', () => {
 });
 
 describe('an ingredient added on the photo sheet', () => {
+  // The scanned dal starts at the 132 g the photo saw (ROADMAP 7a-iv-b).
   const dal = {
     name: 'Dal (lentil curry)', canonical: 'dal_lentil_curry', gramsPoint: 132, gramsRange: [132, 132], portionSource: 'default', nutritionSource: 'curated',
-    kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4, pieces: null,
+    kcalPoint: 191, kcalLow: 191, kcalHigh: 191, proteinG: 9, carbsG: 19, fatG: 4,
+    measures: [{ id: 'g', name: 'g', grams: 1 }, { id: 'oz', name: 'oz', grams: 28.349523125 }], startsAt: { measure: 'g', amount: 132 }, portionEstimated: true,
   };
+  /** The added apple's own card, which holds its own picker. */
+  const appleCard = () => within(screen.getByText('added by you').closest('.rounded-2xl'));
 
   async function scanAndAddApple() {
     renderPage();
@@ -262,30 +268,34 @@ describe('an ingredient added on the photo sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add an ingredient' }));
     fireEvent.change(screen.getByPlaceholderText('e.g. milk, sugar, oil...'), { target: { value: 'apple' } });
     fireEvent.click((await screen.findByText('Apple')).closest('button'));
-    return screen.findByRole('button', { name: 'Measure' });
+    return screen.findByText('added by you');
   }
+  const chooseIn = (card, label) => {
+    fireEvent.click(card.getByRole('button', { name: 'Measure' }));
+    fireEvent.click(card.getByRole('option', { name: label }));
+  };
 
-  it('is picked by measure and saved as the measure and how many', async () => {
+  it('is picked by measure and saved as the measure and how many, beside the scanned row sent by its own', async () => {
     await scanAndAddApple();
-    expect(picked()).toBe('apple · 180 g');
-    choose('medium (3" dia) · 182 g');
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
+    expect(appleCard().getByRole('button', { name: 'Measure' }).textContent).toBe('apple · 180 g');
+    chooseIn(appleCard(), 'medium (3" dia) · 182 g');
+    fireEvent.change(appleCard().getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1.5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm & log meal' }));
     await waitFor(() => expect(svc.confirmMeal).toHaveBeenCalledTimes(1));
     expect(svc.confirmMeal.mock.calls[0][0].items).toEqual([
-      { canonical: 'dal_lentil_curry', grams: 132 },
+      { canonical: 'dal_lentil_curry', measure: 'g', amount: 132 },
       { canonical: 'apple', measure: 'usda-4', amount: 1.5 },
     ]);
   });
 
   it('says on its own row when it comes to less than a gram', async () => {
     await scanAndAddApple();
-    choose('g');
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
-    expect(screen.getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
+    chooseIn(appleCard(), 'grams');
+    fireEvent.change(appleCard().getByRole('spinbutton', { name: 'Amount' }), { target: { value: '0.4' } });
+    expect(appleCard().getByText('That comes to less than 1 g — pick a larger amount.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Confirm & log meal' })).toBeNull();
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1' } });
+    fireEvent.change(appleCard().getByRole('spinbutton', { name: 'Amount' }), { target: { value: '1' } });
     expect(screen.queryByText('That comes to less than 1 g — pick a larger amount.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Confirm & log meal' })).toBeTruthy();
   });

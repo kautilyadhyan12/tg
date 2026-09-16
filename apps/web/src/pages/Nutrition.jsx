@@ -3,14 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Trash2, Camera, X, Loader2,
   Flame, Coffee, UtensilsCrossed, Sandwich, Cookie,
-  Sparkles, Check, Tag, CookingPot, Pencil,
+  Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
-import MeasurePicker, { SaveDishForm } from '../components/nutrition/MeasurePicker';
-import { FILL_CHOICES, amountRefusal, chosenItemFor, comesToUnderAGram, itemText, pickerChoices, startingValue } from '../components/nutrition/measures';
+import MeasurePicker from '../components/nutrition/MeasurePicker';
+import {
+  amountRefusal, amountSummary, chosenItemFor, comesToUnderAGram, isStartingValue, itemText, pickerChoices, startingValue, valueKeepingGrams,
+} from '../components/nutrition/measures';
 import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
 import { getUserId } from '../utils/storage';
 
@@ -27,18 +29,11 @@ const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Package
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
-// Where a photo row's count stepper starts. The scan's own count, one piece a step
-// (six nuggets read ×6, and + makes seven), belongs to the food the scan saw at the
-// grams it saw; any other food, or other grams, starts at ×1 on the grams the row
-// holds (or the scan's grams while the box holds no usable number).
-const scannedStepper = (item) => {
-  const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
-  return { count: pieces, base: item.gramsPoint / pieces };
-};
-const stepperAtGrams = (gramsText, fallback) => {
-  const typed = parseFloat(gramsText);
-  return { count: 1, base: Number.isFinite(typed) && typed > 0 ? typed : fallback };
-};
+/** A copy of `map` without `key`. */
+const without = (map, key) => { const next = { ...map }; delete next[key]; return next; };
+/** The server's refusals of an amount itself, as its preview answers them: a portion
+ *  too small or too large, a measure the food lacks, a dish that is not the person's. */
+const REFUSED_AMOUNTS = new Set(['portion_out_of_range', 'unknown_measure', 'unknown_dishware']);
 
 // ── Meal type config ──────────────────────────────────────────────────────────
 const MEAL_TYPES = [
@@ -289,89 +284,6 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
         )}
       </div>
     </motion.div>
-  );
-}
-
-// ── Card 5c2: "measure with my dish" ─────────────────────────────────────────
-// Pick one of your saved bowls + how full it was (or save a new bowl), instead
-// of typing grams. Reports {dishwareId, fillLevel} up; the SERVER turns that
-// into grams (2B — the browser never does the math). Kd ruling: shown as
-// tap-to-pick choices EVERY time, never auto-applied — a user may use a
-// different bowl each meal.
-function DishMeasure({ dishware, value, onChange, onSaved }) {
-  const [showSave, setShowSave] = useState(false);
-
-  return (
-    <div className="rounded-xl p-3 mt-1"
-         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {/* Your saved bowls (tap to pick — every time, never auto-applied). */}
-      {dishware.length > 0 && (
-        <>
-          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Which dish?</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {dishware.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => onChange({ dishwareId: d.id, fillLevel: value?.fillLevel ?? null })}
-                className="px-2.5 py-1 rounded-lg text-2xs font-semibold"
-                style={{
-                  background: value?.dishwareId === d.id ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                  border: value?.dishwareId === d.id ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                  color: value?.dishwareId === d.id ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
-                }}
-              >
-                {d.label} · {d.volumeMl} ml
-              </button>
-            ))}
-            {!showSave && (
-              <button type="button" onClick={() => setShowSave(true)}
-                      className="px-2.5 py-1 rounded-lg text-2xs font-semibold flex items-center gap-1"
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,138,31,0.35)', color: '#FF8A1F' }}>
-                <Plus className="w-3 h-3" /> New dish
-              </button>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Save a new dish — auto-open when the user has none yet. The form is the
-          measure picker's own (7a-iv-a), so a dish is saved one way everywhere. */}
-      {(showSave || dishware.length === 0) && (
-        <div className="mb-3">
-          <SaveDishForm
-            title={dishware.length === 0 ? 'Save your first dish' : 'Save a new dish'}
-            onClose={dishware.length > 0 ? () => setShowSave(false) : undefined}
-            onSaved={(saved) => {
-              onSaved(saved);                                   // parent refreshes the list
-              onChange({ dishwareId: saved.id, fillLevel: value?.fillLevel ?? null });
-              setShowSave(false);
-            }}
-          />
-        </div>
-      )}
-
-      {/* How full? — required (Kd ruling). Only meaningful once a dish is picked. */}
-      {value?.dishwareId && (
-        <>
-          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>How full?</p>
-          <div className="flex gap-1.5">
-            {FILL_CHOICES.map((f) => (
-              <button key={f.value} type="button"
-                      onClick={() => onChange({ dishwareId: value.dishwareId, fillLevel: f.value })}
-                      className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
-                      style={{
-                        background: value.fillLevel === f.value ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                        border: value.fillLevel === f.value ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                        color: value.fillLevel === f.value ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
-                      }}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -775,7 +687,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
 }
 
 // ── AI Photo Upload Modal ─────────────────────────────────────────────────────
-// Card 5a: photo → analysis (scanToken) → user reviews/edits grams → ONE
+// Card 5a: photo → analysis (scanToken) → user reviews the amounts → ONE
 // confirm POST creates the meal (replaces the old N× logMeal loop). Macros
 // come back SERVER-computed; a poor photo is a 422 that may carry a
 // retakeToken (one free retry — Part 2B §3.5).
@@ -783,11 +695,10 @@ function PhotoModal({ open, onClose, onSave }) {
   const [analyzing,   setAnalyzing]   = useState(false);
   const [analysis,    setAnalysis]    = useState(null);
   const [preview,     setPreview]     = useState(null);
-  const [grams,       setGrams]       = useState({});
-  const [counts,      setCounts]      = useState({});
-  // Stepper base per item: the AI's per-unit grams, replaced by whatever the
-  // user last TYPED (T3 5a advisory — stepping must not discard typed grams).
-  const [bases,       setBases]       = useState({});
+  // ROADMAP 7a-iv-b: every scanned row is measured in the measure picker, as an
+  // added ingredient is. amounts[i] is row i's {key, amount}, starting where the
+  // server started it: one of its food's own measures, or the photo's grams.
+  const [amounts,     setAmounts]     = useState({});
   // "Log as": the user-chosen mealType LABEL (stored via migration 0007);
   // null = unlabeled. takenAt is always the exact real time either way.
   const [logAs,       setLogAs]       = useState(null);
@@ -796,21 +707,24 @@ function PhotoModal({ open, onClose, onSave }) {
   const [retakeMsg,   setRetakeMsg]   = useState(null);
   const [saving,      setSaving]      = useState(false);
   // Card 5c — meal composition: ingredients the AI never saw (the oats-with-
-  // milk case). Each is {food, grams, count, base}; they ride the SAME confirm
-  // as the drafted items, and the server resolves them by canonical.
+  // milk case). Each is {food, amount}; they ride the SAME confirm as the
+  // drafted items, and the server resolves them by canonical.
   const [extras,      setExtras]      = useState([]);
   const [adding,      setAdding]      = useState(false);
-  // Card 5c2: per drafted-item "measure with my dish". itemMeasures[i] present
-  // (even {}) means that item is in dish mode; its value is {dishwareId,
-  // fillLevel}. Extras carry the measure picker's value on the extra object.
+  // The person's saved dishes, which every picker on the sheet offers as measures.
   const [dishware,     setDishware]     = useState([]);
-  const [itemMeasures, setItemMeasures] = useState({});
   // ROADMAP 7a-iii-b "Change": replaced[i] is the food the person picked in place
   // of scanned row i, at the row's own grams; changing is the row whose search
   // is open. A changed row goes to the server as an added food (the scan never
-  // estimated it), so it forms no correction pair.
+  // estimated it), so it forms no correction pair. changeUndo[i] holds what the
+  // row held before and what Change set it to, for its Undo.
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
+  const [changeUndo,   setChangeUndo]   = useState({});
+  // The sheet is a short list, one line a food, and a tap opens that food's
+  // picker (Kd's pick, RULINGS 2026-09-17): openRow is the open one — "s2" for
+  // scanned row 2, "x0" for added ingredient 0 — or null.
+  const [openRow,      setOpenRow]      = useState(null);
   // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
   // used one of the day's scans, so neither closing the sheet nor leaving the page
   // throws it away (`unsavedScan.js`). scannedAt is when this sheet's scan came
@@ -818,9 +732,12 @@ function PhotoModal({ open, onClose, onSave }) {
   // unsaved, holding what was left of it (ms) when the X was pressed, or null.
   const [scannedAt,       setScannedAt]       = useState(null);
   const [confirmingClose, setConfirmingClose] = useState(null);
-  // A row taken from "my dish" back to grams keeps the dish's grams; undoGrams[i]
-  // is what the row held before, for its Undo, as "Change" has one.
-  const [undoGrams,       setUndoGrams]       = useState({});
+  // A row taken from a saved dish to another measure keeps the dish's grams, with
+  // an Undo, as "Change" has one (RULINGS 2026-09-16): dishUndo[i] is the dish and
+  // fill it held and the grams kept. beforeDish[i] is what the row held before a
+  // dish was picked, which it goes back to where the dish was never weighed.
+  const [dishUndo,        setDishUndo]        = useState({});
+  const [beforeDish,      setBeforeDish]      = useState({});
   const fileRef = useRef(null);
 
   const loadDishware = () =>
@@ -830,9 +747,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setAnalysis(null);
     setPreview(null);
     setAnalyzing(false);
-    setGrams({});
-    setCounts({});
-    setBases({});
+    setAmounts({});
     setLogAs(null);
     setLive(null);
     setRetakeToken(null);
@@ -840,12 +755,14 @@ function PhotoModal({ open, onClose, onSave }) {
     setSaving(false);
     setExtras([]);
     setAdding(false);
-    setItemMeasures({});
     setReplaced({});
     setChanging(null);
+    setChangeUndo({});
+    setOpenRow(null);
     setScannedAt(null);
     setConfirmingClose(null);
-    setUndoGrams({});
+    setDishUndo({});
+    setBeforeDish({});
     forgetUnsavedScan();
   };
 
@@ -854,9 +771,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setAnalysis(sheet.analysis);
     setPreview(sheet.preview);
     setAnalyzing(false);
-    setGrams(sheet.grams);
-    setCounts(sheet.counts);
-    setBases(sheet.bases);
+    setAmounts(sheet.amounts);
     setLogAs(sheet.logAs);
     setLive(null);
     setRetakeToken(null);
@@ -864,12 +779,14 @@ function PhotoModal({ open, onClose, onSave }) {
     setSaving(false);
     setExtras(sheet.extras);
     setAdding(false);
-    setItemMeasures(sheet.itemMeasures);
     setReplaced(sheet.replaced);
     setChanging(null);
+    setChangeUndo(sheet.changeUndo);
+    setOpenRow(null);
     setScannedAt(at);
     setConfirmingClose(null);
-    setUndoGrams(sheet.undoGrams);
+    setDishUndo(sheet.dishUndo);
+    setBeforeDish(sheet.beforeDish);
   };
 
   useEffect(() => {
@@ -887,9 +804,9 @@ function PhotoModal({ open, onClose, onSave }) {
   // Every change to an unsaved sheet is kept above the page, for its person.
   useEffect(() => {
     if (analysis !== null && scannedAt !== null) {
-      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams });
+      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, amounts, logAs, extras, replaced, changeUndo, dishUndo, beforeDish });
     }
-  }, [analysis, scannedAt, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams]);
+  }, [analysis, scannedAt, preview, amounts, logAs, extras, replaced, changeUndo, dishUndo, beforeDish]);
 
   // The X: a sheet holding an unsaved scan asks first, saying how long it can be
   // picked up again. A click outside the box never closes it (Kd: only the cross).
@@ -912,41 +829,35 @@ function PhotoModal({ open, onClose, onSave }) {
     setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
-    setItemMeasures({}); // …and no dish measures from a previous photo
     setReplaced({});     // …and no changed foods
-    setUndoGrams({});
+    setChangeUndo({});
+    setDishUndo({});     // …and no dish measures
+    setBeforeDish({});
     setChanging(null);
+    setOpenRow(null);
     setRetakeMsg(null);
 
     try {
       const res = await nutritionService.analyzePhoto(file, retakeToken);
       const at = Date.now();
-      // Grams default to the server's estimate; the user can correct them —
-      // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
-      // typing grams directly. The server computes ALL nutrition from grams.
-      // An item the photo counted starts at its count (scannedStepper).
-      const g = {};
-      const c = {};
-      const b = {};
-      res.data.items.forEach((item, i) => {
-        const stepper = scannedStepper(item);
-        g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
-      });
+      // Each row starts where the server started it (ROADMAP 7a-iv-b): at one of its
+      // food's own measures where the photo's count of it agrees with the grams the
+      // photo saw, else at those grams. The person corrects it in the picker; the
+      // server computes ALL nutrition from what it sends.
+      const starts = Object.fromEntries(res.data.items.map((item, i) => [i, startingValue(item)]));
       // Kept the moment it returns, not only once a sheet shows it: a person who
       // left the page while the photo was read still has the scan it counted.
       // Never for someone else who has signed in since.
       if (getUserId() === scanner) {
         keepUnsavedScan(scanner, at, {
-          analysis: res.data, preview: photo, grams: g, counts: c, bases: b,
-          logAs: null, extras: [], itemMeasures: {}, replaced: {}, undoGrams: {},
+          analysis: res.data, preview: photo, amounts: starts,
+          logAs: null, extras: [], replaced: {}, changeUndo: {}, dishUndo: {}, beforeDish: {},
         });
       }
       setRetakeToken(null);
       setAnalysis(res.data);
       setScannedAt(at);
-      setGrams(g);
-      setCounts(c);
-      setBases(b);
+      setAmounts(starts);
       setLive(null);
     } catch (err) {
       if (err.response?.status === 422) {
@@ -992,36 +903,31 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
-  // Each item resolves to ONE contract arm: the grams arm {canonical, grams}
-  // OR the Card-5c2 dishware arm {canonical, dishwareId, fillLevel}. An item is
-  // in dish mode when it has a `measure` (a present itemMeasures[i], or an
-  // extra's own .measure); dish mode is valid only once BOTH a dish and a fill
-  // are chosen (Kd: fill required). A grams field must hold a usable value —
-  // a cleared/zero field never silently falls back to the AI estimate (T3 5a).
-  const resolveArm = (canonical, gramsStr, measure) => {
-    if (measure) {
-      const ok = !!measure.dishwareId && !!measure.fillLevel;
-      return { item: ok ? { canonical, dishwareId: measure.dishwareId, fillLevel: measure.fillLevel } : null, valid: ok };
-    }
-    const g = parseFloat(gramsStr);
-    const ok = Number.isFinite(g) && g > 0 && g <= MAX_GRAMS;
-    return { item: ok ? { canonical, grams: g } : null, valid: ok, tooLarge: Number.isFinite(g) && g > MAX_GRAMS };
-  };
-  // An added ingredient is measured in the measure picker (ROADMAP 7a-iv-a): one
-  // of its own measures and how many, or a saved dish and how full.
-  const resolveExtra = (x) => {
-    const choice = x.amount ? pickerChoices(x.food, dishware).find((c) => c.key === x.amount.key) ?? null : null;
-    const item = chosenItemFor(x.food.canonical, choice, x.amount?.amount);
-    const typed = parseFloat(x.amount?.amount);
+  // Every row, scanned or added, is measured in the measure picker (ROADMAP 7a-iv-a,
+  // 7a-iv-b): one of its food's own measures and how many, or a saved dish and how
+  // full it was. It sends nothing while its amount is no amount, and an amount the
+  // server would refuse says why before it is sent.
+  const resolvePicked = (food, value) => {
+    const choice = value ? pickerChoices(food, dishware).find((c) => c.key === value.key) ?? null : null;
+    const item = chosenItemFor(food.canonical, choice, value?.amount);
+    const typed = parseFloat(value?.amount);
     const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
-    const tooSmall = comesToUnderAGram(choice, x.amount?.amount);
+    const tooSmall = comesToUnderAGram(choice, value?.amount);
     const usable = item !== null && !tooLarge && !tooSmall;
     return { item: usable ? item : null, valid: usable, tooLarge, tooSmall };
   };
+  // The food a scanned row prices now: the one Change picked, else the scan's.
+  const rowFood = (i) => replaced[i] ?? analysis.items[i];
   const resolved = analysis === null ? [] : [
-    ...analysis.items.map((item, i) => resolveArm(replaced[i]?.canonical ?? item.canonical, grams[i], itemMeasures[i])),
-    ...extras.map(resolveExtra),
+    ...analysis.items.map((_, i) => resolvePicked(rowFood(i), amounts[i])),
+    ...extras.map((x) => resolvePicked(x.food, x.amount)),
   ];
+  // A row still exactly as the scan started it, and a meal still exactly what the
+  // scan saw: only then do the scan's own numbers stand in while the server has not
+  // answered for what the sheet holds (T3 5c: never a price that is not what will
+  // be saved).
+  const rowAtScan = (i) => replaced[i] === undefined && isStartingValue(analysis.items[i], amounts[i]);
+  const mealAtScan = analysis !== null && extras.length === 0 && analysis.items.every((_, i) => rowAtScan(i));
   // Every food the sheet prices now: a changed row by the food picked for it.
   const rowSources = analysis === null ? [] : [
     ...analysis.items.map((item, i) => replaced[i]?.source ?? item.nutritionSource),
@@ -1041,9 +947,14 @@ function PhotoModal({ open, onClose, onSave }) {
     ...rowCanonicals.filter((_, j) => j !== row),
     ...analysis.items.map((item) => item.canonical).filter((_, j) => j !== row),
   ]);
-  // The total is "about" while any food in it is the scanner's own estimate.
-  const aboutTotal = rowSources.includes('estimate');
-  const anyReplaced = Object.keys(replaced).length > 0;
+  // The total is "about" while any row is an estimate (RULINGS 2026-09-16): a food
+  // the scanner itself priced, or a portion still at the photo's own guess (the
+  // review of PR #76, L1). A SAVED meal reads "about" only for the first
+  // (`hasEstimate`): confirming the sheet makes every amount the person's — Part 2B
+  // §3.2 Stage 4, the tap "converts an AI guess into a user-verified log" — so a
+  // saved item keeps no mark that its amount began as the photo's guess.
+  const aboutTotal = rowSources.includes('estimate')
+    || (analysis !== null && analysis.items.some((item, i) => item.portionEstimated && rowAtScan(i)));
   // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
@@ -1051,11 +962,11 @@ function PhotoModal({ open, onClose, onSave }) {
   // "Add an ingredient" (or its open picker) shows unless the meal is full; what
   // points at it says so only while it is there.
   const canAdd = adding || payloadItems.length < MAX_ITEMS;
-  // 5b T3 advisory: say WHY the button is dead — "Enter grams for every item"
+  // 5b T3 advisory: say WHY the button is dead — "Pick an amount for every item"
   // is a lie when the user plainly entered 20000.
   const gramsTooLarge = resolved.some((r) => r.tooLarge);
 
-  // Live server preview (Kd-approved): whenever grams change, ask the SERVER
+  // Live server preview (Kd-approved): whenever an amount changes, ask the SERVER
   // what the nutrition would be — the browser never computes it. Debounced;
   // failures degrade silently to the analysis estimates (e.g. old API).
   const payloadKey = JSON.stringify(payloadItems);
@@ -1071,21 +982,56 @@ function PhotoModal({ open, onClose, onSave }) {
         // Stamp the result with the payload it priced, so a response that
         // lands after a further edit is not shown as current (T3 5c honesty).
         if (!cancelled) setLive({ data: res.data, key: payloadKey });
-      } catch {
-        if (!cancelled) setLive(null);
+      } catch (err) {
+        // Kept as a failure of this very payload, so a row can say why its grams
+        // are not known: an amount the server refuses, or no answer at all.
+        if (!cancelled) setLive({ data: null, key: payloadKey, refused: REFUSED_AMOUNTS.has(err?.response?.data?.error) });
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-    // payloadKey covers grams AND extras by value; payloadItems is rebuilt each
-    // render so it cannot be a dep itself.
+    // payloadKey covers every amount AND extras by value; payloadItems is rebuilt
+    // each render so it cannot be a dep itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, payloadKey, allValid]);
 
   // T3 5c: a number is only "live" if it priced the CURRENT payload. A result
-  // for a stale payload (mid-debounce, or after a grams edit made gramsValid
-  // false) must NOT be shown — the card's rule is withhold-until-the-server-
+  // for a stale payload (mid-debounce, or after an edit made an amount
+  // unusable) must NOT be shown — the card's rule is withhold-until-the-server-
   // answers, and with extras present a stale total is not what will be saved.
   const liveNow = live !== null && live.key === payloadKey ? live.data : null;
+  // The server's preview of the sheet as it stands failed: 'refused' where it refused
+  // an amount, 'failed' where it gave no answer, else null.
+  const previewTrouble = live !== null && live.key === payloadKey && live.data === null ? (live.refused ? 'refused' : 'failed') : null;
+  // The grams row i holds: the server's answer for the sheet as it stands; else —
+  // before it answers, or where it cannot — what the row's own measure weighs, how
+  // many times the grams one of it weighs on the server's own list, to the whole
+  // gram, as the server works it out. Null for a saved dish the server has not
+  // weighed, and for an amount that is no amount (the review of PR #76, H1: a row
+  // moved and not priced yet was taken at the scan's grams).
+  const rowGrams = (i) => {
+    const priced = liveNow?.items?.[i]?.gramsPoint;
+    if (Number.isFinite(priced)) return priced;
+    const choice = pickerChoices(rowFood(i), dishware).find((c) => c.key === amounts[i]?.key);
+    const amount = parseFloat(amounts[i]?.amount);
+    if (choice?.kind !== 'measure' || !Number.isFinite(amount) || amount <= 0) return null;
+    const grams = Math.round(amount * choice.grams);
+    return grams >= 1 && grams <= MAX_GRAMS ? grams : null;
+  };
+  // Why "Change food" waits, while the row's grams are not known, said truly for each
+  // way they can be unknown (the re-check of PR #76): no amount yet; an amount no
+  // gram or past what one item may weigh; a dish the server weighs, while it is
+  // still to answer, cannot answer until every other amount is usable, refused
+  // the amount, or gave no answer.
+  const changeHold = (i) => {
+    const choice = pickerChoices(rowFood(i), dishware).find((c) => c.key === amounts[i]?.key);
+    const dish = choice?.kind === 'dish';
+    const amount = parseFloat(amounts[i]?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return dish ? 'Pick how full it was first.' : 'Pick an amount first.';
+    if (!dish || previewTrouble === 'refused') return "This amount can't be weighed — pick another.";
+    if (!allValid) return 'Finish the other amounts first.';
+    if (previewTrouble === 'failed') return "The grams couldn't be worked out just now.";
+    return 'Working out the grams…';
+  };
 
   const handleConfirm = async () => {
     if (!analysis || saving || !allValid) return;
@@ -1114,55 +1060,108 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
-  // "my dish" back to grams: the row keeps the grams the server worked out for the
-  // dish (where it has answered for it), and can go back to what it held before.
-  const backToGrams = (idx) => {
-    const dish = itemMeasures[idx];
-    const dishGrams = liveNow?.items?.[idx]?.gramsPoint;
-    setItemMeasures((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-    if (!dish?.dishwareId || !dish?.fillLevel || !Number.isFinite(dishGrams)) return;
-    setUndoGrams((prev) => ({ ...prev, [idx]: { grams: grams[idx], count: counts[idx], base: bases[idx] } }));
-    setGrams((prev) => ({ ...prev, [idx]: String(dishGrams) }));
-    restartStepper(idx, { count: 1, base: dishGrams });
+  // A scanned row's picker changed. Taken from a saved dish to another measure, the
+  // row keeps the grams the server worked out for the dish, with an Undo (RULINGS
+  // 2026-09-16); where the dish was never weighed (no fill picked), it goes back to
+  // what it held before the dish. Any other change is the picker's own.
+  const setRowAmount = (i, next) => {
+    const choices = pickerChoices(rowFood(i), dishware);
+    const from = choices.find((c) => c.key === amounts[i]?.key);
+    const to = choices.find((c) => c.key === next.key);
+    if (from?.kind !== 'dish' && to?.kind === 'dish') {
+      setBeforeDish((prev) => ({ ...prev, [i]: { value: amounts[i], grams: rowGrams(i) } }));
+    }
+    if (from?.kind === 'dish' && to !== undefined && to.kind !== 'dish') {
+      const dishGrams = liveNow?.items?.[i]?.gramsPoint;
+      const kept = valueKeepingGrams(to, dishGrams);
+      const before = beforeDish[i];
+      setBeforeDish((prev) => without(prev, i));
+      if (kept !== null) {
+        setDishUndo((prev) => ({ ...prev, [i]: { value: amounts[i], grams: Math.round(dishGrams) } }));
+        setAmounts((prev) => ({ ...prev, [i]: kept }));
+        return;
+      }
+      const back = before === undefined ? null : before.value?.key === to.key ? before.value : valueKeepingGrams(to, before.grams);
+      if (back) {
+        setAmounts((prev) => ({ ...prev, [i]: back }));
+        return;
+      }
+    }
+    if (to?.kind === 'dish') setDishUndo((prev) => without(prev, i));
+    setAmounts((prev) => ({ ...prev, [i]: next }));
   };
-  const undoGramsChange = (idx) => {
-    const before = undoGrams[idx];
-    if (!before) return;
-    setGrams((prev) => ({ ...prev, [idx]: before.grams }));
-    restartStepper(idx, { count: before.count, base: before.base });
-    setUndoGrams((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+  const undoDishKept = (i) => {
+    const undo = dishUndo[i];
+    if (!undo) return;
+    setAmounts((prev) => ({ ...prev, [i]: undo.value }));
+    setDishUndo((prev) => without(prev, i));
   };
 
   const addExtra = (food) => {
+    setOpenRow(`x${extras.length}`);
     setExtras((prev) => [...prev, { food, amount: startingValue(food) }]);
     setAdding(false);
     setLive(null); // numbers are stale until the server re-prices the new list
   };
   const patchExtra = (idx, next) => setExtras((prev) => prev.map((x, i) => (i === idx ? { ...x, ...next } : x)));
-  const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setLive(null); };
-  // The food picked for a scanned row takes its place at the row's own grams; the
-  // server prices it (never the browser) once the preview asks. Its stepper starts
-  // at ×1 on those grams: the pieces the scan counted were of the food it replaced.
-  const restartStepper = (idx, stepper) => {
-    setCounts((prev) => ({ ...prev, [idx]: stepper.count }));
-    setBases((prev) => ({ ...prev, [idx]: stepper.base }));
-  };
-  const changeRow = (idx, food) => {
-    setReplaced((prev) => ({ ...prev, [idx]: food }));
-    restartStepper(idx, stepperAtGrams(grams[idx], analysis.items[idx].gramsPoint));
+  const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setOpenRow(null); setLive(null); };
+  // The food picked for a scanned row takes its place at the row's own grams, by the
+  // gram: the measures the row had were the food it replaced. The server prices it
+  // (never the browser) once the preview asks. With no grams to keep, nothing is
+  // changed ("Change food" waits for them).
+  const changeRow = (i, food) => {
+    const grams = rowGrams(i);
+    if (grams === null) return;
+    const at = { key: 'g', amount: String(grams) };
+    // Undo gives back the scanned food as it stood before its first Change.
+    setChangeUndo((prev) => ({ ...prev, [i]: { before: replaced[i] === undefined ? amounts[i] : prev[i]?.before ?? startingValue(analysis.items[i]), at } }));
+    setReplaced((prev) => ({ ...prev, [i]: food }));
+    setAmounts((prev) => ({ ...prev, [i]: at }));
+    setDishUndo((prev) => without(prev, i));
+    setBeforeDish((prev) => without(prev, i));
     setChanging(null);
     setLive(null);
   };
-  // Undo puts the scanned food back, with the scan's own count while the grams are
-  // still the scan's.
-  const undoChange = (idx) => {
-    const item = analysis.items[idx];
-    setReplaced((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-    restartStepper(idx, grams[idx] === String(item.gramsPoint) ? scannedStepper(item) : stepperAtGrams(grams[idx], item.gramsPoint));
+  // Undo puts the scanned food back: at the measure and amount it held while the
+  // row is still at the grams Change kept, else by the gram at the grams the row
+  // holds now — or as it held where those grams are not known (a dish not weighed).
+  const undoChange = (i) => {
+    const undo = changeUndo[i];
+    const untouched = undo !== undefined && amounts[i]?.key === undo.at.key && amounts[i]?.amount === undo.at.amount;
+    const grams = rowGrams(i);
+    setReplaced((prev) => without(prev, i));
+    setChangeUndo((prev) => without(prev, i));
+    setDishUndo((prev) => without(prev, i));
+    setBeforeDish((prev) => without(prev, i));
+    setAmounts((prev) => ({ ...prev, [i]: untouched || grams === null ? undo?.before ?? startingValue(analysis.items[i]) : { key: 'g', amount: String(grams) } }));
     setLive(null);
   };
 
   if (!open) return null;
+
+  const amber = { color: 'rgba(251,191,36,0.85)' };
+  const toggleRow = (key) => setOpenRow((current) => (current === key ? null : key));
+  // Why a row cannot be saved as it stands, said under it whether it is open or not:
+  // nothing can be confirmed until it is fixed.
+  const unusableLine = ({ tooLarge, tooSmall }) => ((tooLarge || tooSmall) && (
+    <p className="text-xs px-3.5 pb-2.5" style={amber}>
+      {tooSmall
+        ? 'That comes to less than 1 g — pick a larger amount.'
+        : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
+    </p>
+  ));
+  const macrosLine = (shown) => (
+    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+      {shown === null || shown === undefined
+        ? 'Calculating…'
+        : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
+    </p>
+  );
+  const rowBox = (isOpen, added) => ({
+    background: added ? 'rgba(255,138,31,0.05)' : isOpen ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.02)',
+    border: added ? '1px solid rgba(255,138,31,0.15)' : `1px solid rgba(255,255,255,${isOpen ? '0.10' : '0.05'})`,
+  });
+  const withSheet = analysis !== null;
 
   return (
     <AnimatePresence>
@@ -1170,23 +1169,26 @@ function PhotoModal({ open, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{    opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
       >
+        {/* A phone: the whole screen once a scan is on it. A computer: wide, the
+            photo and the total beside the list (Kd's pick, RULINGS 2026-09-17). */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1    }}
           exit={{    opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-md rounded-3xl flex flex-col"
+          className={`relative w-full flex flex-col rounded-t-3xl sm:rounded-3xl ${withSheet
+            ? 'h-[100dvh] sm:h-[90vh] sm:max-w-2xl lg:max-w-5xl'
+            : 'max-h-[100dvh] sm:max-h-[85vh] sm:max-w-md'}`}
           style={{
             background: '#121110',
             border:     '1px solid rgba(255,255,255,0.06)',
-            maxHeight:  '85vh',
           }}
         >
           {/* The X's question while a scan is unsaved (RULINGS 2026-09-16). */}
           {confirmingClose !== null && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-3xl"
+            <div className="absolute inset-0 z-10 flex items-center justify-center p-6 rounded-t-3xl sm:rounded-3xl"
                  style={{ background: 'rgba(10,9,8,0.94)' }}>
               <div role="alertdialog" aria-labelledby="close-scan-title" className="w-full max-w-xs text-center">
                 <p id="close-scan-title" className="text-base font-bold text-white mb-2">Close without saving?</p>
@@ -1212,7 +1214,7 @@ function PhotoModal({ open, onClose, onSave }) {
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between px-5 py-4"
+          <div className="flex items-center justify-between px-5 py-3 flex-shrink-0"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" style={{ color: '#FF8A1F' }} />
@@ -1228,8 +1230,8 @@ function PhotoModal({ open, onClose, onSave }) {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
-            {!preview ? (
+          {!preview ? (
+            <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
               <button
                 onClick={() => fileRef.current?.click()}
                 className="w-full py-12 rounded-2xl border-2 border-dashed
@@ -1258,377 +1260,92 @@ function PhotoModal({ open, onClose, onSave }) {
                   className="hidden"
                 />
               </button>
-            ) : (
-              <div className="space-y-4">
-                {/* A scan not saved yet, perhaps brought back after a close: a new
-                    photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
-                {analysis && (
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                      Not saved yet. This scan still counts as one of today's scans.
-                    </p>
-                    <button type="button" onClick={resetSheet}
-                            className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
-                            style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
-                      <Camera className="w-3.5 h-3.5" /> New photo
-                    </button>
-                  </div>
-                )}
-                <img
-                  src={preview}
-                  alt="Meal"
-                  className="w-full rounded-2xl object-cover"
-                  style={{ maxHeight: 240 }}
-                />
-
-                {analyzing && (
-                  <div className="flex items-center justify-center gap-2 py-6"
-                       style={{
-                         background: 'rgba(255,138,31,0.05)',
-                         border:     '1px solid rgba(255,138,31,0.15)',
-                         borderRadius: 16,
-                       }}>
-                    <Loader2 className="w-4 h-4 animate-spin"
-                             style={{ color: '#FF8A1F' }} />
-                    <p className="text-sm font-medium"
-                       style={{ color: 'rgba(255,138,31,0.85)' }}>
-                      Analyzing your meal...
-                    </p>
-                  </div>
-                )}
-
-                {analysis && (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2"
-                       style={{ color: '#FF8A1F' }}>
-                      AI Analysis · {analysis.photoQuality === 'good' ? 'clear photo' : 'low confidence'}
-                    </p>
-                    <p className="text-base font-bold text-white mb-1">
-                      {analysis.mealName}
-                    </p>
-                    <p className="text-xs mb-1"
-                       style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      Check the portion sizes below — you can adjust the grams
-                      before saving.
-                    </p>
-                    {/* RULINGS 2026-09-09: photo scans say they estimate calories
-                        and cannot detect allergens. Never softened or removed. */}
-                    <p className="text-xs mb-4"
-                       style={{ color: 'rgba(251,191,36,0.85)' }}>
-                      {PHOTO_SCAN_CAUTION}
-                    </p>
-
-                    <div className="space-y-2 mb-4">
-                      {analysis.items.map((item, i) => {
-                        // Server-computed live numbers for the CURRENT grams
-                        // (2B: never computed in the browser). The AI's own
-                        // estimate is only a legitimate stand-in while the
-                        // meal is still exactly what the AI saw — once the
-                        // user has added an ingredient the row must wait for
-                        // the server rather than show a stale price (T3 5c).
-                        // Fall back to the AI's own estimate ONLY while the meal
-                        // is still exactly what the AI saw (no extras) AND this
-                        // item is still on the AI's grams (not a dish measure) —
-                        // the AI's grams estimate can never equal a dish price,
-                        // so a dish-mode row must wait for the server, not show a
-                        // number that isn't what will be saved (T3 5c2 F1).
-                        // A row changed to another food waits for the server too:
-                        // the scan's numbers are the food it replaced.
-                        const changed = replaced[i];
-                        const shown = liveNow?.items?.[i]
-                          ?? (extras.length === 0 && !anyReplaced && itemMeasures[i] === undefined ? item : null);
-                        const source = changed?.source ?? item.nutritionSource;
-                        // An estimate's grams are the scanner's guess until the person sets them.
-                        const estimateLabel = grams[i] === String(item.gramsPoint)
-                          ? `~${item.gramsPoint} g · estimate`
-                          : grams[i] ? `${grams[i]} g · estimate` : 'Estimate';
-                        return (
-                        <div key={i}
-                             className="p-2.5 rounded-xl"
-                             style={{ background: 'rgba(255,255,255,0.02)' }}>
-                          <div className="flex justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">
-                                {changed?.name ?? item.name}
-                              </p>
-                              <p className="text-2xs mt-0.5 flex flex-wrap items-center gap-x-1.5"
-                                 style={{ color: 'rgba(255,255,255,0.40)' }}>
-                                {source === 'estimate' && itemMeasures[i] === undefined
-                                  ? <span style={{ color: 'rgba(251,191,36,0.85)' }}>{estimateLabel}</span>
-                                  : <span style={source === 'estimate' ? { color: 'rgba(251,191,36,0.85)' } : undefined}>{SOURCE_TAGS[source] ?? source}</span>}
-                                <span aria-hidden="true">·</span>
-                                <button type="button"
-                                        onClick={() => setChanging(changing === i ? null : i)}
-                                        className="font-semibold underline decoration-dotted"
-                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                  Change
-                                </button>
-                                {changed && (
-                                  <button type="button"
-                                          onClick={() => undoChange(i)}
-                                          className="underline decoration-dotted"
-                                          style={{ color: 'rgba(255,255,255,0.50)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                    Undo
-                                  </button>
-                                )}
-                              </p>
-                            </div>
-                            <p className="text-sm font-bold flex-shrink-0"
-                               style={{ color: '#FF8A1F' }}>
-                              {shown === null
-                                ? '…'
-                                : shown.kcalLow === shown.kcalHigh
-                                  ? `${shown.kcalPoint} kcal`
-                                  : `${shown.kcalLow}–${shown.kcalHigh} kcal`}
-                            </p>
-                          </div>
-                          {changing === i && (
-                            <div className="mt-2 p-2.5 rounded-xl space-y-2"
-                                 style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                              <p className="text-2xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
-                                Pick the right food for {changed?.name ?? item.name}. The amount stays the same.
-                              </p>
-                              <FoodPicker
-                                selected={null}
-                                onPick={(food) => changeRow(i, food)}
-                                autoFocus
-                                exclude={onSheet(i)}
-                                placeholder="Search the right food..."
-                              />
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-2xs"
-                               style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              {shown === null
-                                ? 'Calculating…'
-                                : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
-                            </p>
-                            {itemMeasures[i] === undefined ? (
-                              <div className="flex items-center gap-2">
-                                {/* Count stepper: multiplies one piece's grams
-                                    (the scan's grams over its count) — portion
-                                    scaling only; nutrition math stays on the server. */}
-                                <div className="flex items-center gap-1 text-2xs"
-                                     style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                  <button type="button"
-                                    onClick={() => {
-                                      const n = Math.max(1, (counts[i] ?? 1) - 1);
-                                      setCounts({ ...counts, [i]: n });
-                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                    }}
-                                    className="w-6 h-6 rounded-md"
-                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
-                                  <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
-                                  <button type="button"
-                                    onClick={() => {
-                                      // Never lower a scan's own count above the cap.
-                                      const n = Math.max(counts[i] ?? 1, Math.min(30, (counts[i] ?? 1) + 1));
-                                      setCounts({ ...counts, [i]: n });
-                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                    }}
-                                    className="w-6 h-6 rounded-md"
-                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
-                                </div>
-                                <label className="flex items-center gap-1.5 text-2xs"
-                                       style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                  <input
-                                    type="number" value={grams[i] ?? ''} min="1" max="10000"
-                                    onChange={(e) => {
-                                      setGrams({ ...grams, [i]: e.target.value });
-                                      const typed = parseFloat(e.target.value);
-                                      if (Number.isFinite(typed) && typed > 0) {
-                                        setBases({ ...bases, [i]: typed });
-                                        setCounts({ ...counts, [i]: 1 });
-                                      }
-                                    }}
-                                    className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
-                                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
-                                  />
-                                  g
-                                </label>
-                                {/* Card 5c2: measure this item with my dish
-                                    instead. A LABELED pill, not a bare icon, so
-                                    a first-time user can see the option (Kd
-                                    smoke ask — discoverability). */}
-                                <button type="button" title="Measure with my dish instead of grams"
-                                        onClick={() => setItemMeasures({ ...itemMeasures, [i]: {} })}
-                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold whitespace-nowrap flex-shrink-0"
-                                        style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
-                                  <CookingPot className="w-3 h-3" /> my dish
-                                </button>
-                              </div>
-                            ) : (
-                              <button type="button"
-                                      onClick={() => backToGrams(i)}
-                                      className="text-2xs font-semibold px-2 py-1 rounded-md"
-                                      style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
-                                ← back to grams
-                              </button>
-                            )}
-                          </div>
-                          {undoGrams[i] && itemMeasures[i] === undefined && (
-                            <p className="text-2xs mt-1 text-right" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              Kept the dish's {grams[i]} g ·{' '}
-                              <button type="button" onClick={() => undoGramsChange(i)}
-                                      className="underline decoration-dotted"
-                                      style={{ color: 'rgba(255,255,255,0.65)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                Undo
-                              </button>
-                            </p>
-                          )}
-                          {itemMeasures[i] !== undefined && (
-                            <DishMeasure
-                              dishware={dishware}
-                              value={itemMeasures[i]}
-                              onChange={(v) => setItemMeasures({ ...itemMeasures, [i]: v })}
-                              onSaved={loadDishware}
-                            />
-                          )}
-                        </div>
-                        );
-                      })}
-
-                      {/* Card 5c: ingredients the AI never saw (oats → milk).
-                          Same grams/stepper rules; the SERVER prices them. */}
-                      {extras.map((x, j) => {
-                        const shown = liveNow?.items?.[analysis.items.length + j];
-                        // Confirm is hidden while any amount is unusable, so the row says why.
-                        const { tooLarge, tooSmall } = resolved[analysis.items.length + j];
-                        return (
-                          <div key={`${x.food.canonical}-${j}`} className="p-3.5 rounded-2xl"
-                               style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white">{x.food.name}</p>
-                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</p>
-                              </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <p className="text-base font-bold" style={{ color: '#FF8A1F' }}>
-                                  {shown ? `${shown.kcalPoint} kcal` : '…'}
-                                </p>
-                                <button type="button" onClick={() => removeExtra(j)}
-                                        title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
-                                        className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                              {shown
-                                ? `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`
-                                : 'Calculating…'}
-                            </p>
-                            <div className="mt-3">
-                              <MeasurePicker
-                                food={x.food}
-                                dishware={dishware}
-                                value={x.amount}
-                                onChange={(next) => patchExtra(j, { amount: next })}
-                                grams={shown?.gramsPoint ?? null}
-                                onDishSaved={loadDishware}
-                              />
-                            </div>
-                            {(tooLarge || tooSmall) && (
-                              <p className="text-xs mt-2" style={{ color: 'rgba(251,191,36,0.85)' }}>
-                                {tooSmall
-                                  ? 'That comes to less than 1 g — pick a larger amount.'
-                                  : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* + Add ingredient — in the flow, where the mistake is
-                        visible (Kd: features live inside the flow they serve). */}
-                    {adding ? (
-                      <div className="mb-4 p-3 rounded-xl space-y-3"
-                           style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
-                            Add an ingredient the photo missed
-                          </p>
-                          <button type="button" onClick={() => setAdding(false)}
-                                  className="p-1 rounded" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <FoodPicker
-                          selected={null}
-                          onPick={addExtra}
-                          autoFocus
-                          exclude={onSheet()}
-                          placeholder="e.g. milk, sugar, oil..."
-                        />
-                      </div>
-                    ) : canAdd ? (
-                      <button
-                        type="button"
-                        onClick={() => setAdding(true)}
-                        className="w-full mb-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
-                        style={{
-                          background:  'rgba(255,255,255,0.03)',
-                          border:      '1px dashed rgba(255,138,31,0.35)',
-                          color:       '#FF8A1F',
-                        }}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add an ingredient
+            </div>
+          ) : (
+            // One scroll on a phone: the photo and name, the list, then the total and
+            // Confirm. On a computer, two columns that scroll on their own.
+            <div className={`flex-1 min-h-0 overflow-y-auto no-scrollbar p-4 sm:p-5 flex flex-col gap-4 ${withSheet
+              ? 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-6 lg:overflow-hidden'
+              : ''}`}>
+              <div className="contents lg:flex lg:flex-col lg:gap-4 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
+                <div className="order-1 space-y-3">
+                  {/* A scan not saved yet, perhaps brought back after a close: a new
+                      photo is a new scan, and this one still counts (Kd, RULINGS 2026-09-16). */}
+                  {analysis && (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                        Not saved yet. This scan still counts as one of today's scans.
+                      </p>
+                      <button type="button" onClick={resetSheet}
+                              className="flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
+                              style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.25)' }}>
+                        <Camera className="w-3.5 h-3.5" /> New photo
                       </button>
-                    ) : (
-                      <p className="text-2xs mb-4 text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                        That's the most items one meal can hold ({MAX_ITEMS}).
-                      </p>
-                    )}
-
-                    {/* Both what the photo could not identify and what matched no
-                        food are left out of the total. */}
-                    {analysis.unknownItems?.length > 0 && (
-                      <p className="text-2xs mb-4"
-                         style={{ color: 'rgba(251,191,36,0.75)' }}>
-                        Not in the total: {analysis.unknownItems.join(', ')}
-                        {canAdd
-                          ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
-                          : '.'}
-                      </p>
-                    )}
-
-                    {/* Card-5b smoke (Kd): AI saw food but NOTHING matched our
-                        food data ("Flatbread Stack" ≠ Roti) — say so honestly
-                        instead of a 0-kcal box + dead Confirm. Card 5c: the
-                        user can now fix it right here, so point at the button
-                        above rather than sending them to another screen. */}
-                    {analysis.items.length === 0 && extras.length === 0 && (
-                      <div className="rounded-xl p-4 mb-4 text-center"
-                           style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.20)' }}>
-                        <p className="text-sm font-semibold mb-1"
-                           style={{ color: 'rgba(251,191,36,0.85)' }}>
-                          We saw the food but couldn't match it to our
-                          nutrition data.
+                    </div>
+                  )}
+                  <div className={withSheet ? 'flex gap-3 items-start lg:block' : ''}>
+                    <img
+                      src={preview}
+                      alt="Meal"
+                      className={withSheet
+                        ? 'w-24 h-24 sm:w-28 sm:h-28 lg:w-full lg:h-auto lg:max-h-52 rounded-2xl object-cover flex-shrink-0'
+                        : 'w-full rounded-2xl object-cover max-h-60'}
+                    />
+                    {analysis && (
+                      <div className="min-w-0 lg:mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-1"
+                           style={{ color: '#FF8A1F' }}>
+                          AI Analysis · {analysis.photoQuality === 'good' ? 'clear photo' : 'low confidence'}
                         </p>
-                        <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                          Add it yourself with “Add an ingredient” above — we're
-                          improving name matching.
+                        <p className="text-base font-bold text-white mb-1">
+                          {analysis.mealName}
+                        </p>
+                        <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                          Tap a food to change its amount before saving.
+                        </p>
+                        {/* RULINGS 2026-09-09: photo scans say they estimate calories
+                            and cannot detect allergens. Never softened or removed. */}
+                        <p className="text-xs" style={amber}>
+                          {PHOTO_SCAN_CAUTION}
                         </p>
                       </div>
                     )}
+                  </div>
 
+                  {analyzing && (
+                    <div className="flex items-center justify-center gap-2 py-6"
+                         style={{
+                           background: 'rgba(255,138,31,0.05)',
+                           border:     '1px solid rgba(255,138,31,0.15)',
+                           borderRadius: 16,
+                         }}>
+                      <Loader2 className="w-4 h-4 animate-spin"
+                               style={{ color: '#FF8A1F' }} />
+                      <p className="text-sm font-medium"
+                         style={{ color: 'rgba(255,138,31,0.85)' }}>
+                        Analyzing your meal...
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {analysis && (
+                  <div className="order-3">
                     {payloadItems.length > 0 && (<>
                     <div
-                      className="rounded-xl p-3 mb-4"
+                      className="rounded-xl p-3 mb-3"
                       style={{
                         background: 'rgba(255,138,31,0.08)',
                         border:     '1px solid rgba(255,138,31,0.20)',
                       }}
                     >
-                      {/* The AI's own totals cover ONLY what it saw, so once
-                          the user has added an ingredient they are the wrong
-                          number — wait for the server rather than show a total
-                          lower than what we are about to save. */}
+                      {/* The AI's own totals cover ONLY what it saw, as it
+                          started each row: once the user has added an
+                          ingredient, changed a food or moved an amount they are
+                          the wrong number — wait for the server rather than show
+                          a total that is not what we are about to save. */}
                       {(() => {
-                        const t = liveNow?.totals ?? (extras.length === 0 && !anyReplaced ? analysis.totals : null);
+                        const t = liveNow?.totals ?? (mealAtScan ? analysis.totals : null);
                         if (t === null) {
                           return (
                             <>
@@ -1664,7 +1381,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           key={mt.id}
                           type="button"
                           onClick={() => setLogAs(logAs === mt.id ? null : mt.id)}
-                          className="flex-1 py-1.5 rounded-lg text-2xs font-semibold transition-all"
+                          className="flex-1 min-h-11 rounded-xl text-xs font-semibold transition-all"
                           style={{
                             background: logAs === mt.id ? `${mt.color}20` : 'rgba(255,255,255,0.03)',
                             border: logAs === mt.id ? `1px solid ${mt.color}50` : '1px solid rgba(255,255,255,0.05)',
@@ -1680,13 +1397,13 @@ function PhotoModal({ open, onClose, onSave }) {
                        style={{ color: 'rgba(255,255,255,0.40)' }}>
                       {liveNow
                         ? 'All numbers are calculated by the server for your chosen amounts.'
-                        : "Numbers above are the AI's first estimate — final nutrition is recalculated from your grams when you save."}
+                        : "Numbers here are the AI's first estimate — final nutrition is recalculated from your amounts when you save."}
                     </p>
 
                     <button
                       onClick={handleConfirm}
                       disabled={saving || !allValid}
-                      className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
+                      className="w-full h-12 rounded-xl font-semibold text-sm text-white"
                       style={{
                         background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                         boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
@@ -1706,8 +1423,255 @@ function PhotoModal({ open, onClose, onSave }) {
                   </div>
                 )}
               </div>
-            )}
-          </div>
+
+              {analysis && (
+                <div className="order-2 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
+                  <div className="space-y-2 mb-3">
+                    {analysis.items.map((item, i) => {
+                      // Server-computed live numbers for the CURRENT amounts
+                      // (2B: never computed in the browser). The scan's own
+                      // numbers stand in only while the meal is still exactly
+                      // what the scan saw: every row as it started, nothing
+                      // added and nothing changed (T3 5c, 5c2 F1) — a row
+                      // measured any other way, or a changed food, waits for
+                      // the server rather than show a price that will not be saved.
+                      const key = `s${i}`;
+                      const isOpen = openRow === key;
+                      const food = rowFood(i);
+                      const changed = replaced[i];
+                      const shown = liveNow?.items?.[i] ?? (mealAtScan ? item : null);
+                      const source = changed?.source ?? item.nutritionSource;
+                      const choice = pickerChoices(food, dishware).find((c) => c.key === amounts[i]?.key) ?? null;
+                      // A row started at the photo's own grams is the scanner's
+                      // guess until the person sets an amount (ROADMAP 7a-iv-b).
+                      // A start at a measure (no grams from the photo) reads that measure (the review of PR #76, L2).
+                      const portionMark = !(rowAtScan(i) && item.portionEstimated) ? null
+                        : item.startsAt.measure === 'g' ? `~${item.gramsPoint} g · estimate`
+                          : `~${amountSummary(choice, amounts[i]?.amount, item.gramsPoint)} · estimate`;
+                      // "Change food" keeps the row's grams, so it waits while they are not known (H1).
+                      const canChange = rowGrams(i) !== null;
+                      return (
+                        <div key={key} className="rounded-2xl" style={rowBox(isOpen, false)}>
+                          <button type="button" aria-expanded={isOpen} onClick={() => toggleRow(key)}
+                                  className="w-full min-h-14 px-3.5 py-2.5 flex items-center gap-3 text-left">
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-semibold text-white truncate">{food.name}</span>
+                              <span className="block text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                                {/* An estimate's figures and its grams are both the scanner's: one mark says so. */}
+                                {source === 'estimate' && portionMark !== null
+                                  ? <span style={amber}>{portionMark}</span>
+                                  : (
+                                    <>
+                                      <span style={source === 'estimate' ? amber : undefined}>{SOURCE_TAGS[source] ?? source}</span>
+                                      {' · '}
+                                      {portionMark !== null
+                                        ? <span style={amber}>{portionMark}</span>
+                                        : amountSummary(choice, amounts[i]?.amount, shown?.gramsPoint)}
+                                    </>
+                                  )}
+                              </span>
+                            </span>
+                            <span className="text-base font-bold flex-shrink-0 tabular-nums" style={{ color: '#FF8A1F' }}>
+                              {shown === null
+                                ? '…'
+                                : shown.kcalLow === shown.kcalHigh
+                                  ? `${shown.kcalPoint} kcal`
+                                  : `${shown.kcalLow}–${shown.kcalHigh} kcal`}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                                         style={{ color: 'rgba(255,255,255,0.40)' }} />
+                          </button>
+                          {unusableLine(resolved[i])}
+                          {isOpen && (
+                            <div className="px-3.5 pb-3.5 space-y-3">
+                              {macrosLine(shown)}
+                              {/* The food's own measures and the person's saved dishes, as
+                                  Add food offers them (ROADMAP 7a-iv-a, 7a-iv-b). */}
+                              <MeasurePicker
+                                food={food}
+                                dishware={dishware}
+                                value={amounts[i]}
+                                onChange={(next) => setRowAmount(i, next)}
+                                grams={shown?.gramsPoint ?? null}
+                                onDishSaved={loadDishware}
+                              />
+                              {dishUndo[i] && choice?.kind !== 'dish' && (
+                                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                  Kept the dish's {dishUndo[i].grams} g ·{' '}
+                                  <button type="button" onClick={() => undoDishKept(i)}
+                                          className="min-h-11 underline decoration-dotted"
+                                          style={{ color: 'rgba(255,255,255,0.75)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                    Undo
+                                  </button>
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 text-xs">
+                                <button type="button" disabled={!canChange}
+                                        onClick={() => setChanging(changing === i ? null : i)}
+                                        className="min-h-11 font-semibold underline decoration-dotted"
+                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: canChange ? 'pointer' : 'default', opacity: canChange ? 1 : 0.5 }}>
+                                  Change food
+                                </button>
+                                {!canChange && <span style={{ color: 'rgba(255,255,255,0.50)' }}>{changeHold(i)}</span>}
+                                {changed && (
+                                  <button type="button"
+                                          onClick={() => undoChange(i)}
+                                          className="min-h-11 underline decoration-dotted"
+                                          style={{ color: 'rgba(255,255,255,0.60)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                              {changing === i && canChange && (
+                                <div className="p-2.5 rounded-xl space-y-2"
+                                     style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                                    Pick the right food for {food.name}. The amount stays the same.
+                                  </p>
+                                  <FoodPicker
+                                    selected={null}
+                                    onPick={(picked) => changeRow(i, picked)}
+                                    autoFocus
+                                    exclude={onSheet(i)}
+                                    placeholder="Search the right food..."
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Card 5c: ingredients the AI never saw (oats → milk).
+                        The same measure picker; the SERVER prices them. */}
+                    {extras.map((x, j) => {
+                      const key = `x${j}`;
+                      const isOpen = openRow === key;
+                      const shown = liveNow?.items?.[analysis.items.length + j];
+                      const choice = pickerChoices(x.food, dishware).find((c) => c.key === x.amount?.key) ?? null;
+                      return (
+                        <div key={`${x.food.canonical}-${j}`} className="rounded-2xl" style={rowBox(isOpen, true)}>
+                          <div className="flex items-center">
+                            <button type="button" aria-expanded={isOpen} onClick={() => toggleRow(key)}
+                                    className="flex-1 min-w-0 min-h-14 pl-3.5 py-2.5 flex items-center gap-3 text-left">
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-semibold text-white truncate">{x.food.name}</span>
+                                <span className="block text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                                  <span style={{ color: 'rgba(255,138,31,0.80)' }}>added by you</span>
+                                  {' · '}
+                                  {amountSummary(choice, x.amount?.amount, shown?.gramsPoint)}
+                                </span>
+                              </span>
+                              <span className="text-base font-bold flex-shrink-0 tabular-nums" style={{ color: '#FF8A1F' }}>
+                                {shown ? `${shown.kcalPoint} kcal` : '…'}
+                              </span>
+                              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                                           style={{ color: 'rgba(255,255,255,0.40)' }} />
+                            </button>
+                            <button type="button" onClick={() => removeExtra(j)}
+                                    title={`Remove ${x.food.name}`} aria-label={`Remove ${x.food.name}`}
+                                    className="w-11 h-11 mr-1 flex-shrink-0 flex items-center justify-center rounded-xl" style={{ color: 'rgba(239,68,68,0.75)' }}>
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* Confirm is hidden while any amount is unusable, so the row says why. */}
+                          {unusableLine(resolved[analysis.items.length + j])}
+                          {isOpen && (
+                            <div className="px-3.5 pb-3.5 space-y-3">
+                              {macrosLine(shown)}
+                              <MeasurePicker
+                                food={x.food}
+                                dishware={dishware}
+                                value={x.amount}
+                                onChange={(next) => patchExtra(j, { amount: next })}
+                                grams={shown?.gramsPoint ?? null}
+                                onDishSaved={loadDishware}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* + Add ingredient — in the flow, where the mistake is
+                      visible (Kd: features live inside the flow they serve). */}
+                  {adding ? (
+                    <div className="mb-3 p-3 rounded-xl space-y-3"
+                         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                          Add an ingredient the photo missed
+                        </p>
+                        <button type="button" onClick={() => setAdding(false)} aria-label="Stop adding"
+                                className="w-11 h-11 -mr-2 flex items-center justify-center rounded-xl" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <FoodPicker
+                        selected={null}
+                        onPick={addExtra}
+                        autoFocus
+                        exclude={onSheet()}
+                        placeholder="e.g. milk, sugar, oil..."
+                      />
+                    </div>
+                  ) : canAdd ? (
+                    <button
+                      type="button"
+                      onClick={() => setAdding(true)}
+                      className="w-full mb-3 min-h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                      style={{
+                        background:  'rgba(255,255,255,0.03)',
+                        border:      '1px dashed rgba(255,138,31,0.35)',
+                        color:       '#FF8A1F',
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add an ingredient
+                    </button>
+                  ) : (
+                    <p className="text-2xs mb-3 text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      That's the most items one meal can hold ({MAX_ITEMS}).
+                    </p>
+                  )}
+
+                  {/* Both what the photo could not identify and what matched no
+                      food are left out of the total. */}
+                  {analysis.unknownItems?.length > 0 && (
+                    <p className="text-2xs mb-3"
+                       style={{ color: 'rgba(251,191,36,0.75)' }}>
+                      Not in the total: {analysis.unknownItems.join(', ')}
+                      {canAdd
+                        ? ` — add ${analysis.unknownItems.length === 1 ? 'it' : 'them'} with “Add an ingredient” above if needed.`
+                        : '.'}
+                    </p>
+                  )}
+
+                  {/* Card-5b smoke (Kd): AI saw food but NOTHING matched our
+                      food data ("Flatbread Stack" ≠ Roti) — say so honestly
+                      instead of a 0-kcal box + dead Confirm. Card 5c: the
+                      user can now fix it right here, so point at the button
+                      above rather than sending them to another screen. */}
+                  {analysis.items.length === 0 && extras.length === 0 && (
+                    <div className="rounded-xl p-4 mb-3 text-center"
+                         style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.20)' }}>
+                      <p className="text-sm font-semibold mb-1"
+                         style={{ color: 'rgba(251,191,36,0.85)' }}>
+                        We saw the food but couldn't match it to our
+                        nutrition data.
+                      </p>
+                      <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                        Add it yourself with “Add an ingredient” above — we're
+                        improving name matching.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>
