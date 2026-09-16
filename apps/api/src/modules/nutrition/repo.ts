@@ -574,3 +574,133 @@ export async function deleteMeasurement(sql: Sql, userId: string, id: string): P
     return rows.length > 0;
   });
 }
+
+// ── the USDA food table (ROADMAP 7a-iii-a) ───────────────────────────────────
+// PUBLIC DATA, NO OWNER: `usda_foods` is the one table here whose rows belong to
+// nobody, so these are the only queries in this file with no tenancy WHERE.
+// Nothing a person owns is reachable through them, and nothing here writes —
+// `tools/import-usda.ts` is the table's only writer.
+
+/** A USDA food as the search box and the food resolver read it. A figure the
+ *  release does not measure is null; 7a-v shows the twelve beyond the macros,
+ *  which is why only what a `FoodReference` carries is selected here. */
+export interface UsdaFoodRow {
+  fdcId: number;
+  release: string;
+  description: string;
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG: number | null;
+  servingGrams: number;
+  servingUnit: string;
+}
+
+/** At most this many words of a query reach the index; a search box query is
+ *  capped at 100 characters upstream, and ten words is far past a food's name. */
+const MAX_SEARCH_WORDS = 10;
+
+/** A query's words, folded the way `to_tsvector('english')` folds a description:
+ *  accents dropped, lower case, and anything that is not a letter or digit is a
+ *  separator. That is also what makes the tsquery safe — `&`, `|`, `!`, `(`,
+ *  `)`, `:` and `*` are separators here, so no typed text can ever become a
+ *  tsquery operator, and the result still crosses to Postgres as a parameter. */
+export const usdaSearchWords = (query: string): string[] =>
+  query
+    .normalize("NFKD")
+    .replaceAll(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== "")
+    .slice(0, MAX_SEARCH_WORDS);
+
+/** EVERY typed word must match, the last one as a prefix so the box answers
+ *  while it is still being typed ("cappucc" finds "Coffee, Cappuccino").
+ *  Null where nothing typed is searchable. English stop words are not in the
+ *  index at all, so Postgres drops them from the query too: "milk of a cow"
+ *  searches milk and cow, and a query of nothing but stop words matches
+ *  nothing rather than everything. */
+export function usdaTsQuery(query: string): string | null {
+  const words = usdaSearchWords(query);
+  if (words.length === 0) return null;
+  return words.map((word, at) => (at === words.length - 1 ? `${word}:*` : word)).join(" & ");
+}
+
+const usdaRow = (r: {
+  fdc_id: number; release: string; description: string; kcal: number; protein_g: number;
+  carbs_g: number; fat_g: number; fiber_g: number | null; serving_grams: number; serving_unit: string;
+}): UsdaFoodRow => ({
+  fdcId: r.fdc_id, release: r.release, description: r.description, kcal: r.kcal,
+  proteinG: r.protein_g, carbsG: r.carbs_g, fatG: r.fat_g, fiberG: r.fiber_g,
+  servingGrams: r.serving_grams, servingUnit: r.serving_unit,
+});
+
+type UsdaColumns = Parameters<typeof usdaRow>[0];
+
+/** The search box's USDA rung. These rows carry no physical sanity bound, as a
+ *  packaged product does (`openfoodfacts.adapter.ts` refuses over 1,000 kcal or
+ *  a macro over 100 g per 100 g): Open Food Facts is crowd-edited and a prank
+ *  value can be written into it, while these are a government release loaded by
+ *  one tool. Measured over both releases on 2026-09-16: the highest is 902 kcal
+ *  per 100 g (beef tallow, and lard), and no macro exceeds 100 g.
+ *
+ *  A food with no energy, protein, carbohydrate or
+ *  fat figure cannot be priced into a meal, so neither this nor the lookup below
+ *  ever offers one: exactly one food is in that state, FNDDS 2705383 "Milk,
+ *  human" (measured 2026-09-16).
+ *
+ *  FNDDS before SR Legacy — the survey release
+ *  describes food as people eat it — then the fewest-worded description, which
+ *  is the plainest entry ("Coffee, Cappuccino" before "Coffee, Cappuccino,
+ *  decaffeinated, with non-dairy milk"), then USDA's own id so two equal rows
+ *  never swap places between searches. */
+export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number): Promise<UsdaFoodRow[]> {
+  const tsQuery = usdaTsQuery(query);
+  if (tsQuery === null || limit < 1) return [];
+  const rows = await sql<UsdaColumns[]>`
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
+    FROM usda_foods
+    WHERE search @@ to_tsquery('english', ${tsQuery})
+      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
+    ORDER BY (release = 'fndds') DESC, word_count ASC, fdc_id ASC
+    LIMIT ${limit}`;
+  return rows.map(usdaRow);
+}
+
+/** The release a canonical names. The table stores SR Legacy as `sr_legacy`;
+ *  a canonical spells it `sr`, as the curated list's citations do. */
+const CANONICAL_RELEASES: ReadonlyMap<string, string> = new Map([
+  ["sr", "sr_legacy"],
+  ["fndds", "fndds"],
+]);
+
+const USDA_CANONICAL = /^usda_(sr|fndds)_(\d{1,10})$/;
+
+/** `usda_foods.fdc_id` is an `integer` column, so an id past its range is not a
+ *  food — and asking anyway is not a miss but a database error ("value
+ *  2147483648 is out of range for type integer"), which would reach a person as
+ *  a 500 for a canonical anyone can type. */
+const MAX_FDC_ID = 2_147_483_647;
+
+/** `usda_sr_167512` / `usda_fndds_2710472`. A saved meal keeps this, and comes
+ *  back to the same row for as long as the release carries it. */
+export const usdaCanonical = (row: { fdcId: number; release: string }): string =>
+  `usda_${row.release === "fndds" ? "fndds" : "sr"}_${String(row.fdcId)}`;
+
+/** The one food a canonical names, or null. The release is part of the WHERE,
+ *  not decoration: `usda_fndds_167512` must never answer with SR Legacy's
+ *  167512 just because the id happens to exist. */
+export async function usdaFoodByCanonical(sql: SqlOrTx, canonical: string): Promise<UsdaFoodRow | null> {
+  const parsed = USDA_CANONICAL.exec(canonical);
+  const release = CANONICAL_RELEASES.get(parsed?.[1] ?? "");
+  const fdcId = Number(parsed?.[2] ?? NaN);
+  if (release === undefined || !Number.isInteger(fdcId) || fdcId < 1 || fdcId > MAX_FDC_ID) return null;
+  const rows = await sql<UsdaColumns[]>`
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit
+    FROM usda_foods
+    WHERE fdc_id = ${fdcId} AND release = ${release}
+      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL`;
+  const r = rows[0];
+  return r === undefined ? null : usdaRow(r);
+}

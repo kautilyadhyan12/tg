@@ -91,7 +91,7 @@ const foodSchema = z.object({
   fiberG: z.number().min(0).max(100).nullable(),
   serving: z.number(),
   unit: z.string(),
-  source: z.enum(["curated", "openfoodfacts"]),
+  source: z.enum(["curated", "openfoodfacts", "usda"]),
 });
 
 const draftSchema = z
@@ -190,6 +190,9 @@ export async function consumeRetake(deps: NutritionDeps, userId: string, value: 
 
 const foodRefKey = (canonical: string): string => `food:ref:${digest(canonical.toLowerCase())}`;
 
+/** What a canonical of the USDA table looks like (`usda_sr_...`, `usda_fndds_...`). */
+const USDA_CANONICAL_PREFIX = /^usda_(?:sr|fndds)_/;
+
 /** Card-5b smoke finding: every food a search RETURNS must stay resolvable by
  *  its canonical afterwards — the manual-log/preview path looks foods up by
  *  canonical, and an OFF slug full-text-searched against OFF misses (the
@@ -242,14 +245,58 @@ async function cachedExternal(deps: NutritionDeps, query: string, limit: number)
 const asReference = ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source }: FoodReference): FoodReference =>
   ({ canonical, name, kcal, proteinG, carbsG, fatG, fiberG, serving, unit, source });
 
+/** A USDA table row as the search box receives it. Its name is USDA's own
+ *  description; the screen says where it came from, which is what USDA asks in
+ *  return for the data (RULINGS 2026-09-16). */
+const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
+  canonical: repo.usdaCanonical(row),
+  name: row.description,
+  kcal: row.kcal,
+  proteinG: row.proteinG,
+  carbsG: row.carbsG,
+  fatG: row.fatG,
+  fiberG: row.fiberG,
+  serving: row.servingGrams,
+  unit: row.servingUnit,
+  source: "usda",
+});
+
+/** Kd's ruling, 2026-09-16: OUR LIST FIRST, then USDA, then packaged products.
+ *  313 of the list's 318 foods copy their numbers from a USDA entry, so the
+ *  order costs nothing in accuracy and puts a plain name ("Paneer") ahead of a
+ *  technical one; the five that do not are the foods where USDA's own entry is
+ *  wrong for how they are made here (its paneer is worked out from milk and
+ *  vinegar and keeps the milk's sugar, 22 g of carbohydrate per 100 g, against
+ *  CoFID's nine analysed samples at 0.9 g), and those must not be outranked by
+ *  the entry Kd rejected on 2026-09-14. USDA then fills what the list lacks,
+ *  which is 13,225 foods of it.
+ *
+ *  WHAT THAT COSTS, measured 2026-09-16 against the loaded table: a GENERIC word
+ *  fills the page with USDA and leaves no room for a packaged product ("milk"
+ *  matches 370 USDA foods, "peanut butter" 84, against a box of 15), while a
+ *  BRAND still reaches one, because USDA does not stock brands ("yakult" 0,
+ *  "oreo" 2, "nutella" 2, "monster energy" 5). Nothing is removed — a jar is
+ *  found by its brand, which is how a brand is looked for. If Kd would rather a
+ *  jar always showed, the change is to keep the last few places for packaged
+ *  products here; it is his call, not this file's. */
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const local = searchCurated(query, limit).map(asReference);
   if (local.length >= limit) return local;
-  const external = await cachedExternal(deps, query, limit - local.length);
-  return [...local, ...external].slice(0, limit);
+  const usda = (await repo.searchUsdaFoods(deps.sql, query, limit - local.length)).map(asUsdaReference);
+  const room = limit - local.length - usda.length;
+  const external = room > 0 ? await cachedExternal(deps, query, room) : [];
+  return [...local, ...usda, ...external].slice(0, limit);
 }
 
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
+  // A usda_* canonical is one row of our own table and nothing else: it must
+  // not reach findCurated's fuzzy match, and one the table does not hold must
+  // not be handed to OpenFoodFacts as if it were a food's NAME (searching their
+  // index for "usda_sr_167512" can only ever find a wrong food).
+  if (USDA_CANONICAL_PREFIX.test(query)) {
+    const row = await repo.usdaFoodByCanonical(deps.sql, query);
+    return row === null ? null : asUsdaReference(row);
+  }
   // T3 (manual-off-foods): an off_* canonical must NEVER resolve through
   // findCurated's fuzzy substring match — off_banana_chips would hijack to
   // curated "banana" and save macros different from what search displayed.

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MAX_ITEM_GRAMS } from "@app/shared";
 
 /** `fiberG` is null where a curated food's table has no measured figure. */
-export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: "curated" | "openfoodfacts"; }
+export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: "curated" | "openfoodfacts" | "usda"; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
 const searchSchema = z.object({ hits: z.array(productSchema).optional(), products: z.array(productSchema).optional() }).passthrough();
