@@ -1,5 +1,7 @@
 // ROADMAP 7a-iv-a — the measure picker's pure rules: what it offers, where a food
-// starts, how − and + move an amount, what it sends, and how a saved item reads.
+// starts, how − and + move an amount, what it sends, and how a saved item reads;
+// and ROADMAP 7a-iv-b — a scanned row still where it started, and a measure that
+// keeps what a dish weighed.
 import { describe, expect, it } from 'vitest';
 import {
   FILL_CHOICES,
@@ -9,11 +11,13 @@ import {
   choiceLabel,
   chosenItemFor,
   comesToUnderAGram,
+  isStartingValue,
   itemText,
   pickerChoices,
   startingValue,
   steppedAmount,
   valueForChoice,
+  valueKeepingGrams,
 } from './measures';
 
 const apple = {
@@ -168,5 +172,44 @@ describe('how a saved item reads in the meal list', () => {
     expect(itemText(item(null))).toBe('Apple 273g');
     // No float noise in an amount.
     expect(itemText(item({ id: 'serving', name: 'apple', amount: 0.1 + 0.2 }))).toBe('Apple: 0.3 × apple, 273g');
+  });
+});
+
+describe('a scanned row still where the scan started it', () => {
+  // A row the server started at two of its 30 g slices.
+  const bread = { canonical: 'usda_fndds_1', measures: [{ id: 'usda-1', name: 'slice', grams: 30 }, { id: 'g', name: 'g', grams: 1 }], startsAt: { measure: 'usda-1', amount: 2 } };
+
+  it('is its starting measure and amount, however the amount is written', () => {
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2' })).toBe(true);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2.0' })).toBe(true);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '2.5' })).toBe(false);
+    expect(isStartingValue(bread, { key: 'g', amount: '2' })).toBe(false);
+    expect(isStartingValue(bread, { key: 'usda-1', amount: '' })).toBe(false);
+    expect(isStartingValue(bread, undefined)).toBe(false);
+  });
+});
+
+describe('a measure that keeps what a dish weighed', () => {
+  const [serving, medium, grams, ounce] = pickerChoices(apple, []);
+  const [dish] = pickerChoices(apple, [bowl]).filter((c) => c.kind === 'dish');
+
+  it('is the grams, or as many of the measure as weigh them, to a hundredth', () => {
+    expect(valueKeepingGrams(grams, 180)).toEqual({ key: 'g', amount: '180' });
+    expect(valueKeepingGrams(grams, 180.6)).toEqual({ key: 'g', amount: '181' });
+    expect(valueKeepingGrams(serving, 180)).toEqual({ key: 'serving', amount: '1' });
+    expect(valueKeepingGrams(medium, 273)).toEqual({ key: 'usda-4', amount: '1.5' });
+    expect(valueKeepingGrams(ounce, 100)).toEqual({ key: 'oz', amount: '3.53' });
+  });
+
+  it('is nothing for a dish, whose amount is how full it was, or where nothing is weighed yet', () => {
+    expect(valueKeepingGrams(dish, 180)).toBeNull();
+    for (const none of [null, undefined, 0, -5, Number.NaN]) expect(valueKeepingGrams(grams, none), String(none)).toBeNull();
+    expect(valueKeepingGrams(undefined, 180)).toBeNull();
+  });
+
+  it('never keeps an amount the contract would refuse, nor grams past it', () => {
+    // A gram of a 5,000 g measure is 0.0002 of it: no hundredth to keep.
+    expect(valueKeepingGrams({ key: 'usda-9', kind: 'measure', id: 'usda-9', name: 'whole cake', grams: 5000 }, 1)).toBeNull();
+    expect(valueKeepingGrams(grams, MAX_AMOUNT + 500)).toEqual({ key: 'g', amount: String(MAX_AMOUNT) });
   });
 });

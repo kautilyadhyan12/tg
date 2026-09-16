@@ -2,7 +2,8 @@
 // where its numbers come from, a food no table has reads as the scanner's own
 // estimate, the total is "about" while one is on it, and "Change" swaps a row's
 // food for one the person searches, at the same grams. A saved meal holding an
-// estimate, and the day it is in, read "about" too.
+// estimate, and the day it is in, read "about" too. Each row is measured in the
+// measure picker (ROADMAP 7a-iv-b).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -15,18 +16,29 @@ vi.mock('../api/nutritionApi', async (importOriginal) => ({ ...(await importOrig
 const Nutrition = (await import('./Nutrition')).default;
 
 const SCAN_TOKEN = 't'.repeat(40);
+const GRAMS = { id: 'g', name: 'g', grams: 1 };
+const OUNCES = { id: 'oz', name: 'oz', grams: 28.349523125 };
+const SLICE = { id: 'usda-1', name: 'slice', grams: 30 };
+/** A saved meal's item, or a preview's. */
 const item = (name, canonical, nutritionSource, gramsPoint, kcalPoint) => ({
   name, canonical, gramsPoint, gramsRange: [gramsPoint, gramsPoint], portionSource: 'default', nutritionSource,
-  kcalPoint, kcalLow: kcalPoint, kcalHigh: kcalPoint, proteinG: 5, carbsG: 5, fatG: 5, pieces: null,
+  kcalPoint, kcalLow: kcalPoint, kcalHigh: kcalPoint, proteinG: 5, carbsG: 5, fatG: 5,
+});
+/** A scanned row: started at the photo's own grams unless told otherwise. */
+const scanned = (name, canonical, nutritionSource, gramsPoint, kcalPoint, start = { measures: [], startsAt: { measure: 'g', amount: gramsPoint }, portionEstimated: true }) => ({
+  ...item(name, canonical, nutritionSource, gramsPoint, kcalPoint),
+  measures: [...start.measures, GRAMS, OUNCES], startsAt: start.startsAt, portionEstimated: start.portionEstimated,
 });
 const totals = (kcal) => ({ kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 20, carbsG: 20, fatG: 20 });
-const TOAST = item('avocado toast', 'est_avocado_toast', 'estimate', 120, 280);
+const TOAST = scanned('avocado toast', 'est_avocado_toast', 'estimate', 120, 280);
 const PLATE = [
-  item('Avocado', 'avocado', 'curated', 100, 160),
-  item('Pumpkin, cooked', 'usda_fndds_2709692', 'usda', 60, 31),
-  item('Yakult Original · Yakult', 'off_4901392000034', 'openfoodfacts', 65, 42),
+  scanned('Avocado', 'avocado', 'curated', 100, 160),
+  scanned('Pumpkin, cooked', 'usda_fndds_2709692', 'usda', 60, 31),
+  scanned('Yakult Original · Yakult', 'off_4901392000034', 'openfoodfacts', 65, 42, { measures: [{ id: 'serving', name: 'bottle', grams: 65 }], startsAt: { measure: 'serving', amount: 1 }, portionEstimated: false }),
   TOAST,
 ];
+/** What each measure the sheet may send weighs, as the server's list has it. */
+const WEIGHS = { g: 1, oz: 28.349523125, serving: 65, 'usda-1': 30 };
 
 function scanReturns(items) {
   svc.analyzePhoto = vi.fn(async () => ({
@@ -42,9 +54,9 @@ beforeEach(() => {
   svc.listMealsForDay = vi.fn(async () => ({ meals: [], truncated: false }));
   svc.listDishware = vi.fn(async () => ({ data: { items: [], nextCursor: null } }));
   svc.getTargets = vi.fn(async () => ({ data: { targets: null, missing: ['goal'], targetWrongSide: false } }));
-  // The server's price for whatever the sheet sends: 100 kcal an item.
+  // The server's price for whatever the sheet sends: 100 kcal an item, at the grams its measure weighs.
   svc.previewMeal = vi.fn(async ({ items }) => ({
-    data: { items: items.map((i) => item(i.canonical, i.canonical, 'curated', i.grams, 100)), totals: totals(items.length * 100) },
+    data: { items: items.map((i) => item(i.canonical, i.canonical, 'curated', Math.round(i.amount * WEIGHS[i.measure]), 100)), totals: totals(items.length * 100) },
   }));
   svc.confirmMeal = vi.fn(async () => ({ data: {} }));
   scanReturns(PLATE);
@@ -63,8 +75,17 @@ async function scanPlate() {
   fireEvent.click(await screen.findByRole('button', { name: /Log meal from photo/ }));
   fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['x'], 'meal.jpg', { type: 'image/jpeg' })] } });
   await screen.findByText('Avocado');
-  return (name) => screen.getByText(name).closest('.rounded-xl');
+  return (name) => screen.getByText(name).closest('.rounded-2xl');
 }
+/** What a row's picker holds: the measure it shows as picked, and the amount. */
+const pickerOf = (rowEl) => [
+  within(rowEl).getByRole('button', { name: 'Measure' }).textContent,
+  within(rowEl).getByRole('spinbutton', { name: 'Amount' }).value,
+];
+const bread = {
+  canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice',
+  measures: [SLICE, GRAMS, OUNCES], startsAt: { measure: 'usda-1', amount: 1 },
+};
 
 describe('the photo sheet names where each food’s numbers come from', () => {
   it('tags every row, reads an estimate’s grams as the scanner’s, and makes the total "about"', async () => {
@@ -75,6 +96,10 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     expect(within(row('Pumpkin, cooked')).getByText('USDA')).toBeTruthy();
     expect(within(row('Yakult Original · Yakult')).getByText('Packaged product')).toBeTruthy();
     expect(within(row('avocado toast')).getByText('~120 g · estimate')).toBeTruthy();
+    // A table food started at the photo's grams says its portion is the scanner's guess;
+    // one started at a measure the count agreed with does not.
+    expect(within(row('Avocado')).getByText('~100 g · estimate')).toBeTruthy();
+    expect(within(row('Yakult Original · Yakult')).queryByText(/estimate/)).toBeNull();
     for (const name of ['Avocado', 'Pumpkin, cooked', 'Yakult Original · Yakult', 'avocado toast']) {
       expect(within(row(name)).getByRole('button', { name: 'Change' })).toBeTruthy();
     }
@@ -85,14 +110,15 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     expect(screen.getByRole('link', { name: 'USDA FoodData Central' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open Food Facts' })).toBeTruthy();
 
-    // Grams the person sets are theirs; the food's figures are still the estimate.
-    fireEvent.change(within(row('avocado toast')).getByRole('spinbutton'), { target: { value: '150' } });
-    expect(await within(row('avocado toast')).findByText('150 g · estimate')).toBeTruthy();
+    // An amount the person sets is theirs; the food's figures are still the estimate.
+    fireEvent.change(within(row('avocado toast')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '150' } });
+    expect(within(row('avocado toast')).queryByText(/~120 g/)).toBeNull();
+    expect(within(row('avocado toast')).getByText('Estimate')).toBeTruthy();
   });
 
   it('reads a plain total, and credits no table, where every food is on our own list', async () => {
     svc.previewMeal = vi.fn(async () => { throw new Error('no preview'); });
-    scanReturns([item('Avocado', 'avocado', 'curated', 100, 160), item('Eggs (scrambled)', 'eggs_scrambled', 'curated', 50, 75)]);
+    scanReturns([scanned('Avocado', 'avocado', 'curated', 100, 160), scanned('Eggs (scrambled)', 'eggs_scrambled', 'curated', 50, 75)]);
     await scanPlate();
     expect(screen.getByText('235 kcal')).toBeTruthy();
     expect(screen.queryByText(/about/)).toBeNull();
@@ -102,8 +128,6 @@ describe('the photo sheet names where each food’s numbers come from', () => {
 });
 
 describe('Change on a scanned row', () => {
-  const bread = { canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice' };
-
   it('swaps the food for the one searched, at the same grams, and sends it as that food', async () => {
     // The search also answers with a food already on the sheet, which is never offered twice.
     const avocado = { ...bread, canonical: 'avocado', name: 'Avocado (searched)', source: 'curated' };
@@ -118,21 +142,21 @@ describe('Change on a scanned row', () => {
 
     // Until the server prices it, neither the row nor the total shows the scan's
     // numbers, which were the food it replaced.
-    expect(within(row('Bread, toasted')).getByText('…')).toBeTruthy();
+    expect(within(row('Bread, toasted')).getByText('Calculating…')).toBeTruthy();
     expect(screen.getByText('Adding up your ingredients…')).toBeTruthy();
 
-    // The row is the new food now, from its own table, and can be put back.
+    // The row is the new food now, from its own table, by the gram at the row's grams, and can be put back.
     const changed = row('Bread, toasted');
     expect(within(changed).getByText('USDA')).toBeTruthy();
-    expect(within(changed).getByRole('spinbutton').value).toBe('120');
+    expect(pickerOf(changed)).toEqual(['g', '120']);
     expect(screen.queryByText('avocado toast')).toBeNull();
     expect(screen.queryByPlaceholderText('Search the right food...')).toBeNull();
     expect(svc.searchFoods).toHaveBeenCalledWith('toast', 15);
 
     // The server prices the new food at the row's grams; nothing is an estimate any more.
     const sent = [
-      { canonical: 'avocado', grams: 100 }, { canonical: 'usda_fndds_2709692', grams: 60 },
-      { canonical: 'off_4901392000034', grams: 65 }, { canonical: 'usda_fndds_123', grams: 120 },
+      { canonical: 'avocado', measure: 'g', amount: 100 }, { canonical: 'usda_fndds_2709692', measure: 'g', amount: 60 },
+      { canonical: 'off_4901392000034', measure: 'serving', amount: 1 }, { canonical: 'usda_fndds_123', measure: 'g', amount: 120 },
     ];
     await waitFor(() => expect(svc.previewMeal).toHaveBeenLastCalledWith({ scanToken: SCAN_TOKEN, items: sent }));
     expect(await screen.findByText('400 kcal')).toBeTruthy();
@@ -153,62 +177,56 @@ describe('Change on a scanned row', () => {
     expect(within(row('avocado toast')).getByText('~120 g · estimate')).toBeTruthy();
     await waitFor(() => expect(svc.previewMeal).toHaveBeenLastCalledWith({
       scanToken: SCAN_TOKEN,
-      items: [{ canonical: 'avocado', grams: 100 }, { canonical: 'usda_fndds_2709692', grams: 60 }, { canonical: 'off_4901392000034', grams: 65 }, { canonical: 'est_avocado_toast', grams: 120 }],
+      items: [
+        { canonical: 'avocado', measure: 'g', amount: 100 }, { canonical: 'usda_fndds_2709692', measure: 'g', amount: 60 },
+        { canonical: 'off_4901392000034', measure: 'serving', amount: 1 }, { canonical: 'est_avocado_toast', measure: 'g', amount: 120 },
+      ],
     }));
   });
 });
 
-describe('the count stepper on a changed row', () => {
-  const bread = { canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice' };
-  // Two slices the scan counted, at 60 g: its stepper steps by 30 g.
-  const TWO_SLICES = { ...item('bread', 'est_bread', 'estimate', 60, 160), pieces: 2 };
-  const stepper = (rowEl) => ({
-    count: within(rowEl).getByText(/^×\d+$/).textContent,
-    grams: within(rowEl).getByRole('spinbutton').value,
-  });
+describe('the measure on a changed row', () => {
+  // Two slices the scan counted, at 60 g: its row starts at two of its 30 g slices.
+  const TWO_SLICES = scanned('bread', 'est_bread', 'estimate', 60, 160, { measures: [SLICE], startsAt: { measure: 'usda-1', amount: 2 }, portionEstimated: false });
   const changeTo = async (row, from, food) => {
     fireEvent.click(within(row(from)).getByRole('button', { name: 'Change' }));
     fireEvent.change(await screen.findByPlaceholderText('Search the right food...'), { target: { value: 'toast' } });
     fireEvent.click((await screen.findByText(food.name)).closest('button'));
   };
-  const plus = (rowEl) => fireEvent.click(within(rowEl).getByRole('button', { name: '+' }));
+  const plus = (rowEl) => fireEvent.click(within(rowEl).getByRole('button', { name: 'More' }));
+  const bagel = { ...bread, canonical: 'usda_fndds_456', name: 'Bagel, toasted', measures: [{ id: 'usda-1', name: 'bagel', grams: 95 }, GRAMS, OUNCES] };
 
   beforeEach(() => {
-    scanReturns([item('Avocado', 'avocado', 'curated', 100, 160), TWO_SLICES]);
-    svc.searchFoods = vi.fn(async () => ({ data: { items: [bread] } }));
+    scanReturns([scanned('Avocado', 'avocado', 'curated', 100, 160), TWO_SLICES]);
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [bagel] } }));
   });
 
-  it('starts the new food at ×1 on the row’s grams, never by the pieces the scan counted of the food it replaced', async () => {
+  it('starts the new food by the gram at the row’s grams, never by the measure of the food it replaced', async () => {
     const row = await scanPlate();
-    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '60' });
-    await changeTo(row, 'bread', bread);
-    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×1', grams: '60' });
-    // Two of the whole 60 g, not three 30 g slices.
-    plus(row('Bread, toasted'));
-    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×2', grams: '120' });
+    expect(pickerOf(row('bread'))).toEqual(['slice · 30 g', '2']);
+    await changeTo(row, 'bread', bagel);
+    expect(pickerOf(row('Bagel, toasted'))).toEqual(['g', '60']);
+    // Ten grams a step, not another slice.
+    plus(row('Bagel, toasted'));
+    expect(pickerOf(row('Bagel, toasted'))).toEqual(['g', '70']);
   });
 
-  it('gives the scanned food back its own count on Undo while the grams are the scan’s, and ×1 on the grams set since otherwise', async () => {
+  it('gives the scanned food back its own measure on Undo while the grams are what Change kept, and those grams otherwise', async () => {
     const row = await scanPlate();
-    // Changed and put back untouched: the scan's two slices, 30 g a step.
-    await changeTo(row, 'bread', bread);
-    fireEvent.click(within(row('Bread, toasted')).getByRole('button', { name: 'Undo' }));
-    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '60' });
-    plus(row('bread'));
-    expect(stepper(row('bread'))).toEqual({ count: '×3', grams: '90' });
-    // Changed, stepped to other grams, and put back: ×1 on those grams.
-    await changeTo(row, 'bread', bread);
-    plus(row('Bread, toasted'));
-    expect(stepper(row('Bread, toasted'))).toEqual({ count: '×2', grams: '180' });
-    fireEvent.click(within(row('Bread, toasted')).getByRole('button', { name: 'Undo' }));
-    expect(stepper(row('bread'))).toEqual({ count: '×1', grams: '180' });
-    plus(row('bread'));
-    expect(stepper(row('bread'))).toEqual({ count: '×2', grams: '360' });
+    // Changed and put back untouched: the scan's two slices.
+    await changeTo(row, 'bread', bagel);
+    fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
+    expect(pickerOf(row('bread'))).toEqual(['slice · 30 g', '2']);
+    // Changed, stepped to other grams the server has priced, and put back: by the gram at those grams.
+    await changeTo(row, 'bread', bagel);
+    plus(row('Bagel, toasted'));
+    await waitFor(() => expect(within(row('Bagel, toasted')).getByText('= 70 g')).toBeTruthy());
+    fireEvent.click(within(row('Bagel, toasted')).getByRole('button', { name: 'Undo' }));
+    expect(pickerOf(row('bread'))).toEqual(['g', '70']);
   });
 });
 
 describe('what a search on the sheet offers', () => {
-  const bread = { canonical: 'usda_fndds_123', name: 'Bread, toasted', source: 'usda', kcal: 290, proteinG: 9, carbsG: 50, fatG: 4, fiberG: 3, serving: 30, unit: 'slice' };
   const rye = { ...bread, canonical: 'usda_fndds_456', name: 'Rye bread' };
   // Each food already on the sheet, as a search would find it again under another name.
   const pumpkinAgain = { ...bread, canonical: 'usda_fndds_2709692', name: 'Pumpkin, found again' };
@@ -232,8 +250,8 @@ describe('what a search on the sheet offers', () => {
     expect(screen.queryByText('Bread, found again')).toBeNull();
     fireEvent.click(within(row('Avocado')).getByRole('button', { name: 'Change' }));
 
-    // "Add an ingredient" offers none of them, nor the avocado — while a grams box is empty, too.
-    fireEvent.change(within(row('Avocado')).getByRole('spinbutton'), { target: { value: '' } });
+    // "Add an ingredient" offers none of them, nor the avocado — while an amount box is empty, too.
+    fireEvent.change(within(row('Avocado')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '' } });
     svc.searchFoods = vi.fn(async () => ({ data: { items: [pumpkinAgain, breadAgain, avocadoAgain, rye] } }));
     fireEvent.click(screen.getByRole('button', { name: /Add an ingredient/ }));
     fireEvent.change(await screen.findByPlaceholderText('e.g. milk, sugar, oil...'), { target: { value: 'food' } });
@@ -246,7 +264,7 @@ describe('a saved meal holding an estimate', () => {
   it('reads "about", names the estimate, and makes the day\'s line "about"', async () => {
     const saved = {
       id: '00000000-0000-4000-8000-000000000001', takenAt: new Date().toISOString(), mealType: 'breakfast', mealName: 'Toast plate',
-      items: [item('Avocado', 'avocado', 'curated', 100, 160), { ...TOAST, per100g: { kcal: 233.3, proteinG: 5, carbsG: 18.3, fatG: 15 } }],
+      items: [item('Avocado', 'avocado', 'curated', 100, 160), { ...item('avocado toast', 'est_avocado_toast', 'estimate', 120, 280), per100g: { kcal: 233.3, proteinG: 5, carbsG: 18.3, fatG: 15 } }],
       totals: { kcalPoint: 440, kcalLow: 440, kcalHigh: 440, proteinG: 10, carbsG: 10, fatG: 10 },
       confirmed: true, origin: 'photo', portionSource: 'default', nutritionSources: ['curated', 'estimate'], calcVersion: 1,
     };

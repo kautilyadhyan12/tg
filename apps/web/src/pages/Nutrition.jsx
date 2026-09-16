@@ -3,14 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Trash2, Camera, X, Loader2,
   Flame, Coffee, UtensilsCrossed, Sandwich, Cookie,
-  Sparkles, Check, Tag, CookingPot, Pencil,
+  Sparkles, Check, Tag, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
-import MeasurePicker, { SaveDishForm } from '../components/nutrition/MeasurePicker';
-import { FILL_CHOICES, amountRefusal, chosenItemFor, comesToUnderAGram, itemText, pickerChoices, startingValue } from '../components/nutrition/measures';
+import MeasurePicker from '../components/nutrition/MeasurePicker';
+import {
+  amountRefusal, chosenItemFor, comesToUnderAGram, isStartingValue, itemText, pickerChoices, startingValue, valueKeepingGrams,
+} from '../components/nutrition/measures';
 import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
 import { getUserId } from '../utils/storage';
 
@@ -27,18 +29,8 @@ const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Package
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
-// Where a photo row's count stepper starts. The scan's own count, one piece a step
-// (six nuggets read ×6, and + makes seven), belongs to the food the scan saw at the
-// grams it saw; any other food, or other grams, starts at ×1 on the grams the row
-// holds (or the scan's grams while the box holds no usable number).
-const scannedStepper = (item) => {
-  const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
-  return { count: pieces, base: item.gramsPoint / pieces };
-};
-const stepperAtGrams = (gramsText, fallback) => {
-  const typed = parseFloat(gramsText);
-  return { count: 1, base: Number.isFinite(typed) && typed > 0 ? typed : fallback };
-};
+/** A copy of `map` without `key`. */
+const without = (map, key) => { const next = { ...map }; delete next[key]; return next; };
 
 // ── Meal type config ──────────────────────────────────────────────────────────
 const MEAL_TYPES = [
@@ -289,89 +281,6 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
         )}
       </div>
     </motion.div>
-  );
-}
-
-// ── Card 5c2: "measure with my dish" ─────────────────────────────────────────
-// Pick one of your saved bowls + how full it was (or save a new bowl), instead
-// of typing grams. Reports {dishwareId, fillLevel} up; the SERVER turns that
-// into grams (2B — the browser never does the math). Kd ruling: shown as
-// tap-to-pick choices EVERY time, never auto-applied — a user may use a
-// different bowl each meal.
-function DishMeasure({ dishware, value, onChange, onSaved }) {
-  const [showSave, setShowSave] = useState(false);
-
-  return (
-    <div className="rounded-xl p-3 mt-1"
-         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {/* Your saved bowls (tap to pick — every time, never auto-applied). */}
-      {dishware.length > 0 && (
-        <>
-          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Which dish?</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {dishware.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => onChange({ dishwareId: d.id, fillLevel: value?.fillLevel ?? null })}
-                className="px-2.5 py-1 rounded-lg text-2xs font-semibold"
-                style={{
-                  background: value?.dishwareId === d.id ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                  border: value?.dishwareId === d.id ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                  color: value?.dishwareId === d.id ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
-                }}
-              >
-                {d.label} · {d.volumeMl} ml
-              </button>
-            ))}
-            {!showSave && (
-              <button type="button" onClick={() => setShowSave(true)}
-                      className="px-2.5 py-1 rounded-lg text-2xs font-semibold flex items-center gap-1"
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,138,31,0.35)', color: '#FF8A1F' }}>
-                <Plus className="w-3 h-3" /> New dish
-              </button>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Save a new dish — auto-open when the user has none yet. The form is the
-          measure picker's own (7a-iv-a), so a dish is saved one way everywhere. */}
-      {(showSave || dishware.length === 0) && (
-        <div className="mb-3">
-          <SaveDishForm
-            title={dishware.length === 0 ? 'Save your first dish' : 'Save a new dish'}
-            onClose={dishware.length > 0 ? () => setShowSave(false) : undefined}
-            onSaved={(saved) => {
-              onSaved(saved);                                   // parent refreshes the list
-              onChange({ dishwareId: saved.id, fillLevel: value?.fillLevel ?? null });
-              setShowSave(false);
-            }}
-          />
-        </div>
-      )}
-
-      {/* How full? — required (Kd ruling). Only meaningful once a dish is picked. */}
-      {value?.dishwareId && (
-        <>
-          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>How full?</p>
-          <div className="flex gap-1.5">
-            {FILL_CHOICES.map((f) => (
-              <button key={f.value} type="button"
-                      onClick={() => onChange({ dishwareId: value.dishwareId, fillLevel: f.value })}
-                      className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
-                      style={{
-                        background: value.fillLevel === f.value ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                        border: value.fillLevel === f.value ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
-                        color: value.fillLevel === f.value ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
-                      }}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -775,7 +684,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
 }
 
 // ── AI Photo Upload Modal ─────────────────────────────────────────────────────
-// Card 5a: photo → analysis (scanToken) → user reviews/edits grams → ONE
+// Card 5a: photo → analysis (scanToken) → user reviews the amounts → ONE
 // confirm POST creates the meal (replaces the old N× logMeal loop). Macros
 // come back SERVER-computed; a poor photo is a 422 that may carry a
 // retakeToken (one free retry — Part 2B §3.5).
@@ -783,11 +692,10 @@ function PhotoModal({ open, onClose, onSave }) {
   const [analyzing,   setAnalyzing]   = useState(false);
   const [analysis,    setAnalysis]    = useState(null);
   const [preview,     setPreview]     = useState(null);
-  const [grams,       setGrams]       = useState({});
-  const [counts,      setCounts]      = useState({});
-  // Stepper base per item: the AI's per-unit grams, replaced by whatever the
-  // user last TYPED (T3 5a advisory — stepping must not discard typed grams).
-  const [bases,       setBases]       = useState({});
+  // ROADMAP 7a-iv-b: every scanned row is measured in the measure picker, as an
+  // added ingredient is. amounts[i] is row i's {key, amount}, starting where the
+  // server started it: one of its food's own measures, or the photo's grams.
+  const [amounts,     setAmounts]     = useState({});
   // "Log as": the user-chosen mealType LABEL (stored via migration 0007);
   // null = unlabeled. takenAt is always the exact real time either way.
   const [logAs,       setLogAs]       = useState(null);
@@ -796,21 +704,20 @@ function PhotoModal({ open, onClose, onSave }) {
   const [retakeMsg,   setRetakeMsg]   = useState(null);
   const [saving,      setSaving]      = useState(false);
   // Card 5c — meal composition: ingredients the AI never saw (the oats-with-
-  // milk case). Each is {food, grams, count, base}; they ride the SAME confirm
-  // as the drafted items, and the server resolves them by canonical.
+  // milk case). Each is {food, amount}; they ride the SAME confirm as the
+  // drafted items, and the server resolves them by canonical.
   const [extras,      setExtras]      = useState([]);
   const [adding,      setAdding]      = useState(false);
-  // Card 5c2: per drafted-item "measure with my dish". itemMeasures[i] present
-  // (even {}) means that item is in dish mode; its value is {dishwareId,
-  // fillLevel}. Extras carry the measure picker's value on the extra object.
+  // The person's saved dishes, which every picker on the sheet offers as measures.
   const [dishware,     setDishware]     = useState([]);
-  const [itemMeasures, setItemMeasures] = useState({});
   // ROADMAP 7a-iii-b "Change": replaced[i] is the food the person picked in place
   // of scanned row i, at the row's own grams; changing is the row whose search
   // is open. A changed row goes to the server as an added food (the scan never
-  // estimated it), so it forms no correction pair.
+  // estimated it), so it forms no correction pair. changeUndo[i] holds what the
+  // row held before and what Change set it to, for its Undo.
   const [replaced,     setReplaced]     = useState({});
   const [changing,     setChanging]     = useState(null);
+  const [changeUndo,   setChangeUndo]   = useState({});
   // RULINGS 2026-09-16 (Kd's click-through of 7a-iv-a): an unsaved scan already
   // used one of the day's scans, so neither closing the sheet nor leaving the page
   // throws it away (`unsavedScan.js`). scannedAt is when this sheet's scan came
@@ -818,9 +725,12 @@ function PhotoModal({ open, onClose, onSave }) {
   // unsaved, holding what was left of it (ms) when the X was pressed, or null.
   const [scannedAt,       setScannedAt]       = useState(null);
   const [confirmingClose, setConfirmingClose] = useState(null);
-  // A row taken from "my dish" back to grams keeps the dish's grams; undoGrams[i]
-  // is what the row held before, for its Undo, as "Change" has one.
-  const [undoGrams,       setUndoGrams]       = useState({});
+  // A row taken from a saved dish to another measure keeps the dish's grams, with
+  // an Undo, as "Change" has one (RULINGS 2026-09-16): dishUndo[i] is the dish and
+  // fill it held and the grams kept. beforeDish[i] is what the row held before a
+  // dish was picked, which it goes back to where the dish was never weighed.
+  const [dishUndo,        setDishUndo]        = useState({});
+  const [beforeDish,      setBeforeDish]      = useState({});
   const fileRef = useRef(null);
 
   const loadDishware = () =>
@@ -830,9 +740,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setAnalysis(null);
     setPreview(null);
     setAnalyzing(false);
-    setGrams({});
-    setCounts({});
-    setBases({});
+    setAmounts({});
     setLogAs(null);
     setLive(null);
     setRetakeToken(null);
@@ -840,12 +748,13 @@ function PhotoModal({ open, onClose, onSave }) {
     setSaving(false);
     setExtras([]);
     setAdding(false);
-    setItemMeasures({});
     setReplaced({});
     setChanging(null);
+    setChangeUndo({});
     setScannedAt(null);
     setConfirmingClose(null);
-    setUndoGrams({});
+    setDishUndo({});
+    setBeforeDish({});
     forgetUnsavedScan();
   };
 
@@ -854,9 +763,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setAnalysis(sheet.analysis);
     setPreview(sheet.preview);
     setAnalyzing(false);
-    setGrams(sheet.grams);
-    setCounts(sheet.counts);
-    setBases(sheet.bases);
+    setAmounts(sheet.amounts);
     setLogAs(sheet.logAs);
     setLive(null);
     setRetakeToken(null);
@@ -864,12 +771,13 @@ function PhotoModal({ open, onClose, onSave }) {
     setSaving(false);
     setExtras(sheet.extras);
     setAdding(false);
-    setItemMeasures(sheet.itemMeasures);
     setReplaced(sheet.replaced);
     setChanging(null);
+    setChangeUndo(sheet.changeUndo);
     setScannedAt(at);
     setConfirmingClose(null);
-    setUndoGrams(sheet.undoGrams);
+    setDishUndo(sheet.dishUndo);
+    setBeforeDish(sheet.beforeDish);
   };
 
   useEffect(() => {
@@ -887,9 +795,9 @@ function PhotoModal({ open, onClose, onSave }) {
   // Every change to an unsaved sheet is kept above the page, for its person.
   useEffect(() => {
     if (analysis !== null && scannedAt !== null) {
-      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams });
+      keepUnsavedScan(getUserId(), scannedAt, { analysis, preview, amounts, logAs, extras, replaced, changeUndo, dishUndo, beforeDish });
     }
-  }, [analysis, scannedAt, preview, grams, counts, bases, logAs, extras, itemMeasures, replaced, undoGrams]);
+  }, [analysis, scannedAt, preview, amounts, logAs, extras, replaced, changeUndo, dishUndo, beforeDish]);
 
   // The X: a sheet holding an unsaved scan asks first, saying how long it can be
   // picked up again. A click outside the box never closes it (Kd: only the cross).
@@ -912,41 +820,34 @@ function PhotoModal({ open, onClose, onSave }) {
     setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
-    setItemMeasures({}); // …and no dish measures from a previous photo
     setReplaced({});     // …and no changed foods
-    setUndoGrams({});
+    setChangeUndo({});
+    setDishUndo({});     // …and no dish measures
+    setBeforeDish({});
     setChanging(null);
     setRetakeMsg(null);
 
     try {
       const res = await nutritionService.analyzePhoto(file, retakeToken);
       const at = Date.now();
-      // Grams default to the server's estimate; the user can correct them —
-      // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
-      // typing grams directly. The server computes ALL nutrition from grams.
-      // An item the photo counted starts at its count (scannedStepper).
-      const g = {};
-      const c = {};
-      const b = {};
-      res.data.items.forEach((item, i) => {
-        const stepper = scannedStepper(item);
-        g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
-      });
+      // Each row starts where the server started it (ROADMAP 7a-iv-b): at one of its
+      // food's own measures where the photo's count of it agrees with the grams the
+      // photo saw, else at those grams. The person corrects it in the picker; the
+      // server computes ALL nutrition from what it sends.
+      const starts = Object.fromEntries(res.data.items.map((item, i) => [i, startingValue(item)]));
       // Kept the moment it returns, not only once a sheet shows it: a person who
       // left the page while the photo was read still has the scan it counted.
       // Never for someone else who has signed in since.
       if (getUserId() === scanner) {
         keepUnsavedScan(scanner, at, {
-          analysis: res.data, preview: photo, grams: g, counts: c, bases: b,
-          logAs: null, extras: [], itemMeasures: {}, replaced: {}, undoGrams: {},
+          analysis: res.data, preview: photo, amounts: starts,
+          logAs: null, extras: [], replaced: {}, changeUndo: {}, dishUndo: {}, beforeDish: {},
         });
       }
       setRetakeToken(null);
       setAnalysis(res.data);
       setScannedAt(at);
-      setGrams(g);
-      setCounts(c);
-      setBases(b);
+      setAmounts(starts);
       setLive(null);
     } catch (err) {
       if (err.response?.status === 422) {
@@ -992,36 +893,31 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
-  // Each item resolves to ONE contract arm: the grams arm {canonical, grams}
-  // OR the Card-5c2 dishware arm {canonical, dishwareId, fillLevel}. An item is
-  // in dish mode when it has a `measure` (a present itemMeasures[i], or an
-  // extra's own .measure); dish mode is valid only once BOTH a dish and a fill
-  // are chosen (Kd: fill required). A grams field must hold a usable value —
-  // a cleared/zero field never silently falls back to the AI estimate (T3 5a).
-  const resolveArm = (canonical, gramsStr, measure) => {
-    if (measure) {
-      const ok = !!measure.dishwareId && !!measure.fillLevel;
-      return { item: ok ? { canonical, dishwareId: measure.dishwareId, fillLevel: measure.fillLevel } : null, valid: ok };
-    }
-    const g = parseFloat(gramsStr);
-    const ok = Number.isFinite(g) && g > 0 && g <= MAX_GRAMS;
-    return { item: ok ? { canonical, grams: g } : null, valid: ok, tooLarge: Number.isFinite(g) && g > MAX_GRAMS };
-  };
-  // An added ingredient is measured in the measure picker (ROADMAP 7a-iv-a): one
-  // of its own measures and how many, or a saved dish and how full.
-  const resolveExtra = (x) => {
-    const choice = x.amount ? pickerChoices(x.food, dishware).find((c) => c.key === x.amount.key) ?? null : null;
-    const item = chosenItemFor(x.food.canonical, choice, x.amount?.amount);
-    const typed = parseFloat(x.amount?.amount);
+  // Every row, scanned or added, is measured in the measure picker (ROADMAP 7a-iv-a,
+  // 7a-iv-b): one of its food's own measures and how many, or a saved dish and how
+  // full it was. It sends nothing while its amount is no amount, and an amount the
+  // server would refuse says why before it is sent.
+  const resolvePicked = (food, value) => {
+    const choice = value ? pickerChoices(food, dishware).find((c) => c.key === value.key) ?? null : null;
+    const item = chosenItemFor(food.canonical, choice, value?.amount);
+    const typed = parseFloat(value?.amount);
     const tooLarge = choice?.kind === 'measure' && Number.isFinite(typed) && typed * choice.grams > MAX_GRAMS;
-    const tooSmall = comesToUnderAGram(choice, x.amount?.amount);
+    const tooSmall = comesToUnderAGram(choice, value?.amount);
     const usable = item !== null && !tooLarge && !tooSmall;
     return { item: usable ? item : null, valid: usable, tooLarge, tooSmall };
   };
+  // The food a scanned row prices now: the one Change picked, else the scan's.
+  const rowFood = (i) => replaced[i] ?? analysis.items[i];
   const resolved = analysis === null ? [] : [
-    ...analysis.items.map((item, i) => resolveArm(replaced[i]?.canonical ?? item.canonical, grams[i], itemMeasures[i])),
-    ...extras.map(resolveExtra),
+    ...analysis.items.map((_, i) => resolvePicked(rowFood(i), amounts[i])),
+    ...extras.map((x) => resolvePicked(x.food, x.amount)),
   ];
+  // A row still exactly as the scan started it, and a meal still exactly what the
+  // scan saw: only then do the scan's own numbers stand in while the server has not
+  // answered for what the sheet holds (T3 5c: never a price that is not what will
+  // be saved).
+  const rowAtScan = (i) => replaced[i] === undefined && isStartingValue(analysis.items[i], amounts[i]);
+  const mealAtScan = analysis !== null && extras.length === 0 && analysis.items.every((_, i) => rowAtScan(i));
   // Every food the sheet prices now: a changed row by the food picked for it.
   const rowSources = analysis === null ? [] : [
     ...analysis.items.map((item, i) => replaced[i]?.source ?? item.nutritionSource),
@@ -1043,7 +939,6 @@ function PhotoModal({ open, onClose, onSave }) {
   ]);
   // The total is "about" while any food in it is the scanner's own estimate.
   const aboutTotal = rowSources.includes('estimate');
-  const anyReplaced = Object.keys(replaced).length > 0;
   // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
@@ -1051,11 +946,11 @@ function PhotoModal({ open, onClose, onSave }) {
   // "Add an ingredient" (or its open picker) shows unless the meal is full; what
   // points at it says so only while it is there.
   const canAdd = adding || payloadItems.length < MAX_ITEMS;
-  // 5b T3 advisory: say WHY the button is dead — "Enter grams for every item"
+  // 5b T3 advisory: say WHY the button is dead — "Pick an amount for every item"
   // is a lie when the user plainly entered 20000.
   const gramsTooLarge = resolved.some((r) => r.tooLarge);
 
-  // Live server preview (Kd-approved): whenever grams change, ask the SERVER
+  // Live server preview (Kd-approved): whenever an amount changes, ask the SERVER
   // what the nutrition would be — the browser never computes it. Debounced;
   // failures degrade silently to the analysis estimates (e.g. old API).
   const payloadKey = JSON.stringify(payloadItems);
@@ -1076,16 +971,19 @@ function PhotoModal({ open, onClose, onSave }) {
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-    // payloadKey covers grams AND extras by value; payloadItems is rebuilt each
-    // render so it cannot be a dep itself.
+    // payloadKey covers every amount AND extras by value; payloadItems is rebuilt
+    // each render so it cannot be a dep itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, payloadKey, allValid]);
 
   // T3 5c: a number is only "live" if it priced the CURRENT payload. A result
-  // for a stale payload (mid-debounce, or after a grams edit made gramsValid
-  // false) must NOT be shown — the card's rule is withhold-until-the-server-
+  // for a stale payload (mid-debounce, or after an edit made an amount
+  // unusable) must NOT be shown — the card's rule is withhold-until-the-server-
   // answers, and with extras present a stale total is not what will be saved.
   const liveNow = live !== null && live.key === payloadKey ? live.data : null;
+  // The grams the server has worked out for row i as it stands, or the scan's
+  // while the row is as the scan started it; null while neither is known.
+  const rowGrams = (i) => liveNow?.items?.[i]?.gramsPoint ?? (rowAtScan(i) ? analysis.items[i].gramsPoint : null);
 
   const handleConfirm = async () => {
     if (!analysis || saving || !allValid) return;
@@ -1114,23 +1012,41 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
-  // "my dish" back to grams: the row keeps the grams the server worked out for the
-  // dish (where it has answered for it), and can go back to what it held before.
-  const backToGrams = (idx) => {
-    const dish = itemMeasures[idx];
-    const dishGrams = liveNow?.items?.[idx]?.gramsPoint;
-    setItemMeasures((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-    if (!dish?.dishwareId || !dish?.fillLevel || !Number.isFinite(dishGrams)) return;
-    setUndoGrams((prev) => ({ ...prev, [idx]: { grams: grams[idx], count: counts[idx], base: bases[idx] } }));
-    setGrams((prev) => ({ ...prev, [idx]: String(dishGrams) }));
-    restartStepper(idx, { count: 1, base: dishGrams });
+  // A scanned row's picker changed. Taken from a saved dish to another measure, the
+  // row keeps the grams the server worked out for the dish, with an Undo (RULINGS
+  // 2026-09-16); where the dish was never weighed (no fill picked), it goes back to
+  // what it held before the dish. Any other change is the picker's own.
+  const setRowAmount = (i, next) => {
+    const choices = pickerChoices(rowFood(i), dishware);
+    const from = choices.find((c) => c.key === amounts[i]?.key);
+    const to = choices.find((c) => c.key === next.key);
+    if (from?.kind !== 'dish' && to?.kind === 'dish') {
+      setBeforeDish((prev) => ({ ...prev, [i]: { value: amounts[i], grams: rowGrams(i) } }));
+    }
+    if (from?.kind === 'dish' && to !== undefined && to.kind !== 'dish') {
+      const dishGrams = liveNow?.items?.[i]?.gramsPoint;
+      const kept = valueKeepingGrams(to, dishGrams);
+      const before = beforeDish[i];
+      setBeforeDish((prev) => without(prev, i));
+      if (kept !== null) {
+        setDishUndo((prev) => ({ ...prev, [i]: { value: amounts[i], grams: Math.round(dishGrams) } }));
+        setAmounts((prev) => ({ ...prev, [i]: kept }));
+        return;
+      }
+      const back = before === undefined ? null : before.value?.key === to.key ? before.value : valueKeepingGrams(to, before.grams);
+      if (back) {
+        setAmounts((prev) => ({ ...prev, [i]: back }));
+        return;
+      }
+    }
+    if (to?.kind === 'dish') setDishUndo((prev) => without(prev, i));
+    setAmounts((prev) => ({ ...prev, [i]: next }));
   };
-  const undoGramsChange = (idx) => {
-    const before = undoGrams[idx];
-    if (!before) return;
-    setGrams((prev) => ({ ...prev, [idx]: before.grams }));
-    restartStepper(idx, { count: before.count, base: before.base });
-    setUndoGrams((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+  const undoDishKept = (i) => {
+    const undo = dishUndo[i];
+    if (!undo) return;
+    setAmounts((prev) => ({ ...prev, [i]: undo.value }));
+    setDishUndo((prev) => without(prev, i));
   };
 
   const addExtra = (food) => {
@@ -1140,25 +1056,31 @@ function PhotoModal({ open, onClose, onSave }) {
   };
   const patchExtra = (idx, next) => setExtras((prev) => prev.map((x, i) => (i === idx ? { ...x, ...next } : x)));
   const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setLive(null); };
-  // The food picked for a scanned row takes its place at the row's own grams; the
-  // server prices it (never the browser) once the preview asks. Its stepper starts
-  // at ×1 on those grams: the pieces the scan counted were of the food it replaced.
-  const restartStepper = (idx, stepper) => {
-    setCounts((prev) => ({ ...prev, [idx]: stepper.count }));
-    setBases((prev) => ({ ...prev, [idx]: stepper.base }));
-  };
-  const changeRow = (idx, food) => {
-    setReplaced((prev) => ({ ...prev, [idx]: food }));
-    restartStepper(idx, stepperAtGrams(grams[idx], analysis.items[idx].gramsPoint));
+  // The food picked for a scanned row takes its place at the row's own grams, by the
+  // gram: the measures the row had were the food it replaced. The server prices it
+  // (never the browser) once the preview asks.
+  const changeRow = (i, food) => {
+    const at = { key: 'g', amount: String(Math.round(rowGrams(i) ?? analysis.items[i].gramsPoint)) };
+    // Undo gives back the scanned food as it stood before its first Change.
+    setChangeUndo((prev) => ({ ...prev, [i]: { before: replaced[i] === undefined ? amounts[i] : prev[i]?.before ?? startingValue(analysis.items[i]), at } }));
+    setReplaced((prev) => ({ ...prev, [i]: food }));
+    setAmounts((prev) => ({ ...prev, [i]: at }));
+    setDishUndo((prev) => without(prev, i));
+    setBeforeDish((prev) => without(prev, i));
     setChanging(null);
     setLive(null);
   };
-  // Undo puts the scanned food back, with the scan's own count while the grams are
-  // still the scan's.
-  const undoChange = (idx) => {
-    const item = analysis.items[idx];
-    setReplaced((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-    restartStepper(idx, grams[idx] === String(item.gramsPoint) ? scannedStepper(item) : stepperAtGrams(grams[idx], item.gramsPoint));
+  // Undo puts the scanned food back: at the measure and amount it held while the
+  // row is still at the grams Change kept, else at the grams the row holds now.
+  const undoChange = (i) => {
+    const undo = changeUndo[i];
+    const untouched = undo !== undefined && amounts[i]?.key === undo.at.key && amounts[i]?.amount === undo.at.amount;
+    const grams = liveNow?.items?.[i]?.gramsPoint ?? analysis.items[i].gramsPoint;
+    setReplaced((prev) => without(prev, i));
+    setChangeUndo((prev) => without(prev, i));
+    setDishUndo((prev) => without(prev, i));
+    setBeforeDish((prev) => without(prev, i));
+    setAmounts((prev) => ({ ...prev, [i]: untouched ? undo.before : { key: 'g', amount: String(Math.round(grams)) } }));
     setLive(null);
   };
 
@@ -1308,8 +1230,8 @@ function PhotoModal({ open, onClose, onSave }) {
                     </p>
                     <p className="text-xs mb-1"
                        style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      Check the portion sizes below — you can adjust the grams
-                      before saving.
+                      Check the amounts below — you can change them before
+                      saving.
                     </p>
                     {/* RULINGS 2026-09-09: photo scans say they estimate calories
                         and cannot detect allergens. Never softened or removed. */}
@@ -1320,42 +1242,44 @@ function PhotoModal({ open, onClose, onSave }) {
 
                     <div className="space-y-2 mb-4">
                       {analysis.items.map((item, i) => {
-                        // Server-computed live numbers for the CURRENT grams
-                        // (2B: never computed in the browser). The AI's own
-                        // estimate is only a legitimate stand-in while the
-                        // meal is still exactly what the AI saw — once the
-                        // user has added an ingredient the row must wait for
-                        // the server rather than show a stale price (T3 5c).
-                        // Fall back to the AI's own estimate ONLY while the meal
-                        // is still exactly what the AI saw (no extras) AND this
-                        // item is still on the AI's grams (not a dish measure) —
-                        // the AI's grams estimate can never equal a dish price,
-                        // so a dish-mode row must wait for the server, not show a
-                        // number that isn't what will be saved (T3 5c2 F1).
-                        // A row changed to another food waits for the server too:
-                        // the scan's numbers are the food it replaced.
+                        // Server-computed live numbers for the CURRENT amounts
+                        // (2B: never computed in the browser). The scan's own
+                        // numbers stand in only while the meal is still exactly
+                        // what the scan saw: every row as it started, nothing
+                        // added and nothing changed (T3 5c, 5c2 F1) — a row
+                        // measured any other way, or a changed food, waits for
+                        // the server rather than show a price that will not be saved.
+                        const food = rowFood(i);
                         const changed = replaced[i];
-                        const shown = liveNow?.items?.[i]
-                          ?? (extras.length === 0 && !anyReplaced && itemMeasures[i] === undefined ? item : null);
+                        const shown = liveNow?.items?.[i] ?? (mealAtScan ? item : null);
                         const source = changed?.source ?? item.nutritionSource;
-                        // An estimate's grams are the scanner's guess until the person sets them.
-                        const estimateLabel = grams[i] === String(item.gramsPoint)
-                          ? `~${item.gramsPoint} g · estimate`
-                          : grams[i] ? `${grams[i]} g · estimate` : 'Estimate';
+                        const amber = { color: 'rgba(251,191,36,0.85)' };
+                        // A row started at the photo's own grams is the scanner's
+                        // guess until the person sets an amount (ROADMAP 7a-iv-b).
+                        const portionMark = rowAtScan(i) && item.portionEstimated ? `~${item.gramsPoint} g · estimate` : null;
+                        const inDish = pickerChoices(food, dishware).find((c) => c.key === amounts[i]?.key)?.kind === 'dish';
+                        const { tooLarge, tooSmall } = resolved[i];
                         return (
                         <div key={i}
-                             className="p-2.5 rounded-xl"
-                             style={{ background: 'rgba(255,255,255,0.02)' }}>
-                          <div className="flex justify-between gap-2">
+                             className="p-3.5 rounded-2xl"
+                             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-white">
-                                {changed?.name ?? item.name}
+                                {food.name}
                               </p>
-                              <p className="text-2xs mt-0.5 flex flex-wrap items-center gap-x-1.5"
-                                 style={{ color: 'rgba(255,255,255,0.40)' }}>
-                                {source === 'estimate' && itemMeasures[i] === undefined
-                                  ? <span style={{ color: 'rgba(251,191,36,0.85)' }}>{estimateLabel}</span>
-                                  : <span style={source === 'estimate' ? { color: 'rgba(251,191,36,0.85)' } : undefined}>{SOURCE_TAGS[source] ?? source}</span>}
+                              <p className="text-xs mt-0.5 flex flex-wrap items-center gap-x-1.5"
+                                 style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                {/* An estimate's figures and its grams are both the scanner's: one mark says so. */}
+                                {source === 'estimate' && portionMark !== null
+                                  ? <span style={amber}>{portionMark}</span>
+                                  : <span style={source === 'estimate' ? amber : undefined}>{SOURCE_TAGS[source] ?? source}</span>}
+                                {source !== 'estimate' && portionMark !== null && (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span style={amber}>{portionMark}</span>
+                                  </>
+                                )}
                                 <span aria-hidden="true">·</span>
                                 <button type="button"
                                         onClick={() => setChanging(changing === i ? null : i)}
@@ -1373,7 +1297,7 @@ function PhotoModal({ open, onClose, onSave }) {
                                 )}
                               </p>
                             </div>
-                            <p className="text-sm font-bold flex-shrink-0"
+                            <p className="text-base font-bold flex-shrink-0"
                                style={{ color: '#FF8A1F' }}>
                               {shown === null
                                 ? '…'
@@ -1385,112 +1309,58 @@ function PhotoModal({ open, onClose, onSave }) {
                           {changing === i && (
                             <div className="mt-2 p-2.5 rounded-xl space-y-2"
                                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                              <p className="text-2xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
-                                Pick the right food for {changed?.name ?? item.name}. The amount stays the same.
+                              <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                                Pick the right food for {food.name}. The amount stays the same.
                               </p>
                               <FoodPicker
                                 selected={null}
-                                onPick={(food) => changeRow(i, food)}
+                                onPick={(picked) => changeRow(i, picked)}
                                 autoFocus
                                 exclude={onSheet(i)}
                                 placeholder="Search the right food..."
                               />
                             </div>
                           )}
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-2xs"
-                               style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              {shown === null
-                                ? 'Calculating…'
-                                : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
-                            </p>
-                            {itemMeasures[i] === undefined ? (
-                              <div className="flex items-center gap-2">
-                                {/* Count stepper: multiplies one piece's grams
-                                    (the scan's grams over its count) — portion
-                                    scaling only; nutrition math stays on the server. */}
-                                <div className="flex items-center gap-1 text-2xs"
-                                     style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                  <button type="button"
-                                    onClick={() => {
-                                      const n = Math.max(1, (counts[i] ?? 1) - 1);
-                                      setCounts({ ...counts, [i]: n });
-                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                    }}
-                                    className="w-6 h-6 rounded-md"
-                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
-                                  <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
-                                  <button type="button"
-                                    onClick={() => {
-                                      // Never lower a scan's own count above the cap.
-                                      const n = Math.max(counts[i] ?? 1, Math.min(30, (counts[i] ?? 1) + 1));
-                                      setCounts({ ...counts, [i]: n });
-                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                    }}
-                                    className="w-6 h-6 rounded-md"
-                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
-                                </div>
-                                <label className="flex items-center gap-1.5 text-2xs"
-                                       style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                  <input
-                                    type="number" value={grams[i] ?? ''} min="1" max="10000"
-                                    onChange={(e) => {
-                                      setGrams({ ...grams, [i]: e.target.value });
-                                      const typed = parseFloat(e.target.value);
-                                      if (Number.isFinite(typed) && typed > 0) {
-                                        setBases({ ...bases, [i]: typed });
-                                        setCounts({ ...counts, [i]: 1 });
-                                      }
-                                    }}
-                                    className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
-                                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
-                                  />
-                                  g
-                                </label>
-                                {/* Card 5c2: measure this item with my dish
-                                    instead. A LABELED pill, not a bare icon, so
-                                    a first-time user can see the option (Kd
-                                    smoke ask — discoverability). */}
-                                <button type="button" title="Measure with my dish instead of grams"
-                                        onClick={() => setItemMeasures({ ...itemMeasures, [i]: {} })}
-                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold whitespace-nowrap flex-shrink-0"
-                                        style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
-                                  <CookingPot className="w-3 h-3" /> my dish
-                                </button>
-                              </div>
-                            ) : (
-                              <button type="button"
-                                      onClick={() => backToGrams(i)}
-                                      className="text-2xs font-semibold px-2 py-1 rounded-md"
-                                      style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
-                                ← back to grams
-                              </button>
-                            )}
+                          <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                            {shown === null
+                              ? 'Calculating…'
+                              : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
+                          </p>
+                          {/* The food's own measures and the person's saved dishes, as
+                              Add food offers them (ROADMAP 7a-iv-a, 7a-iv-b). */}
+                          <div className="mt-3">
+                            <MeasurePicker
+                              food={food}
+                              dishware={dishware}
+                              value={amounts[i]}
+                              onChange={(next) => setRowAmount(i, next)}
+                              grams={shown?.gramsPoint ?? null}
+                              onDishSaved={loadDishware}
+                            />
                           </div>
-                          {undoGrams[i] && itemMeasures[i] === undefined && (
-                            <p className="text-2xs mt-1 text-right" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                              Kept the dish's {grams[i]} g ·{' '}
-                              <button type="button" onClick={() => undoGramsChange(i)}
+                          {dishUndo[i] && !inDish && (
+                            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                              Kept the dish's {dishUndo[i].grams} g ·{' '}
+                              <button type="button" onClick={() => undoDishKept(i)}
                                       className="underline decoration-dotted"
-                                      style={{ color: 'rgba(255,255,255,0.65)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                      style={{ color: 'rgba(255,255,255,0.75)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                                 Undo
                               </button>
                             </p>
                           )}
-                          {itemMeasures[i] !== undefined && (
-                            <DishMeasure
-                              dishware={dishware}
-                              value={itemMeasures[i]}
-                              onChange={(v) => setItemMeasures({ ...itemMeasures, [i]: v })}
-                              onSaved={loadDishware}
-                            />
+                          {(tooLarge || tooSmall) && (
+                            <p className="text-xs mt-2" style={amber}>
+                              {tooSmall
+                                ? 'That comes to less than 1 g — pick a larger amount.'
+                                : `That is more than ${MAX_GRAMS.toLocaleString()} g — pick a smaller amount.`}
+                            </p>
                           )}
                         </div>
                         );
                       })}
 
                       {/* Card 5c: ingredients the AI never saw (oats → milk).
-                          Same grams/stepper rules; the SERVER prices them. */}
+                          The same measure picker; the SERVER prices them. */}
                       {extras.map((x, j) => {
                         const shown = liveNow?.items?.[analysis.items.length + j];
                         // Confirm is hidden while any amount is unusable, so the row says why.
@@ -1623,12 +1493,13 @@ function PhotoModal({ open, onClose, onSave }) {
                         border:     '1px solid rgba(255,138,31,0.20)',
                       }}
                     >
-                      {/* The AI's own totals cover ONLY what it saw, so once
-                          the user has added an ingredient they are the wrong
-                          number — wait for the server rather than show a total
-                          lower than what we are about to save. */}
+                      {/* The AI's own totals cover ONLY what it saw, as it
+                          started each row: once the user has added an
+                          ingredient, changed a food or moved an amount they are
+                          the wrong number — wait for the server rather than show
+                          a total that is not what we are about to save. */}
                       {(() => {
-                        const t = liveNow?.totals ?? (extras.length === 0 && !anyReplaced ? analysis.totals : null);
+                        const t = liveNow?.totals ?? (mealAtScan ? analysis.totals : null);
                         if (t === null) {
                           return (
                             <>
@@ -1680,7 +1551,7 @@ function PhotoModal({ open, onClose, onSave }) {
                        style={{ color: 'rgba(255,255,255,0.40)' }}>
                       {liveNow
                         ? 'All numbers are calculated by the server for your chosen amounts.'
-                        : "Numbers above are the AI's first estimate — final nutrition is recalculated from your grams when you save."}
+                        : "Numbers above are the AI's first estimate — final nutrition is recalculated from your amounts when you save."}
                     </p>
 
                     <button

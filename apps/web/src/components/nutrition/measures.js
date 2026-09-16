@@ -51,6 +51,26 @@ export function startingValue(food) {
   return { key: first.key, amount: first.id === 'g' ? String(food?.serving || 100) : '1' };
 }
 
+/** Whether a value is still the one a food starts at: a scanned row the person has
+ *  not moved from where the scan started it (ROADMAP 7a-iv-b). */
+export function isStartingValue(food, value) {
+  const start = startingValue(food);
+  return value?.key === start.key && parseFloat(value?.amount) === parseFloat(start.amount);
+}
+
+/** A choice's value that keeps what the item weighed (`grams`, as the server worked
+ *  them out): those grams, or as many of the measure as weigh them, to a hundredth.
+ *  Null for a dish, whose amount is how full it was, or where nothing is weighed yet.
+ *  A scanned row taken from a saved dish to another measure keeps its grams (Kd's
+ *  click-through of 7a-iv-a, RULINGS 2026-09-16). */
+export function valueKeepingGrams(choice, grams) {
+  const weighed = Number(grams);
+  if (!choice || choice.kind === 'dish' || !Number.isFinite(weighed) || weighed <= 0) return null;
+  if (choice.id === 'g') return { key: choice.key, amount: String(Math.min(MAX_AMOUNT, Math.round(weighed))) };
+  const amount = Math.round((weighed / choice.grams) * 100) / 100;
+  return amount > 0 && amount <= MAX_AMOUNT ? { key: choice.key, amount: String(amount) } : null;
+}
+
 /** The value after the person picks another choice: a dish starts with no fill
  *  picked; grams start at what the item weighed where that is known; any other
  *  measure starts at one. */
