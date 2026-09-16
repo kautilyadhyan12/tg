@@ -31,6 +31,9 @@ const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Package
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
 /** A copy of `map` without `key`. */
 const without = (map, key) => { const next = { ...map }; delete next[key]; return next; };
+/** The server's refusals of an amount itself, as its preview answers them: a portion
+ *  too small or too large, a measure the food lacks, a dish that is not the person's. */
+const REFUSED_AMOUNTS = new Set(['portion_out_of_range', 'unknown_measure', 'unknown_dishware']);
 
 // ── Meal type config ──────────────────────────────────────────────────────────
 const MEAL_TYPES = [
@@ -946,7 +949,10 @@ function PhotoModal({ open, onClose, onSave }) {
   ]);
   // The total is "about" while any row is an estimate (RULINGS 2026-09-16): a food
   // the scanner itself priced, or a portion still at the photo's own guess (the
-  // review of PR #76, L1).
+  // review of PR #76, L1). A SAVED meal reads "about" only for the first
+  // (`hasEstimate`): confirming the sheet makes every amount the person's — Part 2B
+  // §3.2 Stage 4, the tap "converts an AI guess into a user-verified log" — so a
+  // saved item keeps no mark that its amount began as the photo's guess.
   const aboutTotal = rowSources.includes('estimate')
     || (analysis !== null && analysis.items.some((item, i) => item.portionEstimated && rowAtScan(i)));
   // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
@@ -976,8 +982,10 @@ function PhotoModal({ open, onClose, onSave }) {
         // Stamp the result with the payload it priced, so a response that
         // lands after a further edit is not shown as current (T3 5c honesty).
         if (!cancelled) setLive({ data: res.data, key: payloadKey });
-      } catch {
-        if (!cancelled) setLive(null);
+      } catch (err) {
+        // Kept as a failure of this very payload, so a row can say why its grams
+        // are not known: an amount the server refuses, or no answer at all.
+        if (!cancelled) setLive({ data: null, key: payloadKey, refused: REFUSED_AMOUNTS.has(err?.response?.data?.error) });
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
@@ -991,6 +999,9 @@ function PhotoModal({ open, onClose, onSave }) {
   // unusable) must NOT be shown — the card's rule is withhold-until-the-server-
   // answers, and with extras present a stale total is not what will be saved.
   const liveNow = live !== null && live.key === payloadKey ? live.data : null;
+  // The server's preview of the sheet as it stands failed: 'refused' where it refused
+  // an amount, 'failed' where it gave no answer, else null.
+  const previewTrouble = live !== null && live.key === payloadKey && live.data === null ? (live.refused ? 'refused' : 'failed') : null;
   // The grams row i holds: the server's answer for the sheet as it stands; else —
   // before it answers, or where it cannot — what the row's own measure weighs, how
   // many times the grams one of it weighs on the server's own list, to the whole
@@ -1006,11 +1017,20 @@ function PhotoModal({ open, onClose, onSave }) {
     const grams = Math.round(amount * choice.grams);
     return grams >= 1 && grams <= MAX_GRAMS ? grams : null;
   };
-  // Why "Change food" waits, while the row's grams are not known.
+  // Why "Change food" waits, while the row's grams are not known, said truly for each
+  // way they can be unknown (the re-check of PR #76): no amount yet; an amount no
+  // gram or past what one item may weigh; a dish the server weighs, while it is
+  // still to answer, cannot answer until every other amount is usable, refused
+  // the amount, or gave no answer.
   const changeHold = (i) => {
     const choice = pickerChoices(rowFood(i), dishware).find((c) => c.key === amounts[i]?.key);
-    if (choice?.kind !== 'dish') return 'Pick an amount first.';
-    return parseFloat(amounts[i]?.amount) > 0 ? 'Working out the grams…' : 'Pick how full it was first.';
+    const dish = choice?.kind === 'dish';
+    const amount = parseFloat(amounts[i]?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return dish ? 'Pick how full it was first.' : 'Pick an amount first.';
+    if (!dish || previewTrouble === 'refused') return "This amount can't be weighed — pick another.";
+    if (!allValid) return 'Finish the other amounts first.';
+    if (previewTrouble === 'failed') return "The grams couldn't be worked out just now.";
+    return 'Working out the grams…';
   };
 
   const handleConfirm = async () => {

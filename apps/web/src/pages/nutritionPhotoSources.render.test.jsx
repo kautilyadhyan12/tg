@@ -292,6 +292,52 @@ describe('the measure on a changed row', () => {
       expect(change.disabled).toBe(true);
       expect(within(row('bread')).getByText('Pick how full it was first.')).toBeTruthy();
     });
+
+    // The re-check of PR #76: each way the grams can be unknown says its own reason.
+    const blueBowl = { id: 'd-1', label: 'My blue bowl', containerClass: 'cereal_bowl', volumeMl: 360, foodHint: null, createdAt: '2026-09-16T10:00:00.000Z' };
+    const halfBowl = async (row) => {
+      open(row('bread'));
+      fireEvent.click(within(row('bread')).getByRole('button', { name: 'Measure' }));
+      fireEvent.click(await within(row('bread')).findByRole('option', { name: 'My blue bowl · 360 ml' }));
+      fireEvent.click(within(row('bread')).getByRole('button', { name: '½' }));
+    };
+    const holdOf = (rowEl) => {
+      expect(within(rowEl).getByRole('button', { name: 'Change food' }).disabled).toBe(true);
+      return within(rowEl).getByRole('button', { name: 'Change food' }).nextElementSibling?.textContent;
+    };
+
+    it('says an amount past what one item may weigh cannot be weighed, not that none is picked', async () => {
+      const row = await scanPlate();
+      open(row('bread'));
+      // 400 slices of 30 g are 12,000 g.
+      fireEvent.change(within(row('bread')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '400' } });
+      expect(holdOf(row('bread'))).toBe("This amount can't be weighed — pick another.");
+    });
+
+    it('says a weighed dish the server gave no answer for could not be worked out, never that it is still working', async () => {
+      svc.listDishware = vi.fn(async () => ({ data: { items: [blueBowl], nextCursor: null } }));
+      const row = await scanPlate();
+      await halfBowl(row);
+      await waitFor(() => expect(svc.previewMeal.mock.lastCall?.[0].items[1]).toEqual({ canonical: 'est_bread', dishwareId: 'd-1', fillLevel: 0.5 }));
+      await waitFor(() => expect(holdOf(row('bread'))).toBe("The grams couldn't be worked out just now."));
+    });
+
+    it('says a dish amount the server refused cannot be weighed', async () => {
+      svc.listDishware = vi.fn(async () => ({ data: { items: [blueBowl], nextCursor: null } }));
+      svc.previewMeal = vi.fn(async () => { throw Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: { error: 'portion_out_of_range' } } }); });
+      const row = await scanPlate();
+      await halfBowl(row);
+      await waitFor(() => expect(holdOf(row('bread'))).toBe("This amount can't be weighed — pick another."));
+    });
+
+    it('says a weighed dish waits for the other amounts while one of them is unusable', async () => {
+      svc.listDishware = vi.fn(async () => ({ data: { items: [blueBowl], nextCursor: null } }));
+      const row = await scanPlate();
+      open(row('Avocado'));
+      fireEvent.change(within(row('Avocado')).getByRole('spinbutton', { name: 'Amount' }), { target: { value: '' } });
+      await halfBowl(row);
+      expect(holdOf(row('bread'))).toBe('Finish the other amounts first.');
+    });
   });
 });
 
