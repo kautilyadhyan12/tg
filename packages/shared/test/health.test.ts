@@ -7,6 +7,7 @@ import {
   FOOD_ALLERGY_CAUTION,
   HEALTH_QUESTION,
   HEALTH_QUESTION_NOTE,
+  PHOTO_SCAN_CAUTION,
   UNANSWERED_HEALTH_SCREENING,
   checkFirstSchema,
   consentListResponseSchema,
@@ -128,8 +129,15 @@ describe("the words both screens show (4b-i)", () => {
     expect(lower).not.toMatch(/allergen-free|allergy-free|\bsafe\b|free from/);
   });
 
+  it("the photo scan's caution says both halves of the ruling: calories are estimated, and allergens cannot be detected (RULINGS 2026-09-09)", () => {
+    const lower = PHOTO_SCAN_CAUTION.toLowerCase();
+    expect(lower).toContain("estimate");
+    expect(lower).toContain("cannot detect allergens");
+    expect(lower).not.toMatch(/allergen-free|allergy-free|\bsafe\b|free from/);
+  });
+
   it("never claims anything is safe for the person, treated or cured", () => {
-    for (const text of [HEALTH_QUESTION, HEALTH_QUESTION_NOTE, FOOD_ALLERGY_CAUTION, ...Object.values(CHECK_FIRST_OPTIONS).flatMap((o) => [o.label, o.detail])]) {
+    for (const text of [HEALTH_QUESTION, HEALTH_QUESTION_NOTE, FOOD_ALLERGY_CAUTION, PHOTO_SCAN_CAUTION, ...Object.values(CHECK_FIRST_OPTIONS).flatMap((o) => [o.label, o.detail])]) {
       const lower = text.toLowerCase();
       expect(lower).not.toContain("safe for you");
       expect(lower).not.toMatch(/treats?/);

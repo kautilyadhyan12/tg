@@ -12,9 +12,11 @@ import {
   searchUsdaFoods,
   usdaCanonical,
   usdaFoodByCanonical,
+  usdaFoodForScan,
   usdaSearchWords,
   usdaTsQuery,
 } from "../src/modules/nutrition/repo.js";
+import { energySeen } from "../src/modules/nutrition/scanMatch.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaPortion, type UsdaRelease } from "../tools/usda-files.js";
 
@@ -89,6 +91,56 @@ d("the USDA food table (real Postgres)", () => {
     // An accented head, for the order steps reading the folded name.
     [90_000_018, "fndds", "Zqxpâté spread", 59],
     [90_000_019, "fndds", "Zqxpâté, liver", 60],
+    // A scan's food (ROADMAP 7a-iii-b), one row per rule; words "zqxs…", so the
+    // search tests above never see them.
+    // A whole description that IS the name, in SR Legacy, beside a survey-release head.
+    [90_000_040, "sr_legacy", "Zqxsname", 70],
+    [90_000_041, "fndds", "Zqxsname, cooked", 71],
+    // A head that IS the name, in SR Legacy, beside a survey-release dish.
+    [90_000_042, "sr_legacy", "Zqxshead, raw", 72],
+    [90_000_043, "fndds", "Zqxshead split", 73],
+    // Every word, three words each: the survey release first.
+    [90_000_044, "sr_legacy", "Zqxsdish, zqxsrel, baked", 74],
+    [90_000_045, "fndds", "Zqxsrel zqxsdish pie", 75],
+    // Every word, one release: the fewest words, then USDA's id.
+    [90_000_046, "fndds", "Zqxsfew, zqxsmore, fried, with oil", 76],
+    [90_000_047, "fndds", "Zqxsfew, zqxsmore, fried", 77],
+    [90_000_048, "fndds", "Zqxsfew, zqxsmore, baked", 78],
+    // A dish made from the food, whose first word is another food's.
+    [90_000_049, "fndds", "Bread, zqxsbanana", 79],
+    // One word of two.
+    [90_000_050, "fndds", "Zqxsone, raw", 80],
+    // A plural and a past tense, stemmed.
+    [90_000_051, "fndds", "Zqxsegg, scrambled", 81],
+    // No figure to price it by.
+    [90_000_052, "fndds", "Zqxsnofat, raw", 82, ["fatG"]],
+    [90_000_053, "fndds", "Zqxsnokcal, raw", null],
+    // One food made three ways, all heads of the same name, and a dish of it: the
+    // survey release's pickled one leads by the release rule; SR Legacy's raw one
+    // is the plainest of the other two, a calorie from the longer one.
+    [90_000_054, "fndds", "Zqxsprep, pickled", 34],
+    [90_000_055, "sr_legacy", "Zqxsprep, raw", 16],
+    [90_000_056, "sr_legacy", "Zqxsprep, oriental, cooked, boiled, drained", 17],
+    [90_000_057, "fndds", "Zqxsprep pie", 300],
+    // Kd's pumpkin, as USDA has it: the plain cooked entry and a canned one 4 kcal
+    // from it, a raw one, and a dish of it that only starts with its name.
+    [90_000_058, "fndds", "Zqxsgourd, cooked", 52],
+    [90_000_059, "fndds", "Zqxsgourd, canned, cooked", 56],
+    [90_000_060, "sr_legacy", "Zqxsgourd, raw", 26],
+    [90_000_061, "fndds", "Zqxsgourd pie", 80],
+    // Mushrooms, as USDA has them: a plain pickled entry and a longer one cooked
+    // with oil, 24 kcal apart.
+    [90_000_062, "fndds", "Zqxsmush, pickled", 46],
+    [90_000_063, "fndds", "Zqxsmush, fresh, cooked with oil", 70],
+    // A food whose two ways are 30 kcal apart, and both near 600.
+    [90_000_064, "fndds", "Zqxsnut, raw", 580],
+    [90_000_065, "fndds", "Zqxsnut, dry roasted, with salt added", 610],
+    // Two foods at the tie's edge: a long entry near the estimate, and a plain one
+    // past the estimate's error by exactly 10 kcal more than it, or by 11.
+    [90_000_066, "fndds", "Zqxsleaf, frozen, cooked, boiled, drained", 125],
+    [90_000_067, "fndds", "Zqxsleaf, raw", 135],
+    [90_000_068, "fndds", "Zqxsroot, frozen, cooked, boiled, drained", 125],
+    [90_000_069, "fndds", "Zqxsroot, raw", 136],
   ];
 
   const load = async (): Promise<void> => {
@@ -235,6 +287,88 @@ d("the USDA food table (real Postgres)", () => {
     it("honours the limit it is given, and asks nothing of the database below one", async () => {
       expect(await found("zqxfixture cappuccino", 2)).toEqual([90_000_001, 90_000_003]);
       expect(await found("zqxfixture cappuccino", 0)).toEqual([]);
+    });
+  });
+
+  describe("the USDA row a scanned food's name finds (ROADMAP 7a-iii-b)", () => {
+    const scanned = async (hint: string, kcalSeen: number | null = null): Promise<[number, string] | null> => {
+      const seen = kcalSeen === null ? null : energySeen({ kcal: kcalSeen, proteinG: 0, carbsG: 0, fatG: 0 });
+      const found = await usdaFoodForScan(sql, hint, seen);
+      return found === null ? null : [found.food.fdcId, found.match];
+    };
+
+    it("is the food itself by name first: the whole description, then its head, before any release rule", async () => {
+      // SR Legacy's "Zqxsname" is the name; the survey release's "Zqxsname, cooked" is only its head.
+      expect(await scanned("zqxsname")).toEqual([90_000_040, "name"]);
+      // SR Legacy's head "Zqxshead, raw" before the survey release's dish "Zqxshead split".
+      expect(await scanned("zqxshead")).toEqual([90_000_042, "head"]);
+    });
+
+    it("is then every word, starting with one of them: the survey release first, the fewest words, then USDA's id", async () => {
+      expect(await scanned("zqxsrel zqxsdish")).toEqual([90_000_045, "words"]);
+      expect(await scanned("zqxsmore zqxsfew")).toEqual([90_000_047, "words"]);
+    });
+
+    it("never is a dish that only holds the name after another food's", async () => {
+      expect(await scanned("zqxsbanana")).toBeNull();
+      expect(await scanned("zqxsone zqxstwo")).toBeNull();
+    });
+
+    it("stems both sides by the index's own dictionary, and folds accents", async () => {
+      expect(await scanned("scrambled zqxseggs")).toEqual([90_000_051, "words"]);
+      expect(await scanned("Zqxsnâme")).toEqual([90_000_040, "name"]);
+    });
+
+    it("is, among the entries the name finds equally, the plainest of those as near to the model's energy as it can tell", async () => {
+      // No energy to go by: the release rule alone.
+      expect(await scanned("zqxsprep")).toEqual([90_000_054, "head"]);
+      // 17, good to 10: raw (16) and the oriental one (17) are as near, so the plainest, raw — not the
+      // nearest; pickled (34) is 17 further, past what the estimate can tell, though the release rule puts it first.
+      expect(await scanned("zqxsprep", 17)).toEqual([90_000_055, "head"]);
+      // 5, good to 10: raw (16) is nearest, the oriental one (17) as near, pickled (34) not.
+      expect(await scanned("zqxsprep", 5)).toEqual([90_000_055, "head"]);
+      // 30: pickled (34) is nearest, and raw and the oriental one within 10 of it: the release rule, pickled.
+      expect(await scanned("zqxsprep", 30)).toEqual([90_000_054, "head"]);
+    });
+
+    it("never names a way of cooking by a few kcal: a canned entry 4 kcal nearer is as near as the plain one", async () => {
+      // 75, good to 22.5: the canned entry (56) is 19 off and inside a band around 75; the plain one (52) is 23 off, just outside it.
+      expect(await scanned("zqxsgourd", 75)).toEqual([90_000_058, "head"]);
+      // 100, good to 30: neither is near, the canned one 4 kcal nearer.
+      expect(await scanned("zqxsgourd", 100)).toEqual([90_000_058, "head"]);
+    });
+
+    it("never lets an entry past the estimate's error tie with one inside it by more than 10 kcal", async () => {
+      // 80, good to 24, and no entry is 80: cooked with oil (70) is 10 off, inside; pickled (46) is 34 off, outside and
+      // 24 further — within 24 of the nearest, but not as near.
+      expect(await scanned("zqxsmush", 80)).toEqual([90_000_063, "head"]);
+      // 610, good to 183: raw (580) and roasted (610) are both inside, 30 kcal apart, so as near: the plainest, raw.
+      expect(await scanned("zqxsnut", 610)).toEqual([90_000_064, "head"]);
+    });
+
+    it("ties an entry past the estimate's error with the nearest up to 10 kcal further, and not 11", async () => {
+      // 100, good to 30: the frozen entry (125) is 25 off, inside. Raw at 135 is 35 off, outside the error but exactly
+      // 10 further than the nearest, so as near, and the plainer wins.
+      expect(await scanned("zqxsleaf", 100)).toEqual([90_000_067, "head"]);
+      // Raw at 136 is 36 off, 11 further: not as near, however plain.
+      expect(await scanned("zqxsroot", 100)).toEqual([90_000_068, "head"]);
+    });
+
+    it("measures the nearest within the name's own step, and never leaves that step for a nearer dish", async () => {
+      // 80 is the pie's energy exactly, but the pie only starts with the name. Measured from the pie (0 off), only the
+      // canned entry (24 off) would be as near; measured within the heads, the plain one (28 off) is as near too.
+      expect(await scanned("zqxsgourd", 80)).toEqual([90_000_058, "head"]);
+      // 300 is the pie's energy exactly: still a head, the plainest of them, pickled (34).
+      expect(await scanned("zqxsprep", 300)).toEqual([90_000_054, "head"]);
+    });
+
+    it("never is a food it cannot price, and no text the model writes is an operator", async () => {
+      expect(await scanned("zqxsnofat")).toBeNull();
+      expect(await scanned("zqxsnokcal")).toBeNull();
+      expect(await scanned("zqxsname & | ! ( ) : * <->")).toEqual([90_000_040, "name"]);
+      expect(await scanned("zqxsname%")).toEqual([90_000_040, "name"]);
+      expect(await scanned("&& !!")).toBeNull();
+      expect(await scanned("of the")).toBeNull();
     });
   });
 

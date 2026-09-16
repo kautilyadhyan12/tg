@@ -1,8 +1,11 @@
-// Part 2B §3.2 Stage 1: vision identifies evidence and never computes nutrition.
-// The scanner runs on Gemini (RULINGS 2026-08-24); Groq stays as a switched-off
-// spare. MEAL_VISION_MODEL picks one at boot, and every model carries its price.
-// Every reply is parsed through the scanner's schemas in @app/shared.
-import { geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
+// Part 2B §3.2 Stage 1: vision identifies the foods and the portion evidence, and
+// gives its own estimate of each food's grams, calories and macros, which the
+// app shows only where no food table has the food (RULINGS 2026-09-15, amended
+// 2026-09-16). The scanner runs on Gemini (RULINGS 2026-08-24); Groq stays as a
+// switched-off spare. MEAL_VISION_MODEL picks one at boot, and every model
+// carries its price. Every reply is parsed through the scanner's schemas in
+// @app/shared.
+import { MAX_SCAN_FOODS, MEAL_VESSELS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
@@ -22,8 +25,23 @@ export const MEAL_VISION_MODELS: Readonly<Record<MealVisionModel, {
   "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
 };
 
+/** A scan's cost in integer micro-USD at its model's list price; BigInt
+ *  end-to-end, rounded half up. The ledger and the cost-measuring tool
+ *  (`tools/measure-scan-cost.ts`) both price with this. */
+export function visionCostMicro(model: MealVisionModel, tokensIn: number, tokensOut: number): bigint {
+  const price = MEAL_VISION_MODELS[model];
+  const raw =
+    BigInt(tokensIn) * price.inputMicroUsdPerMillion +
+    BigInt(tokensOut) * price.outputMicroUsdPerMillion;
+  return (raw + 500_000n) / 1_000_000n; // round-half-up, no float near money
+}
+
 /** A provider that never answers must not hold the scan request open. */
 export const VISION_TIMEOUT_MS = 30_000;
+
+/** The most output tokens one reply may bill: the most a scan can cost. The
+ *  number of foods a reply may list (`MAX_SCAN_FOODS`) is sized to fit inside it. */
+export const VISION_MAX_OUTPUT_TOKENS = 1000;
 
 /** How many tokens Gemini spends reading the photo. Gemini 3 reads a photo as
  *  about 280 tokens at low, 560 at medium and 1,120 when left unset
@@ -64,13 +82,24 @@ export class VisionProviderError extends Error {
 const httpFailure = (status: number): VisionProviderError =>
   new VisionProviderError(`vision HTTP ${String(status)}`, status === 408 || status === 429 || status >= 500 ? "unavailable" : "refused");
 
-// The instructions on reading the plate are Kd's whole prompt (RULINGS
-// 2026-08-24). What the model writes back is trimmed to what the app reads
-// (RULINGS 2026-09-15): no cuisine guess, no scale anchors, no confidence
-// word, and a field it cannot fill is left out rather than written as null —
-// but never an item's name or canonical_hint, which the evidence contract
-// requires, so a food it cannot name goes in unknown_items.
-export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items [{name,canonical_hint,container,fill_level,size_class,count}], unknown_items, photo_quality. Write the JSON on one line, with no line breaks or indentation, and leave out any field you cannot fill instead of writing null, "none" or "N/A". Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. Field formats are strict: meal_name must be a short name for the meal; fill_level must be a number between 0 and 1; container and size_class must be strings; count must be a positive integer; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Never output calories, kcal, grams, quantities by weight, protein, carbohydrates, fat, fibre, or any nutrition arithmetic.`;
+// The instructions on reading the plate are Kd's (RULINGS 2026-08-24), word for
+// word: what to identify, a name and a canonical_hint on every item, the local
+// name before a generic one, counting only what is reliably countable, and
+// unknown instead of a guess. What changed is what the model writes back:
+// - trimmed to what the app reads (RULINGS 2026-09-15): no cuisine guess, no
+//   scale anchors, no confidence word;
+// - ONE LIST PER FOOD (RULINGS 2026-09-16), with a null in a slot it cannot
+//   fill, so the five numbers ride in fewer tokens than field names would;
+// - the model's own grams, kcal and macros for what it sees, always filled —
+//   "Never output calories…" went with the redesign of 2026-09-15 — which the
+//   app shows only where no table has the food, marked "estimate". Never ending
+//   in .0 is for the bill: the shape check wrote "150.0" for every whole number,
+//   and each ".0" is output tokens (the shape check, HANDOFF 2026-09-16);
+// - a vessel from a fixed list, and a count of whole pieces only (the form
+//   ROADMAP 7a-iv reads);
+// - at most MAX_SCAN_FOODS items, any other food named in unknown_items, so a
+//   crowded plate's reply ends inside the output cap instead of being cut off.
+export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]. Write the JSON on one line, with no line breaks or indentation, and write null in any slot you cannot fill. Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items. Field formats are strict: meal_name must be a short name for the meal; vessel must be exactly one of ${MEAL_VESSELS.join(", ")}; fill_level must be a number between 0 and 1; size_class must be a string; count must be a positive integer; grams, kcal, protein_g, carbs_g and fat_g must be numbers, your own estimate for the portion shown, always filled, and never end in .0; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Count whole pieces only, never slices, chunks or pieces cut from a bigger item.`;
 
 /** The model's JSON text → evidence. A reply that breaks the contract fails
  *  closed and keeps its usage, so the ledger still records the spend. */
@@ -90,7 +119,7 @@ export function createGroqVisionProvider(apiKey: string, model: string, fetchImp
       // budget before the JSON; reasoning_effort:"none" disables it (Groq
       // docs/reasoning, checked 2026-07-16 — the parameter is Qwen-only).
       const qwenOpts = model.startsWith("qwen/") ? { reasoning_effort: "none" } : {};
-      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: 1000, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
+      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: VISION_MAX_OUTPUT_TOKENS, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
     } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
     if (!response.ok) throw httpFailure(response.status);
     let raw: unknown;
@@ -118,8 +147,8 @@ export function createGeminiVisionProvider(
       // can carry it. The prompt goes before the photo, as Google's guide asks
       // for a single image. Temperature stays at Gemini 3's default: Google's
       // Gemini 3 guide warns that below 1.0 it can loop or degrade (Part 2B
-      // §3.2's temperature 0 was set for the earlier models; ROADMAP 7a-iii
-      // puts the choice to Kd). Thinking is pinned to "minimal", since thought
+      // §3.2's temperature 0 was set for the earlier models; Kd ruled the
+      // default, RULINGS 2026-09-16). Thinking is pinned to "minimal", since thought
       // tokens bill as output. No response schema: 3.5 Flash-Lite refuses the
       // evidence contract's item shape with a 400, so JSON mode and the prompt
       // carry the contract, and the evidence schema parses every reply, as on Groq.
@@ -129,7 +158,7 @@ export function createGeminiVisionProvider(
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: MEAL_VISION_PROMPT }, { inlineData: { mimeType, data: imageBase64 } }] }],
           generationConfig: {
-            maxOutputTokens: 1000,
+            maxOutputTokens: VISION_MAX_OUTPUT_TOKENS,
             responseMimeType: "application/json",
             thinkingConfig: { thinkingLevel: "minimal" },
             ...(mediaResolution === null ? {} : { mediaResolution }),

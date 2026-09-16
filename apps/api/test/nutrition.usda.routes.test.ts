@@ -142,14 +142,17 @@ d("a USDA food through the food routes (real Postgres)", () => {
 
   /** The order Kd chose on 2026-09-16, read off the response as a list of
    *  sources. No source may appear after one that ranks below it. */
-  const inOrder = (sources: readonly ("curated" | "usda" | "openfoodfacts")[]): boolean => {
-    const rank = { curated: 0, usda: 1, openfoodfacts: 2 };
+  const inOrder = (sources: readonly FoodReference["source"][]): boolean => {
+    const rank = { curated: 0, usda: 1, openfoodfacts: 2, estimate: 3 };
     return sources.every((s, at) => at === 0 || rank[sources[at - 1] ?? s] <= rank[s]);
   };
-  const sourcesFor = async (query: string, limit = 10): Promise<("curated" | "usda" | "openfoodfacts")[]> => {
+  const sourcesFor = async (query: string, limit = 10): Promise<FoodReference["source"][]> => {
     const res = await inject("GET", `/v1/nutrition/foods?q=${encodeURIComponent(query)}&limit=${String(limit)}`, cookieA);
     expect(res.statusCode, res.body).toBe(200);
-    return res.json<{ items: FoodReference[] }>().items.map((i) => i.source);
+    const sources = res.json<{ items: FoodReference[] }>().items.map((i) => i.source);
+    // A search never offers a scan's estimate: no table stands behind one.
+    expect(sources).not.toContain("estimate");
+    return sources;
   };
 
   it("puts our own list before USDA (Kd, 2026-09-16)", async () => {

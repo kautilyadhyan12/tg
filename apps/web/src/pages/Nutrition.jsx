@@ -6,6 +6,7 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 
@@ -25,6 +26,25 @@ const BOWL_SIZES = [
   { label: 'Medium', volumeMl: 175, containerClass: 'standard_katori' },
   { label: 'Large',  volumeMl: 275, containerClass: 'large_katori' },
 ];
+// Where a scanned food's numbers came from, as the photo sheet tags its row
+// (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
+// table has.
+const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Packaged product', estimate: 'Estimate' };
+/** Whether any of these items is priced by the scanner's own estimate, which
+ *  makes their total "about". */
+const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
+// Where a photo row's count stepper starts. The scan's own count, one piece a step
+// (six nuggets read ×6, and + makes seven), belongs to the food the scan saw at the
+// grams it saw; any other food, or other grams, starts at ×1 on the grams the row
+// holds (or the scan's grams while the box holds no usable number).
+const scannedStepper = (item) => {
+  const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
+  return { count: pieces, base: item.gramsPoint / pieces };
+};
+const stepperAtGrams = (gramsText, fallback) => {
+  const typed = parseFloat(gramsText);
+  return { count: 1, base: Number.isFinite(typed) && typed > 0 ? typed : fallback };
+};
 // Kd ruling: the user must say how full — no invented "full" default. ¼/½/¾/Full.
 const FILL_LEVELS = [
   { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
@@ -66,6 +86,8 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
     : '';
   const name = meal.mealName || meal.items?.[0]?.name || 'Meal';
   const t = meal.totals || {};
+  // A meal holding a food priced by the scanner's own estimate is "about" (ROADMAP 7a-iii-b).
+  const estimated = hasEstimate(meal.items);
 
   return (
     <motion.div
@@ -142,13 +164,13 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
           )}
         </div>
         <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {Math.round(t.kcalPoint || 0)} kcal · Protein {Math.round(t.proteinG || 0)}g
+          {estimated ? 'about ' : ''}{Math.round(t.kcalPoint || 0)} kcal · Protein {Math.round(t.proteinG || 0)}g
           · Carbs {Math.round(t.carbsG || 0)}g · Fat {Math.round(t.fatG || 0)}g
         </p>
         {/* What's in it — so "add ingredient" has a visible before/after. */}
         {meal.items?.length > 0 && (
           <p className="text-2xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.28)' }}>
-            {meal.items.map((i) => `${i.name} ${Math.round(i.gramsPoint)}g`).join(' · ')}
+            {meal.items.map((i) => `${i.name} ${Math.round(i.gramsPoint)}g${i.nutritionSource === 'estimate' ? ' (estimate)' : ''}`).join(' · ')}
           </p>
         )}
         {/* Card 5c: change the section label. null clears it — an unlabeled
@@ -554,10 +576,20 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
           </button>
         ))}
       </div>
+      <SourceCredits sources={shown.map((r) => r.source)} />
+    </>
+  );
+}
+
+/** The credits the food tables ask for wherever their numbers are shown: the
+ *  search box's results and the photo sheet's rows. */
+function SourceCredits({ sources }) {
+  return (
+    <>
       {/* USDA FoodData Central is public domain (CC0 1.0) and asks for no
           permission, only that it be listed as the source (fdc.nal.usda.gov,
           read 2026-09-16; RULINGS the same day). */}
-      {shown.some((r) => r.source === 'usda') && (
+      {sources.includes('usda') && (
         <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
           Food data from{' '}
           <a href="https://fdc.nal.usda.gov" target="_blank" rel="noreferrer" className="underline"
@@ -568,7 +600,7 @@ function FoodPicker({ selected, onPick, autoFocus, exclude = [], placeholder = '
       {/* The Open Database License's notice for showing its data (section 4.3a):
           the database's name links to the database, and the licence's name to
           its text, as Open Food Facts' terms of use also ask. */}
-      {shown.some((r) => r.source === 'openfoodfacts') && (
+      {sources.includes('openfoodfacts') && (
         <p className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.30)' }}>
           Packaged products contain information from{' '}
           <a href="https://openfoodfacts.org" target="_blank" rel="noreferrer" className="underline"
@@ -894,6 +926,12 @@ function PhotoModal({ open, onClose, onSave }) {
   // fillLevel}. Extras carry their own `measure` on the extra object.
   const [dishware,     setDishware]     = useState([]);
   const [itemMeasures, setItemMeasures] = useState({});
+  // ROADMAP 7a-iii-b "Change": replaced[i] is the food the person picked in place
+  // of scanned row i, at the row's own grams; changing is the row whose search
+  // is open. A changed row goes to the server as an added food (the scan never
+  // estimated it), so it forms no correction pair.
+  const [replaced,     setReplaced]     = useState({});
+  const [changing,     setChanging]     = useState(null);
   const fileRef = useRef(null);
 
   const loadDishware = () =>
@@ -915,6 +953,8 @@ function PhotoModal({ open, onClose, onSave }) {
       setExtras([]);
       setAdding(false);
       setItemMeasures({});
+      setReplaced({});
+      setChanging(null);
       loadDishware();
     }
   }, [open]);
@@ -930,6 +970,8 @@ function PhotoModal({ open, onClose, onSave }) {
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
     setItemMeasures({}); // …and no dish measures from a previous photo
+    setReplaced({});     // …and no changed foods
+    setChanging(null);
     setRetakeMsg(null);
 
     try {
@@ -939,14 +981,13 @@ function PhotoModal({ open, onClose, onSave }) {
       // Grams default to the server's estimate; the user can correct them —
       // by count (stepper, e.g. the AI saw 1 apple but there are 3) or by
       // typing grams directly. The server computes ALL nutrition from grams.
-      // An item the photo counted starts at its count, one piece a step (six
-      // nuggets read ×6, and + makes seven); any other starts at ×1.
+      // An item the photo counted starts at its count (scannedStepper).
       const g = {};
       const c = {};
       const b = {};
       res.data.items.forEach((item, i) => {
-        const pieces = Number.isInteger(item.pieces) && item.pieces > 0 ? item.pieces : 1;
-        g[i] = String(item.gramsPoint); c[i] = pieces; b[i] = item.gramsPoint / pieces;
+        const stepper = scannedStepper(item);
+        g[i] = String(item.gramsPoint); c[i] = stepper.count; b[i] = stepper.base;
       });
       setGrams(g);
       setCounts(c);
@@ -1012,9 +1053,31 @@ function PhotoModal({ open, onClose, onSave }) {
     return { item: ok ? { canonical, grams: g } : null, valid: ok, tooLarge: Number.isFinite(g) && g > MAX_GRAMS };
   };
   const resolved = analysis === null ? [] : [
-    ...analysis.items.map((item, i) => resolveArm(item.canonical, grams[i], itemMeasures[i])),
+    ...analysis.items.map((item, i) => resolveArm(replaced[i]?.canonical ?? item.canonical, grams[i], itemMeasures[i])),
     ...extras.map((x) => resolveArm(x.food.canonical, x.grams, x.measure)),
   ];
+  // Every food the sheet prices now: a changed row by the food picked for it.
+  const rowSources = analysis === null ? [] : [
+    ...analysis.items.map((item, i) => replaced[i]?.source ?? item.nutritionSource),
+    ...extras.map((x) => x.food.source),
+  ];
+  const rowCanonicals = analysis === null ? [] : [
+    ...analysis.items.map((item, i) => replaced[i]?.canonical ?? item.canonical),
+    ...extras.map((x) => x.food.canonical),
+  ];
+  // What no search on this sheet may offer: every food on it now, and every food
+  // the scan put on it, even on a row since changed. The server reads a food by
+  // its canonical, so a scanned food sent for another row, or as an added
+  // ingredient, is taken for that scanned row — a correction the person never
+  // made — and a later Undo would send the same food twice. `row` is the row whose
+  // own foods, as scanned and as it is now, its Change may pick again.
+  const onSheet = (row = null) => (analysis === null ? [] : [
+    ...rowCanonicals.filter((_, j) => j !== row),
+    ...analysis.items.map((item) => item.canonical).filter((_, j) => j !== row),
+  ]);
+  // The total is "about" while any food in it is the scanner's own estimate.
+  const aboutTotal = rowSources.includes('estimate');
+  const anyReplaced = Object.keys(replaced).length > 0;
   // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
   // confirmable once the user adds an ingredient, the whole point of Card 5c.
   const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
@@ -1089,6 +1152,27 @@ function PhotoModal({ open, onClose, onSave }) {
   };
   const patchExtra = (idx, next) => setExtras((prev) => prev.map((x, i) => (i === idx ? { ...x, ...next } : x)));
   const removeExtra = (idx) => { setExtras((prev) => prev.filter((_, i) => i !== idx)); setLive(null); };
+  // The food picked for a scanned row takes its place at the row's own grams; the
+  // server prices it (never the browser) once the preview asks. Its stepper starts
+  // at ×1 on those grams: the pieces the scan counted were of the food it replaced.
+  const restartStepper = (idx, stepper) => {
+    setCounts((prev) => ({ ...prev, [idx]: stepper.count }));
+    setBases((prev) => ({ ...prev, [idx]: stepper.base }));
+  };
+  const changeRow = (idx, food) => {
+    setReplaced((prev) => ({ ...prev, [idx]: food }));
+    restartStepper(idx, stepperAtGrams(grams[idx], analysis.items[idx].gramsPoint));
+    setChanging(null);
+    setLive(null);
+  };
+  // Undo puts the scanned food back, with the scan's own count while the grams are
+  // still the scan's.
+  const undoChange = (idx) => {
+    const item = analysis.items[idx];
+    setReplaced((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+    restartStepper(idx, grams[idx] === String(item.gramsPoint) ? scannedStepper(item) : stepperAtGrams(grams[idx], item.gramsPoint));
+    setLive(null);
+  };
 
   if (!open) return null;
 
@@ -1193,10 +1277,16 @@ function PhotoModal({ open, onClose, onSave }) {
                     <p className="text-base font-bold text-white mb-1">
                       {analysis.mealName}
                     </p>
-                    <p className="text-xs mb-4"
+                    <p className="text-xs mb-1"
                        style={{ color: 'rgba(255,255,255,0.45)' }}>
                       Check the portion sizes below — you can adjust the grams
                       before saving.
+                    </p>
+                    {/* RULINGS 2026-09-09: photo scans say they estimate calories
+                        and cannot detect allergens. Never softened or removed. */}
+                    <p className="text-xs mb-4"
+                       style={{ color: 'rgba(251,191,36,0.85)' }}>
+                      {PHOTO_SCAN_CAUTION}
                     </p>
 
                     <div className="space-y-2 mb-4">
@@ -1213,17 +1303,48 @@ function PhotoModal({ open, onClose, onSave }) {
                         // the AI's grams estimate can never equal a dish price,
                         // so a dish-mode row must wait for the server, not show a
                         // number that isn't what will be saved (T3 5c2 F1).
+                        // A row changed to another food waits for the server too:
+                        // the scan's numbers are the food it replaced.
+                        const changed = replaced[i];
                         const shown = liveNow?.items?.[i]
-                          ?? (extras.length === 0 && itemMeasures[i] === undefined ? item : null);
+                          ?? (extras.length === 0 && !anyReplaced && itemMeasures[i] === undefined ? item : null);
+                        const source = changed?.source ?? item.nutritionSource;
+                        // An estimate's grams are the scanner's guess until the person sets them.
+                        const estimateLabel = grams[i] === String(item.gramsPoint)
+                          ? `~${item.gramsPoint} g · estimate`
+                          : grams[i] ? `${grams[i]} g · estimate` : 'Estimate';
                         return (
                         <div key={i}
                              className="p-2.5 rounded-xl"
                              style={{ background: 'rgba(255,255,255,0.02)' }}>
-                          <div className="flex justify-between">
-                            <p className="text-sm font-semibold text-white">
-                              {item.name}
-                            </p>
-                            <p className="text-sm font-bold"
+                          <div className="flex justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">
+                                {changed?.name ?? item.name}
+                              </p>
+                              <p className="text-2xs mt-0.5 flex flex-wrap items-center gap-x-1.5"
+                                 style={{ color: 'rgba(255,255,255,0.40)' }}>
+                                {source === 'estimate' && itemMeasures[i] === undefined
+                                  ? <span style={{ color: 'rgba(251,191,36,0.85)' }}>{estimateLabel}</span>
+                                  : <span style={source === 'estimate' ? { color: 'rgba(251,191,36,0.85)' } : undefined}>{SOURCE_TAGS[source] ?? source}</span>}
+                                <span aria-hidden="true">·</span>
+                                <button type="button"
+                                        onClick={() => setChanging(changing === i ? null : i)}
+                                        className="font-semibold underline decoration-dotted"
+                                        style={{ color: '#FF8A1F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                  Change
+                                </button>
+                                {changed && (
+                                  <button type="button"
+                                          onClick={() => undoChange(i)}
+                                          className="underline decoration-dotted"
+                                          style={{ color: 'rgba(255,255,255,0.50)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                    Undo
+                                  </button>
+                                )}
+                              </p>
+                            </div>
+                            <p className="text-sm font-bold flex-shrink-0"
                                style={{ color: '#FF8A1F' }}>
                               {shown === null
                                 ? '…'
@@ -1232,6 +1353,21 @@ function PhotoModal({ open, onClose, onSave }) {
                                   : `${shown.kcalLow}–${shown.kcalHigh} kcal`}
                             </p>
                           </div>
+                          {changing === i && (
+                            <div className="mt-2 p-2.5 rounded-xl space-y-2"
+                                 style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <p className="text-2xs font-semibold" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                                Pick the right food for {changed?.name ?? item.name}. The amount stays the same.
+                              </p>
+                              <FoodPicker
+                                selected={null}
+                                onPick={(food) => changeRow(i, food)}
+                                autoFocus
+                                exclude={onSheet(i)}
+                                placeholder="Search the right food..."
+                              />
+                            </div>
+                          )}
                           <div className="flex items-center justify-between mt-1">
                             <p className="text-2xs"
                                style={{ color: 'rgba(255,255,255,0.45)' }}>
@@ -1399,7 +1535,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           selected={null}
                           onPick={addExtra}
                           autoFocus
-                          exclude={payloadItems.map((it) => it.canonical)}
+                          exclude={onSheet()}
                           placeholder="e.g. milk, sugar, oil..."
                         />
                       </div>
@@ -1468,7 +1604,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           number — wait for the server rather than show a total
                           lower than what we are about to save. */}
                       {(() => {
-                        const t = liveNow?.totals ?? (extras.length === 0 ? analysis.totals : null);
+                        const t = liveNow?.totals ?? (extras.length === 0 && !anyReplaced ? analysis.totals : null);
                         if (t === null) {
                           return (
                             <>
@@ -1486,6 +1622,7 @@ function PhotoModal({ open, onClose, onSave }) {
                               {liveNow ? 'TOTAL (updates as you adjust)' : 'ESTIMATED TOTAL'}
                             </p>
                             <p className="text-xl font-bold tracking-tight" style={{ color: '#FF8A1F' }}>
+                              {aboutTotal ? 'about ' : ''}
                               {t.kcalLow === t.kcalHigh ? `${t.kcalPoint} kcal` : `${t.kcalLow}–${t.kcalHigh} kcal`}
                             </p>
                             <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,138,31,0.65)' }}>
@@ -1541,6 +1678,7 @@ function PhotoModal({ open, onClose, onSave }) {
                             : 'Pick grams or a dish for every item'}
                     </button>
                     </>)}
+                    <SourceCredits sources={rowSources} />
                   </div>
                 )}
               </div>
@@ -1754,6 +1892,10 @@ export default function Nutrition() {
       toast.error('Failed to rename the meal');
     }
   };
+
+  // The day's line is "about" while any meal in it holds a food priced by the
+  // scanner's own estimate (ROADMAP 7a-iii-b).
+  const dayEstimated = meals.some((m) => hasEstimate(m.items));
 
   // Totals = SUM of each meal's SERVER-computed totals (D3 doctrine: the
   // client displays and sums server numbers, it never derives nutrition).
@@ -1981,7 +2123,7 @@ export default function Nutrition() {
                       </span>
                       <span className="text-sm font-semibold tabular-nums"
                             style={{ color: r.color }}>
-                        {r.value || 0}{r.unit}
+                        {dayEstimated ? 'about ' : ''}{r.value || 0}{r.unit}
                       </span>
                     </div>
                   ))}

@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import { USDA_TIE_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
 import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
 
@@ -690,6 +691,84 @@ export async function searchUsdaFoods(sql: SqlOrTx, query: string, limit: number
              (release = 'fndds') DESC, word_count ASC, fdc_id ASC
     LIMIT ${limit}`;
   return rows.map(usdaRow);
+}
+
+/** How a scanned food's name found its USDA row: the whole description is that
+ *  name · the description's head (up to its first comma) is · every word of the
+ *  name is in the description, which starts with one of them. */
+export type UsdaScanMatch = "name" | "head" | "words";
+
+/** The USDA food a scan's canonical_hint names, or null (ROADMAP 7a-iii-b). One
+ *  row, not a list: a scan cannot ask the person which of ten they meant, and a
+ *  wrong food is worse than none, so the rule is narrower than the search box's.
+ *
+ *  1. THE FOOD ITSELF BY NAME: the whole description, or its head — USDA writes a
+ *     food "head, then qualifiers", so "Pumpkin, cooked" is the vegetable a hint
+ *     "pumpkin" means and "Banana, raw" the fruit, where "Banana split" is a dish.
+ *     The whole description first, then the head.
+ *  2. EVERY WORD: every word of the hint is in the description, and the
+ *     description's FIRST word is one of the hint's — both stemmed by Postgres's
+ *     English dictionary, which built the index, so "eggs" is "egg" and
+ *     "strawberries" "strawberry" on both sides. The first-word rule is what keeps
+ *     a dish made from a food from standing for it: "roasted potatoes" finds
+ *     "Potato, roasted, NFS", and "banana" alone never finds "Bread, banana".
+ *  Within either step, the entries the name finds equally are the same food made
+ *  different ways — "Radishes, raw" at 16 kcal per 100 g and "Radishes, pickled" at
+ *  34 — and the model's own energy (`seen`) says which is on the plate:
+ *  3. AS NEAR AS THE ESTIMATE CAN TELL: every entry within `seen.slack` of the
+ *     model's energy (its error), and every entry within 10 kcal of the nearest
+ *     one (`USDA_TIE_KCAL`), is as near, and the plainest of them wins, as below.
+ *     So a few kcal never name a way of cooking the photo does not show — pumpkin seen at 100 is "Pumpkin, cooked" (52), not
+ *     "Pumpkin, canned, cooked" (56) — and "egg" at 140 is never "Egg, whole, raw,
+ *     frozen, salted, pasteurized" (138). An entry past both is not, however plain:
+ *     radishes at 16 are "Radishes, raw" (16), never "Radishes, pickled" (34), and
+ *     mushrooms at 80 "Mushrooms, fresh, cooked with oil" (70), never "Mushrooms,
+ *     pickled" (46). The step still comes first, and the nearest is measured within
+ *     it: the energy only chooses among entries the name supports, so "apple" at 52
+ *     is "Apple, raw" (61) where it was "Apple, dried" (243), and "orange" at 47
+ *     stays "Orange, raw" where the nearest of every match would be "Orange juice,
+ *     100%, NFS" (measured on the loaded table, 2026-09-16).
+ *  Then the survey release (FNDDS) before SR Legacy, the fewest-worded description,
+ *  and USDA's id, so a scan reads the same food every time. With no estimate
+ *  (`seen` null) the order is that alone. A food with no energy or macro figure
+ *  cannot be priced, and is never an answer.
+ *
+ *  The words are cut by the one rule the search and the importer share
+ *  (`usdaWords.ts`): letters, digits and a decimal point, so neither `to_tsquery`
+ *  nor `LIKE` receives an operator from the model's text. */
+export async function usdaFoodForScan(
+  sql: SqlOrTx,
+  hint: string,
+  seen: { kcal: number; slack: number } | null,
+): Promise<{ food: UsdaFoodRow; match: UsdaScanMatch } | null> {
+  const words = usdaSearchWords(hint);
+  if (words.length === 0) return null;
+  const named = words.join(" ");
+  // With no estimate both are null, so every distance is null and every row ties.
+  const kcal = seen?.kcal ?? null;
+  const slack = seen?.slack ?? null;
+  const rows = await sql<(UsdaColumns & { match: UsdaScanMatch })[]>`
+    WITH matched AS (
+      SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit, word_count,
+             CASE WHEN search_text = ${named} THEN 0
+                  WHEN search_text LIKE ${`${named},%`} THEN 1
+                  ELSE 2 END AS step,
+             abs(kcal - ${kcal}::float8) AS distance
+      FROM usda_foods
+      WHERE search @@ to_tsquery('english', ${words.join(" & ")})
+        AND (search_text = ${named} OR search_text LIKE ${`${named},%`}
+             OR to_tsvector('english', first_word) @@ to_tsquery('english', ${words.join(" | ")}))
+        AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL
+    )
+    SELECT fdc_id, release, description, kcal, protein_g, carbs_g, fat_g, fiber_g, serving_grams, serving_unit,
+           CASE step WHEN 0 THEN 'name' WHEN 1 THEN 'head' ELSE 'words' END AS match
+    FROM matched
+    ORDER BY step ASC,
+             (distance <= greatest(${slack}::float8, min(distance) OVER (PARTITION BY step) + ${USDA_TIE_KCAL}::float8)) DESC,
+             (release = 'fndds') DESC, word_count ASC, fdc_id ASC
+    LIMIT 1`;
+  const r = rows[0];
+  return r === undefined ? null : { food: usdaRow(r), match: r.match };
 }
 
 /** The release a canonical names. The table stores SR Legacy as `sr_legacy`;

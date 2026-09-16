@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
-import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -18,7 +18,11 @@ const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||u
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
 const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error",GROQ_API_KEY:"p26a-fake-provider-key"}; // gitleaks:allow
 type App=Awaited<ReturnType<typeof buildApp>>;
-const goodEvidence:VisionEvidence={meal_name:"Dal and roti",items:[{name:"Dal",canonical_hint:"dal",container:"standard_katori",fill_level:.75,size_class:null,count:null},{name:"Roti",canonical_hint:"roti",container:null,fill_level:null,size_class:null,count:2}],unknown_items:[],photo_quality:"good"};
+/** A scanned food as the reply is read (one list per food, RULINGS 2026-09-16), with no estimate of its own unless one is given: a food no table has is then named under "Not in the total", as these tests expect, and not estimated. */
+const seen=(o:{name:string;canonical_hint:string;vessel?:MealVessel|null;fill_level?:number|null;size_class?:string|null;count?:number|null;grams?:number|null;kcal?:number|null;protein_g?:number|null;carbs_g?:number|null;fat_g?:number|null}):VisionItem=>({vessel:null,fill_level:null,size_class:null,count:null,grams:null,kcal:null,protein_g:null,carbs_g:null,fat_g:null,...o});
+/** Evidence as the model writes it on the wire: one list per food. */
+const wire=(e:VisionEvidence)=>({meal_name:e.meal_name,items:e.items.map((i)=>[i.name,i.canonical_hint,i.vessel,i.fill_level,i.size_class,i.count,i.grams,i.kcal,i.protein_g,i.carbs_g,i.fat_g]),unknown_items:e.unknown_items,photo_quality:e.photo_quality});
+const goodEvidence:VisionEvidence={meal_name:"Dal and roti",items:[seen({name:"Dal",canonical_hint:"dal",vessel:"katori",fill_level:.75}),seen({name:"Roti",canonical_hint:"roti",count:2})],unknown_items:[],photo_quality:"good"};
 function fakeVision():VisionProvider&{queue:VisionEvidence[];calls:number}{const queue:VisionEvidence[]=[];return{queue,calls:0,analyze(){this.calls++;const evidence=queue.shift()??goodEvidence;return Promise.resolve({evidence,tokensIn:100,tokensOut:200} satisfies VisionResult);}};}
 const noExternal:FoodSearchProvider={search:()=>Promise.resolve([])};
 const jpeg=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;bytes[2]=0xff;return bytes.toString("base64");})();
@@ -63,7 +67,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // and previewing must not consume the single-use draft.
   it("preview with scanToken matches the confirmed meal exactly for an OFF-sourced draft item",async()=>{
     const offFood={canonical:"off_test_dish",name:"Test Dish",kcal:200,proteinG:10,carbsG:20,fatG:5,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const};
-    const offVision=fakeVision();offVision.queue.push({...goodEvidence,meal_name:"Test dish plate",items:[{name:"Test Dish",canonical_hint:"test dish",container:null,fill_level:null,size_class:null,count:1}]});
+    const offVision=fakeVision();offVision.queue.push({...goodEvidence,meal_name:"Test dish plate",items:[seen({name:"Test Dish",canonical_hint:"test dish",count:1})]});
     const app3=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:offVision,foodSearchProvider:{search:()=>Promise.resolve([offFood])}}});
     try{
       const login=async(email:string)=>{await app3.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a OFF"})});const l=await app3.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});return l.cookies.find((c)=>c.name==="accessToken")?.value??"";};
@@ -127,8 +131,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // a serving by weight or a count of cut bits never multiplied.
   it("a photo's count multiplies pieces and vessels, never a weight or cut bits, and what matches no food is named",async()=>{
     const counted=fakeVision();
-    const item=(canonical_hint:string,count:number,container:string|null=null)=>({name:canonical_hint,canonical_hint,container,fill_level:container===null?null:1,size_class:null,count});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"pint_glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),item("hot dog pieces",8),item("beef stew chunks",6),item("mugs of coffee",2),item("cans of coke",3),item("ramen bowl",25),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
+    const item=(canonical_hint:string,count:number,vessel:MealVessel|null=null)=>seen({name:canonical_hint,canonical_hint,vessel,fill_level:vessel===null?null:1,count});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("chicken nugget pieces",6),item("pizza pieces",3),item("roti pieces",3),item("veggie burger",1),item("eggplant",1),item("apple",2),item("grapes",10),item("banana bread",2),item("boiled eggs",2),item("roti",3),item("banana slices",10),item("spring rolls",2),item("chapati flatbread",2),item("beer",2,"glass"),item("bottles of beer",3),item("yogurt cups",2),item("beer",3,"mug"),item("beer mugs",3,"mug"),item("hot dog pieces",8),item("beef stew chunks",6),item("mugs of coffee",2),item("cans of coke",3),item("ramen bowl",25),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";
@@ -136,7 +140,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const login=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});
       const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";
       const call=(url:string,body:unknown)=>a.inject({method:"POST",url,cookies:{accessToken:access},headers:{"content-type":"application/json"},payload:JSON.stringify(body)});
-      const dish=await call("/v1/nutrition/dishware",{label:"My pint glass",containerClass:"pint_glass",volumeMl:568});
+      const dish=await call("/v1/nutrition/dishware",{label:"My pint glass",containerClass:"glass",volumeMl:568});
       expect(dish.statusCode,dish.body).toBe(201);
       const scan=await call("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
       expect(scan.statusCode,scan.body).toBe(200);
@@ -181,13 +185,15 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // food, so the item is named as not on the list instead of priced as that food.
   it("a scanned item takes a packaged product only when the product's name holds every word of its hint",async()=>{
     // Open Food Facts' own reply shape, through the real adapter: the search's top
-    // product for every query, and Yakult's label, "1 bottle (65 ml)".
+    // product for every query, and Yakult's label, "1 bottle (65 ml)". Every hint here is
+    // one neither our list nor USDA holds ("chips" alone is USDA's rice chips), so the
+    // packaged product is the table asked.
     const hit=(code:string,product_name:string,serving_size:string)=>({code,product_name,serving_size,nutriments:{"energy-kcal_100g":65}});
     const top=(q:string)=>q.includes("yakult")?hit("4901392000034","Yakult Original","1 bottle (65 ml)"):q.includes("noodles")?hit("4902105000001","Cup Noodles Chicken","1 cup (64 g)"):hit("1","Mystery","30 g");
     const answersEverything=createOpenFoodFactsProvider((input)=>Promise.resolve(new Response(JSON.stringify({hits:[top(input instanceof URL?(input.searchParams.get("q")??"").toLowerCase():"")]}),{status:200})));
     const scanned=fakeVision();
-    const item=(name:string,canonical_hint:string,count:number|null=null)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count});
-    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult",3),item("Chips","chips"),item("Glass noodles","glass noodles")]});
+    const item=(name:string,canonical_hint:string,count:number|null=null)=>seen({name,canonical_hint,count});
+    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),item("Yakult","bottles of yakult",3),item("Chips","qwzxchips"),item("Glass noodles","glass noodles")]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:scanned,foodSearchProvider:answersEverything}});
     try{
       const email="p26a-packaged@example.com";
@@ -802,7 +808,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const answers=[
       googleReply(429,{error:{code:429,status:"RESOURCE_EXHAUSTED"}}),
       googleReply(200,{candidates:"not Gemini's"}),
-      googleReply(200,{candidates:[{content:{parts:[{text:JSON.stringify(goodEvidence)}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}}),
+      googleReply(200,{candidates:[{content:{parts:[{text:JSON.stringify(wire(goodEvidence))}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}}),
     ];
     const google:typeof fetch=()=>{const next=answers.shift();return next===undefined?Promise.reject(new Error("no answer left")):Promise.resolve(next);};
     const s=await scanApp("p26a-google-busy@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:google}); // gitleaks:allow
@@ -844,7 +850,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("a fault after the model answered costs no scan either: unavailable, sent to Sentry with the request id, and the model's spend ledgered",async()=>{
     const searchDown=new Error("food search down");
-    const unlisted={name:"Qwzx vlorp",canonical_hint:"qwzx vlorp",container:null,fill_level:null,size_class:null,count:null};
+    const unlisted=seen({name:"Qwzx vlorp",canonical_hint:"qwzx vlorp"});
     const s=await scanApp("p26a-late-fault@example.com",{env:{SENTRY_DSN:"https://public@sentry.example.com/1"},vision:scripted({...goodEvidence,items:[unlisted]}),foods:{search:()=>Promise.reject(searchDown)}});
     try{
       sentry.captureException.mockClear();
@@ -859,7 +865,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   it("a food left out of the total is never named by a word that says there is none; an item named so reads as its hint",async()=>{
-    const unlisted=(name:string,canonical_hint:string)=>({name,canonical_hint,container:null,fill_level:null,size_class:null,count:null});
+    const unlisted=(name:string,canonical_hint:string)=>seen({name,canonical_hint});
     const s=await scanApp("p26a-no-name@example.com",{vision:scripted({...goodEvidence,unknown_items:["none"," N/A ","NULL","Unknown","","Mystery sauce"],items:[unlisted("N/A","qwzx vlorp"),unlisted("none","unknown"),...goodEvidence.items]})});
     try{
       const res=await s.scan();
@@ -926,7 +932,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const calls:{url:string;key:string|null}[]=[];
     const gemini:typeof fetch=(input,init)=>{
       calls.push({url:typeof input==="string"?input:input instanceof URL?input.href:input.url,key:new Headers(init?.headers).get("x-goog-api-key")});
-      const reply={candidates:[{content:{parts:[{text:JSON.stringify(goodEvidence)}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}};
+      const reply={candidates:[{content:{parts:[{text:JSON.stringify(wire(goodEvidence))}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}};
       return Promise.resolve(new Response(JSON.stringify(reply),{status:200,headers:{"content-type":"application/json"}}));
     };
     const on=await scanApp("p26a-realkey@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:gemini}); // gitleaks:allow
