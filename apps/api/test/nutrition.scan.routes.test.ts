@@ -59,16 +59,17 @@ const PICKLED_ID = 90_000_302;
 const RAW_ID = 90_000_303;
 /** The eight plates' USDA rows, from here up. */
 const PLATE_ROWS_FROM = 90_000_310;
-const LAST_ID = 90_000_399;
+const LAST_ID = 90_000_499;
 
 /** Every USDA row the eight plates' foods can find by name (`usdaFoodForScan`'s
  *  WHERE), copied from the loaded table on 2026-09-16 — FNDDS 2024-10-31 and SR
  *  Legacy 2018-04, public domain: release, description, kcal, protein, carbohydrate,
- *  fat and fibre per 100 g, and the first household measure. The coconut rows were
- *  copied the same way on 2026-09-17, for the plates the model listed food by food.
- *  The other plates' foods not on our list (caffe latte, avocado toast, cherry
- *  tomato, toast, banana toast, egg bacon toast, sourdough toast, mashed avocado,
- *  grilled asparagus, scored pork sausage, iced latte) find none in either release. */
+ *  fat and fibre per 100 g, and the first household measure. The coconut, brie
+ *  cheese, deli ham, sweet corn and sesame seed rows were copied the same way on
+ *  2026-09-17, for the "-apart" plates. The other plates' foods not on our list
+ *  (caffe latte, avocado toast, cherry tomato, toast, banana toast, egg bacon toast,
+ *  sourdough toast, mashed avocado, grilled asparagus, scored pork sausage, iced
+ *  latte, roasted pumpkin, steamed broccoli) find none in either release. */
 const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, number, number, number | null, number, string])[] = [
   ["fndds", "Pumpkin seeds, NFS", 574, 29.84, 14.71, 49.05, 6.5, 144, "cup, without shell"],
   ["fndds", "Pumpkin seeds, salted", 567, 29.49, 14.54, 48.47, 6.4, 144, "cup, without shell"],
@@ -110,6 +111,10 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["fndds", "Coconut, packaged", 456, 3.13, 51.85, 27.99, 9.9, 85, "cup"],
   ["fndds", "Coconut water, sweetened", 37, 0.21, 9.07, 0.02, 0, 30, "fl oz (no ice)"],
   ["fndds", "Coconut water, unsweetened", 18, 0.22, 4.24, 0, 0, 30, "fl oz (no ice)"],
+  ["fndds", "Cheese, Brie", 334, 20.75, 0.45, 27.68, 0, 128, "package (4.5 oz)"],
+  ["fndds", "Ham, prepackaged or deli, luncheon meat", 101, 16.7, 0.27, 3.73, 0, 28, "slice, NFS"],
+  ["fndds", "Ham, prepackaged or deli, luncheon meat, reduced sodium", 101, 16.7, 0.27, 3.73, 0, 28, "slice, NFS"],
+  ["fndds", "Sesame seeds", 631, 20.45, 11.73, 61.21, 11.6, 128, "cup"],
   ["sr_legacy", "Lemons, raw, without peel", 29, 1.1, 9.32, 0.3, 2.8, 212, "cup, sections"],
   ["sr_legacy", "Lemon juice, raw", 22, 0.35, 6.9, 0.24, 0.3, 244, "cup"],
   ["sr_legacy", "Lemon juice from concentrate, canned or bottled", 17, 0.45, 5.62, 0.07, 0.7, 15, "tbsp"],
@@ -129,14 +134,68 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["sr_legacy", "Pumpkin leaves, cooked, boiled, drained, with salt", 21, 2.72, 3.39, 0.22, 2.7, 71, "cup"],
   ["sr_legacy", "Pumpkin, cooked, boiled, drained, with salt", 18, 0.72, 4.31, 0.07, 1.1, 245, "cup, mashed"],
   ["sr_legacy", "Pumpkin, canned, with salt", 34, 1.1, 8.09, 0.28, 2.9, 245, "cup"],
+  ["sr_legacy", "Cheese, brie", 334, 20.75, 0.45, 27.68, 0, 28.35, "oz"],
+  ["sr_legacy", "Ham, sliced, pre-packaged, deli meat (96%fat free, water added)", 107, 16.85, 0.7, 4.04, 0, 13, "slice"],
+  ["sr_legacy", "Ham, turkey, sliced, extra lean, prepackaged or deli", 134, 19.6, 0.93, 5.8, 0, 138, "cup pieces"],
+  ["sr_legacy", "Corn, sweet, white, canned, cream style, no salt added", 72, 1.74, 18.13, 0.42, 1.2, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, cream style, regular pack", 74, 1.74, 18.62, 0.42, 1.2, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, vacuum pack, no salt added", 79, 2.41, 19.44, 0.5, 2, 210, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, vacuum pack, regular pack", 79, 2.41, 19.44, 0.5, 2, 210, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, whole kernel, drained solids", 67, 2.29, 14.34, 1.22, 2, 164, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, whole kernel, no salt added, solids and liquids", 64, 1.95, 15.41, 0.5, 0.7, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, white, canned, whole kernel, regular pack, solids and liquids", 64, 1.95, 15.41, 0.5, 1.7, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, white, cooked, boiled, drained, without salt", 97, 3.34, 21.71, 1.41, 2.7, 89, "ear, small (5-1/2\" to 6-1/2\" long)"],
+  ["sr_legacy", "Corn, sweet, white, cooked, boiled, drained, with salt", 97, 3.34, 21.71, 1.41, 2.7, 89, "ear, small (5-1/2\" to 6-1/2\" long)"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels cut off cob, boiled, drained, without salt", 80, 2.75, 19.56, 0.43, 2.4, 165, "cup"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels cut off cob, boiled, drained, with salt", 80, 2.75, 19.56, 0.43, 2.4, 165, "cup"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels cut off cob, unprepared", 88, 3.02, 20.73, 0.77, 2.9, 165, "cup"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels on cob, cooked, boiled, drained, without salt", 94, 3.11, 22.33, 0.74, 2.1, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels on cob, cooked, boiled, drained, with salt", 94, 3.11, 22.33, 0.74, 2.8, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, white, frozen, kernels on cob, unprepared", 98, 3.28, 23.5, 0.78, 2.8, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, white, raw", 86, 3.22, 19.02, 1.18, 2.7, 73, "ear, small (5-1/2\" to 6-1/2\" long)"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, brine pack, regular pack, solids and liquids", 61, 1.95, 13.86, 0.77, 1.7, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, cream style, no salt added", 72, 1.74, 18.13, 0.42, 1.2, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, cream style, regular pack", 72, 1.74, 18.13, 0.42, 1.2, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, drained solids, rinsed with tap water", 64, 2.18, 13.02, 1.43, 1.7, 150, "cup drained, rinsed"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, no salt added, solids and liquids (Includes foods for USDA's Food Distribution Program)", 61, 1.95, 13.86, 0.77, 1.7, 256, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, vacuum pack, no salt added", 79, 2.41, 19.44, 0.5, 2, 210, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, vacuum pack, regular pack", 79, 2.41, 19.44, 0.5, 2, 210, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, canned, whole kernel, drained solids", 67, 2.29, 14.34, 1.22, 2, 164, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, cooked, boiled, drained, without salt", 96, 3.41, 20.98, 1.5, 2.4, 89, "ear small (5-1/2\" to 6-1/2\" long)"],
+  ["sr_legacy", "Corn, sweet, yellow, cooked, boiled, drained, with salt", 96, 3.41, 20.98, 1.5, 2.4, 89, "ear small (5-1/2\" to 6-1/2\" long)"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels cut off cob, boiled, drained, without salt", 81, 2.55, 19.3, 0.67, 2.4, 165, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels, cut off cob, boiled, drained, with salt", 79, 2.55, 18.71, 0.67, 2.4, 165, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels cut off cob, unprepared (Includes foods for USDA's Food Distribution Program)", 88, 3.02, 20.71, 0.78, 2.1, 136, "cup"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels on cob, cooked, boiled, drained, without salt", 94, 3.11, 22.33, 0.74, 2.8, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels on cob, cooked, boiled, drained, with salt", 94, 3.11, 22.33, 0.74, 2.8, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, yellow, frozen, kernels on cob, unprepared", 98, 3.28, 23.5, 0.78, 2.8, 165, "cup kernels"],
+  ["sr_legacy", "Corn, sweet, yellow, raw", 86, 3.27, 18.7, 1.35, 2, 145, "cup"],
+  ["sr_legacy", "Seeds, sesame butter, paste", 586, 18.08, 24.05, 50.87, 5.5, 16, "tbsp"],
+  ["sr_legacy", "Seeds, sesame butter, tahini, from raw and stone ground kernels", 570, 17.81, 26.19, 48, 9.3, 15, "tbsp"],
+  ["sr_legacy", "Seeds, sesame butter, tahini, from roasted and toasted kernels (most common type)", 595, 17, 21.19, 53.76, 9.3, 15, "tbsp"],
+  ["sr_legacy", "Seeds, sesame butter, tahini, from unroasted kernels (non-chemically removed seed coat)", 607, 17.95, 17.89, 56.44, 9.3, 14, "tbsp"],
+  ["sr_legacy", "Seeds, sesame butter, tahini, type of kernels unspecified", 592, 17.4, 21.5, 53.01, 4.7, 15, "tbsp"],
+  ["sr_legacy", "Seeds, sesame flour, high-fat", 526, 30.78, 26.62, 37.1, null, 28.35, "oz"],
+  ["sr_legacy", "Seeds, sesame flour, low-fat", 333, 50.14, 35.51, 1.75, null, 28.35, "oz"],
+  ["sr_legacy", "Seeds, sesame flour, partially defatted", 382, 40.32, 35.14, 11.89, null, 28.35, "oz"],
+  ["sr_legacy", "Seeds, sesame meal, partially defatted", 567, 16.96, 26.04, 48, null, 28.35, "oz"],
+  ["sr_legacy", "Seeds, sesame seed kernels, dried (decorticated)", 631, 20.45, 11.73, 61.21, 11.6, 150, "cup"],
+  ["sr_legacy", "Seeds, sesame seed kernels, toasted, without salt added (decorticated)", 567, 16.96, 26.04, 48, 16.9, 128, "cup"],
+  ["sr_legacy", "Seeds, sesame seed kernels, toasted, with salt added (decorticated)", 567, 16.96, 26.04, 48, 16.9, 128, "cup"],
+  ["sr_legacy", "Seeds, sesame seeds, whole, dried", 573, 17.73, 23.45, 49.67, 11.8, 144, "cup"],
+  ["sr_legacy", "Seeds, sesame seeds, whole, roasted and toasted", 565, 16.96, 25.74, 48, 14, 28.35, "oz"],
 ];
 
-/** Every household measure, as the loaded table holds them, of the three USDA foods
- *  the eight plates' sheets show: a row starts at one of them, so the copy carries
- *  them all, under USDA's own numbers. */
+/** Every household measure, as the loaded table holds them, of the USDA foods the
+ *  plates' sheets show: a row starts at one of them, so the copy carries them all,
+ *  under USDA's own numbers. */
 const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Map([
   ["Pumpkin, cooked", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 230 }, { seqNum: 2, amount: null, unit: "1 cup, mashed", gramWeight: 250 }]],
   ["Coconut, packaged", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 85 }]],
+  ["Cheese, Brie", [{ seqNum: 1, amount: null, unit: "1 package (4.5 oz)", gramWeight: 128 }, { seqNum: 2, amount: null, unit: "1 cup, sliced", gramWeight: 144 }, { seqNum: 3, amount: null, unit: "1 cup, melted", gramWeight: 240 }, { seqNum: 4, amount: null, unit: "1 cup, NFS", gramWeight: 144 }, { seqNum: 5, amount: null, unit: "1 cubic inch", gramWeight: 17 }]],
+  ["Ham, prepackaged or deli, luncheon meat", [{ seqNum: 1, amount: null, unit: "1 slice, NFS", gramWeight: 28 }, { seqNum: 2, amount: null, unit: "1 cup, pieces", gramWeight: 140 }, { seqNum: 3, amount: null, unit: "Guideline amount on regular sandwich", gramWeight: 56 }, { seqNum: 4, amount: null, unit: "Guideline amount on large sandwich", gramWeight: 84 }]],
+  ["Corn, sweet, white, raw", [{ seqNum: 1, amount: 1, unit: "ear, small (5-1/2\" to 6-1/2\" long)", gramWeight: 73 }, { seqNum: 2, amount: 1, unit: "ear, medium (6-3/4\" to 7-1/2\" long)", gramWeight: 90 }, { seqNum: 3, amount: 1, unit: "ear, large (7-3/4\" to 9\" long)", gramWeight: 143 }, { seqNum: 4, amount: 1, unit: "cup kernels", gramWeight: 154 }]],
+  ["Sesame seeds", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 128 }]],
   ["Lemon, raw", [{ seqNum: 1, amount: null, unit: "1 fruit", gramWeight: 65 }, { seqNum: 2, amount: null, unit: "1 slice or wedge", gramWeight: 8 }, { seqNum: 3, amount: null, unit: "1 cup", gramWeight: 200 }]],
   ["Iced Coffee, pre-lightened and pre-sweetened", [
     { seqNum: 1, amount: null, unit: "1 fl oz", gramWeight: 31 }, { seqNum: 2, amount: null, unit: "1 cup (8 fl oz)", gramWeight: 248 },
@@ -411,8 +470,9 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // on 2026-09-16 with 7a-iii-b's prompt (the text only; no photo is in the
   // repository), with the vessel, fill and size slots that prompt asked for taken
   // out (ROADMAP 7a-iv-d), so every row pinned below is the one those replies gave
-  // before; the three "-apart" plates are replies of 2026-09-17 to the prompt that
-  // asks for each food apart (ROADMAP 7a-iv-f). The review plates are the cases PR #71's four reviews found in the
+  // before; the "-apart" plates are the same eight photos' replies of 2026-09-17 to
+  // the prompt that asks for each food apart, the one shipped (ROADMAP 7a-iv-f). The
+  // review plates are the cases PR #71's four reviews found in the
   // old portion code, which read the words of a food's name, written as the model's
   // form writes them: a count of whole pieces and the grams it saw. What a count of
   // cut bits, a container or a serving word once did to a portion is now the grams'
@@ -470,10 +530,41 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       "download.json": [
         ["banana toast", "estimate", "~220 g", 220, 450], ["egg bacon toast", "estimate", "~250 g", 250, 420], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
-      // Three of the plates above as the model wrote them once asked for every food it
-      // can see apart (ROADMAP 7a-iv-f): what it joined into a dish is now rows, and a
-      // food a table has is priced from it — the sourdough, cream cheese and arugula of
-      // the two toasts, the dried coconut at USDA's packaged entry.
+      // The eight plates as the model wrote them once asked for every food it can see
+      // apart (ROADMAP 7a-iv-f): what it joined into a dish is now rows, and a food a
+      // table has is priced from it — the sourdough, cream cheese and arugula of the two
+      // toasts, the dried coconut at USDA's packaged entry.
+      "download-1-apart.json": [
+        ["toast", "estimate", "~120 g", 120, 320], ["avocado", "estimate", "~60 g", 60, 96], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cubic inch", 102, 341], ["Ham, prepackaged or deli, luncheon meat", "usda", "~60 g", 60, 61],
+        ["Apple", "curated", "~60 g", 60, 31], ["Mixed nuts", "curated", "~10 g", 10, 61], ["Arugula", "curated", "1 × half cup", 10, 3],
+        ["Cappuccino", "curated", "1 × cup", 240, 65],
+      ],
+      // Read wrong, and pinned so it shows (the review of PR #80, High 1): the model
+      // now names the corn "sweet corn", which our list's "Corn (cooked)" does not hold,
+      // so USDA's plainest near entry, the raw white one, names boiled yellow corn; and
+      // "steamed broccoli" and "roasted pumpkin" find no table (ROADMAP 7a-iv-i).
+      "download-3-apart.json": [
+        ["Chicken thigh (cooked)", "curated", "~150 g", 150, 269], ["Shrimp (cooked)", "curated", "~70 g", 70, 69], ["Egg (hard-boiled)", "curated", "1 × egg", 50, 78],
+        ["pumpkin", "estimate", "~60 g", 60, 30], ["broccoli", "estimate", "~80 g", 80, 28], ["Corn, sweet, white, raw", "usda", "~60 g", 60, 52],
+        ["Orange juice", "curated", "1 × cup", 248, 112],
+      ],
+      "download-4-apart.json": [
+        ["Salmon (cooked)", "curated", "2 × half fillet", 356, 733], ["Broccoli (cooked)", "curated", "~120 g", 120, 42], ["Roast potatoes", "curated", "~200 g", 200, 252],
+        ["Lemon, raw", "usda", "~30 g", 30, 9],
+      ],
+      // Read wrong, and pinned so it shows (the review of PR #80, High 1): the model
+      // now names the toast "bread", which our list reads as whole wheat.
+      "download-6-apart.json": [
+        ["Whole wheat bread", "curated", "2 × slice", 64, 161], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "~30 g", 30, 83],
+        ["Sesame seeds", "usda", "~5 g", 5, 32], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
+        ["Blueberries", "curated", "1 × 50 berries", 68, 39], ["Raspberries", "curated", "~50 g", 50, 26],
+      ],
+      // "Sweet corn" reads as the raw white entry here too (the review of PR #80, High 1).
+      "minimalist-meal-planner-inspiration-idea-120-apart.json": [
+        ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Corn, sweet, white, raw", "usda", "1 × ear, small (5-1/2\" to 6-1/2\" long)", 73, 63],
+        ["Carrots (raw)", "curated", "1 × large (7-1/4\" to 8-/1/2\" long)", 72, 30], ["broccoli", "estimate", "~100 g", 100, 34], ["Chicken breast (grilled)", "curated", "1 × piece", 196, 296],
+      ],
       "download-apart.json": [
         ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Banana", "curated", "1 × small (6\" to 6-7/8\" long)", 101, 90],
         ["Coconut, packaged", "usda", "~5 g", 5, 23], ["Cream cheese", "curated", "1 × serving", 28, 98], ["Arugula", "curated", "1 × half cup", 10, 3],
@@ -550,7 +641,8 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     // Apps of their own, over the same database and the same model replies: a store
     // each, so the people scanning here count against no sign-in limit the tests
     // above share (twenty requests an address). Each plate signs one person up and
-    // in, two requests, so an app serves at most eight plates, however many are added.
+    // in, two requests, so an app serves at most eight plates, clear of the twenty,
+    // however many plates are added.
     const PLATES_PER_APP = 8;
     const apps: App[] = [];
     const appFor = (at: number): App => {
