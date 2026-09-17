@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)
+
+- Kd asked how a gym's own entry system (fingerprint, face, card, QR) connects to the app, in India and abroad. Three web checks (India, abroad, the law) and two device manuals read; the findings are on RULINGS 2026-09-17 and ROADMAP's "After launch".
+- His second question: should we build it at all, and what about the uploaded list going stale, a QR nobody will scan, the leaderboard and the cheer resting on attendance, manual work for the gym, and cards split that belong together. He asked for engineering judgement, not agreement, and said earlier chats patched and deferred to old rulings.
+- Answer given and adopted (*"yes adopt it, update rulings and roadmap"*): the gym's software is the source of truth, ours reconciles from its uploads and never gates (a source of truth is not a gatekeeper); the join code admits at once; one "active day" definition feeds the leaderboard, "slipping away" and the cheer, and a workout counts on its own; phone check-in comes with the phone app; door machines after launch on request (eSSL/ZKTeco first), never a fingerprint or face.
+- Records: RULINGS — seven new 2026-09-17 lines (the model, the reconciling list, no manual per-member work, active day, attendance sources, the research, and two process lines under "How work is done"); amendments on 2026-08-19 (applications), 2026-08-24 (reaffirmed), 2026-08-31 and 2026-09-02 (workouts count on their own). ROADMAP — Stage 2 reshaped (1a/1b, 2 re-pointed, 3 and 5 as one design), Stage 5 item 8 (phone check-in), an entry-systems bullet under "After launch".
+- Verified: nothing to run; a records-only push runs the secrets scan only.
+- Open: the lawyer review (Stage 4 item 3) must confirm that receiving a number and a time keeps the app outside biometric law. The next chat builds Stage 2 item 3, the member list's server half.
+
 ## 2026-09-17 · 7a-iv-b built: the photo sheet by measure (branch `photo-sheet-by-measure`)
 
 - Kd: *"go"* to the plan. One question while building, answered: *"30 % only (Recommended)"* — the rule's "or 10 g" started the toast plate's 10 g of almonds, counted 1, at one 1 g almond, the only row of the eleven test plates it changed (measured with a script on the loaded table: 75 rows of our list with grams, 42 at a measure, 1 by the 10 g). RULINGS 2026-09-16's portion line amended.
