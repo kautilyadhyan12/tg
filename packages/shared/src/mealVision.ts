@@ -43,9 +43,11 @@ export const MAX_PHOTO_COUNT = 30;
 
 /** The most foods the prompt asks one reply to list, naming any other food it sees
  *  in unknown_items, so it still shows under "Not in the total". It is what the
- *  reply's output cap holds with room to spare: each food costs about 40 output
- *  tokens (155 for a plate of 3, 393 for a plate of 9; HANDOFF 2026-09-16) and the
- *  cap is 1,000 (`vision.adapter.ts`), so about 24 fit. A reply cut off at the cap
+ *  reply's output cap holds with room to spare: each food cost about 40 output
+ *  tokens when every item also carried a vessel, fill and size (155 for a plate of
+ *  3, 393 for a plate of 9; HANDOFF 2026-09-16), and the cap is 1,000
+ *  (`vision.adapter.ts`), so about 24 fit; the shorter reply measured 36.5 a food on
+ *  the eight plates (HANDOFF 2026-09-17), inside that bound. A reply cut off at the cap
  *  is no JSON at all: the scan fails as unreadable, and so does its free retake. A
  *  reply that lists more anyway is still read: its first MAX_SCAN_FOODS foods are
  *  the sheet's rows and the rest are named in unknown_items, each by the name a row

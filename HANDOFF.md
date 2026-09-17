@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Tests: the eleven plate fixtures lose the three slots (a script checked each of Kd's eight round-trips exactly first), every pinned row unchanged; the unit test reads two real replies of 2026-09-17 (salmon; the list of one) and rejects the old eleven slots, two objects, an empty list and a list in a list.
 - Verified: shared tsc 0 · eslint src test 0 · shared tests 125/125 · api tsc 0 · eslint src test tools 0 · the four scanner files 114/114 on local Postgres · full api 1277 passed, `auth.routes` failing at setup in the full run (its 20 skipped) and 20/20 alone · 6 deliberate breaks each red (no unwrap, unwrap any list, unwrap twice, count and grams swapped, the prompt asking a vessel, "JSON only" back), files restored identical (sha256).
 - Records on this branch: the model-and-effort rule (CLAUDE.md §2.1), 7a-iv-b-ii's tick, 7a-iv-c struck, 7a-iv-d's ruling and tick, 7a-iv-f (lumping) added. The four dashboard images on disk are still not this chat's and are not committed.
-- Next: the review of this branch (it parses an outside reply: the reviewer runs the real scanner), then 7a-iv-e; 7a-iv-f's place in the order is Kd's.
+- CI green on f52ab7f. Review (fresh chat, one real scan through the route with real Redis and two users): no Critical/High; three Lows fixed with no re-check — the spec's amendment note, MAX_SCAN_FOODS's per-food figure, and the older entry's "7a-iv-c's pull request".
+- Open: Kd's click-through (the account `kd.scan@aihomegym.test` is set up on local Postgres; api and web running), then merge on his word; then 7a-iv-e; 7a-iv-f's place in the order is Kd's.
 
 ## 2026-09-17 · 7a-iv-b-ii built: how far over a target (branch `how-far-over`); the member list planned
 
@@ -22,7 +23,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: the two files 24/24 · full web 2288 passed, `poseAssets.contract` failing to load as before · eslint on the three files: the same 7 errors in Nutrition.jsx as the handoff before, none new · 4 deliberate breaks each red (clamped at 0, a rounded -0 as over, "about" dropped on an over row, a past day as over), the page's sha256 identical after.
 - Kd's click-through passed (*"allpassed"*) on the local API (local Postgres) and web.
 - Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Ruled (RULINGS 2026-09-17): the health rules hold for typed numbers; built as ROADMAP 7a-iv-e, after 7a-iv-d. Not built.
-- After the merge, UNCOMMITTED on master for 7a-iv-c's pull request to carry: the rule that every plan recommends the model and effort (CLAUDE.md §2.1, RULINGS 2026-09-17), this line, and 7a-iv-b-ii's tick in ROADMAP (merged as PR #78).
+- After the merge, UNCOMMITTED on master for 7a-iv-d's pull request to carry (7a-iv-c was struck): the rule that every plan recommends the model and effort (CLAUDE.md §2.1, RULINGS 2026-09-17), this line, and 7a-iv-b-ii's tick in ROADMAP (merged as PR #78).
 - PR #78: CI green on 1eb8b42. Review: no Critical/High; two Lows and a weak test fixed with no re-check (the ring's "/ 140 g", the unreachable -0 case removed, the past-day test renamed); the affected web files 97/97, lint clean on the fixed files. Next: then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
 
 ## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)
