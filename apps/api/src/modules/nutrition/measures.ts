@@ -219,7 +219,7 @@ export interface ScanStart { measure: string; amount: number; grams: number; est
  *  the photo gave no count there is nothing to multiply; where
  *  it gave no weight there is nothing to check a count against, so the food starts
  *  where Add food starts it (`startingMeasure`), an estimate too. No word of the
- *  food's name, its vessel or how full it looked is read: the grams decide. */
+ *  food's name is read: the grams decide. */
 export function scanStart(
   source: Pick<MeasureSource, "serving" | "unit" | "ownServing">,
   measures: readonly FoodMeasure[],

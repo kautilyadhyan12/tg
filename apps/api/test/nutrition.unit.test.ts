@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GRAM } from "../src/modules/nutrition/measures.js";
 import {
@@ -18,7 +16,7 @@ import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { ScanPrice } from "../src/modules/nutrition/scanMatch.js";
 import { scanSheet } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, MEAL_VESSELS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
 import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -31,9 +29,9 @@ describe("P2.6a nutrition pure pipeline", () => {
     // A bad count never loses a paid scan: the item stays, its count unknown.
     expect(MAX_PHOTO_COUNT).toBe(30);
     const reply = (items: unknown[]) => wrap({ meal_name: "x", unknown_items: [], photo_quality: "good", items });
-    // One list per food (RULINGS 2026-09-16): the count is the sixth slot, and
+    // One list per food (RULINGS 2026-09-16): the count is the third slot, and
     // null is how the model says it has none — a slot cannot be left out of a list.
-    const item = (count: unknown): unknown[] => ["x", "x", null, null, null, count, 100, 100, 0, 25, 0];
+    const item = (count: unknown): unknown[] => ["x", "x", count, 100, 100, 0, 25, 0];
     const counts = async (...values: unknown[]) => {
       const provider = createGroqVisionProvider("dummy-key", "m", reply(values.map(item))); // gitleaks:allow
       return (await provider.analyze("AA==", "image/jpeg")).evidence.items.map((scanned) => scanned.count);
@@ -62,15 +60,18 @@ describe("P2.6a nutrition pure pipeline", () => {
 
   it("the reply is one list per food with the model's own figures (RULINGS 2026-09-16); the plate-reading instructions are whole", () => {
     // Asked for: what the service reads, slot by slot in the order the schema reads them.
+    // One object: the first scan of the trimmed prompt came back as `[{…}]` (ROADMAP 7a-iv-d).
     expect(MEAL_VISION_PROMPT).toContain(
-      "Return JSON only with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g].",
+      "Return one JSON object only, with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, count, grams, kcal, protein_g, carbs_g, fat_g].",
     );
     expect(MEAL_VISION_PROMPT).toContain("write null in any slot you cannot fill");
-    // Not asked for: what nothing ever read (RULINGS 2026-09-15).
-    for (const retired of [...RETIRED_EVIDENCE_FIELDS, "confidence"]) expect(MEAL_VISION_PROMPT).not.toContain(retired);
-    // The vessel is named from the list the schema reads it off.
-    expect(MEAL_VESSELS).toEqual(["katori", "bowl", "large bowl", "thali section", "tumbler", "chai cup", "cup", "mug", "glass", "can", "bottle", "pot", "tablespoon", "teaspoon", "plate", "none"]);
-    expect(MEAL_VISION_PROMPT).toContain(`vessel must be exactly one of ${MEAL_VESSELS.join(", ")};`);
+    // Not asked for: what nothing ever read (RULINGS 2026-09-15), and the vessel, how full
+    // it looked and a size word, which nothing read once a row started by its count and
+    // grams (ROADMAP 7a-iv-d) — nor the vessel list, which was only the vessel's.
+    for (const retired of [...RETIRED_EVIDENCE_FIELDS, "confidence", "vessel", "fill_level", "size_class", "katori", "tumbler"]) {
+      expect(MEAL_VISION_PROMPT, retired).not.toContain(retired);
+    }
+    expect(MEAL_VISION_PROMPT).toContain("meal_name must be a short name for the meal; count must be a positive integer;");
     // The model's own figures, always, and without the ".0" that bills tokens for nothing
     // (the shape check wrote "150.0" for every whole number); "Never output calories" went
     // with the redesign (RULINGS 2026-09-15).
@@ -93,11 +94,13 @@ describe("P2.6a nutrition pure pipeline", () => {
     // Measured on Kd's plates (HANDOFF 2026-09-16): 155 output tokens for the 3 foods of
     // "download", 393 for the 9 of "download (1)" — about 40 a food. A full list stays
     // under nine tenths of the cap, so a reply is never cut off into JSON nothing reads.
+    // Those were three slots a food longer than today's; the shorter reply wrote 303
+    // tokens for all 9 foods of "download (1)" (HANDOFF 2026-09-17), inside this bound.
     const perFood = (393 - 155) / (9 - 3);
     expect(155 + perFood * (MAX_SCAN_FOODS - 3)).toBeLessThan(0.9 * VISION_MAX_OUTPUT_TOKENS);
     // A reply that lists more anyway is still read, never failed: its first foods are the
     // rows, and every food past them is named after what the model named itself.
-    const food = (at: number) => [`Food ${String(at + 1)}`, "dal", null, null, null, null, 100, 145, 9, 19, 4];
+    const food = (at: number) => [`Food ${String(at + 1)}`, "dal", null, 100, 145, 9, 19, 4];
     const reply = (count: number) => createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
       meal_name: "x", items: Array.from({ length: count }, (_, at) => food(at)), unknown_items: ["Mystery sauce"], photo_quality: "good",
     }));
@@ -110,7 +113,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     }
     // A food past them whose name says there is none is named by its hint, as its row would be, and the sheet
     // shows it under "Not in the total" beside the rest.
-    const nameless = ["N/A", "zqx vlorp", null, null, null, null, 100, 145, 9, 19, 4];
+    const nameless = ["N/A", "zqx vlorp", null, 100, 145, 9, 19, 4];
     const { evidence: long } = await createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
       meal_name: "x", items: [...Array.from({ length: MAX_SCAN_FOODS }, (_, at) => food(at)), nameless, food(MAX_SCAN_FOODS + 1)], unknown_items: ["Mystery sauce"], photo_quality: "good",
     })).analyze("AA==", "image/jpeg");
@@ -219,11 +222,11 @@ describe("P2.6a nutrition pure pipeline", () => {
 
   // ── Vision model swap card (2026-07-16): the browser smoke proved BOTH real
   // Groq vision models return field formats a strict schema rejected, 422ing
-  // every scan — a word for a fill ("full", "N/A"), "None" for a container,
+  // every scan — a word for a number ("full", "N/A"), "None" for a container,
   // capitalized enums. The reply is one list per food since 2026-09-16 (RULINGS),
   // and those same variants, written in it, must still read: a word where a
-  // number or a vessel belongs is unknown, and the fields the scanner no longer
-  // asks for are dropped rather than failing a reply that still carries them.
+  // number belongs is unknown, and the fields the scanner no longer asks for
+  // are dropped rather than failing a reply that still carries them.
   const wrap = (evidence: unknown) =>
     ((): typeof fetch => () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(evidence) } }],
@@ -234,14 +237,14 @@ describe("P2.6a nutrition pure pipeline", () => {
     const provider = createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
       meal_name: "Margherita Pizza", cuisine_guess: "Italian",
       items: [
-        ["Pizza", "Margherita Pizza", "None", "full", "Large", 1, 400, 1000, 44, 120, 38],
-        ["Basil leaves", "Fresh Basil", "none", "N/A", "Small", 1, 2, 0, 0, 0, 0],
+        ["Pizza", "Margherita Pizza", 1, 400, 1000, 44, 120, 38],
+        ["Basil leaves", "Fresh Basil", "N/A", "full", 0, 0, 0, 0],
       ],
       scale_anchors: [{ type: "Countertop", notes: "Speckled granite surface visible around the pizza" }],
       unknown_items: [], photo_quality: "Good",
     }));
     const result = await provider.analyze("AA==", "image/jpeg");
-    expect(result.evidence.items.map((i) => [i.vessel, i.fill_level, i.size_class, i.count, i.grams])).toEqual([[null, null, "Large", 1, 400], [null, null, "Small", 1, 2]]);
+    expect(result.evidence.items.map((i) => [i.count, i.grams, i.kcal])).toEqual([[1, 400, 1000], [null, null, 0]]);
     expect(result.evidence).not.toHaveProperty("cuisine_guess");
     expect(result.evidence).not.toHaveProperty("scale_anchors");
     expect(result.evidence.photo_quality).toBe("good");
@@ -250,40 +253,35 @@ describe("P2.6a nutrition pure pipeline", () => {
 
   it("a slot the model cannot fill is unknown, never guessed; no unknown_items is none; no items is none", async () => {
     const provider = createGroqVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
-      meal_name: "x", items: [["x", "x", null, null, null, null, null, null, null, null, null]], photo_quality: "good",
+      meal_name: "x", items: [["x", "x", null, null, null, null, null, null]], photo_quality: "good",
     }));
     expect((await provider.analyze("AA==", "image/jpeg")).evidence).toEqual({
       meal_name: "x",
-      items: [{ name: "x", canonical_hint: "x", vessel: null, fill_level: null, size_class: null, count: null, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null }],
+      items: [{ name: "x", canonical_hint: "x", count: null, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null }],
       unknown_items: [], photo_quality: "good",
     });
     const bare = createGroqVisionProvider("dummy-key", "m", wrap({ photo_quality: "poor" })); // gitleaks:allow
     expect((await bare.analyze("AA==", "image/jpeg")).evidence).toEqual({ meal_name: null, items: [], unknown_items: [], photo_quality: "poor" });
     const itemsOf = async (items: unknown[][]) =>
       (await createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: "x", items, photo_quality: "good" })).analyze("AA==", "image/jpeg")).evidence.items; // gitleaks:allow
-    // A meal name, vessel or size that says there is none is no value, however it is spelled.
+    // A meal name that says there is none is no name, however it is spelled.
     for (const word of NO_VALUE_WORDS) {
       for (const spelled of [word, word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1), `  ${word} `]) {
-        const said = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: spelled, items: [["x", "x", spelled, null, spelled, null, 100, 100, 0, 25, 0]], photo_quality: "good" })); // gitleaks:allow
+        const said = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: spelled, items: [["x", "x", null, 100, 100, 0, 25, 0]], photo_quality: "good" })); // gitleaks:allow
         const { evidence } = await said.analyze("AA==", "image/jpeg");
-        expect([evidence.meal_name, evidence.items[0]?.vessel, evidence.items[0]?.size_class], JSON.stringify(spelled)).toEqual([null, null, null]);
+        expect(evidence.meal_name, JSON.stringify(spelled)).toBeNull();
       }
     }
-    // A vessel is read off the list in any case or spacing, with "_" for a space; any
-    // other word, or no word, is no vessel.
-    const vessels = ["Large_Bowl", "  THALI  section ", "katori", "Chai Cup", "bowl with lid", "serving bowl", "paper", 3, true];
-    expect((await itemsOf(vessels.map((v) => ["x", "x", v, null, null, null, 100, 100, 0, 25, 0]))).map((i) => i.vessel))
-      .toEqual(["large bowl", "thali section", "katori", "chai cup", null, null, null, null, null]);
-    // Every number is one the sheet can use or unknown: a fill from 0 to 1, grams
-    // above nothing and no more than an item may weigh, kcal and macros of zero or more.
+    // Every number is one the sheet can use or unknown: grams above nothing and no
+    // more than an item may weigh, kcal and macros of zero or more.
     expect(await itemsOf([
-      ["x", "x", null, 1.5, null, null, 0, -1, "12", true, {}],
-      ["x", "x", null, 0, null, null, MAX_ITEM_GRAMS, 0, 0, 0, 0],
-      ["x", "x", null, 1, null, null, MAX_ITEM_GRAMS + 1, 12.5, 1.5, 2.5, 0.5],
+      ["x", "x", null, 0, -1, "12", true, {}],
+      ["x", "x", null, MAX_ITEM_GRAMS, 0, 0, 0, 0],
+      ["x", "x", null, MAX_ITEM_GRAMS + 1, 12.5, 1.5, 2.5, 0.5],
     ])).toEqual([
-      { name: "x", canonical_hint: "x", vessel: null, fill_level: null, size_class: null, count: null, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
-      { name: "x", canonical_hint: "x", vessel: null, fill_level: 0, size_class: null, count: null, grams: MAX_ITEM_GRAMS, kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
-      { name: "x", canonical_hint: "x", vessel: null, fill_level: 1, size_class: null, count: null, grams: null, kcal: 12.5, protein_g: 1.5, carbs_g: 2.5, fat_g: 0.5 },
+      { name: "x", canonical_hint: "x", count: null, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
+      { name: "x", canonical_hint: "x", count: null, grams: MAX_ITEM_GRAMS, kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+      { name: "x", canonical_hint: "x", count: null, grams: null, kcal: 12.5, protein_g: 1.5, carbs_g: 2.5, fat_g: 0.5 },
     ]);
     // Every word the prompt gives the model for a value it does not have is one of them, read from
     // the prompt itself: its "write … in any slot you cannot fill" and its "Say … instead of guessing".
@@ -292,7 +290,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect([writing, said]).toEqual(["null", "unknown"]);
     for (const word of [writing ?? "", said ?? ""]) expect(isNoValueWord(word), word).toBe(true);
     // A real name that holds one of the words keeps it.
-    const real = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: "Unknown dish", items: [["x", "x", null, null, null, null, 100, 100, 0, 25, 0]], photo_quality: "good" })); // gitleaks:allow
+    const real = createGroqVisionProvider("dummy-key", "m", wrap({ meal_name: "Unknown dish", items: [["x", "x", null, 100, 100, 0, 25, 0]], photo_quality: "good" })); // gitleaks:allow
     expect((await real.analyze("AA==", "image/jpeg")).evidence.meal_name).toBe("Unknown dish");
   });
 
@@ -312,21 +310,30 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(bodies[1]).not.toHaveProperty("reasoning_effort");
   });
 
-  it("strictly rejects a reply whose food is not one list of eleven slots with a name, or that adds a field, and retains usage for the ledger", async () => {
+  it("strictly rejects a reply whose food is not one list of eight slots with a name, or that adds a field, and retains usage for the ledger", async () => {
     const groq = (evidence: unknown): typeof fetch => () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(evidence) } }],
       model: "scout", usage: { prompt_tokens: 10, completion_tokens: 20 },
     }), { status: 200, headers: { "content-type": "application/json" } }));
+    const dal = { meal_name: "Dal", items: [["Dal", "dal", null, 100, 100, 0, 25, 0]], unknown_items: [], photo_quality: "good" };
     const broken: [string, unknown][] = [
       // The field names the reply used before 2026-09-16 are no longer read.
       ["an item in the old field form", { meal_name: "Dal", items: [{ name: "Dal", canonical_hint: "dal", kcal: 100 }], unknown_items: [], photo_quality: "good" }],
+      // Nor the eleven slots it had before ROADMAP 7a-iv-d: its grams would read as a count.
+      ["the eleven slots of the reply before", { meal_name: "Dal", items: [["Dal", "dal", "katori", 0.75, "medium", null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
       // A slot missing or one too many shifts every slot after it, so neither is read.
-      ["ten slots", { meal_name: "Dal", items: [["Dal", "dal", null, null, null, null, 100, 100, 0, 25]], photo_quality: "good" }],
-      ["twelve slots", { meal_name: "Dal", items: [["Dal", "dal", null, null, null, null, 100, 100, 0, 25, 0, 1]], photo_quality: "good" }],
-      ["no name", { meal_name: "Dal", items: [["", "dal", null, null, null, null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
-      ["a canonical_hint that is not text", { meal_name: "Dal", items: [["Dal", 7, null, null, null, null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
+      ["seven slots", { meal_name: "Dal", items: [["Dal", "dal", null, 100, 100, 0, 25]], photo_quality: "good" }],
+      ["nine slots", { meal_name: "Dal", items: [["Dal", "dal", null, 100, 100, 0, 25, 0, 1]], photo_quality: "good" }],
+      ["no name", { meal_name: "Dal", items: [["", "dal", null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
+      ["a canonical_hint that is not text", { meal_name: "Dal", items: [["Dal", 7, null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
       ["a field the contract does not have", { meal_name: "Dal", items: [], photo_quality: "good", total_kcal: 500 }],
+      // One object in a list is that object (below); anything else in a list is no reply.
+      ["two objects in a list", [dal, dal]],
+      ["an empty list", []],
+      ["a list of the items alone", dal.items],
+      ["an object in a list in a list", [[dal]]],
     ];
+    expect(await createGroqVisionProvider("dummy-key", "scout", groq(dal)).analyze("AA==", "image/jpeg")).toMatchObject({ evidence: { meal_name: "Dal" } }); // gitleaks:allow
     for (const [label, evidence] of broken) {
       const provider = createGroqVisionProvider("dummy-key", "scout", groq(evidence)); // gitleaks:allow
       await expect(provider.analyze("AA==", "image/jpeg"), label).rejects.toMatchObject({ message: "vision malformed evidence shape", usage: { tokensIn: 10, tokensOut: 20 } });
@@ -334,18 +341,25 @@ describe("P2.6a nutrition pure pipeline", () => {
   });
 
   // ── The scanner on Gemini (RULINGS 2026-08-24; 3.5 Flash-Lite since
-  // 2026-09-15). Two real replies: Kd's salmon plate on 2026-09-16 with this
-  // card's prompt — the model's text exactly as it wrote it (the plates fixture),
-  // in Gemini's envelope with the tokens that call billed (HANDOFF 2026-09-16) —
-  // and a 64×64 orange square on 2026-09-15, a photo with no meal on it, VERBATIM
-  // but for the thought signature, under an earlier prompt, so it still carries
-  // the fields that were retired.
-  const SALMON_TEXT = readFileSync(join(import.meta.dirname, "fixtures", "plates", "download-4.json"), "utf8");
-  const SALMON_REPLY = {
-    candidates: [{ content: { parts: [{ text: SALMON_TEXT }], role: "model" }, finishReason: "STOP", index: 0 }],
-    usageMetadata: { promptTokenCount: 607, candidatesTokenCount: 177, totalTokenCount: 784 },
+  // 2026-09-15). Three real replies. Two to today's prompt, on 2026-09-17 (HANDOFF),
+  // the model's text exactly as it wrote it, in Gemini's envelope with the tokens
+  // that call billed: Kd's salmon plate, and the first scan of the prompt, which came
+  // back as its object in a list. And a 64×64 orange square on 2026-09-15, a photo
+  // with no meal on it, VERBATIM but for the thought signature, under an earlier
+  // prompt, so it still carries the fields that were retired.
+  const gemini = (text: string, tokensIn: number, tokensOut: number) => ({
+    candidates: [{ content: { parts: [{ text }], role: "model" }, finishReason: "STOP", index: 0 }],
+    usageMetadata: { promptTokenCount: tokensIn, candidatesTokenCount: tokensOut, totalTokenCount: tokensIn + tokensOut },
     modelVersion: "gemini-3.5-flash-lite",
-  };
+  });
+  const SALMON_REPLY = gemini(
+    '{"meal_name": "Baked salmon with roasted potatoes and broccoli", "items": [["salmon fillet", "salmon", 2, 250, 520, 52, 0, 32], ["roasted potato", "roasted potatoes", 10, 150, 130, 3, 27, 2], ["broccoli", "broccoli", 1, 120, 40, 4, 8, 0], ["lemon wedge", "lemon", 3, 30, 9, 0, 3, 0]], "unknown_items": [], "photo_quality": "good"}',
+    558, 148,
+  );
+  const LISTED_REPLY = gemini(
+    '[{"meal_name": "Grilled chicken and shrimp meal", "items": [["shrimp", "shrimp", 7, 100, 99, 18, 0, 1], ["chicken thigh", "chicken", 1, 150, 315, 27, 0, 22], ["soft boiled egg", "egg", 2, 100, 143, 13, 1, 10], ["broccoli", "broccoli", 1, 80, 28, 3, 6, 0], ["corn", "corn", 1, 70, 60, 2, 14, 1], ["pumpkin slice", "pumpkin", 3, 60, 15, 0, 4, 0], ["orange juice", "orange juice", 1, 200, 90, 1, 21, 0]], "unknown_items": [], "photo_quality": "good"}]',
+    565, 235,
+  );
   const NO_MEAL_REPLY = {
     candidates: [{ content: { parts: [{ text: '{"meal_name": null, "cuisine_guess": null, "items": [], "scale_anchors": [], "unknown_items": [], "photo_quality": "poor"}', thoughtSignature: "(96 characters)" }], role: "model" }, finishReason: "STOP", index: 0 }],
     usageMetadata: { promptTokenCount: 798, candidatesTokenCount: 39, totalTokenCount: 837, promptTokensDetails: [{ modality: "IMAGE", tokenCount: 529 }, { modality: "TEXT", tokenCount: 269 }], serviceTier: "standard" },
@@ -393,17 +407,24 @@ describe("P2.6a nutrition pure pipeline", () => {
     });
   });
 
-  it("Gemini: reads the REAL salmon-plate reply, and the REAL no-meal reply as a poor photo with its retired fields dropped", async () => {
+  it("Gemini: reads the REAL salmon-plate reply, the REAL reply listed in a list, and the REAL no-meal reply as a poor photo with its retired fields dropped", async () => {
     const good = await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", geminiFetch(SALMON_REPLY).fetchImpl).analyze("AA==", "image/jpeg");
-    expect(good.evidence.meal_name).toBe("Salmon with Roasted Potatoes and Broccoli");
-    expect(good.evidence.items.map((i) => [i.canonical_hint, i.vessel, i.fill_level, i.size_class, i.count, i.grams, i.kcal, i.protein_g, i.carbs_g, i.fat_g])).toEqual([
-      ["salmon", "plate", null, "medium", 2, 300, 624, 60, 0, 40],
-      ["roasted potatoes", "plate", null, "medium", 9, 200, 186, 4, 34, 4],
-      ["broccoli", "plate", null, "medium", null, 150, 51, 6, 10, 1],
-      ["lemon", "plate", null, "small", 2, 40, 12, 0, 4, 0],
+    expect(good.evidence.meal_name).toBe("Baked salmon with roasted potatoes and broccoli");
+    expect(good.evidence.items.map((i) => [i.name, i.canonical_hint, i.count, i.grams, i.kcal, i.protein_g, i.carbs_g, i.fat_g])).toEqual([
+      ["salmon fillet", "salmon", 2, 250, 520, 52, 0, 32],
+      ["roasted potato", "roasted potatoes", 10, 150, 130, 3, 27, 2],
+      ["broccoli", "broccoli", 1, 120, 40, 4, 8, 0],
+      ["lemon wedge", "lemon", 3, 30, 9, 0, 3, 0],
     ]);
     expect(good.evidence.unknown_items).toEqual([]);
-    expect(good).toMatchObject({ tokensIn: 607, tokensOut: 177 });
+    expect(good).toMatchObject({ tokensIn: 558, tokensOut: 148 });
+    // Its object in a list is that object, every food read, never a lost paid scan.
+    const listed = await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", geminiFetch(LISTED_REPLY).fetchImpl).analyze("AA==", "image/jpeg");
+    expect(listed.evidence.meal_name).toBe("Grilled chicken and shrimp meal");
+    expect(listed.evidence.items.map((i) => [i.canonical_hint, i.count, i.grams])).toEqual([
+      ["shrimp", 7, 100], ["chicken", 1, 150], ["egg", 2, 100], ["broccoli", 1, 80], ["corn", 1, 70], ["pumpkin", 3, 60], ["orange juice", 1, 200],
+    ]);
+    expect(listed).toMatchObject({ tokensIn: 565, tokensOut: 235 });
     const none = await createGeminiVisionProvider("k", "gemini-3.5-flash-lite", geminiFetch(NO_MEAL_REPLY).fetchImpl).analyze("AA==", "image/png");
     expect(none.evidence).toEqual({ meal_name: null, items: [], unknown_items: [], photo_quality: "poor" });
     expect(none).toMatchObject({ tokensIn: 798, tokensOut: 39 });
