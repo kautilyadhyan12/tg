@@ -52,14 +52,16 @@ const env = {
 };
 const jpeg = (() => { const bytes = Buffer.alloc(1200, 1); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
 
-const USDA_ID = 90_000_301;
+/** This file's USDA ids. The other USDA test files hold 90,000,001–099, 201–299 and
+ *  401–499, and run beside this one: an id two files share is saved over and deleted. */
+const USDA_ID = 90_000_501;
 /** One name, two ways made: the survey release's pickled at 34 kcal per 100 g, and
  *  SR Legacy's raw at 16, which the release rule alone would never pick. */
-const PICKLED_ID = 90_000_302;
-const RAW_ID = 90_000_303;
+const PICKLED_ID = 90_000_502;
+const RAW_ID = 90_000_503;
 /** The eight plates' USDA rows, from here up. */
-const PLATE_ROWS_FROM = 90_000_310;
-const LAST_ID = 90_000_499;
+const PLATE_ROWS_FROM = 90_000_510;
+const LAST_ID = 90_000_699;
 
 /** Every USDA row the eight plates' foods can find by name (`usdaFoodForScan`'s
  *  WHERE), copied from the loaded table on 2026-09-16 — FNDDS 2024-10-31 and SR
@@ -305,6 +307,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   };
 
   beforeAll(async () => {
+    if (PLATE_ROWS_FROM + PLATE_USDA_ROWS.length - 1 > LAST_ID) throw new Error("the plate rows run past LAST_ID, out of this file's ids");
     await clean();
     const figures = new Map<UsdaNutrient, number | null>(USDA_NUTRIENTS.map((n, at) => [n.key, at + 1]));
     for (const [key, value] of [["kcal", 213], ["proteinG", 11.5], ["carbsG", 27.3], ["fatG", 6.4]] as const) figures.set(key, value);
