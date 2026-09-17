@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
-import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
+import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -19,10 +19,10 @@ const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
 const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error",GROQ_API_KEY:"p26a-fake-provider-key"}; // gitleaks:allow
 type App=Awaited<ReturnType<typeof buildApp>>;
 /** A scanned food as the reply is read (one list per food, RULINGS 2026-09-16), with no estimate of its own unless one is given: a food no table has is then named under "Not in the total", as these tests expect, and not estimated. */
-const seen=(o:{name:string;canonical_hint:string;vessel?:MealVessel|null;fill_level?:number|null;size_class?:string|null;count?:number|null;grams?:number|null;kcal?:number|null;protein_g?:number|null;carbs_g?:number|null;fat_g?:number|null}):VisionItem=>({vessel:null,fill_level:null,size_class:null,count:null,grams:null,kcal:null,protein_g:null,carbs_g:null,fat_g:null,...o});
+const seen=(o:{name:string;canonical_hint:string;count?:number|null;grams?:number|null;kcal?:number|null;protein_g?:number|null;carbs_g?:number|null;fat_g?:number|null}):VisionItem=>({count:null,grams:null,kcal:null,protein_g:null,carbs_g:null,fat_g:null,...o});
 /** Evidence as the model writes it on the wire: one list per food. */
-const wire=(e:VisionEvidence)=>({meal_name:e.meal_name,items:e.items.map((i)=>[i.name,i.canonical_hint,i.vessel,i.fill_level,i.size_class,i.count,i.grams,i.kcal,i.protein_g,i.carbs_g,i.fat_g]),unknown_items:e.unknown_items,photo_quality:e.photo_quality});
-const goodEvidence:VisionEvidence={meal_name:"Dal and roti",items:[seen({name:"Dal",canonical_hint:"dal",vessel:"katori",fill_level:.75}),seen({name:"Roti",canonical_hint:"roti",count:2})],unknown_items:[],photo_quality:"good"};
+const wire=(e:VisionEvidence)=>({meal_name:e.meal_name,items:e.items.map((i)=>[i.name,i.canonical_hint,i.count,i.grams,i.kcal,i.protein_g,i.carbs_g,i.fat_g]),unknown_items:e.unknown_items,photo_quality:e.photo_quality});
+const goodEvidence:VisionEvidence={meal_name:"Dal and roti",items:[seen({name:"Dal",canonical_hint:"dal"}),seen({name:"Roti",canonical_hint:"roti",count:2})],unknown_items:[],photo_quality:"good"};
 function fakeVision():VisionProvider&{queue:VisionEvidence[];calls:number}{const queue:VisionEvidence[]=[];return{queue,calls:0,analyze(){this.calls++;const evidence=queue.shift()??goodEvidence;return Promise.resolve({evidence,tokensIn:100,tokensOut:200} satisfies VisionResult);}};}
 const noExternal:FoodSearchProvider={search:()=>Promise.resolve([])};
 const jpeg=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;bytes[2]=0xff;return bytes.toString("base64");})();
@@ -130,8 +130,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // ROADMAP 7a-iv-b), where the count cases this plate held became review plates with the grams the model writes.
   it("names what matches no food beside what the model could not identify, and the draft it leaves confirms as the sheet starts it",async()=>{
     const counted=fakeVision();
-    const item=(canonical_hint:string,count:number,vessel:MealVessel|null=null)=>seen({name:canonical_hint,canonical_hint,vessel,fill_level:vessel===null?null:1,count});
-    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("beer",2,"glass"),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
+    const item=(canonical_hint:string,count:number)=>seen({name:canonical_hint,canonical_hint,count});
+    counted.queue.push({...goodEvidence,meal_name:"Counted plate",unknown_items:["Mystery sauce","  ","MYSTERY  sauce "],items:[item("chicken nuggets",6),item("beer",2),{...item("mango_lassi",1),name:"  Mango  Lassi "},{...item("black_garlic_relish",1),name:"   "},item("mystery sauce",1)]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:counted,foodSearchProvider:noExternal}});
     try{
       const email="p26a-counted@example.com";

@@ -22,6 +22,12 @@ at a specific `[archive :line]` for detail. Never quote it as a rule.
 1. **Plan, ten lines or fewer, in plain English, to Kd.** What the user will see, what
    changes on the server, what you will test, anything that costs money or needs a
    new dependency. No file lists, no line numbers, no rule codes, no jargon.
+   Its last line recommends the model and effort for building the card, with a
+   one-line reason (RULINGS 2026-09-17): **Opus high** for a small screen, wording
+   or display card; **Opus xhigh** for sign-in, money, other people's data, uploads,
+   anything that parses an outside reply or sends data out, or a rule that picks,
+   ranks or thresholds; **Fable max** for a planning or redesign chat that writes no
+   code. If Kd's current setting differs, say so before building.
 2. **Kd says go.** No code before that. If he answers a different question than the one
    asked, ask again in one line; never treat a musing as a ruling and never treat your
    own suggestion as his decision.

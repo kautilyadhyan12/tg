@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
-import { mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealPhotoItem, type MealVessel, type VisionEvidence, type VisionItem } from "@app/shared";
+import { mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealPhotoItem, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -162,8 +162,8 @@ const packagedSearch: FoodSearchProvider = {
 };
 
 /** A food as the scanner reads the model's list, figures as given. */
-const seen = (name: string, hint: string, figures: [grams: number, kcal: number, protein: number, carbs: number, fat: number] | null, more: { vessel?: MealVessel; fill?: number; count?: number } = {}): VisionItem => ({
-  name, canonical_hint: hint, vessel: more.vessel ?? null, fill_level: more.fill ?? null, size_class: null, count: more.count ?? null,
+const seen = (name: string, hint: string, figures: [grams: number, kcal: number, protein: number, carbs: number, fat: number] | null, more: { count?: number } = {}): VisionItem => ({
+  name, canonical_hint: hint, count: more.count ?? null,
   grams: figures?.[0] ?? null, kcal: figures?.[1] ?? null, protein_g: figures?.[2] ?? null, carbs_g: figures?.[3] ?? null, fat_g: figures?.[4] ?? null,
 });
 const plate = (...items: VisionItem[]): VisionEvidence => ({ meal_name: "Qwzx plate", items, unknown_items: [], photo_quality: "good" });
@@ -184,9 +184,9 @@ function scripted(): VisionProvider & { queue: VisionEvidence[] } {
 // 120 g of a fritter no table has, at 300 kcal: 6 g protein, 30 g carbohydrate and
 // 17 g fat make 297 kcal, so it is an estimate — 250 kcal, 5 g, 25 g and 14.17 g per 100 g.
 const FRITTER = seen("Qwzx fritter", "qwzx fritter", [120, 300, 6, 30, 17], { count: 2 });
-// Our list's dal (145 kcal per 100 g) in a katori ¾ full, which the model saw at 150 g and
-// did not count: the row starts at those 150 g, 218 kcal — never Appendix B's katori.
-const DAL = seen("Dal", "dal", [150, 170, 9, 25, 4], { vessel: "katori", fill: 0.75 });
+// Our list's dal (145 kcal per 100 g), which the model saw at 150 g and did not count:
+// the row starts at those 150 g, 218 kcal — never a dish the person saved.
+const DAL = seen("Dal", "dal", [150, 170, 9, 25, 4]);
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -337,17 +337,17 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   it("never weighs a scanned food by a saved dish the person did not pick (RULINGS 2026-07-18)", async () => {
     const gus = await session("scan7b-gus@example.com");
     // The web's Medium bowl is saved as Appendix B's standard katori, which is what a
-    // katori the model names reads as — so a scan used to weigh this dal as 400 ml.
+    // katori the model named once read as — so a scan used to weigh this dal as 400 ml.
     const dish = await inject("POST", "/v1/nutrition/dishware", gus, { label: "Medium bowl", containerClass: "standard_katori", volumeMl: 400 });
     expect(dish.statusCode, dish.body).toBe(201);
     const sheet = await scan(gus, plate(DAL));
-    // The grams the model saw, as for a person with no dish saved: 150 g, not 400 × ¾ = 300.
+    // The grams the model saw, as for a person with no dish saved: 150 g, never the dish's.
     expect(sheet.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 150, portionSource: "default", startsAt: { measure: "g", amount: 150 } });
     // Nor is the dish one of the measures a count starts a row at (the review of PR
-    // #76): one katori of dal the model saw at 350 g is within 30 % of the 400 g the
-    // dish holds of dal (its cup is 240 g, a gram a millilitre), and of no measure
-    // the dal has (one 240 g cup is 110 g off) — so it starts at the photo's grams.
-    const counted = await scan(gus, plate(seen("Dal", "dal", [350, 508, 21, 58, 9], { vessel: "katori", fill: 1, count: 1 })));
+    // #76): one dal the model saw at 350 g is within 30 % of the 400 g the dish
+    // holds of dal (its cup is 240 g, a gram a millilitre), and of no measure the
+    // dal has (one 240 g cup is 110 g off) — so it starts at the photo's grams.
+    const counted = await scan(gus, plate(seen("Dal", "dal", [350, 508, 21, 58, 9], { count: 1 })));
     expect(counted.items[0]).toMatchObject({ canonical: "dal_lentil_curry", gramsPoint: 350, startsAt: { measure: "g", amount: 350 }, portionEstimated: true });
     expect(counted.items[0]?.measures.map((m) => m.id)).not.toContain("dish");
   }, 60_000);
@@ -367,8 +367,8 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     // USDA's 240 g cup are 720 g, so the first starts at its 180 g, an estimate; one
     // cup is near 250 g, so the second starts at it.
     const sheet = await scan(erin, plate(
-      seen("Zqxscanroute", "zqxscanroute", [180, 380, 19, 48, 12], { vessel: "plate", count: 3 }),
-      seen("Zqxscanroute", "zqxscanroute", [250, 530, 27, 67, 17], { vessel: "bowl", count: 1 }),
+      seen("Zqxscanroute", "zqxscanroute", [180, 380, 19, 48, 12], { count: 3 }),
+      seen("Zqxscanroute", "zqxscanroute", [250, 530, 27, 67, 17], { count: 1 }),
     ));
     expect(sheet.items).toHaveLength(2);
     expect(sheet.items[0]).toMatchObject({
@@ -381,7 +381,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect(preview.statusCode, preview.body).toBe(200);
     expect(mealPreviewSchema.parse(preview.json()).items.map((i) => [i.gramsPoint, i.kcalPoint])).toEqual([[180, 383], [240, 511]]);
     // With no grams from the model, where Add food starts it — USDA's first measure, once, whatever the count — marked an estimate.
-    const unweighed = await scan(erin, plate(seen("Zqxscanroute", "zqxscanroute", null, { vessel: "plate", count: 2 })));
+    const unweighed = await scan(erin, plate(seen("Zqxscanroute", "zqxscanroute", null, { count: 2 })));
     expect(unweighed.items[0]).toMatchObject({ canonical: route, gramsPoint: 240, kcalPoint: 511, startsAt: { measure: "usda-1", amount: 1 }, portionEstimated: true });
   }, 60_000);
 
@@ -398,7 +398,9 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // ── The test plates ─────────────────────────────────────────────────────────
   // Kd's eight plates are the model's replies to his eight photos, as it wrote them
   // on 2026-09-16 with 7a-iii-b's prompt (the text only; no photo is in the
-  // repository). The review plates are the cases PR #71's four reviews found in the
+  // repository), with the vessel, fill and size slots that prompt asked for taken
+  // out (ROADMAP 7a-iv-d), so every row pinned below is the one those replies gave
+  // before. The review plates are the cases PR #71's four reviews found in the
   // old portion code, which read the words of a food's name, written as the model's
   // form writes them: a count of whole pieces and the grams it saw. What a count of
   // cut bits, a container or a serving word once did to a portion is now the grams'
@@ -491,12 +493,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Chicken nuggets", "curated", "~190 g", 190, 583], // two plates of nuggets, not two nuggets
         ["Palak paneer (spinach and cheese curry)", "curated", "~200 g", 200, 202], // eight cubes, not eight cups
         ["Apple", "curated", "~150 g", 150, 78], // eight slices, not eight apples
-        ["Constructor", "estimate", "~50 g", 50, 50], // a name, vessel and size every object answers to
+        ["Constructor", "estimate", "~50 g", 50, 50], // a name every object answers to
       ],
-      // A vessel, how full it looked and a serving word change nothing: the grams say.
+      // A vessel or a serving word in the name changes nothing: the grams say.
       "review-vessels.json": [
-        ["Wine (red)", "curated", "1 × glass", 150, 128], // a glass 0.4 full is still its 150 g pour
-        ["Coffee (black)", "curated", "~120 g", 120, 1], // a cup half full: its 240 g cup is far
+        ["Wine (red)", "curated", "1 × glass", 150, 128], // wine the photo saw at 150 g is its 150 g pour
+        ["Coffee (black)", "curated", "~120 g", 120, 1], // a cup of coffee at 120 g: its 240 g cup is far
         ["Coffee (black)", "curated", "2 × cup", 480, 5], // two mugs at 650 g: two cups are within 30 %
         ["Beer (regular)", "curated", "3 × can", 1068, 459], // three mugs at 975 g
         ["Yogurt (plain, low-fat)", "curated", "2 × container", 340, 214], // two pots shown as cups
@@ -509,7 +511,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Chicken nuggets", "curated", "6 × nugget", 96, 295], // six servings of nuggets are six nuggets
         ["Beef stew", "curated", "2 × cup", 510, 546], // two bowls of stew chunks at 510 g
         ["Ramen bowl", "curated", "~9800 g", 9800, 12446], // 25 bowls would weigh more than an item may
-        ["Pho (beef)", "curated", "1 × bowl", 400, 308], // a bowl 0.6 full is still its bowl
+        ["Pho (beef)", "curated", "1 × bowl", 400, 308], // pho at 400 g is its bowl
         ["Smoothie (fruit)", "curated", "1 × glass", 324, 214],
       ],
     };

@@ -78,8 +78,7 @@ for (const [at, photo] of photos.entries()) {
     usage = { tokensIn: read.tokensIn, tokensOut: read.tokensOut };
     outcome = `${String(read.evidence.items.length)} foods, photo ${read.evidence.photo_quality}`;
     foods = read.evidence.items.map((i) =>
-      `${i.name} (${i.canonical_hint}) · ${i.vessel ?? "no vessel"}${i.fill_level === null ? "" : ` ${String(i.fill_level)} full`}` +
-      `${i.count === null ? "" : ` ×${String(i.count)}`} · ${String(i.grams)} g ${String(i.kcal)} kcal · P ${String(i.protein_g)} C ${String(i.carbs_g)} F ${String(i.fat_g)}`);
+      `${i.name} (${i.canonical_hint})${i.count === null ? "" : ` ×${String(i.count)}`} · ${String(i.grams)} g ${String(i.kcal)} kcal · P ${String(i.protein_g)} C ${String(i.carbs_g)} F ${String(i.fat_g)}`);
     if (read.evidence.unknown_items.length > 0) foods.push(`unknown: ${read.evidence.unknown_items.join(", ")}`);
   } catch (err) {
     if (!(err instanceof VisionProviderError)) throw err;

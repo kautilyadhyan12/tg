@@ -26,7 +26,7 @@ import { scanSheet } from "../src/modules/nutrition/service.js";
 
 /** A scanned food, with the model's five figures as given. */
 const seen = (figures: Partial<Pick<VisionItem, "grams" | "kcal" | "protein_g" | "carbs_g" | "fat_g">>, hint = "zqxfood"): VisionItem => ({
-  name: hint, canonical_hint: hint, vessel: null, fill_level: null, size_class: null, count: null,
+  name: hint, canonical_hint: hint, count: null,
   grams: 100, kcal: 100, protein_g: 0, carbs_g: 25, fat_g: 0, ...figures,
 });
 
@@ -264,7 +264,7 @@ describe("where each priced food's row starts on the photo sheet (ROADMAP 7a-iv-
    *  cup and piece, grams and ounces. */
   const pumpkinMeasures = (): readonly FoodMeasure[] => [CUP, PIECE, GRAMS, OUNCES];
   // Kd's plate "download (3)": 60 g of pumpkin in two pieces, at 30 kcal.
-  const pumpkin: VisionItem = { ...seen({ grams: 60, kcal: 30, protein_g: 1, carbs_g: 7, fat_g: 0 }, "pumpkin"), vessel: "plate", fill_level: 0.2, count: 2 };
+  const pumpkin: VisionItem = { ...seen({ grams: 60, kcal: 30, protein_g: 1, carbs_g: 7, fat_g: 0 }, "pumpkin"), count: 2 };
   const table = (food: FoodReference): ScanPrice => ({ kind: "table", food });
 
   it("is the photo's count of one of the food's measures where that weighs near the grams it saw", () => {
@@ -279,8 +279,8 @@ describe("where each priced food's row starts on the photo sheet (ROADMAP 7a-iv-
   });
 
   it("is the photo's own grams, an estimate, where no count of a measure comes near them", () => {
-    // Three pieces are 90 g, 50 % past the 60 g the photo saw; nor did the vessel or how full it looked change anything.
-    for (const item of [{ ...pumpkin, count: 3 }, { ...pumpkin, count: null }, { ...pumpkin, count: 3, vessel: "katori" as const, fill_level: 1 }]) {
+    // Three pieces are 90 g, 50 % past the 60 g the photo saw.
+    for (const item of [{ ...pumpkin, count: 3 }, { ...pumpkin, count: null }]) {
       const sheet = scanSheet(evidence(item), [table(usdaPumpkin)], pumpkinMeasures);
       expect(sheet.items[0], String(item.count)).toMatchObject({ gramsPoint: 60, startsAt: { measure: "g", amount: 60 }, portionEstimated: true, kcalPoint: 31 });
     }

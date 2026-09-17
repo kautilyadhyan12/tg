@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · 7a-iv-c struck; 7a-iv-d built: the scanner's reply without vessel, fill and size (branch `scanner-reply-trim`)
+
+- 7a-iv-c struck before building (RULINGS 2026-09-16's portion line as amended): Kd asked what remembering the amount is for (*"i eat two apples morning …"*), then what the card is for at all; the chat recommended not building it.
+- 7a-iv-d: Kd asked whether the bowl and fill help; answered (only a dish of known size, the person's own) and *"i agree go"*. Not answered yet: whether "your own dish" (the model suggests "your bowl, ¾ full?", one tap) goes on ROADMAP.
+- Built: the reply is 8 slots a food; the prompt asks "one JSON object only" and the contract reads `[{…}]` as its object (the first shape check came back so, refused as unreadable). Google's token counter was named in the plan as free; Google's pages do not say so, so it was not used.
+- Paid calls (`tools/measure-scan-cost.ts` and a scratch A/B script, outputs in `D:\Projects\ai-home-gym-plates\out-7a-iv-d\`): shape check 1, `[{…}]`, 565 in + 235 out, $0.000757 · shape check 2, one object, 568 + 224, $0.000730 · the eight, $0.000625 average (was $0.000803 on 2026-09-16) · toast plate A/B on Kd's word, today's prompt 3/5/3 foods at 640 in, trimmed 9/5/5 at 568. Sixteen calls, $0.0107.
+- Tests: the eleven plate fixtures lose the three slots (a script checked each of Kd's eight round-trips exactly first), every pinned row unchanged; the unit test reads two real replies of 2026-09-17 (salmon; the list of one) and rejects the old eleven slots, two objects, an empty list and a list in a list.
+- Verified: shared tsc 0 · eslint src test 0 · shared tests 125/125 · api tsc 0 · eslint src test tools 0 · the four scanner files 114/114 on local Postgres · full api 1277 passed, `auth.routes` failing at setup in the full run (its 20 skipped) and 20/20 alone · 6 deliberate breaks each red (no unwrap, unwrap any list, unwrap twice, count and grams swapped, the prompt asking a vessel, "JSON only" back), files restored identical (sha256).
+- Records on this branch: the model-and-effort rule (CLAUDE.md §2.1), 7a-iv-b-ii's tick, 7a-iv-c struck, 7a-iv-d's ruling and tick, 7a-iv-f (lumping) added. The four dashboard images on disk are still not this chat's and are not committed.
+- CI green on f52ab7f. Review (fresh chat, one real scan through the route with real Redis and two users): no Critical/High; three Lows fixed with no re-check — the spec's amendment note, MAX_SCAN_FOODS's per-food figure, and the older entry's "7a-iv-c's pull request".
+- Kd's smoke passed on the local api and web (*"smoke passed merge"*); the test account `kd.scan@aihomegym.test` is left on local Postgres. Merged on his word. Next: 7a-iv-e; 7a-iv-f's place in the order is Kd's; "your own dish" still unanswered.
+
 ## 2026-09-17 · 7a-iv-b-ii built: how far over a target (branch `how-far-over`); the member list planned
 
 - The chat opened on Stage 2 item 3. Kd approved the member list plan, then asked whether to finish nutrition first; he picked the food leftovers first (RULINGS 2026-09-17). Item 3 is split 3a · 3b · 3c in ROADMAP with the approved plan; phone is every gym's backup to email (Kd: *"yes phone as backup"*). Two packages approved for 3a: `read-excel-file`, `libphonenumber-js` (npm, read that day: MIT, updated 2026-08-10 and 2026-09-10). Resend's prices, read that day, are on 3b's line.
@@ -11,6 +23,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: the two files 24/24 · full web 2288 passed, `poseAssets.contract` failing to load as before · eslint on the three files: the same 7 errors in Nutrition.jsx as the handoff before, none new · 4 deliberate breaks each red (clamped at 0, a rounded -0 as over, "about" dropped on an over row, a past day as over), the page's sha256 identical after.
 - Kd's click-through passed (*"allpassed"*) on the local API (local Postgres) and web.
 - Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Ruled (RULINGS 2026-09-17): the health rules hold for typed numbers; built as ROADMAP 7a-iv-e, after 7a-iv-d. Not built.
+- After the merge, UNCOMMITTED on master for 7a-iv-d's pull request to carry (7a-iv-c was struck): the rule that every plan recommends the model and effort (CLAUDE.md §2.1, RULINGS 2026-09-17), this line, and 7a-iv-b-ii's tick in ROADMAP (merged as PR #78).
 - PR #78: CI green on 1eb8b42. Review: no Critical/High; two Lows and a weak test fixed with no re-check (the ring's "/ 140 g", the unreachable -0 case removed, the past-day test renamed); the affected web files 97/97, lint clean on the fixed files. Next: then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
 
 ## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)

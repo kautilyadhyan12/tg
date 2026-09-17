@@ -5,7 +5,7 @@
 // switched-off spare. MEAL_VISION_MODEL picks one at boot, and every model
 // carries its price. Every reply is parsed through the scanner's schemas in
 // @app/shared.
-import { MAX_SCAN_FOODS, MEAL_VESSELS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
+import { MAX_SCAN_FOODS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
@@ -95,12 +95,13 @@ const httpFailure = (status: number): VisionProviderError =>
 //   app shows only where no table has the food, marked "estimate". Never ending
 //   in .0 is for the bill: the shape check wrote "150.0" for every whole number,
 //   and each ".0" is output tokens (the shape check, HANDOFF 2026-09-16);
-// - a vessel from a fixed list, and a count of whole pieces only (the form of
-//   ROADMAP 7a-iii-b; the photo sheet starts a row by the count and the grams,
-//   7a-iv-b);
+// - a count of whole pieces only: the photo sheet starts a row by the count and
+//   the grams (ROADMAP 7a-iv-b), so the vessel, how full it looked and a size word,
+//   which nothing read, are no longer asked for (ROADMAP 7a-iv-d); the first scan
+//   of that prompt wrapped its object in a list, `[{…}]`, so it asks for one object;
 // - at most MAX_SCAN_FOODS items, any other food named in unknown_items, so a
 //   crowded plate's reply ends inside the output cap instead of being cut off.
-export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return JSON only with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, vessel, fill_level, size_class, count, grams, kcal, protein_g, carbs_g, fat_g]. Write the JSON on one line, with no line breaks or indentation, and write null in any slot you cannot fill. Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items. Field formats are strict: meal_name must be a short name for the meal; vessel must be exactly one of ${MEAL_VESSELS.join(", ")}; fill_level must be a number between 0 and 1; size_class must be a string; count must be a positive integer; grams, kcal, protein_g, carbs_g and fat_g must be numbers, your own estimate for the portion shown, always filled, and never end in .0; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Count whole pieces only, never slices, chunks or pieces cut from a bigger item.`;
+export const MEAL_VISION_PROMPT = `Identify visible foods and portion evidence. Return one JSON object only, with meal_name, items, unknown_items, photo_quality, where every item is one list: [name, canonical_hint, count, grams, kcal, protein_g, carbs_g, fat_g]. Write the JSON on one line, with no line breaks or indentation, and write null in any slot you cannot fill. Every item always has both name and canonical_hint; a food you cannot name goes in unknown_items, not in items. List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items. Field formats are strict: meal_name must be a short name for the meal; count must be a positive integer; grams, kcal, protein_g, carbs_g and fat_g must be numbers, your own estimate for the portion shown, always filled, and never end in .0; photo_quality must be exactly "good" or "poor" (lowercase). For canonical_hint, prefer the common everyday or local name of the dish over a generic or fancy description — for example "roti" not "flatbread stack", "dal" not "lentil stew", "paneer" not "cottage cheese", "biryani" not "rice dish". Count only reliably countable items. Say unknown instead of guessing. Count whole pieces only, never slices, chunks or pieces cut from a bigger item.`;
 
 /** The model's JSON text → evidence. A reply that breaks the contract fails
  *  closed and keeps its usage, so the ledger still records the spend. */
