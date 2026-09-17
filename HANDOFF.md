@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · 7a-iv-i built: a scanned name finds the food it means (branch `scanned-name-finds-food`, from `scanner-lists-each-food`)
+
+- Plan measured first (scratchpad `census.mts`, `proto*.mts`, real lookups on the loaded table): the reviewer's shorter-ending order fixed the plates but made wrong foods among 229 typed names; the guarded rule built changes 39 of 382 names, none to a wrong food on the plates. Kd: *"go"*, taken as accepting the near-version cost (masala dosa as plain dosa), since the plan rests on it. Two RULINGS lines.
+- Built: `scanMatch.ts` order (whole name ours · USDA name/head · our shorter name vs USDA every word, 10 kcal tie · packaged · estimate), `findCuratedNamed` and `COMMON_FOOD_PICKS` in `foods.ts` ("bread" → white bread), `repo.usdaFoodWords`, the service's two new lookups. Spec Part 2B Stage 3 amended. No screen, migration, dependency or model call.
+- The eight "-apart" plates: estimates 13 → 5 of 56 foods; sweet corn is Corn (cooked); deli ham is our Ham (sliced) (24 kcal/100 g nearer than USDA's). Re-pinned in the route test, every changed row checked by hand.
+- Tests: scan unit 41/41 · foods unit 22/22 · usda.table 33/33 · scan routes 29/29 on the loaded table and on `aihg_ci_scratch` (no USDA rows) · full api 1331/1331 · api tsc 0, eslint 0 · 10 deliberate breaks red, sha256 identical after.
+- Two new plates (`review-shorter-names`, `review-names-kept-whole`), 60 copied USDA rows in USDA id order (another order flipped vanilla yogurt to Greek on the empty table), 13 cited entries added to `usda-plate-foods.json`.
+- Open for Kd: plate (6)'s white bread starts at "2 × cup, cubes" (the 7a-iv-b start rule picks the nearest measure); options in the chat. Peanut butter cups still read peanut butter (ROADMAP 10).
+- Next: PR to master; this card's fresh review; #80's reviewer re-checks High 1 against this branch; #80 merges, then this; one click-through of both. The four dashboard images are still not this card's.
+
 ## 2026-09-17 · 7a-iv-f built: the scanner lists each food apart (branch `scanner-lists-each-food`, PR #80)
 
 - Kd asked why the card when his scans list foods apart; answered from the saved scans (toast plate apart 1 of 4; 4 of 8 plates joined foods). *"ok build"* to the plan, which put the line at foods seen apart vs a dish cooked or mixed into one, or a closed sandwich (RULINGS amended).

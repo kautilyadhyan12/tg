@@ -25,7 +25,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, curatedUsdaFdcId, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedNamed, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import * as repo from "./repo.js";
@@ -443,9 +443,18 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
     const food = findCurated(hint);
     return food === null ? null : asReference(food);
   },
+  ourListNamed: (name) => {
+    const food = findCuratedNamed(name);
+    return food === null ? null : asReference(food);
+  },
   usda: async (hint, seen) => {
     const found = await repo.usdaFoodForScan(deps.sql, hint, seen);
-    return found === null ? null : asUsdaReference(found.food);
+    return found === null ? null : { food: asUsdaReference(found.food), byEveryWord: found.match === "words" };
+  },
+  foodWords: async (words) => {
+    const ours = words.filter((word) => findCurated(word) !== null);
+    const usda = await repo.usdaFoodWords(deps.sql, words.filter((word) => !ours.includes(word)));
+    return new Set([...ours, ...usda]);
   },
   packaged: async (hint) => {
     const [product] = await cachedExternal(deps, hint, 1);

@@ -13,6 +13,7 @@ import {
   usdaCanonical,
   usdaFoodByCanonical,
   usdaFoodForScan,
+  usdaFoodWords,
   usdaSearchWords,
   usdaTsQuery,
 } from "../src/modules/nutrition/repo.js";
@@ -369,6 +370,22 @@ d("the USDA food table (real Postgres)", () => {
       expect(await scanned("zqxsname%")).toEqual([90_000_040, "name"]);
       expect(await scanned("&& !!")).toBeNull();
       expect(await scanned("of the")).toBeNull();
+    });
+  });
+
+  describe("the words a scan drops that are a USDA food's own name (ROADMAP 7a-iv-i)", () => {
+    it("are the words a priceable description is, or is the head of, and no other", async () => {
+      // "Zqxsname" is a whole description, "Zqxshead, raw" and "Zqxsdish, zqxsrel, baked" heads. "Zqxsrel zqxsdish pie"
+      // only starts with its word, "Bread, zqxsbanana" holds it after another food's, and the last two cannot be priced.
+      const words = ["zqxsname", "zqxshead", "zqxsdish", "zqxsrel", "zqxsbanana", "zqxsnofat", "zqxsnokcal", "zqxnotaword"];
+      expect(await usdaFoodWords(sql, words)).toEqual(new Set(["zqxsname", "zqxshead", "zqxsdish"]));
+    });
+
+    it("asks only a word the search's own rule reads as that one word, so none carries a wildcard or an accent", async () => {
+      // "zqxpate" is the head of "Zqxpâté, liver" as folded; each other spelling of it, or of a food above, is not asked.
+      const words = ["zqxpate", "zqxpâté", "ZQXSNAME", "zqxsname%", "zqxs_ame", "zqxs%", "zqxsname zqxshead", "3.25", ""];
+      expect(await usdaFoodWords(sql, words)).toEqual(new Set(["zqxpate"]));
+      expect(await usdaFoodWords(sql, [])).toEqual(new Set());
     });
   });
 

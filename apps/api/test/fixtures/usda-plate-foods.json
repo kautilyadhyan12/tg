@@ -53,6 +53,19 @@
     {"fdcId":2708700,"release":"fndds","description":"Egg roll, meatless","figures":[270,5.62,30.02,14.14,2.3],"portions":[[1,null,"1 miniature egg roll",13],[2,null,"1 egg roll",64]]},
     {"fdcId":2709153,"release":"fndds","description":"Ramen bowl, NFS","figures":[127,7.13,13.95,4.57,0.9],"portions":[[1,null,"1 cup",245]]},
     {"fdcId":2709402,"release":"fndds","description":"Potato, roasted, NFS","figures":[126,1.87,20.45,4.25,1.4],"portions":[[1,null,"1 baby potato",60],[2,null,"1 new potato",60],[3,null,"1 small",130],[4,null,"1 medium",170],[5,null,"1 large",300],[6,null,"1 cup",160]]},
-    {"fdcId":2709631,"release":"fndds","description":"Palak Paneer","figures":[101,5.42,4.28,7.02,0.9],"portions":[[1,null,"1 cup",200]]}
+    {"fdcId":2709631,"release":"fndds","description":"Palak Paneer","figures":[101,5.42,4.28,7.02,0.9],"portions":[[1,null,"1 cup",200]]},
+    {"fdcId":170585,"release":"sr_legacy","description":"Nuts, mixed nuts, dry roasted, with peanuts, without salt added","figures":[607,19.5,22.42,53.5,6.4],"portions":[[1,1,"cup",131],[2,1,"oz",28.35]]},
+    {"fdcId":2710472,"release":"fndds","description":"Coffee, Cappuccino","figures":[27,1.71,2.75,0.99,0],"portions":[[1,null,"1 fl oz",30],[5,null,"1 cup (8 fl oz)",240],[6,null,"1 small",360],[7,null,"1 medium",480],[8,null,"1 large",600]]},
+    {"fdcId":2710386,"release":"fndds","description":"Coffee, Latte","figures":[43,2.81,4.35,1.61,0],"portions":[[1,null,"1 fl oz",30],[2,null,"1 cup (8 fl oz)",240],[3,null,"1 small",360],[4,null,"1 medium",480],[5,null,"1 large",600]]},
+    {"fdcId":172388,"release":"sr_legacy","description":"Chicken, broilers or fryers, thigh, meat only, cooked, roasted","figures":[179,24.76,0,8.15,0],"portions":[[1,3,"oz",85],[2,1,"thigh without skin",116],[3,1,"thigh with skin",137]]},
+    {"fdcId":174924,"release":"sr_legacy","description":"Bread, white, commercially prepared (includes soft bread crumbs)","figures":[266,8.85,49.42,3.33,2.7],"portions":[[1,1,"slice",29],[2,1,"oz",28.35],[3,1,"cup, crumbs",45],[4,1,"cup, cubes",35],[5,1,"slice, large",30],[6,1,"slice",25],[7,1,"slice crust not eaten",12],[8,1,"slice, thin",20],[9,1,"slice thin, crust not eaten",9],[10,1,"slice, very thin",15]]},
+    {"fdcId":170880,"release":"sr_legacy","description":"Milk, chocolate, fluid, commercial, reduced fat, with added vitamin A and vitamin D","figures":[76,2.99,12.13,1.9,0.7],"portions":[[1,1,"cup",250],[2,1,"fl oz",31.2],[3,1,"quart",1000]]},
+    {"fdcId":174832,"release":"sr_legacy","description":"Beverages, almond milk, unsweetened, shelf stable","figures":[15,0.4,1.31,0.96,0.2],"portions":[[1,1,"cup",262]]},
+    {"fdcId":2708952,"release":"fndds","description":"Rice, fried, NFS","figures":[174,3.84,32.5,3.19,1.1],"portions":[[1,null,"1 cup",198]]},
+    {"fdcId":170093,"release":"sr_legacy","description":"Potatoes, baked, flesh and skin, without salt","figures":[93,2.5,21.15,0.13,2.2],"portions":[[1,1,"NLEA serving",148],[2,1,"potato large",299],[3,1,"potato medium",173],[4,1,"potato small",138]]},
+    {"fdcId":172183,"release":"sr_legacy","description":"Egg, white, raw, fresh","figures":[52,10.9,0.73,0.17,0],"portions":[[1,1,"large",33],[2,1,"cup",243]]},
+    {"fdcId":173227,"release":"sr_legacy","description":"Beverages, tea, black, brewed, prepared with tap water","figures":[1,0,0.3,0,0],"portions":[[1,1,"fl oz",29.6],[2,6,"fl oz",178],[3,1,"cup (8 fl oz)",237]]},
+    {"fdcId":2708347,"release":"fndds","description":"Dosa, plain","figures":[210,5.7,37.04,4.05,1.8],"portions":[[1,null,"1 small",35],[2,null,"1 medium",80],[3,null,"1 large",155],[4,null,"1 surface inch",1]]},
+    {"fdcId":2708705,"release":"fndds","description":"Wonton, dumpling or pot sticker, fried","figures":[192,8.76,14.05,11.13,1.5],"portions":[[1,null,"1 item, any size",25],[2,null,"1 cup",75]]}
   ]
 }

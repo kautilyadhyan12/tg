@@ -11,8 +11,11 @@ import {
   ENERGY_TOLERANCE,
   ESTIMATE_CANONICAL_PREFIX,
   MAX_ESTIMATE_KCAL_PER_100G,
+  MAX_SHORTENED_NAME_WORDS,
+  SHORTER_NAME_TIE_KCAL,
   WRONG_FOOD_MIN_GAP_KCAL,
   WRONG_FOOD_RATIO,
+  agreesWithScan,
   energySeen,
   estimateFood,
   estimatePer100g,
@@ -144,25 +147,49 @@ describe("the energy a scan saw, which chooses among USDA entries of one name", 
   });
 });
 
-describe("the order a scanned food is priced in", () => {
-  /** Lookups that answer from the given foods and say which were asked, and with what energy. */
-  const lookups = (answers: { ourList?: FoodReference; usda?: FoodReference; packaged?: FoodReference }) => {
-    const asked: string[] = [];
-    const usdaSaw: (EnergySeen | null)[] = [];
-    const ask = (rung: keyof typeof answers) => (hint: string): FoodReference | null => {
-      asked.push(`${rung}:${hint}`);
-      return answers[rung] ?? null;
-    };
-    const table: ScanLookups = {
-      ourList: ask("ourList"),
-      usda: (hint, energy) => {
-        usdaSaw.push(energy);
-        return Promise.resolve(ask("usda")(hint));
-      },
-      packaged: (hint) => Promise.resolve(ask("packaged")(hint)),
-    };
-    return { asked, usdaSaw, table };
+interface Answers {
+  ourList?: FoodReference;
+  /** Our list's food for each shorter name. */
+  named?: ReadonlyMap<string, FoodReference>;
+  usda?: FoodReference;
+  /** Whether USDA's answer holds every word rather than being the food of that name. */
+  usdaByEveryWord?: boolean;
+  /** The words that are a food of their own. */
+  foodWords?: readonly string[];
+  packaged?: FoodReference;
+}
+
+/** Lookups that answer from the given foods and say what was asked, in order, and with what energy. */
+const lookups = (answers: Answers) => {
+  const asked: string[] = [];
+  const usdaSaw: (EnergySeen | null)[] = [];
+  const table: ScanLookups = {
+    ourList: (hint) => {
+      asked.push(`ourList:${hint}`);
+      return answers.ourList ?? null;
+    },
+    ourListNamed: (name) => {
+      asked.push(`ourListNamed:${name}`);
+      return answers.named?.get(name) ?? null;
+    },
+    usda: (hint, energy) => {
+      asked.push(`usda:${hint}`);
+      usdaSaw.push(energy);
+      return Promise.resolve(answers.usda === undefined ? null : { food: answers.usda, byEveryWord: answers.usdaByEveryWord ?? false });
+    },
+    foodWords: (words) => {
+      asked.push(`foodWords:${words.join(" ")}`);
+      return Promise.resolve(new Set(words.filter((word) => answers.foodWords?.includes(word) === true)));
+    },
+    packaged: (hint) => {
+      asked.push(`packaged:${hint}`);
+      return Promise.resolve(answers.packaged ?? null);
+    },
   };
+  return { asked, usdaSaw, table };
+};
+
+describe("the order a scanned food is priced in", () => {
   const plate = seen({ grams: 200, kcal: 200, protein_g: 0, carbs_g: 50, fat_g: 0 }, "zqxdish");
   const ours = tableFood("ours", 110);
   const usda = tableFood("usda", 90, "usda");
@@ -199,8 +226,15 @@ describe("the order a scanned food is priced in", () => {
 
   it("gives a table food 3× from the model's energy way to the estimate, whichever table answered, never to the next table", async () => {
     // The model saw 100 kcal per 100 g; each table's food here is over 300.
-    for (const [rung, food] of [["ourList", tableFood("ours far", 301)], ["usda", tableFood("usda far", 301, "usda")], ["packaged", tableFood("packaged far", 301, "openfoodfacts")]] as const) {
-      const run = lookups(rung === "ourList" ? { ourList: food } : rung === "usda" ? { usda: food } : { packaged: food });
+    const far = (name: string, source: FoodReference["source"]) => tableFood(name, 301, source);
+    const runs: [string, Answers, FoodReference][] = [
+      ["ourList", { ourList: far("ours far", "curated") }, far("ours far", "curated")],
+      ["usda", { usda: far("usda far", "usda") }, far("usda far", "usda")],
+      ["usda", { usda: far("usda far", "usda"), usdaByEveryWord: true }, far("usda far", "usda")],
+      ["packaged", { packaged: far("packaged far", "openfoodfacts") }, far("packaged far", "openfoodfacts")],
+    ];
+    for (const [rung, answers, food] of runs) {
+      const run = lookups(answers);
       expect(await priceScannedFood(plate, run.table), rung).toEqual({ kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200, overruled: food });
       expect(run.asked.at(-1), rung).toBe(`${rung}:zqxdish`);
     }
@@ -227,6 +261,185 @@ describe("the order a scanned food is priced in", () => {
     const hinted = lookups(answering);
     expect(await priceScannedFood({ ...plate, name: "unknown", canonical_hint: "zqxdish" }, hinted.table)).toEqual({ kind: "table", food: ours });
     expect(hinted.asked).toEqual(["ourList:zqxdish"]);
+  });
+});
+
+describe("a name our list holds only shorter (ROADMAP 7a-iv-i)", () => {
+  // The model saw 200 g at 200 kcal: 100 kcal per 100 g, good to 60 kcal on the plate.
+  const figures = { grams: 200, kcal: 200, protein_g: 0, carbs_g: 50, fat_g: 0 };
+  const ESTIMATE = { kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200 } as const;
+  const food = (name: string, kcal: number, source: FoodReference["source"] = "curated") => tableFood(name, kcal, source);
+  const named = (...entries: [string, FoodReference][]) => new Map(entries);
+  interface Case {
+    label: string;
+    hint: string;
+    answers: Answers;
+    figures?: Partial<Pick<VisionItem, "grams" | "kcal" | "protein_g" | "carbs_g" | "fat_g">>;
+    expected: ScanPrice;
+    /** Everything asked, in order. */
+    asked: string[];
+  }
+  const cases: Case[] = [
+    {
+      label: "our list's food of the name with its first word dropped, where that word is no food and the food carries what the model saw",
+      hint: "zqxsteamed zqxfood",
+      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      expected: { kind: "table", food: food("zqxfood", 100) },
+      // Never a packaged product: our list's food is found first.
+      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqxsteamed"],
+    },
+    {
+      label: "the longest shorter name our list holds, which drops the fewest words",
+      hint: "zqxscored zqxpork zqxsausage",
+      answers: { named: named(["zqxpork zqxsausage", food("zqxpork sausage", 100)], ["zqxsausage", food("zqxsausage", 100)]) },
+      expected: { kind: "table", food: food("zqxpork sausage", 100) },
+      asked: ["ourList:zqxscored zqxpork zqxsausage", "usda:zqxscored zqxpork zqxsausage", "ourListNamed:zqxpork zqxsausage", "foodWords:zqxscored"],
+    },
+    {
+      label: "no food, where the longest shorter name's food is not what the model saw: never a still shorter name",
+      hint: "zqxscored zqxpork zqxsausage",
+      answers: { named: named(["zqxpork zqxsausage", food("zqxpork sausage", 300)], ["zqxsausage", food("zqxsausage", 100)]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:zqxscored zqxpork zqxsausage", "usda:zqxscored zqxpork zqxsausage", "ourListNamed:zqxpork zqxsausage", "foodWords:zqxscored", "packaged:zqxscored zqxpork zqxsausage"],
+    },
+    {
+      label: "no food, where a dropped word is a food of its own (chicken salad is no salad)",
+      hint: "zqxchicken zqxsalad",
+      answers: { named: named(["zqxsalad", food("zqxsalad", 100)]), foodWords: ["zqxchicken"] },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:zqxchicken zqxsalad", "usda:zqxchicken zqxsalad", "ourListNamed:zqxsalad", "foodWords:zqxchicken", "packaged:zqxchicken zqxsalad"],
+    },
+    {
+      label: "no food, where any dropped word is a food, not only the first (light coconut milk is no milk)",
+      hint: "zqxlight zqxcoconut zqxmilk",
+      answers: { named: named(["zqxmilk", food("zqxmilk", 100)]), foodWords: ["zqxcoconut"] },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:zqxlight zqxcoconut zqxmilk", "usda:zqxlight zqxcoconut zqxmilk", "ourListNamed:zqxcoconut zqxmilk", "ourListNamed:zqxmilk", "foodWords:zqxlight zqxcoconut", "packaged:zqxlight zqxcoconut zqxmilk"],
+    },
+    {
+      label: "the shorter name before the food word, which drops only the words before it",
+      hint: "zqxlight zqxcoconut zqxmilk",
+      answers: { named: named(["zqxcoconut zqxmilk", food("zqxcoconut milk", 100)], ["zqxmilk", food("zqxmilk", 100)]), foodWords: ["zqxcoconut"] },
+      expected: { kind: "table", food: food("zqxcoconut milk", 100) },
+      asked: ["ourList:zqxlight zqxcoconut zqxmilk", "usda:zqxlight zqxcoconut zqxmilk", "ourListNamed:zqxcoconut zqxmilk", "foodWords:zqxlight"],
+    },
+    {
+      label: "no food, and nothing shortened or asked about, where the model gave no usable number",
+      hint: "zqxsteamed zqxfood",
+      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      figures: { fat_g: null },
+      expected: { kind: "none" },
+      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "packaged:zqxsteamed zqxfood"],
+    },
+    {
+      label: "our list's shorter name where the whole name's food is another food: no other table is asked the whole name",
+      hint: "zqxsteamed zqxfood",
+      answers: { ourList: food("zqxfar", 301), named: named(["zqxfood", food("zqxfood", 100)]) },
+      expected: { kind: "table", food: food("zqxfood", 100) },
+      asked: ["ourList:zqxsteamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqxsteamed"],
+    },
+    {
+      label: "the estimate, naming the whole name's other food, where no shorter name has one either",
+      hint: "zqxsteamed zqxfood",
+      answers: { usda: food("zqxfar", 301, "usda") },
+      expected: { ...ESTIMATE, overruled: food("zqxfar", 301, "usda") },
+      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "ourListNamed:zqxfood"],
+    },
+    {
+      label: "USDA's food of every word where ours of a shorter name is further than it from what the model saw",
+      hint: "zqxvanilla zqxyogurt",
+      answers: { usda: food("zqxvanilla yogurt", 100, "usda"), usdaByEveryWord: true, named: named(["zqxyogurt", food("zqxyogurt", 110.1)]) },
+      expected: { kind: "table", food: food("zqxvanilla yogurt", 100, "usda") },
+      asked: ["ourList:zqxvanilla zqxyogurt", "usda:zqxvanilla zqxyogurt", "ourListNamed:zqxyogurt", "foodWords:zqxvanilla"],
+    },
+    {
+      label: "ours of a shorter name where USDA's food of every word is no more than 10 kcal per 100 g nearer",
+      hint: "zqxsweet zqxcorn",
+      answers: { usda: food("zqxcorn raw", 100, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 110)]) },
+      expected: { kind: "table", food: food("zqxcorn cooked", 110) },
+      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+    },
+    {
+      label: "ours of a shorter name where USDA's food of every word is the further one",
+      hint: "zqxsweet zqxcorn",
+      answers: { usda: food("zqxcorn raw", 80, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 100)]) },
+      expected: { kind: "table", food: food("zqxcorn cooked", 100) },
+      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+    },
+    {
+      label: "ours of a shorter name where USDA's food of every word is another food",
+      hint: "zqxsweet zqxcorn",
+      answers: { usda: food("zqxcorn syrup", 301, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 100)]) },
+      expected: { kind: "table", food: food("zqxcorn cooked", 100) },
+      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+    },
+    {
+      label: "USDA's food of every word where our list has no shorter name, as before",
+      hint: "zqxsweet zqxcorn",
+      answers: { usda: food("zqxcorn raw", 80, "usda"), usdaByEveryWord: true },
+      expected: { kind: "table", food: food("zqxcorn raw", 80, "usda") },
+      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn"],
+    },
+    {
+      label: "the estimate, naming USDA's other food, where USDA's food of every word is another food and our list has none",
+      hint: "zqxsweet zqxcorn",
+      answers: { usda: food("zqxcorn syrup", 301, "usda"), usdaByEveryWord: true },
+      expected: { ...ESTIMATE, overruled: food("zqxcorn syrup", 301, "usda") },
+      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn"],
+    },
+    {
+      label: "a name of ten words, shortened",
+      hint: "zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
+      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      expected: { kind: "table", food: food("zqxfood", 100) },
+      asked: [
+        "ourList:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "usda:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
+        "ourListNamed:zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
+        "ourListNamed:zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxf zqxg zqxh zqxi zqxfood",
+        "ourListNamed:zqxg zqxh zqxi zqxfood", "ourListNamed:zqxh zqxi zqxfood", "ourListNamed:zqxi zqxfood", "ourListNamed:zqxfood",
+        "foodWords:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi",
+      ],
+    },
+    {
+      label: "a name of eleven words, never shortened",
+      hint: "zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood",
+      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood", "usda:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood", "packaged:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood"],
+    },
+    {
+      label: "a name's words as the food list reads them: accents folded, lower case, anything else a space",
+      hint: "Zqx-Stéamed  ZQXFOOD!",
+      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      expected: { kind: "table", food: food("zqxfood", 100) },
+      asked: ["ourList:Zqx-Stéamed  ZQXFOOD!", "usda:Zqx-Stéamed  ZQXFOOD!", "ourListNamed:steamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqx steamed"],
+    },
+  ];
+
+  for (const c of cases) {
+    it(`is ${c.label}`, async () => {
+      const run = lookups(c.answers);
+      expect(await priceScannedFood(seen({ ...figures, ...c.figures }, c.hint), run.table)).toEqual(c.expected);
+      expect(run.asked).toEqual(c.asked);
+    });
+  }
+
+  it("holds the shorter name's food to the model's own error on the plate, 30 % or 10 kcal, not to three times", async () => {
+    expect([MAX_SHORTENED_NAME_WORDS, SHORTER_NAME_TIE_KCAL]).toEqual([10, 10]);
+    const priced = async (kcalPer100g: number, plateFigures: Partial<typeof figures> = figures): Promise<ScanPrice> =>
+      priceScannedFood(seen({ ...figures, ...plateFigures }, "zqxsteamed zqxfood"), lookups({ named: named(["zqxfood", food("zqxfood", kcalPer100g)]) }).table);
+    // 200 kcal the model saw in 200 g: 140 to 260 on the plate, 70 to 130 per 100 g.
+    const cases: [number, boolean][] = [[130, true], [130.1, false], [70, true], [69.9, false], [100, true]];
+    for (const [kcal, taken] of cases) expect((await priced(kcal)).kind, String(kcal)).toBe(taken ? "table" : "estimate");
+    // Each of those refused is well within three times: the rule is the tighter one.
+    expect(isWrongFood(130.1, { kcal: 100, proteinG: 0, carbsG: 0, fatG: 0 }) || isWrongFood(69.9, { kcal: 100, proteinG: 0, carbsG: 0, fatG: 0 })).toBe(false);
+    // 20 kcal in 20 g: 30 % is 6, so the 10 kcal holds — 10 to 30 on the plate, 50 to 150 per 100 g.
+    const small = { grams: 20, kcal: 20, carbs_g: 5 };
+    for (const [kcal, taken] of [[150, true], [150.1, false], [50, true], [49.9, false]] as const) {
+      expect((await priced(kcal, small)).kind, `small ${String(kcal)}`).toBe(taken ? "table" : "estimate");
+    }
+    expect(agreesWithScan(130, 200, 200)).toBe(true);
+    expect(agreesWithScan(130.1, 200, 200)).toBe(false);
   });
 });
 

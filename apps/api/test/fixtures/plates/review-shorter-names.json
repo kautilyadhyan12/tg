@@ -1,0 +1,18 @@
+{
+  "meal_name": "Shorter names plate",
+  "items": [
+    ["Grilled corn","grilled corn",1,90,99,3,19,2],
+    ["Jacket potato","jacket potato",1,250,233,6,53,0],
+    ["Basmati rice","basmati rice",null,150,195,4,42,1],
+    ["Boiled egg whites","boiled egg whites",2,66,34,7,0,0],
+    ["Steamed rice","steamed rice",null,150,195,4,42,1],
+    ["Baby carrots","baby carrots",10,90,32,1,7,0],
+    ["Green tea","green tea",1,240,2,0,0,0],
+    ["Masala dosa","masala dosa",1,150,255,6,38,9],
+    ["Steamed dumplings","steamed dumplings",6,180,270,12,32,10],
+    ["Vanilla yogurt","vanilla yogurt",1,170,145,6,24,3],
+    ["Grilled shrimp","grilled shrimp",6,90,99,21,0,2]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

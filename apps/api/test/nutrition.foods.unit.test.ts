@@ -4,7 +4,7 @@
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
-import { CURATED_FOODS, FOOD_ALIASES, findCurated, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, findCurated, findCuratedNamed, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -268,6 +268,38 @@ describe("the food a name means", () => {
     for (const [alias, canonical] of FOOD_ALIASES) {
       expect(CURATED_FOODS.some((f) => f.canonical === canonical), `${alias} → ${canonical}`).toBe(true);
       expect(findCurated(alias)?.canonical, alias).toBe(canonical);
+    }
+  });
+
+  it("is the one the list picks for a word several foods answer to, and bread alone is white bread (RULINGS 2026-09-17)", () => {
+    expect(findCurated("bread")?.canonical).toBe("white_bread");
+    expect(findCurated("Bread Slices")?.canonical).toBe("white_bread");
+    for (const [word, canonical] of COMMON_FOOD_PICKS) {
+      expect(FOOD_ALIASES.get(word), word).toBe(canonical);
+      expect(findCurated(word)?.canonical, word).toBe(canonical);
+    }
+  });
+
+  it("is never a pick where the name is one the scanner shortened, and is findCurated's food for every other name", () => {
+    // A shorter name the scanner reads (scanMatch.ts) is part of a longer one: the
+    // model named more than the word, so the list's pick for the word alone is not it.
+    for (const [word, canonical] of COMMON_FOOD_PICKS) {
+      expect(findCuratedNamed(word)?.canonical, word).not.toBe(canonical);
+      expect(findCuratedNamed(`${word}s`)?.canonical, `${word}s`).not.toBe(canonical);
+    }
+    expect(findCuratedNamed("cheese")).toBeNull();
+    expect(findCuratedNamed("cookies")).toBeNull();
+    for (const [alias, canonical] of FOOD_ALIASES) {
+      if (!COMMON_FOOD_PICKS.has(alias)) expect(findCuratedNamed(alias)?.canonical, alias).toBe(canonical);
+    }
+    for (const f of CURATED_FOODS) {
+      expect(findCuratedNamed(f.name), f.name).toBe(f);
+      expect(findCuratedNamed(f.canonical), f.canonical).toBe(f);
+    }
+    // The list's own words and noise words are read as findCurated reads them.
+    for (const name of ["broccoli", "avocado", "pork sausage", "egg whites", "latte", "Pizza Slice", "apple slices", "white rice", "corn"]) {
+      expect(findCuratedNamed(name), name).toBe(findCurated(name));
+      expect(findCuratedNamed(name), name).not.toBeNull();
     }
   });
 

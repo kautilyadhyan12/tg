@@ -78,14 +78,24 @@ export function isWrongFood(tableKcalPer100g: number, estimate: Per100g | null):
   return high > WRONG_FOOD_RATIO * low && high - low > WRONG_FOOD_MIN_GAP_KCAL;
 }
 
-/** Where a scanned food's numbers can come from, in the order they are asked. */
+/** What the USDA table answers a name with, and how: by the food of that name
+ *  (the whole description, or its head), or by every word of it. */
+export interface UsdaScanAnswer { food: FoodReference; byEveryWord: boolean }
+
+/** Where a scanned food's numbers can come from. */
 export interface ScanLookups {
-  /** Our own list, by whole words (`findCurated`). */
+  /** Our own list, by the whole name (`findCurated`). */
   ourList(hint: string): FoodReference | null;
+  /** Our own list, by a shorter name: the food that name is, never the list's
+   *  pick for a word several foods answer to (`findCuratedNamed`). */
+  ourListNamed(name: string): FoodReference | null;
   /** The USDA table: the food itself by name, then every word; among the entries
    *  a name finds equally, the plainest of those as near to what the model saw as
    *  its estimate can tell. */
-  usda(hint: string, seen: EnergySeen | null): Promise<FoodReference | null>;
+  usda(hint: string, seen: EnergySeen | null): Promise<UsdaScanAnswer | null>;
+  /** Which of these words name a food of their own: one our list finds by the
+   *  word alone, or a USDA food of that name. */
+  foodWords(words: readonly string[]): Promise<ReadonlySet<string>>;
   /** A packaged product whose name holds every word. */
   packaged(hint: string): Promise<FoodReference | null>;
 }
@@ -98,11 +108,91 @@ export type ScanPrice =
   /** Nothing has it and the model gave no usable number: left out of the total, and named. */
   | { kind: "none" };
 
-/** Our list → USDA → a packaged product → the model's estimate. A lower table is
- *  asked only when the one above has nothing, and whichever answers is checked
- *  against the model's own energy; one that fails gives way to the estimate, not
- *  to the next table, since the next table's answer to the same name is the same
- *  guess made worse.
+/** A name of more words than this is never shortened: ten words is far past a
+ *  food's name, and the USDA lookup reads no more of one (`repo.usdaSearchWords`). */
+export const MAX_SHORTENED_NAME_WORDS = 10;
+
+/** How much nearer, in kcal per 100 g, USDA's food holding every word of a name
+ *  must be to the model's energy than our list's food of a shorter name, to be
+ *  taken over it. Within that the two are one food made two ways — "sweet corn"
+ *  seen at 90 is our list's cooked corn (96), not USDA's raw white corn (86) — and
+ *  our list's is the one checked by hand; past it, the word ours drops is what the
+ *  plate shows: "vanilla yogurt" seen at 85 is USDA's vanilla yogurt (85), not our
+ *  plain one (63). Its own rule, though 10 as `USDA_TIE_KCAL` is. */
+export const SHORTER_NAME_TIE_KCAL = 10;
+
+/** Whether a food carries, at the grams the model saw, the kcal it saw: within
+ *  the model's own error, the 30 % or 10 kcal its macros are held to against its
+ *  kcal (`estimatePer100g`). A food found by a shorter name is a broader food than
+ *  the one the model named, so it must agree with the plate this closely, not
+ *  only be within three times of it. */
+export function agreesWithScan(tableKcalPer100g: number, grams: number, kcal: number): boolean {
+  return Math.abs((tableKcalPer100g * grams) / 100 - kcal) <= Math.max(ENERGY_TOLERANCE * kcal, ENERGY_SLACK_KCAL);
+}
+
+/** Our list's food for a SHORTER NAME — the name with its first words dropped,
+ *  the longest our list holds ("scored pork sausage" is our pork sausage,
+ *  "steamed broccoli" our cooked broccoli) — or null. A dropped word that is a
+ *  food of its own is part of what the food is, so the name is never shortened
+ *  past it: "chicken salad" is no salad, "light coconut milk" no milk, "cherry
+ *  tomato" no tomato. The food must carry the kcal the model saw
+ *  (`agreesWithScan`), so it needs the model's own figures: without them no name
+ *  is shortened. A food the plate shows in a version our list does not hold reads
+ *  as the version it does, as the shorter name alone would: "masala dosa" is our
+ *  plain dosa (Kd, RULINGS 2026-09-17). */
+async function shorterNameFood(item: VisionItem, estimate: Per100g | null, lookups: ScanLookups): Promise<FoodReference | null> {
+  if (estimate === null || item.grams === null || item.kcal === null) return null;
+  const words = slug(item.canonical_hint).split("_").filter((word) => word !== "");
+  if (words.length > MAX_SHORTENED_NAME_WORDS) return null;
+  for (let drop = 1; drop < words.length; drop++) {
+    const food = lookups.ourListNamed(words.slice(drop).join(" "));
+    if (food === null) continue;
+    const dropped = words.slice(0, drop);
+    const foods = await lookups.foodWords(dropped);
+    if (dropped.some((word) => foods.has(word))) return null;
+    return agreesWithScan(food.kcal, item.grams, item.kcal) ? food : null;
+  }
+  return null;
+}
+
+/** The table food a scanned name finds, or none, and the food a table answered
+ *  that the model's energy says is another (`overruled`). In this order:
+ *   1. our list by the whole name;
+ *   2. the USDA food of that name, its whole description or its head;
+ *   3. our list by a shorter name (`shorterNameFood`), set against
+ *   4. USDA's food holding every word of the name, which is taken over ours only
+ *      where it is clearly nearer to the model's energy (`SHORTER_NAME_TIE_KCAL`);
+ *   5. a packaged product.
+ *  Every table's answer is checked against the model's own energy (`isWrongFood`).
+ *  An answer to the whole name that fails it named another food, and no other
+ *  table is asked that name — its answer to the same name is the same guess made
+ *  worse — but our list is still asked a shorter name, whose food must agree with
+ *  the plate more closely still. */
+async function tableFood(item: VisionItem, estimate: Per100g | null, lookups: ScanLookups): Promise<{ food: FoodReference | null; overruled: FoodReference | null }> {
+  const hint = item.canonical_hint;
+  let named = lookups.ourList(hint);
+  let everyWord: FoodReference | null = null;
+  if (named === null) {
+    const usda = await lookups.usda(hint, energySeen(estimate));
+    if (usda?.byEveryWord === true) everyWord = usda.food;
+    else named = usda?.food ?? null;
+  }
+  if (named !== null && !isWrongFood(named.kcal, estimate)) return { food: named, overruled: null };
+  const shorter = await shorterNameFood(item, estimate, lookups);
+  if (named !== null) return { food: shorter, overruled: named };
+  if (everyWord !== null) {
+    if (isWrongFood(everyWord.kcal, estimate)) return { food: shorter, overruled: everyWord };
+    if (shorter === null || estimate === null) return { food: everyWord, overruled: null };
+    const nearer = Math.abs(everyWord.kcal - estimate.kcal) + SHORTER_NAME_TIE_KCAL < Math.abs(shorter.kcal - estimate.kcal);
+    return { food: nearer ? everyWord : shorter, overruled: null };
+  }
+  if (shorter !== null) return { food: shorter, overruled: null };
+  const product = await lookups.packaged(hint);
+  if (product === null || !isWrongFood(product.kcal, estimate)) return { food: product, overruled: null };
+  return { food: null, overruled: product };
+}
+
+/** A table's food where one has it (`tableFood`), else the model's estimate.
  *
  *  A table is asked by a name only. A canonical_hint that says there is none
  *  ("unknown", "N/A") would find whatever a table happens to call by that word, so
@@ -111,14 +201,11 @@ export type ScanPrice =
  *  it — the prompt puts a food the model cannot name in unknown_items. */
 export async function priceScannedFood(item: VisionItem, lookups: ScanLookups): Promise<ScanPrice> {
   const estimate = estimatePer100g(item);
-  const hint = item.canonical_hint;
-  const hinted = !isNoValueWord(hint);
+  const hinted = !isNoValueWord(item.canonical_hint);
   if (!hinted && isNoValueWord(item.name)) return { kind: "none" };
-  const food = hinted
-    ? (lookups.ourList(hint) ?? (await lookups.usda(hint, energySeen(estimate))) ?? (await lookups.packaged(hint)))
-    : null;
-  if (food !== null && !isWrongFood(food.kcal, estimate)) return { kind: "table", food };
-  if (estimate !== null && item.grams !== null) return { kind: "estimate", per100g: estimate, grams: item.grams, overruled: food };
+  const { food, overruled } = hinted ? await tableFood(item, estimate, lookups) : { food: null, overruled: null };
+  if (food !== null) return { kind: "table", food };
+  if (estimate !== null && item.grams !== null) return { kind: "estimate", per100g: estimate, grams: item.grams, overruled };
   return { kind: "none" };
 }
 
