@@ -12,7 +12,15 @@ import { dayInTz } from "../gamification/streak.js";
 import type { UsdaPortion } from "./measures.js";
 import { USDA_TIE_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
-import type { BodyMeasurementInput, DishwareInput, PatchBodyMeasurement, PatchDishware } from "./schemas.js";
+import { ownNutritionTargetsSchema, ringTargetsSourceSchema } from "./schemas.js";
+import type {
+  BodyMeasurementInput,
+  DishwareInput,
+  OwnNutritionTargets,
+  PatchBodyMeasurement,
+  PatchDishware,
+  RingTargetsSource,
+} from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx (postgres.js's Sql and
  *  TransactionSql are siblings, neither assignable to the other). */
@@ -368,6 +376,66 @@ export async function deleteDishware(sql: Sql, userId: string, id: string): Prom
   const rows = await sql<{ id: string }[]>`
     DELETE FROM user_dishware WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
   return rows.length > 0;
+}
+
+// ── the rings' own numbers (ROADMAP 7a-iv-e) ────────────────────────────────
+
+/** What a person picked over the macro rings, and what they typed. NO ROW is
+ *  the answer everybody starts with — the app's plan — so the reader hands back
+ *  that, never a null the callers each have to interpret. */
+export interface RingTargetsRow {
+  source: RingTargetsSource;
+  own: OwnNutritionTargets | null;
+}
+
+const NO_RING_PICK: RingTargetsRow = { source: "app", own: null };
+
+/** Parsed through the shared contract rather than trusted: the CHECKs allow a
+ *  wider range than the app does (they are rails, not the rule), and a row
+ *  outside the contract must fail loud here rather than reach the rings. */
+function toRingTargets(r: { source: string; kcal: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }): RingTargetsRow {
+  const own =
+    r.kcal === null || r.protein_g === null || r.carbs_g === null || r.fat_g === null
+      ? null
+      : ownNutritionTargetsSchema.parse({ kcal: r.kcal, proteinG: r.protein_g, carbsG: r.carbs_g, fatG: r.fat_g });
+  const source = ringTargetsSourceSchema.parse(r.source);
+  // 'own' without numbers is refused by the table's own CHECK; this is the
+  // same claim in code, so a row written past it cannot pick a set that is not
+  // there.
+  return { source: own === null ? "app" : source, own };
+}
+
+export async function getRingTargets(sql: SqlOrTx, userId: string): Promise<RingTargetsRow> {
+  const rows = await sql<{ source: string; kcal: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }[]>`
+    SELECT source, kcal, protein_g, carbs_g, fat_g FROM user_nutrition_targets WHERE user_id = ${userId}`;
+  const r = rows[0];
+  return r === undefined ? NO_RING_PICK : toRingTargets(r);
+}
+
+/** Store the pick. `own` null leaves whatever numbers are already there
+ *  (switching back to the app's plan keeps them, RULINGS 2026-09-17); a set of
+ *  numbers replaces them. One row per person, so this is an upsert keyed on the
+ *  owner — there is no id a request could name. */
+export async function putRingTargets(
+  sql: Sql,
+  userId: string,
+  source: RingTargetsSource,
+  own: OwnNutritionTargets | null,
+): Promise<RingTargetsRow> {
+  const rows = await sql<{ source: string; kcal: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }[]>`
+    INSERT INTO user_nutrition_targets (user_id, source, kcal, protein_g, carbs_g, fat_g)
+    VALUES (${userId}, ${source}, ${own?.kcal ?? null}, ${own?.proteinG ?? null}, ${own?.carbsG ?? null}, ${own?.fatG ?? null})
+    ON CONFLICT (user_id) DO UPDATE SET
+      source = ${source},
+      kcal = CASE WHEN ${own !== null} THEN ${own?.kcal ?? null} ELSE user_nutrition_targets.kcal END,
+      protein_g = CASE WHEN ${own !== null} THEN ${own?.proteinG ?? null} ELSE user_nutrition_targets.protein_g END,
+      carbs_g = CASE WHEN ${own !== null} THEN ${own?.carbsG ?? null} ELSE user_nutrition_targets.carbs_g END,
+      fat_g = CASE WHEN ${own !== null} THEN ${own?.fatG ?? null} ELSE user_nutrition_targets.fat_g END,
+      updated_at = now()
+    RETURNING source, kcal, protein_g, carbs_g, fat_g`;
+  const r = rows[0];
+  if (r === undefined) throw new Error("ring targets upsert returned no row");
+  return toRingTargets(r);
 }
 
 

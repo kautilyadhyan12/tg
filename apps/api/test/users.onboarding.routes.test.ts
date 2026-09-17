@@ -675,7 +675,12 @@ d("onboarding v2 routes (real Postgres)", () => {
     // target was a loss target, below the 70 kg weight, so the rings ask for
     // a target above it, and only that.
     await settingsSave(cookies, { weightGoal: "gain", fitnessGoals: ["flexibility", "posture"] });
-    expect(await ringsBody()).toEqual({ targets: null, missing: [], targetWrongSide: true });
+    // Nobody here has touched 7a-iv-e's switch, so both sides of it are the
+    // app's plan — which has no number to give while the target is wrong-side.
+    expect(await ringsBody()).toEqual({
+      targets: null, appTargets: null, missing: [], targetWrongSide: true,
+      source: "app", own: null, ownHeld: null,
+    });
     expect(await rings(cookies)).toBeNull();
     // A target above the weight, as the target screen saves it: the gain plan.
     await patchOk(cookies, { targetWeightKg: 75 });

@@ -54,6 +54,12 @@ export const DIRECT_DELETE_TABLES = [
   // yes still says a person has SOME condition, injury or pregnancy, so it
   // stands on user_fitness_profiles' footing: deleted at Day 14 and exported.
   "user_health_screenings",
+  // The rings' own numbers (migration 0032, 2026-09-17; ROADMAP 7a-iv-e): which
+  // set of daily targets the person picked, and the calories and macros they
+  // typed for themselves. Not health data in the health-screening sense, but a
+  // person's own eating targets are their own data on `user_fitness_profiles`'
+  // footing — deleted at Day 14 and exported.
+  "user_nutrition_targets",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row

@@ -21,6 +21,7 @@ import {
   patchDishwareSchema,
   patchMealRequestSchema,
   previewMealRequestSchema,
+  putNutritionTargetsRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
 import { createMealVisionProvider, type VisionProvider } from "./vision.adapter.js";
@@ -197,6 +198,17 @@ export function registerNutritionRoutes(
    *  the server never fabricates a target (RULINGS 2026-07-15). */
   app.get("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getTargets(nutritionDeps, authedUserId(req)));
+  });
+
+  /** The switch over the rings (ROADMAP 7a-iv-e): App's plan, or My own with
+   *  the four numbers. One row per person keyed on the session's own id — no id
+   *  to tamper with, as above. The health rules are the server's: typed
+   *  calories under the app's floor, or under what keeps the weight for a plan
+   *  that holds no cut, come back 400 with the number that binds. */
+  app.put("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = parse(putNutritionTargetsRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.send(await service.putTargets(nutritionDeps, authedUserId(req), body));
   });
 
   app.get("/v1/nutrition/foods", { preHandler: [app.authenticate] }, async (req, reply) => {

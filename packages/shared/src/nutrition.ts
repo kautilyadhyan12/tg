@@ -1,6 +1,6 @@
 // P2.6a — Nutrition & body contracts (Part 2B §3; Part 4 §3.6).
 import { z } from "zod";
-import { missingPlanInputSchema } from "./plan.js";
+import { missingPlanInputSchema, noDeficitReasonSchema } from "./plan.js";
 
 export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "default", "legacy"]);
 /** Where an item's numbers per 100 g came from. `usda` is a food of the USDA
@@ -271,12 +271,74 @@ export const nutritionTargetsSchema = z.object({
    *  `no_deficit` flag: `kcal` is then the daily burn. */
   noCalorieCut: z.boolean(),
 }).strict();
+// ── The rings' numbers can be the person's own (ROADMAP 7a-iv-e) ────────────
+// RULINGS 2026-09-17: a switch over the rings — App's plan · My own — and the
+// numbers picked feed the rings, "Remaining today" and its "over" rows. "Gym's
+// plan" joins this enum at Stage 2 item 10, when a gym can write one; an option
+// with nothing behind it is not shown, so it is not here yet.
+export const ringTargetsSourceSchema = z.enum(["app", "own"]);
+export type RingTargetsSource = z.infer<typeof ringTargetsSourceSchema>;
+
+/** The rails on a typed number, and NOT the health rule: the calorie floor and
+ *  "no cut below what keeps your weight" are the server's, computed against
+ *  this person's own plan (`ownTargetsHeld`), because both depend on answers a
+ *  contract cannot see. These two only keep a typed number in the range a day
+ *  of eating can occupy at all. */
+export const OWN_TARGETS_MAX_KCAL = 20_000;
+export const OWN_TARGETS_MAX_MACRO_G = 2_000;
+
+/** The four numbers a person types for themselves. Whole numbers, as the rings
+ *  and "Remaining today" print them. Macros are NOT made to add up to the
+ *  calories: the screen says what they come to and leaves both as typed, since
+ *  a box that silently rewrites one of the four numbers is a box that fights
+ *  the person editing it. */
+export const ownNutritionTargetsSchema = z.object({
+  kcal: z.number().int().min(0).max(OWN_TARGETS_MAX_KCAL),
+  proteinG: z.number().int().min(0).max(OWN_TARGETS_MAX_MACRO_G),
+  carbsG: z.number().int().min(0).max(OWN_TARGETS_MAX_MACRO_G),
+  fatG: z.number().int().min(0).max(OWN_TARGETS_MAX_MACRO_G),
+}).strict();
+export type OwnNutritionTargets = z.infer<typeof ownNutritionTargetsSchema>;
+
+/** Why the rings are on the app's plan although the person picked their own
+ *  numbers. The stored numbers are never rewritten or dropped — the answers
+ *  under them change (the health question, a birthday, a heavier body), so the
+ *  same rule that let a number in is run again on every read, and the screen
+ *  says which one is holding rather than swapping numbers silently. */
+export const ownTargetsHeldSchema = z.discriminatedUnion("code", [
+  /** The plan cannot be worked out yet, so there is nothing to check the typed
+   *  calories against — and no resting burn for the rings either. */
+  z.object({ code: z.literal("plan_incomplete") }).strict(),
+  z.object({ code: z.literal("below_floor"), floorKcal: z.number().int().positive() }).strict(),
+  z.object({
+    code: z.literal("no_cut_below_maintenance"),
+    maintenanceKcal: z.number().int().positive(),
+    reasons: z.array(noDeficitReasonSchema).min(1),
+  }).strict(),
+]);
+export type OwnTargetsHeld = z.infer<typeof ownTargetsHeldSchema>;
+
+/** The rings' switch, saved: "App's plan", or "My own" with the four numbers.
+ *  One route for both, so picking a set and editing it cannot disagree about
+ *  what is stored. Switching back keeps the typed numbers (RULINGS 2026-09-17),
+ *  which is why "app" carries none. */
+export const putNutritionTargetsRequestSchema = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("app") }).strict(),
+  ownNutritionTargetsSchema.extend({ source: z.literal("own") }).strict(),
+]);
+export type PutNutritionTargetsRequest = z.infer<typeof putNutritionTargetsRequestSchema>;
+
 // The EXACTLY is enforced, not merely asserted: every impossible state (a
 // number beside an unmet input or a wrong-side target, no number with no
 // reason given, both reasons at once) passes the bare shape. No number with no
 // reason is the dangerous one: a client would render an "add your details"
-// prompt naming no details.
+// prompt naming no details. Since 7a-iv-e the same holds for the two sets: a
+// `source` the numbers on `targets` do not come from is an impossible state,
+// and it is the one that would show a person somebody else's arithmetic under
+// their own heading.
 export const nutritionTargetsResponseSchema = z.object({
+  /** The numbers the rings, "Remaining today" and its "over" rows show: the
+   *  picked set, resolved on the server (7c's day targets read it too). */
   targets: nutritionTargetsSchema.nullable(),
   missing: z.array(missingPlanInputSchema),
   /** The stored target is on the wrong side of the weight for the weight
@@ -285,13 +347,53 @@ export const nutritionTargetsResponseSchema = z.object({
    *  the rings do not pass that off as the goal's number; they say the target
    *  no longer fits, never that it is unanswered (RULINGS 2026-09-11). */
   targetWrongSide: z.boolean(),
+  /** Which set `targets` holds. */
+  source: ringTargetsSourceSchema,
+  /** The app's plan as the rings would show it — the switch's other side, and
+   *  what "My own" starts from. Null exactly when the plan cannot produce it,
+   *  which `missing` and `targetWrongSide` are the reasons for. */
+  appTargets: nutritionTargetsSchema.nullable(),
+  /** The person's own numbers as they were typed, whether or not they are the
+   *  ones in use — switching to the app's plan keeps them. */
+  own: ownNutritionTargetsSchema.nullable(),
+  /** Why `own` is stored, picked, and not in use. Null otherwise. */
+  ownHeld: ownTargetsHeldSchema.nullable(),
 }).strict()
-  .refine((r) => (r.targets === null) === (r.missing.length > 0 || r.targetWrongSide), {
-    message: "targets must be null exactly when an answer is missing or the target is on the wrong side",
+  .refine((r) => (r.appTargets === null) === (r.missing.length > 0 || r.targetWrongSide), {
+    message: "the app's targets must be null exactly when an answer is missing or the target is on the wrong side",
   })
   // A plan still missing an answer has no flags to raise.
   .refine((r) => !(r.targetWrongSide && r.missing.length > 0), {
     message: "a wrong-side target is never reported beside a missing answer",
+  })
+  // "My own" on the switch means the rings are showing the four typed numbers,
+  // nothing else, and that nothing is holding them back.
+  .refine(
+    (r) =>
+      r.source !== "own" ||
+      (r.own !== null &&
+        r.ownHeld === null &&
+        r.targets !== null &&
+        r.targets.kcal === r.own.kcal &&
+        r.targets.proteinG === r.own.proteinG &&
+        r.targets.carbsG === r.own.carbsG &&
+        r.targets.fatG === r.own.fatG),
+    { message: "the own source must carry the person's own four numbers, unheld" },
+  )
+  // "App's plan" means the rings are showing the plan's numbers, unchanged.
+  .refine(
+    (r) =>
+      r.source !== "app" ||
+      (r.targets === null
+        ? r.appTargets === null
+        : r.appTargets !== null &&
+          (Object.keys(r.appTargets) as (keyof NutritionTargets)[]).every((k) => r.targets?.[k] === r.appTargets?.[k])),
+    { message: "the app source must carry the plan's own numbers" },
+  )
+  // Nothing is held back that was never typed, and a held set is never the one
+  // on the rings.
+  .refine((r) => r.ownHeld === null || (r.own !== null && r.source === "app"), {
+    message: "a hold belongs to stored own numbers that the rings are not using",
   });
 export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
 export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;

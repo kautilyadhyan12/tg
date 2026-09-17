@@ -28,12 +28,12 @@ const noExternal:FoodSearchProvider={search:()=>Promise.resolve([])};
 const jpeg=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;bytes[2]=0xff;return bytes.toString("base64");})();
 
 d("nutrition + body routes (real Postgres, fake providers)",()=>{
-  const sql=postgres(url??"",{prepare:false,max:5});const redis=createMemoryRedis();const vision=fakeVision();let app:App|undefined;let cookieA="",cookieB="",userA="";
+  const sql=postgres(url??"",{prepare:false,max:5});const redis=createMemoryRedis();const vision=fakeVision();let app:App|undefined;let ringApp:App|undefined;let cookieA="",cookieB="",userA="";
   const api=():App=>{if(app===undefined)throw new Error("beforeAll did not run");return app;};
   const inject=(method:"GET"|"POST"|"PUT"|"PATCH"|"DELETE",path:string,access:string,body?:unknown)=>api().inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
   async function session(email:string){const reg=await inject("POST","/v1/auth/register","",{email,password:PASSWORD,displayName:"P26a Fixture"});if(reg.statusCode!==201)throw new Error(reg.body);const userId=reg.json<{userId:string}>().userId;const login=await inject("POST","/v1/auth/login","",{email,password:PASSWORD});return{userId,access:login.cookies.find((c)=>c.name==="accessToken")?.value??""};}
   beforeAll(async()=>{await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM user_dishware WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM users WHERE email LIKE 'p26a-%@example.com'`;app=await buildApp(loadConfig(env),{redis,nutrition:{visionProvider:vision,foodSearchProvider:noExternal}});const a=await session("p26a-alice@example.com");userA=a.userId;cookieA=a.access;cookieB=(await session("p26a-bob@example.com")).access;},60_000);
-  afterAll(async()=>{if(app!==undefined)await app.close();await sql.end({timeout:5});});
+  afterAll(async()=>{if(app!==undefined)await app.close();if(ringApp!==undefined)await ringApp.close();await sql.end({timeout:5});});
 
   it("auth and validation run before quota",async()=>{expect((await inject("POST","/v1/nutrition/analyze-photo","",{imageBase64:jpeg,mimeType:"image/jpeg"})).statusCode).toBe(401);for(let i=0;i<3;i++)expect((await inject("POST","/v1/nutrition/analyze-photo",cookieA,{imageBase64:"bad",mimeType:"image/jpeg"})).statusCode).toBe(400);const key=quotaKey("meal_scan",userA,"day",new Date());expect(await redis.get(key)).toBeNull();},30_000);
 
@@ -587,7 +587,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // A brand-new user: no number, and every core answer of the plan missing.
     const empty=await inject("GET","/v1/nutrition/targets",t.access);
     expect(empty.statusCode,empty.body).toBe(200);
-    expect(empty.json()).toEqual({targets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"],targetWrongSide:false});
+    const noPick={source:"app",own:null,ownHeld:null}; // nobody has touched 7a-iv-e's switch
+    expect(empty.json()).toEqual({targets:null,appTargets:null,missing:["goal","age","gender","heightCm","weightKg","dayActivity","trainingDays","sessionMinutes"],targetWrongSide:false,...noPick});
 
     // Someone who finished the OLD form: it never asked the weight choice or
     // "your day", so the rings name exactly those two, however complete the
@@ -599,7 +600,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     await sql`UPDATE user_fitness_profiles SET onboarding_completed = true WHERE user_id = ${t.userId}`;
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:70})).statusCode).toBe(200);
     const old=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(old.json()).toEqual({targets:null,missing:["goal","dayActivity"],targetWrongSide:false});
+    expect(old.json()).toEqual({targets:null,appTargets:null,missing:["goal","dayActivity"],targetWrongSide:false,...noPick});
 
     // Answered on the onboarding screens, the rings carry the plan: the golden
     // of users.onboarding.routes.test.ts, and field by field what that route says.
@@ -609,7 +610,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const planOf=async(access:string)=>(await inject("GET","/v1/users/me/onboarding",access)).json<{plan:Plan}>().plan;
     const ringsOf=(p:Plan)=>({bmr:p.restingBurnKcal,tdee:p.dailyBurnKcal,kcal:p.targetKcal,proteinG:p.proteinG,carbsG:p.carbsG,fatG:p.fatG,noCalorieCut:false});
     const done=await inject("GET","/v1/nutrition/targets",t.access);
-    expect(done.json()).toEqual({targets:{bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false},missing:[],targetWrongSide:false});
+    const goldenRings={bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false};
+    expect(done.json()).toEqual({targets:goldenRings,appTargets:goldenRings,missing:[],targetWrongSide:false,...noPick});
     expect(done.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(t.access)));
 
     // R7.2 (T3 finding): every arm is parsed through the SHARED contract, so
@@ -623,10 +625,132 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const u=await session("p26a-targets2@example.com");
     expect((await inject("PATCH","/v1/users/me/onboarding",u.access,{weightGoal:"lose",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
     const theirs=await inject("GET","/v1/nutrition/targets",u.access);
-    expect(theirs.json()).toEqual({targets:{bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false},missing:[],targetWrongSide:false});
+    const theirRings={bmr:2124,tdee:2742,kcal:2192,proteinG:184,carbsG:227,fatG:61,noCalorieCut:false};
+    expect(theirs.json()).toEqual({targets:theirRings,appTargets:theirRings,missing:[],targetWrongSide:false,...noPick});
     expect(theirs.json<{targets:unknown}>().targets).toEqual(ringsOf(await planOf(u.access)));
     expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1267);
   },30_000);
+
+  // The switch over the rings (ROADMAP 7a-iv-e; RULINGS 2026-09-17): App's plan
+  // · My own. The health rules are the SERVER's, on the way in AND on every read
+  // after, because the answers under a stored number move.
+  it("stores the person's own ring numbers, holds them to the health rules on every read, and never crosses users",async()=>{
+    // An app of its own, with its own Redis: two more sign-ups on the shared one
+    // pass the per-address limit this file already sits against (the eight test
+    // plates hit it first, 2026-09-17).
+    ringApp=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:fakeVision(),foodSearchProvider:noExternal}});
+    const ring=ringApp;
+    const call=(method:"GET"|"POST"|"PUT"|"PATCH",path:string,access:string,body?:unknown)=>ring.inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
+    const person=async(email:string)=>{const reg=await call("POST","/v1/auth/register","",{email,password:PASSWORD,displayName:"P26a Own"});if(reg.statusCode!==201)throw new Error(reg.body);const login=await call("POST","/v1/auth/login","",{email,password:PASSWORD});return{userId:reg.json<{userId:string}>().userId,access:login.cookies.find((c)=>c.name==="accessToken")?.value??""};};
+    const t=await person("p26a-own@example.com");
+    const own={source:"own",kcal:1500,proteinG:150,carbsG:120,fatG:45};
+    const get=(access:string)=>call("GET","/v1/nutrition/targets",access);
+    const put=(access:string,body:unknown)=>call("PUT","/v1/nutrition/targets",access,body);
+    expect((await put("",{source:"app"})).statusCode).toBe(401);
+
+    // Before the questions are answered there is no plan to check a number
+    // against, so nothing is stored and the refusal says which way out.
+    const early=await put(t.access,own);
+    expect(early.statusCode,early.body).toBe(400);
+    expect(early.json<{error:string}>().error).toBe("plan_incomplete");
+    expect((await sql<{n:string}[]>`SELECT count(*) AS n FROM user_nutrition_targets WHERE user_id=${t.userId}`)[0]?.n).toBe("0");
+
+    // The golden person of the plan tests: burn 1817, the plan's own 1267.
+    expect((await call("PATCH","/v1/users/me/onboarding",t.access,{weightGoal:"lose",age:30,gender:"female",heightCm:165,weightKg:70,targetWeightKg:65,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    const plan={bmr:1420,tdee:1817,kcal:1267,proteinG:140,carbsG:98,fatG:35,noCalorieCut:false};
+    expect((await get(t.access)).json()).toEqual({targets:plan,missing:[],targetWrongSide:false,source:"app",appTargets:plan,own:null,ownHeld:null});
+
+    // "My own": the rings take the four typed numbers, the burn figures stay the
+    // plan's, and the app's own numbers are still there to switch back to.
+    const saved=await put(t.access,own);
+    expect(saved.statusCode,saved.body).toBe(200);
+    const mine={bmr:1420,tdee:1817,kcal:1500,proteinG:150,carbsG:120,fatG:45,noCalorieCut:false};
+    const asOwn={targets:mine,missing:[],targetWrongSide:false,source:"own",appTargets:plan,own:{kcal:1500,proteinG:150,carbsG:120,fatG:45},ownHeld:null};
+    expect(saved.json()).toEqual(asOwn);
+    // The reply and the next read are the same answer — the screen never has to
+    // fetch again to learn what was stored.
+    expect((await get(t.access)).json()).toEqual(asOwn);
+
+    // The floor is the server's: a number under it is refused, by name, and the
+    // stored set is untouched.
+    const low=await put(t.access,{...own,kcal:1199});
+    expect(low.statusCode,low.body).toBe(400);
+    const lowSaid=low.json<{error:string;message:string}>();
+    expect(lowSaid.error).toBe("own_targets_below_floor");
+    expect(lowSaid.message,"the number that would be a yes is in the words").toContain("1200");
+    expect((await get(t.access)).json()).toEqual(asOwn);
+
+    // Back to the app's plan: the typed numbers are KEPT, not cleared
+    // (RULINGS 2026-09-17), and nothing is held.
+    expect((await put(t.access,{source:"app"})).json()).toEqual({...asOwn,targets:plan,source:"app"});
+    // …and picking "My own" again needs no retyping.
+    expect((await put(t.access,own)).json()).toEqual(asOwn);
+
+    // THE CASE THE SAVE COULD NOT CATCH: a health yes arrives after the number
+    // was stored, and 1500 is now below what keeps the weight. The numbers are
+    // neither rewritten nor dropped — the app's plan shows, and the reason is
+    // named with the figure that would let them back in.
+    expect((await call("PUT","/v1/users/me/health-screening",t.access,{hasCondition:true,checkFirst:"cleared"})).statusCode).toBe(200);
+    const held=await get(t.access);
+    expect(held.json()).toEqual({
+      targets:{bmr:1420,tdee:1817,kcal:1817,proteinG:140,carbsG:201,fatG:50,noCalorieCut:true},
+      missing:[],targetWrongSide:false,source:"app",
+      appTargets:{bmr:1420,tdee:1817,kcal:1817,proteinG:140,carbsG:201,fatG:50,noCalorieCut:true},
+      own:{kcal:1500,proteinG:150,carbsG:120,fatG:45},
+      ownHeld:{code:"no_cut_below_maintenance",maintenanceKcal:1817,reasons:["health_answer"]},
+    });
+    // The same rule refuses it on the way in now, with the same figure.
+    const refused=await put(t.access,own);
+    expect(refused.statusCode).toBe(400);
+    const refusedSaid=refused.json<{error:string;message:string}>();
+    expect(refusedSaid.error).toBe("own_targets_below_maintenance");
+    expect(refusedSaid.message).toContain("1817");
+    // A number at what keeps the weight is taken, and the plan's "no cut" fact
+    // is still told truly under the person's own numbers.
+    const atBurn=await put(t.access,{...own,kcal:1817});
+    expect(atBurn.statusCode,atBurn.body).toBe(200);
+    expect(atBurn.json()).toMatchObject({source:"own",targets:{kcal:1817,noCalorieCut:true}});
+
+    // The contract at the door: "own" without its numbers, a number that is not
+    // one, a source the app has no set behind, and an extra key.
+    for(const body of [{source:"own"},{source:"own",kcal:2000,proteinG:150,carbsG:120},{source:"own",kcal:1817.5,proteinG:150,carbsG:120,fatG:45},{source:"gym"},{source:"app",kcal:2000},{source:"own",kcal:20001,proteinG:150,carbsG:120,fatG:45},{source:"own",kcal:2000,proteinG:-1,carbsG:120,fatG:45}])
+      expect((await put(t.access,body)).statusCode,JSON.stringify(body)).toBe(400);
+    // …and none of that moved what is stored.
+    expect((await get(t.access)).json<{own:unknown}>().own).toEqual({kcal:1817,proteinG:150,carbsG:120,fatG:45});
+
+    // THE RULE IS NOT THE PLAN'S FLAG. A 17-year-old who picked "keep my
+    // weight" has no cut to refuse, so the plan raises no `no_deficit` flag at
+    // all — and may still not type one. Read off the flag this passes; read off
+    // the reasons, as the server does, it is refused at the same figure.
+    const teen=await person("p26a-own3@example.com");
+    expect((await call("PATCH","/v1/users/me/onboarding",teen.access,{weightGoal:"maintain",age:17,gender:"female",heightCm:165,weightKg:60,dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    const teenRings=(await get(teen.access)).json<{targets:{tdee:number;kcal:number;noCalorieCut:boolean}}>().targets;
+    expect(teenRings.kcal,"eating what they burn").toBe(teenRings.tdee);
+    expect(teenRings.noCalorieCut,"no cut was asked for, so none was held back").toBe(false);
+    const teenCut=await put(teen.access,{source:"own",kcal:teenRings.tdee-1,proteinG:120,carbsG:150,fatG:50});
+    expect(teenCut.statusCode,teenCut.body).toBe(400);
+    const teenSaid=teenCut.json<{error:string;message:string}>();
+    expect(teenSaid.error).toBe("own_targets_below_maintenance");
+    expect(teenSaid.message).toContain(String(teenRings.tdee));
+    expect((await put(teen.access,{source:"own",kcal:teenRings.tdee,proteinG:120,carbsG:150,fatG:50})).statusCode).toBe(200);
+
+    // Tenancy: this route takes no id either, so the proof is that a second
+    // person's numbers are their own and neither set reaches the other. Their
+    // body is heavy (120 kg at 175 cm), the plan tests' second golden.
+    const u=await person("p26a-own2@example.com");
+    expect((await call("PATCH","/v1/users/me/onboarding",u.access,{weightGoal:"lose",age:35,gender:"male",heightCm:175,weightKg:120,targetWeightKg:90,pace:"steady",dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    expect((await get(u.access)).json()).toMatchObject({source:"app",own:null,ownHeld:null,targets:{kcal:2192}});
+    expect((await put(u.access,{source:"own",kcal:2400,proteinG:190,carbsG:230,fatG:70})).json()).toMatchObject({source:"own",targets:{kcal:2400,bmr:2124,tdee:2742}});
+    expect((await get(t.access)).json<{own:{kcal:number}}>().own.kcal).toBe(1817);
+    expect((await get(u.access)).json<{own:{kcal:number}}>().own.kcal).toBe(2400);
+    // One row each, and each keyed to its owner.
+    const rows=await sql<{user_id:string;kcal:number}[]>`SELECT user_id, kcal FROM user_nutrition_targets WHERE user_id IN (${t.userId},${u.userId}) ORDER BY kcal`;
+    expect(rows).toEqual([{user_id:t.userId,kcal:1817},{user_id:u.userId,kcal:2400}]);
+
+    // R7.2: every arm parsed through the SHARED contract, so the route's shape
+    // and the client's types cannot drift apart silently.
+    for(const res of [saved,held,atBurn])expect(nutritionTargetsResponseSchema.safeParse(res.json()).success,res.body).toBe(true);
+  },60_000);
 
   // ── What a failed scan costs the person, and what they are told ─────────────
   /** A scanner that plays its steps in order: evidence, or a failure it throws. It counts the calls it is sent. */

@@ -133,6 +133,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
               VALUES (${userId}, 31, 'female', 165, 'morning')`;
     await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
               VALUES (${userId}, true, 'not_yet')`;
+    // The rings' own numbers (7a-iv-e): deleted at Day 14 like the profile.
+    await sql`INSERT INTO user_nutrition_targets (user_id, source, kcal, protein_g, carbs_g, fat_g)
+              VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;

@@ -20,7 +20,7 @@ import { bustEntitlements } from "../entitlements/service.js";
 // question a finish date depends on.
 import { dayInTz, safeTimeZone } from "../gamification/streak.js";
 import { planAnswersFor } from "../plan/answers.js";
-import { missingPlanInputs, resolvePlan } from "../plan/maths.js";
+import { missingPlanInputs, noDeficitReasons, resolvePlan } from "../plan/maths.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import {
@@ -46,6 +46,8 @@ import type {
   PatchOnboardingRequest,
   MissingPlanInput,
   MissingSetupAnswer,
+  NoDeficitReason,
+  PlanAnswers,
   PlanHealth,
   PlanResponse,
   PutFitnessProfileRequest,
@@ -69,9 +71,30 @@ export async function getUserSyncContext(
  *  read, so the rings and the screens can never show two daily numbers
  *  (ROADMAP 4a-iii). sql-only like getUserSyncContext above, and for the same
  *  reason: NutritionDeps cannot supply UsersDeps. `requestedTimeZone` only
- *  dates the finish; null falls back to the zone the person has stored. */
-export async function getUserPlan(sql: Sql, userId: string, requestedTimeZone: string | null): Promise<PlanResponse> {
-  return await planOf(sql, userId, await repo.getOnboarding(sql, userId), requestedTimeZone);
+ *  dates the finish; null falls back to the zone the person has stored.
+ *
+ *  It comes with the reasons this person's plan can hold NO calorie cut, which
+ *  the plan's `no_deficit` flag alone cannot answer: that flag is only raised
+ *  where there was a cut to refuse (a "lose" plan with a target), and the rings'
+ *  own numbers (7a-iv-e) need the rule for every weight choice — an under-18 who
+ *  picked "keep my weight" may not type a cut either. Empty when a cut is
+ *  allowed, and when the plan is still missing an answer: a number that cannot
+ *  be worked out refuses nothing, and the caller says so instead
+ *  (`plan_incomplete`). */
+export async function getUserPlanAndCutRules(
+  sql: Sql,
+  userId: string,
+  requestedTimeZone: string | null,
+): Promise<{ plan: PlanResponse; noCutReasons: readonly NoDeficitReason[] }> {
+  const { plan, answers } = await planWithAnswersOf(
+    sql,
+    userId,
+    await repo.getOnboarding(sql, userId),
+    requestedTimeZone,
+  );
+  const noCutReasons =
+    answers.age === undefined ? [] : noDeficitReasons({ age: answers.age, health: answers.health ?? null });
+  return { plan, noCutReasons };
 }
 
 /** THE flag every plan route reads (ROADMAP 3b): the stored screening as the
@@ -371,9 +394,22 @@ async function planOf(
   row: repo.OnboardingRow,
   requestedTimeZone: string | null,
 ): Promise<PlanResponse> {
+  return (await planWithAnswersOf(sql, userId, row, requestedTimeZone)).plan;
+}
+
+/** The plan and the answers it was worked out from — one read of each row, so
+ *  a caller that needs a rule the plan's own flags do not carry (7a-iv-e) does
+ *  not fetch the profile and the screening a second time. */
+async function planWithAnswersOf(
+  sql: Sql,
+  userId: string,
+  row: repo.OnboardingRow,
+  requestedTimeZone: string | null,
+): Promise<{ plan: PlanResponse; answers: PlanAnswers }> {
   const health = await getPlanHealth(sql, userId);
   const today = dayInTz(new Date(), resolveTimeZone(requestedTimeZone, row.timezone));
-  return resolvePlan(planAnswersFor({ answers: toOnboardingAnswers(row), health, today }));
+  const answers = planAnswersFor({ answers: toOnboardingAnswers(row), health, today });
+  return { plan: resolvePlan(answers), answers };
 }
 
 async function toOnboardingResponse(
