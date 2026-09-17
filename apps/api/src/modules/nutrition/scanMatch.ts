@@ -161,11 +161,16 @@ export const KEPT_WORDS: ReadonlySet<string> = new Set(["canned", "pickled", "sm
  *  never shortened past any word not here: it is USDA's food of every word, a
  *  packaged product, or the model's own estimate, never the food a substitute is
  *  made to stand in for. A word missing here costs a table's number, never a wrong
- *  food. */
+ *  food.
+ *
+ *  A word one market reads another way does not belong here, whatever it says in
+ *  ours: "iced" is over ice in the US and frosted on a British bake, so an iced bun
+ *  read as a bread roll (the re-check of PR #81), and an iced latte is a name of
+ *  our latte instead. */
 export const PREPARATION_WORDS: ReadonlySet<string> = new Set([
   ...COOKING_WORDS.keys(), "cooked", "raw", "fresh",
   "mashed", "smashed", "scored", "whole", "baby",
-  "iced", "chilled", "cold", "warm", "hot",
+  "chilled", "cold", "warm", "hot",
   "pan", "deep", "air", "oven", "stir", "slow",
   ...NOISE_WORDS,
 ]);

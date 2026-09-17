@@ -294,8 +294,10 @@ a version the curated table names otherwise ("steamed carrots" are never its raw
 carrots), and only where that food carries the kcal the model saw within its own
 error — unless USDA's food holding every word is more than 10 kcal per 100 g nearer
 to it; then a packaged product; else the model's estimate. A word that can say what
-a food is ("vegan butter", "soy yogurt", "vegetable lasagna") is never dropped.
-Amended again the same day, from the reviews of PR #80 and #81.)*
+a food is ("vegan butter", "soy yogurt", "vegetable lasagna") is never dropped, and
+a shortened name never lands on the curated table's pick for a word several of its
+foods answer to ("roast pork" is no pork chop). Amended again the same day, from
+the reviews of PR #80 and #81 and their re-checks.)*
 
 **Stage 4 — The confirmation moment (three seconds, one tap).** *(AMENDED 2026-09-16, RULINGS, the portion redesign; built at ROADMAP 7a-iv-b: each item starts at one of its food's measures or at the photo's grams marked "~120 g · estimate", and is corrected in the measure picker — a measure and how many, or a saved dish and how full — never S/M/L cards; the total is a single number, "about" while an estimate is in it.)* Before
 anything is saved, one compact sheet: each item as a chip with its portion

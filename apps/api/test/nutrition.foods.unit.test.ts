@@ -284,6 +284,9 @@ describe("the food a name means", () => {
     const cases: [string, string][] = [
       ["sweet corn", "corn_cooked"], ["Sweet Corn", "corn_cooked"], ["jacket potato", "potato_baked"], ["jacket potatoes", "potato_baked"],
       ["basmati rice", "rice_white_cooked"], ["jasmine rice", "rice_white_cooked"], ["caffè latte", "latte"], ["caffe latte", "latte"],
+      // "Iced" is frosted on a British bake, so it is no word a name is shortened past
+      // (scanMatch.ts); an iced latte is a name of our latte (the re-check of PR #81).
+      ["iced latte", "latte"], ["Iced Latte", "latte"],
     ];
     for (const [name, canonical] of cases) expect(findCurated(name)?.canonical, name).toBe(canonical);
     // Each is the food its cited USDA entry describes by that other name.
@@ -301,8 +304,28 @@ describe("the food a name means", () => {
     expect(canonicals("potato")).toEqual(["potato_baked", "potato_boiled"]);
     expect(canonicals("boiled potatoes")).toEqual(["potato_boiled", "potato_baked"]);
     expect(canonicals("roti")).toEqual(["roti_chapati", "roti_chapati_store_bought_flatbread"]);
-    expect(canonicals("bread")).toEqual(["white_bread"]);
     expect(canonicals("broccoli")).toEqual(["broccoli_cooked"]);
+    // Never the list's pick for a word several foods answer to: the model named more
+    // than that word, and what it added may pick another of them ("roast pork" is no
+    // pork chop, "toasted bread" no white bread).
+    for (const [word, canonical] of COMMON_FOOD_PICKS) {
+      expect(findCurated(word)?.canonical, word).toBe(canonical);
+      expect(canonicals(word)[0], word).not.toBe(canonical);
+      expect(canonicals(`${word}s`)[0], `${word}s`).not.toBe(canonical);
+    }
+    // Nothing at all where no food of ours is named by the word itself…
+    expect(canonicals("bread")).toEqual([]);
+    expect(canonicals("cheese")).toEqual([]);
+    expect(canonicals("beef")).toEqual([]);
+    expect(canonicals("pork")).toEqual([]);
+    // …and the food the word IS the name of where one is, never the pick beside it.
+    expect(canonicals("turkey")).toEqual(["turkey_deli_slices"]);
+    expect(findCurated("turkey")?.canonical).toBe("turkey_breast_cooked");
+    // Every other name of a food is still one, and so is the food's own name.
+    for (const [alias, canonical] of FOOD_ALIASES) {
+      if (!COMMON_FOOD_PICKS.has(alias)) expect(canonicals(alias)[0], alias).toBe(canonical);
+    }
+    for (const f of CURATED_FOODS) expect(findCuratedVersions(f.name)[0], f.name).toBe(f);
     // A name and its plural are one name: "Egg (fried)" and "Eggs (scrambled)" are versions of one food.
     expect(canonicals("eggs")).toEqual(["egg_whole_large", "egg_hard_boiled", "eggs_scrambled", "egg_fried", "egg_poached"]);
     expect(canonicals("zqxnothing")).toEqual([]);

@@ -422,22 +422,22 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews o
     },
     {
       label: "a name of ten words, shortened",
-      hint: "the some a an of with small hot iced zqxfood",
+      hint: "the some a an of with small hot warm zqxfood",
       answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
       expected: { kind: "table", food: food("Zqxfood") },
       asked: [
-        "ourList:the some a an of with small hot iced zqxfood", "usda:the some a an of with small hot iced zqxfood",
-        "ourListVersions:some a an of with small hot iced zqxfood", "ourListVersions:a an of with small hot iced zqxfood",
-        "ourListVersions:an of with small hot iced zqxfood", "ourListVersions:of with small hot iced zqxfood", "ourListVersions:with small hot iced zqxfood",
-        "ourListVersions:small hot iced zqxfood", "ourListVersions:hot iced zqxfood", "ourListVersions:iced zqxfood", "ourListVersions:zqxfood",
+        "ourList:the some a an of with small hot warm zqxfood", "usda:the some a an of with small hot warm zqxfood",
+        "ourListVersions:some a an of with small hot warm zqxfood", "ourListVersions:a an of with small hot warm zqxfood",
+        "ourListVersions:an of with small hot warm zqxfood", "ourListVersions:of with small hot warm zqxfood", "ourListVersions:with small hot warm zqxfood",
+        "ourListVersions:small hot warm zqxfood", "ourListVersions:hot warm zqxfood", "ourListVersions:warm zqxfood", "ourListVersions:zqxfood",
       ],
     },
     {
       label: "a name of eleven words, never shortened",
-      hint: "the some a an of with small hot iced warm zqxfood",
+      hint: "the some a an of with small hot warm chilled zqxfood",
       answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
       expected: { ...ESTIMATE, overruled: null },
-      asked: ["ourList:the some a an of with small hot iced warm zqxfood", "usda:the some a an of with small hot iced warm zqxfood", "packaged:the some a an of with small hot iced warm zqxfood"],
+      asked: ["ourList:the some a an of with small hot warm chilled zqxfood", "usda:the some a an of with small hot warm chilled zqxfood", "packaged:the some a an of with small hot warm chilled zqxfood"],
     },
     {
       label: "a name's words as the food list reads them: accents folded, lower case, anything else a space",
@@ -469,7 +469,9 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews o
   it("is never shortened past a word that can say what the food is, what was taken out or put in, its kind, its brand or who it is for, whatever the calories", async () => {
     // Every such word of both reviews' names and this card's probes, at the calories of
     // the food the shorter name would read as: a substitute is made to match them.
+    // "Iced" is here because a market reads it as frosted, not cold (the re-check of PR #81).
     const words = [
+      "iced",
       "vegan", "veg", "veggie", "vegetarian", "vegetable", "plant", "based", "meatless", "soy", "dairy", "free", "lactose", "gluten",
       "eggless", "decaf", "skim", "light", "diet", "breakfast", "margherita", "hawaiian", "masala", "jeera", "matcha", "brown", "sharp",
       "roma", "cherry", "frozen", "smoked", "pickled", "canned", "dried", "cured", "deli", "sweet", "plain", "soft", "pulled", "minced",

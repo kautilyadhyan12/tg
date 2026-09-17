@@ -293,6 +293,25 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["fndds", "Broccoli raab, raw", 22, 3.17, 2.85, 0.49, 2.7, 40, "cup"],
   ["fndds", "Broccoli, raw", 39, 2.57, 6.27, 0.34, 2.4, 90, "cup"],
   ["fndds", "Broccoli, chinese, raw", 26, 1.2, 4.67, 0.76, 2.6, 36, "cup"],
+  // The one-word picks plate of PR #80's re-check, copied the same way, in USDA's own id order.
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, select, raw", 124, 21.9, 0.21, 3.99, 0, 113, "4 oz"],
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, choice, raw", 130, 21.64, 0.12, 4.81, 0, 113, "4 oz"],
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, all grades, cooked, braised", 191, 32.41, 0, 6.82, 0, 85, "3 oz"],
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, select, cooked, braised", 186, 32.29, 0, 6.34, 0, 85, "3 oz"],
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, choice, cooked, braised", 194, 32.49, 0, 7.14, 0, 85, "3 oz"],
+  ["sr_legacy", "Beef, chuck for stew, separable lean and fat, all grades, raw", 128, 21.75, 0.16, 4.48, 0, 113, "4 oz"],
+  ["sr_legacy", "Beef stew, canned entree", 99, 4.41, 7.85, 5.53, 0.9, 196, "cup (1 serving)"],
+  ["fndds", "Beef, stew meat", 251, 28.39, 0, 15.35, 0, 20, "oz yields"],
+  ["fndds", "Stewed seasoned ground beef, Mexican style", 169, 14.27, 1.28, 11.38, 0.2, 222, "cup"],
+  ["fndds", "Stewed seasoned ground beef, Puerto Rican style", 278, 13.75, 3.83, 22.81, 0.9, 200, "cup"],
+  ["fndds", "Stewed dried beef, Puerto Rican style", 258, 17.69, 3.91, 19.13, 0.8, 200, "cup"],
+  ["fndds", "Stewed, seasoned, ground beef and pork, Mexican style", 139, 16.7, 1.45, 6.98, 0.2, 222, "cup"],
+  ["fndds", "Stewed, seasoned, ground beef with potatoes, Mexican style", 137, 10.42, 5.6, 7.88, 0.8, 222, "cup"],
+  ["fndds", "Beef stew with potatoes, Puerto Rican style", 220, 14.57, 6.53, 14.85, 1, 212, "cup"],
+  ["fndds", "Stewed, seasoned, ground beef and pork with potatoes, Mexican style", 143, 12.84, 4.16, 8.02, 0.6, 222, "cup"],
+  ["fndds", "Stew, beef, canned", 100, 5, 6.54, 5.96, 1.1, 255, "cup"],
+  ["fndds", "Stew, beef", 107, 8.76, 6.29, 5.07, 1.3, 255, "cup"],
+  ["fndds", "Stew, beef, with pasta", 132, 9.76, 10.81, 5.23, 1.1, 255, "cup"],
 ];
 
 /** Every household measure, as the loaded table holds them, of the USDA foods the
@@ -336,6 +355,7 @@ const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Ma
     { seqNum: 3, amount: null, unit: "1 container, NFS", gramWeight: 150 }, { seqNum: 4, amount: null, unit: "1 cup", gramWeight: 245 },
   ]],
   ["Pasta, gluten free", [{ seqNum: 1, amount: null, unit: "1 cup, cooked", gramWeight: 140 }, { seqNum: 2, amount: null, unit: "1 oz, dry, yields", gramWeight: 80 }]],
+  ["Beef, stew meat", [{ seqNum: 1, amount: null, unit: "1 oz yields", gramWeight: 20 }, { seqNum: 2, amount: null, unit: "1 cubic inch", gramWeight: 17 }, { seqNum: 3, amount: null, unit: "1 cup", gramWeight: 135 }]],
   ["Milk, lactose free, whole", [
     { seqNum: 1, amount: null, unit: "1 cup", gramWeight: 244 }, { seqNum: 2, amount: null, unit: "1 fl oz", gramWeight: 30.5 },
     { seqNum: 3, amount: null, unit: "Guideline amount per fl oz of beverage", gramWeight: 2.5 }, { seqNum: 4, amount: null, unit: "Guideline amount per cup of hot cereal", gramWeight: 61 },
@@ -860,7 +880,20 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         // Pan fried: our cooked chicken breast. Served by weight, it has no serving of its own to
         // start a count at, so its count of one starts at USDA's nearest measure, a chopped cup.
         ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
-        ["Pork sausage (cooked)", "curated", "2 × link", 46, 150], // grilled: our "sausage", at its own link
+        ["Pork chop (cooked)", "curated", "1 × chop without refuse (Yield from 1…)", 157, 328], // grilled: our cooked pork chop, by its whole name
+      ],
+      // A word several of our foods answer to is the list's pick for that word alone
+      // (RULINGS 2026-09-12): a shortened name never lands on one, because the word the
+      // model added may be what picks another of them (the re-check of PR #80). So these
+      // are USDA's food of every word, or the estimate — never our mince, breast, cheddar,
+      // bread roll or pork sausage. "Iced" is frosted on a British bake, so it is no word
+      // of how a food is served either (the re-check of PR #81).
+      "review-picks.json": [
+        ["Beef, stew meat", "usda", "~200 g", 200, 502], // never our ground beef
+        ["Whole chicken", "estimate", "~300 g", 300, 570], // never our chicken breast
+        ["Fried cheese", "estimate", "~100 g", 100, 350], // never our cheddar
+        ["Iced bun", "estimate", "~70 g", 70, 231], // never our bread roll
+        ["Grilled sausage", "estimate", "~46 g", 46, 150], // never our pork sausage
       ],
     };
     const files = readdirSync(PLATES).filter((name) => name.endsWith(".json")).sort();
