@@ -64,9 +64,11 @@ const LAST_ID = 90_000_399;
 /** Every USDA row the eight plates' foods can find by name (`usdaFoodForScan`'s
  *  WHERE), copied from the loaded table on 2026-09-16 — FNDDS 2024-10-31 and SR
  *  Legacy 2018-04, public domain: release, description, kcal, protein, carbohydrate,
- *  fat and fibre per 100 g, and the first household measure. The other plates'
- *  foods not on our list (caffe latte, avocado toast, cherry tomato, toast, banana
- *  toast, egg bacon toast) find none in either release. */
+ *  fat and fibre per 100 g, and the first household measure. The coconut rows were
+ *  copied the same way on 2026-09-17, for the plates the model listed food by food.
+ *  The other plates' foods not on our list (caffe latte, avocado toast, cherry
+ *  tomato, toast, banana toast, egg bacon toast, sourdough toast, mashed avocado,
+ *  grilled asparagus, scored pork sausage, iced latte) find none in either release. */
 const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, number, number, number | null, number, string])[] = [
   ["fndds", "Pumpkin seeds, NFS", 574, 29.84, 14.71, 49.05, 6.5, 144, "cup, without shell"],
   ["fndds", "Pumpkin seeds, salted", 567, 29.49, 14.54, 48.47, 6.4, 144, "cup, without shell"],
@@ -100,6 +102,14 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["fndds", "Coffee, Iced Cafe Mocha, decaffeinated", 51, 1.59, 8.99, 0.92, 0, 31, "fl oz"],
   ["fndds", "Coffee, Iced Cafe Mocha, decaffeinated, nonfat", 43, 1.62, 9, 0.06, 0, 31, "fl oz"],
   ["fndds", "Coffee, Iced Cafe Mocha, decaffeinated, with non-dairy milk", 42, 0.55, 8.1, 0.78, 0, 31, "fl oz"],
+  ["fndds", "Coconut cream, canned, sweetened", 357, 1.17, 53.21, 16.31, 0.2, 30, "fl oz (no ice)"],
+  ["fndds", "Coconut, fresh", 354, 3.33, 15.23, 33.49, 9, 85, "cup"],
+  ["fndds", "Coconut milk", 31, 0.21, 2.92, 2.08, 0, 244, "cup"],
+  ["fndds", "Coconut milk, used in cooking", 230, 2.29, 5.54, 23.84, 2.2, 30, "fl oz"],
+  ["fndds", "Coconut oil", 895, 0, 0.84, 99.1, 0, 224, "cup"],
+  ["fndds", "Coconut, packaged", 456, 3.13, 51.85, 27.99, 9.9, 85, "cup"],
+  ["fndds", "Coconut water, sweetened", 37, 0.21, 9.07, 0.02, 0, 30, "fl oz (no ice)"],
+  ["fndds", "Coconut water, unsweetened", 18, 0.22, 4.24, 0, 0, 30, "fl oz (no ice)"],
   ["sr_legacy", "Lemons, raw, without peel", 29, 1.1, 9.32, 0.3, 2.8, 212, "cup, sections"],
   ["sr_legacy", "Lemon juice, raw", 22, 0.35, 6.9, 0.24, 0.3, 244, "cup"],
   ["sr_legacy", "Lemon juice from concentrate, canned or bottled", 17, 0.45, 5.62, 0.07, 0.7, 15, "tbsp"],
@@ -126,6 +136,7 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
  *  them all, under USDA's own numbers. */
 const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Map([
   ["Pumpkin, cooked", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 230 }, { seqNum: 2, amount: null, unit: "1 cup, mashed", gramWeight: 250 }]],
+  ["Coconut, packaged", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 85 }]],
   ["Lemon, raw", [{ seqNum: 1, amount: null, unit: "1 fruit", gramWeight: 65 }, { seqNum: 2, amount: null, unit: "1 slice or wedge", gramWeight: 8 }, { seqNum: 3, amount: null, unit: "1 cup", gramWeight: 200 }]],
   ["Iced Coffee, pre-lightened and pre-sweetened", [
     { seqNum: 1, amount: null, unit: "1 fl oz", gramWeight: 31 }, { seqNum: 2, amount: null, unit: "1 cup (8 fl oz)", gramWeight: 248 },
@@ -400,7 +411,8 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // on 2026-09-16 with 7a-iii-b's prompt (the text only; no photo is in the
   // repository), with the vessel, fill and size slots that prompt asked for taken
   // out (ROADMAP 7a-iv-d), so every row pinned below is the one those replies gave
-  // before. The review plates are the cases PR #71's four reviews found in the
+  // before; the three "-apart" plates are replies of 2026-09-17 to the prompt that
+  // asks for each food apart (ROADMAP 7a-iv-f). The review plates are the cases PR #71's four reviews found in the
   // old portion code, which read the words of a food's name, written as the model's
   // form writes them: a count of whole pieces and the grams it saw. What a count of
   // cut bits, a container or a serving word once did to a portion is now the grams'
@@ -457,6 +469,24 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // A 250 g mug of iced coffee is one of its 248 g cups, never USDA's 496 g "medium".
       "download.json": [
         ["banana toast", "estimate", "~220 g", 220, 450], ["egg bacon toast", "estimate", "~250 g", 250, 420], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
+      ],
+      // Three of the plates above as the model wrote them once asked for every food it
+      // can see apart (ROADMAP 7a-iv-f): what it joined into a dish is now rows, and a
+      // food a table has is priced from it — the sourdough, cream cheese and arugula of
+      // the two toasts, the dried coconut at USDA's packaged entry.
+      "download-apart.json": [
+        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Banana", "curated", "1 × small (6\" to 6-7/8\" long)", 101, 90],
+        ["Coconut, packaged", "usda", "~5 g", 5, 23], ["Cream cheese", "curated", "1 × serving", 28, 98], ["Arugula", "curated", "1 × half cup", 10, 3],
+        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Egg (hard-boiled)", "curated", "2 × egg", 100, 155], ["iced coffee", "estimate", "~250 g", 250, 120],
+      ],
+      "download-2-apart.json": [
+        ["toast", "estimate", "~60 g", 60, 160], ["avocado", "estimate", "~50 g", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["asparagus", "estimate", "~45 g", 45, 15], ["cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "~60 g", 60, 59],
+        ["sausage", "estimate", "~80 g", 80, 240], ["iced coffee", "estimate", "~200 g", 200, 120],
+      ],
+      "download-5-apart.json": [
+        ["toast", "estimate", "~35 g", 35, 90], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~100 g", 100, 149],
+        ["Strawberries", "curated", "1 × cup, halves", 152, 49],
       ],
       "minimalist-meal-planner-inspiration-idea-120.json": [
         ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
@@ -519,22 +549,22 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     const replyOf = (file: string): VisionEvidence => mealVisionEvidenceSchema.parse(JSON.parse(readFileSync(join(PLATES, file), "utf8")));
     // Apps of their own, over the same database and the same model replies: a store
     // each, so the people scanning here count against no sign-in limit the tests
-    // above share (twenty requests an address) — Kd's eight on one, the review
-    // plates on the other.
-    let platesApp: App | undefined;
-    let reviewApp: App | undefined;
-    const appFor = (file: string): App => {
-      const target = file.startsWith("review-") ? reviewApp : platesApp;
+    // above share (twenty requests an address). Each plate signs one person up and
+    // in, two requests, so an app serves at most eight plates, however many are added.
+    const PLATES_PER_APP = 8;
+    const apps: App[] = [];
+    const appFor = (at: number): App => {
+      const target = apps[Math.floor(at / PLATES_PER_APP)];
       if (target === undefined) throw new Error("beforeAll did not run");
       return target;
     };
     beforeAll(async () => {
-      platesApp = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } });
-      reviewApp = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } });
+      for (let n = 0; n < Math.ceil(Object.keys(EXPECTED).length / PLATES_PER_APP); n++) {
+        apps.push(await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { visionProvider: vision, foodSearchProvider: packagedSearch } }));
+      }
     }, 60_000);
     afterAll(async () => {
-      if (platesApp !== undefined) await platesApp.close();
-      if (reviewApp !== undefined) await reviewApp.close();
+      for (const target of apps) await target.close();
     });
 
     it("are all here, each a reply the schema reads", () => {
@@ -545,7 +575,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     for (const [at, [file, rows]] of Object.entries(EXPECTED).entries()) {
       it(`${file}: every food the model saw is on the sheet, as pinned, and priced as the confirm will price it`, async () => {
         const evidence = replyOf(file);
-        const target = appFor(file);
+        const target = appFor(at);
         const access = await sessionOn(target, `scan7b-plate-${String(at)}@example.com`);
         const sheet = await scanOn(target, access, evidence);
         if (process.env["PRINT_PLATES"] === "1") console.log(`PLATE ${file} ${JSON.stringify(sheet.items.map((i): Row => [i.name, i.nutritionSource, startOf(i), i.gramsPoint, i.kcalPoint]))}`);

@@ -88,6 +88,19 @@ describe("P2.6a nutrition pure pipeline", () => {
     );
   });
 
+  it("asks for every food the model can see apart as its own item; a dish cooked or mixed into one, or a closed sandwich, stays one (RULINGS 2026-09-17)", () => {
+    // Without it, Kd's topped toasts came back as one dish in 3 of 4 scans (ROADMAP 7a-iv-f).
+    expect(MEAL_VISION_PROMPT).toContain(
+      'List every food you can see as its own item, even where one sits on another: toast topped with avocado, a fried egg and bacon is four items (toast, avocado, fried egg, bacon), never one item such as "avocado toast with egg and bacon".',
+    );
+    expect(MEAL_VISION_PROMPT).toContain(
+      "Only a dish whose foods are cooked or mixed together into one stays one item, such as a curry, stew, soup, biryani, pizza or smoothie, and so does a closed sandwich or burger, whose inside cannot be seen.",
+    );
+    // Asked before the reply's limits and the field formats, beside what an item is.
+    expect(MEAL_VISION_PROMPT.indexOf("List every food you can see as its own item")).toBeGreaterThan(MEAL_VISION_PROMPT.indexOf("a food you cannot name goes in unknown_items, not in items."));
+    expect(MEAL_VISION_PROMPT.indexOf("List every food you can see as its own item")).toBeLessThan(MEAL_VISION_PROMPT.indexOf("List at most"));
+  });
+
   it("lists no more foods than the reply's output cap holds, and names any other food in unknown_items", async () => {
     expect([MAX_SCAN_FOODS, VISION_MAX_OUTPUT_TOKENS]).toEqual([20, 1000]);
     expect(MEAL_VISION_PROMPT).toContain(`List at most ${String(MAX_SCAN_FOODS)} items, and put the name of any other food you see in unknown_items.`);
@@ -95,7 +108,8 @@ describe("P2.6a nutrition pure pipeline", () => {
     // "download", 393 for the 9 of "download (1)" — about 40 a food. A full list stays
     // under nine tenths of the cap, so a reply is never cut off into JSON nothing reads.
     // Those were three slots a food longer than today's; the shorter reply wrote 303
-    // tokens for all 9 foods of "download (1)" (HANDOFF 2026-09-17), inside this bound.
+    // tokens for all 9 foods of "download (1)" (HANDOFF 2026-09-17), inside this bound, and
+    // asked for every food apart, 328 for the 10 foods of "download" (ROADMAP 7a-iv-f).
     const perFood = (393 - 155) / (9 - 3);
     expect(155 + perFood * (MAX_SCAN_FOODS - 3)).toBeLessThan(0.9 * VISION_MAX_OUTPUT_TOKENS);
     // A reply that lists more anyway is still read, never failed: its first foods are the

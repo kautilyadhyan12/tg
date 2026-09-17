@@ -244,7 +244,7 @@ ellipse" },
 }
 ```
 
-Rules encoded in the prompt: countable items get counts (rotis, idlis,
+Rules encoded in the prompt: every food the model can see apart is its own item — a toast topped with avocado, a fried egg and bacon is four items — while a dish cooked or mixed into one (a curry, a stew, biryani, a pizza), or a closed sandwich or burger, stays one *(ADDED 2026-09-17, RULINGS, ROADMAP 7a-iv-f: without it, Kd's topped toasts came back as one dish in most scans, priced by the model's estimate)*; countable items get counts (rotis, idlis,
 eggs — counting is the one portion task vision does reliably); containers
 get a type + size class + fill level *(STRUCK 2026-09-17, RULINGS, ROADMAP 7a-iv-d: no container, size or fill is asked)*; the model must list visible scale
 anchors (plate rims, cutlery, hands, cans) and must say "unknown" rather
