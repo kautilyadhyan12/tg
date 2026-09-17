@@ -312,6 +312,13 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["fndds", "Stew, beef, canned", 100, 5, 6.54, 5.96, 1.1, 255, "cup"],
   ["fndds", "Stew, beef", 107, 8.76, 6.29, 5.07, 1.3, 255, "cup"],
   ["fndds", "Stew, beef, with pasta", 132, 9.76, 10.81, 5.23, 1.1, 255, "cup"],
+  ["fndds", "Grilled cheese sandwich, NFS", 343, 11.03, 28.09, 20.78, 1.2, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, American cheese, on white bread", 343, 11.03, 28.09, 20.78, 1.2, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, American cheese, on wheat bread", 341, 12.05, 26.13, 20.98, 2.8, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, cheddar cheese, on white bread", 368, 13.38, 26.38, 23.26, 1.2, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, cheddar cheese, on wheat bread", 366, 14.4, 24.42, 23.46, 2.8, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, reduced fat cheese, on white bread", 307, 11.32, 29.33, 16.05, 1.2, 116, "sandwich"],
+  ["fndds", "Grilled cheese sandwich, reduced fat cheese, on wheat bread", 305, 12.34, 27.38, 16.25, 2.8, 116, "sandwich"],
 ];
 
 /** Every household measure, as the loaded table holds them, of the USDA foods the
@@ -356,6 +363,7 @@ const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Ma
   ]],
   ["Pasta, gluten free", [{ seqNum: 1, amount: null, unit: "1 cup, cooked", gramWeight: 140 }, { seqNum: 2, amount: null, unit: "1 oz, dry, yields", gramWeight: 80 }]],
   ["Beef, stew meat", [{ seqNum: 1, amount: null, unit: "1 oz yields", gramWeight: 20 }, { seqNum: 2, amount: null, unit: "1 cubic inch", gramWeight: 17 }, { seqNum: 3, amount: null, unit: "1 cup", gramWeight: 135 }]],
+  ["Grilled cheese sandwich, reduced fat cheese, on white bread", [{ seqNum: 1, amount: null, unit: "1 sandwich", gramWeight: 116 }]],
   ["Milk, lactose free, whole", [
     { seqNum: 1, amount: null, unit: "1 cup", gramWeight: 244 }, { seqNum: 2, amount: null, unit: "1 fl oz", gramWeight: 30.5 },
     { seqNum: 3, amount: null, unit: "Guideline amount per fl oz of beverage", gramWeight: 2.5 }, { seqNum: 4, amount: null, unit: "Guideline amount per cup of hot cereal", gramWeight: 61 },
@@ -887,13 +895,19 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // model added may be what picks another of them (the re-check of PR #80). So these
       // are USDA's food of every word, or the estimate — never our mince, breast, cheddar,
       // bread roll or pork sausage. "Iced" is frosted on a British bake, so it is no word
-      // of how a food is served either (the re-check of PR #81).
+      // of how a food is served either (the re-check of PR #81). The last three are the
+      // same pick made by the list's own order: our one sandwich, burrito and lasagna
+      // name their kind in their brackets, and these names never said turkey, chicken or
+      // meat (the re-check of PR #81 again).
       "review-picks.json": [
         ["Beef, stew meat", "usda", "~200 g", 200, 502], // never our ground beef
         ["Whole chicken", "estimate", "~300 g", 300, 570], // never our chicken breast
         ["Fried cheese", "estimate", "~100 g", 100, 350], // never our cheddar
         ["Iced bun", "estimate", "~70 g", 70, 231], // never our bread roll
         ["Grilled sausage", "estimate", "~46 g", 46, 150], // never our pork sausage
+        ["Grilled cheese sandwich, reduced fat cheese, on white bread", "usda", "1 × sandwich", 116, 356], // never our turkey sandwich
+        ["Hot burrito", "estimate", "~200 g", 200, 418], // never our chicken burrito
+        ["Lasagna, Vegetable, frozen, baked", "usda", "~250 g", 250, 348], // never our meat lasagna
       ],
     };
     const files = readdirSync(PLATES).filter((name) => name.endsWith(".json")).sort();

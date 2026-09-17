@@ -4,7 +4,7 @@
 // ROADMAP 7a-iv-b — where each priced food's row starts. The plates run through
 // the real lookups in nutrition.scan.routes.test.ts.
 import { describe, expect, it } from "vitest";
-import { mealPhotoItemSchema, per100gSchema, type FoodMeasure, type VisionEvidence, type VisionItem } from "@app/shared";
+import { mealPhotoItemSchema, per100gSchema, type Diet, type FoodMeasure, type VisionEvidence, type VisionItem } from "@app/shared";
 import type { FoodReference } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import {
   COOKING_WORDS,
@@ -21,11 +21,13 @@ import {
   agreesWithScan,
   contradicts,
   energySeen,
+  saysAnotherKind,
   estimateFood,
   estimatePer100g,
   isWrongFood,
   priceScannedFood,
   type EnergySeen,
+  type OurListFood,
   type ScanLookups,
   type ScanPrice,
 } from "../src/modules/nutrition/scanMatch.js";
@@ -154,7 +156,7 @@ describe("the energy a scan saw, which chooses among USDA entries of one name", 
 interface Answers {
   ourList?: FoodReference;
   /** Our list's food, and its other versions, for each shorter name. */
-  versions?: ReadonlyMap<string, readonly FoodReference[]>;
+  versions?: ReadonlyMap<string, readonly OurListFood[]>;
   usda?: FoodReference;
   /** Whether USDA's answer holds every word rather than being the food of that name. */
   usdaByEveryWord?: boolean;
@@ -267,7 +269,12 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews o
   const figures = { grams: 200, kcal: 200, protein_g: 0, carbs_g: 50, fat_g: 0 };
   const ESTIMATE = { kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200 } as const;
   const food = (name: string, kcal = 100, source: FoodReference["source"] = "curated") => tableFood(name, kcal, source);
-  const versions = (...entries: [string, FoodReference[]][]) => new Map(entries);
+  /** Our list's foods for a shorter name; a food of no diet rung that holds meat or eggs. */
+  const versions = (...entries: [string, FoodReference[]][]): Map<string, OurListFood[]> =>
+    new Map(entries.map(([name, foods]) => [name, foods.map((one): OurListFood => ({ food: one, diet: "vegan" }))]));
+  /** The same, each food with the diet it carries. */
+  const dietVersions = (...entries: [string, [FoodReference, Diet][]][]): Map<string, OurListFood[]> =>
+    new Map(entries.map(([name, foods]) => [name, foods.map(([one, diet]): OurListFood => ({ food: one, diet }))]));
   interface Case {
     label: string;
     hint: string;
@@ -421,6 +428,41 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews o
       asked: ["ourList:vegetable zqxlasagna", "usda:vegetable zqxlasagna"],
     },
     {
+      label: "no food where a meat food's own name says which kind it is and the scanned name did not (a grilled sandwich is no turkey one)",
+      hint: "grilled zqxsandwich",
+      answers: { versions: dietVersions(["zqxsandwich", [[food("Zqxsandwich (zqxturkey)"), "non_vegetarian"]]]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:grilled zqxsandwich", "usda:grilled zqxsandwich", "ourListVersions:zqxsandwich", "packaged:grilled zqxsandwich"],
+    },
+    {
+      label: "no food where an egg food's name does, either",
+      hint: "warm zqxomelette",
+      answers: { versions: dietVersions(["zqxomelette", [[food("Zqxomelette (zqxbacon)"), "vegetarian_eggs"]]]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:warm zqxomelette", "usda:warm zqxomelette", "ourListVersions:zqxomelette", "packaged:warm zqxomelette"],
+    },
+    {
+      label: "the meat food whose brackets say only how it was cooked",
+      hint: "grilled zqxchicken zqxbreast",
+      answers: { versions: dietVersions(["zqxchicken zqxbreast", [[food("Zqxchicken breast (cooked)"), "non_vegetarian"]]]) },
+      expected: { kind: "table", food: food("Zqxchicken breast (cooked)") },
+      asked: ["ourList:grilled zqxchicken zqxbreast", "usda:grilled zqxchicken zqxbreast", "ourListVersions:zqxchicken zqxbreast"],
+    },
+    {
+      label: "the meat food whose kind the scanned name itself says",
+      hint: "grilled zqxturkey zqxsandwich",
+      answers: { versions: dietVersions(["zqxturkey zqxsandwich", [[food("Zqxsandwich (zqxturkey)"), "non_vegetarian"]]]) },
+      expected: { kind: "table", food: food("Zqxsandwich (zqxturkey)") },
+      asked: ["ourList:grilled zqxturkey zqxsandwich", "usda:grilled zqxturkey zqxsandwich", "ourListVersions:zqxturkey zqxsandwich"],
+    },
+    {
+      label: "the food no rung above vegetarian, whatever its brackets say: our one pizza is the pizza",
+      hint: "grilled zqxpizza",
+      answers: { versions: dietVersions(["zqxpizza", [[food("Zqxpizza (zqxcheese)"), "vegetarian"]]]) },
+      expected: { kind: "table", food: food("Zqxpizza (zqxcheese)") },
+      asked: ["ourList:grilled zqxpizza", "usda:grilled zqxpizza", "ourListVersions:zqxpizza"],
+    },
+    {
       label: "a name of ten words, shortened",
       hint: "the some a an of with small hot warm zqxfood",
       answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
@@ -523,6 +565,24 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews o
     ["steamed", "Zqxfood", false],
   ])("contradicts: %s against %s is %s", (dropped, name, expected) => {
     expect(contradicts(dropped.split(" "), name)).toBe(expected);
+  });
+
+  it.each<[string, Diet, string, boolean]>([
+    // A meat or egg food whose brackets name a kind the scanned name never said.
+    ["Zqxsandwich (zqxturkey)", "non_vegetarian", "zqxsandwich", true],
+    ["Zqxomelette (zqxbacon)", "vegetarian_eggs", "zqxomelette", true],
+    ["Zqxsteak (zqxsirloin, cooked)", "non_vegetarian", "zqxsteak", true],
+    // …unless the name says that kind, or the brackets say only how it was made.
+    ["Zqxsandwich (zqxturkey)", "non_vegetarian", "zqxturkey zqxsandwich", false],
+    ["Zqxchicken breast (cooked)", "non_vegetarian", "zqxchicken breast", false],
+    ["Zqxham (sliced)", "non_vegetarian", "zqxham", false],
+    ["Zqxegg (whole, large)", "vegetarian_eggs", "zqxegg", false],
+    ["Zqxbacon", "non_vegetarian", "zqxbacon", false],
+    // A food no rung above vegetarian is left alone, whatever its brackets say.
+    ["Zqxpizza (zqxcheese)", "vegetarian", "zqxpizza", false],
+    ["Zqxrice (white, cooked)", "vegan", "zqxrice", false],
+  ])("saysAnotherKind: %s, a %s food, for %s is %s", (name, diet, kept, expected) => {
+    expect(saysAnotherKind({ food: tableFood(name, 100), diet }, kept.split(" "))).toBe(expected);
   });
 
   it("holds the shorter name's food to the model's own error on the plate, 30 % or 10 kcal, not to three times", async () => {

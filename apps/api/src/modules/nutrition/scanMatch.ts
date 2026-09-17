@@ -6,7 +6,7 @@
 //
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
-import { isNoValueWord, type Per100g, type VisionItem } from "@app/shared";
+import { DIET_LADDER, isNoValueWord, type Diet, type Per100g, type VisionItem } from "@app/shared";
 import { NOISE_WORDS, slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
@@ -82,13 +82,18 @@ export function isWrongFood(tableKcalPer100g: number, estimate: Per100g | null):
  *  (the whole description, or its head), or by every word of it. */
 export interface UsdaScanAnswer { food: FoodReference; byEveryWord: boolean }
 
+/** A food of our own list, with the lowest diet that eats it. */
+export interface OurListFood { food: FoodReference; diet: Diet }
+
 /** Where a scanned food's numbers can come from. */
 export interface ScanLookups {
   /** Our own list, by the whole name (`findCurated`). */
   ourList(hint: string): FoodReference | null;
   /** Our own list, by a shorter name: the food the name alone means, then the other
-   *  versions of that food on the list, in the list's order (`findCuratedVersions`). */
-  ourListVersions(name: string): readonly FoodReference[];
+   *  versions of that food on the list, in the list's order (`findCuratedVersions`),
+   *  each with the diet it carries, which says whether its name holds a meat or an
+   *  egg the scanned name never said (`saysAnotherKind`). */
+  ourListVersions(name: string): readonly OurListFood[];
   /** The USDA table: the food itself by name, then every word; among the entries
    *  a name finds equally, the plainest of those as near to what the model saw as
    *  its estimate can tell. */
@@ -203,6 +208,21 @@ export function contradicts(dropped: readonly string[], foodName: string): boole
   return named.cooking.size > 0 && [...scanned.cooking].some((group) => !named.cooking.has(group));
 }
 
+/** Whether a MEAT OR EGG food's own name says which kind it is where the scanned name
+ *  did not. Our list holds one "Sandwich (turkey)", one "Burrito (chicken)" and one
+ *  "Lasagna (meat)", so a shortened "grilled sandwich" would read as the turkey one and
+ *  "baked lasagna" as the meat one — the same falseness as a vegan lasagna reading as
+ *  ours, over the same line of the diet ladder (the re-check of PR #81). Brackets that
+ *  say only how a food was cooked, cut or served are no kind of it ("Chicken breast
+ *  (cooked)" answers "pan fried chicken breast"), and a kind the name itself says is no
+ *  surprise. A food no rung above vegetarian is left alone: our one "Pizza (cheese)" is
+ *  the plain pizza a shortened "grilled pizza" means, and our one white rice the rice. */
+export function saysAnotherKind(food: OurListFood, kept: readonly string[]): boolean {
+  if (DIET_LADDER[food.diet] < DIET_LADDER.vegetarian_eggs) return false;
+  const brackets = [...food.food.name.matchAll(/\(([^)]*)\)/g)].flatMap((found) => slug(found[1] ?? "").split("_")).filter((word) => word !== "");
+  return brackets.some((word) => !PREPARATION_WORDS.has(word) && !kept.includes(word));
+}
+
 /** Our list's food for a SHORTER NAME — the name with its first words dropped, the
  *  longest our list holds ("scored pork sausage" is our pork sausage, "steamed
  *  broccoli" our cooked broccoli) — or null. Only words that say how a food was
@@ -211,20 +231,22 @@ export function contradicts(dropped: readonly string[], foodName: string): boole
  *  bread "bread" is (RULINGS 2026-09-17). Of the food and its other versions on the
  *  list, the first whose own name the dropped words do not contradict
  *  (`contradicts`): "steamed carrots" are "Carrots (cooked)", not the list's first
- *  carrots, "Carrots (raw)"; none, and the name finds no food. The food must carry
- *  the kcal the model saw (`agreesWithScan`), so it needs the model's own figures:
- *  without them no name is shortened. */
+ *  carrots, "Carrots (raw)"; and whose own name holds no meat or egg the scanned
+ *  name never said (`saysAnotherKind`); none, and the name finds no food. The food
+ *  must carry the kcal the model saw (`agreesWithScan`), so it needs the model's own
+ *  figures: without them no name is shortened. */
 function shorterNameFood(item: VisionItem, estimate: Per100g | null, lookups: ScanLookups): FoodReference | null {
   if (estimate === null || item.grams === null || item.kcal === null) return null;
   const words = slug(item.canonical_hint).split("_").filter((word) => word !== "");
   if (words.length > MAX_SHORTENED_NAME_WORDS) return null;
   for (let drop = 1; drop < words.length; drop++) {
     if (!PREPARATION_WORDS.has(words[drop - 1] ?? "")) return null;
-    const versions = lookups.ourListVersions(words.slice(drop).join(" "));
+    const kept = words.slice(drop);
+    const versions = lookups.ourListVersions(kept.join(" "));
     if (versions.length === 0) continue;
     const dropped = words.slice(0, drop);
-    const food = versions.find((version) => !contradicts(dropped, version.name));
-    return food !== undefined && agreesWithScan(food.kcal, item.grams, item.kcal) ? food : null;
+    const found = versions.find((version) => !contradicts(dropped, version.food.name) && !saysAnotherKind(version, kept));
+    return found !== undefined && agreesWithScan(found.food.kcal, item.grams, item.kcal) ? found.food : null;
   }
   return null;
 }

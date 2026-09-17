@@ -443,7 +443,7 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
     const food = findCurated(hint);
     return food === null ? null : asReference(food);
   },
-  ourListVersions: (name) => findCuratedVersions(name).map(asReference),
+  ourListVersions: (name) => findCuratedVersions(name).map((food) => ({ food: asReference(food), diet: food.diet })),
   usda: async (hint, seen) => {
     const found = await repo.usdaFoodForScan(deps.sql, hint, seen);
     return found === null ? null : { food: asUsdaReference(found.food), byEveryWord: found.match === "words" };
