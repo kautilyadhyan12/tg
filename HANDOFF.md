@@ -11,7 +11,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: the two files 24/24 · full web 2288 passed, `poseAssets.contract` failing to load as before · eslint on the three files: the same 7 errors in Nutrition.jsx as the handoff before, none new · 4 deliberate breaks each red (clamped at 0, a rounded -0 as over, "about" dropped on an over row, a past day as over), the page's sha256 identical after.
 - Kd's click-through passed (*"allpassed"*) on the local API (local Postgres) and web.
 - Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Ruled (RULINGS 2026-09-17): the health rules hold for typed numbers; built as ROADMAP 7a-iv-e, after 7a-iv-d. Not built.
-- PR #78 open. Next: its review, then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
+- PR #78: CI green on 1eb8b42. Review: no Critical/High; two Lows and a weak test fixed with no re-check (the ring's "/ 140 g", the unreachable -0 case removed, the past-day test renamed); the affected web files 97/97, lint clean on the fixed files. Next: then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
 
 ## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)
 

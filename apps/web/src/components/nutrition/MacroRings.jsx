@@ -46,7 +46,7 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
           </p>
           <p className="text-2xs font-medium"
              style={{ color: 'rgba(255,255,255,0.40)' }}>
-            / {target}{unit}
+            {`/ ${target}${unit ? ` ${unit}` : ''}`}
           </p>
         </div>
       </div>

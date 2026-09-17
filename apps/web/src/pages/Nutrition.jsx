@@ -1917,8 +1917,7 @@ export default function Nutrition() {
   // apart, and conflating them here would have made the false "add your
   // details" prompt the sole explanation of a network blip.
   // Signed: below zero is how far past the target the day went, which the card
-  // says as "30 g over" instead of 0 (RULINGS 2026-09-17). A rounded -0 is not
-  // below zero, so it reads 0.
+  // says as "30 g over" instead of 0 (RULINGS 2026-09-17).
   const remaining = targets === null || targets === undefined ? null : {
     kcal:      Math.round(targets.kcal      - totals.kcal),
     protein_g: Math.round(targets.protein_g - totals.protein_g),

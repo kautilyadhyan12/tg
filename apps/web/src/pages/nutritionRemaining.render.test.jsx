@@ -68,11 +68,6 @@ describe('"Remaining today" under, at and over each target', () => {
     expect(await card('Remaining today')).toEqual(expected);
   });
 
-  it('a target a fraction under what was eaten rounds to 0, never "0 g over"', async () => {
-    serve({ eaten: { kcal: 2000, protein: 100, carbs: 200, fat: 60 }, target: { kcal: 1999.6, protein: 99.6, carbs: 199.6, fat: 59.6 } });
-    expect(await card('Remaining today')).toEqual({ Calories: '0 kcal', Protein: '0 g', Carbs: '0 g', Fat: '0 g' });
-  });
-
   it('keeps "about" in front of an over row when the day holds an estimate', async () => {
     serve({ eaten: { kcal: 2120, protein: 130, carbs: 150, fat: 40 }, target, source: 'estimate' });
     expect(await card('Remaining today')).toEqual({
@@ -80,7 +75,9 @@ describe('"Remaining today" under, at and over each target', () => {
     });
   });
 
-  it('leaves a past day as what was eaten, with no "over"', async () => {
+  // What was eaten is never below zero, so no code can print "over" here: this
+  // pins that a past day reads "Eaten on this day" and its totals, not "remaining".
+  it('reads a past day as "Eaten on this day" and its totals, not what is left', async () => {
     serve({ eaten: { kcal: 2120, protein: 130, carbs: 260, fat: 75 }, target });
     await screen.findByText('Remaining today');
     fireEvent.click(screen.getByTitle('Previous day'));
