@@ -10,8 +10,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Built: "Remaining today" is signed; below zero reads "30 g over"; every row puts a space before its unit. Web only, `Nutrition.jsx` and a new `nutritionRemaining.render.test.jsx`; two old assertions in `nutritionPhotoSources.render.test.jsx` gained the space.
 - Verified: the two files 24/24 · full web 2288 passed, `poseAssets.contract` failing to load as before · eslint on the three files: the same 7 errors in Nutrition.jsx as the handoff before, none new · 4 deliberate breaks each red (clamped at 0, a rounded -0 as over, "about" dropped on an over row, a past day as over), the page's sha256 identical after.
 - Kd's click-through passed (*"allpassed"*) on the local API (local Postgres) and web.
-- Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Its plan and questions are with Kd; not built.
-- Next: this card's review, then 7a-iv-c, 7a-iv-d, then the member list 3a.
+- Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Ruled (RULINGS 2026-09-17): the health rules hold for typed numbers; built as ROADMAP 7a-iv-e, after 7a-iv-d. Not built.
+- PR #78 open. Next: its review, then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
 
 ## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)
 
