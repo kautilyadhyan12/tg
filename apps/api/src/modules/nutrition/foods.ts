@@ -436,12 +436,11 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
 /** Names the words of the list's own names do not reach, each pointing at a
  *  canonical: other spellings and local names, the English name of an Indian
  *  dish (its name holds it in brackets, but a name is found by the words outside
- *  them), a cooking word where the table's cooking is the same one, and the
- *  single words that stand for one common food ("chicken" for cooked chicken
- *  breast). A Map, not an object literal, so a key such as "constructor" is
- *  never found on the prototype. Exported for the test that holds each one to a
- *  food on the list. */
-export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries({
+ *  them), a cooking word where the table's cooking is the same one, and a food's
+ *  own name ("cheddar"). Each names one food; the words several foods answer to
+ *  are `COMMON_FOOD_PICKS`, below. A Map, not an object literal, so a key such
+ *  as "constructor" is never found on the prototype. */
+const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   // Indian names
   roti: "roti_chapati", chapati: "roti_chapati", flatbread: "roti_chapati",
   phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
@@ -480,22 +479,39 @@ export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(
   macaroni_and_cheese: "mac_and_cheese", chicken_soup: "chicken_noodle_soup", doner: "gyro",
   doner_kebab: "gyro", california_roll: "sushi_roll", egg_fried_rice: "fried_rice",
   battered_fish: "fried_fish_coated",
+  // the food its cited entry is, by another name: sweet corn ("Corn, sweet, yellow,
+  // cooked"), a potato baked in its jacket ("Potatoes, baked, flesh and skin"), two
+  // long-grain white rices ("Rice, white, long-grain"), and the latte's Italian name
+  sweet_corn: "corn_cooked", jacket_potato: "potato_baked", basmati_rice: "rice_white_cooked",
+  jasmine_rice: "rice_white_cooked", caffe_latte: "latte", iced_latte: "latte",
   // a cooking word where the table's cooking is the same one
   grilled_chicken: "chicken_breast_grilled", grilled_salmon: "salmon_cooked", baked_salmon: "salmon_cooked",
   roast_chicken: "rotisserie_chicken", roasted_chicken: "rotisserie_chicken", roasted_potatoes: "roast_potatoes",
-  // one word for one common food
-  chicken: "chicken_breast_cooked", beef: "ground_beef_85_cooked", ground_beef: "ground_beef_85_cooked",
-  pork: "pork_chop_cooked", turkey: "turkey_breast_cooked", sausage: "pork_sausage_cooked",
-  bread: "whole_wheat_bread", cheese: "cheddar_cheese", cheddar: "cheddar_cheese",
-  mozzarella: "mozzarella_cheese", parmesan: "parmesan_cheese", feta: "feta_cheese",
-  nuts: "mixed_nuts", juice: "orange_juice",
-  fries: "french_fries", burger: "hamburger_fast_food", cookie: "chocolate_chip_cookie",
-  sushi: "sushi_roll", spaghetti: "pasta_cooked", chili: "chili_con_carne", chilli: "chili_con_carne",
-  chilli_con_carne: "chili_con_carne", bolognese: "spaghetti_bolognese",
+  // one food's own name
+  ground_beef: "ground_beef_85_cooked", cheddar: "cheddar_cheese", mozzarella: "mozzarella_cheese",
+  parmesan: "parmesan_cheese", feta: "feta_cheese", chilli_con_carne: "chili_con_carne", bolognese: "spaghetti_bolognese",
   // Left out on purpose: a word the markets use for different foods. "Jelly" is
   // jam in the US and a gelatine dessert in the UK, "chips" are crisps in the US
   // and fries in the UK, and "beans" on a British plate are baked beans.
 }));
+
+/** One word for one common food: a word several foods answer to, and the one the
+ *  list picks for it when nothing else is said — the most eaten in the markets
+ *  (RULINGS 2026-09-12), so "bread" alone is white bread (RULINGS 2026-09-17). A
+ *  pick answers the word alone, never a longer name the scanner has shortened to it
+ *  (`findCuratedVersions`): "brie cheese" is no cheddar, "roast pork" no pork chop
+ *  and "stewed beef" no mince. Exported for the test that holds each one to a food. */
+export const COMMON_FOOD_PICKS: ReadonlyMap<string, string> = new Map(Object.entries({
+  chicken: "chicken_breast_cooked", beef: "ground_beef_85_cooked", pork: "pork_chop_cooked",
+  turkey: "turkey_breast_cooked", sausage: "pork_sausage_cooked", bread: "white_bread", cheese: "cheddar_cheese",
+  nuts: "mixed_nuts", juice: "orange_juice", fries: "french_fries", burger: "hamburger_fast_food",
+  cookie: "chocolate_chip_cookie", sushi: "sushi_roll", spaghetti: "pasta_cooked", chili: "chili_con_carne",
+  chilli: "chili_con_carne",
+}));
+
+/** Every other name and every pick. Exported for the test that holds each one to
+ *  a food on the list. */
+export const FOOD_ALIASES: ReadonlyMap<string, string> = new Map([...FOOD_NAMES, ...COMMON_FOOD_PICKS]);
 
 /** Words that only say how a food is arranged, cut or served, never what it
  *  is, so dropping them can only reveal the food's own name ("flatbread stack",
@@ -591,18 +607,32 @@ function byWords(slugged: string): CuratedFood | null {
   return best === null ? null : best.food;
 }
 
-/** The aliases keyed by their words' one spelling, so "nugget" finds "nuggets"
- *  and "cookies" finds "cookie". */
-const ALIASES_BY_STEM: ReadonlyMap<string, string> = new Map(
-  [...FOOD_ALIASES].map(([alias, canonical]) => [toTokens(alias).map(stem).join("_"), canonical]),
-);
+/** A slugged name's words in their one spelling, so "nugget" finds "nuggets" and
+ *  "cookies" finds "cookie". */
+const stemKey = (slugged: string): string => toTokens(slugged).map(stem).join("_");
 
-const aliasFor = (slugged: string): string | undefined => ALIASES_BY_STEM.get(toTokens(slugged).map(stem).join("_"));
+/** Aliases keyed by `stemKey`: every one, and the names of one food alone — no
+ *  pick for a word several foods answer to (`COMMON_FOOD_PICKS`). */
+type AliasesByStem = ReadonlyMap<string, string>;
+const byStem = (aliases: ReadonlyMap<string, string>): AliasesByStem => new Map([...aliases].map(([alias, canonical]) => [stemKey(alias), canonical]));
+const ALIASES_BY_STEM = byStem(FOOD_ALIASES);
+const NAMES_BY_STEM = byStem(FOOD_NAMES);
 
-function byAliasOrWords(slugged: string): CuratedFood | null {
-  const target = aliasFor(slugged);
+const aliasFor = (slugged: string): string | undefined => ALIASES_BY_STEM.get(stemKey(slugged));
+
+function byAliasOrWords(slugged: string, aliases: AliasesByStem): CuratedFood | null {
+  const target = aliases.get(stemKey(slugged));
   if (target !== undefined) return BY_CANONICAL.get(target) ?? null;
   return byWords(slugged);
+}
+
+function find(query: string, aliases: AliasesByStem): CuratedFood | null {
+  const q = slug(query);
+  if (q === "") return null;
+  const exact = BY_CANONICAL.get(q);
+  if (exact !== undefined) return exact;
+  const stripped = denoise(q);
+  return byAliasOrWords(q, aliases) ?? (stripped === null ? null : byAliasOrWords(stripped, aliases));
 }
 
 /** The one food a name means, or null: the food whose canonical it is, then an
@@ -613,12 +643,26 @@ function byAliasOrWords(slugged: string): CuratedFood | null {
  *  homemade roti, not the store-bought one with fewer words; "spring_roll" is
  *  the egg roll it was renamed to). */
 export function findCurated(query: string): CuratedFood | null {
-  const q = slug(query);
-  if (q === "") return null;
-  const exact = BY_CANONICAL.get(q);
-  if (exact !== undefined) return exact;
-  const stripped = denoise(q);
-  return byAliasOrWords(q) ?? (stripped === null ? null : byAliasOrWords(stripped));
+  return find(query, ALIASES_BY_STEM);
+}
+
+/** Each food's name outside its brackets, which its other versions share. */
+const HEAD_KEYS: ReadonlyMap<CuratedFood, string> = new Map(FOOD_WORDS.map((f) => [f.food, f.headKey]));
+
+/** The food a name the scanner has SHORTENED means (`scanMatch.ts`), then the other
+ *  versions of that food on the list — the foods of the same name outside their
+ *  brackets, "Carrots (raw)" and "Carrots (cooked)" — in the list's order; none
+ *  where the name means no food. Two rules the whole name's lookup does not need.
+ *  The versions: "steamed carrots" are no carrots the list names raw. And never
+ *  the list's pick for a word several foods answer to (`COMMON_FOOD_PICKS`): the
+ *  model named more than that word, and the word it added may be what picks
+ *  another of them — "roast pork" is no pork chop, "stewed beef" no mince, "whole
+ *  chicken" no chicken breast (the re-check of PR #80). */
+export function findCuratedVersions(query: string): CuratedFood[] {
+  const food = find(query, NAMES_BY_STEM);
+  if (food === null) return [];
+  const head = HEAD_KEYS.get(food);
+  return [food, ...FOOD_WORDS.filter((f) => f.food !== food && f.headKey === head).map((f) => f.food)];
 }
 
 /** The noise words that only join a query's words or point at them. */

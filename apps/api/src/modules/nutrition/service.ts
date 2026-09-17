@@ -25,7 +25,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { getUserPlan, getUserSyncContext } from "../users/service.js";
 import { targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, curatedUsdaFdcId, findCurated, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import * as repo from "./repo.js";
@@ -443,9 +443,10 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
     const food = findCurated(hint);
     return food === null ? null : asReference(food);
   },
+  ourListVersions: (name) => findCuratedVersions(name).map((food) => ({ food: asReference(food), diet: food.diet })),
   usda: async (hint, seen) => {
     const found = await repo.usdaFoodForScan(deps.sql, hint, seen);
-    return found === null ? null : asUsdaReference(found.food);
+    return found === null ? null : { food: asUsdaReference(found.food), byEveryWord: found.match === "words" };
   },
   packaged: async (hint) => {
     const [product] = await cachedExternal(deps, hint, 1);

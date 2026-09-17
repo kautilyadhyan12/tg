@@ -285,7 +285,21 @@ an **IFCT 2017 pack** for Indian foods (the Indian Food Composition Tables
 and OpenFoodFacts for packaged goods (free, global; barcode path arrives
 with mobile). Every item's result carries its source. Same photo + same
 confirmed portions now produce the same numbers every single time, and
-every number has a citation.
+every number has a citation. *(AMENDED 2026-09-17, RULINGS, ROADMAP 7a-iv-i: a
+scanned name is looked up whole on the curated table, then as USDA's food of that
+name; a name no table holds whole, such as "steamed broccoli", is the curated
+table's food of a shorter name — shortened only past words that say how a food was
+cooked, cut or served (LanguaL's cooking method, form and heat treatment), never to
+a version the curated table names otherwise ("steamed carrots" are never its raw
+carrots), and only where that food carries the kcal the model saw within its own
+error — unless USDA's food holding every word is more than 10 kcal per 100 g nearer
+to it; then a packaged product; else the model's estimate. A word that can say what
+a food is ("vegan butter", "soy yogurt", "vegetable lasagna") is never dropped, and
+a shortened name never lands on the curated table's pick for a word several of its
+foods answer to ("roast pork" is no pork chop), nor on a meat or egg food whose own
+name says which kind it is where the scanned name did not ("grilled sandwich" is no
+turkey sandwich). Amended again the same day, from the reviews of PR #80 and #81 and
+their re-checks.)*
 
 **Stage 4 — The confirmation moment (three seconds, one tap).** *(AMENDED 2026-09-16, RULINGS, the portion redesign; built at ROADMAP 7a-iv-b: each item starts at one of its food's measures or at the photo's grams marked "~120 g · estimate", and is corrected in the measure picker — a measure and how many, or a saved dish and how full — never S/M/L cards; the total is a single number, "about" while an estimate is in it.)* Before
 anything is saved, one compact sheet: each item as a chip with its portion

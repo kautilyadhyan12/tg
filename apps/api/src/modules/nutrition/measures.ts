@@ -210,35 +210,49 @@ export interface ScanStart { measure: string; amount: number; grams: number; est
 /** Where a food the photo scan saw starts on the photo sheet (RULINGS 2026-09-16):
  *  at the photo's count of one of its own measures where that weighs within
  *  `SCAN_START_TOLERANCE_PERCENT` of the grams the photo saw, as the row will weigh
- *  it (to the whole gram) — the nearest such measure, the earlier in the food's
- *  list where two are as near — else at those grams, an estimate, so no row starts
- *  further than that from what the photo saw. Grams and ounces are units of weight, not
- *  anything a photo counts, so a count is never of them. A measure's count is only
- *  a start the save would take: no more than one item of a meal may weigh (one
- *  that rounds to no gram at all is 100 % from any grams, so never near). Where
- *  the photo gave no count there is nothing to multiply; where
- *  it gave no weight there is nothing to check a count against, so the food starts
- *  where Add food starts it (`startingMeasure`), an estimate too. No word of the
- *  food's name is read: the grams decide. */
+ *  it (to the whole gram), else at those grams, an estimate, so no row starts
+ *  further than that from what the photo saw. Of the measures that near, a food of
+ *  our list, or a label's, starts at its own serving (the measure Add food starts
+ *  it at) where that is one of them: within 30 % the grams cannot tell one measure
+ *  from another, and the serving is the measure the food is eaten by, so two slices
+ *  of white bread seen at 70 g are "2 × slice · 58 g", never two 35 g cups of bread
+ *  cubes that happen to weigh 70 g. Otherwise, and for a USDA food, whose first
+ *  measure is only first in USDA's list ("cup, quartered or chopped" for an apple),
+ *  the nearest such measure, the earlier in the food's list where two are as near.
+ *  Grams and ounces are units of weight, not anything a photo counts, so a count
+ *  is never of them. A measure's count is only a start the save would take: no
+ *  more than one item of a meal may weigh (one that rounds to no gram at all is
+ *  100 % from any grams, so never near). Where the photo gave no count there is
+ *  nothing to multiply; where it gave no weight there is nothing to check a count
+ *  against, so the food starts where Add food starts it (`startingMeasure`), an
+ *  estimate too. No word of the food's name is read: the grams decide. */
 export function scanStart(
   source: Pick<MeasureSource, "serving" | "unit" | "ownServing">,
   measures: readonly FoodMeasure[],
   count: number | null,
   seenGrams: number | null,
 ): ScanStart {
+  const start = startingMeasure(source, measures);
   if (seenGrams === null) {
-    const start = startingMeasure(source, measures);
     const measure = measures.find((m) => m.id === start.measure) ?? GRAM;
     return { ...start, grams: measureGrams(measure, start.amount), estimated: true };
   }
-  let best: (ScanStart & { off: number }) | null = null;
-  for (const measure of measures) {
-    if (count === null || measure.id === GRAM.id || measure.id === OUNCE.id) continue;
+  /** The photo's count of a measure, where that is a start and near the photo's grams. */
+  const near = (measure: FoodMeasure): (ScanStart & { off: number }) | null => {
+    if (count === null || measure.id === GRAM.id || measure.id === OUNCE.id) return null;
     const grams = measureGrams(measure, count);
     const off = Math.abs(grams - seenGrams);
     // In whole percents, so 30 % of whole grams is exact: 60 g off 200 g is near.
-    if (grams > MAX_ITEM_GRAMS || 100 * off > SCAN_START_TOLERANCE_PERCENT * seenGrams) continue;
-    if (best === null || off < best.off) best = { measure: measure.id, amount: count, grams, estimated: false, off };
+    if (grams > MAX_ITEM_GRAMS || 100 * off > SCAN_START_TOLERANCE_PERCENT * seenGrams) return null;
+    return { measure: measure.id, amount: count, grams, estimated: false, off };
+  };
+  const serving = source.ownServing ? measures.find((m) => m.id === start.measure) : undefined;
+  let best = serving === undefined ? null : near(serving);
+  if (best === null) {
+    for (const measure of measures) {
+      const at = near(measure);
+      if (at !== null && (best === null || at.off < best.off)) best = at;
+    }
   }
   if (best !== null) return { measure: best.measure, amount: best.amount, grams: best.grams, estimated: false };
   const seen = Math.min(MAX_ITEM_GRAMS, Math.max(1, Math.round(seenGrams)));

@@ -1,0 +1,21 @@
+{
+  "meal_name": "Names kept whole plate",
+  "items": [
+    ["Chicken salad","chicken salad",null,150,300,18,8,22],
+    ["Cherry tomatoes","cherry tomatoes",8,80,14,1,3,0],
+    ["Lemon water","lemon water",1,250,5,0,1,0],
+    ["Light coconut milk","light coconut milk",null,120,37,0,3,3],
+    ["Coconut milk","coconut milk",null,60,114,1,2,12],
+    ["Oreo cookies","oreo cookies",3,34,160,2,24,7],
+    ["Overnight oats","overnight oats",null,250,375,13,55,11],
+    ["Garlic bread","garlic bread",2,80,280,7,34,13],
+    ["Peanut butter cups","peanut butter cups",2,42,216,4,24,13],
+    ["Chocolate milk","chocolate milk",1,240,190,8,26,5],
+    ["Almond milk","almond milk",1,240,36,1,1,3],
+    ["Fried rice","fried rice",null,200,340,8,50,12],
+    ["Egg fried rice","egg fried rice",null,200,350,10,50,12],
+    ["Banana bread","banana bread",1,60,196,3,33,6]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

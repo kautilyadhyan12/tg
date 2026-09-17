@@ -1,0 +1,17 @@
+{
+  "meal_name": "Cooking words plate",
+  "items": [
+    ["Steamed carrots","steamed carrots",null,80,28,1,7,0],
+    ["Raw broccoli","raw broccoli",null,90,31,3,6,0],
+    ["Steamed potatoes","steamed potatoes",null,150,129,3,30,0],
+    ["Steamed spinach","steamed spinach",null,90,21,3,3,0],
+    ["Grilled tuna","grilled tuna",null,150,276,38,0,13],
+    ["Soft boiled egg","soft boiled egg",1,50,72,6,0,5],
+    ["Roasted almonds","roasted almonds",1,28,168,6,6,14],
+    ["Hot milk","hot milk",1,240,146,8,12,8],
+    ["Pan fried chicken breast","pan fried chicken breast",1,172,310,53,0,10],
+    ["Grilled pork chop","grilled pork chop",1,150,314,30,0,21]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

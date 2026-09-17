@@ -1,0 +1,18 @@
+{
+  "meal_name": "Dish versions plate",
+  "items": [
+    ["Vegetable lasagna","vegetable lasagna",null,250,300,13,35,12],
+    ["Vegan lasagna","vegan lasagna",null,250,348,19,40,12],
+    ["Vegan meatballs","vegan meatballs",4,172,320,31,0,21],
+    ["Veg sandwich","veg sandwich",1,115,217,14,30,4],
+    ["Veg burrito","veg burrito",1,200,418,22,52,13],
+    ["Breakfast burrito","breakfast burrito",1,200,418,22,52,13],
+    ["Margherita pizza","margherita pizza",2,214,569,24,71,21],
+    ["Hawaiian pizza","hawaiian pizza",2,214,569,24,71,21],
+    ["Vegetable dumplings","vegetable dumplings",6,150,288,13,21,17],
+    ["Veg biryani","veg biryani",null,250,260,10,35,9],
+    ["Brown basmati rice","brown basmati rice",null,150,185,4,39,1]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

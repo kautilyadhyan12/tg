@@ -1,0 +1,15 @@
+{
+  "meal_name": "One-word picks plate",
+  "items": [
+    ["Stewed beef","stewed beef",null,200,500,40,0,36],
+    ["Whole chicken","whole chicken",1,300,570,50,0,40],
+    ["Fried cheese","fried cheese",2,100,350,20,5,27],
+    ["Iced bun","iced bun",1,70,231,5,40,6],
+    ["Grilled sausage","grilled sausage",2,46,150,9,1,12],
+    ["Grilled sandwich","grilled sandwich",1,115,217,14,30,4],
+    ["Hot burrito","hot burrito",1,200,418,22,52,13],
+    ["Baked lasagna","baked lasagna",null,250,348,19,40,12]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}
