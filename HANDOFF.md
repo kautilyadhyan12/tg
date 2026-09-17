@@ -14,7 +14,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Verified: shared tsc 0 · eslint src test 0 · shared tests 125/125 · api tsc 0 · eslint src test tools 0 · the four scanner files 114/114 on local Postgres · full api 1277 passed, `auth.routes` failing at setup in the full run (its 20 skipped) and 20/20 alone · 6 deliberate breaks each red (no unwrap, unwrap any list, unwrap twice, count and grams swapped, the prompt asking a vessel, "JSON only" back), files restored identical (sha256).
 - Records on this branch: the model-and-effort rule (CLAUDE.md §2.1), 7a-iv-b-ii's tick, 7a-iv-c struck, 7a-iv-d's ruling and tick, 7a-iv-f (lumping) added. The four dashboard images on disk are still not this chat's and are not committed.
 - CI green on f52ab7f. Review (fresh chat, one real scan through the route with real Redis and two users): no Critical/High; three Lows fixed with no re-check — the spec's amendment note, MAX_SCAN_FOODS's per-food figure, and the older entry's "7a-iv-c's pull request".
-- Open: Kd's click-through (the account `kd.scan@aihomegym.test` is set up on local Postgres; api and web running), then merge on his word; then 7a-iv-e; 7a-iv-f's place in the order is Kd's.
+- Kd's smoke passed on the local api and web (*"smoke passed merge"*); the test account `kd.scan@aihomegym.test` is left on local Postgres. Merged on his word. Next: 7a-iv-e; 7a-iv-f's place in the order is Kd's; "your own dish" still unanswered.
 
 ## 2026-09-17 · 7a-iv-b-ii built: how far over a target (branch `how-far-over`); the member list planned
 
