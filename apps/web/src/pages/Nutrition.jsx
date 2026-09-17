@@ -1916,11 +1916,14 @@ export default function Nutrition() {
   // target to subtract from either way — but MacroRings above tells the two
   // apart, and conflating them here would have made the false "add your
   // details" prompt the sole explanation of a network blip.
+  // Signed: below zero is how far past the target the day went, which the card
+  // says as "30 g over" instead of 0 (RULINGS 2026-09-17). A rounded -0 is not
+  // below zero, so it reads 0.
   const remaining = targets === null || targets === undefined ? null : {
-    kcal:      Math.max(0, Math.round(targets.kcal      - totals.kcal)),
-    protein_g: Math.max(0, Math.round(targets.protein_g - totals.protein_g)),
-    carbs_g:   Math.max(0, Math.round(targets.carbs_g   - totals.carbs_g)),
-    fat_g:     Math.max(0, Math.round(targets.fat_g     - totals.fat_g)),
+    kcal:      Math.round(targets.kcal      - totals.kcal),
+    protein_g: Math.round(targets.protein_g - totals.protein_g),
+    carbs_g:   Math.round(targets.carbs_g   - totals.carbs_g),
+    fat_g:     Math.round(targets.fat_g     - totals.fat_g),
   };
 
   // Sections group by the USER-CHOSEN label (meal_type, Kd ruling
@@ -2111,7 +2114,7 @@ export default function Nutrition() {
                       </span>
                       <span className="text-sm font-semibold tabular-nums"
                             style={{ color: r.color }}>
-                        {dayEstimated ? 'about ' : ''}{r.value || 0}{r.unit}
+                        {`${dayEstimated ? 'about ' : ''}${r.value < 0 ? `${-r.value} ${r.unit} over` : `${r.value || 0} ${r.unit}`}`}
                       </span>
                     </div>
                   ))}
