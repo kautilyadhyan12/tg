@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · 7a-iv-b-ii built: how far over a target (branch `how-far-over`); the member list planned
+
+- The chat opened on Stage 2 item 3. Kd approved the member list plan, then asked whether to finish nutrition first; he picked the food leftovers first (RULINGS 2026-09-17). Item 3 is split 3a · 3b · 3c in ROADMAP with the approved plan; phone is every gym's backup to email (Kd: *"yes phone as backup"*). Two packages approved for 3a: `read-excel-file`, `libphonenumber-js` (npm, read that day: MIT, updated 2026-08-10 and 2026-09-10). Resend's prices, read that day, are on 3b's line.
+- Built: "Remaining today" is signed; below zero reads "30 g over"; every row puts a space before its unit. Web only, `Nutrition.jsx` and a new `nutritionRemaining.render.test.jsx`; two old assertions in `nutritionPhotoSources.render.test.jsx` gained the space.
+- Verified: the two files 24/24 · full web 2288 passed, `poseAssets.contract` failing to load as before · eslint on the three files: the same 7 errors in Nutrition.jsx as the handoff before, none new · 4 deliberate breaks each red (clamped at 0, a rounded -0 as over, "about" dropped on an over row, a past day as over), the page's sha256 identical after.
+- Kd's click-through passed (*"allpassed"*) on the local API (local Postgres) and web.
+- Kd's next ask, the same message: edit the rings' numbers by hand, beside the app's and, later, a gym's plan. Ruled (RULINGS 2026-09-17): the health rules hold for typed numbers; built as ROADMAP 7a-iv-e, after 7a-iv-d. Not built.
+- PR #78: CI green on 1eb8b42. Review: no Critical/High; two Lows and a weak test fixed with no re-check (the ring's "/ 140 g", the unreachable -0 case removed, the past-day test renamed); the affected web files 97/97, lint clean on the fixed files. Next: then 7a-iv-c, 7a-iv-d, 7a-iv-e, then the member list 3a. The local API and web are still running (local Postgres).
+
 ## 2026-09-17 · Decided: the app sits beside the gym's software (records only, no code; branch `records-beside-the-gym`)
 
 - Kd asked how a gym's own entry system (fingerprint, face, card, QR) connects to the app, in India and abroad. Three web checks (India, abroad, the law) and two device manuals read; the findings are on RULINGS 2026-09-17 and ROADMAP's "After launch".

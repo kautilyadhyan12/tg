@@ -49,7 +49,7 @@ describe('the macro rings', () => {
 
   it('shows the server\'s numbers on the rings, with nothing to answer', () => {
     draw({ targets: { kcal: 1267, protein_g: 140, carbs_g: 98, fat_g: 35 }, missingInputs: [] });
-    for (const text of ['/ 1267', '/ 140g', '/ 98g', '/ 35g']) expect(screen.getByText(text), text).toBeTruthy();
+    for (const text of ['/ 1267', '/ 140 g', '/ 98 g', '/ 35 g']) expect(screen.getByText(text), text).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Answer now' })).toBeNull();
   });
 

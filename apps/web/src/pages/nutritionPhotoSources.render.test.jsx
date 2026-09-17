@@ -390,8 +390,8 @@ describe('a saved meal holding an estimate', () => {
     draw();
     expect(await screen.findByText(/^about 440 kcal · Protein 10g/)).toBeTruthy();
     expect(screen.getByText('Avocado 100g · avocado toast 120g (estimate)')).toBeTruthy();
-    expect(screen.getByText('about 1560kcal')).toBeTruthy();
-    expect(screen.getByText('about 90g')).toBeTruthy();
+    expect(screen.getByText('about 1560 kcal')).toBeTruthy();
+    expect(screen.getByText('about 90 g')).toBeTruthy();
   });
 
   it('reads plainly where no meal of the day holds one', async () => {
@@ -405,7 +405,7 @@ describe('a saved meal holding an estimate', () => {
     svc.getTargets = vi.fn(async () => ({ data: { targets: { bmr: 1400, tdee: 2000, kcal: 2000, proteinG: 100, carbsG: 200, fatG: 60, noCalorieCut: false }, missing: [], targetWrongSide: false } }));
     draw();
     expect(await screen.findByText(/^160 kcal · Protein 2g/)).toBeTruthy();
-    expect(screen.getByText('1840kcal')).toBeTruthy();
+    expect(screen.getByText('1840 kcal')).toBeTruthy();
     expect(screen.queryByText(/about/)).toBeNull();
   });
 });
