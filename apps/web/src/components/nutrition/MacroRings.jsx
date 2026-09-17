@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { missingText } from '../../pages/onboarding/onboardingModel';
+import RingNumbers from './RingNumbers';
+import { holdText } from './ringTargets';
 
 // ── Single animated ring ──────────────────────────────────────────────────────
 function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, target }) {
@@ -67,7 +69,7 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
 // person has one: the card asks for a new one, in words that fit whether the
 // goal changed or the target was reached, and the link opens the target
 // screen, which shows it and offers only the goal's side (RULINGS 2026-09-11).
-function NoTargets({ missingInputs, targetWrongSide }) {
+function NoTargets({ missingInputs, targetWrongSide, hold }) {
   const list = missingInputs.length > 0 ? missingText(missingInputs) : null;
   let text = 'Finish setting up to see your daily calories and macros.';
   if (targetWrongSide) text = 'Time to set a new target weight. Pick one to see your daily calories and macros.';
@@ -82,6 +84,11 @@ function NoTargets({ missingInputs, targetWrongSide }) {
          style={{ color: 'rgba(255,255,255,0.55)' }}>
         {text}
       </p>
+      {/* 7a-iv-e: numbers of their own, typed before an answer was cleared, are
+          still theirs — said here rather than silently forgotten. */}
+      {hold ? (
+        <p className="text-xs leading-relaxed mb-4" style={{ color: '#fbbf24' }}>{hold}</p>
+      ) : null}
       <Link
         to="/onboarding"
         state={{ returnTo: '/nutrition' }}
@@ -115,8 +122,26 @@ function TargetsUnavailable() {
 }
 
 // ── Full macro rings panel ────────────────────────────────────────────────────
-export default function MacroRings({ totals, targets, missingInputs = [], targetWrongSide = false }) {
+export default function MacroRings({
+  totals, targets, missingInputs = [], targetWrongSide = false,
+  // ROADMAP 7a-iv-e: the switch over these rings. `onPickNumbers` absent means
+  // no switch at all (the page has not wired it, or there is nothing to pick
+  // from), and everything below renders exactly as it did before.
+  ringChoice = null, onPickNumbers = null,
+}) {
   const safeTotals = totals || {};
+  // The switch needs a set to start from, which is the same thing the rings
+  // need to draw, so it rides with them and never with the honest empty state:
+  // a person with no numbers has nothing to edit yet.
+  const numbers = ringChoice === null || onPickNumbers === null ? null : (
+    <RingNumbers
+      source={ringChoice.source}
+      appTargets={ringChoice.appTargets}
+      own={ringChoice.own}
+      ownHeld={ringChoice.ownHeld}
+      onSave={onPickNumbers}
+    />
+  );
 
   // THREE states, and they must NOT collapse (T3 F1 — the first version used
   // `== null` here, which swallowed `undefined` into the null branch and so
@@ -133,7 +158,15 @@ export default function MacroRings({ totals, targets, missingInputs = [], target
   // dark for everyone; with one live they would fire ONLY for the
   // incomplete-profile user — precisely the person who must not be shown a
   // stranger's calorie goal rendered identically to their own.
-  if (targets === null) return <NoTargets missingInputs={missingInputs} targetWrongSide={targetWrongSide} />;
+  if (targets === null) {
+    return (
+      <NoTargets
+        missingInputs={missingInputs}
+        targetWrongSide={targetWrongSide}
+        hold={holdText(ringChoice === null ? null : ringChoice.ownHeld)}
+      />
+    );
+  }
   if (targets === undefined) return <TargetsUnavailable />;
 
   const kcalTarget    = targets.kcal;
@@ -148,10 +181,12 @@ export default function MacroRings({ totals, targets, missingInputs = [], target
 
   return (
     <div className="card-glass">
-      <h3 className="text-sm font-semibold mb-5"
+      <h3 className="text-sm font-semibold mb-3"
           style={{ color: 'rgba(255,255,255,0.80)' }}>
         Today's Macros
       </h3>
+
+      {numbers}
 
       {/* Large center kcal ring */}
       <div className="flex justify-center mb-6">

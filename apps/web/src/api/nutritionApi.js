@@ -231,6 +231,15 @@ export const nutritionService = {
    *  needs, because the server refuses to invent a goal (Kd ruling). Map with
    *  toDisplayTargets below. */
   getTargets: () => authApi.get('/v1/nutrition/targets', { timeout: TARGETS_TIMEOUT_MS }),
+
+  /** The switch over the rings (ROADMAP 7a-iv-e): `{source:'app'}` goes back to
+   *  the app's plan and KEEPS whatever was typed; `{source:'own', kcal,
+   *  proteinG, carbsG, fatG}` stores the person's own four numbers. The reply is
+   *  the whole targets answer, so the page never has to re-fetch to know what
+   *  was stored. A number the health rules refuse comes back 400 with the
+   *  message to show (the server owns that rule — the floor, and no cut below
+   *  what keeps the weight). */
+  putTargets: (body) => authApi.put('/v1/nutrition/targets', body, { timeout: TARGETS_TIMEOUT_MS }),
 };
 
 // ── targets display mapping ─────────────────────────────────────────────────
@@ -265,6 +274,39 @@ export function toDisplayTargets(response) {
   return Object.values(mapped).every((v) => typeof v === 'number' && Number.isFinite(v))
     ? mapped
     : undefined;
+}
+
+/** The four numbers of a target set, as the API sends them (camelCase), or null
+ *  if any is missing or unreadable — the same "never invent a number" rule as
+ *  toDisplayTargets, applied to the switch's own two sets. */
+function fourNumbers(t) {
+  if (t === null || typeof t !== 'object') return null;
+  const picked = { kcal: t.kcal, proteinG: t.proteinG, carbsG: t.carbsG, fatG: t.fatG };
+  return Object.values(picked).every((v) => typeof v === 'number' && Number.isFinite(v)) ? picked : null;
+}
+
+/** The rings' switch (ROADMAP 7a-iv-e), as the page holds it:
+ *    source     → which set the rings are showing, 'app' unless the server says 'own'
+ *    appTargets → the app's plan numbers, what "My own" starts from (null: none yet)
+ *    own        → the person's own numbers as stored, in use or not (null: none typed)
+ *    ownHeld    → why stored, picked numbers are not the ones showing (null: nothing held)
+ *  Unreadable anything degrades to the app's plan with no switch, never to a
+ *  half-filled editor: an invented starting number is the one thing this page
+ *  must not do. */
+export function toRingChoice(response) {
+  const none = { source: 'app', appTargets: null, own: null, ownHeld: null };
+  if (response === null || typeof response !== 'object') return none;
+  const own = fourNumbers(response.own ?? null);
+  const held = response.ownHeld;
+  return {
+    // 'own' is only believed with the numbers behind it — the server's contract
+    // refuses the pairing, and this is the same claim on the screen's side.
+    source: response.source === 'own' && own !== null ? 'own' : 'app',
+    appTargets: fourNumbers(response.appTargets ?? null),
+    own,
+    ownHeld:
+      own !== null && held !== null && typeof held === 'object' && typeof held.code === 'string' ? held : null,
+  };
 }
 
 /** The questions the SERVER says the plan still needs, as it sent them (the
