@@ -4,6 +4,25 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · 7a-iv-f built: the scanner lists each food apart (branch `scanner-lists-each-food`)
+
+- Kd asked why the card when his scans list foods apart; answered from the saved scans (toast plate apart 1 of 4; 4 of 8 plates joined foods). *"ok build"* to the plan, which put the line at foods seen apart vs a dish cooked or mixed into one, or a closed sandwich (RULINGS amended).
+- Built: one sentence in `MEAL_VISION_PROMPT`, after what an item is. No screen, server logic or contract change.
+- Paid calls (`tools/measure-scan-cost.ts`, outputs in `D:\Projects\ai-home-gym-plates\out-7a-iv-f\`): the eight, $0.000791 average (665 in, 236 out; 56 foods, all apart, none lost) · toast plate and banana-and-egg toasts twice more each, apart every time ($0.000916, $0.000956, $0.000936, $0.001021). Twelve calls, $0.0102.
+- Priced on the loaded table (scratchpad script, real lookups): 43 of 56 from a table against 29 of 40 in 7a-iv-d's run; 11 of the 13 estimates are descriptive names ("steamed broccoli") a table holds plainer — ROADMAP 7a-iv-i, place Kd's.
+- Tests: the sentence and its place pinned; `download-apart`, `download-2-apart`, `download-5-apart` plates added beside the old replies, rows checked by hand; coconut's 8 USDA rows and arugula's and cream cheese's cited entries copied; one test app per eight plates (eleven on one passed the sign-in limit and shifted every later reply).
+- Verified: api tsc 0 · eslint src test tools 0 · five scanner files 125/125 on the loaded local table · the route file 22/22 on `aihg_ci_scratch` (created, migrated, seeded, no USDA rows; left in the container) · full api 1298/1301, the 3 in `workouts.sync` 23/23 alone (ROADMAP 10).
+- 6 deliberate breaks each red (sentence removed, dishes split, sentence moved last, fourteen plates on one app, coconut row gone, arugula entry gone), files restored identical (sha256); a seventh, cream cheese's entry gone, stayed green: that row starts at our list's own serving either way (kept for completeness).
+- Open: Kd's click-through (real scans on the local app), CI, the review. The four dashboard images are still not this card's.
+
+## 2026-09-17 · Decided after PR #79 merged (records only, UNCOMMITTED on master)
+
+- Kd asked to change a food already logged ("Chicken breast (cooked) 600 g · 990 kcal"); shown MyFitnessPal, MacroFactor and Cronometer (web search that day), he picked: change the amount, or type your own numbers (ROADMAP 7a-iv-g).
+- Explained in plain words (he could not follow "lumped" or menus of options — explain first, in prose, with his own photo as the example, then ask yes or no): the scan lists every food on its own row, built NEXT (7a-iv-f); the model is not asked the bowl, the grams also read "about 1 cup" for free, and "How full?" gets a bowl picture and a word (7a-iv-h). Three RULINGS lines of 2026-09-17.
+- Cost figures given to him came from today's saved scans (`D:\Projects\ai-home-gym-plates\out-7a-iv-d\`): breakfast photo 3 rows $0.00052, 9 rows $0.00093; eight-plate average $0.000625 now, about $0.000676 with that photo at 9 rows (an estimate); the bowl, fill and size fields 8.5 output tokens a food, about $0.0001 a scan.
+- These records (RULINGS, ROADMAP 7a-iv-f/g/h, this entry) are uncommitted on master: 7a-iv-f's pull request carries them. The four dashboard images are still not any card's.
+- Next: 7a-iv-f in a fresh chat (Kd's choice); then 7a-iv-e; 7a-iv-g and 7a-iv-h to be placed by Kd.
+
 ## 2026-09-17 · 7a-iv-c struck; 7a-iv-d built: the scanner's reply without vessel, fill and size (branch `scanner-reply-trim`)
 
 - 7a-iv-c struck before building (RULINGS 2026-09-16's portion line as amended): Kd asked what remembering the amount is for (*"i eat two apples morning …"*), then what the card is for at all; the chat recommended not building it.
