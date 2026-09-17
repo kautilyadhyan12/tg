@@ -39,6 +39,14 @@ const APPLE_PORTIONS = [
   portion(4, "medium (3\" dia)", 182), portion(5, "small (2-3/4\" dia)", 149), portion(6, "extra small (2-1/2\" dia)", 101),
   portion(7, "NLEA serving", 242),
 ];
+// USDA's own rows for white bread (SR Legacy 174924, the entry our list's White bread
+// cites), as the loaded table holds them: its "slice" first, then an ounce, crumbs, cubes
+// and the other sizes of slice.
+const WHITE_BREAD_PORTIONS = [
+  portion(1, "slice", 29), portion(2, "oz", 28.35), portion(3, "cup, crumbs", 45), portion(4, "cup, cubes", 35),
+  portion(5, "slice, large", 30), portion(6, "slice", 25), portion(7, "slice crust not eaten", 12), portion(8, "slice, thin", 20),
+  portion(9, "slice thin, crust not eaten", 9), portion(10, "slice, very thin", 15),
+];
 // USDA's own rows for frozen kale (SR Legacy 169239): an amount of 0 on a package
 // of 94 g, beside the package's real 284 g.
 const KALE_PORTIONS = [portion(0, "package (10 oz)", 94, 0), portion(1, "cup", 67, 0.33), portion(2, "package (10 oz)", 284, 1)];
@@ -271,6 +279,15 @@ describe("where a food the photo scan saw starts on the photo sheet (RULINGS 202
     ["the nearest size", fed(portion(1, "small", 101), portion(2, "medium", 118), portion(3, "large", 136)), 1, 120, at("usda-2", 1, 118)],
     ["the earlier of two as near", fed(portion(1, "short", 110), portion(2, "tall", 130)), 1, 120, at("usda-1", 1, 110)],
     ["our own serving is as good a measure as USDA's, and comes first", own(180, "apple", [portion(4, "medium (3\" dia)", 182)]), 1, 181, at("serving", 1, 180)],
+    // Of the measures near, our list's food, or a label's, starts at its own serving: within
+    // 30 % the grams cannot tell them apart (the reviews of PR #80 and #81).
+    ["two slices of white bread at 70 g are two slices, never two 35 g cups of cubes", own(30, "slice", WHITE_BREAD_PORTIONS), 2, 70, at("usda-1", 2, 58)],
+    ["a label's serving, though a USDA measure is nearer", own(40, "bar", [portion(2, "bar, small", 30)]), 1, 31, at("serving", 1, 40)],
+    ["our serving too far off: the nearest measure", own(180, "apple", APPLE_PORTIONS), 1, 100, at("usda-6", 1, 101)],
+    ["our serving by the ounce is no count: the nearest measure", own(28, "oz", [portion(1, "piece", 14)]), 2, 28, at("usda-1", 2, 28)],
+    ["our serving by weight is no count: the nearest measure", own(100, "g", [portion(1, "piece", 45)]), 2, 90, at("usda-1", 2, 90)],
+    // A USDA food's first measure is only first in USDA's list: the nearest.
+    ["an apple of the USDA table seen at 150 g is its small apple, not its first measure, a cup quartered", usdaFood(125, "cup, quartered or chopped", APPLE_PORTIONS), 1, 150, at("usda-5", 1, 149)],
     // Grams and ounces are weights, never what a photo counts.
     ["never an ounce, even at the photo's grams", fed(), 1, 28, estimate("g", 28, 28)],
     ["never an ounce beside a measure too far off", fed(portion(1, "bar", 40)), 1, 29, estimate("g", 29, 29)],

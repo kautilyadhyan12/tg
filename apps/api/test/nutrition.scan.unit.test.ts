@@ -7,15 +7,19 @@ import { describe, expect, it } from "vitest";
 import { mealPhotoItemSchema, per100gSchema, type FoodMeasure, type VisionEvidence, type VisionItem } from "@app/shared";
 import type { FoodReference } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import {
+  COOKING_WORDS,
   ENERGY_SLACK_KCAL,
   ENERGY_TOLERANCE,
   ESTIMATE_CANONICAL_PREFIX,
+  KEPT_WORDS,
   MAX_ESTIMATE_KCAL_PER_100G,
   MAX_SHORTENED_NAME_WORDS,
+  PREPARATION_WORDS,
   SHORTER_NAME_TIE_KCAL,
   WRONG_FOOD_MIN_GAP_KCAL,
   WRONG_FOOD_RATIO,
   agreesWithScan,
+  contradicts,
   energySeen,
   estimateFood,
   estimatePer100g,
@@ -149,13 +153,11 @@ describe("the energy a scan saw, which chooses among USDA entries of one name", 
 
 interface Answers {
   ourList?: FoodReference;
-  /** Our list's food for each shorter name. */
-  named?: ReadonlyMap<string, FoodReference>;
+  /** Our list's food, and its other versions, for each shorter name. */
+  versions?: ReadonlyMap<string, readonly FoodReference[]>;
   usda?: FoodReference;
   /** Whether USDA's answer holds every word rather than being the food of that name. */
   usdaByEveryWord?: boolean;
-  /** The words that are a food of their own. */
-  foodWords?: readonly string[];
   packaged?: FoodReference;
 }
 
@@ -168,18 +170,14 @@ const lookups = (answers: Answers) => {
       asked.push(`ourList:${hint}`);
       return answers.ourList ?? null;
     },
-    ourListNamed: (name) => {
-      asked.push(`ourListNamed:${name}`);
-      return answers.named?.get(name) ?? null;
+    ourListVersions: (name) => {
+      asked.push(`ourListVersions:${name}`);
+      return answers.versions?.get(name) ?? [];
     },
     usda: (hint, energy) => {
       asked.push(`usda:${hint}`);
       usdaSaw.push(energy);
       return Promise.resolve(answers.usda === undefined ? null : { food: answers.usda, byEveryWord: answers.usdaByEveryWord ?? false });
-    },
-    foodWords: (words) => {
-      asked.push(`foodWords:${words.join(" ")}`);
-      return Promise.resolve(new Set(words.filter((word) => answers.foodWords?.includes(word) === true)));
     },
     packaged: (hint) => {
       asked.push(`packaged:${hint}`);
@@ -264,12 +262,12 @@ describe("the order a scanned food is priced in", () => {
   });
 });
 
-describe("a name our list holds only shorter (ROADMAP 7a-iv-i)", () => {
+describe("a name our list holds only shorter (ROADMAP 7a-iv-i, and the reviews of PR #80 and #81)", () => {
   // The model saw 200 g at 200 kcal: 100 kcal per 100 g, good to 60 kcal on the plate.
   const figures = { grams: 200, kcal: 200, protein_g: 0, carbs_g: 50, fat_g: 0 };
   const ESTIMATE = { kind: "estimate", per100g: { kcal: 100, proteinG: 0, carbsG: 25, fatG: 0 }, grams: 200 } as const;
-  const food = (name: string, kcal: number, source: FoodReference["source"] = "curated") => tableFood(name, kcal, source);
-  const named = (...entries: [string, FoodReference][]) => new Map(entries);
+  const food = (name: string, kcal = 100, source: FoodReference["source"] = "curated") => tableFood(name, kcal, source);
+  const versions = (...entries: [string, FoodReference[]][]) => new Map(entries);
   interface Case {
     label: string;
     hint: string;
@@ -281,138 +279,172 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i)", () => {
   }
   const cases: Case[] = [
     {
-      label: "our list's food of the name with its first word dropped, where that word is no food and the food carries what the model saw",
-      hint: "zqxsteamed zqxfood",
-      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
-      expected: { kind: "table", food: food("zqxfood", 100) },
+      label: "our list's food of the name with the way it was cooked dropped, where the food carries what the model saw",
+      hint: "steamed zqxfood",
+      answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
+      expected: { kind: "table", food: food("Zqxfood") },
       // Never a packaged product: our list's food is found first.
-      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqxsteamed"],
+      asked: ["ourList:steamed zqxfood", "usda:steamed zqxfood", "ourListVersions:zqxfood"],
     },
     {
       label: "the longest shorter name our list holds, which drops the fewest words",
-      hint: "zqxscored zqxpork zqxsausage",
-      answers: { named: named(["zqxpork zqxsausage", food("zqxpork sausage", 100)], ["zqxsausage", food("zqxsausage", 100)]) },
-      expected: { kind: "table", food: food("zqxpork sausage", 100) },
-      asked: ["ourList:zqxscored zqxpork zqxsausage", "usda:zqxscored zqxpork zqxsausage", "ourListNamed:zqxpork zqxsausage", "foodWords:zqxscored"],
+      hint: "pan fried zqxsausage",
+      answers: { versions: versions(["fried zqxsausage", [food("Zqxsausage (fried)")]], ["zqxsausage", [food("Zqxsausage")]]) },
+      expected: { kind: "table", food: food("Zqxsausage (fried)") },
+      asked: ["ourList:pan fried zqxsausage", "usda:pan fried zqxsausage", "ourListVersions:fried zqxsausage"],
     },
     {
-      label: "no food, where the longest shorter name's food is not what the model saw: never a still shorter name",
-      hint: "zqxscored zqxpork zqxsausage",
-      answers: { named: named(["zqxpork zqxsausage", food("zqxpork sausage", 300)], ["zqxsausage", food("zqxsausage", 100)]) },
+      label: "two words of how it was cooked, dropped one at a time",
+      hint: "pan fried zqxsausage",
+      answers: { versions: versions(["zqxsausage", [food("Zqxsausage")]]) },
+      expected: { kind: "table", food: food("Zqxsausage") },
+      asked: ["ourList:pan fried zqxsausage", "usda:pan fried zqxsausage", "ourListVersions:fried zqxsausage", "ourListVersions:zqxsausage"],
+    },
+    {
+      label: "no food, and no shorter name asked, where the first word can be what the food is (vegan butter is no butter)",
+      hint: "vegan zqxbutter",
+      answers: { versions: versions(["zqxbutter", [food("Zqxbutter")]]) },
       expected: { ...ESTIMATE, overruled: null },
-      asked: ["ourList:zqxscored zqxpork zqxsausage", "usda:zqxscored zqxpork zqxsausage", "ourListNamed:zqxpork zqxsausage", "foodWords:zqxscored", "packaged:zqxscored zqxpork zqxsausage"],
+      asked: ["ourList:vegan zqxbutter", "usda:vegan zqxbutter", "packaged:vegan zqxbutter"],
     },
     {
-      label: "no food, where a dropped word is a food of its own (chicken salad is no salad)",
-      hint: "zqxchicken zqxsalad",
-      answers: { named: named(["zqxsalad", food("zqxsalad", 100)]), foodWords: ["zqxchicken"] },
+      label: "no food where such a word comes after a word of how it was cooked: never shortened past it",
+      hint: "grilled vegan zqxburger",
+      answers: { versions: versions(["zqxburger", [food("Zqxburger")]]) },
       expected: { ...ESTIMATE, overruled: null },
-      asked: ["ourList:zqxchicken zqxsalad", "usda:zqxchicken zqxsalad", "ourListNamed:zqxsalad", "foodWords:zqxchicken", "packaged:zqxchicken zqxsalad"],
+      asked: ["ourList:grilled vegan zqxburger", "usda:grilled vegan zqxburger", "ourListVersions:vegan zqxburger", "packaged:grilled vegan zqxburger"],
     },
     {
-      label: "no food, where any dropped word is a food, not only the first (light coconut milk is no milk)",
-      hint: "zqxlight zqxcoconut zqxmilk",
-      answers: { named: named(["zqxmilk", food("zqxmilk", 100)]), foodWords: ["zqxcoconut"] },
+      label: "the shorter name that keeps such a word, where our list holds it",
+      hint: "sliced smoked zqxham",
+      answers: { versions: versions(["smoked zqxham", [food("Smoked zqxham")]], ["zqxham", [food("Zqxham")]]) },
+      expected: { kind: "table", food: food("Smoked zqxham") },
+      asked: ["ourList:sliced smoked zqxham", "usda:sliced smoked zqxham", "ourListVersions:smoked zqxham"],
+    },
+    {
+      label: "no food where the longest shorter name's food is not what the model saw: never a still shorter name",
+      hint: "pan fried zqxsausage",
+      answers: { versions: versions(["fried zqxsausage", [food("Zqxsausage (fried)", 300)]], ["zqxsausage", [food("Zqxsausage")]]) },
       expected: { ...ESTIMATE, overruled: null },
-      asked: ["ourList:zqxlight zqxcoconut zqxmilk", "usda:zqxlight zqxcoconut zqxmilk", "ourListNamed:zqxcoconut zqxmilk", "ourListNamed:zqxmilk", "foodWords:zqxlight zqxcoconut", "packaged:zqxlight zqxcoconut zqxmilk"],
+      asked: ["ourList:pan fried zqxsausage", "usda:pan fried zqxsausage", "ourListVersions:fried zqxsausage", "packaged:pan fried zqxsausage"],
     },
     {
-      label: "the shorter name before the food word, which drops only the words before it",
-      hint: "zqxlight zqxcoconut zqxmilk",
-      answers: { named: named(["zqxcoconut zqxmilk", food("zqxcoconut milk", 100)], ["zqxmilk", food("zqxmilk", 100)]), foodWords: ["zqxcoconut"] },
-      expected: { kind: "table", food: food("zqxcoconut milk", 100) },
-      asked: ["ourList:zqxlight zqxcoconut zqxmilk", "usda:zqxlight zqxcoconut zqxmilk", "ourListNamed:zqxcoconut zqxmilk", "foodWords:zqxlight"],
+      label: "no food where the first version the words allow is not what the model saw: never another version for its calories",
+      hint: "warm zqxmilk",
+      answers: { versions: versions(["zqxmilk", [food("Zqxmilk (whole)", 300), food("Zqxmilk (skim)", 100)]]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:warm zqxmilk", "usda:warm zqxmilk", "ourListVersions:zqxmilk", "packaged:warm zqxmilk"],
+    },
+    {
+      label: "the first version the dropped words do not contradict (steamed carrots are the cooked ones)",
+      hint: "steamed zqxcarrots",
+      answers: { versions: versions(["zqxcarrots", [food("Zqxcarrots (raw)"), food("Zqxcarrots (cooked)")]]) },
+      expected: { kind: "table", food: food("Zqxcarrots (cooked)") },
+      asked: ["ourList:steamed zqxcarrots", "usda:steamed zqxcarrots", "ourListVersions:zqxcarrots"],
+    },
+    {
+      label: "no food where every version contradicts them (steamed dumplings are no fried ones), and no shorter name",
+      hint: "steamed zqxdumplings",
+      answers: { versions: versions(["zqxdumplings", [food("Zqxdumplings (zqxpork, fried)")]]) },
+      expected: { ...ESTIMATE, overruled: null },
+      asked: ["ourList:steamed zqxdumplings", "usda:steamed zqxdumplings", "ourListVersions:zqxdumplings", "packaged:steamed zqxdumplings"],
     },
     {
       label: "no food, and nothing shortened or asked about, where the model gave no usable number",
-      hint: "zqxsteamed zqxfood",
-      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      hint: "steamed zqxfood",
+      answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
       figures: { fat_g: null },
       expected: { kind: "none" },
-      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "packaged:zqxsteamed zqxfood"],
+      asked: ["ourList:steamed zqxfood", "usda:steamed zqxfood", "packaged:steamed zqxfood"],
     },
     {
       label: "our list's shorter name where the whole name's food is another food: no other table is asked the whole name",
-      hint: "zqxsteamed zqxfood",
-      answers: { ourList: food("zqxfar", 301), named: named(["zqxfood", food("zqxfood", 100)]) },
-      expected: { kind: "table", food: food("zqxfood", 100) },
-      asked: ["ourList:zqxsteamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqxsteamed"],
+      hint: "steamed zqxfood",
+      answers: { ourList: food("Zqxfar", 301), versions: versions(["zqxfood", [food("Zqxfood")]]) },
+      expected: { kind: "table", food: food("Zqxfood") },
+      asked: ["ourList:steamed zqxfood", "ourListVersions:zqxfood"],
     },
     {
       label: "the estimate, naming the whole name's other food, where no shorter name has one either",
-      hint: "zqxsteamed zqxfood",
-      answers: { usda: food("zqxfar", 301, "usda") },
-      expected: { ...ESTIMATE, overruled: food("zqxfar", 301, "usda") },
-      asked: ["ourList:zqxsteamed zqxfood", "usda:zqxsteamed zqxfood", "ourListNamed:zqxfood"],
+      hint: "steamed zqxfood",
+      answers: { usda: food("Zqxfar", 301, "usda") },
+      expected: { ...ESTIMATE, overruled: food("Zqxfar", 301, "usda") },
+      asked: ["ourList:steamed zqxfood", "usda:steamed zqxfood", "ourListVersions:zqxfood"],
     },
     {
       label: "USDA's food of every word where ours of a shorter name is further than it from what the model saw",
-      hint: "zqxvanilla zqxyogurt",
-      answers: { usda: food("zqxvanilla yogurt", 100, "usda"), usdaByEveryWord: true, named: named(["zqxyogurt", food("zqxyogurt", 110.1)]) },
-      expected: { kind: "table", food: food("zqxvanilla yogurt", 100, "usda") },
-      asked: ["ourList:zqxvanilla zqxyogurt", "usda:zqxvanilla zqxyogurt", "ourListNamed:zqxyogurt", "foodWords:zqxvanilla"],
+      hint: "grilled zqxshrimp",
+      answers: { usda: food("Zqxshrimp, grilled", 100, "usda"), usdaByEveryWord: true, versions: versions(["zqxshrimp", [food("Zqxshrimp (cooked)", 110.1)]]) },
+      expected: { kind: "table", food: food("Zqxshrimp, grilled", 100, "usda") },
+      asked: ["ourList:grilled zqxshrimp", "usda:grilled zqxshrimp", "ourListVersions:zqxshrimp"],
     },
     {
       label: "ours of a shorter name where USDA's food of every word is no more than 10 kcal per 100 g nearer",
-      hint: "zqxsweet zqxcorn",
-      answers: { usda: food("zqxcorn raw", 100, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 110)]) },
-      expected: { kind: "table", food: food("zqxcorn cooked", 110) },
-      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+      hint: "roasted zqxalmonds",
+      answers: { usda: food("Zqxalmonds, honey roasted", 100, "usda"), usdaByEveryWord: true, versions: versions(["zqxalmonds", [food("Zqxalmonds", 110)]]) },
+      expected: { kind: "table", food: food("Zqxalmonds", 110) },
+      asked: ["ourList:roasted zqxalmonds", "usda:roasted zqxalmonds", "ourListVersions:zqxalmonds"],
     },
     {
       label: "ours of a shorter name where USDA's food of every word is the further one",
-      hint: "zqxsweet zqxcorn",
-      answers: { usda: food("zqxcorn raw", 80, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 100)]) },
-      expected: { kind: "table", food: food("zqxcorn cooked", 100) },
-      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+      hint: "roasted zqxalmonds",
+      answers: { usda: food("Zqxalmonds, honey roasted", 80, "usda"), usdaByEveryWord: true, versions: versions(["zqxalmonds", [food("Zqxalmonds")]]) },
+      expected: { kind: "table", food: food("Zqxalmonds") },
+      asked: ["ourList:roasted zqxalmonds", "usda:roasted zqxalmonds", "ourListVersions:zqxalmonds"],
     },
     {
       label: "ours of a shorter name where USDA's food of every word is another food",
-      hint: "zqxsweet zqxcorn",
-      answers: { usda: food("zqxcorn syrup", 301, "usda"), usdaByEveryWord: true, named: named(["zqxcorn", food("zqxcorn cooked", 100)]) },
-      expected: { kind: "table", food: food("zqxcorn cooked", 100) },
-      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn", "foodWords:zqxsweet"],
+      hint: "roasted zqxalmonds",
+      answers: { usda: food("Zqxalmonds, candied", 301, "usda"), usdaByEveryWord: true, versions: versions(["zqxalmonds", [food("Zqxalmonds")]]) },
+      expected: { kind: "table", food: food("Zqxalmonds") },
+      asked: ["ourList:roasted zqxalmonds", "usda:roasted zqxalmonds", "ourListVersions:zqxalmonds"],
     },
     {
       label: "USDA's food of every word where our list has no shorter name, as before",
-      hint: "zqxsweet zqxcorn",
-      answers: { usda: food("zqxcorn raw", 80, "usda"), usdaByEveryWord: true },
-      expected: { kind: "table", food: food("zqxcorn raw", 80, "usda") },
-      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn"],
+      hint: "roasted zqxalmonds",
+      answers: { usda: food("Zqxalmonds, honey roasted", 80, "usda"), usdaByEveryWord: true },
+      expected: { kind: "table", food: food("Zqxalmonds, honey roasted", 80, "usda") },
+      asked: ["ourList:roasted zqxalmonds", "usda:roasted zqxalmonds", "ourListVersions:zqxalmonds"],
     },
     {
       label: "the estimate, naming USDA's other food, where USDA's food of every word is another food and our list has none",
-      hint: "zqxsweet zqxcorn",
-      answers: { usda: food("zqxcorn syrup", 301, "usda"), usdaByEveryWord: true },
-      expected: { ...ESTIMATE, overruled: food("zqxcorn syrup", 301, "usda") },
-      asked: ["ourList:zqxsweet zqxcorn", "usda:zqxsweet zqxcorn", "ourListNamed:zqxcorn"],
+      hint: "roasted zqxalmonds",
+      answers: { usda: food("Zqxalmonds, candied", 301, "usda"), usdaByEveryWord: true },
+      expected: { ...ESTIMATE, overruled: food("Zqxalmonds, candied", 301, "usda") },
+      asked: ["ourList:roasted zqxalmonds", "usda:roasted zqxalmonds", "ourListVersions:zqxalmonds"],
+    },
+    {
+      label: "USDA's food of every word, never ours, where a word of the name can be what the food is, even at the model's own calories (vegetable lasagna is no meat lasagna)",
+      hint: "vegetable zqxlasagna",
+      answers: { usda: food("Zqxlasagna, vegetable", 130, "usda"), usdaByEveryWord: true, versions: versions(["zqxlasagna", [food("Zqxlasagna (meat)")]]) },
+      expected: { kind: "table", food: food("Zqxlasagna, vegetable", 130, "usda") },
+      asked: ["ourList:vegetable zqxlasagna", "usda:vegetable zqxlasagna"],
     },
     {
       label: "a name of ten words, shortened",
-      hint: "zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
-      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
-      expected: { kind: "table", food: food("zqxfood", 100) },
+      hint: "the some a an of with small hot iced zqxfood",
+      answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
+      expected: { kind: "table", food: food("Zqxfood") },
       asked: [
-        "ourList:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "usda:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
-        "ourListNamed:zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxfood",
-        "ourListNamed:zqxd zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxe zqxf zqxg zqxh zqxi zqxfood", "ourListNamed:zqxf zqxg zqxh zqxi zqxfood",
-        "ourListNamed:zqxg zqxh zqxi zqxfood", "ourListNamed:zqxh zqxi zqxfood", "ourListNamed:zqxi zqxfood", "ourListNamed:zqxfood",
-        "foodWords:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi",
+        "ourList:the some a an of with small hot iced zqxfood", "usda:the some a an of with small hot iced zqxfood",
+        "ourListVersions:some a an of with small hot iced zqxfood", "ourListVersions:a an of with small hot iced zqxfood",
+        "ourListVersions:an of with small hot iced zqxfood", "ourListVersions:of with small hot iced zqxfood", "ourListVersions:with small hot iced zqxfood",
+        "ourListVersions:small hot iced zqxfood", "ourListVersions:hot iced zqxfood", "ourListVersions:iced zqxfood", "ourListVersions:zqxfood",
       ],
     },
     {
       label: "a name of eleven words, never shortened",
-      hint: "zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood",
-      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
+      hint: "the some a an of with small hot iced warm zqxfood",
+      answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
       expected: { ...ESTIMATE, overruled: null },
-      asked: ["ourList:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood", "usda:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood", "packaged:zqxa zqxb zqxc zqxd zqxe zqxf zqxg zqxh zqxi zqxj zqxfood"],
+      asked: ["ourList:the some a an of with small hot iced warm zqxfood", "usda:the some a an of with small hot iced warm zqxfood", "packaged:the some a an of with small hot iced warm zqxfood"],
     },
     {
       label: "a name's words as the food list reads them: accents folded, lower case, anything else a space",
-      hint: "Zqx-Stéamed  ZQXFOOD!",
-      answers: { named: named(["zqxfood", food("zqxfood", 100)]) },
-      expected: { kind: "table", food: food("zqxfood", 100) },
-      asked: ["ourList:Zqx-Stéamed  ZQXFOOD!", "usda:Zqx-Stéamed  ZQXFOOD!", "ourListNamed:steamed zqxfood", "ourListNamed:zqxfood", "foodWords:zqx steamed"],
+      hint: "Pan-Sautéed  ZQXFOOD!",
+      answers: { versions: versions(["zqxfood", [food("Zqxfood")]]) },
+      expected: { kind: "table", food: food("Zqxfood") },
+      asked: ["ourList:Pan-Sautéed  ZQXFOOD!", "usda:Pan-Sautéed  ZQXFOOD!", "ourListVersions:sauteed zqxfood", "ourListVersions:zqxfood"],
     },
   ];
 
@@ -424,10 +456,77 @@ describe("a name our list holds only shorter (ROADMAP 7a-iv-i)", () => {
     });
   }
 
+  it("is shortened past every word that says only how a food was cooked, cut or served", async () => {
+    for (const word of PREPARATION_WORDS) {
+      const run = lookups({ versions: versions(["zqxfood", [food("Zqxfood")]]) });
+      expect(await priceScannedFood(seen(figures, `${word} zqxfood`), run.table), word).toEqual({ kind: "table", food: food("Zqxfood") });
+    }
+    // LanguaL's four ways of cooking, and the ways a food is kept.
+    expect(new Set(COOKING_WORDS.values())).toEqual(new Set(["dry heat", "moist heat", "with fat", "microwave"]));
+    expect(KEPT_WORDS).toEqual(new Set(["canned", "pickled", "smoked", "dried", "cured"]));
+  });
+
+  it("is never shortened past a word that can say what the food is, what was taken out or put in, its kind, its brand or who it is for, whatever the calories", async () => {
+    // Every such word of both reviews' names and this card's probes, at the calories of
+    // the food the shorter name would read as: a substitute is made to match them.
+    const words = [
+      "vegan", "veg", "veggie", "vegetarian", "vegetable", "plant", "based", "meatless", "soy", "dairy", "free", "lactose", "gluten",
+      "eggless", "decaf", "skim", "light", "diet", "breakfast", "margherita", "hawaiian", "masala", "jeera", "matcha", "brown", "sharp",
+      "roma", "cherry", "frozen", "smoked", "pickled", "canned", "dried", "cured", "deli", "sweet", "plain", "soft", "pulled", "minced",
+      "chicken", "lemon", "coconut", "quorn", "honey", "crispy",
+    ];
+    for (const word of words) {
+      const run = lookups({ versions: versions(["zqxfood", [food("Zqxfood")]]) });
+      expect(await priceScannedFood(seen(figures, `${word} zqxfood`), run.table), word).toEqual({ ...ESTIMATE, overruled: null });
+      expect(run.asked, word).toEqual([`ourList:${word} zqxfood`, `usda:${word} zqxfood`, `packaged:${word} zqxfood`]);
+    }
+  });
+
+  it.each<[string, string, boolean]>([
+    // Cooked, by any way or plainly, against raw or kept.
+    ["steamed", "Zqxcarrots (raw)", true],
+    ["cooked", "Zqxcarrots (raw)", true],
+    ...[...KEPT_WORDS].map((kept): [string, string, boolean] => ["boiled", `Zqxfood (${kept})`, true]),
+    ["grilled", "Zqxtuna (canned in water)", true],
+    // Raw against cooked, by any way or plainly, or kept.
+    ["raw", "Zqxbroccoli (cooked)", true],
+    ["raw", "Zqxdumplings (zqxpork, fried)", true],
+    ["raw", "Zqxtuna (canned in water)", true],
+    ["raw", "Zqxcarrots (raw)", false],
+    // Fresh against kept only.
+    ["fresh", "Zqxtuna (canned in water)", true],
+    ["fresh", "Zqxbroccoli (cooked)", false],
+    ["fresh", "Zqxcarrots (raw)", false],
+    // A way of cooking against one of another of LanguaL's groups, and never against one of its own or a plain "cooked".
+    ["steamed", "Zqxdumplings (zqxpork, fried)", true],
+    ["boiled", "Zqxpotato (baked)", true],
+    ["microwaved", "Zqxpotato (boiled)", true],
+    ["roasted", "Zqxpotato (baked)", false],
+    ["grilled", "Zqxpotato (baked)", false],
+    ["steamed", "Zqxpotato (boiled)", false],
+    ["sauteed", "Zqxegg (fried)", false],
+    ["grilled", "Zqxbroccoli (cooked)", false],
+    ["cooked", "Zqxpotato (baked)", false],
+    ["pan fried", "Zqxfood (boiled)", true],
+    // Where the food's name says it outside its brackets too.
+    ["steamed", "Fried zqxfish (coated)", true],
+    ["baked", "Roast zqxpotatoes", false],
+    ["fried", "Zqxidli (steamed rice cake)", true],
+    ["boiled", "Zqxegg (hard-boiled)", false],
+    // How it is cut, sized or served contradicts nothing.
+    ["mashed", "Zqxcarrots (raw)", false],
+    ["iced", "Zqxtuna (canned in water)", false],
+    ["hot", "Zqxdumplings (zqxpork, fried)", false],
+    ["baby", "Zqxspinach (raw)", false],
+    ["steamed", "Zqxfood", false],
+  ])("contradicts: %s against %s is %s", (dropped, name, expected) => {
+    expect(contradicts(dropped.split(" "), name)).toBe(expected);
+  });
+
   it("holds the shorter name's food to the model's own error on the plate, 30 % or 10 kcal, not to three times", async () => {
     expect([MAX_SHORTENED_NAME_WORDS, SHORTER_NAME_TIE_KCAL]).toEqual([10, 10]);
     const priced = async (kcalPer100g: number, plateFigures: Partial<typeof figures> = figures): Promise<ScanPrice> =>
-      priceScannedFood(seen({ ...figures, ...plateFigures }, "zqxsteamed zqxfood"), lookups({ named: named(["zqxfood", food("zqxfood", kcalPer100g)]) }).table);
+      priceScannedFood(seen({ ...figures, ...plateFigures }, "steamed zqxfood"), lookups({ versions: versions(["zqxfood", [food("zqxfood", kcalPer100g)]]) }).table);
     // 200 kcal the model saw in 200 g: 140 to 260 on the plate, 70 to 130 per 100 g.
     const cases: [number, boolean][] = [[130, true], [130.1, false], [70, true], [69.9, false], [100, true]];
     for (const [kcal, taken] of cases) expect((await priced(kcal)).kind, String(kcal)).toBe(taken ? "table" : "estimate");

@@ -772,24 +772,6 @@ export async function usdaFoodForScan(
   return r === undefined ? null : { food: usdaRow(r), match: r.match };
 }
 
-/** The words, of those given, that are the name of a USDA food a scan can price:
- *  a description that is the word, or whose head (up to its first comma) is —
- *  `usdaFoodForScan`'s first step, for one word. "Pork" is ("Pork, NFS"), and
- *  "iced" is not, though "Iced Coffee, brewed" starts with it. A word the search's
- *  own rule (`usdaWords`) would read as another word, or as several, is not asked.
- *  One query for them all: `first_word` holds each description's first word by
- *  that rule, and neither side can carry a `%` or `_` into `LIKE`. */
-export async function usdaFoodWords(sql: SqlOrTx, words: readonly string[]): Promise<Set<string>> {
-  const asked = [...new Set(words)].filter((word) => { const read = usdaWords(word); return read.length === 1 && read[0] === word; });
-  if (asked.length === 0) return new Set();
-  const rows = await sql<{ first_word: string }[]>`
-    SELECT DISTINCT first_word FROM usda_foods
-    WHERE first_word = ANY(${asked}::text[])
-      AND (search_text = first_word OR search_text LIKE first_word || ',%')
-      AND kcal IS NOT NULL AND protein_g IS NOT NULL AND carbs_g IS NOT NULL AND fat_g IS NOT NULL`;
-  return new Set(rows.map((r) => r.first_word));
-}
-
 /** The release a canonical names. The table stores SR Legacy as `sr_legacy`;
  *  a canonical spells it `sr`, as the curated list's citations do. */
 const CANONICAL_RELEASES: ReadonlyMap<string, string> = new Map([

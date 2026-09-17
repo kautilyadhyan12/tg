@@ -1,0 +1,20 @@
+{
+  "meal_name": "Substitutes plate",
+  "items": [
+    ["Soy yogurt","soy yogurt",1,150,95,5,11,3],
+    ["Gluten free pasta","gluten free pasta",null,200,316,11,62,2],
+    ["Lactose free milk","lactose free milk",1,240,146,8,12,8],
+    ["Vegan butter","vegan butter",1,14,100,0,0,11],
+    ["Vegan mayo","vegan mayo",1,15,102,0,0,11],
+    ["Dairy free yogurt","dairy free yogurt",1,150,95,5,11,3],
+    ["Vegan ice cream","vegan ice cream",1,100,207,4,24,11],
+    ["Vegan scrambled eggs","vegan scrambled eggs",null,100,149,10,2,11],
+    ["Vegan pesto","vegan pesto",1,16,67,2,2,6],
+    ["Vegan ghee","vegan ghee",1,13,114,0,0,13],
+    ["Vegan bacon","vegan bacon",2,24,132,8,0,11],
+    ["Quorn nuggets","quorn nuggets",6,96,295,14,24,16],
+    ["Eggless omelette","eggless omelette",1,120,185,10,6,13]
+  ],
+  "unknown_items": [],
+  "photo_quality": "good"
+}

@@ -61,23 +61,24 @@ const PICKLED_ID = 90_000_502;
 const RAW_ID = 90_000_503;
 /** The eight plates' USDA rows, from here up. */
 const PLATE_ROWS_FROM = 90_000_510;
-const LAST_ID = 90_000_699;
+const LAST_ID = 90_000_899;
 
 /** Every USDA row the eight plates' foods can find by name (`usdaFoodForScan`'s
  *  WHERE), copied from the loaded table on 2026-09-16 — FNDDS 2024-10-31 and SR
  *  Legacy 2018-04, public domain: release, description, kcal, protein, carbohydrate,
  *  fat and fibre per 100 g, and the first household measure. The coconut, brie
  *  cheese, deli ham, sweet corn and sesame seed rows were copied the same way on
- *  2026-09-17, for the "-apart" plates, and the chicken salad, garlic bread, steamed
+ *  2026-09-17, for the "-apart" plates, the chicken salad, garlic bread, steamed
  *  rice, baby carrot, green tea, vanilla yogurt and grilled shrimp rows the same
- *  day, for the review-names plates (ROADMAP 7a-iv-i). The other plates' foods not
- *  on our list by their whole name (caffe latte, avocado toast, cherry tomato,
- *  toast, banana toast, egg bacon toast, sourdough toast, mashed avocado, grilled
- *  asparagus, scored pork sausage, iced latte, roasted pumpkin, steamed broccoli,
- *  cherry tomatoes, light coconut milk, oreo cookies, overnight oats, grilled corn,
- *  jacket potato, basmati rice, boiled egg whites, masala dosa, steamed dumplings)
- *  find none in either release, and no word dropped from one to find our list's
- *  food of a shorter name is a USDA food's name but "coconut", whose rows are here. */
+ *  day, for the review-names plates (ROADMAP 7a-iv-i), and the raw broccoli,
+ *  roasted almond, hot milk, vegetable lasagna, soy yogurt, gluten free pasta and
+ *  lactose free milk rows that evening, for the plates of the reviews of PR #80 and
+ *  #81. The other plates' foods not on our list by their whole name (avocado toast,
+ *  cherry tomato, toast, banana toast, egg bacon toast, sourdough toast, mashed
+ *  avocado, grilled asparagus, scored pork sausage, iced latte, roasted pumpkin,
+ *  steamed broccoli, cherry tomatoes, light coconut milk, oreo cookies, overnight
+ *  oats, grilled corn, boiled egg whites, masala dosa, steamed dumplings, and every
+ *  other food of the review plates) find none in either release. */
 const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, number, number, number | null, number, string])[] = [
   ["fndds", "Pumpkin seeds, NFS", 574, 29.84, 14.71, 49.05, 6.5, 144, "cup, without shell"],
   ["fndds", "Pumpkin seeds, salted", 567, 29.49, 14.54, 48.47, 6.4, 144, "cup, without shell"],
@@ -254,6 +255,44 @@ const PLATE_USDA_ROWS: readonly (readonly [UsdaRelease, string, number, number, 
   ["fndds", "Tea, iced, bottled, green", 27, 0, 6.2, 0.22, 0, 31, "fl oz (no ice)"],
   ["fndds", "Tea, iced, bottled, green, diet", 4, 0, 0.93, 0, 0, 31, "fl oz (no ice)"],
   ["fndds", "Tea, iced, bottled, green, unsweetened", 0, 0, 0, 0, 0, 30, "fl oz (no ice)"],
+  // The plates of the reviews of PR #80 and #81, copied the same way, in USDA's own id order.
+  ["sr_legacy", "Pasta, gluten-free, corn, dry", 357, 7.46, 79.26, 2.08, 11, 105, "cup"],
+  ["sr_legacy", "Pasta, gluten-free, corn, cooked", 126, 2.63, 27.91, 0.73, 4.8, 140, "cup"],
+  ["sr_legacy", "Broccoli, leaves, raw", 28, 2.98, 5.06, 0.35, 2.3, 100, "g"],
+  ["sr_legacy", "Broccoli, flower clusters, raw", 28, 2.98, 5.06, 0.35, 2.3, 71, "cup flowerets"],
+  ["sr_legacy", "Broccoli, stalks, raw", 28, 2.98, 5.24, 0.35, null, 114, "stalk"],
+  ["sr_legacy", "Broccoli, chinese, raw", 26, 1.2, 4.67, 0.76, 2.6, 100, "g"],
+  ["sr_legacy", "Broccoli, raw", 34, 2.82, 6.64, 0.37, 2.6, 91, "cup chopped"],
+  ["sr_legacy", "Broccoli raab, raw", 22, 3.17, 2.85, 0.49, 2.7, 40, "cup chopped"],
+  ["sr_legacy", "Milk, chocolate beverage, hot cocoa, homemade", 77, 3.52, 10.74, 2.34, 1, 250, "cup"],
+  ["sr_legacy", "Pasta, gluten-free, brown rice flour, cooked, TINKYADA", 138, 3.46, 32.2, 1.67, 1.7, 169, "cup spaghetti not packed"],
+  ["sr_legacy", "Pasta, gluten-free, corn flour and quinoa flour, cooked, ANCIENT HARVEST", 152, 3.23, 31.11, 2.07, 3.3, 166, "cup spaghetti packed"],
+  ["sr_legacy", "Lasagna, Vegetable, frozen, baked", 139, 6.87, 14.18, 6.04, 1.9, 227, "serving"],
+  ["sr_legacy", "Pasta, gluten-free, rice flour and rice bran extract, cooked, DE BOLES", 200, 4.21, 40.75, 1.7, 1.9, 121, "cup spaghetti"],
+  ["sr_legacy", "Pasta, gluten-free, corn and rice flour, cooked", 179, 3.2, 38.05, 1, 1.4, 141, "cup spaghetti"],
+  ["fndds", "Milk, lactose free, low fat (1%)", 43, 3.38, 5.18, 0.95, 0, 244, "cup"],
+  ["fndds", "Milk, lactose free, fat free (skim)", 34, 3.43, 4.92, 0.08, 0, 244, "cup"],
+  ["fndds", "Milk, lactose free, reduced fat (2%)", 50, 3.36, 4.9, 1.9, 0, 244, "cup"],
+  ["fndds", "Milk, lactose free, whole", 61, 3.27, 4.63, 3.2, 0, 244, "cup"],
+  ["fndds", "Hot chocolate / cocoa, made with whole or reduced fat (2%) milk", 91, 2.73, 16.53, 1.54, 0, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, made with lowfat (1%) or fat free (skim) milk", 78, 2.79, 16.55, 0.06, 0, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, made with non-dairy milk", 76, 0.93, 15.02, 1.3, 0.1, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix, made with whole or reduced fat (2%) milk", 97, 3.81, 15.51, 2.18, 0.5, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix, made with lowfat (1%) or fat free (skim) milk", 83, 3.87, 15.53, 0.61, 0.5, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix , made with non-dairy milk", 81, 1.88, 13.9, 1.92, 0.6, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix, reduced sugar, made with whole or reduced fat (2%) milk", 77, 4.35, 10.37, 1.99, 0.6, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, reduced sugar, made with non-dairy milk", 54, 1.19, 8.92, 1.48, 0.1, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, reduced sugar, made with whole or reduced fat (2%) milk", 69, 2.99, 10.44, 1.73, 0, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix, reduced sugar, made with lowfat (1%) or fat free (skim) milk", 62, 4.41, 10.39, 0.32, 0.6, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, reduced sugar, made with lowfat (1%) or fat free (skim) milk", 56, 3.05, 10.45, 0.25, 0, 248, "cup"],
+  ["fndds", "Hot chocolate / cocoa, dry mix, reduced sugar, made with non-dairy milk", 59, 2.31, 8.66, 1.72, 0.7, 248, "cup"],
+  ["fndds", "Yogurt, soy", 90, 4.83, 12.27, 2.63, 0.9, 150, "5.3 oz container"],
+  ["fndds", "Almonds, honey roasted", 579, 14.11, 35.84, 45.34, 7.3, 1.2, "nut"],
+  ["fndds", "Pasta, gluten free", 179, 3.2, 38.05, 1, 1.4, 140, "cup, cooked"],
+  ["fndds", "Lasagna, meatless, with vegetables", 188, 11.2, 14.52, 9.38, 1.2, 227, "piece (1/6 of 8\" square…)"],
+  ["fndds", "Broccoli raab, raw", 22, 3.17, 2.85, 0.49, 2.7, 40, "cup"],
+  ["fndds", "Broccoli, raw", 39, 2.57, 6.27, 0.34, 2.4, 90, "cup"],
+  ["fndds", "Broccoli, chinese, raw", 26, 1.2, 4.67, 0.76, 2.6, 36, "cup"],
 ];
 
 /** Every household measure, as the loaded table holds them, of the USDA foods the
@@ -283,6 +322,23 @@ const PICKED_USDA_PORTIONS: ReadonlyMap<string, readonly UsdaPortion[]> = new Ma
     { seqNum: 1, amount: null, unit: "1 tiny shrimp", gramWeight: 5 }, { seqNum: 2, amount: null, unit: "1 small/medium shrimp", gramWeight: 10 },
     { seqNum: 3, amount: null, unit: "1 large/jumbo shrimp", gramWeight: 15 }, { seqNum: 4, amount: null, unit: "1 prawn", gramWeight: 20 },
     { seqNum: 5, amount: null, unit: "1 cup", gramWeight: 135 },
+  ]],
+  ["Tea, hot, leaf, green", [
+    { seqNum: 1, amount: null, unit: "1 fl oz", gramWeight: 30 }, { seqNum: 2, amount: null, unit: "1 cup", gramWeight: 240 },
+    { seqNum: 3, amount: null, unit: "1 small", gramWeight: 360 }, { seqNum: 4, amount: null, unit: "1 medium", gramWeight: 480 },
+    { seqNum: 5, amount: null, unit: "1 large", gramWeight: 600 },
+  ]],
+  // The survey release's "Broccoli, raw", the one the plate shows; SR Legacy's row of the name is never shown.
+  ["Broccoli, raw", [{ seqNum: 1, amount: null, unit: "1 cup", gramWeight: 90 }, { seqNum: 2, amount: null, unit: "1 piece", gramWeight: 10 }, { seqNum: 3, amount: null, unit: "1 floweret", gramWeight: 10 }]],
+  ["Lasagna, Vegetable, frozen, baked", [{ seqNum: 1, amount: 1, unit: "serving", gramWeight: 227 }, { seqNum: 2, amount: 1, unit: "cup", gramWeight: 226 }, { seqNum: 3, amount: 1, unit: "oz", gramWeight: 28.35 }]],
+  ["Yogurt, soy", [
+    { seqNum: 1, amount: null, unit: "1 5.3 oz container", gramWeight: 150 }, { seqNum: 2, amount: null, unit: "1 6 oz container", gramWeight: 170 },
+    { seqNum: 3, amount: null, unit: "1 container, NFS", gramWeight: 150 }, { seqNum: 4, amount: null, unit: "1 cup", gramWeight: 245 },
+  ]],
+  ["Pasta, gluten free", [{ seqNum: 1, amount: null, unit: "1 cup, cooked", gramWeight: 140 }, { seqNum: 2, amount: null, unit: "1 oz, dry, yields", gramWeight: 80 }]],
+  ["Milk, lactose free, whole", [
+    { seqNum: 1, amount: null, unit: "1 cup", gramWeight: 244 }, { seqNum: 2, amount: null, unit: "1 fl oz", gramWeight: 30.5 },
+    { seqNum: 3, amount: null, unit: "Guideline amount per fl oz of beverage", gramWeight: 2.5 }, { seqNum: 4, amount: null, unit: "Guideline amount per cup of hot cereal", gramWeight: 61 },
   ]],
 ]);
 
@@ -617,12 +673,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // apart (ROADMAP 7a-iv-f): what it joined into a dish is now rows, and a food a
       // table has is priced from it — the sourdough, cream cheese and arugula of the two
       // toasts, the dried coconut at USDA's packaged entry. A name our list holds only
-      // shorter is our list's food (ROADMAP 7a-iv-i): "mashed avocado" is our avocado,
-      // and "deli ham" our sliced ham, a deli meat itself, 24 kcal per 100 g nearer the
-      // 140 the model saw than USDA's deli ham.
+      // shorter is our list's food (ROADMAP 7a-iv-i): "mashed avocado" is our avocado.
+      // "Deli ham" is USDA's deli ham: "deli" says no way of cooking, cutting or serving a
+      // food, so the name is never shortened to our sliced ham (the reviews of PR #80 and #81).
       "download-1-apart.json": [
         ["toast", "estimate", "~120 g", 120, 320], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
-        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cubic inch", 102, 341], ["Ham (sliced)", "curated", "~60 g", 60, 98],
+        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cubic inch", 102, 341], ["Ham, prepackaged or deli, luncheon meat", "usda", "~60 g", 60, 61],
         ["Apple", "curated", "~60 g", 60, 31], ["Mixed nuts", "curated", "~10 g", 10, 61], ["Arugula", "curated", "1 × half cup", 10, 3],
         ["Cappuccino", "curated", "1 × cup", 240, 65],
       ],
@@ -639,11 +695,11 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Lemon, raw", "usda", "~30 g", 30, 9],
       ],
       // The model names the toast "bread", which alone is white bread (RULINGS
-      // 2026-09-17), no longer whole wheat. Its two slices at 70 g start at the nearest
-      // measure, USDA's 35 g "cup, cubes", 58 g of two slices being further: the start
-      // rule's (ROADMAP 7a-iv-b), pinned as it reads.
+      // 2026-09-17), no longer whole wheat. Its two slices at 70 g start at its own slice,
+      // 58 g: of the measures near the photo's grams our list's food starts at its serving,
+      // never at two 35 g cups of bread cubes (the reviews of PR #80 and #81).
       "download-6-apart.json": [
-        ["White bread", "curated", "2 × cup, cubes", 70, 186], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "~30 g", 30, 83],
+        ["White bread", "curated", "2 × slice", 58, 154], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "~30 g", 30, 83],
         ["Sesame seeds", "usda", "~5 g", 5, 32], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
         ["Blueberries", "curated", "1 × 50 berries", 68, 39], ["Raspberries", "curated", "~50 g", 50, 26],
       ],
@@ -652,8 +708,10 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Corn (cooked)", "curated", "1 × ear small (5-1/2\" to 6-1/2\" long)", 89, 85],
         ["Carrots (raw)", "curated", "1 × large (7-1/4\" to 8-/1/2\" long)", 72, 30], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27], ["Chicken breast (grilled)", "curated", "1 × piece", 196, 296],
       ],
+      // The banana the model saw at 100 g starts at our list's own banana, 120 g, within
+      // 30 % of it, before USDA's 101 g small one, which is nearer (the reviews of PR #80 and #81).
       "download-apart.json": [
-        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Banana", "curated", "1 × small (6\" to 6-7/8\" long)", 101, 90],
+        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Banana", "curated", "1 × banana", 120, 107],
         ["Coconut, packaged", "usda", "~5 g", 5, 23], ["Cream cheese", "curated", "1 × serving", 28, 98], ["Arugula", "curated", "1 × half cup", 10, 3],
         ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Egg (hard-boiled)", "curated", "2 × egg", 100, 155], ["Latte", "curated", "1 × cup (8 fl oz)", 240, 103],
       ],
@@ -685,7 +743,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Coke / cola", "curated", "3 × can", 1110, 466],
         ["Pancakes", "curated", "3 × pancake", 150, 423],
         ["Ham (sliced)", "curated", "3 × slice", 84, 138],
-        ["White bread", "curated", "2 × slice, large", 60, 160], // bread alone is white bread (RULINGS 2026-09-17)
+        ["White bread", "curated", "2 × slice", 58, 154], // bread alone is white bread (RULINGS 2026-09-17), at its own slice
         ["Banana bread", "curated", "2 × slice", 120, 391], // slices, not bananas
         ["Egg roll (vegetable, fried)", "curated", "2 × roll", 128, 346],
         ["Roti / Chapati (homemade flatbread, no fat)", "curated", "2 × roti", 80, 162], // the homemade one
@@ -726,20 +784,22 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Smoothie (fruit)", "curated", "1 × glass", 324, 214],
       ],
       // A name our list holds only shorter, the words before it dropped (ROADMAP
-      // 7a-iv-i): our list's food where no dropped word is a food of its own and the
-      // food carries the kcal the model saw within its own error — over USDA's food
-      // holding every word, unless that is more than 10 kcal per 100 g nearer.
+      // 7a-iv-i): our list's food where every dropped word says how the food was cooked,
+      // cut or served, the food's own name does not say otherwise, and it carries the
+      // kcal the model saw within its own error — over USDA's food holding every word,
+      // unless that is more than 10 kcal per 100 g nearer (the reviews of PR #80 and #81).
       "review-shorter-names.json": [
         ["Corn (cooked)", "curated", "1 × ear small (5-1/2\" to 6-1/2\" long)", 89, 85],
-        ["Potato (baked)", "curated", "1 × potato large", 299, 278], // a jacket potato
-        ["Rice (white, cooked)", "curated", "~150 g", 150, 195], // basmati rice
+        ["Potato (baked)", "curated", "1 × potato large", 299, 278], // a jacket potato, our baked potato by another name
+        ["Rice (white, cooked)", "curated", "~150 g", 150, 195], // basmati rice, a long-grain white rice by name
         ["Egg white", "curated", "2 × white", 66, 34], // boiled egg whites
         ["Rice (white, cooked)", "curated", "~150 g", 150, 195], // steamed rice: USDA's Chinese restaurant rice is 151, ours 130, as seen
-        ["Carrots (raw)", "curated", "10 × strip large (3\" long)", 70, 29], // baby carrots: USDA's toddler food (26) is no nearer the 36 seen
-        ["Tea (unsweetened)", "curated", "1 × cup", 240, 2], // green tea: USDA's green tea (1) is as near
-        // A version our list does not hold reads as the one it does (Kd, RULINGS 2026-09-17).
-        ["Dosa (rice and lentil crepe, plain)", "curated", "1 × large", 155, 326], // masala dosa
-        ["Dumplings (pork, fried)", "curated", "6 × item, any size", 150, 288], // steamed dumplings
+        ["Carrots (raw)", "curated", "10 × strip large (3\" long)", 70, 29], // baby carrots, a size: USDA's toddler food (26) is no nearer the 36 seen
+        ["Tea, hot, leaf, green", "usda", "1 × cup", 240, 2], // "green" is what the tea is: USDA's green tea, never our black
+        // A version our list does not hold is the model's estimate: "masala" is no way of
+        // cooking a dosa, and our dumplings are fried, where these were steamed.
+        ["Masala dosa", "estimate", "~150 g", 150, 255],
+        ["Steamed dumplings", "estimate", "~180 g", 180, 270],
         // USDA's food of every word, far nearer what the model saw than ours of fewer.
         ["Yogurt, vanilla, low fat.", "usda", "1 × container (6 oz)", 170, 145], // ours is plain, 63 against 85
         ["Shrimp, grilled", "usda", "6 × large/jumbo shrimp", 90, 99], // 110 as seen, ours 99: 11 nearer
@@ -762,6 +822,45 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Fried rice", "curated", "~200 g", 200, 348],
         ["Fried rice", "curated", "~200 g", 200, 348], // egg fried rice
         ["Banana bread", "curated", "1 × slice", 60, 196],
+      ],
+      // The reviews of PR #80 and #81: a word that can say what a food is — a substitute,
+      // a diet, what was taken out — is never dropped to find our list's food, however
+      // near its calories, so each is USDA's food of every word or the model's estimate.
+      // Each is written at the calories of the food it would otherwise read as.
+      "review-substitutes.json": [
+        ["Yogurt, soy", "usda", "1 × 5.3 oz container", 150, 135], // never our plain low-fat yogurt
+        ["Pasta, gluten free", "usda", "~200 g", 200, 358],
+        ["Milk, lactose free, whole", "usda", "1 × cup", 244, 149], // never our whole milk, at the same 61 kcal
+        ["Vegan butter", "estimate", "~14 g", 14, 100], ["Vegan mayo", "estimate", "~15 g", 15, 102],
+        ["Dairy free yogurt", "estimate", "~150 g", 150, 95], ["Vegan ice cream", "estimate", "~100 g", 100, 207],
+        ["Vegan scrambled eggs", "estimate", "~100 g", 100, 149], ["Vegan pesto", "estimate", "~16 g", 16, 67],
+        ["Vegan ghee", "estimate", "~13 g", 13, 114], ["Vegan bacon", "estimate", "~24 g", 24, 132],
+        ["Quorn nuggets", "estimate", "~96 g", 96, 295], ["Eggless omelette", "estimate", "~120 g", 120, 185],
+      ],
+      // A dish's own kind is no way of cooking it: never our list's version of another kind.
+      "review-dish-versions.json": [
+        ["Lasagna, Vegetable, frozen, baked", "usda", "~250 g", 250, 348], // never our meat lasagna, tied on calories
+        ["Vegan lasagna", "estimate", "~250 g", 250, 348], ["Vegan meatballs", "estimate", "~172 g", 172, 320],
+        ["Veg sandwich", "estimate", "~115 g", 115, 217], ["Veg burrito", "estimate", "~200 g", 200, 418],
+        ["Breakfast burrito", "estimate", "~200 g", 200, 418], ["Margherita pizza", "estimate", "~214 g", 214, 569],
+        ["Hawaiian pizza", "estimate", "~214 g", 214, 569], ["Vegetable dumplings", "estimate", "~150 g", 150, 288],
+        ["Veg biryani", "estimate", "~250 g", 250, 260], // never our chicken biryani, listed first
+        ["Brown basmati rice", "estimate", "~150 g", 150, 185], // never our white rice
+      ],
+      // A way of cooking is dropped, and our list's version its own name does not contradict is the food.
+      "review-cooking.json": [
+        ["Carrots (cooked)", "curated", "~80 g", 80, 28], // steamed: never "Carrots (raw)", listed first
+        ["Broccoli, raw", "usda", "~90 g", 90, 35], // raw: never our cooked broccoli, so USDA's
+        ["Potato (boiled)", "curated", "~150 g", 150, 129], // steamed, cooked in water: never our baked potato
+        ["Spinach (cooked)", "curated", "~90 g", 90, 21],
+        ["Grilled tuna", "estimate", "~150 g", 150, 276], // our only tuna is canned
+        ["Soft boiled egg", "estimate", "~50 g", 50, 72], // "soft" is no way of cooking: never our hard-boiled egg
+        ["Almonds", "curated", "1 × oz (23 whole kernels)", 28, 162], // roasted: ours, not USDA's honey roasted, tied on calories
+        ["Milk (whole)", "curated", "1 × cup", 244, 149], // hot: ours, not USDA's hot chocolate
+        // Pan fried: our cooked chicken breast. Served by weight, it has no serving of its own to
+        // start a count at, so its count of one starts at USDA's nearest measure, a chopped cup.
+        ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
+        ["Pork sausage (cooked)", "curated", "2 × link", 46, 150], // grilled: our "sausage", at its own link
       ],
     };
     const files = readdirSync(PLATES).filter((name) => name.endsWith(".json")).sort();

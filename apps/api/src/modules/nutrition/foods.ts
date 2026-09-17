@@ -479,6 +479,11 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   macaroni_and_cheese: "mac_and_cheese", chicken_soup: "chicken_noodle_soup", doner: "gyro",
   doner_kebab: "gyro", california_roll: "sushi_roll", egg_fried_rice: "fried_rice",
   battered_fish: "fried_fish_coated",
+  // the food its cited entry is, by another name: sweet corn ("Corn, sweet, yellow,
+  // cooked"), a potato baked in its jacket ("Potatoes, baked, flesh and skin"), two
+  // long-grain white rices ("Rice, white, long-grain"), and the latte's Italian name
+  sweet_corn: "corn_cooked", jacket_potato: "potato_baked", basmati_rice: "rice_white_cooked",
+  jasmine_rice: "rice_white_cooked", caffe_latte: "latte",
   // a cooking word where the table's cooking is the same one
   grilled_chicken: "chicken_breast_grilled", grilled_salmon: "salmon_cooked", baked_salmon: "salmon_cooked",
   roast_chicken: "rotisserie_chicken", roasted_chicken: "rotisserie_chicken", roasted_potatoes: "roast_potatoes",
@@ -492,10 +497,11 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
 
 /** One word for one common food: a word several foods answer to, and the one the
  *  list picks for it when nothing else is said — the most eaten in the markets
- *  (RULINGS 2026-09-12), so "bread" alone is white bread (RULINGS 2026-09-17).
- *  A pick answers the word alone, never a longer name the scanner shortens to it
- *  (`findCuratedNamed`): "brie cheese" is no cheddar, and "oreo cookies" no
- *  chocolate chip cookie. Exported for the test that holds each one to a food. */
+ *  (RULINGS 2026-09-12), so "bread" alone is white bread (RULINGS 2026-09-17). The
+ *  scanner shortens a name only past words of how a food was cooked, cut or served
+ *  (`scanMatch.ts`), so a pick answers such a name as it answers the word —
+ *  "toasted bread" is white bread — and "brie cheese" or "oreo cookies" is never
+ *  shortened to one. Exported for the test that holds each one to a food. */
 export const COMMON_FOOD_PICKS: ReadonlyMap<string, string> = new Map(Object.entries({
   chicken: "chicken_breast_cooked", beef: "ground_beef_85_cooked", pork: "pork_chop_cooked",
   turkey: "turkey_breast_cooked", sausage: "pork_sausage_cooked", bread: "white_bread", cheese: "cheddar_cheese",
@@ -606,27 +612,15 @@ function byWords(slugged: string): CuratedFood | null {
  *  "cookies" finds "cookie". */
 const stemKey = (slugged: string): string => toTokens(slugged).map(stem).join("_");
 
-/** Aliases keyed by `stemKey`: every one, and the names of one food alone. */
-type AliasesByStem = ReadonlyMap<string, string>;
-const byStem = (aliases: ReadonlyMap<string, string>): AliasesByStem => new Map([...aliases].map(([alias, canonical]) => [stemKey(alias), canonical]));
-const ALIASES_BY_STEM = byStem(FOOD_ALIASES);
-const NAMES_BY_STEM = byStem(FOOD_NAMES);
+/** The aliases keyed by `stemKey`. */
+const ALIASES_BY_STEM: ReadonlyMap<string, string> = new Map([...FOOD_ALIASES].map(([alias, canonical]) => [stemKey(alias), canonical]));
 
 const aliasFor = (slugged: string): string | undefined => ALIASES_BY_STEM.get(stemKey(slugged));
 
-function byAliasOrWords(slugged: string, aliases: AliasesByStem): CuratedFood | null {
-  const target = aliases.get(stemKey(slugged));
+function byAliasOrWords(slugged: string): CuratedFood | null {
+  const target = aliasFor(slugged);
   if (target !== undefined) return BY_CANONICAL.get(target) ?? null;
   return byWords(slugged);
-}
-
-function find(query: string, aliases: AliasesByStem): CuratedFood | null {
-  const q = slug(query);
-  if (q === "") return null;
-  const exact = BY_CANONICAL.get(q);
-  if (exact !== undefined) return exact;
-  const stripped = denoise(q);
-  return byAliasOrWords(q, aliases) ?? (stripped === null ? null : byAliasOrWords(stripped, aliases));
 }
 
 /** The one food a name means, or null: the food whose canonical it is, then an
@@ -637,15 +631,27 @@ function find(query: string, aliases: AliasesByStem): CuratedFood | null {
  *  homemade roti, not the store-bought one with fewer words; "spring_roll" is
  *  the egg roll it was renamed to). */
 export function findCurated(query: string): CuratedFood | null {
-  return find(query, ALIASES_BY_STEM);
+  const q = slug(query);
+  if (q === "") return null;
+  const exact = BY_CANONICAL.get(q);
+  if (exact !== undefined) return exact;
+  const stripped = denoise(q);
+  return byAliasOrWords(q) ?? (stripped === null ? null : byAliasOrWords(stripped));
 }
 
-/** The food a name is, by the same rules, but never the list's pick for a word
- *  several foods answer to (`COMMON_FOOD_PICKS`): how the scanner reads a name it
- *  has shortened (`scanMatch.ts`), where "cheese", all that "brie cheese" leaves
- *  once shortened, is not the cheese the model named. */
-export function findCuratedNamed(query: string): CuratedFood | null {
-  return find(query, NAMES_BY_STEM);
+/** Each food's name outside its brackets, which its other versions share. */
+const HEAD_KEYS: ReadonlyMap<CuratedFood, string> = new Map(FOOD_WORDS.map((f) => [f.food, f.headKey]));
+
+/** The food a name means (`findCurated`), then the other versions of that food on
+ *  the list — the foods of the same name outside their brackets, "Carrots (raw)"
+ *  and "Carrots (cooked)" — in the list's order; none where the name means no
+ *  food. How the scanner reads a name it has shortened (`scanMatch.ts`): "steamed
+ *  carrots" are no carrots the list names raw. */
+export function findCuratedVersions(query: string): CuratedFood[] {
+  const food = findCurated(query);
+  if (food === null) return [];
+  const head = HEAD_KEYS.get(food);
+  return [food, ...FOOD_WORDS.filter((f) => f.food !== food && f.headKey === head).map((f) => f.food)];
 }
 
 /** The noise words that only join a query's words or point at them. */

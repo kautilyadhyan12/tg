@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-17 · 7a-iv-i: PR #80's re-check and PR #81's review fixed (branch `scanned-name-finds-food`)
+
+- Kd pasted PR #80's re-check (New Highs A and B) and PR #81's review (Highs 1–4) and said *"solve men"*. Two causes under all six: a shorter name dropped a word that says what a food is (vegan, soy, lactose free, vegetable, veg), which calories cannot catch; and a scanned count started at the nearest measure ("2 × cup, cubes" for two slices).
+- Measured first (scratchpad `census3.mts`, real lookups, loaded table, 618 names: 168 plate rows, 234 typed, 28 from the reviews, 188 probes): every reviewer row reproduced, and the probes found more of the class (vegan bacon as bacon, veg biryani as chicken biryani, steamed carrots as raw, raw broccoli as cooked).
+- Built: `PREPARATION_WORDS` and `contradicts` in `scanMatch.ts` (LanguaL's cooking method, form and heat treatment; its four ways of cooking; cooked, raw, kept); `findCuratedVersions` replaces `findCuratedNamed`; `usdaFoodWords` gone; aliases for sweet corn, jacket potato, basmati and jasmine rice, caffè latte; `scanStart` starts our list's food at its own serving where its count is near. RULINGS 2026-09-17 and spec Part 2B amended. The fix differs from 7a-iv-i on 71 of the 618 names.
+- Seen on the plates: white bread "2 × slice · 58 g"; deli ham and green tea USDA's; masala dosa and steamed dumplings estimates again (the cost Kd accepted is gone); the banana-toast plate's banana, seen at 100 g, "1 × banana · 120 g" (was USDA's small, 101 g) — the one visible cost of serving first.
+- Tests: three new plates (`review-substitutes`, `review-dish-versions`, `review-cooking`), 37 USDA rows and 4 cited entries copied, this file's ids widened to 90,000,899; the rule's table test rewritten (every preparation word, 46 words that can say what a food is, 34 contradiction cases); measures +6.
+- Verified: api tsc 0 · eslint src test tools 0 · scan unit 82/82 · foods unit 23/23 · measures unit 111/111 · scan routes 32/32 on the loaded table and on `aihg_ci_scratch` · full api 1380/1380 in 68 files · 18 deliberate breaks each red (scratchpad `breaks.ps1`), the four files restored identical (sha256).
+- Found, not fixed (ROADMAP 10): USDA's food of every word can add words ("spinach lasagna" is lasagna with meat and spinach); a chicken breast served by weight starts at "1 × cup, chopped or diced".
+- Next: push, CI, the re-check in PR #80's reviewer chat and in PR #81's reviewer chat (both prompts in this chat), then #80 merges, then #81, and one click-through of both. The four dashboard images are still not this card's.
+
 ## 2026-09-17 · 7a-iv-i built: a scanned name finds the food it means (branch `scanned-name-finds-food`, from `scanner-lists-each-food`)
 
 - Plan measured first (scratchpad `census.mts`, `proto*.mts`, real lookups on the loaded table): the reviewer's shorter-ending order fixed the plates but made wrong foods among 229 typed names; the guarded rule built changes 39 of 382 names, none to a wrong food on the plates. Kd: *"go"*, taken as accepting the near-version cost (masala dosa as plain dosa), since the plan rests on it. Two RULINGS lines.

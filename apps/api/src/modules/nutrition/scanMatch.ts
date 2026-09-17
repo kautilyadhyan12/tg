@@ -7,7 +7,7 @@
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
 import { isNoValueWord, type Per100g, type VisionItem } from "@app/shared";
-import { slug } from "./foods.js";
+import { NOISE_WORDS, slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
 /** The most energy an estimate may carry per 100 g: pure fat is 900 kcal, and
@@ -86,16 +86,13 @@ export interface UsdaScanAnswer { food: FoodReference; byEveryWord: boolean }
 export interface ScanLookups {
   /** Our own list, by the whole name (`findCurated`). */
   ourList(hint: string): FoodReference | null;
-  /** Our own list, by a shorter name: the food that name is, never the list's
-   *  pick for a word several foods answer to (`findCuratedNamed`). */
-  ourListNamed(name: string): FoodReference | null;
+  /** Our own list, by a shorter name: the food the name alone means, then the other
+   *  versions of that food on the list, in the list's order (`findCuratedVersions`). */
+  ourListVersions(name: string): readonly FoodReference[];
   /** The USDA table: the food itself by name, then every word; among the entries
    *  a name finds equally, the plainest of those as near to what the model saw as
    *  its estimate can tell. */
   usda(hint: string, seen: EnergySeen | null): Promise<UsdaScanAnswer | null>;
-  /** Which of these words name a food of their own: one our list finds by the
-   *  word alone, or a USDA food of that name. */
-  foodWords(words: readonly string[]): Promise<ReadonlySet<string>>;
   /** A packaged product whose name holds every word. */
   packaged(hint: string): Promise<FoodReference | null>;
 }
@@ -114,11 +111,12 @@ export const MAX_SHORTENED_NAME_WORDS = 10;
 
 /** How much nearer, in kcal per 100 g, USDA's food holding every word of a name
  *  must be to the model's energy than our list's food of a shorter name, to be
- *  taken over it. Within that the two are one food made two ways — "sweet corn"
- *  seen at 90 is our list's cooked corn (96), not USDA's raw white corn (86) — and
- *  our list's is the one checked by hand; past it, the word ours drops is what the
- *  plate shows: "vanilla yogurt" seen at 85 is USDA's vanilla yogurt (85), not our
- *  plain one (63). Its own rule, though 10 as `USDA_TIE_KCAL` is. */
+ *  taken over it. Ours dropped only words of how the food was cooked, cut or served
+ *  (`PREPARATION_WORDS`), so within that the two are one food, and our list's is
+ *  the one checked by hand: "roasted almonds" seen at 600 are our almonds (579),
+ *  not USDA's honey roasted ones (579). Past it, the way of cooking ours drops is
+ *  what the plate shows: "grilled shrimp" seen at 110 is USDA's grilled shrimp
+ *  (110), not our cooked shrimp (99). Its own rule, though 10 as `USDA_TIE_KCAL` is. */
 export const SHORTER_NAME_TIE_KCAL = 10;
 
 /** Whether a food carries, at the grams the model saw, the kcal it saw: within
@@ -130,27 +128,98 @@ export function agreesWithScan(tableKcalPer100g: number, grams: number, kcal: nu
   return Math.abs((tableKcalPer100g * grams) / 100 - kcal) <= Math.max(ENERGY_TOLERANCE * kcal, ENERGY_SLACK_KCAL);
 }
 
-/** Our list's food for a SHORTER NAME — the name with its first words dropped,
- *  the longest our list holds ("scored pork sausage" is our pork sausage,
- *  "steamed broccoli" our cooked broccoli) — or null. A dropped word that is a
- *  food of its own is part of what the food is, so the name is never shortened
- *  past it: "chicken salad" is no salad, "light coconut milk" no milk, "cherry
- *  tomato" no tomato. The food must carry the kcal the model saw
- *  (`agreesWithScan`), so it needs the model's own figures: without them no name
- *  is shortened. A food the plate shows in a version our list does not hold reads
- *  as the version it does, as the shorter name alone would: "masala dosa" is our
- *  plain dosa (Kd, RULINGS 2026-09-17). */
-async function shorterNameFood(item: VisionItem, estimate: Per100g | null, lookups: ScanLookups): Promise<FoodReference | null> {
+/** How a word says a food was cooked, in the groups of LanguaL, the food description
+ *  thesaurus food composition tables index their foods by (its facet G, cooking
+ *  method: "cooked by dry or moist heat; cooked with fat; cooked by microwave"). Two
+ *  words of one group are one way of cooking a food — "roasted" potatoes are the
+ *  baked ones — and two of different groups are not: "steamed" dumplings are no
+ *  fried ones. */
+export type CookingGroup = "dry heat" | "moist heat" | "with fat" | "microwave";
+export const COOKING_WORDS: ReadonlyMap<string, CookingGroup> = new Map([
+  ["baked", "dry heat"], ["roasted", "dry heat"], ["roast", "dry heat"], ["toasted", "dry heat"],
+  ["grilled", "dry heat"], ["broiled", "dry heat"], ["barbecued", "dry heat"], ["charred", "dry heat"],
+  ["boiled", "moist heat"], ["steamed", "moist heat"], ["poached", "moist heat"], ["simmered", "moist heat"],
+  ["blanched", "moist heat"], ["stewed", "moist heat"], ["braised", "moist heat"],
+  ["fried", "with fat"], ["sauteed", "with fat"], ["seared", "with fat"], ["scrambled", "with fat"],
+  ["microwaved", "microwave"],
+]);
+
+/** The words that say how a food was kept (LanguaL's facet J, preservation method),
+ *  which a food just cooked, or raw, or fresh, is not. */
+export const KEPT_WORDS: ReadonlySet<string> = new Set(["canned", "pickled", "smoked", "dried", "cured"]);
+
+/** The words a scanned name is shortened past: words that say only how a food was
+ *  cooked, cut or served, never what it is. They are LanguaL's cooking methods, its
+ *  heat treatment (cooked, raw) and the forms a food is cut or mashed into (facets
+ *  G, F and E), with "fresh", a food's size, how warm it is served, the first half
+ *  of a two-word way of cooking ("pan fried", "slow cooked") and the list's own
+ *  noise words (`NOISE_WORDS`). What a food is made of, what it has taken out or
+ *  put in, its kind, its brand and who it is for are LanguaL's other facets (food
+ *  source, treatment applied, dietary use), and a word of any of them can make it
+ *  another food at the same calories: "vegan" butter, "soy" yogurt, "lactose free"
+ *  milk, "vegetable" lasagna, "veg" biryani, "brown" basmati rice. So a name is
+ *  never shortened past any word not here: it is USDA's food of every word, a
+ *  packaged product, or the model's own estimate, never the food a substitute is
+ *  made to stand in for. A word missing here costs a table's number, never a wrong
+ *  food. */
+export const PREPARATION_WORDS: ReadonlySet<string> = new Set([
+  ...COOKING_WORDS.keys(), "cooked", "raw", "fresh",
+  "mashed", "smashed", "scored", "whole", "baby",
+  "iced", "chilled", "cold", "warm", "hot",
+  "pan", "deep", "air", "oven", "stir", "slow",
+  ...NOISE_WORDS,
+]);
+
+/** What some words say of how a food was made: cooked (by a way of cooking, or
+ *  plainly), raw, fresh, kept. */
+function madeAs(words: readonly string[]): { cooked: boolean; raw: boolean; fresh: boolean; kept: boolean; cooking: ReadonlySet<CookingGroup> } {
+  const cooking = new Set(words.flatMap((word) => { const group = COOKING_WORDS.get(word); return group === undefined ? [] : [group]; }));
+  return {
+    cooked: cooking.size > 0 || words.includes("cooked"),
+    raw: words.includes("raw"),
+    fresh: words.includes("fresh"),
+    kept: words.some((word) => KEPT_WORDS.has(word)),
+    cooking,
+  };
+}
+
+/** Whether a food's own name says it was made otherwise than the words dropped
+ *  from a scanned name say: cooked against raw or kept ("steamed carrots" are no
+ *  "Carrots (raw)", "grilled tuna" no canned tuna), raw against cooked or kept, fresh
+ *  against kept, and a way of cooking against one of another group ("steamed
+ *  dumplings" are no "Dumplings (pork, fried)"). A plain "cooked" names no way, so
+ *  "grilled broccoli" is "Broccoli (cooked)". */
+export function contradicts(dropped: readonly string[], foodName: string): boolean {
+  const scanned = madeAs(dropped);
+  const named = madeAs(slug(foodName).split("_"));
+  if (scanned.cooked && (named.raw || named.kept)) return true;
+  if (scanned.raw && (named.cooked || named.kept)) return true;
+  if (scanned.fresh && named.kept) return true;
+  return named.cooking.size > 0 && [...scanned.cooking].some((group) => !named.cooking.has(group));
+}
+
+/** Our list's food for a SHORTER NAME — the name with its first words dropped, the
+ *  longest our list holds ("scored pork sausage" is our pork sausage, "steamed
+ *  broccoli" our cooked broccoli) — or null. Only words that say how a food was
+ *  cooked, cut or served are dropped (`PREPARATION_WORDS`), so the shorter name is
+ *  the same food, and reads as that name alone would: "toasted bread" is the white
+ *  bread "bread" is (RULINGS 2026-09-17). Of the food and its other versions on the
+ *  list, the first whose own name the dropped words do not contradict
+ *  (`contradicts`): "steamed carrots" are "Carrots (cooked)", not the list's first
+ *  carrots, "Carrots (raw)"; none, and the name finds no food. The food must carry
+ *  the kcal the model saw (`agreesWithScan`), so it needs the model's own figures:
+ *  without them no name is shortened. */
+function shorterNameFood(item: VisionItem, estimate: Per100g | null, lookups: ScanLookups): FoodReference | null {
   if (estimate === null || item.grams === null || item.kcal === null) return null;
   const words = slug(item.canonical_hint).split("_").filter((word) => word !== "");
   if (words.length > MAX_SHORTENED_NAME_WORDS) return null;
   for (let drop = 1; drop < words.length; drop++) {
-    const food = lookups.ourListNamed(words.slice(drop).join(" "));
-    if (food === null) continue;
+    if (!PREPARATION_WORDS.has(words[drop - 1] ?? "")) return null;
+    const versions = lookups.ourListVersions(words.slice(drop).join(" "));
+    if (versions.length === 0) continue;
     const dropped = words.slice(0, drop);
-    const foods = await lookups.foodWords(dropped);
-    if (dropped.some((word) => foods.has(word))) return null;
-    return agreesWithScan(food.kcal, item.grams, item.kcal) ? food : null;
+    const food = versions.find((version) => !contradicts(dropped, version.name));
+    return food !== undefined && agreesWithScan(food.kcal, item.grams, item.kcal) ? food : null;
   }
   return null;
 }
@@ -159,7 +228,8 @@ async function shorterNameFood(item: VisionItem, estimate: Per100g | null, looku
  *  that the model's energy says is another (`overruled`). In this order:
  *   1. our list by the whole name;
  *   2. the USDA food of that name, its whole description or its head;
- *   3. our list by a shorter name (`shorterNameFood`), set against
+ *   3. our list by a shorter name, only words of how it was cooked, cut or served
+ *      dropped (`shorterNameFood`), set against
  *   4. USDA's food holding every word of the name, which is taken over ours only
  *      where it is clearly nearer to the model's energy (`SHORTER_NAME_TIE_KCAL`);
  *   5. a packaged product.
@@ -178,7 +248,7 @@ async function tableFood(item: VisionItem, estimate: Per100g | null, lookups: Sc
     else named = usda?.food ?? null;
   }
   if (named !== null && !isWrongFood(named.kcal, estimate)) return { food: named, overruled: null };
-  const shorter = await shorterNameFood(item, estimate, lookups);
+  const shorter = shorterNameFood(item, estimate, lookups);
   if (named !== null) return { food: shorter, overruled: named };
   if (everyWord !== null) {
     if (isWrongFood(everyWord.kcal, estimate)) return { food: shorter, overruled: everyWord };

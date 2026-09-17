@@ -4,7 +4,7 @@
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
-import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, findCurated, findCuratedNamed, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -280,26 +280,38 @@ describe("the food a name means", () => {
     }
   });
 
-  it("is never a pick where the name is one the scanner shortened, and is findCurated's food for every other name", () => {
-    // A shorter name the scanner reads (scanMatch.ts) is part of a longer one: the
-    // model named more than the word, so the list's pick for the word alone is not it.
-    for (const [word, canonical] of COMMON_FOOD_PICKS) {
-      expect(findCuratedNamed(word)?.canonical, word).not.toBe(canonical);
-      expect(findCuratedNamed(`${word}s`)?.canonical, `${word}s`).not.toBe(canonical);
-    }
-    expect(findCuratedNamed("cheese")).toBeNull();
-    expect(findCuratedNamed("cookies")).toBeNull();
-    for (const [alias, canonical] of FOOD_ALIASES) {
-      if (!COMMON_FOOD_PICKS.has(alias)) expect(findCuratedNamed(alias)?.canonical, alias).toBe(canonical);
-    }
+  it("is the food a cited entry names another way: sweet corn, a jacket potato, basmati and jasmine rice, a caffè latte", () => {
+    const cases: [string, string][] = [
+      ["sweet corn", "corn_cooked"], ["Sweet Corn", "corn_cooked"], ["jacket potato", "potato_baked"], ["jacket potatoes", "potato_baked"],
+      ["basmati rice", "rice_white_cooked"], ["jasmine rice", "rice_white_cooked"], ["caffè latte", "latte"], ["caffe latte", "latte"],
+    ];
+    for (const [name, canonical] of cases) expect(findCurated(name)?.canonical, name).toBe(canonical);
+    // Each is the food its cited USDA entry describes by that other name.
+    expect([curatedUsdaFdcId("corn_cooked"), curatedUsdaFdcId("potato_baked"), curatedUsdaFdcId("rice_white_cooked"), curatedUsdaFdcId("latte")])
+      .toEqual([169999, 170093, 168878, 2710386]);
+    // A version the other name does not say is not it.
+    expect(findCurated("brown basmati rice")).toBeNull();
+  });
+
+  it("with its other versions, in the list's order, where the scanner reads a name it shortened", () => {
+    const canonicals = (name: string): string[] => findCuratedVersions(name).map((f) => f.canonical);
+    // The food the name means first, as findCurated finds it, then the foods of its name outside the brackets.
+    expect(canonicals("carrots")).toEqual(["carrots_raw", "carrots_cooked"]);
+    expect(canonicals("spinach")).toEqual(["spinach_raw", "spinach_cooked"]);
+    expect(canonicals("potato")).toEqual(["potato_baked", "potato_boiled"]);
+    expect(canonicals("boiled potatoes")).toEqual(["potato_boiled", "potato_baked"]);
+    expect(canonicals("roti")).toEqual(["roti_chapati", "roti_chapati_store_bought_flatbread"]);
+    expect(canonicals("bread")).toEqual(["white_bread"]);
+    expect(canonicals("broccoli")).toEqual(["broccoli_cooked"]);
+    // A name and its plural are one name: "Egg (fried)" and "Eggs (scrambled)" are versions of one food.
+    expect(canonicals("eggs")).toEqual(["egg_whole_large", "egg_hard_boiled", "eggs_scrambled", "egg_fried", "egg_poached"]);
+    expect(canonicals("zqxnothing")).toEqual([]);
+    // For every food of the list: itself first, each version once, and the same versions whichever of them a name meant.
     for (const f of CURATED_FOODS) {
-      expect(findCuratedNamed(f.name), f.name).toBe(f);
-      expect(findCuratedNamed(f.canonical), f.canonical).toBe(f);
-    }
-    // The list's own words and noise words are read as findCurated reads them.
-    for (const name of ["broccoli", "avocado", "pork sausage", "egg whites", "latte", "Pizza Slice", "apple slices", "white rice", "corn"]) {
-      expect(findCuratedNamed(name), name).toBe(findCurated(name));
-      expect(findCuratedNamed(name), name).not.toBeNull();
+      const found = findCuratedVersions(f.canonical);
+      expect(found[0], f.canonical).toBe(f);
+      expect(new Set(found).size, f.canonical).toBe(found.length);
+      for (const version of found) expect(new Set(findCuratedVersions(version.canonical)), `${f.canonical} → ${version.canonical}`).toEqual(new Set(found));
     }
   });
 
