@@ -58,7 +58,8 @@ describe('the switch over the rings', () => {
     serve(answer());
     expect(await screen.findByRole('button', { name: /App's plan/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /My own/ }).textContent).toContain('Set my own');
-    expect(screen.getByRole('button', { name: /App's plan/ }).textContent).toContain('1267 kcal');
+    // A four-digit figure is written as the rest of the page writes one.
+    expect(screen.getByRole('button', { name: /App's plan/ }).textContent).toContain('1,267 kcal');
     expect(screen.getByRole('button', { name: /App's plan/ }).getAttribute('aria-pressed')).toBe('true');
     // Nothing typed yet: no editor, and no pencil to open one.
     expect(screen.queryByLabelText('Calories a day')).toBeNull();
@@ -80,7 +81,7 @@ describe('the switch over the rings', () => {
     fireEvent.change(screen.getByLabelText('Carbs a day'), { target: { value: '200' } });
     fireEvent.change(screen.getByLabelText('Fat a day'), { target: { value: '60' } });
     // What the macros come to is said, and never forced onto the calories.
-    expect(screen.getByText(/come to 1940 kcal/)).toBeTruthy();
+    expect(screen.getByText(/come to 1,940 kcal/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Use my numbers' }));
 
     await screen.findByText(/^\/ 2000$/);
@@ -93,11 +94,11 @@ describe('the switch over the rings', () => {
   });
 
   it('shows the server’s own refusal and leaves the rings on the app’s plan', async () => {
-    serve(answer(), { refusal: 'Daily calories cannot go below 1200 kcal.' });
+    serve(answer(), { refusal: 'Daily calories cannot go below 1,200 kcal.' });
     fireEvent.click(await screen.findByRole('button', { name: /My own/ }));
     fireEvent.change(editor(), { target: { value: '900' } });
     fireEvent.click(screen.getByRole('button', { name: 'Use my numbers' }));
-    expect(await screen.findByText('Daily calories cannot go below 1200 kcal.')).toBeTruthy();
+    expect(await screen.findByText('Daily calories cannot go below 1,200 kcal.')).toBeTruthy();
     expect(await ringTarget()).toBe('/ 1267');
     // The box stays open on what was typed, so the number can be fixed.
     expect(editor().value).toBe('900');
@@ -113,17 +114,17 @@ describe('the switch over the rings', () => {
     expect(svc.putTargets).toHaveBeenCalledWith({ source: 'app' });
     expect(await ringTarget()).toBe('/ 1267');
     // Kept, not cleared: the pill still offers them, and one tap sends them back.
-    expect(screen.getByRole('button', { name: /My own/ }).textContent).toContain('2000 kcal');
+    expect(screen.getByRole('button', { name: /My own/ }).textContent).toContain('2,000 kcal');
     fireEvent.click(screen.getByRole('button', { name: /My own/ }));
     expect(svc.putTargets).toHaveBeenLastCalledWith({ source: 'own', ...OWN });
   });
 
-  it('says why stored numbers are not the ones showing, and opens the editor on them', async () => {
+  it('says why stored numbers cannot be used, and opens the editor on them', async () => {
     serve(answer({
       own: OWN,
       ownHeld: { code: 'no_cut_below_maintenance', maintenanceKcal: 1817, reasons: ['health_answer'] },
     }));
-    expect(await screen.findByText(/your own calories cannot be below 1817 kcal/)).toBeTruthy();
+    expect(await screen.findByText(/the rings cannot use your own calories below 1,817 kcal/)).toBeTruthy();
     expect(await ringTarget()).toBe('/ 1267');
     // A held set is not switched to by tapping the pill — that would be asking
     // the server for a refusal. The editor opens on the person's own numbers.
@@ -132,15 +133,70 @@ describe('the switch over the rings', () => {
     expect(editor().value).toBe('2000');
   });
 
-  it('a plan with an answer missing says the numbers are waiting, beside the questions', async () => {
+  it('keeps the figure that binds in sight while a held set is edited, until a refusal replaces it', async () => {
+    const refusal = 'Your plan holds no calorie cut, so daily calories cannot go below 1,817 kcal — what keeps your weight.';
+    serve(answer({
+      own: { ...OWN, kcal: 1500 },
+      ownHeld: { code: 'no_cut_below_maintenance', maintenanceKcal: 1817, reasons: ['health_answer'] },
+    }), { refusal });
+    const hold = /the rings cannot use your own calories below 1,817 kcal/;
+    fireEvent.click(await screen.findByLabelText('Edit my own numbers'));
+    // Said once, and inside the open box, where the numbers are being changed.
+    const box = screen.getByText('My own numbers').closest('.p-3');
+    expect(screen.getAllByText(hold)).toHaveLength(1);
+    expect(within(box).getByText(hold)).toBeTruthy();
+    expect(editor().value).toBe('1500');
+    // Still too low: the server's refusal is the newer word, and takes its place.
+    fireEvent.change(editor(), { target: { value: '1600' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use my numbers' }));
+    expect(await within(box).findByText(refusal)).toBeTruthy();
+    expect(screen.queryByText(hold)).toBeNull();
+  });
+
+  it('a plan with an answer missing says the numbers are kept, beside the questions', async () => {
     serve({
       targets: null, missing: ['goal', 'dayActivity'], targetWrongSide: false,
       source: 'app', appTargets: null, own: OWN, ownHeld: { code: 'plan_incomplete' },
     });
     expect(await screen.findByText('To see your daily calories and macros, answer your weight goal and your day.')).toBeTruthy();
-    expect(screen.getByText('Your own numbers are waiting: answer the setup questions and they come back.')).toBeTruthy();
-    // No switch with nothing to switch between, and no invented starting number.
+    expect(screen.getByText('Your own numbers are kept: answer the setup questions to use them.')).toBeTruthy();
+    // No switch: with no plan to check them against, every pick would be refused.
     expect(screen.queryByRole('button', { name: /App's plan/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /My own/ })).toBeNull();
+  });
+
+  // A stale target blanks the APP's numbers, not the person's own — so the
+  // "new target" card must still reach them, or the one way back to the rings
+  // without picking a target is gone (reachable: save own numbers, switch back,
+  // then change the weight goal in Settings).
+  it('a stale target keeps the switch to numbers left behind "App\'s plan"', async () => {
+    const stale = { targets: null, missing: [], targetWrongSide: true, source: 'app', appTargets: null, own: OWN, ownHeld: null };
+    serve(stale, { next: { ...stale, targets: { ...PLAN, ...OWN }, source: 'own' } });
+    expect(await screen.findByText('Time to set a new target weight. Pick one to see your daily calories and macros.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Pick a new target' })).toBeTruthy();
+    expect(pill(/App's plan/).textContent).toContain('No number yet');
+    expect(pill(/My own/).textContent).toContain('2,000 kcal');
+    fireEvent.click(pill(/My own/));
+    expect(svc.putTargets).toHaveBeenCalledWith({ source: 'own', ...OWN });
+    await screen.findByText(/^\/ 2000$/);
+    expect(await ringTarget()).toBe('/ 2000');
+  });
+
+  it('a stale target with a held set left behind: the switch, the hold, and the editor on tap', async () => {
+    serve({
+      targets: null, missing: [], targetWrongSide: true, source: 'app', appTargets: null,
+      own: { ...OWN, kcal: 900 }, ownHeld: { code: 'below_floor', floorKcal: 1200 },
+    });
+    expect(await screen.findByText("The rings cannot use your own calories below the app's floor of 1,200 kcal.")).toBeTruthy();
+    fireEvent.click(pill(/My own/));
+    expect(svc.putTargets).not.toHaveBeenCalled();
+    expect(editor().value).toBe('900');
+  });
+
+  it('a stale target with nothing stored offers no switch — there is nothing to start from', async () => {
+    serve({ targets: null, missing: [], targetWrongSide: true, source: 'app', appTargets: null, own: null, ownHeld: null });
+    expect(await screen.findByRole('link', { name: 'Pick a new target' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /My own/ })).toBeNull();
   });
 
   it('a wrong-side target blanks the app’s numbers, not the person’s own', async () => {

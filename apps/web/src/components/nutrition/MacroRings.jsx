@@ -69,7 +69,7 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
 // person has one: the card asks for a new one, in words that fit whether the
 // goal changed or the target was reached, and the link opens the target
 // screen, which shows it and offers only the goal's side (RULINGS 2026-09-11).
-function NoTargets({ missingInputs, targetWrongSide, hold }) {
+function NoTargets({ missingInputs, targetWrongSide, hold, numbers }) {
   const list = missingInputs.length > 0 ? missingText(missingInputs) : null;
   let text = 'Finish setting up to see your daily calories and macros.';
   if (targetWrongSide) text = 'Time to set a new target weight. Pick one to see your daily calories and macros.';
@@ -84,11 +84,12 @@ function NoTargets({ missingInputs, targetWrongSide, hold }) {
          style={{ color: 'rgba(255,255,255,0.55)' }}>
         {text}
       </p>
-      {/* 7a-iv-e: numbers of their own, typed before an answer was cleared, are
-          still theirs — said here rather than silently forgotten. */}
-      {hold ? (
+      {/* 7a-iv-e: numbers of their own are still theirs. Where they can be
+          picked the switch is here, and says any hold itself; where they
+          cannot, the hold is said rather than the numbers silently forgotten. */}
+      {numbers ?? (hold ? (
         <p className="text-xs leading-relaxed mb-4" style={{ color: '#fbbf24' }}>{hold}</p>
-      ) : null}
+      ) : null)}
       <Link
         to="/onboarding"
         state={{ returnTo: '/nutrition' }}
@@ -130,9 +131,8 @@ export default function MacroRings({
   ringChoice = null, onPickNumbers = null,
 }) {
   const safeTotals = totals || {};
-  // The switch needs a set to start from, which is the same thing the rings
-  // need to draw, so it rides with them and never with the honest empty state:
-  // a person with no numbers has nothing to edit yet.
+  // The switch needs a set to start from: the rings' own, or the person's
+  // stored numbers. RingNumbers draws nothing when there is neither.
   const numbers = ringChoice === null || onPickNumbers === null ? null : (
     <RingNumbers
       source={ringChoice.source}
@@ -159,11 +159,19 @@ export default function MacroRings({
   // incomplete-profile user — precisely the person who must not be shown a
   // stranger's calorie goal rendered identically to their own.
   if (targets === null) {
+    // A stale target blanks the APP's numbers, not the person's own
+    // (targets.ts), so someone with numbers of their own keeps the switch on
+    // the "new target" card: it is their way back to the rings without picking
+    // a target first. With an answer still missing there is no plan to check a
+    // number against — the server would refuse every pick — so that card
+    // offers no switch and says the numbers are kept.
+    const ownReachable = targetWrongSide && ringChoice !== null && ringChoice.own !== null;
     return (
       <NoTargets
         missingInputs={missingInputs}
         targetWrongSide={targetWrongSide}
         hold={holdText(ringChoice === null ? null : ringChoice.ownHeld)}
+        numbers={ownReachable ? numbers : null}
       />
     );
   }

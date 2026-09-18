@@ -289,7 +289,7 @@ function fourNumbers(t) {
  *    source     → which set the rings are showing, 'app' unless the server says 'own'
  *    appTargets → the app's plan numbers, what "My own" starts from (null: none yet)
  *    own        → the person's own numbers as stored, in use or not (null: none typed)
- *    ownHeld    → why stored, picked numbers are not the ones showing (null: nothing held)
+ *    ownHeld    → why the stored numbers cannot feed the rings today, picked or not (null: nothing held)
  *  Unreadable anything degrades to the app's plan with no switch, never to a
  *  half-filled editor: an invented starting number is the one thing this page
  *  must not do. */

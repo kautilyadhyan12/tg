@@ -92,7 +92,7 @@ export function ownTargetsHeld(
 }
 
 /** The rings' answer: both sets, which one is showing, and why the person's own
- *  is not where it is stored and picked. Parsed through the shared contract, so
+ *  cannot feed the rings today where that is so. Parsed through the shared contract, so
  *  "a number exactly when there is no reason against one" — and "the source and
  *  the numbers agree" — hold for every caller. */
 export function targetsFromPlan(
@@ -103,18 +103,19 @@ export function targetsFromPlan(
   const plan = result.plan;
   const targetWrongSide = plan !== null && plan.flags.some((f) => f.code === "target_wrong_direction");
   const appTargets = appTargetsFrom(plan, targetWrongSide);
-  // A hold is only ever about the set the person PICKED: numbers kept behind a
-  // switch that says "App's plan" are not being held back from anything.
-  const picked = pick.source === "own" ? pick.own : null;
-  const held = picked === null ? null : ownTargetsHeld(picked, plan, noCutReasons);
-  // held === null with a picked set means the plan is there (no plan is a hold
+  // The hold is run on the stored set whichever side is picked: a set kept
+  // behind "App's plan" that today's answers refuse must not be offered as one
+  // tap away, or the tap is a refusal the screen could have said first.
+  const held = pick.own === null ? null : ownTargetsHeld(pick.own, plan, noCutReasons);
+  // held === null with a stored set means the plan is there (no plan is a hold
   // of its own), so the burn figures below are always readable.
-  const own = held === null ? picked : null;
+  const own = pick.source === "own" && held === null ? pick.own : null;
   return nutritionTargetsResponseSchema.parse({
     // The picked set. A wrong-side target does not blank the rings for someone
     // showing their OWN numbers: the stale target is the app plan's business,
-    // and the switch is exactly the way out of it. The plan is still read —
-    // `bmr` and `tdee` are burn figures, not targets, and stay the plan's.
+    // and the switch — shown on the "new target" card too — is the way out of
+    // it. The plan is still read — `bmr` and `tdee` are burn figures, not
+    // targets, and stay the plan's.
     targets:
       own === null || plan === null
         ? appTargets
@@ -134,6 +135,7 @@ export function targetsFromPlan(
     // Stored numbers are reported whether or not they are in use: switching to
     // the app's plan keeps them, and a held set is what the screen offers to fix.
     own: pick.own,
+    // Why the stored set cannot feed the rings today, picked or parked.
     ownHeld: held,
   });
 }

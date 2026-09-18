@@ -727,7 +727,8 @@ describe("nutrition targets read the plan", () => {
     expect(ok({ ...base, targets: mine, appTargets: t, source: "own", own, ownHeld: null })).toBe(true);
     // Typed, then switched back: the numbers are kept and nothing is held.
     expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: null })).toBe(true);
-    // Picked and held: the app's plan shows, and the reason is named.
+    // Held, whether picked or parked behind "App's plan": the app's plan
+    // shows, and the reason is named.
     expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: { code: "below_floor", floorKcal: 1200 } })).toBe(true);
     // A wrong-side target does not blank the rings for someone on their own
     // numbers — the stale target is the app plan's business.
@@ -860,5 +861,58 @@ describe("nutrition targets read the plan", () => {
     expect(targetsFromPlan(resolvePlan({ ...golden, health: { hasCondition: true, safeMode: true } }), { source: "own", own: { ...own, kcal: 2500 } }, ["health_answer", "safe_mode"]).targets).toMatchObject({
       kcal: 2500, noCalorieCut: true,
     });
+  });
+
+  // ONE TABLE over what the rings show and what is said held, for every kind
+  // of plan against every kind of stored pick. The rows a first reading gets
+  // wrong are the PARKED ones: numbers left behind "App's plan" that today's
+  // answers refuse are still held, so the screen never offers as one tap a set
+  // it would refuse — and a stale target never hides the person's own set.
+  it("resolves the rings and the hold for every plan against every stored pick — every class", () => {
+    const allowed = { kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 };
+    const low = { ...allowed, kcal: 900 };       // under the floor
+    const underBurn = { ...allowed, kcal: 1500 }; // over the floor, under the burn
+    const yes: NoDeficitReason[] = ["health_answer"];
+    const plans = {
+      ok: { result: resolvePlan(golden), reasons: [] as NoDeficitReason[] },
+      noCut: { result: resolvePlan({ ...golden, health: { hasCondition: true, safeMode: false } }), reasons: yes },
+      wrongSide: { result: resolvePlan({ ...golden, targetWeightKg: 80 }), reasons: [] as NoDeficitReason[] },
+      incomplete: { result: resolvePlan({ today: "2026-09-11" }), reasons: [] as NoDeficitReason[] },
+    };
+    const floor: OwnTargetsHeld = { code: "below_floor", floorKcal: 1200 };
+    const burn: OwnTargetsHeld = { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: yes };
+    const waiting: OwnTargetsHeld = { code: "plan_incomplete" };
+    type Rings = "app" | "own" | "none" | "neither";
+    const cases: { name: string; plan: keyof typeof plans; pick: { source: "app" | "own"; own: typeof allowed | null }; source: "app" | "own"; rings: Rings; held: OwnTargetsHeld | null }[] = [
+      { name: "a plan, nothing stored", plan: "ok", pick: { source: "app", own: null }, source: "app", rings: "app", held: null },
+      { name: "a plan, allowed set parked", plan: "ok", pick: { source: "app", own: allowed }, source: "app", rings: "app", held: null },
+      { name: "a plan, set under the floor parked", plan: "ok", pick: { source: "app", own: low }, source: "app", rings: "app", held: floor },
+      { name: "a plan, allowed set picked", plan: "ok", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "a plan, set under the floor picked", plan: "ok", pick: { source: "own", own: low }, source: "app", rings: "app", held: floor },
+      { name: "no cut, nothing stored", plan: "noCut", pick: { source: "app", own: null }, source: "app", rings: "app", held: null },
+      { name: "no cut, allowed set parked", plan: "noCut", pick: { source: "app", own: allowed }, source: "app", rings: "app", held: null },
+      { name: "no cut, set under the burn parked", plan: "noCut", pick: { source: "app", own: underBurn }, source: "app", rings: "app", held: burn },
+      { name: "no cut, allowed set picked", plan: "noCut", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "no cut, set under the burn picked", plan: "noCut", pick: { source: "own", own: underBurn }, source: "app", rings: "app", held: burn },
+      { name: "wrong side, nothing stored", plan: "wrongSide", pick: { source: "app", own: null }, source: "app", rings: "none", held: null },
+      { name: "wrong side, allowed set parked", plan: "wrongSide", pick: { source: "app", own: allowed }, source: "app", rings: "none", held: null },
+      { name: "wrong side, set under the floor parked", plan: "wrongSide", pick: { source: "app", own: low }, source: "app", rings: "none", held: floor },
+      { name: "wrong side, allowed set picked", plan: "wrongSide", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "wrong side, set under the floor picked", plan: "wrongSide", pick: { source: "own", own: low }, source: "app", rings: "none", held: floor },
+      { name: "an answer missing, nothing stored", plan: "incomplete", pick: { source: "app", own: null }, source: "app", rings: "none", held: null },
+      { name: "an answer missing, set parked", plan: "incomplete", pick: { source: "app", own: allowed }, source: "app", rings: "none", held: waiting },
+      { name: "an answer missing, set picked", plan: "incomplete", pick: { source: "own", own: allowed }, source: "app", rings: "none", held: waiting },
+    ];
+    for (const c of cases) {
+      const r = targetsFromPlan(plans[c.plan].result, c.pick, plans[c.plan].reasons);
+      const rings: Rings =
+        r.targets === null ? "none"
+        : c.pick.own !== null && r.source === "own" && r.targets.kcal === c.pick.own.kcal ? "own"
+        : r.appTargets !== null && r.targets.kcal === r.appTargets.kcal ? "app"
+        : "neither";
+      expect({ source: r.source, rings, held: r.ownHeld, own: r.own }, c.name).toEqual({
+        source: c.source, rings: c.rings, held: c.held, own: c.pick.own,
+      });
+    }
   });
 });

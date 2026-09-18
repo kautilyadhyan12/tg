@@ -652,7 +652,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // against, so nothing is stored and the refusal says which way out.
     const early=await put(t.access,own);
     expect(early.statusCode,early.body).toBe(400);
-    expect(early.json<{error:string}>().error).toBe("plan_incomplete");
+    expect(early.json<{error:string}>().error).toBe("own_targets_plan_incomplete");
     expect((await sql<{n:string}[]>`SELECT count(*) AS n FROM user_nutrition_targets WHERE user_id=${t.userId}`)[0]?.n).toBe("0");
 
     // The golden person of the plan tests: burn 1817, the plan's own 1267.
@@ -677,7 +677,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(low.statusCode,low.body).toBe(400);
     const lowSaid=low.json<{error:string;message:string}>();
     expect(lowSaid.error).toBe("own_targets_below_floor");
-    expect(lowSaid.message,"the number that would be a yes is in the words").toContain("1200");
+    // …written as the screen beside it writes a four-digit figure.
+    expect(lowSaid.message,"the number that would be a yes is in the words").toContain("1,200 kcal");
     expect((await get(t.access)).json()).toEqual(asOwn);
 
     // Back to the app's plan: the typed numbers are KEPT, not cleared
@@ -699,12 +700,18 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       own:{kcal:1500,proteinG:150,carbsG:120,fatG:45},
       ownHeld:{code:"no_cut_below_maintenance",maintenanceKcal:1817,reasons:["health_answer"]},
     });
+    // Parked behind "App's plan", the same set is STILL held: the screen must
+    // not offer as one tap a set the server would refuse. The row really is
+    // parked (source 'app'), so this is the parked path and not the picked one.
+    expect((await put(t.access,{source:"app"})).json()).toEqual(held.json());
+    expect((await sql<{source:string}[]>`SELECT source FROM user_nutrition_targets WHERE user_id=${t.userId}`)[0]?.source).toBe("app");
+    expect((await get(t.access)).json()).toEqual(held.json());
     // The same rule refuses it on the way in now, with the same figure.
     const refused=await put(t.access,own);
     expect(refused.statusCode).toBe(400);
     const refusedSaid=refused.json<{error:string;message:string}>();
     expect(refusedSaid.error).toBe("own_targets_below_maintenance");
-    expect(refusedSaid.message).toContain("1817");
+    expect(refusedSaid.message).toContain("1,817 kcal");
     // A number at what keeps the weight is taken, and the plan's "no cut" fact
     // is still told truly under the person's own numbers.
     const atBurn=await put(t.access,{...own,kcal:1817});
@@ -731,7 +738,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(teenCut.statusCode,teenCut.body).toBe(400);
     const teenSaid=teenCut.json<{error:string;message:string}>();
     expect(teenSaid.error).toBe("own_targets_below_maintenance");
-    expect(teenSaid.message).toContain(String(teenRings.tdee));
+    expect(teenSaid.message).toContain(`${teenRings.tdee.toLocaleString("en-US")} kcal`);
     expect((await put(teen.access,{source:"own",kcal:teenRings.tdee,proteinG:120,carbsG:150,fatG:50})).statusCode).toBe(200);
 
     // Tenancy: this route takes no id either, so the proof is that a second

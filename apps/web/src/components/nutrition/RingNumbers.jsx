@@ -11,7 +11,7 @@
 // typed; it never decides a number.
 import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
-import { holdText, macroKcal } from './ringTargets';
+import { holdText, kcalText, macroKcal } from './ringTargets';
 
 /** The four fields, in the order the rings read them. */
 const FIELDS = [
@@ -28,8 +28,10 @@ const asInt = (text) => {
 
 /** The editor: four numbers, pre-filled with whatever the person is starting
  *  from (their own if they have any, else the app's plan — never a number this
- *  file invented). */
-function OwnEditor({ start, onCancel, onSave, saving, refusal }) {
+ *  file invented). `hold` is the server's word on the stored numbers, said here
+ *  too so nobody edits a held set without being told the figure that binds;
+ *  once a save is refused, the refusal is the newer word and replaces it. */
+function OwnEditor({ start, onCancel, onSave, saving, refusal, hold }) {
   const [text, setText] = useState(() => ({
     kcal: String(start.kcal), proteinG: String(start.proteinG), carbsG: String(start.carbsG), fatG: String(start.fatG),
   }));
@@ -64,11 +66,11 @@ function OwnEditor({ start, onCancel, onSave, saving, refusal }) {
       </div>
       <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
         {complete
-          ? `Your protein, carbs and fat come to ${macroKcal(values)} kcal. They do not have to match your calories.`
+          ? `Your protein, carbs and fat come to ${kcalText(macroKcal(values))}. They do not have to match your calories.`
           : 'Fill in all four numbers.'}
       </p>
-      {refusal !== null && (
-        <p className="text-xs mt-2" style={{ color: '#fbbf24' }}>{refusal}</p>
+      {(refusal ?? hold) !== null && (
+        <p className="text-xs mt-2" style={{ color: '#fbbf24' }}>{refusal ?? hold}</p>
       )}
       <div className="flex gap-2 mt-3">
         <button
@@ -164,7 +166,7 @@ export default function RingNumbers({ source, appTargets, own, ownHeld, onSave }
           App&apos;s plan
           <br />
           <span className="text-xs" style={{ opacity: 0.7 }}>
-            {appTargets ? `${appTargets.kcal} kcal` : 'No number yet'}
+            {appTargets ? kcalText(appTargets.kcal) : 'No number yet'}
           </span>
         </button>
         <button type="button" onClick={() => pick('own')} disabled={saving} aria-pressed={usingOwn}
@@ -172,7 +174,7 @@ export default function RingNumbers({ source, appTargets, own, ownHeld, onSave }
           My own
           <br />
           <span className="text-xs" style={{ opacity: 0.7 }}>
-            {own ? `${own.kcal} kcal` : 'Set my own'}
+            {own ? kcalText(own.kcal) : 'Set my own'}
           </span>
         </button>
         {own && (
@@ -194,6 +196,7 @@ export default function RingNumbers({ source, appTargets, own, ownHeld, onSave }
           start={start}
           saving={saving}
           refusal={refusal}
+          hold={hold}
           onCancel={closeEditor}
           onSave={(values) => send({ source: 'own', ...values }, true)}
         />

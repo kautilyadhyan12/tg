@@ -581,6 +581,10 @@ export async function putTargets(
   return targetsFromPlan(planResult, pick, noCutReasons);
 }
 
+/** A calorie figure as the screen beside it prints one ("1,200"), so a refusal
+ *  and the hold line near it never write the same number two ways. */
+const kcalFigure = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
 /** A refused typed number, in the words the person reads. Every branch names
  *  the number that binds, so nobody is told "no" without being told what would
  *  be a yes. */
@@ -588,18 +592,18 @@ function ownRefusal(held: OwnTargetsHeld): { code: string; message: string } {
   switch (held.code) {
     case "plan_incomplete":
       return {
-        code: "plan_incomplete",
+        code: "own_targets_plan_incomplete",
         message: "Answer the setup questions first — your own numbers are checked against your plan.",
       };
     case "below_floor":
       return {
         code: "own_targets_below_floor",
-        message: `Daily calories cannot go below ${String(held.floorKcal)} kcal.`,
+        message: `Daily calories cannot go below ${kcalFigure.format(held.floorKcal)} kcal.`,
       };
     case "no_cut_below_maintenance":
       return {
         code: "own_targets_below_maintenance",
-        message: `Your plan holds no calorie cut, so daily calories cannot go below ${String(held.maintenanceKcal)} kcal — what keeps your weight.`,
+        message: `Your plan holds no calorie cut, so daily calories cannot go below ${kcalFigure.format(held.maintenanceKcal)} kcal — what keeps your weight.`,
       };
   }
 }

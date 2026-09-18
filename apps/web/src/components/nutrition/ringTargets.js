@@ -9,22 +9,27 @@
  *  one of them as you type another is a box that fights you. */
 export const macroKcal = (v) => v.proteinG * 4 + v.carbsG * 4 + v.fatG * 9;
 
-/** Why stored, picked numbers are not the ones on the rings, in the person's
- *  words. Every branch names the number that would let them back in — the
- *  SERVER decides which one holds (nutrition/targets.ts `ownTargetsHeld`); this
- *  only says it. */
+/** A calorie figure as the rest of the page prints a four-digit one: "1,940 kcal". */
+export const kcalText = (n) => `${n.toLocaleString()} kcal`;
+
+/** Why the person's stored numbers cannot feed the rings today, in their words.
+ *  The server says so whether they picked the numbers or left them behind
+ *  "App's plan", so every line here must be true either way: none says WHY the
+ *  rings are on the app's plan, only what stops these numbers. Every branch
+ *  names the number that would let them in — the SERVER decides which one
+ *  holds (nutrition/targets.ts `ownTargetsHeld`); this only says it. */
 export function holdText(held) {
   if (held === null || held === undefined) return null;
   if (held.code === 'below_floor') {
-    return `Your own calories are below the app's floor of ${held.floorKcal} kcal, so the rings are on the app's plan.`;
+    return `The rings cannot use your own calories below the app's floor of ${kcalText(held.floorKcal)}.`;
   }
   if (held.code === 'no_cut_below_maintenance') {
-    return `Your plan holds no calorie cut now, so your own calories cannot be below ${held.maintenanceKcal} kcal — what keeps your weight. The rings are on the app's plan until you change them.`;
+    return `Your plan holds no calorie cut now, so the rings cannot use your own calories below ${kcalText(held.maintenanceKcal)} — what keeps your weight.`;
   }
   if (held.code === 'plan_incomplete') {
-    return 'Your own numbers are waiting: answer the setup questions and they come back.';
+    return 'Your own numbers are kept: answer the setup questions to use them.';
   }
-  // A reason this build does not know the words for is still a reason the rings
-  // are not on the person's numbers, and saying nothing would be the lie.
-  return "Your own numbers are on hold, so the rings are on the app's plan.";
+  // A reason this build does not know the words for is still a reason the
+  // numbers cannot be used, and saying nothing would be the lie.
+  return 'The rings cannot use your own numbers just now.';
 }

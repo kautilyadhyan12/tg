@@ -261,14 +261,17 @@ export const nutritionTargetsSchema = z.object({
   bmr: z.number().int(),
   /** The plan's daily burn: the day plus the week's training. */
   tdee: z.number().int(),
-  /** The plan's calories to eat a day. */
+  /** The calories to eat a day: the plan's, or the person's own when the
+   *  response's `source` is "own". */
   kcal: z.number().int(),
   proteinG: z.number().int(),
   carbsG: z.number().int(),
   fatG: z.number().int(),
-  /** True when a rule held a weight-loss cut back — a yes on the health
-   *  question or an age under 18 (RULINGS 2026-09-07/09), the plan's
-   *  `no_deficit` flag: `kcal` is then the daily burn. */
+  /** The PLAN's fact, whichever set is on the rings: true when a rule held a
+   *  weight-loss cut back — a yes on the health question or an age under 18
+   *  (RULINGS 2026-09-07/09), the plan's `no_deficit` flag. It describes the
+   *  app's plan only (`appTargets.kcal` is then the daily burn); under the
+   *  person's own numbers `kcal` is what they typed, which may sit above it. */
   noCalorieCut: z.boolean(),
 }).strict();
 // ── The rings' numbers can be the person's own (ROADMAP 7a-iv-e) ────────────
@@ -300,8 +303,10 @@ export const ownNutritionTargetsSchema = z.object({
 }).strict();
 export type OwnNutritionTargets = z.infer<typeof ownNutritionTargetsSchema>;
 
-/** Why the rings are on the app's plan although the person picked their own
- *  numbers. The stored numbers are never rewritten or dropped — the answers
+/** Why the person's stored numbers cannot feed the rings today — whether they
+ *  picked them (the rings are then on the app's plan) or left them behind
+ *  "App's plan" (so the screen never offers, as one tap, a set it would
+ *  refuse). The stored numbers are never rewritten or dropped — the answers
  *  under them change (the health question, a birthday, a heavier body), so the
  *  same rule that let a number in is run again on every read, and the screen
  *  says which one is holding rather than swapping numbers silently. */
@@ -356,7 +361,8 @@ export const nutritionTargetsResponseSchema = z.object({
   /** The person's own numbers as they were typed, whether or not they are the
    *  ones in use — switching to the app's plan keeps them. */
   own: ownNutritionTargetsSchema.nullable(),
-  /** Why `own` is stored, picked, and not in use. Null otherwise. */
+  /** Why `own` cannot feed the rings today, picked or not. Null when nothing
+   *  is stored or nothing holds it. */
   ownHeld: ownTargetsHeldSchema.nullable(),
 }).strict()
   .refine((r) => (r.appTargets === null) === (r.missing.length > 0 || r.targetWrongSide), {
