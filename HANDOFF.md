@@ -4,12 +4,12 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
-## 2026-09-18 · 7a-iv-h built: amounts anyone can read (PR #84, branch `amounts-anyone-can-read`)
+## 2026-09-18 · 7a-iv-h built: bowls on "How full?"; the cup words built and taken off (PR #84)
 
-- Kd asked cup, bowl or something else; told why a cup (one size, USDA weighs each food's own; a bowl is 100–400 ml), he said *"go"* (Opus xhigh). RULINGS 2026-09-17's line settled.
-- Photo sheet: a row at the photo's grams reads "~60 g · about half a cup, pieces · estimate" (`householdAmount.js`: own cup, else first cup with words, else a spoon; figures, brackets' sizes, NFS and "yield" cups dropped). The line wraps now instead of truncating. Census of the local USDA table: 4,651 foods an own cup, 608 another plain cup, 1,011 a cup with words, 553 a spoon, 6,105 none.
-- "How full?": `fillBowls.js` draws four bowls filled by VOLUME (a half-round bowl half full sits at 65 % of its depth), no rim line, 36 px; words Quarter · Half · Three quarters · Full; lines "half full".
-- Verified: householdAmount 72/72 · web nutrition 271/271 in 17 files · full web 2416 passed, `poseAssets.contract` failing to load as before · changed files eslint 0, Nutrition.jsx the same 7 · 24 deliberate breaks each red, files restored identical (sha256; scratchpad `breaks.mjs`; two first stayed green and got tests).
+- Kd asked cup, bowl or something else; told why a cup (one size, USDA weighs each food's own; a bowl is 100–400 ml), he said *"go"* (Opus xhigh).
+- Part (1), the cup words, was built (9ff1927: "~60 g · about half a cup, pieces · estimate", own cup, else a cup with words, else a spoon) and TAKEN OFF at Kd's click-through: it showed on avocado and eggs, foods eaten in pieces (RULINGS 2026-09-17, as amended). `householdAmount.js` is deleted; the photo row and its test are master's again. The code is in 9ff1927 if a cup for scooped foods is ever wanted (it would need the server to send each food's serving).
+- Part (2), "How full?": `fillBowls.js` draws four bowls filled by VOLUME (a half-round bowl half full sits at 65 % of its depth), no rim line, 36 px; words Quarter · Half · Three quarters · Full; lines "half full".
+- Verified after the take-off: web nutrition 197/197 in 16 files · full web 2342 passed, `poseAssets.contract` failing to load as before · changed files eslint 0 · Nutrition.jsx identical to master · 6 deliberate breaks of the bowls and words each red, files restored identical (sha256; scratchpad `breaks-fill.mjs`). Before it: 24 breaks red, full web 2416 passed with `poseAssets.contract` failing to load as before.
 - The first Add food test timed out once at 6.8 s under load (5 s limit; the 7a-iv-g entry saw it too): given 15 s.
 - Looked at in headless Edge, 400 and 1280 wide, on a replayed toast-plate reply (no model call) and a saved bowl; the throwaway account deleted.
 - Local: API on 3000 (local Postgres, the Gemini key from `.env` read into the process) and web on 5173 running. `kd.edit@aihomegym.test` now has a saved "My blue bowl" (375 ml); no unused code today.
