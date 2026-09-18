@@ -408,6 +408,19 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(seen[0]).toMatchObject({ url: '/v1/nutrition/targets', method: 'get' });
   });
 
+  // 7a-iv-e: the switch's own call. Every render test mocks the service
+  // wholesale, so this is the one place its verb, path and body are pinned — a
+  // POST, or the singular path, would leave the switch dead in the browser.
+  it('putTargets PUTs the switch, body as given, to the same /v1 endpoint', async () => {
+    const seen = recordRequests(authApi);
+    await nutritionService.putTargets({ source: 'own', kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 });
+    await nutritionService.putTargets({ source: 'app' });
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/targets', method: 'put' });
+    expect(JSON.parse(seen[0].data)).toEqual({ source: 'own', kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 });
+    expect(seen[1]).toMatchObject({ url: '/v1/nutrition/targets', method: 'put' });
+    expect(JSON.parse(seen[1].data)).toEqual({ source: 'app' });
+  });
+
   // THE SILENT TRAP. The API returns camelCase (proteinG); MacroRings and the
   // Remaining card read snake_case (protein_g). A straight repoint yields
   // undefined, which `|| 150` used to render as a plausible fake number rather

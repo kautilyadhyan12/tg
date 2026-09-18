@@ -218,6 +218,13 @@
       "when": 1788220800014,
       "tag": "0031_usda_foods",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788220800015,
+      "tag": "0032_own_ring_numbers",
+      "breakpoints": true
     }
   ]
 }

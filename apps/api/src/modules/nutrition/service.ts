@@ -23,14 +23,14 @@ import {
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
-import { getUserPlan, getUserSyncContext } from "../users/service.js";
-import { targetsFromPlan } from "./targets.js";
+import { getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
+import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
-import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
+import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, OwnTargetsHeld, PatchMealRequest, PreviewMealRequest, PutNutritionTargetsRequest } from "./schemas.js";
 import {
   MEAL_VISION_MODELS,
   VisionProviderError,
@@ -541,11 +541,71 @@ const totals = (items: readonly MealItem[]) => ({
  *  server-side from stored profile data, never from anything the client sends).
  *  Returns targets OR the list of details still missing — never a default. */
 export async function getTargets(deps: NutritionDeps, userId: string): Promise<NutritionTargetsResponse> {
-  // The rings' numbers ARE the plan's (ROADMAP 4a-iii). No time zone is sent:
-  // it only dates the finish, which the rings do not show, so the stored zone
-  // serves. targetsFromPlan parses through the shared contract, so the
-  // null-exactly-when-missing refine() holds for every caller.
-  return targetsFromPlan(await getUserPlan(deps.sql, userId, null));
+  // The rings' numbers ARE the plan's (ROADMAP 4a-iii), unless the person has
+  // picked their own (7a-iv-e). No time zone is sent: it only dates the finish,
+  // which the rings do not show, so the stored zone serves. targetsFromPlan
+  // parses through the shared contract, so the null-exactly-when-missing
+  // refine() — and the source-matches-the-numbers one — hold for every caller.
+  const [{ plan: planResult, noCutReasons }, pick] = await Promise.all([
+    getUserPlanAndCutRules(deps.sql, userId, null),
+    repo.getRingTargets(deps.sql, userId),
+  ]);
+  return targetsFromPlan(planResult, pick, noCutReasons);
+}
+
+/** The switch over the rings, saved (ROADMAP 7a-iv-e): the app's plan, or the
+ *  person's own four numbers. The health rules are the SERVER's (R3.1) — typed
+ *  calories below the app's floor, or below what keeps the weight for a plan
+ *  that holds no cut, are refused here with the number in the message, and the
+ *  same rule runs again on every read (targets.ts, `ownTargetsHeld`). The reply
+ *  is the rings' whole answer, so the screen never has to guess what was
+ *  stored. */
+export async function putTargets(
+  deps: NutritionDeps,
+  userId: string,
+  body: PutNutritionTargetsRequest,
+): Promise<NutritionTargetsResponse> {
+  const { plan: planResult, noCutReasons } = await getUserPlanAndCutRules(deps.sql, userId, null);
+  const own =
+    body.source === "own"
+      ? { kcal: body.kcal, proteinG: body.proteinG, carbsG: body.carbsG, fatG: body.fatG }
+      : null;
+  if (own !== null) {
+    const held = ownTargetsHeld(own, planResult.plan, noCutReasons);
+    if (held !== null) {
+      const refusal = ownRefusal(held);
+      throw new NutritionError(400, refusal.code, refusal.message);
+    }
+  }
+  const pick = await repo.putRingTargets(deps.sql, userId, body.source, own);
+  return targetsFromPlan(planResult, pick, noCutReasons);
+}
+
+/** A calorie figure as the screen beside it prints one ("1,200"), so a refusal
+ *  and the hold line near it never write the same number two ways. */
+const kcalFigure = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+/** A refused typed number, in the words the person reads. Every branch names
+ *  the number that binds, so nobody is told "no" without being told what would
+ *  be a yes. */
+function ownRefusal(held: OwnTargetsHeld): { code: string; message: string } {
+  switch (held.code) {
+    case "plan_incomplete":
+      return {
+        code: "own_targets_plan_incomplete",
+        message: "Answer the setup questions first — your own numbers are checked against your plan.",
+      };
+    case "below_floor":
+      return {
+        code: "own_targets_below_floor",
+        message: `Daily calories cannot go below ${kcalFigure.format(held.floorKcal)} kcal.`,
+      };
+    case "no_cut_below_maintenance":
+      return {
+        code: "own_targets_below_maintenance",
+        message: `Your plan holds no calorie cut, so daily calories cannot go below ${kcalFigure.format(held.maintenanceKcal)} kcal — what keeps your weight.`,
+      };
+  }
 }
 
 /** Shared badge hook: failure degrades with a warn — a meal save must never

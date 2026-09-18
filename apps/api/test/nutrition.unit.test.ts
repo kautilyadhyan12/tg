@@ -16,9 +16,9 @@ import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { ScanPrice } from "../src/modules/nutrition/scanMatch.js";
 import { scanSheet } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type PlanAnswers } from "@app/shared";
-import { targetsFromPlan } from "../src/modules/nutrition/targets.js";
-import { resolvePlan } from "../src/modules/plan/maths.js";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type NoDeficitReason, type OwnTargetsHeld, type PlanAnswers, type PlanNumbers } from "@app/shared";
+import { ownTargetsHeld, targetsFromPlan } from "../src/modules/nutrition/targets.js";
+import { CALORIE_FLOOR_KCAL, resolvePlan } from "../src/modules/plan/maths.js";
 
 describe("P2.6a nutrition pure pipeline", () => {
   it("the vision prompt nudges toward common local food names (Card 5c)", () => {
@@ -609,10 +609,16 @@ describe("nutrition targets read the plan", () => {
   };
 
   it("carries the plan's own numbers, field by field", () => {
+    const goldenTargets = { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false };
     expect(targetsFromPlan(resolvePlan(golden))).toEqual({
-      targets: { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false },
+      targets: goldenTargets,
       missing: [],
       targetWrongSide: false,
+      // Nobody has touched the switch: the app's plan, on both sides of it.
+      source: "app",
+      appTargets: goldenTargets,
+      own: null,
+      ownHeld: null,
     });
     // A gain, a hold, and a heavy body whose protein is counted at BMI 30: each
     // field is still the plan's own.
@@ -665,14 +671,19 @@ describe("nutrition targets read the plan", () => {
       { ...golden, goal: "gain", targetWeightKg: 65 },
     ] satisfies PlanAnswers[]) {
       expect(planOf(answers).flags, JSON.stringify(answers)).toContainEqual({ code: "target_wrong_direction" });
-      expect(targetsFromPlan(resolvePlan(answers)), JSON.stringify(answers)).toEqual({ targets: null, missing: [], targetWrongSide: true });
+      expect(targetsFromPlan(resolvePlan(answers)), JSON.stringify(answers)).toEqual({
+        targets: null, missing: [], targetWrongSide: true, source: "app", appTargets: null, own: null, ownHeld: null,
+      });
     }
   });
 
   it("with an answer missing, gives no number and the plan's own list of questions", () => {
     // What someone who finished the old form has: no one goal, no "your day".
     const oldForm: PlanAnswers = { age: 30, gender: "female", heightCm: 165, weightKg: 70, trainingDays: 3, sessionMinutes: 45, today: "2026-09-11" };
-    expect(targetsFromPlan(resolvePlan(oldForm))).toEqual({ targets: null, missing: ["goal", "dayActivity"], targetWrongSide: false });
+    expect(targetsFromPlan(resolvePlan(oldForm))).toEqual({
+      targets: null, missing: ["goal", "dayActivity"], targetWrongSide: false,
+      source: "app", appTargets: null, own: null, ownHeld: null,
+    });
     expect(targetsFromPlan(resolvePlan({ today: "2026-09-11" })).missing).toEqual([
       "goal", "age", "gender", "heightCm", "weightKg", "dayActivity", "trainingDays", "sessionMinutes",
     ]);
@@ -682,21 +693,226 @@ describe("nutrition targets read the plan", () => {
   // pairing below typechecks fine and would pass the bare shape.
   it("rejects every impossible pairing of a number, the questions missing and a wrong-side target", () => {
     const t = { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false };
+    const app = { source: "app", own: null, ownHeld: null };
     const ok = (body: unknown) => nutritionTargetsResponseSchema.safeParse(body).success;
-    expect(ok({ targets: t, missing: [], targetWrongSide: false })).toBe(true);
-    expect(ok({ targets: null, missing: ["goal"], targetWrongSide: false })).toBe(true);
-    expect(ok({ targets: null, missing: [], targetWrongSide: true })).toBe(true);
+    expect(ok({ targets: t, appTargets: t, missing: [], targetWrongSide: false, ...app })).toBe(true);
+    expect(ok({ targets: null, appTargets: null, missing: ["goal"], targetWrongSide: false, ...app })).toBe(true);
+    expect(ok({ targets: null, appTargets: null, missing: [], targetWrongSide: true, ...app })).toBe(true);
     // No number and no reason for it: a prompt that names nothing.
-    expect(ok({ targets: null, missing: [], targetWrongSide: false })).toBe(false);
+    expect(ok({ targets: null, appTargets: null, missing: [], targetWrongSide: false, ...app })).toBe(false);
     // A number beside an unanswered question: a number built from a gap.
-    expect(ok({ targets: t, missing: ["goal"], targetWrongSide: false })).toBe(false);
+    expect(ok({ targets: t, appTargets: t, missing: ["goal"], targetWrongSide: false, ...app })).toBe(false);
     // A number beside a wrong-side target: the held weight passed off as the goal's number.
-    expect(ok({ targets: t, missing: [], targetWrongSide: true })).toBe(false);
+    expect(ok({ targets: t, appTargets: t, missing: [], targetWrongSide: true, ...app })).toBe(false);
     // Both reasons at once: a plan still missing an answer raises no flags.
-    expect(ok({ targets: null, missing: ["goal"], targetWrongSide: true })).toBe(false);
+    expect(ok({ targets: null, appTargets: null, missing: ["goal"], targetWrongSide: true, ...app })).toBe(false);
     // The field is always sent.
-    expect(ok({ targets: t, missing: [] })).toBe(false);
+    expect(ok({ targets: t, appTargets: t, missing: [], ...app })).toBe(false);
     // The old calculator's key names a question no screen asks any more.
-    expect(ok({ targets: null, missing: ["exerciseFrequency"], targetWrongSide: false })).toBe(false);
+    expect(ok({ targets: null, appTargets: null, missing: ["exerciseFrequency"], targetWrongSide: false, ...app })).toBe(false);
+  });
+
+  // 7a-iv-e's own impossible pairings: the SOURCE and the numbers on the rings
+  // are two claims about one thing, and the pairing nobody would notice on a
+  // screen — "My own" lit while the rings draw the app's plan — is the one that
+  // shows a person somebody else's arithmetic under their own heading.
+  it("rejects every impossible pairing of the switch, the two sets and a hold", () => {
+    const t = { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false };
+    const own = { kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 };
+    const mine = { ...t, ...own };
+    const ok = (body: unknown) => nutritionTargetsResponseSchema.safeParse(body).success;
+    const base = { missing: [], targetWrongSide: false };
+    // The four states that are real.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: null, ownHeld: null })).toBe(true);
+    expect(ok({ ...base, targets: mine, appTargets: t, source: "own", own, ownHeld: null })).toBe(true);
+    // Typed, then switched back: the numbers are kept and nothing is held.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: null })).toBe(true);
+    // Held, whether picked or parked behind "App's plan": the app's plan
+    // shows, and the reason is named.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: { code: "below_floor", floorKcal: 1200 } })).toBe(true);
+    // A wrong-side target does not blank the rings for someone on their own
+    // numbers — the stale target is the app plan's business.
+    expect(ok({ targets: mine, appTargets: null, missing: [], targetWrongSide: true, source: "own", own, ownHeld: null })).toBe(true);
+
+    // "My own" with nothing typed.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "own", own: null, ownHeld: null })).toBe(false);
+    // "My own" while the rings draw the app's plan.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "own", own, ownHeld: null })).toBe(false);
+    // One number of the four not the person's: a set half theirs.
+    expect(ok({ ...base, targets: { ...mine, fatG: 61 }, appTargets: t, source: "own", own, ownHeld: null })).toBe(false);
+    // "My own" and held at the same time.
+    expect(ok({ ...base, targets: mine, appTargets: t, source: "own", own, ownHeld: { code: "plan_incomplete" } })).toBe(false);
+    // "App's plan" while the rings draw something else.
+    expect(ok({ ...base, targets: mine, appTargets: t, source: "app", own, ownHeld: null })).toBe(false);
+    // A hold with nothing typed to hold.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: null, ownHeld: { code: "below_floor", floorKcal: 1200 } })).toBe(false);
+    // A hold with no reason inside it, and a reason the plan cannot give.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: [] } })).toBe(false);
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own, ownHeld: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: ["tired"] } })).toBe(false);
+    // A source outside the two the app has, and the fields always sent.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "gym", own: null, ownHeld: null })).toBe(false);
+    expect(ok({ ...base, targets: t, appTargets: t, own: null, ownHeld: null })).toBe(false);
+    expect(ok({ ...base, targets: t, source: "app", own: null, ownHeld: null })).toBe(false);
+    // Typed numbers outside the contract's own rails.
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: { ...own, kcal: 20_001 }, ownHeld: null })).toBe(false);
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: { ...own, proteinG: -1 }, ownHeld: null })).toBe(false);
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: { ...own, fatG: 60.5 }, ownHeld: null })).toBe(false);
+    expect(ok({ ...base, targets: t, appTargets: t, source: "app", own: { kcal: 2000, proteinG: 150, carbsG: 200 }, ownHeld: null })).toBe(false);
+  });
+
+  // ── ROADMAP 7a-iv-e: the rule on a number a person types ───────────────────
+  // ONE TABLE over every class, before review (CLAUDE.md §4): a rule that
+  // thresholds is exactly the kind a reviewer must not be the first to sweep.
+  // The bounds are the app's calorie floor and, for a plan that holds no cut at
+  // all, what keeps the weight — and the HIGHER of the two binds, which is the
+  // case a one-bound-at-a-time reading gets wrong.
+  it("holds a typed number by the floor, by what keeps the weight, or not at all — every class", () => {
+    const plan = planOf(golden); // dailyBurnKcal 1817
+    const burn = (kcal: number) => ({ ...plan, dailyBurnKcal: kcal });
+    const own = (kcal: number) => ({ kcal, proteinG: 150, carbsG: 200, fatG: 60 });
+    const yes: NoDeficitReason[] = ["health_answer"];
+    const none: NoDeficitReason[] = [];
+    const cases: { name: string; kcal: number; plan: PlanNumbers | null; reasons: NoDeficitReason[]; held: OwnTargetsHeld | null }[] = [
+      // No plan: nothing to check against, whatever was typed.
+      { name: "no plan at all", kcal: 2000, plan: null, reasons: none, held: { code: "plan_incomplete" } },
+      { name: "no plan, a number under the floor", kcal: 900, plan: null, reasons: none, held: { code: "plan_incomplete" } },
+      // A cut is allowed: the floor alone binds, and it binds AT the number.
+      { name: "a cut allowed, under the floor", kcal: 1199, plan, reasons: none, held: { code: "below_floor", floorKcal: 1200 } },
+      { name: "a cut allowed, nothing typed but a zero", kcal: 0, plan, reasons: none, held: { code: "below_floor", floorKcal: 1200 } },
+      { name: "a cut allowed, exactly the floor", kcal: 1200, plan, reasons: none, held: null },
+      { name: "a cut allowed, a deep cut above the floor", kcal: 1201, plan, reasons: none, held: null },
+      { name: "a cut allowed, well over the burn", kcal: 5000, plan, reasons: none, held: null },
+      // No cut allowed: what keeps the weight binds, above the floor.
+      { name: "no cut, one under the burn", kcal: 1816, plan, reasons: yes, held: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: yes } },
+      { name: "no cut, exactly the burn", kcal: 1817, plan, reasons: yes, held: null },
+      { name: "no cut, over the burn", kcal: 2500, plan, reasons: yes, held: null },
+      // Both bounds bite: the higher one is the one named, so the person is
+      // told the number that would be a yes rather than a number that is not.
+      { name: "no cut, under the floor as well", kcal: 900, plan, reasons: yes, held: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: yes } },
+      // A burn UNDER the floor (a small body, no training): the floor is the
+      // higher bound and is the one that holds.
+      { name: "no cut, a burn under the floor, below both", kcal: 1100, plan: burn(1150), reasons: yes, held: { code: "below_floor", floorKcal: 1200 } },
+      { name: "no cut, a burn under the floor, above it", kcal: 1200, plan: burn(1150), reasons: yes, held: null },
+      { name: "no cut, a burn exactly the floor", kcal: 1199, plan: burn(1200), reasons: yes, held: { code: "below_floor", floorKcal: 1200 } },
+      { name: "no cut, a burn exactly the floor, at it", kcal: 1200, plan: burn(1200), reasons: yes, held: null },
+      // Every reason, and all three at once, are carried as the plan gives them.
+      { name: "under 18", kcal: 1500, plan, reasons: ["under_18"], held: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: ["under_18"] } },
+      { name: "safe mode", kcal: 1500, plan, reasons: ["safe_mode"], held: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: ["safe_mode"] } },
+      { name: "all three", kcal: 1500, plan, reasons: ["under_18", "health_answer", "safe_mode"], held: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: ["under_18", "health_answer", "safe_mode"] } },
+    ];
+    for (const c of cases) expect(ownTargetsHeld(own(c.kcal), c.plan, c.reasons), c.name).toEqual(c.held);
+
+    // The macros are the person's: nothing about them is refused, at either end
+    // of the contract's rails, whatever they come to beside the calories.
+    for (const macros of [{ proteinG: 0, carbsG: 0, fatG: 0 }, { proteinG: 2000, carbsG: 2000, fatG: 2000 }]) {
+      expect(ownTargetsHeld({ kcal: 2000, ...macros }, plan, none)).toBeNull();
+    }
+    // The floor the rule uses IS the plan's own, not a number copied here.
+    expect(ownTargetsHeld(own(CALORIE_FLOOR_KCAL - 1), plan, none)).toEqual({ code: "below_floor", floorKcal: CALORIE_FLOOR_KCAL });
+  });
+
+  it("puts the picked set on the rings, and says when a stored set is not the one showing", () => {
+    const plan = planOf(golden);
+    const appTargets = { bmr: 1420, tdee: 1817, kcal: 1267, proteinG: 140, carbsG: 98, fatG: 35, noCalorieCut: false };
+    const own = { kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 };
+
+    // Nobody has touched the switch (the default argument): the app's plan.
+    expect(targetsFromPlan(resolvePlan(golden))).toMatchObject({ source: "app", targets: appTargets, own: null, ownHeld: null });
+
+    // "My own", allowed: the four numbers are the rings', and the burn figures
+    // stay the plan's — they are what the body spends, not a target.
+    expect(targetsFromPlan(resolvePlan(golden), { source: "own", own })).toEqual({
+      targets: { bmr: 1420, tdee: 1817, ...own, noCalorieCut: false },
+      missing: [], targetWrongSide: false, source: "own", appTargets, own, ownHeld: null,
+    });
+
+    // Typed, then switched back to the app's plan: the numbers are KEPT and
+    // reported, nothing is held, and the rings are the plan's again.
+    expect(targetsFromPlan(resolvePlan(golden), { source: "app", own })).toEqual({
+      targets: appTargets, missing: [], targetWrongSide: false, source: "app", appTargets, own, ownHeld: null,
+    });
+
+    // Picked, and refused by today's answers: the app's plan shows, the stored
+    // numbers are still reported, and the reason is named. This is the case the
+    // save could not have caught — the health answer changed underneath it.
+    expect(targetsFromPlan(resolvePlan({ ...golden, health: { hasCondition: true, safeMode: false } }), { source: "own", own: { ...own, kcal: 1500 } }, ["health_answer"])).toMatchObject({
+      source: "app",
+      own: { kcal: 1500 },
+      ownHeld: { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: ["health_answer"] },
+      targets: { kcal: 1817, noCalorieCut: true },
+    });
+
+    // An answer cleared (Reset onboarding) leaves nothing to check against: no
+    // number at all, the questions named as before, and the person's own
+    // numbers waiting rather than forgotten.
+    expect(targetsFromPlan(resolvePlan({ today: "2026-09-11" }), { source: "own", own })).toMatchObject({
+      targets: null, source: "app", own, ownHeld: { code: "plan_incomplete" },
+    });
+
+    // A target on the wrong side of the weight blanks the APP's numbers, not
+    // the person's own: the switch is the way out of a stale target.
+    expect(targetsFromPlan(resolvePlan({ ...golden, targetWeightKg: 80 }), { source: "own", own })).toEqual({
+      targets: { bmr: plan.restingBurnKcal, tdee: plan.dailyBurnKcal, ...own, noCalorieCut: false },
+      missing: [], targetWrongSide: true, source: "own", appTargets: null, own, ownHeld: null,
+    });
+
+    // "no calorie cut" is the PLAN's fact and is still told truly under the
+    // person's own numbers, which is what the screen explains a refusal with.
+    expect(targetsFromPlan(resolvePlan({ ...golden, health: { hasCondition: true, safeMode: true } }), { source: "own", own: { ...own, kcal: 2500 } }, ["health_answer", "safe_mode"]).targets).toMatchObject({
+      kcal: 2500, noCalorieCut: true,
+    });
+  });
+
+  // ONE TABLE over what the rings show and what is said held, for every kind
+  // of plan against every kind of stored pick. The rows a first reading gets
+  // wrong are the PARKED ones: numbers left behind "App's plan" that today's
+  // answers refuse are still held, so the screen never offers as one tap a set
+  // it would refuse — and a stale target never hides the person's own set.
+  it("resolves the rings and the hold for every plan against every stored pick — every class", () => {
+    const allowed = { kcal: 2000, proteinG: 150, carbsG: 200, fatG: 60 };
+    const low = { ...allowed, kcal: 900 };       // under the floor
+    const underBurn = { ...allowed, kcal: 1500 }; // over the floor, under the burn
+    const yes: NoDeficitReason[] = ["health_answer"];
+    const plans = {
+      ok: { result: resolvePlan(golden), reasons: [] as NoDeficitReason[] },
+      noCut: { result: resolvePlan({ ...golden, health: { hasCondition: true, safeMode: false } }), reasons: yes },
+      wrongSide: { result: resolvePlan({ ...golden, targetWeightKg: 80 }), reasons: [] as NoDeficitReason[] },
+      incomplete: { result: resolvePlan({ today: "2026-09-11" }), reasons: [] as NoDeficitReason[] },
+    };
+    const floor: OwnTargetsHeld = { code: "below_floor", floorKcal: 1200 };
+    const burn: OwnTargetsHeld = { code: "no_cut_below_maintenance", maintenanceKcal: 1817, reasons: yes };
+    const waiting: OwnTargetsHeld = { code: "plan_incomplete" };
+    type Rings = "app" | "own" | "none" | "neither";
+    const cases: { name: string; plan: keyof typeof plans; pick: { source: "app" | "own"; own: typeof allowed | null }; source: "app" | "own"; rings: Rings; held: OwnTargetsHeld | null }[] = [
+      { name: "a plan, nothing stored", plan: "ok", pick: { source: "app", own: null }, source: "app", rings: "app", held: null },
+      { name: "a plan, allowed set parked", plan: "ok", pick: { source: "app", own: allowed }, source: "app", rings: "app", held: null },
+      { name: "a plan, set under the floor parked", plan: "ok", pick: { source: "app", own: low }, source: "app", rings: "app", held: floor },
+      { name: "a plan, allowed set picked", plan: "ok", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "a plan, set under the floor picked", plan: "ok", pick: { source: "own", own: low }, source: "app", rings: "app", held: floor },
+      { name: "no cut, nothing stored", plan: "noCut", pick: { source: "app", own: null }, source: "app", rings: "app", held: null },
+      { name: "no cut, allowed set parked", plan: "noCut", pick: { source: "app", own: allowed }, source: "app", rings: "app", held: null },
+      { name: "no cut, set under the burn parked", plan: "noCut", pick: { source: "app", own: underBurn }, source: "app", rings: "app", held: burn },
+      { name: "no cut, allowed set picked", plan: "noCut", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "no cut, set under the burn picked", plan: "noCut", pick: { source: "own", own: underBurn }, source: "app", rings: "app", held: burn },
+      { name: "wrong side, nothing stored", plan: "wrongSide", pick: { source: "app", own: null }, source: "app", rings: "none", held: null },
+      { name: "wrong side, allowed set parked", plan: "wrongSide", pick: { source: "app", own: allowed }, source: "app", rings: "none", held: null },
+      { name: "wrong side, set under the floor parked", plan: "wrongSide", pick: { source: "app", own: low }, source: "app", rings: "none", held: floor },
+      { name: "wrong side, allowed set picked", plan: "wrongSide", pick: { source: "own", own: allowed }, source: "own", rings: "own", held: null },
+      { name: "wrong side, set under the floor picked", plan: "wrongSide", pick: { source: "own", own: low }, source: "app", rings: "none", held: floor },
+      { name: "an answer missing, nothing stored", plan: "incomplete", pick: { source: "app", own: null }, source: "app", rings: "none", held: null },
+      { name: "an answer missing, set parked", plan: "incomplete", pick: { source: "app", own: allowed }, source: "app", rings: "none", held: waiting },
+      { name: "an answer missing, set picked", plan: "incomplete", pick: { source: "own", own: allowed }, source: "app", rings: "none", held: waiting },
+    ];
+    for (const c of cases) {
+      const r = targetsFromPlan(plans[c.plan].result, c.pick, plans[c.plan].reasons);
+      const rings: Rings =
+        r.targets === null ? "none"
+        : c.pick.own !== null && r.source === "own" && r.targets.kcal === c.pick.own.kcal ? "own"
+        : r.appTargets !== null && r.targets.kcal === r.appTargets.kcal ? "app"
+        : "neither";
+      expect({ source: r.source, rings, held: r.ownHeld, own: r.own }, c.name).toEqual({
+        source: c.source, rings: c.rings, held: c.held, own: c.pick.own,
+      });
+    }
   });
 });

@@ -95,6 +95,9 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${userId}, 31, 'female', 165, 'morning')`;
     await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first)
               VALUES (${userId}, true, 'cleared')`;
+    // The rings' own numbers (7a-iv-e): the person's own daily targets.
+    await sql`INSERT INTO user_nutrition_targets (user_id, source, kcal, protein_g, carbs_g, fat_g)
+              VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'health_step', 'v1', ${`wording-${label}`}, 'test')`;
     const wId = randomUUID();

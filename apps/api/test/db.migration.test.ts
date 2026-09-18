@@ -1727,4 +1727,63 @@ d("0001_init on a real database", () => {
       await sql`DELETE FROM users WHERE id = ${userId}`;
     }
   });
+  /** MIGRATION `0032`: THE RINGS' OWN NUMBERS (ROADMAP 7a-iv-e). One row per
+   *  person, and the CHECKs are RAILS, not the rule — the calorie floor and "no
+   *  cut below what keeps the weight" are computed per read against that
+   *  person's plan, because the answers under a stored number move (a health
+   *  yes, a birthday, a heavier body). A CHECK that froze today's answer into
+   *  the table would be a second, staler rule, so what is pinned here is what
+   *  the table itself must refuse for ever: a source it has no set behind, a
+   *  half-filled set, 'own' with nothing typed, and numbers outside the range a
+   *  day of eating can occupy. Each proven by CAUSING it. */
+  it("0032 keeps one row of ring numbers per person, with its rails and its cascade", async () => {
+    const [u] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name) VALUES ('zz-0032@example.com', 'zz 0032')
+      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`;
+    const userId = u?.id ?? "";
+    const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
+    try {
+      await sql`DELETE FROM user_nutrition_targets WHERE user_id = ${userId}`;
+      // An absent row IS "the app's plan": nobody is written a row by default.
+      const fresh = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM user_nutrition_targets WHERE user_id = ${userId}`;
+      expect(fresh[0]?.n, "no row until the person touches the switch").toBe("0");
+
+      await sql`INSERT INTO user_nutrition_targets (user_id) VALUES (${userId})`;
+      const [row] = await sql<{ source: string; kcal: number | null }[]>`
+        SELECT source, kcal FROM user_nutrition_targets WHERE user_id = ${userId}`;
+      expect(row, "a row with nothing typed is the app's plan").toEqual({ source: "app", kcal: null });
+
+      await refused(sql`UPDATE user_nutrition_targets SET source = 'gym' WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET source = 'own' WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = 2000 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = 2000, protein_g = 150, carbs_g = 200 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = 20001, protein_g = 150, carbs_g = 200, fat_g = 60 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = -1, protein_g = 150, carbs_g = 200, fat_g = 60 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = 2000, protein_g = 2001, carbs_g = 200, fat_g = 60 WHERE user_id = ${userId}`);
+      await refused(sql`UPDATE user_nutrition_targets SET kcal = 2000, protein_g = 150, carbs_g = 200, fat_g = -1 WHERE user_id = ${userId}`);
+      // What the screen sends is taken, at both ends of the rails.
+      await sql`UPDATE user_nutrition_targets SET source = 'own', kcal = 2000, protein_g = 150, carbs_g = 200, fat_g = 60 WHERE user_id = ${userId}`;
+      await sql`UPDATE user_nutrition_targets SET kcal = 0, protein_g = 0, carbs_g = 0, fat_g = 0 WHERE user_id = ${userId}`;
+      await sql`UPDATE user_nutrition_targets SET kcal = 20000, protein_g = 2000, carbs_g = 2000, fat_g = 2000 WHERE user_id = ${userId}`;
+      // Switching back keeps the numbers: 'app' beside a typed set is allowed.
+      await sql`UPDATE user_nutrition_targets SET source = 'app' WHERE user_id = ${userId}`;
+
+      // One row per person, by name — the upsert has no id to conflict on else.
+      const pk = await sql<{ attname: string }[]>`
+        SELECT a.attname FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+        WHERE i.indrelid = 'user_nutrition_targets'::regclass AND i.indisprimary`;
+      expect(pk.map((r) => r.attname)).toEqual(["user_id"]);
+      // CASCADE: defence in depth behind the Day-14 delete (privacy/repo.ts),
+      // since §5.2 anonymises the users row rather than deleting it.
+      const fk = await sql<{ confdeltype: string }[]>`
+        SELECT confdeltype FROM pg_constraint WHERE conrelid = 'user_nutrition_targets'::regclass AND contype = 'f'`;
+      expect(fk.map((r) => r.confdeltype)).toEqual(["c"]);
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${userId}`;
+    }
+    // The cascade is real, not merely declared: the row went with the person.
+    const left = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM user_nutrition_targets WHERE user_id = ${userId}`;
+    expect(left[0]?.n).toBe("0");
+  });
 });

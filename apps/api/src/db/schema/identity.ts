@@ -245,6 +245,51 @@ export const userHealthScreenings = pgTable(
   ],
 );
 
+// The rings' numbers (migration 0032; RULINGS 2026-09-17, ROADMAP 7a-iv-e).
+// One row per person, written only once they touch the switch over the macro
+// rings: `source` is the set they picked, and the four columns are the numbers
+// they typed for themselves. Switching back to the app's plan keeps them, which
+// is why the numbers are not cleared when `source` goes back to 'app'.
+//
+// THE NUMBERS ARE NOT THE RULE. The calorie floor and "no cut below what keeps
+// your weight" are computed on every read against the person's own plan
+// (nutrition/targets.ts, `ownTargetsHeld`) — the answers under them change, so
+// a CHECK that froze today's rule into the table would be a second, staler
+// answer. The CHECKs below are rails: the range a day of eating can occupy at
+// all, and the four numbers standing or falling together.
+export const userNutritionTargets = pgTable(
+  "user_nutrition_targets",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    source: text("source").notNull().default("app"),
+    kcal: integer("kcal"),
+    proteinG: integer("protein_g"),
+    carbsG: integer("carbs_g"),
+    fatG: integer("fat_g"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("user_nutrition_targets_source_check", sql`${t.source} IN ('app','own')`),
+    // All four or none: three numbers and a gap is no set of targets, and the
+    // rings would have to invent the fourth.
+    check(
+      "user_nutrition_targets_numbers_together_check",
+      sql`(${t.kcal} IS NULL AND ${t.proteinG} IS NULL AND ${t.carbsG} IS NULL AND ${t.fatG} IS NULL)
+          OR (${t.kcal} IS NOT NULL AND ${t.proteinG} IS NOT NULL AND ${t.carbsG} IS NOT NULL AND ${t.fatG} IS NOT NULL)`,
+    ),
+    // 'own' is a choice of numbers, so it cannot be stored without them.
+    check("user_nutrition_targets_own_needs_numbers_check", sql`${t.source} <> 'own' OR ${t.kcal} IS NOT NULL`),
+    check("user_nutrition_targets_kcal_check", sql`${t.kcal} BETWEEN 0 AND 20000`),
+    check(
+      "user_nutrition_targets_macros_check",
+      sql`${t.proteinG} BETWEEN 0 AND 2000 AND ${t.carbsG} BETWEEN 0 AND 2000 AND ${t.fatG} BETWEEN 0 AND 2000`,
+    ),
+  ],
+);
+
 // The consent log (migration 0025; RULINGS 2026-09-07): one append-only row per
 // disclaimer tap, wording copied verbatim. Kept after a purge like audit_log
 // (no name, address or health fact on the row); exported.

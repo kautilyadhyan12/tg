@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
-import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets } from '../api/nutritionApi';
+import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
 import {
@@ -1736,6 +1736,10 @@ export default function Nutrition() {
   const [missingInputs,  setMissingInputs]   = useState([]);
   const [targetWrongSide, setTargetWrongSide] = useState(false);
   const [targetsLoaded,  setTargetsLoaded]   = useState(false);
+  // ROADMAP 7a-iv-e: which set of numbers the rings are on (App's plan · My
+  // own), both sets, and why a stored set of the person's own is not the one
+  // showing. `null` = no switch (not loaded, or the request failed).
+  const [ringChoice,     setRingChoice]      = useState(null);
   // undefined = not loaded yet · null = profile can't produce a target ·
   // object = real server-computed targets (toDisplayTargets owns the mapping).
   const [targets,        setTargets]         = useState(undefined);
@@ -1796,18 +1800,35 @@ export default function Nutrition() {
   // collapsing them is what the deleted 2000/150/250/65 fallbacks used to
   // hide. A failed request degrades to undefined (show nothing), never null
   // (which would wrongly tell the user their profile is incomplete).
+  // One answer, one place it lands: GET and the switch's own PUT both reply
+  // with the whole targets payload, so the rings can never show one set while
+  // the switch says another.
+  const applyTargets = (data) => {
+    setTargets(toDisplayTargets(data));
+    setMissingInputs(missingAnswers(data?.missing));
+    setTargetWrongSide(data?.targetWrongSide === true);
+    setRingChoice(toRingChoice(data));
+  };
+
+  /** The switch over the rings (7a-iv-e). Rejects with the server's own refusal
+   *  so the picker can show the number that binds; the rings move only on the
+   *  answer the server sends back. */
+  const pickRingNumbers = async (body) => {
+    const res = await nutritionService.putTargets(body);
+    applyTargets(res.data);
+  };
+
   const loadTargets = async () => {
     try {
       const res = await nutritionService.getTargets();
-      setTargets(toDisplayTargets(res.data));
-      setMissingInputs(missingAnswers(res.data?.missing));
-      setTargetWrongSide(res.data?.targetWrongSide === true);
+      applyTargets(res.data);
     } catch (err) {
       // Never `null` here — that would blame the user's profile for our own
       // failure. `undefined` renders MacroRings' "couldn't load" state.
       setTargets(undefined);
       setMissingInputs([]);
       setTargetWrongSide(false);
+      setRingChoice(null);
       // Logged, not swallowed (T3): the left column now WAITS on this request,
       // so a silent failure was both invisible and load-bearing. Message only —
       // the error object carries the request config (R3.10).
@@ -2067,7 +2088,8 @@ export default function Nutrition() {
                 </div>
               ) : (
                 <>
-                  <MacroRings totals={totals} targets={targets} missingInputs={missingInputs} targetWrongSide={targetWrongSide} />
+                  <MacroRings totals={totals} targets={targets} missingInputs={missingInputs} targetWrongSide={targetWrongSide}
+                              ringChoice={ringChoice} onPickNumbers={pickRingNumbers} />
 
               {/* Card 5d: on Today this is "Remaining today" (target − eaten);
                   on a past day "remaining" is meaningless, so it becomes an
