@@ -4,6 +4,14 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-18 · 7a-iv-g: the re-check ended the round; its two Lows fixed; merged (PR #83)
+
+- The same reviewer chat re-checked d5cc997: all four findings and the four weak tests closed, nothing Critical or High open — the round ended. Two new Lows, fixed with no further re-check (RULINGS 2026-09-16).
+- Low A (a second food changed straight after a save was refused as "changed somewhere else": the page still held the old `itemsVersion` while the day was re-read): the saved meal from the PATCH's reply goes on the page at once (`mealSaved` in Nutrition.jsx), for a change, a remove and an added ingredient, then the day is read again.
+- Low B: add ingredient's refusal says "This meal was changed somewhere else. Try again." (its box has closed; "close this" was untrue).
+- Tests: three cases with the day's re-read held back (after a save, a remove, an added ingredient), the next food's price asked with the new version; the wording. 3 deliberate breaks each red, restored identical. Web nutrition 229/229 in 16 files, eslint 0 on the changed files, Nutrition.jsx the same 7.
+- Local: the API on 3000 was restarted on the new code (the old one refused `itemsVersion`); `kd.edit@aihomegym.test` is still there. Next: 7a-iv-h, then the member list. The four dashboard images are still not this card's.
+
 ## 2026-09-18 · 7a-iv-g: PR #83's review round one fixed (2 High, 2 Low, 4 weak tests)
 
 - High 1 (a food added in another tab dropped by a stale edit; two saves at once overwriting each other): every meal carries `itemsVersion`, a fingerprint of its items (`mealEdit.itemsVersion`); an items edit and its preview must send the one it read (contract refine), and the server refuses any other with 409 `meal_changed` — before pricing, and again under the row's lock in `repo.updateMeal`, which now takes a patch of only the fields sent and lays it on the locked row (a rename no longer writes back items it read earlier). Add ingredient sends it too; the old unnamed resend is held to it as well.

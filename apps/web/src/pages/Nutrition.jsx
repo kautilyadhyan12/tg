@@ -9,7 +9,6 @@ import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
-import { editRefusal } from '../components/nutrition/loggedFood';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
 import {
@@ -567,11 +566,13 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         // every existing item to be kept as saved, plus the new one (composed by
         // a pure, unit-tested helper — silently dropping an existing item here
         // would wipe a meal).
-        await nutritionService.updateMeal(meal.id, {
+        const res = await nutritionService.updateMeal(meal.id, {
           items: composeAddIngredient(meal.items, chosenItem),
           itemsVersion: meal.itemsVersion,
         });
         toast.success(`Added ${selected.name} to ${meal.mealName || 'the meal'}`);
+        // The meal as saved goes on the page at once (7a-iv-g).
+        onSave(res.data?.meal);
       } else {
         await nutritionService.logManualMeal({
           mealName: selected.name,
@@ -582,15 +583,16 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
           items: [chosenItem],
         });
         toast.success(`Added ${selected.name}`);
+        onSave();
       }
-      onSave();
       onClose();
     } catch (err) {
       // The meal changed in another tab since this box opened (7a-iv-g): the
       // server added nothing. The day is read again and the box closes, so the
-      // next try starts from the meal as it is.
+      // next try starts from the meal as it is — and the words say try again,
+      // never "close this", since it is closed.
       if (meal && err.response?.data?.error === 'meal_changed') {
-        toast.error(editRefusal(err));
+        toast.error('This meal was changed somewhere else. Try again.');
         onSave();
         onClose();
         return;
@@ -1903,6 +1905,16 @@ export default function Nutrition() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A meal as the server saved it goes on the page at once, then the day is read
+  // again: a food tapped before that read lands is changed from the meal as it
+  // now is, never refused as changed elsewhere (the review of PR #83, Low A).
+  const mealSaved = (saved) => {
+    if (saved && typeof saved.id === 'string') {
+      setMeals((list) => list.map((m) => (m.id === saved.id ? saved : m)));
+    }
+    loadData();
+  };
+
   // Resolves whether the meal was deleted, so a box that asked for it stays open
   // when it was not (the review of PR #83, L2).
   const handleDelete = async (mealId) => {
@@ -2310,7 +2322,7 @@ export default function Nutrition() {
         mealType={addModal.mealType}
         meal={addModal.meal}
         onClose={() => setAddModal({ open: false, mealType: null, meal: null })}
-        onSave={loadData}
+        onSave={mealSaved}
       />
       <PhotoModal
         open={photoModalOpen}
@@ -2323,7 +2335,7 @@ export default function Nutrition() {
           meal={foodSheet.meal}
           at={foodSheet.at}
           onClose={() => setFoodSheet(null)}
-          onSaved={loadData}
+          onSaved={mealSaved}
           onStale={loadData}
           onDeleteMeal={handleDelete}
         />

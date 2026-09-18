@@ -20,7 +20,8 @@ const sameValue = (a, b) => a?.key === b?.key && parseFloat(a?.amount) === parse
 /** Whether a failure is the server saying the meal changed after it was read. */
 const mealChanged = (err) => err?.response?.data?.error === 'meal_changed';
 
-/** `onSaved` reads the day again after a change; `onStale` reads it again when the
+/** `onSaved` takes the meal as the server saved it, so the next food opened is
+ *  changed from the meal as it now is, and reads the day again; `onStale` reads it again when the
  *  server says the meal changed elsewhere, so the food opened next is the meal as
  *  it is; `onDeleteMeal` resolves true once the meal is deleted. */
 export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onStale, onDeleteMeal }) {
@@ -123,9 +124,9 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onStale, o
     if (held) return;
     setSaving(true);
     try {
-      await nutritionService.updateMeal(meal.id, { items: edit, itemsVersion: meal.itemsVersion });
+      const res = await nutritionService.updateMeal(meal.id, { items: edit, itemsVersion: meal.itemsVersion });
       toast.success(`Changed ${item.name}`);
-      onSaved();
+      onSaved(res.data?.meal);
       onClose();
     } catch (err) {
       if (mealChanged(err)) {
@@ -148,9 +149,9 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onStale, o
         // A meal that could not be deleted keeps its box open: the page said why.
         if (await onDeleteMeal(meal.id)) onClose();
       } else {
-        await nutritionService.updateMeal(meal.id, { items: composeRemoveFood(meal.items, at), itemsVersion: meal.itemsVersion });
+        const res = await nutritionService.updateMeal(meal.id, { items: composeRemoveFood(meal.items, at), itemsVersion: meal.itemsVersion });
         toast.success(`Removed ${item.name}`);
-        onSaved();
+        onSaved(res.data?.meal);
         onClose();
       }
     } catch (err) {
