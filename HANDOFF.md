@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - The first Add food test timed out once at 6.8 s under load (5 s limit; the 7a-iv-g entry saw it too): given 15 s.
 - Looked at in headless Edge, 400 and 1280 wide, on a replayed toast-plate reply (no model call) and a saved bowl; the throwaway account deleted.
 - Local: API on 3000 (local Postgres, the Gemini key from `.env` read into the process) and web on 5173 running. `kd.edit@aihomegym.test` now has a saved "My blue bowl" (375 ml); no unused code today.
-- Next: CI, review round one in a fresh chat, Kd's click-through, merge on his word; then the member list. The four dashboard images are still not this card's.
+- Review round one (fresh chat): no Critical/High; L1 three quarters and full near one picture (the bowl is deeper now: rim 5, 11 deep, contents 9), L2 a saved cup or mug drawn as a bowl filled by volume, which reads half as half the height (now a mug, filled by height; `fillIcon`, `containerClass` through `pickerChoices`), L3 this line; and a test green with the bowl drawn by height (each surface now pinned to the volume rule, each icon to its own fill). All fixed; no re-check (RULINGS 2026-09-16). 12 breaks red, restored identical (scratchpad `breaks-fix.mjs`); web nutrition 200/200; full web 2345 passed, `poseAssets.contract` as before; eslint 0.
+- Kd said *"fix if nohigh critical ix and merge"*: merged on that word. His click-through reported only the cup words; nothing says whether the bowls passed. Next: the member list (Stage 2 item 3). The four dashboard images are still not this card's.
 
 ## 2026-09-18 · 7a-iv-g: the re-check ended the round; its two Lows fixed; merged (PR #83)
 

@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { nutritionService } from '../../api/nutritionApi';
 import Select from '../common/Select';
 import { DISH_SIZES, FILL_CHOICES, MAX_AMOUNT, choiceLabel, pickerChoices, steppedAmount, unitLabel, valueForChoice } from './measures';
-import { FILL_BOWL_ICONS } from './fillBowls';
+import { fillIcon } from './fillBowls';
 
 const NEW_DISH = '__new_dish';
 
@@ -159,11 +159,12 @@ export default function MeasurePicker({ food, dishware, value, onChange, grams, 
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>How full?</p>
             {gramsText}
           </div>
-          {/* A bowl drawn filled to each level, and its word: no fractions (Kd, RULINGS 2026-09-17). */}
+          {/* The dish drawn filled to each level, and its word: no fractions (Kd, RULINGS 2026-09-17). */}
           <div className="grid grid-cols-4 gap-2">
             {FILL_CHOICES.map((f) => {
               const selected = parseFloat(amount) === f.value;
-              const Bowl = FILL_BOWL_ICONS.get(f.value);
+              // The dish's own shape, filled to what the server will weigh.
+              const Dish = fillIcon(choice.containerClass, f.value);
               return (
                 <button key={f.value} type="button" aria-pressed={selected}
                         onClick={() => onChange({ key: value.key, amount: String(f.value) })}
@@ -173,7 +174,7 @@ export default function MeasurePicker({ food, dishware, value, onChange, grams, 
                           border: selected ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
                           color: selected ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
                         }}>
-                  <Bowl className="w-9 h-9 flex-shrink-0" />
+                  <Dish className="w-9 h-9 flex-shrink-0" />
                   <span>{f.label}</span>
                 </button>
               );

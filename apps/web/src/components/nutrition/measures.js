@@ -40,7 +40,7 @@ export function pickerChoices(food, dishware) {
   return [
     ...measures.map((m) => ({ key: m.id, kind: 'measure', id: m.id, name: m.name, grams: m.grams })),
     ...(Array.isArray(dishware) ? dishware : []).map((d) => ({
-      key: `${DISH_KEY_PREFIX}${d.id}`, kind: 'dish', dishwareId: d.id, name: d.label, volumeMl: d.volumeMl,
+      key: `${DISH_KEY_PREFIX}${d.id}`, kind: 'dish', dishwareId: d.id, name: d.label, volumeMl: d.volumeMl, containerClass: d.containerClass,
     })),
   ];
 }

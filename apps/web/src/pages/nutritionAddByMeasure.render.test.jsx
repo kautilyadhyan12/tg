@@ -145,6 +145,22 @@ describe('adding a food by measure', () => {
     expect(svc.logManualMeal.mock.calls[0][0].items).toEqual([{ canonical: 'apple', dishwareId: 'd-1', fillLevel: 0.5 }]);
   });
 
+  it('draws a saved mug as a mug, filled by height, and a saved bowl as a bowl (7a-iv-h)', async () => {
+    const mug = { ...bowl, id: 'd-3', label: 'My mug', containerClass: 'mug', volumeMl: 325 };
+    renderPage({ dishware: [bowl, mug] });
+    await pickApple();
+    await waitFor(() => expect(offered()).toContain('My mug · 325 ml'));
+    const surfaces = () => ['Quarter', 'Half', 'Three quarters', 'Full'].map((name) => {
+      const d = screen.getByRole('button', { name }).querySelector('svg path[fill="currentColor"]').getAttribute('d');
+      return [d.includes('A') ? 'bowl' : 'mug', Number(/^M[\d.]+ ([\d.]+)/.exec(d)[1])];
+    });
+    choose('My mug · 325 ml');
+    // Straight sides: half full is half the height.
+    expect(surfaces()).toEqual([['mug', 15], ['mug', 12], ['mug', 9], ['mug', 6]]);
+    choose('My blue bowl · 360 ml');
+    expect(surfaces().map(([shape]) => shape)).toEqual(['bowl', 'bowl', 'bowl', 'bowl']);
+  });
+
   it('saves a new dish from the picker at a size of the global starter set, then asks how full it was', async () => {
     renderPage();
     svc.createDishware = vi.fn(async (input) => ({ data: { dishware: { ...bowl, id: 'd-2', label: input.label, containerClass: input.containerClass, volumeMl: input.volumeMl } } }));
