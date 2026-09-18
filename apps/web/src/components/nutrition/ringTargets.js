@@ -9,8 +9,10 @@
  *  one of them as you type another is a box that fights you. */
 export const macroKcal = (v) => v.proteinG * 4 + v.carbsG * 4 + v.fatG * 9;
 
-/** A calorie figure as the rest of the page prints a four-digit one: "1,940 kcal". */
-export const kcalText = (n) => `${n.toLocaleString()} kcal`;
+/** A calorie figure written as "1,940 kcal" in every browser: the words around
+ *  it are English, and the server's refusal beside it writes "1,940" too, so a
+ *  German "1.940" here would print one number two ways on one screen. */
+export const kcalText = (n) => `${n.toLocaleString('en-US')} kcal`;
 
 /** Why the person's stored numbers cannot feed the rings today, in their words.
  *  The server says so whether they picked the numbers or left them behind
