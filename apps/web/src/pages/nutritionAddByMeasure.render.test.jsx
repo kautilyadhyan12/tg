@@ -114,7 +114,8 @@ describe('adding a food by measure', () => {
     expect(svc.logManualMeal.mock.calls[0][0]).toMatchObject({
       mealName: 'Apple', mealType: 'breakfast', items: [{ canonical: 'apple', measure: 'usda-4', amount: 1.5 }],
     });
-  });
+    // Eleven steps through one picker: past 5 s on a loaded machine (6.8 s, 2026-09-18).
+  }, 15_000);
 
   it('asks how full a saved dish was before anything can be added, and sends the dish and its fill', async () => {
     renderPage({ dishware: [bowl] });
@@ -127,7 +128,17 @@ describe('adding a food by measure', () => {
     const add = screen.getByRole('button', { name: 'Pick how full' });
     expect(add.disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: '½' }));
+    // Four buttons, each a word and a bowl drawn filled to its level, fuller to the
+    // right, and no fraction anywhere (7a-iv-h); none picked until the person picks.
+    const fills = ['Quarter', 'Half', 'Three quarters', 'Full'].map((name) => screen.getByRole('button', { name }));
+    const surfaces = fills.map((button) => Number(/^M[\d.]+ ([\d.]+)A/.exec(button.querySelector('svg path[fill="currentColor"]').getAttribute('d'))[1]));
+    expect(surfaces).toEqual([...surfaces].sort((a, b) => b - a));
+    expect(new Set(surfaces).size).toBe(4);
+    expect(fills.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'false', 'false']);
+    expect(screen.queryByText(/[¼½¾]/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Half' }));
+    expect(screen.getByRole('button', { name: 'Half' }).getAttribute('aria-pressed')).toBe('true');
     expect(await screen.findByText('= 180 g')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add Apple' }));
     await waitFor(() => expect(svc.logManualMeal).toHaveBeenCalledTimes(1));
@@ -198,11 +209,11 @@ describe('adding a food by measure', () => {
     await pickApple();
     await waitFor(() => expect(offered()).toContain('My blue bowl · 360 ml'));
     choose('My blue bowl · 360 ml');
-    fireEvent.click(screen.getByRole('button', { name: '¼' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quarter' }));
     expect(await screen.findByText('That amount is too small or too large to log — pick another amount.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pick another amount' }).disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: '½' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Half' }));
     expect(await screen.findByText('= 180 g')).toBeTruthy();
     expect(screen.queryByText('That amount is too small or too large to log — pick another amount.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Add Apple' }).disabled).toBe(false);

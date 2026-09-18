@@ -75,7 +75,7 @@ describe('the photo sheet as a short list', () => {
   it('shows every food on one line, closed, with its amount in words and its calories', async () => {
     const row = await scanPlate();
     expect(lineOf(row('Chicken nuggets')).textContent).toBe('Chicken nuggetsOur list · 6 × nugget · 96 g120 kcal');
-    expect(lineOf(row('Grapes')).textContent).toBe('GrapesOur list · ~50 g · estimate120 kcal');
+    expect(lineOf(row('Grapes')).textContent).toBe('GrapesOur list · ~50 g · about a quarter cup · estimate120 kcal');
     // Closed: no picker on the sheet at all.
     expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
   });
@@ -111,7 +111,7 @@ describe('where a scanned row starts', () => {
     expect(within(row('Chicken nuggets')).queryByText(/estimate/)).toBeNull();
     open(row('Grapes'));
     expect(pickerOf(row('Grapes'))).toEqual(['grams', '50']);
-    expect(within(row('Grapes')).getByText('~50 g · estimate')).toBeTruthy();
+    expect(within(row('Grapes')).getByText('~50 g · about a quarter cup · estimate')).toBeTruthy();
     // Every row lists its food's own measures, as Add food does.
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Measure' }));
     expect(within(row('Grapes')).getAllByRole('option').map((o) => o.textContent)).toEqual(['cup · 151 g', 'grams', 'ounces · 28.35 g', '+ Save a new dish…']);
@@ -132,7 +132,7 @@ describe('where a scanned row starts', () => {
     expect(lineOf(row('Grapes')).textContent).toContain('Our list · 60 g');
     // Back at the start, it is the scanner's guess again.
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Less' }));
-    expect(within(row('Grapes')).getByText('~50 g · estimate')).toBeTruthy();
+    expect(within(row('Grapes')).getByText('~50 g · about a quarter cup · estimate')).toBeTruthy();
   });
 
   it('sends every row as the measure and how many it shows, never grams the browser worked out', async () => {
@@ -181,6 +181,32 @@ describe('where a scanned row starts', () => {
     expect(within(lineOf(row('Chicken nuggets'))).getByText('…')).toBeTruthy();
     expect(screen.queryByText(/240 kcal/)).toBeNull();
     expect(screen.getByText('Adding up your ingredients…')).toBeTruthy();
+  });
+});
+
+describe("the photo's grams said in a cup (7a-iv-h)", () => {
+  const BANANA = item('Banana', 'banana', 60, { measures: [{ id: 'usda-1', name: 'cup, mashed', grams: 225 }, { id: 'usda-2', name: 'cup, sliced', grams: 150 }] });
+  const BACON = item('Bacon (cooked)', 'bacon', 24, { measures: [{ id: 'usda-1', name: 'slice', grams: 8 }] });
+
+  it("says a row at the photo's grams in the food's own cup, keeps a cup's words, and says grams alone for a food with none", async () => {
+    scanReturns([NUGGETS, GRAPES, BANANA, BACON]);
+    const row = await scanPlate();
+    expect(lineOf(row('Banana')).textContent).toBe('BananaOur list · ~60 g · about a quarter cup, mashed · estimate120 kcal');
+    // No count from the grams: the photo's count and its grams disagreed.
+    expect(lineOf(row('Bacon (cooked)')).textContent).toBe('Bacon (cooked)Our list · ~24 g · estimate120 kcal');
+    // A row at a measure the photo counted says that measure, and no cup.
+    expect(lineOf(row('Chicken nuggets')).textContent).toBe('Chicken nuggetsOur list · 6 × nugget · 96 g120 kcal');
+    // The line wraps, never cut short: "estimate" must stay on screen beside a long cup.
+    expect(within(row('Banana')).getByText('~60 g · about a quarter cup, mashed · estimate').closest('.truncate')).toBeNull();
+  });
+
+  it('goes with the estimate mark once the amount is the person’s, and comes back with it', async () => {
+    const row = await scanPlate();
+    open(row('Grapes'));
+    fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'More' }));
+    expect(lineOf(row('Grapes')).textContent).not.toMatch(/about|cup/);
+    fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Less' }));
+    expect(lineOf(row('Grapes')).textContent).toContain('~50 g · about a quarter cup · estimate');
   });
 });
 

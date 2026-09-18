@@ -11,6 +11,7 @@ import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTarget
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
+import { photoGramsMark } from '../components/nutrition/householdAmount';
 import {
   amountRefusal, amountSummary, chosenItemFor, comesToUnderAGram, isStartingValue, loggedAmountText, pickerChoices, startingValue, valueKeepingGrams,
 } from '../components/nutrition/measures';
@@ -1501,8 +1502,9 @@ function PhotoModal({ open, onClose, onSave }) {
                       // A row started at the photo's own grams is the scanner's
                       // guess until the person sets an amount (ROADMAP 7a-iv-b).
                       // A start at a measure (no grams from the photo) reads that measure (the review of PR #76, L2).
+                      // The photo's grams are said in the food's own cup too, where it has one (ROADMAP 7a-iv-h).
                       const portionMark = !(rowAtScan(i) && item.portionEstimated) ? null
-                        : item.startsAt.measure === 'g' ? `~${item.gramsPoint} g · estimate`
+                        : item.startsAt.measure === 'g' ? photoGramsMark(item.measures, item.gramsPoint)
                           : `~${amountSummary(choice, amounts[i]?.amount, item.gramsPoint)} · estimate`;
                       // "Change food" keeps the row's grams, so it waits while they are not known (H1).
                       const canChange = rowGrams(i) !== null;
@@ -1512,7 +1514,8 @@ function PhotoModal({ open, onClose, onSave }) {
                                   className="w-full min-h-14 px-3.5 py-2.5 flex items-center gap-3 text-left">
                             <span className="min-w-0 flex-1">
                               <span className="block text-sm font-semibold text-white truncate">{food.name}</span>
-                              <span className="block text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                              {/* Wraps, never cut: the cup's words must not push "estimate" off a phone (7a-iv-h). */}
+                              <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.50)' }}>
                                 {/* An estimate's figures and its grams are both the scanner's: one mark says so. */}
                                 {source === 'estimate' && portionMark !== null
                                   ? <span style={amber}>{portionMark}</span>

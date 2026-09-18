@@ -299,7 +299,7 @@ describe('the measure on a changed row', () => {
       open(row('bread'));
       fireEvent.click(within(row('bread')).getByRole('button', { name: 'Measure' }));
       fireEvent.click(await within(row('bread')).findByRole('option', { name: 'My blue bowl · 360 ml' }));
-      fireEvent.click(within(row('bread')).getByRole('button', { name: '½' }));
+      fireEvent.click(within(row('bread')).getByRole('button', { name: 'Half' }));
     };
     const holdOf = (rowEl) => {
       expect(within(rowEl).getByRole('button', { name: 'Change food' }).disabled).toBe(true);

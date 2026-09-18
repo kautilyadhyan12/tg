@@ -253,7 +253,7 @@ describe('a saved dish on a scanned row', () => {
   /** The dish picked, half full, and the server's answer for it. */
   const halfBowl = async () => {
     await choose('My blue bowl · 360 ml');
-    fireEvent.click(screen.getByRole('button', { name: '½' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Half' }));
     await waitFor(() => expect(svc.previewMeal.mock.calls.some(([body]) => body.items[0]?.dishwareId === 'd-1')).toBe(true));
     await waitFor(() => expect(screen.getByText('= 180 g')).toBeTruthy());
   };
