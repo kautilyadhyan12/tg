@@ -51,10 +51,11 @@ describe('nutritionService repoint (Card 5a)', () => {
 
   it("a logged food's edit is previewed at the meal's own preview, and its measures read from the meal (7a-iv-g)", async () => {
     const seen = recordRequests(authApi);
-    await nutritionService.previewMealEdit('m-1', [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }]);
+    await nutritionService.previewMealEdit('m-1', [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }], 'items-v1');
     await nutritionService.getMealMeasures('m-1');
     expect(seen[0]).toMatchObject({ url: '/v1/nutrition/meals/m-1/preview', method: 'post' });
-    expect(JSON.parse(seen[0].data)).toEqual({ items: [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }] });
+    // With the version of the items it was made from, so a meal changed since is refused.
+    expect(JSON.parse(seen[0].data)).toEqual({ items: [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }], itemsVersion: 'items-v1' });
     expect(seen[1]).toMatchObject({ url: '/v1/nutrition/meals/m-1/measures', method: 'get' });
   });
 

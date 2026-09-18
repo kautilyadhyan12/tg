@@ -17,7 +17,13 @@ import {
 
 const sameValue = (a, b) => a?.key === b?.key && parseFloat(a?.amount) === parseFloat(b?.amount);
 
-export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMeal }) {
+/** Whether a failure is the server saying the meal changed after it was read. */
+const mealChanged = (err) => err?.response?.data?.error === 'meal_changed';
+
+/** `onSaved` reads the day again after a change; `onStale` reads it again when the
+ *  server says the meal changed elsewhere, so the food opened next is the meal as
+ *  it is; `onDeleteMeal` resolves true once the meal is deleted. */
+export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onStale, onDeleteMeal }) {
   const item = meal.items[at];
   const [measures,   setMeasures]   = useState(null); // null while loading
   const [dishware,   setDishware]   = useState([]);
@@ -27,7 +33,10 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
   // the person's own numbers being typed · clear: back to the food's numbers.
   const [ownMode,    setOwnMode]    = useState('keep');
   const [ownText,    setOwnText]    = useState({ proteinG: '', carbsG: '', fatG: '' });
+  // The server's answer for one edit, keyed by it: {key, item}, a refusal said
+  // in words {key, refusal}, or a failure that says nothing {key, failed}.
   const [live,       setLive]       = useState(null);
+  const [retries,    setRetries]    = useState(0);
   const [saving,     setSaving]     = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -76,28 +85,36 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
     let stale = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await nutritionService.previewMealEdit(meal.id, edit);
-        if (!stale) setLive({ key: editKey, item: res.data?.items?.[at] ?? null });
+        const res = await nutritionService.previewMealEdit(meal.id, edit, meal.itemsVersion);
+        const priced = res.data?.items?.[at] ?? null;
+        if (!stale) setLive(priced === null ? { key: editKey, failed: true } : { key: editKey, item: priced });
       } catch (err) {
-        if (!stale) setLive({ key: editKey, refusal: editRefusal(err) });
+        if (stale) return;
+        const refusal = editRefusal(err);
+        setLive(refusal === null ? { key: editKey, failed: true } : { key: editKey, refusal });
+        if (mealChanged(err)) onStale();
       }
     }, 300);
     return () => { stale = true; clearTimeout(timer); };
-    // editKey is a complete value-serialisation of the edit.
+    // editKey is a complete value-serialisation of the edit; `retries` asks again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editKey, changed]);
+  }, [editKey, changed, retries]);
 
   // The numbers shown: the saved item's until something changes, then only the
-  // server's answer for exactly what would be sent — never an older one.
+  // server's answer for exactly what would be sent — never an older one, and
+  // never one still being worked out. Nothing can be saved, nor typed over,
+  // that the server has not priced for the amount on screen (the review of
+  // PR #83, High 2): what is saved is what was shown.
   const current = live?.key === editKey ? live : null;
   const shown = !changed ? item : current?.item ?? null;
   const refused = current?.refusal ?? null;
-  const held = !changed || edit === null || refused !== null || saving;
+  const failed = current?.failed === true;
+  const held = !changed || edit === null || !current?.item || saving;
 
   const startTyping = () => {
-    const from = shown ?? item;
+    if (shown === null) return;
     setOwnText({
-      proteinG: formatAmount(from.proteinG), carbsG: formatAmount(from.carbsG), fatG: formatAmount(from.fatG),
+      proteinG: formatAmount(shown.proteinG), carbsG: formatAmount(shown.carbsG), fatG: formatAmount(shown.fatG),
     });
     setOwnMode('typing');
   };
@@ -106,12 +123,18 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
     if (held) return;
     setSaving(true);
     try {
-      await nutritionService.updateMeal(meal.id, { items: edit });
+      await nutritionService.updateMeal(meal.id, { items: edit, itemsVersion: meal.itemsVersion });
       toast.success(`Changed ${item.name}`);
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(editRefusal(err) ?? 'Could not save the change. Try again.');
+      if (mealChanged(err)) {
+        // Said in the box, and Save held: this edit can never be saved now.
+        setLive({ key: editKey, refusal: editRefusal(err) });
+        onStale();
+      } else {
+        toast.error(editRefusal(err) ?? 'Could not save the change. Try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -122,15 +145,17 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
     setSaving(true);
     try {
       if (meal.items.length === 1) {
-        await onDeleteMeal(meal.id);
+        // A meal that could not be deleted keeps its box open: the page said why.
+        if (await onDeleteMeal(meal.id)) onClose();
       } else {
-        await nutritionService.updateMeal(meal.id, { items: composeRemoveFood(meal.items, at) });
+        await nutritionService.updateMeal(meal.id, { items: composeRemoveFood(meal.items, at), itemsVersion: meal.itemsVersion });
         toast.success(`Removed ${item.name}`);
         onSaved();
+        onClose();
       }
-      onClose();
     } catch (err) {
       toast.error(editRefusal(err) ?? 'Could not remove it. Try again.');
+      if (mealChanged(err)) onStale();
     } finally {
       setSaving(false);
     }
@@ -143,7 +168,8 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
       : tooSmall ? 'That comes to less than 1 g — pick a larger amount.'
         : amountArm === null ? (choice?.kind === 'dish' ? "Pick how full it was — we'll work out the grams." : 'Enter an amount.')
           : ownMode === 'typing' && typedOwn === null ? 'Fill in protein, carbs and fat, in grams.'
-            : refused;
+            : failed ? "Couldn't work out the numbers for this amount."
+              : refused;
   const button = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' };
   const field = { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' };
 
@@ -245,7 +271,11 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
                       These are your numbers. Change the amount and they grow or shrink with it.
                     </p>
                   )}
-                  <button type="button" onClick={startTyping} className="w-full h-11 rounded-xl text-sm font-semibold" style={button}>
+                  {/* Filled from the server's numbers for the amount on screen, so
+                      it waits for them: never the last amount's under this one. */}
+                  <button type="button" onClick={startTyping} disabled={shown === null}
+                          className="w-full h-11 rounded-xl text-sm font-semibold"
+                          style={{ ...button, opacity: shown === null ? 0.5 : 1 }}>
                     {isOwn ? 'Type new numbers' : 'Type my own numbers'}
                   </button>
                   {isOwn && (
@@ -287,6 +317,12 @@ export default function LoggedFoodSheet({ meal, at, onClose, onSaved, onDeleteMe
 
           <div className="p-5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             {heldReason && <p className="text-xs mb-3" style={{ color: 'rgba(251,191,36,0.85)' }}>{heldReason}</p>}
+            {failed && (
+              <button type="button" onClick={() => { setLive(null); setRetries((n) => n + 1); }}
+                      className="w-full h-11 mb-3 rounded-xl text-sm font-semibold" style={button}>
+                Try again
+              </button>
+            )}
             <button
               type="button" onClick={save} disabled={held}
               className="w-full h-12 rounded-xl font-semibold text-base text-white"

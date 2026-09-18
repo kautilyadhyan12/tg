@@ -232,13 +232,16 @@ export const nutritionService = {
 
   deleteMeal: (id) => authApi.delete(`/v1/nutrition/meals/${id}`), // 204
 
-  /** patchMealRequestSchema (.strict(), ≥1 field). */
+  /** patchMealRequestSchema (.strict(), ≥1 field). `items` go with the meal's
+   *  `itemsVersion` they were composed from, and the server refuses them (409
+   *  meal_changed) where the meal has changed since. */
   updateMeal: (id, patch) => authApi.patch(`/v1/nutrition/meals/${id}`, patch),
 
   /** ROADMAP 7a-iv-g: what a saved meal's items would come to after an edit,
-   *  nothing saved — the same items the PATCH takes (composeFoodEdit), priced by
-   *  the same server rule. {items, totals}. */
-  previewMealEdit: (id, items) => authApi.post(`/v1/nutrition/meals/${id}/preview`, { items }),
+   *  nothing saved — the same items the PATCH takes (composeFoodEdit), with the
+   *  meal's `itemsVersion` they were read at, priced by the same server rule.
+   *  {items, totals}; 409 meal_changed where the meal has changed since. */
+  previewMealEdit: (id, items, itemsVersion) => authApi.post(`/v1/nutrition/meals/${id}/preview`, { items, itemsVersion }),
 
   /** ROADMAP 7a-iv-g: each of a saved meal's foods' measures, {measures: [[…]]},
    *  `measures[i]` for the meal's `items[i]`. */

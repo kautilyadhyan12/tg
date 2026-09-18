@@ -29,7 +29,7 @@ import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { ownPer100g, savedPlaces } from "./mealEdit.js";
+import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
@@ -428,10 +428,13 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   // T3 (manual-off-foods): an off_* canonical must NEVER resolve through
   // findCurated's fuzzy substring match — off_banana_chips would hijack to
   // curated "banana" and save macros different from what search displayed.
-  if (!query.startsWith("off_")) {
-    const local = findCurated(query);
-    if (local !== null) return local;
-  }
+  // Nor through a search: the canonical is our slug of a product a search
+  // returned, kept for a day (rememberFoods), and searching Open Food Facts for
+  // the slug itself can find nothing but another product (the review of PR #83,
+  // L1) — so one past its day is not found, as a usda_* canonical is.
+  if (query.startsWith("off_")) return await canonicalCached(deps, query);
+  const local = findCurated(query);
+  if (local !== null) return local;
   // Canonical-keyed cache (foods a search already returned — the manual-log
   // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
@@ -524,6 +527,7 @@ const asMeal = (r: repo.MealRow): Meal => ({
           : "user_dishware",
   nutritionSources: r.nutritionSources,
   calcVersion: r.calcVersion,
+  itemsVersion: itemsVersion(r.items),
 });
 
 const totals = (items: readonly MealItem[]) => ({
@@ -1111,11 +1115,13 @@ async function editedItems(
   userId: string,
   saved: readonly MealItem[],
   edits: readonly MealEditItem[],
+  readAt: string,
 ): Promise<MealItem[]> {
-  const places = savedPlaces(saved, edits);
-  if (places === null) {
-    throw new NutritionError(409, "meal_changed", "This meal has changed since it was opened. Open it again.");
-  }
+  // Made from another state of the items (a food added in another tab since),
+  // its places would name the wrong foods and leave out the new one: refused.
+  // The save checks the same again under the row's lock (repo.updateMeal).
+  const places = itemsVersion(saved) === readAt ? savedPlaces(saved, edits) : null;
+  if (places === null) throw mealChanged();
   const changed = edits.flatMap((edit, at) => {
     const place = places[at] ?? null;
     return "canonical" in edit ? [{ edit, prior: place === null ? undefined : saved[place], at }] : [];
@@ -1170,6 +1176,9 @@ const unreachable = (): never => {
   throw new Error("a food with no table and no saved item reached its weighing");
 };
 
+const mealChanged = (): NutritionError =>
+  new NutritionError(409, "meal_changed", "This meal has changed since it was opened. Open it again.");
+
 /** What a saved meal's items would come to after an edit, nothing saved (the
  *  screen's live numbers while a logged food is changed); null for a meal that is
  *  not this person's. */
@@ -1181,7 +1190,7 @@ export async function previewMealEdit(
 ): Promise<MealPreview | null> {
   const meal = await repo.getMeal(deps.sql, userId, id);
   if (meal === null) return null;
-  const items = await editedItems(deps, userId, meal.items, input.items);
+  const items = await editedItems(deps, userId, meal.items, input.items, input.itemsVersion);
   return { items, totals: totals(items) };
 }
 
@@ -1206,16 +1215,23 @@ export async function patchMeal(
 ): Promise<Meal | null> {
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
-  const items = input.items === undefined ? before.items : await editedItems(deps, userId, before.items, input.items);
-  const row = await repo.updateMeal(deps.sql, userId, id, {
-    takenAt: input.takenAt === undefined ? before.takenAt : new Date(input.takenAt),
-    // undefined = keep; explicit null = clear the label.
-    mealType: input.mealType === undefined ? before.mealType : input.mealType,
-    mealName: input.mealName ?? before.mealName ?? "Meal",
-    items,
-    origin: before.origin,
-  });
-  return row === null ? null : asMeal(row);
+  // The contract sends items only with the itemsVersion they were read at.
+  const items = input.items === undefined || input.itemsVersion === undefined
+    ? undefined
+    : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
+  try {
+    const row = await repo.updateMeal(deps.sql, userId, id, {
+      ...(input.takenAt === undefined ? {} : { takenAt: new Date(input.takenAt) }),
+      // undefined = keep; explicit null = clear the label.
+      ...(input.mealType === undefined ? {} : { mealType: input.mealType }),
+      ...(input.mealName === undefined ? {} : { mealName: input.mealName }),
+      ...(items === undefined ? {} : { items }),
+    });
+    return row === null ? null : asMeal(row);
+  } catch (err) {
+    if (err instanceof repo.MealChangedError) throw mealChanged();
+    throw err;
+  }
 }
 
 // ── thin service seams (T3 P2.6a finding 4: real functions, not repo

@@ -189,15 +189,28 @@ const mealEditItemsSchema = z.array(mealEditItemSchema).min(1).max(30).refine((i
   return new Set(places).size === places.length;
 }, { message: "a saved item is named once" });
 
+/** Which state of a meal's items an edit was made from: the `itemsVersion` the
+ *  meal carried when the screen read it. An edit of the items names places in
+ *  that list, so the server refuses one made from any other state (409
+ *  `meal_changed`) rather than dropping a food added since, or writing over a
+ *  change saved at the same moment. */
+const itemsVersionSchema = z.string().min(1).max(100);
+
 export const patchMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200).optional(), takenAt: takenAtSchema.optional(),
   mealType: mealTypeSchema.nullable().optional(), // null clears the label
   items: mealEditItemsSchema.optional(),
-}).strict().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+  itemsVersion: itemsVersionSchema.optional(),
+}).strict()
+  .refine((v) => Object.keys(v).length > 0, { message: "at least one field required" })
+  .refine((v) => (v.items === undefined) === (v.itemsVersion === undefined), {
+    message: "items are sent with the itemsVersion they were read at, and only with items",
+    path: ["itemsVersion"],
+  });
 export type PatchMealRequest = z.infer<typeof patchMealRequestSchema>;
 /** What a saved meal's items would come to after an edit, nothing saved: the same
  *  items the PATCH takes, priced as the PATCH would price them. */
-export const mealEditPreviewRequestSchema = z.object({ items: mealEditItemsSchema }).strict();
+export const mealEditPreviewRequestSchema = z.object({ items: mealEditItemsSchema, itemsVersion: itemsVersionSchema }).strict();
 export type MealEditPreviewRequest = z.infer<typeof mealEditPreviewRequestSchema>;
 /** Each of a saved meal's items' measures, `measures[i]` for `items[i]`: what its
  *  food can be logged by now, so a logged food opens in the measure picker. */
@@ -210,6 +223,9 @@ export const mealSchema = z.object({
   totals: mealTotalsSchema, confirmed: z.boolean(), origin: mealOriginSchema,
   portionSource: z.enum(["user_dishware", "regional_prior", "default", "legacy"]),
   nutritionSources: z.array(z.string()), calcVersion: z.number().int(),
+  /** Which state of the items this is (a fingerprint of them): an edit of the
+   *  items sends it back (ROADMAP 7a-iv-g). */
+  itemsVersion: z.string().min(1),
 });
 export type Meal = z.infer<typeof mealSchema>;
 

@@ -30,6 +30,9 @@ const item = (name, canonical, grams, kcal, macros, extra = {}) => ({
 const RICE = item('Rice (white, cooked)', 'rice_white', 150, 195, { proteinG: 4, carbsG: 42, fatG: 0.4 });
 const CHICKEN = item('Chicken breast (cooked)', 'chicken_breast', 600, 990, { proteinG: 186, carbsG: 0, fatG: 21 });
 
+/** The version of the meal's items the page read, which every change sends back. */
+const READ_AT = 'items-read-at-v1';
+
 function mealOf(items, name = 'Lunch plate') {
   const at = new Date();
   at.setHours(12, 30, 0, 0);
@@ -37,8 +40,12 @@ function mealOf(items, name = 'Lunch plate') {
     id: MEAL_ID, takenAt: at.toISOString(), mealType: 'lunch', mealName: name, items,
     totals: { kcalPoint: items.reduce((n, i) => n + i.kcalPoint, 0), kcalLow: 0, kcalHigh: 0, proteinG: 0, carbsG: 0, fatG: 0 },
     confirmed: true, origin: 'manual', portionSource: 'default', nutritionSources: ['curated'], calcVersion: 1,
+    itemsVersion: READ_AT,
   };
 }
+
+/** The server's answer that the meal changed since the page read it. */
+const changedElsewhere = () => Object.assign(new Error('409'), { response: { status: 409, data: { error: 'meal_changed', message: 'This meal has changed since it was opened. Open it again.' } } });
 
 /** The server's preview of an edit: the changed chicken priced at 165 kcal per
  *  100 g by its table, or by own numbers at 4/4/9 kcal a gram; every kept food as
@@ -137,12 +144,12 @@ describe('a food already logged', () => {
     expect(box.getByText('From the food list')).toBeTruthy();
 
     fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
-    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }]));
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }], READ_AT));
     expect(await box.findByText('330 kcal')).toBeTruthy();
 
     fireEvent.click(box.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledTimes(1));
-    expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }] });
+    expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }], itemsVersion: READ_AT });
     expect(toast.success).toHaveBeenCalledWith('Changed Chicken breast (cooked)');
     // The day is read again, and the box is gone.
     await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
@@ -157,7 +164,7 @@ describe('a food already logged', () => {
     expect(box.getByRole('button', { name: 'Measure' }).textContent).toBe('cup, chopped or diced · 140 g');
     expect(box.getByRole('spinbutton', { name: 'Amount' }).value).toBe('2');
     fireEvent.click(box.getByRole('button', { name: 'More' }));
-    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ canonical: 'chicken_breast', measure: 'usda-1', amount: 2.5, from: 0 }]));
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ canonical: 'chicken_breast', measure: 'usda-1', amount: 2.5, from: 0 }], READ_AT));
   });
 
   it('never shows the numbers of an amount no longer picked while the new one is priced', async () => {
@@ -203,7 +210,7 @@ describe('a food already logged', () => {
     fireEvent.change(box.getByRole('spinbutton', { name: 'Protein in grams' }), { target: { value: '50' } });
     fireEvent.change(box.getByRole('spinbutton', { name: 'Fat in grams' }), { target: { value: '10' } });
     const sent = [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1, own: { proteinG: 50, carbsG: 0, fatG: 10 } }];
-    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenLastCalledWith(MEAL_ID, sent));
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenLastCalledWith(MEAL_ID, sent, READ_AT));
     // 200 + 90: the server's answer, shown before saving.
     expect(await box.findByText('Comes to 290 kcal')).toBeTruthy();
     expect(box.getByText('Your numbers')).toBeTruthy();
@@ -216,7 +223,7 @@ describe('a food already logged', () => {
     await box.findByText('Comes to 290 kcal');
 
     fireEvent.click(box.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: sent }));
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: sent, itemsVersion: READ_AT }));
   });
 
   it("says the server's refusal of numbers heavier than the food, and holds Save", async () => {
@@ -231,15 +238,79 @@ describe('a food already logged', () => {
     expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
   });
 
-  it('says the meal changed elsewhere rather than saving over it', async () => {
+  it('says the meal changed elsewhere when the price says so, and reads the day again', async () => {
     renderPage(mealOf([RICE, CHICKEN]));
-    svc.previewMealEdit = vi.fn(async () => {
-      throw Object.assign(new Error('409'), { response: { status: 409, data: { error: 'meal_changed' } } });
-    });
+    svc.previewMealEdit = vi.fn(async () => { throw changedElsewhere(); });
     const box = await open('Chicken breast (cooked)');
     fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
     expect(await box.findByText('This meal was changed somewhere else. Close this and open it again.')).toBeTruthy();
     expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
+  });
+
+  it('says the meal changed elsewhere when the save says so, holds Save, and reads the day again', async () => {
+    renderPage(mealOf([RICE, CHICKEN]));
+    svc.updateMeal = vi.fn(async () => { throw changedElsewhere(); });
+    const box = await open('Chicken breast (cooked)');
+    fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
+    await box.findByText('330 kcal');
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }], itemsVersion: READ_AT }));
+    expect(await box.findByText('This meal was changed somewhere else. Close this and open it again.')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('holds Save, and typing numbers, until the server has priced the amount on screen, then fills them from that price', async () => {
+    const meal = mealOf([RICE, CHICKEN]);
+    renderPage(meal);
+    let release;
+    svc.previewMealEdit = vi.fn((_id, edit) => new Promise((resolve) => { release = () => resolve(previewOf(meal, edit)); }));
+    const box = await open('Chicken breast (cooked)');
+    fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledTimes(1));
+    // Still being priced: nothing to save, and no numbers of the old amount to type over.
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    const typeOwn = box.getByRole('button', { name: 'Type my own numbers' });
+    expect(typeOwn.disabled).toBe(true);
+    fireEvent.click(typeOwn);
+    expect(box.queryByRole('spinbutton', { name: 'Protein in grams' })).toBeNull();
+
+    release();
+    expect(await box.findByText('330 kcal')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(false);
+    fireEvent.click(box.getByRole('button', { name: 'Type my own numbers' }));
+    // The 200 g numbers, never the 600 g ones (186, 0, 21).
+    expect([
+      box.getByRole('spinbutton', { name: 'Protein in grams' }).value,
+      box.getByRole('spinbutton', { name: 'Carbs in grams' }).value,
+      box.getByRole('spinbutton', { name: 'Fat in grams' }).value,
+    ]).toEqual(['62', '0', '7']);
+    expect(box.getByText('For 200 g, as you ate it — from a label or a restaurant.')).toBeTruthy();
+    // The typed numbers are priced before they can be saved, too.
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledTimes(2));
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    release();
+    expect(await box.findByText('Comes to 311 kcal')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(false);
+  });
+
+  it('says it could not work out the numbers when the price fails, holds Save, and asks again on Try again', async () => {
+    const meal = mealOf([RICE, CHICKEN]);
+    renderPage(meal);
+    svc.previewMealEdit = vi.fn(async () => { throw new Error('Network Error'); });
+    const box = await open('Chicken breast (cooked)');
+    fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
+    expect(await box.findByText("Couldn't work out the numbers for this amount.")).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    svc.previewMealEdit = vi.fn(async (_id, edit) => previewOf(meal, edit));
+    fireEvent.click(box.getByRole('button', { name: 'Try again' }));
+    expect(await box.findByText('330 kcal')).toBeTruthy();
+    expect(box.queryByText("Couldn't work out the numbers for this amount.")).toBeNull();
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(false);
   });
 
   it("gives back the food list's numbers for a food of the person's own, and the scan's estimate for one typed over a scan", async () => {
@@ -252,7 +323,7 @@ describe('a food already logged', () => {
     expect(box.getByText('These are your numbers. Change the amount and they grow or shrink with it.')).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: "Use the food list's numbers" }));
     expect(box.getByText("Saving puts back the food list's numbers for this amount.")).toBeTruthy();
-    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 600, from: 1, own: null }]));
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 600, from: 1, own: null }], READ_AT));
     await box.findByText('990 kcal');
     // "Keep my numbers" undoes it: nothing is changed, so nothing can be saved.
     fireEvent.click(box.getByRole('button', { name: 'Keep my numbers' }));
@@ -260,7 +331,7 @@ describe('a food already logged', () => {
     fireEvent.click(box.getByRole('button', { name: "Use the food list's numbers" }));
     await box.findByText('990 kcal');
     fireEvent.click(box.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 600, from: 1, own: null }] }));
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 600, from: 1, own: null }], itemsVersion: READ_AT }));
 
     cleanup();
     const scanned = { ...own, name: 'avocado toast', canonical: 'est_avocado_toast', scanEstimate: { kcal: 233, proteinG: 5, carbsG: 18, fatG: 15 } };
@@ -279,7 +350,7 @@ describe('a food already logged', () => {
     expect(svc.updateMeal).not.toHaveBeenCalled();
     fireEvent.click(box.getByRole('button', { name: 'Remove from this meal' }));
     fireEvent.click(box.getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 1 }] }));
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 1 }], itemsVersion: READ_AT }));
     expect(toast.success).toHaveBeenCalledWith('Removed Rice (white, cooked)');
     expect(svc.deleteMeal).not.toHaveBeenCalled();
   });
@@ -294,6 +365,28 @@ describe('a food already logged', () => {
     expect(svc.updateMeal).not.toHaveBeenCalled();
   });
 
+  it('keeps the box open, and says so, when the meal of its only food could not be deleted', async () => {
+    renderPage(mealOf([CHICKEN]));
+    svc.deleteMeal = vi.fn(async () => { throw new Error('Network Error'); });
+    const box = await open('Chicken breast (cooked)');
+    fireEvent.click(box.getByRole('button', { name: 'Remove from this meal' }));
+    fireEvent.click(box.getByRole('button', { name: 'Delete the meal' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to delete'));
+    expect(screen.getByRole('dialog', { name: 'Change Chicken breast (cooked)' })).toBeTruthy();
+  });
+
+  it('says a remove made from a meal changed elsewhere was refused, keeps the box, and reads the day again', async () => {
+    renderPage(mealOf([RICE, CHICKEN]));
+    svc.updateMeal = vi.fn(async () => { throw changedElsewhere(); });
+    const box = await open('Rice (white, cooked)');
+    fireEvent.click(box.getByRole('button', { name: 'Remove from this meal' }));
+    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, { items: [{ from: 1 }], itemsVersion: READ_AT }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('This meal was changed somewhere else. Close this and open it again.'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
+  });
+
   it('tells a food from its twin: the second of two of one food is the one changed', async () => {
     const small = { ...CHICKEN, gramsPoint: 100, kcalPoint: 165 };
     renderPage(mealOf([CHICKEN, small]));
@@ -305,6 +398,40 @@ describe('a food already logged', () => {
     await box.findByRole('button', { name: 'Measure' });
     expect(box.getByRole('spinbutton', { name: 'Amount' }).value).toBe('100');
     fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '150' } });
-    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 150, from: 1 }]));
+    await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 150, from: 1 }], READ_AT));
+  });
+});
+
+describe('an ingredient added to a saved meal', () => {
+  const OATS = {
+    canonical: 'oats', name: 'Oats', kcal: 389, proteinG: 17, carbsG: 66, fatG: 7, fiberG: null, serving: 40, unit: 'g', source: 'curated',
+    measures: [{ id: 'g', name: 'g', grams: 1 }, { id: 'oz', name: 'oz', grams: 28.349523125 }], startsAt: { measure: 'g', amount: 40 },
+  };
+  async function addOats() {
+    svc.searchFoods = vi.fn(async () => ({ data: { items: [OATS] } }));
+    svc.previewMeal = vi.fn(async () => ({ data: { items: [item('Oats', 'oats', 40, 156, { proteinG: 7, carbsG: 26, fatG: 3 })], totals: { kcalPoint: 156, kcalLow: 156, kcalHigh: 156, proteinG: 7, carbsG: 26, fatG: 3 } } }));
+    fireEvent.click(await screen.findByTitle('Add an ingredient to this meal'));
+    fireEvent.change(await screen.findByPlaceholderText('Search food...'), { target: { value: 'oats' } });
+    fireEvent.click((await screen.findByText('Oats')).closest('button'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Oats' }));
+  }
+
+  it("keeps the meal's foods as saved, and sends the version of them the page read", async () => {
+    renderPage(mealOf([RICE, CHICKEN]));
+    await addOats();
+    await waitFor(() => expect(svc.updateMeal).toHaveBeenCalledWith(MEAL_ID, {
+      items: [{ from: 0 }, { from: 1 }, { canonical: 'oats', measure: 'g', amount: 40 }],
+      itemsVersion: READ_AT,
+    }));
+  });
+
+  it('says a meal changed elsewhere, reads the day again and closes, so the next try starts from the meal as it is', async () => {
+    renderPage(mealOf([RICE, CHICKEN]));
+    svc.updateMeal = vi.fn(async () => { throw changedElsewhere(); });
+    await addOats();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('This meal was changed somewhere else. Close this and open it again.'));
+    await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Add Oats' })).toBeNull();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

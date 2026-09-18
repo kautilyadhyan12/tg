@@ -1,7 +1,17 @@
-// ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17). The two
-// rules an edit of a saved meal turns on, pure so each is one table test: which of
-// the saved items each edited item is, and the person's own numbers per 100 g.
-import type { MealEditItem, OwnNumbers, Per100g } from "@app/shared";
+// ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17). The rules
+// an edit of a saved meal turns on, pure so each is one table test: which state of
+// the items it was made from, which of the saved items each edited item is, and
+// the person's own numbers per 100 g.
+import { createHash } from "node:crypto";
+import type { MealEditItem, MealItem, OwnNumbers, Per100g } from "@app/shared";
+
+/** A fingerprint of a meal's items: equal exactly when the items are, so an edit
+ *  that sends back the one it read was made from the items as they are now. The
+ *  items are always the contract's parse of the stored row, so one list always
+ *  writes the same way. */
+export function itemsVersion(items: readonly MealItem[]): string {
+  return createHash("sha256").update(JSON.stringify(items)).digest("base64url").slice(0, 22);
+}
 
 /** Which saved item each edit is, `[i]` for `edits[i]`: its place in `saved`, or
  *  null for a food new to the meal. The whole answer is null where an edit names a

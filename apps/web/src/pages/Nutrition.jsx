@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
+import { editRefusal } from '../components/nutrition/loggedFood';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
 import {
@@ -568,6 +569,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         // would wipe a meal).
         await nutritionService.updateMeal(meal.id, {
           items: composeAddIngredient(meal.items, chosenItem),
+          itemsVersion: meal.itemsVersion,
         });
         toast.success(`Added ${selected.name} to ${meal.mealName || 'the meal'}`);
       } else {
@@ -584,13 +586,23 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
       onSave();
       onClose();
     } catch (err) {
-      // A refused amount says so. Any other 400 is usually an item that can no
-      // longer be resolved by canonical — an OFF food picked >24h ago has aged
-      // out of the server's cache (the recorded residual). Say something actionable.
+      // The meal changed in another tab since this box opened (7a-iv-g): the
+      // server added nothing. The day is read again and the box closes, so the
+      // next try starts from the meal as it is.
+      if (meal && err.response?.data?.error === 'meal_changed') {
+        toast.error(editRefusal(err));
+        onSave();
+        onClose();
+        return;
+      }
+      // A refused amount says so. Any other 400 is the food itself: one that can
+      // no longer be resolved by canonical — an OFF food picked >24h ago has aged
+      // out of the server's cache (the recorded residual). The meal's other foods
+      // are kept as saved, never looked up again. Say something actionable.
       toast.error(
         amountRefusal(err) ?? (err.response?.status === 400
           ? meal
-            ? "One of this meal's foods could not be re-checked — try searching for it again."
+            ? 'That food could not be added — try searching for it again.'
             : 'That food could not be logged.'
           : meal ? 'Failed to add the ingredient' : 'Failed to log meal'),
       );
@@ -1891,13 +1903,17 @@ export default function Nutrition() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Resolves whether the meal was deleted, so a box that asked for it stays open
+  // when it was not (the review of PR #83, L2).
   const handleDelete = async (mealId) => {
     try {
       await nutritionService.deleteMeal(mealId);
       toast.success('Meal removed');
       loadData();
+      return true;
     } catch (err) {
       toast.error('Failed to delete');
+      return false;
     }
   };
 
@@ -2308,6 +2324,7 @@ export default function Nutrition() {
           at={foodSheet.at}
           onClose={() => setFoodSheet(null)}
           onSaved={loadData}
+          onStale={loadData}
           onDeleteMeal={handleDelete}
         />
       )}

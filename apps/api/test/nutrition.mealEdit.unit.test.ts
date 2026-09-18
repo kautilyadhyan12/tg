@@ -3,8 +3,8 @@
 // case: which saved item each edited item is, and the person's own numbers per
 // 100 g, their calories worked out from protein, carbs and fat.
 import { describe, expect, it } from "vitest";
-import { mealEditItemSchema, patchMealRequestSchema, per100gSchema, type MealEditItem } from "@app/shared";
-import { KCAL_PER_GRAM, ownPer100g, savedPlaces } from "../src/modules/nutrition/mealEdit.js";
+import { mealEditItemSchema, mealEditPreviewRequestSchema, patchMealRequestSchema, per100gSchema, type MealEditItem, type MealItem } from "@app/shared";
+import { KCAL_PER_GRAM, itemsVersion, ownPer100g, savedPlaces } from "../src/modules/nutrition/mealEdit.js";
 
 const meal = (...canonicals: string[]) => canonicals.map((canonical) => ({ canonical }));
 /** An edit by grams, naming its saved item or not. */
@@ -68,8 +68,16 @@ describe("savedPlaces: which saved item each edit is", () => {
   });
 
   it("the contract refuses a saved item named twice, a kept item with anything beside it, and own numbers past 10,000 g", () => {
-    expect(patchMealRequestSchema.safeParse({ items: [keep(0), g("a", 0)] }).success).toBe(false);
-    expect(patchMealRequestSchema.safeParse({ items: [keep(0), keep(1)] }).success).toBe(true);
+    expect(patchMealRequestSchema.safeParse({ items: [keep(0), g("a", 0)], itemsVersion: "v" }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ items: [keep(0), keep(1)], itemsVersion: "v" }).success).toBe(true);
+    // Items go with the version they were read at, and a version only with items.
+    expect(patchMealRequestSchema.safeParse({ items: [keep(0), keep(1)] }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ itemsVersion: "v" }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ mealName: "Lunch", itemsVersion: "v" }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ items: [keep(0)], itemsVersion: "" }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ mealName: "Lunch" }).success).toBe(true);
+    expect(mealEditPreviewRequestSchema.safeParse({ items: [keep(0)] }).success).toBe(false);
+    expect(mealEditPreviewRequestSchema.safeParse({ items: [keep(0)], itemsVersion: "v" }).success).toBe(true);
     expect(mealEditItemSchema.safeParse({ from: 0, grams: 100 }).success).toBe(false);
     expect(mealEditItemSchema.safeParse({ from: 30 }).success).toBe(false);
     expect(mealEditItemSchema.safeParse({ from: -1 }).success).toBe(false);
@@ -81,7 +89,39 @@ describe("savedPlaces: which saved item each edit is", () => {
     expect(mealEditItemSchema.safeParse({ canonical: "a", grams: 100, own: { proteinG: 1, carbsG: 1 } }).success).toBe(false);
     expect(mealEditItemSchema.safeParse({ canonical: "a", grams: 100, own: { proteinG: 1, carbsG: 1, fatG: 1, kcal: 9 } }).success).toBe(false);
     expect(mealEditItemSchema.safeParse({ from: 0, own: null }).success).toBe(false);
-    expect(patchMealRequestSchema.safeParse({ items: [] }).success).toBe(false);
+    expect(patchMealRequestSchema.safeParse({ items: [], itemsVersion: "v" }).success).toBe(false);
+  });
+});
+
+describe("itemsVersion: which state of a meal's items an edit was made from", () => {
+  const item = (canonical: string, grams: number, extra: Partial<MealItem> = {}): MealItem => ({
+    name: canonical, canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", nutritionSource: "curated",
+    kcalPoint: grams, kcalLow: grams, kcalHigh: grams, proteinG: 1, carbsG: 1, fatG: 1, ...extra,
+  });
+  const meal = [item("roti", 40), item("paneer", 100)];
+
+  it("is the same for the same items, and a short string", () => {
+    expect(itemsVersion(meal)).toBe(itemsVersion([item("roti", 40), item("paneer", 100)]));
+    expect(itemsVersion(meal)).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  });
+
+  it("differs for every change an edit can make to the items", () => {
+    const changes: [string, MealItem[]][] = [
+      ["a food added", [...meal, item("chana", 200)]],
+      ["a food removed", [item("roti", 40)]],
+      ["two foods swapped", [item("paneer", 100), item("roti", 40)]],
+      ["an amount changed", [item("roti", 80), item("paneer", 100)]],
+      ["own numbers typed", [item("roti", 40), item("paneer", 100, { nutritionSource: "own", per100g: { kcal: 208, proteinG: 20, carbsG: 2, fatG: 13 } })]],
+      ["a measure named", [item("roti", 40, { measure: { id: "serving", name: "roti", amount: 1 } }), item("paneer", 100)]],
+      ["the same food again", [...meal, item("roti", 40)]],
+      ["no food at all", []],
+    ];
+    const seen = new Set([itemsVersion(meal)]);
+    for (const [name, items] of changes) {
+      const version = itemsVersion(items);
+      expect(seen.has(version), name).toBe(false);
+      seen.add(version);
+    }
   });
 });
 

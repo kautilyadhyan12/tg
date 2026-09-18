@@ -41,10 +41,14 @@ const food = (start: string) => {
 };
 const ROTI = food("Roti / Chapati (homemade");
 const PANEER = food("Paneer");
+const CHANA = food("Chana masala");
 
-/** Open Food Facts holds nothing: a packaged product's canonical past its day in the
- *  cache is found nowhere. */
-const nothingPackaged: FoodSearchProvider = { search: () => Promise.resolve([]) };
+/** Every search sent to Open Food Facts, which holds nothing here: a packaged
+ *  product's canonical past its day in the cache is found nowhere, and no route
+ *  that changes or opens a logged food may search for it by its canonical (the
+ *  review of PR #83, L1). */
+const searches: string[] = [];
+const recordingPackaged: FoodSearchProvider = { search: (query) => { searches.push(query); return Promise.resolve([]); } };
 
 /** A saved item as the server writes one, for the rows no route can make by itself
  *  here: a scan's estimate, and a packaged product no longer in the cache. */
@@ -82,16 +86,24 @@ d("changing a food already logged (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(201);
     return mealOf(res.body);
   };
-  /** The edit, previewed first, then saved: the preview must be what is saved. */
+  /** The meal's items as a screen reads them now: the version its edit sends back. */
+  const readAt = async (id: string, access = alice): Promise<string> =>
+    mealOf((await inject("GET", `/v1/nutrition/meals/${id}`, access)).body).itemsVersion;
+  /** The edit, made from the meal as it is, previewed first, then saved: the
+   *  preview must be what is saved. */
   const edit = async (id: string, items: unknown[]): Promise<Meal> => {
-    const preview = await inject("POST", `/v1/nutrition/meals/${id}/preview`, alice, { items });
+    const itemsVersion = await readAt(id);
+    const preview = await inject("POST", `/v1/nutrition/meals/${id}/preview`, alice, { items, itemsVersion });
     expect(preview.statusCode, preview.body).toBe(200);
-    const saved = await inject("PATCH", `/v1/nutrition/meals/${id}`, alice, { items });
+    const saved = await inject("PATCH", `/v1/nutrition/meals/${id}`, alice, { items, itemsVersion });
     expect(saved.statusCode, saved.body).toBe(200);
     const meal = mealOf(saved.body);
     expect(mealPreviewSchema.parse(preview.json())).toEqual({ items: meal.items, totals: meal.totals });
     return meal;
   };
+  /** An edit made from the meal as it is, the answer not checked. */
+  const send = async (method: "POST" | "PATCH", id: string, items: unknown[], access = alice) =>
+    inject(method, method === "POST" ? `/v1/nutrition/meals/${id}/preview` : `/v1/nutrition/meals/${id}`, access, { items, itemsVersion: await readAt(id) });
   /** What a person reads of each food: its numbers and where they are from. */
   const read = (meal: Meal) => meal.items.map((i) => [i.canonical, i.gramsPoint, i.kcalPoint, i.proteinG, i.carbsG, i.fatG, i.nutritionSource]);
   const clean = async (): Promise<void> => {
@@ -101,7 +113,7 @@ d("changing a food already logged (real Postgres)", () => {
 
   beforeAll(async () => {
     await clean();
-    app = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { foodSearchProvider: nothingPackaged } });
+    app = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { foodSearchProvider: recordingPackaged } });
     alice = await session("edit7a-alice@example.com");
     bob = await session("edit7a-bob@example.com");
     const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'edit7a-alice@example.com'`;
@@ -129,8 +141,8 @@ d("changing a food already logged (real Postgres)", () => {
     expect([grams.items[0]?.gramsPoint, grams.items[0]?.kcalPoint, grams.items[0]?.measure]).toEqual([60, 121, undefined]);
 
     // A measure the food does not have, or an amount no item may weigh, is refused.
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: PANEER.canonical, measure: "serving", amount: 1, from: 1 }] }))).toEqual([400, "unknown_measure"]);
-    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items: [{ canonical: ROTI.canonical, measure: "serving", amount: 300, from: 0 }] }))).toEqual([400, "portion_out_of_range"]);
+    expect(errorOf(await send("PATCH", meal.id, [{ canonical: PANEER.canonical, measure: "serving", amount: 1, from: 1 }]))).toEqual([400, "unknown_measure"]);
+    expect(errorOf(await send("POST", meal.id, [{ canonical: ROTI.canonical, measure: "serving", amount: 300, from: 0 }]))).toEqual([400, "portion_out_of_range"]);
   }, 60_000);
 
   it("takes the person's own numbers, works out their calories, grows them with the amount, and gives them back", async () => {
@@ -169,7 +181,7 @@ d("changing a food already logged (real Postgres)", () => {
     expect(back.items[1]?.per100g).toBeUndefined();
 
     // Numbers heavier than the food itself are no numbers.
-    const heavy = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: PANEER.canonical, grams: 150, from: 1, own: { proteinG: 100, carbsG: 40, fatG: 20 } }] });
+    const heavy = await send("PATCH", meal.id, [{ canonical: PANEER.canonical, grams: 150, from: 1, own: { proteinG: 100, carbsG: 40, fatG: 20 } }]);
     expect(errorOf(heavy)).toEqual([400, "own_numbers_too_heavy"]);
     expect(z.object({ message: z.string() }).parse(heavy.json()).message).toBe("Protein, carbs and fat together can't weigh more than the food itself (150 g).");
     const unchanged = await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice);
@@ -193,14 +205,73 @@ d("changing a food already logged (real Postgres)", () => {
     expect(read(three)[1]).toEqual([ROTI.canonical, 120, 294, 15, 45, 6, "own"]);
   }, 60_000);
 
-  it("refuses an edit made on a meal that has changed since, and a saved item named twice", async () => {
+  it("refuses every edit made from the meal as it was before a food was added in another tab, and keeps that food", async () => {
     const meal = await manual([{ canonical: ROTI.canonical, grams: 40 }, { canonical: PANEER.canonical, grams: 100 }]);
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 2 }] }))).toEqual([409, "meal_changed"]);
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: PANEER.canonical, grams: 50, from: 0 }] }))).toEqual([409, "meal_changed"]);
-    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items: [{ from: 5 }] }))).toEqual([409, "meal_changed"]);
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 0 }, { from: 0 }] }))).toEqual([400, "validation_error"]);
-    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items: [] }))).toEqual([400, "validation_error"]);
-    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items: [{ from: 0, grams: 10 }] }))).toEqual([400, "validation_error"]);
+    const tabA = meal.itemsVersion;
+    // Tab B adds chana masala.
+    const tabB = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 0 }, { from: 1 }, { canonical: CHANA.canonical, grams: 200 }], itemsVersion: tabA });
+    expect(tabB.statusCode, tabB.body).toBe(200);
+    const withChana = mealOf(tabB.body);
+    expect(withChana.items.map((i) => i.canonical)).toEqual([ROTI.canonical, PANEER.canonical, CHANA.canonical]);
+    expect(withChana.itemsVersion).not.toBe(tabA);
+
+    // Tab A still shows two foods: its change, its remove, its add and the old
+    // unnamed resend are each refused, saved or previewed.
+    for (const items of [
+      [{ canonical: ROTI.canonical, grams: 80, from: 0 }, { from: 1 }],
+      [{ from: 0 }],
+      [{ from: 0 }, { from: 1 }, { canonical: ROTI.canonical, grams: 10 }],
+      [{ canonical: ROTI.canonical, grams: 40 }, { canonical: PANEER.canonical, grams: 100 }],
+    ]) {
+      expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items, itemsVersion: tabA })), JSON.stringify(items)).toEqual([409, "meal_changed"]);
+      expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items, itemsVersion: tabA })), JSON.stringify(items)).toEqual([409, "meal_changed"]);
+    }
+    const now = mealOf((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).body);
+    expect(now.items).toEqual(withChana.items);
+    expect(now.itemsVersion).toBe(withChana.itemsVersion);
+
+    // A rename, a new time or a label from tab A sends no items, and keeps tab B's.
+    const renamed = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { mealName: "Renamed in tab A", mealType: "lunch" });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect(mealOf(renamed.body).items).toEqual(withChana.items);
+  }, 60_000);
+
+  it("lets through only one of two edits sent at the same moment, and checks the items under the row's lock", async () => {
+    for (let round = 0; round < 5; round += 1) {
+      const meal = await manual([{ canonical: ROTI.canonical, grams: 40 }, { canonical: PANEER.canonical, grams: 100 }]);
+      const both = await Promise.all([
+        inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: ROTI.canonical, grams: 80, from: 0 }, { from: 1 }], itemsVersion: meal.itemsVersion }),
+        inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 0 }], itemsVersion: meal.itemsVersion }),
+      ]);
+      expect(both.map((r) => r.statusCode).sort(), both.map((r) => r.body).join(" | ")).toEqual([200, 409]);
+      const winner = both.find((r) => r.statusCode === 200);
+      expect(read(mealOf((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).body))).toEqual(read(mealOf(winner?.body ?? "")));
+    }
+
+    // Under the lock itself: items worked out from any other state write nothing,
+    // and a patch with no items keeps the items the row holds.
+    const meal = await manual([{ canonical: ROTI.canonical, grams: 40 }]);
+    const moved = await edit(meal.id, [{ canonical: ROTI.canonical, grams: 60, from: 0 }]);
+    await expect(repo.updateMeal(sql, aliceId, meal.id, { items: { items: meal.items, readAt: meal.itemsVersion } })).rejects.toBeInstanceOf(repo.MealChangedError);
+    const renamed = await repo.updateMeal(sql, aliceId, meal.id, { mealName: "Renamed" });
+    expect(renamed?.items).toEqual(moved.items);
+    expect(renamed?.mealName).toBe("Renamed");
+  }, 60_000);
+
+  it("refuses places that name no item or another food, and an edit that says nothing of what it read", async () => {
+    const meal = await manual([{ canonical: ROTI.canonical, grams: 40 }, { canonical: PANEER.canonical, grams: 100 }]);
+    expect(errorOf(await send("PATCH", meal.id, [{ from: 2 }]))).toEqual([409, "meal_changed"]);
+    expect(errorOf(await send("PATCH", meal.id, [{ canonical: PANEER.canonical, grams: 50, from: 0 }]))).toEqual([409, "meal_changed"]);
+    expect(errorOf(await send("POST", meal.id, [{ from: 5 }]))).toEqual([409, "meal_changed"]);
+    expect(errorOf(await send("PATCH", meal.id, [{ from: 0 }, { from: 0 }]))).toEqual([400, "validation_error"]);
+    expect(errorOf(await send("POST", meal.id, []))).toEqual([400, "validation_error"]);
+    expect(errorOf(await send("POST", meal.id, [{ from: 0, grams: 10 }]))).toEqual([400, "validation_error"]);
+    // Items with no version, or a version with no items: no edit.
+    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 0 }] }))).toEqual([400, "validation_error"]);
+    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, alice, { items: [{ from: 0 }] }))).toEqual([400, "validation_error"]);
+    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { itemsVersion: meal.itemsVersion }))).toEqual([400, "validation_error"]);
+    // A version no state of the items ever had.
+    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ from: 0 }, { from: 1 }], itemsVersion: "not-a-version" }))).toEqual([409, "meal_changed"]);
     // Nothing was changed by any of them.
     expect(read(mealOf((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).body))).toEqual(read(meal));
   }, 60_000);
@@ -216,6 +287,7 @@ d("changing a food already logged (real Postgres)", () => {
       ],
     });
     const [fritter, bar, dip] = row.items;
+    searches.length = 0;
 
     // Each food's measures: an estimate, and a product no longer found, by grams and ounces.
     const measures = await inject("GET", `/v1/nutrition/meals/${row.id}/measures`, alice);
@@ -241,7 +313,7 @@ d("changing a food already logged (real Postgres)", () => {
     expect(back.items[0]?.scanEstimate).toBeUndefined();
 
     // The product no longer found: its amount cannot be priced again by a table...
-    expect(errorOf(await inject("POST", `/v1/nutrition/meals/${row.id}/preview`, alice, { items: [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 100, from: 1 }, { from: 2 }] }))).toEqual([400, "unknown_food"]);
+    expect(errorOf(await send("POST", row.id, [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 100, from: 1 }, { from: 2 }]))).toEqual([400, "unknown_food"]);
     // ...but typed over, it is weighed by the gram and priced by the person's numbers,
     const ownBar = await edit(row.id, [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 50, from: 1, own: { proteinG: 6, carbsG: 30, fatG: 8 } }, { from: 2 }]);
     expect(read(ownBar)[1]).toEqual(["off_zqxedit_gone", 50, 216, 6, 30, 8, "own"]);
@@ -250,11 +322,15 @@ d("changing a food already logged (real Postgres)", () => {
     const twoBars = await edit(row.id, [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 100, from: 1 }, { from: 2 }]);
     expect(read(twoBars)[1]).toEqual(["off_zqxedit_gone", 100, 432, 12, 60, 16, "own"]);
     // Taking the numbers away asks the table, which has nothing: refused, not guessed.
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${row.id}`, alice, { items: [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 100, from: 1, own: null }, { from: 2 }] }))).toEqual([400, "unknown_food"]);
+    expect(errorOf(await send("PATCH", row.id, [{ from: 0 }, { canonical: "off_zqxedit_gone", grams: 100, from: 1, own: null }, { from: 2 }]))).toEqual([400, "unknown_food"]);
     // A food the scan estimated is never a food new to a meal: nothing is priced by
     // a name a request sends.
-    expect(errorOf(await inject("PATCH", `/v1/nutrition/meals/${row.id}`, alice, { items: [{ from: 0 }, { from: 1 }, { from: 2 }, { canonical: "est_zqxedit_fritter", grams: 100, own: { proteinG: 1, carbsG: 1, fatG: 1 } }] }))).toEqual([400, "unknown_food"]);
+    expect(errorOf(await send("PATCH", row.id, [{ from: 0 }, { from: 1 }, { from: 2 }, { canonical: "est_zqxedit_fritter", grams: 100, own: { proteinG: 1, carbsG: 1, fatG: 1 } }]))).toEqual([400, "unknown_food"]);
     expect(dip).toBeDefined();
+    // Not one of the opens, previews and saves above searched Open Food Facts for
+    // the product by its canonical, which could only find another product.
+    expect((await inject("GET", `/v1/nutrition/meals/${row.id}/measures`, alice)).statusCode).toBe(200);
+    expect(searches).toEqual([]);
   }, 60_000);
 
   it("gives each food of a meal its measures", async () => {
@@ -271,11 +347,13 @@ d("changing a food already logged (real Postgres)", () => {
 
   it("keeps a stranger out of every route that changes or reads a logged food", async () => {
     const meal = await manual([{ canonical: ROTI.canonical, grams: 40 }]);
-    const change = { items: [{ canonical: ROTI.canonical, grams: 80, from: 0, own: { proteinG: 1, carbsG: 1, fatG: 1 } }] };
+    // Bob holds Alice's meal's id and the version her screen read.
+    const change = { items: [{ canonical: ROTI.canonical, grams: 80, from: 0, own: { proteinG: 1, carbsG: 1, fatG: 1 } }], itemsVersion: meal.itemsVersion };
     expect((await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, bob, change)).statusCode).toBe(404);
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}/measures`, bob)).statusCode).toBe(404);
     expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, change)).statusCode).toBe(404);
-    expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, { items: [{ from: 0 }] })).statusCode).toBe(404);
+    expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, { items: [{ from: 0 }], itemsVersion: meal.itemsVersion })).statusCode).toBe(404);
+    expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, { mealName: "Bob's now" })).statusCode).toBe(404);
     expect((await inject("POST", `/v1/nutrition/meals/${meal.id}/preview`, "", change)).statusCode).toBe(401);
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}/measures`, "")).statusCode).toBe(401);
     expect((await inject("GET", "/v1/nutrition/meals/not-a-meal/measures", alice)).statusCode).toBe(404);

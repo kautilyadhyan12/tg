@@ -163,6 +163,9 @@ d("adding a food by measure (real Postgres)", () => {
   }, 60_000);
 
   let mealId = "";
+  /** The meal's items as each test reads them, for the edit that follows. */
+  const itemsVersionOf = async (id: string): Promise<string> =>
+    mealOf((await inject("GET", `/v1/nutrition/meals/${id}`, alice)).body).itemsVersion;
 
   it("saves a food by one of its measures, the grams worked out by the server, and previews the same", async () => {
     const items = [
@@ -234,6 +237,7 @@ d("adding a food by measure (real Postgres)", () => {
         { canonical: "off_zqxmeasure_pot", grams: 250 },
         { canonical: NUTS, measure: "usda-2", amount: 10 },
       ],
+      itemsVersion: await itemsVersionOf(mealId),
     });
     expect(added.statusCode, added.body).toBe(200);
     expect(mealOf(added.body).items.map((i) => [i.canonical, i.gramsPoint, i.measure?.name, i.measure?.amount])).toEqual([
@@ -244,7 +248,7 @@ d("adding a food by measure (real Postgres)", () => {
     ]);
 
     // New grams are grams: the measure no longer says what the item holds.
-    const regrammed = await inject("PATCH", `/v1/nutrition/meals/${mealId}`, alice, { items: [{ canonical: "apple", grams: 200 }] });
+    const regrammed = await inject("PATCH", `/v1/nutrition/meals/${mealId}`, alice, { items: [{ canonical: "apple", grams: 200 }], itemsVersion: await itemsVersionOf(mealId) });
     expect(regrammed.statusCode, regrammed.body).toBe(200);
     const [apple] = mealOf(regrammed.body).items;
     expect([apple?.gramsPoint, apple?.measure]).toEqual([200, undefined]);
@@ -254,7 +258,8 @@ d("adding a food by measure (real Postgres)", () => {
     const twice = async (items: unknown[], resend: unknown[]) => {
       const created = await manual(alice, items);
       expect(created.statusCode, created.body).toBe(201);
-      const edited = await inject("PATCH", `/v1/nutrition/meals/${mealOf(created.body).id}`, alice, { items: resend });
+      const made = mealOf(created.body);
+      const edited = await inject("PATCH", `/v1/nutrition/meals/${made.id}`, alice, { items: resend, itemsVersion: made.itemsVersion });
       expect(edited.statusCode, edited.body).toBe(200);
       return mealOf(edited.body).items.map((i) => [i.canonical, i.gramsPoint, i.measure?.name ?? null]);
     };
@@ -269,7 +274,8 @@ d("adding a food by measure (real Postgres)", () => {
 
     // A stranger can neither read the meal nor change it by a measure.
     expect((await inject("GET", `/v1/nutrition/meals/${mealId}`, bob)).statusCode).toBe(404);
-    expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, bob, { items: [{ canonical: "apple", measure: "serving", amount: 1 }] })).statusCode).toBe(404);
-    expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, "", { items: [{ canonical: "apple", measure: "serving", amount: 1 }] })).statusCode).toBe(401);
+    const readAt = await itemsVersionOf(mealId);
+    expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, bob, { items: [{ canonical: "apple", measure: "serving", amount: 1 }], itemsVersion: readAt })).statusCode).toBe(404);
+    expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, "", { items: [{ canonical: "apple", measure: "serving", amount: 1 }], itemsVersion: readAt })).statusCode).toBe(401);
   }, 60_000);
 });
