@@ -389,6 +389,7 @@ describe('a saved meal holding an estimate', () => {
     svc.getTargets = vi.fn(async () => ({ data: { targets: { bmr: 1400, tdee: 2000, kcal: 2000, proteinG: 100, carbsG: 200, fatG: 60, noCalorieCut: false }, missing: [], targetWrongSide: false } }));
     draw();
     expect(await screen.findByText(/^about 440 kcal · Protein 10g/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the foods in this meal' }));
     expect(within(screen.getByRole('list', { name: 'Foods in Toast plate' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
       'Avocado100 g · 160 kcal',
       'avocado toast120 g · 280 kcal · estimate',
@@ -411,6 +412,7 @@ describe('a saved meal holding an estimate', () => {
     svc.getTargets = vi.fn(async () => ({ data: { targets: { bmr: 1400, tdee: 2000, kcal: 2000, proteinG: 100, carbsG: 200, fatG: 60, noCalorieCut: false }, missing: [], targetWrongSide: false } }));
     draw();
     expect(await screen.findByText(/^460 kcal · Protein 10g/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the foods in this meal' }));
     expect(within(screen.getByRole('list', { name: 'Foods in Toast plate' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
       'Avocado100 g · 160 kcal',
       'avocado toast120 g · 300 kcal · your numbers',

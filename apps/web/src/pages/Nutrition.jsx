@@ -60,6 +60,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
   const [editingTime, setEditingTime] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [labelOpen,   setLabelOpen]   = useState(false);
+  const [foodsOpen,   setFoodsOpen]   = useState(false);
   // Distinguishes an Escape-cancel from a click-away/Enter save on the rename
   // input, so blur commits (the previous onBlur silently discarded the edit —
   // the smoke bug where a rename reverted with no PATCH ever sent).
@@ -215,12 +216,27 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
+        {/* The meal's foods fold away beside Delete, and start folded, so a day
+            of many meals stays short (Kd's click-through of 7a-iv-g). */}
+        {meal.items?.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setFoodsOpen((v) => !v)}
+            aria-expanded={foodsOpen}
+            aria-label={foodsOpen ? 'Hide the foods in this meal' : 'Show the foods in this meal'}
+            title={foodsOpen ? 'Hide the foods in this meal' : 'Show the foods in this meal'}
+            className="p-1.5 rounded-lg"
+            style={{ color: foodsOpen ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${foodsOpen ? 'rotate-180' : ''}`} />
+          </button>
+        )}
       </div>
       {/* What's in it, one line a food, each a tap to change it (ROADMAP
           7a-iv-g): its amount, its calories, and whose numbers they are. A line
           of its own under the meal, the meal's whole width, so a name is read,
           not cut, on a phone. */}
-      {meal.items?.length > 0 && (
+      {foodsOpen && meal.items?.length > 0 && (
         <ul className="basis-full mt-2 space-y-1" aria-label={`Foods in ${name}`}>
           {meal.items.map((item, at) => (
             <li key={`${at}-${item.canonical}`}>

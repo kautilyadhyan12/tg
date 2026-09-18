@@ -71,8 +71,15 @@ function renderPage(meal) {
   );
 }
 
+/** Unfolds the meal's foods, beside its Delete, where they are folded. */
+async function showFoods() {
+  const toggle = await screen.findByRole('button', { name: /the foods in this meal$/ });
+  if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+}
+
 /** Opens a food's box by tapping its line, as a person does. */
 async function open(name) {
+  await showFoods();
   fireEvent.click(await screen.findByRole('button', { name: `Change ${name}` }));
   const box = await screen.findByRole('dialog', { name: `Change ${name}` });
   await within(box).findByRole('button', { name: 'Measure' });
@@ -81,6 +88,40 @@ async function open(name) {
 
 beforeEach(() => { vi.clearAllMocks(); });
 afterEach(() => { cleanup(); forgetUnsavedScan(); });
+
+describe("a meal's foods", () => {
+  it('start folded beside Delete, unfold and fold again, and stay unfolded after a food is changed', async () => {
+    renderPage(mealOf([RICE, CHICKEN]));
+    const toggle = await screen.findByRole('button', { name: 'Show the foods in this meal' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // Beside Delete, and no food line until it is tapped.
+    expect(toggle.previousElementSibling.getAttribute('title')).toBe('Delete this meal');
+    expect(screen.queryByRole('list', { name: 'Foods in Lunch plate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Change Rice (white, cooked)' })).toBeNull();
+
+    fireEvent.click(toggle);
+    const hide = screen.getByRole('button', { name: 'Hide the foods in this meal' });
+    expect(hide.getAttribute('aria-expanded')).toBe('true');
+    expect(within(screen.getByRole('list', { name: 'Foods in Lunch plate' })).getAllByRole('button')).toHaveLength(2);
+
+    fireEvent.click(hide);
+    expect(screen.queryByRole('list', { name: 'Foods in Lunch plate' })).toBeNull();
+
+    // Unfolded, a food changed and saved: the day is read again and the foods stay shown.
+    const box = await open('Chicken breast (cooked)');
+    fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
+    await box.findByText('330 kcal');
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(svc.listMealsForDay).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('list', { name: 'Foods in Lunch plate' })).toBeTruthy();
+  });
+
+  it('has no fold for a meal holding no food', async () => {
+    renderPage(mealOf([]));
+    await screen.findByText('Lunch plate');
+    expect(screen.queryByRole('button', { name: /the foods in this meal$/ })).toBeNull();
+  });
+});
 
 describe('a food already logged', () => {
   it('opens at the amount it was logged by, prices a new amount on the server, and saves only that food', async () => {
@@ -204,6 +245,7 @@ describe('a food already logged', () => {
   it("gives back the food list's numbers for a food of the person's own, and the scan's estimate for one typed over a scan", async () => {
     const own = { ...CHICKEN, nutritionSource: 'own', kcalPoint: 900, per100g: { kcal: 150, proteinG: 30, carbsG: 0, fatG: 3.33 } };
     renderPage(mealOf([RICE, own]));
+    await showFoods();
     const line = await screen.findByRole('button', { name: 'Change Chicken breast (cooked)' });
     expect(line.textContent).toBe('Chicken breast (cooked)600 g · 900 kcal · your numbers');
     const box = await open('Chicken breast (cooked)');
@@ -255,6 +297,7 @@ describe('a food already logged', () => {
   it('tells a food from its twin: the second of two of one food is the one changed', async () => {
     const small = { ...CHICKEN, gramsPoint: 100, kcalPoint: 165 };
     renderPage(mealOf([CHICKEN, small]));
+    await showFoods();
     const lines = within(await screen.findByRole('list', { name: 'Foods in Lunch plate' })).getAllByRole('button');
     expect(lines.map((b) => b.textContent)).toEqual(['Chicken breast (cooked)600 g · 990 kcal', 'Chicken breast (cooked)100 g · 165 kcal']);
     fireEvent.click(lines[1]);

@@ -237,7 +237,8 @@ describe('adding a food by measure', () => {
         confirmed: true, origin: 'manual', portionSource: 'default', nutritionSources: ['curated'], calcVersion: 1,
       }],
     });
-    // One line a food, each a tap to change it (7a-iv-g).
+    // One line a food, each a tap to change it, unfolded beside Delete (7a-iv-g).
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the foods in this meal' }));
     const foods = within(await screen.findByRole('list', { name: 'Foods in Breakfast bowl' }));
     expect(foods.getAllByRole('button').map((b) => b.textContent)).toEqual([
       'Apple1.5 × medium (3" dia) · 273 g · 10 kcal',
