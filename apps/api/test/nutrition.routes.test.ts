@@ -412,12 +412,13 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const confirmed=await inject("POST","/v1/nutrition/meals",e.access,{scanToken:body1.scanToken,takenAt:new Date().toISOString(),items:body1.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint+37}))});
     expect(confirmed.statusCode,confirmed.body).toBe(201);
     const eMealId=confirmed.json<{meal:{id:string}}>().meal.id;
+    const eReadAt=confirmed.json<{meal:{itemsVersion:string}}>().meal.itemsVersion;
     // Confirm-time originalItems diff, stamped with the ORIGINAL rung ('default' for every scanned row since ROADMAP 7a-iv-b).
     const conf=await sql<{field:string;portion_source:string|null}[]>`SELECT field,portion_source FROM meal_log_corrections WHERE meal_log_id=${eMealId}`;
     expect(conf.some((r)=>r.field==="items"&&r.portion_source==="default")).toBe(true);
     // Edit-time: items + taken_at PATCH each write a correction row.
     const newTime=new Date(Date.now()-60*60*1000).toISOString();
-    const patch=await inject("PATCH",`/v1/nutrition/meals/${eMealId}`,e.access,{takenAt:newTime,items:[{canonical:"dal_lentil_curry",grams:250}]});
+    const patch=await inject("PATCH",`/v1/nutrition/meals/${eMealId}`,e.access,{takenAt:newTime,items:[{canonical:"dal_lentil_curry",grams:250}],itemsVersion:eReadAt});
     expect(patch.statusCode,patch.body).toBe(200);
     const fields=await sql<{field:string}[]>`SELECT field FROM meal_log_corrections WHERE meal_log_id=${eMealId}`;
     const names=fields.map((f)=>f.field);
@@ -543,8 +544,10 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // start with a grams-based manual meal, then PATCH the item to a dishware measure.
       const created=await call("POST","/v1/nutrition/meals",{mealName:"Dal",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:150}]});
       const mealId=created.json<{meal:{id:string}}>().meal.id;
-      const patched=await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId,fillLevel:0.5}]});
+      const readAt=created.json<{meal:{itemsVersion:string}}>().meal.itemsVersion;
+      const patched=await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId,fillLevel:0.5}],itemsVersion:readAt});
       expect(patched.statusCode,patched.body).toBe(200);
+      const afterDish=patched.json<{meal:{itemsVersion:string}}>().meal.itemsVersion;
       const item=patched.json<{meal:{items:{gramsPoint:number;portionSource:string}[]}}>().meal.items[0];
       expect(item?.gramsPoint).toBe(Math.round(200*0.5*1.0)); // 100 g
       expect(item?.portionSource).toBe("user_dishware");
@@ -553,7 +556,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       try{
         const s=await stranger.call("POST","/v1/nutrition/dishware",{label:"theirs",containerClass:"x",volumeMl:300});
         const sId=s.json<{dishware:{id:string}}>().dishware.id;
-        expect((await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId:sId,fillLevel:0.5}]})).statusCode).toBe(400);
+        const foreign=await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId:sId,fillLevel:0.5}],itemsVersion:afterDish});
+        expect([foreign.statusCode,foreign.json<{error:string}>().error]).toEqual([400,"unknown_dishware"]);
       }finally{await stranger.app.close();}
     }finally{await a.close();}
   },30_000);

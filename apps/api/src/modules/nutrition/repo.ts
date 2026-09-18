@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { mealItemSchema, type MealItem } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import { itemsVersion } from "./mealEdit.js";
 import type { UsdaPortion } from "./measures.js";
 import { USDA_TIE_KCAL } from "./scanMatch.js";
 import { usdaWords } from "./usdaWords.js";
@@ -240,9 +241,33 @@ export async function listMeals(
   return rows.map(toMeal);
 }
 
+/** An edit of a meal's items made from a state of them the row no longer holds. */
+export class MealChangedError extends Error {
+  constructor() {
+    super("the meal's items changed since the edit read them");
+    this.name = "MealChangedError";
+  }
+}
+
+/** What a PATCH changes, and only that: a field left out keeps what the row holds
+ *  under its lock, never a copy read before it. New items come with the
+ *  `itemsVersion` they were worked out from (`readAt`). */
+export interface MealPatch {
+  takenAt?: Date;
+  /** null clears the label. */
+  mealType?: MealType | null;
+  mealName?: string;
+  items?: { items: MealItem[]; readAt: string };
+}
+
 /** PATCH: corrections rows (originals preserved — P4 doctrine) for every
- *  changed field, stamped with the ORIGINAL items' rung (T3 finding 3). */
-export async function updateMeal(sql: Sql, userId: string, id: string, next: MealWrite): Promise<MealRow | null> {
+ *  changed field, stamped with the ORIGINAL items' rung (T3 finding 3). The
+ *  patch is laid onto the row as it is under its lock, so two edits of a meal
+ *  never write each other's fields back; and new items are checked against the
+ *  items they were worked out from, so an edit made from another state of them
+ *  — a food added in another tab, or a save that landed a moment before —
+ *  throws MealChangedError and writes nothing. */
+export async function updateMeal(sql: Sql, userId: string, id: string, patch: MealPatch): Promise<MealRow | null> {
   return await sql.begin(async (tx) => {
     const beforeRows = await tx<MealDbRow[]>`
       SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
@@ -252,6 +277,13 @@ export async function updateMeal(sql: Sql, userId: string, id: string, next: Mea
     const beforeRaw = beforeRows[0];
     if (beforeRaw === undefined) return null;
     const before = toMeal(beforeRaw);
+    if (patch.items !== undefined && itemsVersion(before.items) !== patch.items.readAt) throw new MealChangedError();
+    const next = {
+      takenAt: patch.takenAt ?? before.takenAt,
+      mealType: patch.mealType === undefined ? before.mealType : patch.mealType,
+      mealName: patch.mealName ?? before.mealName ?? "Meal",
+      items: patch.items?.items ?? before.items,
+    };
     const t = totals(next.items);
     const originalRung = worst(before.items);
 

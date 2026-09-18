@@ -18,6 +18,7 @@ import {
   type Meal,
   type MealItem,
   type MealPhotoItem,
+  type Per100g,
   type VisionEvidence,
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
@@ -28,9 +29,13 @@ import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
+import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
-import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, OwnTargetsHeld, PatchMealRequest, PreviewMealRequest, PutNutritionTargetsRequest } from "./schemas.js";
+import type {
+  ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NutritionTargetsResponse,
+  OwnTargetsHeld, PatchMealRequest, PreviewMealRequest, PutNutritionTargetsRequest,
+} from "./schemas.js";
 import {
   MEAL_VISION_MODELS,
   VisionProviderError,
@@ -423,10 +428,13 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   // T3 (manual-off-foods): an off_* canonical must NEVER resolve through
   // findCurated's fuzzy substring match — off_banana_chips would hijack to
   // curated "banana" and save macros different from what search displayed.
-  if (!query.startsWith("off_")) {
-    const local = findCurated(query);
-    if (local !== null) return local;
-  }
+  // Nor through a search: the canonical is our slug of a product a search
+  // returned, kept for a day (rememberFoods), and searching Open Food Facts for
+  // the slug itself can find nothing but another product (the review of PR #83,
+  // L1) — so one past its day is not found, as a usda_* canonical is.
+  if (query.startsWith("off_")) return await canonicalCached(deps, query);
+  const local = findCurated(query);
+  if (local !== null) return local;
   // Canonical-keyed cache (foods a search already returned — the manual-log
   // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
@@ -493,13 +501,6 @@ function nutritionItem(
   };
 }
 
-/** The food an estimate item of a saved meal stands for, from the figures the
- *  item carries — never from anything a request sends. */
-const estimateOf = (item: MealItem): FoodReference | null =>
-  item.nutritionSource === "estimate" && item.per100g !== undefined
-    ? { canonical: item.canonical, name: item.name, ...item.per100g, fiberG: null, serving: item.gramsPoint, unit: "g", source: "estimate" }
-    : null;
-
 const asMeal = (r: repo.MealRow): Meal => ({
   id: r.id,
   takenAt: r.takenAt.toISOString(),
@@ -526,6 +527,7 @@ const asMeal = (r: repo.MealRow): Meal => ({
           : "user_dishware",
   nutritionSources: r.nutritionSources,
   calcVersion: r.calcVersion,
+  itemsVersion: itemsVersion(r.items),
 });
 
 const totals = (items: readonly MealItem[]) => ({
@@ -1050,6 +1052,161 @@ export async function getMeal(deps: NutritionDeps, userId: string, id: string): 
   return row === null ? null : asMeal(row);
 }
 
+// ── changing a food already logged (ROADMAP 7a-iv-g; RULINGS 2026-09-17) ─────
+
+/** An edit that names a food and its amount, as against one that keeps a saved
+ *  item as it is. */
+type FoodEdit = Extract<MealEditItem, { canonical: string }>;
+
+/** The figures a saved item carries from a scan, which no table has: an estimate's
+ *  own, or the estimate a person's own numbers were typed over. */
+const scanFiguresOf = (item: MealItem): Per100g | null =>
+  item.nutritionSource === "estimate" ? (item.per100g ?? null)
+    : item.nutritionSource === "own" ? (item.scanEstimate ?? null)
+      : null;
+
+/** A saved item's food by figures it carries — never by anything a request sends:
+ *  weighed by grams and ounces alone, as a scan's estimate is. With no figures it
+ *  prices nothing, and only an item priced by the person's own numbers stands on it
+ *  (a packaged product whose entry is no longer in the cache). */
+const savedFood = (item: MealItem, figures: Per100g | null): FoodReference => ({
+  canonical: item.canonical, name: item.name,
+  kcal: figures?.kcal ?? 0, proteinG: figures?.proteinG ?? 0, carbsG: figures?.carbsG ?? 0, fatG: figures?.fatG ?? 0,
+  fiberG: null, serving: item.gramsPoint, unit: "g", source: "estimate",
+});
+
+/** The food a saved item is weighed by, and priced by unless the person's own
+ *  numbers price it: the scan's figures it carries (no table has that food), else
+ *  its table's entry, as when it was saved; null where no table has it now. */
+async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string): Promise<FoodReference | null> {
+  const scanned = item === undefined ? null : scanFiguresOf(item);
+  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical);
+}
+
+/** The person's own numbers an edited food is priced by, per 100 g, or null for its
+ *  food's: typed now, for the grams the edit weighs; taken away (null); or, left out
+ *  of the edit, the saved item's own, grown or shrunk with its amount. */
+function ownFigures(edit: FoodEdit, prior: MealItem | undefined, grams: number): Per100g | null {
+  if (edit.own === null) return null;
+  if (edit.own === undefined) return prior?.nutritionSource === "own" ? (prior.per100g ?? null) : null;
+  const figures = ownPer100g(edit.own, grams);
+  if (figures === null) {
+    throw new NutritionError(
+      400,
+      "own_numbers_too_heavy",
+      `Protein, carbs and fat together can't weigh more than the food itself (${gramsFigure.format(grams)} g).`,
+    );
+  }
+  return figures;
+}
+
+/** Grams in a refusal: up to one decimal, en-US, as the screen writes them. */
+const gramsFigure = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+
+/** A saved meal's items after an edit — ONE implementation for the edit and its
+ *  preview, so what is shown is what is saved. Each edit is the saved item it
+ *  names, or stands in the place of (`savedPlaces`); a kept item is that item
+ *  exactly as saved; a food left out is removed from the meal. An edited food is
+ *  weighed by its own measures and priced by its table, by the scan's figures the
+ *  item carries, or by the person's own numbers (`ownFigures`); their numbers
+ *  keep, marked `own`, the scan's estimate they were typed over. */
+async function editedItems(
+  deps: NutritionDeps,
+  userId: string,
+  saved: readonly MealItem[],
+  edits: readonly MealEditItem[],
+  readAt: string,
+): Promise<MealItem[]> {
+  // Made from another state of the items (a food added in another tab since),
+  // its places would name the wrong foods and leave out the new one: refused.
+  // The save checks the same again under the row's lock (repo.updateMeal).
+  const places = itemsVersion(saved) === readAt ? savedPlaces(saved, edits) : null;
+  if (places === null) throw mealChanged();
+  const changed = edits.flatMap((edit, at) => {
+    const place = places[at] ?? null;
+    return "canonical" in edit ? [{ edit, prior: place === null ? undefined : saved[place], at }] : [];
+  });
+  const foods: FoodReference[] = [];
+  for (const { edit, prior } of changed) {
+    const food = await foodOfItem(deps, prior, edit.canonical);
+    // A food no table has any more is weighed by grams alone, and only where the
+    // person's own numbers price it: kept from the saved item, or typed now.
+    const ownPrices = edit.own !== null && (edit.own !== undefined || (prior?.nutritionSource === "own" && prior.per100g !== undefined));
+    if (food === null && (prior === undefined || !ownPrices)) {
+      throw new NutritionError(400, "unknown_food", "Food reference not found.");
+    }
+    foods.push(food ?? savedFood(prior ?? unreachable(), null));
+  }
+  const measures = await measuresForChosen(deps, changed.map((c) => c.edit), foods);
+  const priced = new Map<number, MealItem>();
+  for (const [n, { edit, prior, at }] of changed.entries()) {
+    const food = foods[n];
+    if (food === undefined) continue;
+    const amount = await amountOf(deps, userId, edit, measures[n] ?? []);
+    // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
+    // rung (same rule as confirmMeal) — only items new to the meal are
+    // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they
+    // normalize to 'default'. Card 5c2: re-measuring with a dish overrides
+    // the rung to 'user_dishware'.
+    const rungBefore = prior?.portionSource;
+    const preserved = rungBefore === "user_dishware" || rungBefore === "regional_prior" ? rungBefore : "default";
+    const rung = amount.dishwareRung ?? preserved;
+    // An edit that sends an item back at the grams it holds keeps the measure it
+    // was logged by; any other grams are grams.
+    const kept = "grams" in edit && prior?.measure !== undefined && prior.gramsPoint === edit.grams ? prior.measure : null;
+    const measure = amount.measure ?? kept;
+    const figures = ownFigures(edit, prior, amount.grams);
+    const item = nutritionItem(figures === null ? food : { ...food, ...figures }, amount.grams, [amount.grams, amount.grams], rung, measure);
+    const scanned = prior === undefined ? null : scanFiguresOf(prior);
+    priced.set(at, figures === null ? item : {
+      ...item,
+      nutritionSource: "own",
+      per100g: figures,
+      ...(scanned === null ? {} : { scanEstimate: scanned }),
+    });
+  }
+  return edits.map((edit, at) => {
+    const item = priced.get(at) ?? (edit.from === undefined ? undefined : saved[edit.from]);
+    if (item === undefined) throw new Error("an edited item was neither priced nor kept");
+    return item;
+  });
+}
+
+const unreachable = (): never => {
+  throw new Error("a food with no table and no saved item reached its weighing");
+};
+
+const mealChanged = (): NutritionError =>
+  new NutritionError(409, "meal_changed", "This meal has changed since it was opened. Open it again.");
+
+/** What a saved meal's items would come to after an edit, nothing saved (the
+ *  screen's live numbers while a logged food is changed); null for a meal that is
+ *  not this person's. */
+export async function previewMealEdit(
+  deps: NutritionDeps,
+  userId: string,
+  id: string,
+  input: MealEditPreviewRequest,
+): Promise<MealPreview | null> {
+  const meal = await repo.getMeal(deps.sql, userId, id);
+  if (meal === null) return null;
+  const items = await editedItems(deps, userId, meal.items, input.items, input.itemsVersion);
+  return { items, totals: totals(items) };
+}
+
+/** Each of a saved meal's items' measures, `[i]` for `items[i]`, with ONE read of
+ *  the USDA measures they share — what the food can be logged by now, so a logged
+ *  food opens in the measure picker. An item priced by the scan's figures, or whose
+ *  food no table has now, is weighed by grams and ounces. Null for a meal that is
+ *  not this person's. */
+export async function mealMeasures(deps: NutritionDeps, userId: string, id: string): Promise<FoodMeasure[][] | null> {
+  const meal = await repo.getMeal(deps.sql, userId, id);
+  if (meal === null) return null;
+  const foods: FoodReference[] = [];
+  for (const item of meal.items) foods.push((await foodOfItem(deps, item, item.canonical)) ?? savedFood(item, null));
+  return await measuresOf(deps, foods);
+}
+
 export async function patchMeal(
   deps: NutritionDeps,
   userId: string,
@@ -1058,51 +1215,23 @@ export async function patchMeal(
 ): Promise<Meal | null> {
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
-  let items = before.items;
-  if (input.items !== undefined) {
-    items = [];
-    const found: { food: FoodReference; saved: MealItem | undefined }[] = [];
-    for (const [at, chosen] of input.items.entries()) {
-      // The saved item this one is: the one at the same place in the meal where it
-      // is the same food — a meal can hold one food twice, and each keeps its own
-      // measure — else the meal's first of that food.
-      const inPlace = before.items[at];
-      const saved = inPlace !== undefined && inPlace.canonical === chosen.canonical
-        ? inPlace
-        : before.items.find((i) => i.canonical === chosen.canonical);
-      // A food the scan estimated is priced by the figures this meal's own item
-      // carries (it has no table); anything else by its table, as it was saved.
-      const food = (saved === undefined ? null : estimateOf(saved)) ?? (await findFood(deps, chosen.canonical));
-      if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-      found.push({ food, saved });
-    }
-    const measures = await measuresForChosen(deps, input.items, found.map((f) => f.food));
-    for (const { chosen, food: { food, saved }, measures: own } of withFoods(input.items, found, measures)) {
-      const amount = await amountOf(deps, userId, chosen, own);
-      // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
-      // rung (same rule as confirmMeal) — only items new to the meal are
-      // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they
-      // normalize to 'default'. Card 5c2: re-measuring with a dish overrides
-      // the rung to 'user_dishware'.
-      const prior = saved?.portionSource;
-      const preserved = prior === "user_dishware" || prior === "regional_prior" ? prior : "default";
-      const rung = amount.dishwareRung ?? preserved;
-      // An edit that sends an item back at the grams it holds (the web resends a
-      // meal's other items so to add one) keeps the measure it was logged by;
-      // any other grams are grams.
-      const kept = "grams" in chosen && saved?.measure !== undefined && saved.gramsPoint === chosen.grams ? saved.measure : null;
-      items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], rung, amount.measure ?? kept));
-    }
+  // The contract sends items only with the itemsVersion they were read at.
+  const items = input.items === undefined || input.itemsVersion === undefined
+    ? undefined
+    : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
+  try {
+    const row = await repo.updateMeal(deps.sql, userId, id, {
+      ...(input.takenAt === undefined ? {} : { takenAt: new Date(input.takenAt) }),
+      // undefined = keep; explicit null = clear the label.
+      ...(input.mealType === undefined ? {} : { mealType: input.mealType }),
+      ...(input.mealName === undefined ? {} : { mealName: input.mealName }),
+      ...(items === undefined ? {} : { items }),
+    });
+    return row === null ? null : asMeal(row);
+  } catch (err) {
+    if (err instanceof repo.MealChangedError) throw mealChanged();
+    throw err;
   }
-  const row = await repo.updateMeal(deps.sql, userId, id, {
-    takenAt: input.takenAt === undefined ? before.takenAt : new Date(input.takenAt),
-    // undefined = keep; explicit null = clear the label.
-    mealType: input.mealType === undefined ? before.mealType : input.mealType,
-    mealName: input.mealName ?? before.mealName ?? "Meal",
-    items,
-    origin: before.origin,
-  });
-  return row === null ? null : asMeal(row);
 }
 
 // ── thin service seams (T3 P2.6a finding 4: real functions, not repo

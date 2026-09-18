@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import { shrinkPhoto } from '../utils/shrinkPhoto';
-import { bytesToBase64, composeAddIngredient, dataUrlToBase64, missingAnswers, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
+import { bytesToBase64, composeAddIngredient, composeFoodEdit, composeRemoveFood, dataUrlToBase64, missingAnswers, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
 
 // The shrink draws on a canvas, which this node environment has none of; its
 // own test hands it a fake window. Here it is a stand-in that returns whatever
@@ -47,6 +47,16 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(seen[3]).toMatchObject({ url: '/v1/nutrition/meals/m-1', method: 'delete' });
     expect(seen[4]).toMatchObject({ url: '/v1/nutrition/meals/m-1', method: 'patch' });
     expect(JSON.parse(seen[4].data)).toEqual({ mealName: 'Lunch' });
+  });
+
+  it("a logged food's edit is previewed at the meal's own preview, and its measures read from the meal (7a-iv-g)", async () => {
+    const seen = recordRequests(authApi);
+    await nutritionService.previewMealEdit('m-1', [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }], 'items-v1');
+    await nutritionService.getMealMeasures('m-1');
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/meals/m-1/preview', method: 'post' });
+    // With the version of the items it was made from, so a meal changed since is refused.
+    expect(JSON.parse(seen[0].data)).toEqual({ items: [{ from: 0 }, { canonical: 'apple', grams: 200, from: 1 }], itemsVersion: 'items-v1' });
+    expect(seen[1]).toMatchObject({ url: '/v1/nutrition/meals/m-1/measures', method: 'get' });
   });
 
   it('searchFoods queries /v1/nutrition/foods with q + limit', async () => {
@@ -174,18 +184,19 @@ describe('nutritionService repoint (Card 5a)', () => {
   });
 
   // ── Card 5c: meal composition + change-label ────────────────────────────────
-  it('composeAddIngredient keeps EVERY existing item (at stored grams) + appends the new one (Card 5c)', () => {
+  it('composeAddIngredient keeps EVERY existing item as saved + appends the new one (Card 5c)', () => {
     // This is the real add-ingredient logic — a bug here silently REWRITES a
     // saved meal, so it is tested directly, not via a hand-built array (T3).
     const existing = [
       { canonical: 'oats_dry', gramsPoint: 40, name: 'Oats', kcalPoint: 156 },
-      { canonical: 'banana', gramsPoint: 120, name: 'Banana', kcalPoint: 107 },
+      { canonical: 'banana', gramsPoint: 120, name: 'Banana', kcalPoint: 107, nutritionSource: 'own' },
     ];
     const out = composeAddIngredient(existing, { canonical: 'milk_whole', grams: 200 });
-    // all originals survive, mapped to {canonical, grams:gramsPoint}, extra fields dropped
+    // all originals survive, each named by its place so the server keeps it as
+    // saved (its numbers, its measure, the person's own numbers: 7a-iv-g)
     expect(out).toEqual([
-      { canonical: 'oats_dry', grams: 40 },
-      { canonical: 'banana', grams: 120 },
+      { from: 0 },
+      { from: 1 },
       { canonical: 'milk_whole', grams: 200 },
     ]);
     // the new item is always last, and nothing is lost
@@ -217,7 +228,7 @@ describe('nutritionService repoint (Card 5a)', () => {
       { canonical: 'milk_whole', dishwareId: 'd-9', fillLevel: 0.5 },
     );
     expect(out).toEqual([
-      { canonical: 'oats_dry', grams: 40 },
+      { from: 0 },
       { canonical: 'milk_whole', dishwareId: 'd-9', fillLevel: 0.5 },
     ]);
   });
@@ -235,15 +246,47 @@ describe('nutritionService repoint (Card 5a)', () => {
     ]);
   });
 
-  it('composeAddIngredient appends a measure-arm ingredient, the existing items at their stored grams', () => {
+  it('composeAddIngredient appends a measure-arm ingredient, the existing items kept as saved', () => {
     const out = composeAddIngredient(
       [{ canonical: 'apple', gramsPoint: 273, measure: { id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 } }],
-      { canonical: 'peanut_butter', measure: 'usda-1', amount: 1 },
+      { canonical: 'peanut_butter', measure: 'usda-1', amount: 1, name: 'Peanut butter' },
     );
     expect(out).toEqual([
-      { canonical: 'apple', grams: 273 },
+      { from: 0 },
       { canonical: 'peanut_butter', measure: 'usda-1', amount: 1 },
     ]);
+  });
+
+  // ── 7a-iv-g: one logged food changed, or removed ────────────────────────────
+  const meal3 = [
+    { canonical: 'apple', gramsPoint: 182 },
+    { canonical: 'apple', gramsPoint: 91, nutritionSource: 'own' },
+    { canonical: 'oats_dry', gramsPoint: 40 },
+  ];
+
+  it("composeFoodEdit sends only the changed food's amount, named by its place, and keeps every other as saved", () => {
+    expect(composeFoodEdit(meal3, 1, { canonical: 'apple', measure: 'usda-4', amount: 2, name: 'Apple' })).toEqual([
+      { from: 0 }, { canonical: 'apple', measure: 'usda-4', amount: 2, from: 1 }, { from: 2 },
+    ]);
+    expect(composeFoodEdit(meal3, 0, { canonical: 'apple', grams: 150 })).toEqual([
+      { canonical: 'apple', grams: 150, from: 0 }, { from: 1 }, { from: 2 },
+    ]);
+    expect(composeFoodEdit(meal3, 2, { canonical: 'oats_dry', dishwareId: 'd-1', fillLevel: 0.5 })).toEqual([
+      { from: 0 }, { from: 1 }, { canonical: 'oats_dry', dishwareId: 'd-1', fillLevel: 0.5, from: 2 },
+    ]);
+  });
+
+  it("composeFoodEdit carries the person's own numbers: set, taken away, or left out to keep them", () => {
+    const own = { proteinG: 1, carbsG: 20, fatG: 0.5 };
+    expect(composeFoodEdit(meal3, 0, { canonical: 'apple', grams: 150 }, own)[0]).toEqual({ canonical: 'apple', grams: 150, from: 0, own });
+    expect(composeFoodEdit(meal3, 1, { canonical: 'apple', grams: 91 }, null)[1]).toEqual({ canonical: 'apple', grams: 91, from: 1, own: null });
+    expect('own' in composeFoodEdit(meal3, 1, { canonical: 'apple', grams: 91 })[1]).toBe(false);
+  });
+
+  it('composeRemoveFood leaves out exactly the one food, the twin of a food included', () => {
+    expect(composeRemoveFood(meal3, 0)).toEqual([{ from: 1 }, { from: 2 }]);
+    expect(composeRemoveFood(meal3, 1)).toEqual([{ from: 0 }, { from: 2 }]);
+    expect(composeRemoveFood(meal3, 2)).toEqual([{ from: 0 }, { from: 1 }]);
   });
 
   it('updateMeal sends the composed items to the meals PATCH (Card 5c wiring)', async () => {
@@ -257,7 +300,7 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(seen[0]).toMatchObject({ url: '/v1/nutrition/meals/m-1', method: 'patch' });
     expect(JSON.parse(seen[0].data)).toEqual({
       items: [
-        { canonical: 'oats_dry', grams: 40 },
+        { from: 0 },
         { canonical: 'milk_whole', grams: 200 },
       ],
     });

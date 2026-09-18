@@ -62,22 +62,44 @@ export function toChosenItems(items) {
   });
 }
 
+/** One food's amount as the contract's arm for it: the dishware arm {canonical,
+ *  dishwareId, fillLevel}, the 7a-iv-a measure arm {canonical, measure, amount},
+ *  or grams {canonical, grams}, every other field dropped. */
+const amountArm = (item) => (item.dishwareId
+  ? { canonical: item.canonical, dishwareId: item.dishwareId, fillLevel: item.fillLevel }
+  : item.measure
+    ? { canonical: item.canonical, measure: item.measure, amount: item.amount }
+    : { canonical: item.canonical, grams: item.grams });
+
+/** The meal's items the PATCH keeps as they are: each named by its place
+ *  (`{from: i}`), so the server keeps it exactly as saved — its numbers, its
+ *  measure, and the person's own numbers where it has them (ROADMAP 7a-iv-g). */
+const keptItems = (existing) => (existing || []).map((_, i) => ({ from: i }));
+
 /** Card 5c add-ingredient: the meals PATCH replaces the WHOLE items array, so
- *  compose the meal's existing items (kept at their stored `gramsPoint`) with
- *  the newly picked one. Pure + unit-tested precisely because a bug here —
- *  dropping or mis-mapping an existing item — would silently REWRITE a saved
- *  meal, not just fail loudly. `existing` is the Meal.items shape from the API
- *  ({canonical, gramsPoint, …}), sent back at its grams, which keeps the measure
- *  each was logged by (the server's rule); `added` is {canonical, grams}, the
- *  Card-5c2 dishware arm {canonical, dishwareId, fillLevel}, or the 7a-iv-a
- *  measure arm {canonical, measure, amount}. */
+ *  compose the meal's existing items, each kept as saved, with the newly picked
+ *  one. Pure + unit-tested precisely because a bug here — dropping or mis-mapping
+ *  an existing item — would silently REWRITE a saved meal, not just fail loudly.
+ *  `existing` is the Meal.items shape from the API; `added` is {canonical,
+ *  grams}, the Card-5c2 dishware arm, or the 7a-iv-a measure arm. */
 export function composeAddIngredient(existing, added) {
-  const next = added.dishwareId
-    ? { canonical: added.canonical, dishwareId: added.dishwareId, fillLevel: added.fillLevel }
-    : added.measure
-      ? { canonical: added.canonical, measure: added.measure, amount: added.amount }
-      : { canonical: added.canonical, grams: added.grams };
-  return [...(existing || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })), next];
+  return [...keptItems(existing), amountArm(added)];
+}
+
+/** ROADMAP 7a-iv-g — one logged food changed: every other item kept as saved,
+ *  and the one at `at` sent with its new amount (`change`, as the picker makes
+ *  it) and where it names it, the person's own numbers: `own` an object sets
+ *  them, null takes them away, and left out the item keeps what it had. */
+export function composeFoodEdit(existing, at, change, own) {
+  return keptItems(existing).map((kept, i) => (i === at
+    ? { ...amountArm(change), from: at, ...(own === undefined ? {} : { own }) }
+    : kept));
+}
+
+/** ROADMAP 7a-iv-g — one logged food removed: every other item kept as saved,
+ *  and the one at `at` left out. */
+export function composeRemoveFood(existing, at) {
+  return keptItems(existing).filter((kept) => kept.from !== at);
 }
 
 // ── Card 5d: previous-days view ───────────────────────────────────────────────
@@ -210,8 +232,20 @@ export const nutritionService = {
 
   deleteMeal: (id) => authApi.delete(`/v1/nutrition/meals/${id}`), // 204
 
-  /** patchMealRequestSchema (.strict(), ≥1 field). */
+  /** patchMealRequestSchema (.strict(), ≥1 field). `items` go with the meal's
+   *  `itemsVersion` they were composed from, and the server refuses them (409
+   *  meal_changed) where the meal has changed since. */
   updateMeal: (id, patch) => authApi.patch(`/v1/nutrition/meals/${id}`, patch),
+
+  /** ROADMAP 7a-iv-g: what a saved meal's items would come to after an edit,
+   *  nothing saved — the same items the PATCH takes (composeFoodEdit), with the
+   *  meal's `itemsVersion` they were read at, priced by the same server rule.
+   *  {items, totals}; 409 meal_changed where the meal has changed since. */
+  previewMealEdit: (id, items, itemsVersion) => authApi.post(`/v1/nutrition/meals/${id}/preview`, { items, itemsVersion }),
+
+  /** ROADMAP 7a-iv-g: each of a saved meal's foods' measures, {measures: [[…]]},
+   *  `measures[i]` for the meal's `items[i]`. */
+  getMealMeasures: (id) => authApi.get(`/v1/nutrition/meals/${id}/measures`),
 
   // ── Dishware (Part 2B §3.2 rung 1; Card 5b UI) — once registered, the
   //    photo pipeline's portion resolver uses these server-side. ────────────

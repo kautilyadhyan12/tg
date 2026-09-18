@@ -16,6 +16,7 @@ import {
   createMealRequestSchema,
   dishwareInputSchema,
   foodSearchQuerySchema,
+  mealEditPreviewRequestSchema,
   nutritionListQuerySchema,
   patchBodyMeasurementSchema,
   patchDishwareSchema,
@@ -270,6 +271,32 @@ export function registerNutritionRoutes(
       if (v === null) return;
       const meal = await service.patchMeal(nutritionDeps, authedUserId(req), req.params.id, v);
       return meal === null ? notFound(req, reply) : reply.send({ meal });
+    },
+  );
+
+  /** A logged food changed (ROADMAP 7a-iv-g): what the meal's items would come to,
+   *  nothing saved — the same rule the PATCH saves by. No quota: no AI call. */
+  app.post<{ Params: { id: string } }>(
+    "/v1/nutrition/meals/:id/preview",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      if (!UUID.test(req.params.id)) return notFound(req, reply);
+      const v = parse(mealEditPreviewRequestSchema, req.body, req, reply);
+      if (v === null) return;
+      const preview = await service.previewMealEdit(nutritionDeps, authedUserId(req), req.params.id, v);
+      return preview === null ? notFound(req, reply) : reply.send(preview);
+    },
+  );
+
+  /** Each of a saved meal's items' measures, so a logged food opens in the measure
+   *  picker (ROADMAP 7a-iv-g). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/nutrition/meals/:id/measures",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      if (!UUID.test(req.params.id)) return notFound(req, reply);
+      const measures = await service.mealMeasures(nutritionDeps, authedUserId(req), req.params.id);
+      return measures === null ? notFound(req, reply) : reply.send({ measures });
     },
   );
 

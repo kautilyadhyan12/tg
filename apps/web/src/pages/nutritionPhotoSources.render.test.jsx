@@ -389,9 +389,36 @@ describe('a saved meal holding an estimate', () => {
     svc.getTargets = vi.fn(async () => ({ data: { targets: { bmr: 1400, tdee: 2000, kcal: 2000, proteinG: 100, carbsG: 200, fatG: 60, noCalorieCut: false }, missing: [], targetWrongSide: false } }));
     draw();
     expect(await screen.findByText(/^about 440 kcal · Protein 10g/)).toBeTruthy();
-    expect(screen.getByText('Avocado 100g · avocado toast 120g (estimate)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the foods in this meal' }));
+    expect(within(screen.getByRole('list', { name: 'Foods in Toast plate' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Avocado100 g · 160 kcal',
+      'avocado toast120 g · 280 kcal · estimate',
+    ]);
     expect(screen.getByText('about 1560 kcal')).toBeTruthy();
     expect(screen.getByText('about 90 g')).toBeTruthy();
+  });
+
+  it("reads the person's own numbers as theirs, and never as \"about\" (7a-iv-g)", async () => {
+    const saved = {
+      id: '00000000-0000-4000-8000-000000000003', takenAt: new Date().toISOString(), mealType: 'breakfast', mealName: 'Toast plate',
+      items: [
+        item('Avocado', 'avocado', 'curated', 100, 160),
+        { ...item('avocado toast', 'est_avocado_toast', 'own', 120, 300), per100g: { kcal: 250, proteinG: 5, carbsG: 30, fatG: 12 }, scanEstimate: { kcal: 233.3, proteinG: 5, carbsG: 18.3, fatG: 15 } },
+      ],
+      totals: { kcalPoint: 460, kcalLow: 460, kcalHigh: 460, proteinG: 10, carbsG: 10, fatG: 10 },
+      confirmed: true, origin: 'photo', portionSource: 'default', nutritionSources: ['curated', 'own'], calcVersion: 1,
+    };
+    svc.listMealsForDay = vi.fn(async () => ({ meals: [saved], truncated: false }));
+    svc.getTargets = vi.fn(async () => ({ data: { targets: { bmr: 1400, tdee: 2000, kcal: 2000, proteinG: 100, carbsG: 200, fatG: 60, noCalorieCut: false }, missing: [], targetWrongSide: false } }));
+    draw();
+    expect(await screen.findByText(/^460 kcal · Protein 10g/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the foods in this meal' }));
+    expect(within(screen.getByRole('list', { name: 'Foods in Toast plate' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Avocado100 g · 160 kcal',
+      'avocado toast120 g · 300 kcal · your numbers',
+    ]);
+    expect(screen.getByText('1540 kcal')).toBeTruthy();
+    expect(screen.queryByText(/about/)).toBeNull();
   });
 
   it('reads plainly where no meal of the day holds one', async () => {

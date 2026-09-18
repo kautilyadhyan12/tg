@@ -539,14 +539,14 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect(meal.nutritionSources.sort()).toEqual(["curated", "estimate"]);
 
     // Its grams changed a day later: priced from the figures the meal carries, with no table to ask.
-    const edited = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: "est_qwzx_fritter", grams: 240 }, { canonical: "dal_lentil_curry", grams: 150 }] });
+    const edited = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: "est_qwzx_fritter", grams: 240 }, { canonical: "dal_lentil_curry", grams: 150 }], itemsVersion: meal.itemsVersion });
     expect(edited.statusCode, edited.body).toBe(200);
     expect(mealOf(edited.body).items[0]).toMatchObject({ gramsPoint: 240, kcalPoint: 600, proteinG: 12, carbsG: 60, fatG: 34, per100g: meal.items[0]?.per100g });
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).json<{ meal: Meal }>().meal.totals.kcalPoint).toBe(600 + 218);
 
     // A stranger can neither read the meal nor change it.
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, bob)).statusCode).toBe(404);
-    expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, { items: [{ canonical: "est_qwzx_fritter", grams: 1 }] })).statusCode).toBe(404);
+    expect((await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, bob, { items: [{ canonical: "est_qwzx_fritter", grams: 1 }], itemsVersion: meal.itemsVersion })).statusCode).toBe(404);
     expect((await inject("GET", `/v1/nutrition/meals/${meal.id}`, alice)).json<{ meal: Meal }>().meal.items[0]?.gramsPoint).toBe(240);
   }, 60_000);
 
@@ -559,7 +559,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     // Bob's own meal cannot take in Alice's estimate: its figures are hers, and only her meal carries them.
     const own = await inject("POST", "/v1/nutrition/meals", bob, { mealName: "Bob's dal", takenAt, items: [{ canonical: "dal_lentil_curry", grams: 100 }] });
     expect(own.statusCode, own.body).toBe(201);
-    const borrowed = await inject("PATCH", `/v1/nutrition/meals/${mealOf(own.body).id}`, bob, { items: [{ canonical: "dal_lentil_curry", grams: 100 }, { canonical: "est_qwzx_fritter", grams: 100 }] });
+    const borrowed = await inject("PATCH", `/v1/nutrition/meals/${mealOf(own.body).id}`, bob, { items: [{ canonical: "dal_lentil_curry", grams: 100 }, { canonical: "est_qwzx_fritter", grams: 100 }], itemsVersion: mealOf(own.body).itemsVersion });
     expect([borrowed.statusCode, borrowed.json<{ error: string }>().error]).toEqual([400, "unknown_food"]);
   }, 60_000);
 
