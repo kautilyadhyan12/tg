@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-18 · 7a-iv-h built: bowls on "How full?"; the cup words built and taken off (PR #84)
+
+- Kd asked cup, bowl or something else; told why a cup (one size, USDA weighs each food's own; a bowl is 100–400 ml), he said *"go"* (Opus xhigh).
+- Part (1), the cup words, was built (9ff1927: "~60 g · about half a cup, pieces · estimate", own cup, else a cup with words, else a spoon) and TAKEN OFF at Kd's click-through: it showed on avocado and eggs, foods eaten in pieces (RULINGS 2026-09-17, as amended). `householdAmount.js` is deleted; the photo row and its test are master's again. The code is in 9ff1927 if a cup for scooped foods is ever wanted (it would need the server to send each food's serving).
+- Part (2), "How full?": `fillBowls.js` draws four bowls filled by VOLUME (a half-round bowl half full sits at 65 % of its depth), no rim line, 36 px; words Quarter · Half · Three quarters · Full; lines "half full".
+- Verified after the take-off: web nutrition 197/197 in 16 files · full web 2342 passed, `poseAssets.contract` failing to load as before · changed files eslint 0 · Nutrition.jsx identical to master · 6 deliberate breaks of the bowls and words each red, files restored identical (sha256; scratchpad `breaks-fill.mjs`). Before it: 24 breaks red, full web 2416 passed with `poseAssets.contract` failing to load as before.
+- The first Add food test timed out once at 6.8 s under load (5 s limit; the 7a-iv-g entry saw it too): given 15 s.
+- Looked at in headless Edge, 400 and 1280 wide, on a replayed toast-plate reply (no model call) and a saved bowl; the throwaway account deleted.
+- Local: API on 3000 (local Postgres, the Gemini key from `.env` read into the process) and web on 5173 running. `kd.edit@aihomegym.test` now has a saved "My blue bowl" (375 ml); no unused code today.
+- Review round one (fresh chat): no Critical/High; L1 three quarters and full near one picture (the bowl is deeper now: rim 5, 11 deep, contents 9), L2 a saved cup or mug drawn as a bowl filled by volume, which reads half as half the height (now a mug, filled by height; `fillIcon`, `containerClass` through `pickerChoices`), L3 this line; and a test green with the bowl drawn by height (each surface now pinned to the volume rule, each icon to its own fill). All fixed; no re-check (RULINGS 2026-09-16). 12 breaks red, restored identical (scratchpad `breaks-fix.mjs`); web nutrition 200/200; full web 2345 passed, `poseAssets.contract` as before; eslint 0.
+- Kd said *"fix if nohigh critical ix and merge"*: merged on that word. His click-through reported only the cup words; nothing says whether the bowls passed. Next: the member list (Stage 2 item 3). The four dashboard images are still not this card's.
+
 ## 2026-09-18 · 7a-iv-g: the re-check ended the round; its two Lows fixed; merged (PR #83)
 
 - The same reviewer chat re-checked d5cc997: all four findings and the four weak tests closed, nothing Critical or High open — the round ended. Two new Lows, fixed with no further re-check (RULINGS 2026-09-16).

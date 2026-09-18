@@ -20,10 +20,14 @@ export const DISH_SIZES = [
 ];
 
 /** How full a dish was: the amount a dish takes, and nothing is picked until the
- *  person picks it (Kd, 2026-07-18: no invented "full"). */
+ *  person picks it (Kd, 2026-07-18: no invented "full"). Said in words, never as a
+ *  fraction (Kd, RULINGS 2026-09-17: "what are these numbers will a normal people
+ *  not knowing math understand"): `label` on its button, `words` in a line. */
 export const FILL_CHOICES = [
-  { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
-  { label: '¾', value: 0.75 }, { label: 'Full', value: 1 },
+  { label: 'Quarter', words: 'quarter full', value: 0.25 },
+  { label: 'Half', words: 'half full', value: 0.5 },
+  { label: 'Three quarters', words: 'three quarters full', value: 0.75 },
+  { label: 'Full', words: 'full', value: 1 },
 ];
 
 const GRAMS = { id: 'g', name: 'g', grams: 1 };
@@ -36,7 +40,7 @@ export function pickerChoices(food, dishware) {
   return [
     ...measures.map((m) => ({ key: m.id, kind: 'measure', id: m.id, name: m.name, grams: m.grams })),
     ...(Array.isArray(dishware) ? dishware : []).map((d) => ({
-      key: `${DISH_KEY_PREFIX}${d.id}`, kind: 'dish', dishwareId: d.id, name: d.label, volumeMl: d.volumeMl,
+      key: `${DISH_KEY_PREFIX}${d.id}`, kind: 'dish', dishwareId: d.id, name: d.label, volumeMl: d.volumeMl, containerClass: d.containerClass,
     })),
   ];
 }
@@ -150,7 +154,7 @@ export function unitLabel(choice) {
 
 /** A row's amount as a short list line reads it: the amount of its measure and
  *  what the server says that weighs ("2 × slice cooked · 16 g", "60 g",
- *  "3 oz · 85 g", "My blue bowl, ½ full · 180 g"), or what is still to pick. */
+ *  "3 oz · 85 g", "My blue bowl, half full · 180 g"), or what is still to pick. */
 export function amountSummary(choice, amountText, grams) {
   const amount = parseFloat(amountText);
   const weighed = Number.isFinite(grams) && grams > 0 ? ` · ${Math.round(grams)} g` : '';
@@ -158,7 +162,7 @@ export function amountSummary(choice, amountText, grams) {
   if (choice.kind === 'dish') {
     const fill = FILL_CHOICES.find((f) => f.value === amount);
     if (!fill) return `${choice.name} · how full?`;
-    return `${choice.name}, ${fill.value === 1 ? 'full' : `${fill.label} full`}${weighed}`;
+    return `${choice.name}, ${fill.words}${weighed}`;
   }
   if (!Number.isFinite(amount) || amount <= 0) return 'Pick an amount';
   if (choice.id === 'g') return `${formatAmount(amount)} g`;
@@ -168,7 +172,7 @@ export function amountSummary(choice, amountText, grams) {
 
 /** A saved item's amount as the meal list reads it, in the short list's words: by
  *  the measure it was logged by ("1.5 × medium (3" dia) · 273 g", "My blue bowl,
- *  ½ full · 180 g", "2 oz · 57 g"), else by its grams ("273 g"). */
+ *  half full · 180 g", "2 oz · 57 g"), else by its grams ("273 g"). */
 export function loggedAmountText(item) {
   const m = item?.measure;
   const grams = Number(item?.gramsPoint);

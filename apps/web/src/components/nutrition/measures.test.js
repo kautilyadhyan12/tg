@@ -171,7 +171,7 @@ describe('how a saved item reads in the meal list', () => {
   it('by the measure it was logged by, else by its grams, the unit beside every number', () => {
     expect(loggedAmountText(item({ id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 }))).toBe('1.5 × medium (3" dia) · 273 g');
     expect(loggedAmountText(item({ id: 'oz', name: 'oz', amount: 2 }))).toBe('2 oz · 273 g');
-    expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 0.5 }))).toBe('My blue bowl, ½ full · 273 g');
+    expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 0.5 }))).toBe('My blue bowl, half full · 273 g');
     expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 1 }))).toBe('My blue bowl, full · 273 g');
     // A dish filled to a level the picker never offers reads as how much of it.
     expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 0.3 }))).toBe('0.3 × My blue bowl · 273 g');
@@ -255,8 +255,19 @@ describe('what an amount counts, beside it, and each food on one line', () => {
     expect(amountSummary(medium, '1.5', 273)).toBe('1.5 × medium (3" dia) · 273 g');
     // The server has not answered yet: no grams, never grams the browser worked out.
     expect(amountSummary(serving, '2', null)).toBe('2 × apple');
-    expect(amountSummary(dish, '0.5', 180)).toBe('My blue bowl, ½ full · 180 g');
+    expect(amountSummary(dish, '0.5', 180)).toBe('My blue bowl, half full · 180 g');
     expect(amountSummary(dish, '1', 360)).toBe('My blue bowl, full · 360 g');
+  });
+
+  it('says how full a dish was in words, never a fraction (7a-iv-h)', () => {
+    expect(FILL_CHOICES.map((f) => f.label)).toEqual(['Quarter', 'Half', 'Three quarters', 'Full']);
+    expect(FILL_CHOICES.map((f) => amountSummary(dish, String(f.value), 90))).toEqual([
+      'My blue bowl, quarter full · 90 g', 'My blue bowl, half full · 90 g',
+      'My blue bowl, three quarters full · 90 g', 'My blue bowl, full · 90 g',
+    ]);
+    for (const f of FILL_CHOICES) {
+      expect(loggedAmountText({ gramsPoint: 90, measure: { id: 'dish', name: 'My blue bowl', amount: f.value } })).not.toMatch(/[¼½¾]/);
+    }
   });
 
   it('says what is still to pick', () => {
