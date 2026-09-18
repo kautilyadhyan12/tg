@@ -13,7 +13,8 @@ import {
   chosenItemFor,
   comesToUnderAGram,
   isStartingValue,
-  itemText,
+  loggedAmountText,
+  loggedValue,
   pickerChoices,
   startingValue,
   steppedAmount,
@@ -167,14 +168,35 @@ describe('what a refused amount says', () => {
 describe('how a saved item reads in the meal list', () => {
   const item = (measure) => ({ name: 'Apple', gramsPoint: 273.2, ...(measure ? { measure } : {}) });
 
-  it('by the measure it was logged by, else by its grams', () => {
-    expect(itemText(item({ id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 }))).toBe('Apple: 1.5 × medium (3" dia), 273g');
-    expect(itemText(item({ id: 'oz', name: 'oz', amount: 2 }))).toBe('Apple: 2 oz, 273g');
-    expect(itemText(item({ id: 'dish', name: 'My blue bowl', amount: 0.5 }))).toBe('Apple: 0.5 × My blue bowl, 273g');
-    expect(itemText(item({ id: 'g', name: 'g', amount: 273.2 }))).toBe('Apple 273g');
-    expect(itemText(item(null))).toBe('Apple 273g');
+  it('by the measure it was logged by, else by its grams, the unit beside every number', () => {
+    expect(loggedAmountText(item({ id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 }))).toBe('1.5 × medium (3" dia) · 273 g');
+    expect(loggedAmountText(item({ id: 'oz', name: 'oz', amount: 2 }))).toBe('2 oz · 273 g');
+    expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 0.5 }))).toBe('My blue bowl, ½ full · 273 g');
+    expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 1 }))).toBe('My blue bowl, full · 273 g');
+    // A dish filled to a level the picker never offers reads as how much of it.
+    expect(loggedAmountText(item({ id: 'dish', name: 'My blue bowl', amount: 0.3 }))).toBe('0.3 × My blue bowl · 273 g');
+    expect(loggedAmountText(item({ id: 'g', name: 'g', amount: 273.2 }))).toBe('273.2 g');
+    expect(loggedAmountText(item(null))).toBe('273.2 g');
     // No float noise in an amount.
-    expect(itemText(item({ id: 'serving', name: 'apple', amount: 0.1 + 0.2 }))).toBe('Apple: 0.3 × apple, 273g');
+    expect(loggedAmountText(item({ id: 'serving', name: 'apple', amount: 0.1 + 0.2 }))).toBe('0.3 × apple · 273 g');
+  });
+});
+
+describe('where the picker opens for a food already logged (7a-iv-g)', () => {
+  const measures = apple.measures;
+  const item = (measure, gramsPoint = 273) => ({ name: 'Apple', gramsPoint, ...(measure ? { measure } : {}) });
+
+  it('at the measure and amount it was logged by, while the food still has that measure', () => {
+    expect(loggedValue(item({ id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 }), measures)).toEqual({ key: 'usda-4', amount: '1.5' });
+    expect(loggedValue(item({ id: 'serving', name: 'apple', amount: 0.1 + 0.2 }), measures)).toEqual({ key: 'serving', amount: '0.3' });
+    expect(loggedValue(item({ id: 'oz', name: 'oz', amount: 2 }), measures)).toEqual({ key: 'oz', amount: '2' });
+  });
+
+  it('else at its grams: by the gram, a measure the food no longer has, a saved dish, or no measures read', () => {
+    expect(loggedValue(item(null, 150.5), measures)).toEqual({ key: 'g', amount: '150.5' });
+    expect(loggedValue(item({ id: 'usda-9', name: 'gone', amount: 2 }), measures)).toEqual({ key: 'g', amount: '273' });
+    expect(loggedValue(item({ id: 'dish', name: 'My blue bowl', amount: 0.5 }), measures)).toEqual({ key: 'g', amount: '273' });
+    expect(loggedValue(item({ id: 'usda-4', name: 'medium (3" dia)', amount: 1.5 }), null)).toEqual({ key: 'g', amount: '273' });
   });
 });
 

@@ -8,10 +8,11 @@ import {
 import toast from 'react-hot-toast';
 import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
+import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
 import MeasurePicker from '../components/nutrition/MeasurePicker';
 import {
-  amountRefusal, amountSummary, chosenItemFor, comesToUnderAGram, isStartingValue, itemText, pickerChoices, startingValue, valueKeepingGrams,
+  amountRefusal, amountSummary, chosenItemFor, comesToUnderAGram, isStartingValue, loggedAmountText, pickerChoices, startingValue, valueKeepingGrams,
 } from '../components/nutrition/measures';
 import { forgetUnsavedScan, keepUnsavedScan, timeLeftText, unsavedScanFor, unsavedScanMsLeft } from '../components/nutrition/unsavedScan';
 import { getUserId } from '../utils/storage';
@@ -29,6 +30,9 @@ const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Package
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
+/** What a saved meal's food line says after its calories about whose numbers they
+ *  are: a scan's estimate, or the person's own (ROADMAP 7a-iv-g). */
+const ITEM_TAGS = { estimate: ' · estimate', own: ' · your numbers' };
 /** A copy of `map` without `key`. */
 const without = (map, key) => { const next = { ...map }; delete next[key]; return next; };
 /** The server's refusals of an amount itself, as its preview answers them: a portion
@@ -52,7 +56,7 @@ const MEAL_TYPES = [
 // Card 5c: the change-label control (owed by 5b) and per-meal "add ingredient".
 // Card 5c2 (Kd smoke ask): tap the name to rename a logged meal (PATCH mealName
 // already exists — no API change).
-function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
+function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRename, onChangeFood }) {
   const [editingTime, setEditingTime] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [labelOpen,   setLabelOpen]   = useState(false);
@@ -78,7 +82,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 10 }}
-      className="group flex items-center justify-between py-2.5 px-3 rounded-xl
+      className="group flex flex-wrap items-start justify-between gap-x-2 py-2.5 px-3 rounded-xl
                  transition-all"
       style={{ background: 'rgba(255,255,255,0.02)' }}
     >
@@ -151,12 +155,6 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
           {estimated ? 'about ' : ''}{Math.round(t.kcalPoint || 0)} kcal · Protein {Math.round(t.proteinG || 0)}g
           · Carbs {Math.round(t.carbsG || 0)}g · Fat {Math.round(t.fatG || 0)}g
         </p>
-        {/* What's in it — so "add ingredient" has a visible before/after. */}
-        {meal.items?.length > 0 && (
-          <p className="text-2xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.28)' }}>
-            {meal.items.map((i) => `${itemText(i)}${i.nutritionSource === 'estimate' ? ' (estimate)' : ''}`).join(' · ')}
-          </p>
-        )}
         {/* Card 5c: change the section label. null clears it — an unlabeled
             meal falls back to the time-of-day bucket for display. */}
         {labelOpen && (
@@ -218,12 +216,39 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
+      {/* What's in it, one line a food, each a tap to change it (ROADMAP
+          7a-iv-g): its amount, its calories, and whose numbers they are. A line
+          of its own under the meal, the meal's whole width, so a name is read,
+          not cut, on a phone. */}
+      {meal.items?.length > 0 && (
+        <ul className="basis-full mt-2 space-y-1" aria-label={`Foods in ${name}`}>
+          {meal.items.map((item, at) => (
+            <li key={`${at}-${item.canonical}`}>
+              <button
+                type="button"
+                onClick={() => onChangeFood(meal, at)}
+                aria-label={`Change ${item.name}`}
+                className="w-full min-h-11 px-2.5 py-1.5 rounded-lg flex items-center gap-2 text-left"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer' }}
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs break-words" style={{ color: 'rgba(255,255,255,0.80)' }}>{item.name}</span>
+                  <span className="block text-2xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {loggedAmountText(item)} · {item.kcalPoint} kcal{ITEM_TAGS[item.nutritionSource] ?? ''}
+                  </span>
+                </span>
+                <Pencil className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </motion.div>
   );
 }
 
 // ── Meal type section ─────────────────────────────────────────────────────────
-function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
+function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient, onRename, onChangeFood }) {
   const Icon = mealType.icon;
   // Display-summing SERVER-computed per-meal totals (D3 doctrine).
   const total = meals.reduce((sum, m) => sum + (m.totals?.kcalPoint || 0), 0);
@@ -273,7 +298,8 @@ function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onR
         <AnimatePresence>
           {meals.map((m) => (
             <MealRow key={m.id} meal={m} onDelete={onDelete} onEditTime={onEditTime}
-                     onRelabel={onRelabel} onAddIngredient={onAddIngredient} onRename={onRename} />
+                     onRelabel={onRelabel} onAddIngredient={onAddIngredient} onRename={onRename}
+                     onChangeFood={onChangeFood} />
           ))}
         </AnimatePresence>
         {meals.length === 0 && (
@@ -451,8 +477,8 @@ function SourceCredits({ sources }) {
 // it — or a saved dish and how full — picked in the measure picker; the SERVER
 // works out the grams from its own list of the food's measures.
 // Card 5c: DUAL MODE. With a `meal` prop the same modal adds an ingredient to
-// an already-saved meal — PATCH resends the meal's existing items plus the new
-// one (the API already accepts any searched food there; no new endpoint).
+// an already-saved meal — PATCH keeps the meal's existing items as saved and adds
+// the new one (the API already accepts any searched food there; no new endpoint).
 function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   const [selected, setSelected] = useState(null);
   // The picker's value: {key: a measure id or "dish:<id>", amount: as typed}.
@@ -520,10 +546,10 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     setSaving(true);
     try {
       if (meal) {
-        // Add-ingredient mode: PATCH replaces the whole items array, so resend
-        // the existing items at their stored grams plus the new one (composed by
+        // Add-ingredient mode: PATCH replaces the whole items array, so name
+        // every existing item to be kept as saved, plus the new one (composed by
         // a pure, unit-tested helper — silently dropping an existing item here
-        // would wipe a meal). The server preserves each item's rung.
+        // would wipe a meal).
         await nutritionService.updateMeal(meal.id, {
           items: composeAddIngredient(meal.items, chosenItem),
         });
@@ -1752,6 +1778,8 @@ export default function Nutrition() {
   // `meal` set = add-ingredient-to-a-saved-meal mode (Card 5c).
   const [addModal,       setAddModal]        = useState({ open: false, mealType: null, meal: null });
   const [photoModalOpen, setPhotoModalOpen]  = useState(false);
+  // ROADMAP 7a-iv-g: the logged food whose box is open, {meal, at}, or null.
+  const [foodSheet,      setFoodSheet]       = useState(null);
 
   const viewingToday = isSameDay(selectedDate, new Date());
   // Card 5d (T3 F1): the newest-day request wins. Rapid ‹/› navigation fires
@@ -2232,6 +2260,7 @@ export default function Nutrition() {
                         onRelabel={handleRelabel}
                         onAddIngredient={(meal) => setAddModal({ open: true, mealType: meal.mealType, meal })}
                         onRename={handleRename}
+                        onChangeFood={(meal, at) => setFoodSheet({ meal, at })}
                       />
                     ))
                   )}
@@ -2256,6 +2285,16 @@ export default function Nutrition() {
         onClose={() => setPhotoModalOpen(false)}
         onSave={loadData}
       />
+      {foodSheet && (
+        <LoggedFoodSheet
+          key={`${foodSheet.meal.id}-${foodSheet.at}`}
+          meal={foodSheet.meal}
+          at={foodSheet.at}
+          onClose={() => setFoodSheet(null)}
+          onSaved={loadData}
+          onDeleteMeal={handleDelete}
+        />
+      )}
     </div>
   );
 }

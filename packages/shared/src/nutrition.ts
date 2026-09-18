@@ -10,6 +10,12 @@ export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "d
  *  2026-09-15), shown marked "estimate". */
 export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate"]);
 export type NutritionSource = z.infer<typeof nutritionSourceSchema>;
+/** Where a saved meal's item has its numbers from: its food's source, or `own` —
+ *  the person typed that food's protein, carbs and fat and its calories were
+ *  worked out from them (ROADMAP 7a-iv-g). No food the search or the scanner
+ *  returns is ever `own`; only an item of a saved meal becomes one. */
+export const mealItemSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate", "own"]);
+export type MealItemSource = z.infer<typeof mealItemSourceSchema>;
 export const mealOriginSchema = z.enum(["photo", "manual"]);
 /** Kd ruling 2026-07-17 (Card-5b smoke; supersedes the D1 time-bucket
  *  interim): the section is a USER-CHOSEN label stored on the meal —
@@ -38,13 +44,17 @@ export type LoggedMeasure = z.infer<typeof loggedMeasureSchema>;
 
 export const mealItemSchema = z.object({
   name: z.string(), canonical: z.string(), gramsPoint: z.number().positive(), gramsRange: gramRangeSchema,
-  portionSource: portionSourceSchema, nutritionSource: nutritionSourceSchema,
+  portionSource: portionSourceSchema, nutritionSource: mealItemSourceSchema,
   kcalPoint: z.number().int().nonnegative(), kcalLow: z.number().int().nonnegative(), kcalHigh: z.number().int().nonnegative(),
   proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
-  /** An estimate row's own figures (ROADMAP 7a-iii-b). No table holds that food,
-   *  so the meal carries them, and its grams can be changed after saving without
-   *  a lookup; every other row is priced again from its table by canonical. */
+  /** The figures an item carries because no table prices it again: an estimate
+   *  row's (ROADMAP 7a-iii-b), or the person's own numbers (7a-iv-g). The meal
+   *  carries them, so the item's amount can be changed after saving and its
+   *  numbers follow; every other row is priced again from its table by canonical. */
   per100g: per100gSchema.optional(),
+  /** The scan's estimate an `own` row held before the person typed over it, kept
+   *  so going back to it needs no scan (7a-iv-g). */
+  scanEstimate: per100gSchema.optional(),
   measure: loggedMeasureSchema.optional(),
 });
 export type MealItem = z.infer<typeof mealItemSchema>;
@@ -146,12 +156,53 @@ export type PreviewMealRequest = z.infer<typeof previewMealRequestSchema>;
 export const mealPreviewSchema = z.object({ items: z.array(mealItemSchema), totals: mealTotalsSchema });
 export type MealPreview = z.infer<typeof mealPreviewSchema>;
 
+// ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
+/** The person's own protein, carbs and fat for one food of a saved meal, in grams,
+ *  as eaten at the amount sent beside them. The server works out its calories from
+ *  them — 4, 4 and 9 kcal a gram — so the four always agree, and refuses them where
+ *  together they weigh more than the food. */
+export const ownNumbersSchema = z.object({
+  proteinG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+  carbsG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+  fatG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+}).strict();
+export type OwnNumbers = z.infer<typeof ownNumbersSchema>;
+/** An item's place in a saved meal, as the meal was read (a meal holds at most 30). */
+const savedPlaceSchema = z.number().int().min(0).max(29);
+/** What an edit may say beside a food's amount. `from` is which of the saved meal's
+ *  items it is; without it, the item in its own place where that is the same food,
+ *  else the first of that food no other edit is, else a food new to the meal.
+ *  `own` sets the person's own numbers; null takes them away, back to the food's
+ *  table (or the scan's estimate); left out, an item keeps what it had, its own
+ *  numbers grown or shrunk with its amount. */
+const editFields = { from: savedPlaceSchema.optional(), own: ownNumbersSchema.nullable().optional() };
+/** One of the saved meal's items, kept exactly as it was saved. */
+const keptItemSchema = z.object({ from: savedPlaceSchema }).strict();
+export const mealEditItemSchema = z.union([
+  gramsItemSchema.extend(editFields), dishwareItemSchema.extend(editFields), measureItemSchema.extend(editFields), keptItemSchema,
+]);
+export type MealEditItem = z.infer<typeof mealEditItemSchema>;
+/** A saved meal's whole list of items after an edit, in order: an item left out is
+ *  removed from the meal, and no saved item may be named twice. */
+const mealEditItemsSchema = z.array(mealEditItemSchema).min(1).max(30).refine((items) => {
+  const places = items.flatMap((item) => (item.from === undefined ? [] : [item.from]));
+  return new Set(places).size === places.length;
+}, { message: "a saved item is named once" });
+
 export const patchMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200).optional(), takenAt: takenAtSchema.optional(),
   mealType: mealTypeSchema.nullable().optional(), // null clears the label
-  items: chosenItemsSchema.optional(),
+  items: mealEditItemsSchema.optional(),
 }).strict().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type PatchMealRequest = z.infer<typeof patchMealRequestSchema>;
+/** What a saved meal's items would come to after an edit, nothing saved: the same
+ *  items the PATCH takes, priced as the PATCH would price them. */
+export const mealEditPreviewRequestSchema = z.object({ items: mealEditItemsSchema }).strict();
+export type MealEditPreviewRequest = z.infer<typeof mealEditPreviewRequestSchema>;
+/** Each of a saved meal's items' measures, `measures[i]` for `items[i]`: what its
+ *  food can be logged by now, so a logged food opens in the measure picker. */
+export const mealMeasuresResponseSchema = z.object({ measures: z.array(z.array(foodMeasureSchema).min(1)) }).strict();
+export type MealMeasuresResponse = z.infer<typeof mealMeasuresResponseSchema>;
 
 export const mealSchema = z.object({
   id: z.string().uuid(), takenAt: z.string(), mealType: mealTypeSchema.nullable(),

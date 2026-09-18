@@ -237,7 +237,12 @@ describe('adding a food by measure', () => {
         confirmed: true, origin: 'manual', portionSource: 'default', nutritionSources: ['curated'], calcVersion: 1,
       }],
     });
-    expect(await screen.findByText('Apple: 1.5 × medium (3" dia), 273g · Oats 40g')).toBeTruthy();
+    // One line a food, each a tap to change it (7a-iv-g).
+    const foods = within(await screen.findByRole('list', { name: 'Foods in Breakfast bowl' }));
+    expect(foods.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Apple1.5 × medium (3" dia) · 273 g · 10 kcal',
+      'Oats40 g · 10 kcal',
+    ]);
   });
 });
 

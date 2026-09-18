@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-18 · 7a-iv-g built: change a food already logged (branch `change-logged-food`)
+
+- Kd: *"go"* to the plan (Opus xhigh), which took 7a-iv-g before 7a-iv-h. RULINGS 2026-09-17's line is settled with it: a row of the person's own numbers grows with its amount; "Remove from this meal" is in the box, and on a meal's only food it asks to delete the meal; the alcohol line, no fifth box.
+- Screen: a saved meal's foods one a line, on a line of their own under the meal; a tap opens `LoggedFoodSheet` at the logged measure and amount (a dish, or a measure gone, by its grams), the server's numbers for a new amount, "Type my own numbers" ("Comes to N kcal" from the server), "Use the food list's numbers" / "the scan's estimate", "Remove from this meal". Helpers in `loggedFood.js`, `loggedAmountText` and `loggedValue` in `measures.js`.
+- Server: `mealEdit.ts` (`savedPlaces`: which saved item each edit is; `ownPer100g`: 4/4/9, never heavier than the food). PATCH items name their saved item (`from`), keep one exactly (`{from}`), carry `own` (null takes it away); an `own` item carries `per100g` and the `scanEstimate` it was typed over. 409 `meal_changed`, 400 `own_numbers_too_heavy`. `POST /v1/nutrition/meals/:id/preview`, `GET /v1/nutrition/meals/:id/measures`. Add ingredient now keeps the other foods as saved (`composeAddIngredient` sends `{from}`), not priced again. No migration, package or model call.
+- Verified: shared tsc 0, eslint 0 · api tsc 0, eslint src test tools 0 · edit unit 37/37 · edit routes 7/7 · nutrition routes, measures, scan and unit files 214/214 · full api 1428/1446, the 18 in `workouts.sync` 23/23 alone (ROADMAP 10); after a one-line fix to the unknown-food guard, the edit files and `workouts.sync` again 67/67 · web: changed files eslint 0, Nutrition.jsx the same 7 errors as master · web nutrition 158/158 in 9 files · full web 2325 passed, `poseAssets.contract` failing to load as before (run before the stale-answer test was added).
+- 20 deliberate breaks, each red on the test that claims it, every file restored identical (sha256; scratchpad `breaks.ps1`). One first stayed green — no test held that an old price is never shown while a new amount is priced — and that test was added.
+- Looked at in headless Edge on the local app, 1280 and 390 wide: at 390 the food names were cut beside the meal's three buttons, so the list moved to a full-width line under the meal (seen again after).
+- Local: API on 3000 (local Postgres) and web on 5173 running. `kd.edit@aihomegym.test` is pre-set for the click-through: setup done, today's lunch "Chicken and rice" (rice 150 g, chicken 600 g) and a scanned breakfast "Toast plate" (avocado toast, an estimate). The throwaway look account was deleted.
+- Next: PR to master, CI, review round one in a fresh chat, Kd's click-through, merge on his word; then 7a-iv-h, then the member list. The four dashboard images are still not this card's.
+
 ## 2026-09-18 · 7a-iv-e: PR #82's review round one fixed (branch `own-ring-numbers`)
 
 - Kd pasted the round-one review (one High, five Lows, two tests that stayed green when broken) and asked for every finding fixed and the re-check prompt back.

@@ -166,12 +166,30 @@ export function amountSummary(choice, amountText, grams) {
   return `${formatAmount(amount)} × ${choice.name}${weighed}`;
 }
 
-/** A saved item as the meal list reads it: by the measure it was logged by
- *  ("Apple: 1.5 × medium (3" dia), 273g"), else by its grams ("Apple 273g"). */
-export function itemText(item) {
-  const grams = `${Math.round(item.gramsPoint)}g`;
-  const m = item.measure;
-  if (!m || m.id === 'g') return `${item.name} ${grams}`;
-  if (m.id === 'oz') return `${item.name}: ${formatAmount(m.amount)} oz, ${grams}`;
-  return `${item.name}: ${formatAmount(m.amount)} × ${m.name}, ${grams}`;
+/** A saved item's amount as the meal list reads it, in the short list's words: by
+ *  the measure it was logged by ("1.5 × medium (3" dia) · 273 g", "My blue bowl,
+ *  ½ full · 180 g", "2 oz · 57 g"), else by its grams ("273 g"). */
+export function loggedAmountText(item) {
+  const m = item?.measure;
+  const grams = Number(item?.gramsPoint);
+  if (!m || m.id === 'g') return amountSummary(GRAM_CHOICE, formatAmount(grams), grams);
+  // A dish filled to a level the picker never offers (the contract takes any)
+  // reads as how much of it, never as "how full?" on a food already eaten.
+  const fill = m.id === 'dish' && FILL_CHOICES.some((f) => f.value === m.amount);
+  const choice = fill ? { kind: 'dish', name: m.name } : { kind: 'measure', id: m.id, name: m.name };
+  return amountSummary(choice, String(m.amount), grams);
+}
+const GRAM_CHOICE = { kind: 'measure', ...GRAMS };
+
+/** Where the picker opens for a food already logged (ROADMAP 7a-iv-g): at the
+ *  measure and amount it was logged by, where that measure is still one of the
+ *  food's (`measures`, as the server sends them now), else at its grams. A saved
+ *  dish opens at its grams too: the dish's size may have changed since, and
+ *  opening must never change the numbers by itself. */
+export function loggedValue(item, measures) {
+  const m = item?.measure;
+  if (m && m.id !== 'dish' && Array.isArray(measures) && measures.some((x) => x.id === m.id)) {
+    return { key: m.id, amount: formatAmount(m.amount) };
+  }
+  return { key: GRAMS.id, amount: formatAmount(item?.gramsPoint) };
 }
