@@ -4,7 +4,8 @@
 // nothing in it is mocked; what it computes is tested in-process by the other
 // memberList files, and here only that it is the thing answering.
 import fs from "node:fs";
-import { describe, expect, it } from "vitest";
+import { Worker } from "node:worker_threads";
+import { describe, expect, it, vi } from "vitest";
 import { MEMBER_LIST_MAX_DATA_ROWS } from "@app/shared";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { memberFilesOpen, parseMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
@@ -63,21 +64,29 @@ describe("the worker", () => {
   it(
     "stops a worker at the time limit, terminating it, and answers parse_timeout",
     async () => {
-      // A worker that ends by itself exits 0; one terminated exits 1. At 50 ms
-      // the worker has not even loaded its modules (about 750 ms), so only a
-      // terminate can end it before it answers.
-      let exited: (code: number) => void = () => undefined;
-      const exit = new Promise<number>((resolve) => {
-        exited = resolve;
-      });
-      expect(await parseMemberFile(read("book.xlsx"), { timeoutMs: 50, onWorkerExit: (code) => {
-        exited(code);
-      } })).toEqual({
-        ok: false,
-        refusal: { code: "parse_timeout" },
-      });
-      expect(await exit).toBe(1);
-      expect(memberFilesOpen()).toBe(0);
+      // At 50 ms the worker has not even loaded its modules (about 750 ms), so
+      // it is still running when the limit passes: it must be terminated, and its
+      // thread end. (Its exit code says nothing: 1 on Windows, 0 on CI's Linux.)
+      const terminate = vi.spyOn(Worker.prototype, "terminate");
+      try {
+        let ended: () => void = () => undefined;
+        const threadEnded = new Promise<void>((resolve) => {
+          ended = resolve;
+        });
+        expect(
+          await parseMemberFile(read("book.xlsx"), {
+            timeoutMs: 50,
+            onWorkerExit: () => {
+              ended();
+            },
+          }),
+        ).toEqual({ ok: false, refusal: { code: "parse_timeout" } });
+        expect(terminate).toHaveBeenCalledTimes(1);
+        await threadEnded;
+        expect(memberFilesOpen()).toBe(0);
+      } finally {
+        terminate.mockRestore();
+      }
       // The next file is read as usual.
       expect((await parseMemberFile(read("csv-utf8.csv"))).ok).toBe(true);
     },

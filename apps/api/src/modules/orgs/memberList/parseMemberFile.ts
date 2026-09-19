@@ -50,7 +50,8 @@ export function readWorkerReply(message: unknown): MemberFileResult {
 export interface ParseMemberFileSeams {
   timeoutMs?: number;
   heapMb?: number;
-  /** Told each worker's exit code: 1 when it was terminated, 0 when it ended itself. */
+  /** Told when each worker's thread has ended, with its exit code (a terminated
+   *  worker exits 1 on Windows and 0 on CI's Linux, so the code is not a signal). */
   onWorkerExit?: (exitCode: number) => void;
 }
 
