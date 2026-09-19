@@ -688,9 +688,13 @@ browser's type are not sent and not used.
    descriptors, no extra fields, no comment. ONLY this archive reaches the package —
    its sequential reader and our central-directory reader can then never disagree.
 
-**Reading it.** `readXlsxFile(repacked, { parseNumber: (s) => s, trim: false })`.
-`parseNumber` is what keeps a phone or member number exact (measured on a real Excel
-file: `"919876543210"`, `"1234567890123456"`). Every sheet comes back; a cell becomes
+**Reading it.** `readXlsxFile(repacked, { parseNumber: plainNumberText, trim: false })`.
+`parseNumber` hands over a number cell's stored text, which is what keeps a phone or
+member number exact (measured on a real Excel file: `"919876543210"`,
+`"1234567890123456"`); `plainNumberText` writes it in plain digits by moving the
+decimal point in the text, never through a float, because Google Sheets stores the same
+numbers as `9.1987654321E11` and `1.234567890123456E15` (3a-i, Kd's download) — every
+digit present, and 3a-ii must not take that for a CSV's damage. Every sheet comes back; a cell becomes
 text (string as is · TRUE/FALSE · a date as `YYYY-MM-DD` · empty). A sheet is cut at
 10,020 rows and 100 columns and marked `truncated: { rows, columns }` only where
 something was written past the cut; blank rows after the last written one are
@@ -1029,9 +1033,10 @@ address, a number, the body. Logs carry ids, counts and codes.
 files made here by COM automation (Excel 16 is installed: `.xlsx`, CSV UTF-8, CSV
 comma, Unicode Text, CSV Macintosh, CSV MS-DOS — accented, Polish and Devanagari names,
 phones as text and as numbers, leading zeros, a 16-digit id) · a Google Sheets `.xlsx`
-and `.csv` (Kd downloads them once; exact steps in 3a-i's plan) · an archive with data
-descriptors, as streaming writers leave them (3a-i builds it in the test:
-`openpyxl` is not installed here, and the reader's path is the same) · hand-written
+and `.csv` (Kd imported the Excel book into Google Sheets and downloaded both,
+2026-09-19; Google's `.xlsx` writes every part with a data descriptor, so it is also
+the real streaming-writer file `openpyxl` was to give — not installed here — beside
+one built in the test) · hand-written
 text: `;` and TAB and `|`, `sep=`, quoted line breaks, a title block above the header,
 a totals row, a blank row mid-file, no header row, one column of emails. *Bombs are
 built in the test, never committed:* a lying size, a 1,000:1 deflate, overlapping
