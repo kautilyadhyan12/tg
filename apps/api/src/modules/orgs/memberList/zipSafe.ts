@@ -15,6 +15,7 @@ import zlib from "node:zlib";
 import {
   MEMBER_FILE_MAX_ARCHIVE_ENTRIES,
   MEMBER_FILE_MAX_INFLATED_BYTES,
+  MEMBER_FILE_MAX_TAG_CHARS,
   type MemberFileOtherZip,
   type MemberFileRefusal,
   type MemberFileWarning,
@@ -213,7 +214,59 @@ const partText = (part: Buffer): string => new TextDecoder("utf-8").decode(part)
 
 const DECLARATION = /<!(?:doctype|entity)/i;
 const SHEET_DATA = /<(?:[\w.-]+:)?sheetData\b/;
-const HIDDEN_ROW_OR_COLUMN = /<(?:[\w.-]+:)?(?:row|col)\b[^>]*?\shidden\s*=\s*["'](?:1|true)["']/;
+/** Never scans past the next `<` or `>`: with `[^>]*?` every `<row` of a part
+ *  with no `>` scanned to its end, 409 ms at 64 KiB and four times as long for
+ *  each doubling (review of PR #85). */
+const HIDDEN_ROW_OR_COLUMN = /<(?:[\w.-]+:)?(?:row|col)\b[^<>]*?\shidden\s*=\s*["'](?:1|true)["']/;
+
+export const hasHiddenRowsOrColumns = (text: string): boolean => SHEET_DATA.test(text) && HIDDEN_ROW_OR_COLUMN.test(text);
+
+const GREATER_THAN = 0x3e;
+const DOUBLE_QUOTE = 0x22;
+const SINGLE_QUOTE = 0x27;
+
+/** The ends of the markup that is not a tag, which the package reads quickly
+ *  however long (measured: 1 MiB left open, 13–23 ms). */
+const CLOSERS: ReadonlyArray<readonly [string, string]> = [
+  ["<!--", "-->"],
+  ["<![CDATA[", "]]>"],
+  ["<?", "?>"],
+];
+
+/** Whether every tag in a part ends within MEMBER_FILE_MAX_TAG_CHARS, counted
+ *  from its `<` to the first `>` outside a quoted value, and every comment,
+ *  CDATA section and processing instruction ends at all. The Excel package's
+ *  time grows much faster than a tag's length — 74 s for one closed 1 MiB tag,
+ *  94 s for one whose early `>` sits inside quotes, 173 s for one never closed
+ *  (measured 2026-09-19) — and one such upload would hold a reading slot for
+ *  the whole time limit. One pass, linear in the part. */
+export function tagsAreShort(text: string): boolean {
+  let at = text.indexOf("<");
+  while (at !== -1) {
+    const closer = CLOSERS.find(([open]) => text.startsWith(open, at));
+    let next: number;
+    if (closer !== undefined) {
+      const end = text.indexOf(closer[1], at + closer[0].length);
+      if (end === -1) return false;
+      next = end + closer[1].length;
+    } else {
+      const limit = Math.min(text.length, at + MEMBER_FILE_MAX_TAG_CHARS);
+      let quote = 0;
+      let i = at + 1;
+      for (; i < limit; i++) {
+        const c = text.charCodeAt(i);
+        if (quote !== 0) {
+          if (c === quote) quote = 0;
+        } else if (c === DOUBLE_QUOTE || c === SINGLE_QUOTE) quote = c;
+        else if (c === GREATER_THAN) break;
+      }
+      if (i >= limit) return false;
+      next = i + 1;
+    }
+    at = text.indexOf("<", next);
+  }
+  return true;
+}
 
 /** A fresh archive of `parts`, stored: no compression, no data descriptors, no
  *  extra fields, no comments, true sizes and checksums. */
@@ -284,10 +337,10 @@ export function openZipSafely(bytes: Uint8Array): SafeXlsx {
     for (const { entry, dataStart } of wanted) {
       const data = inflate(buf.subarray(dataStart, dataStart + entry.compressedSize), entry);
       const text = partText(data);
-      if (DECLARATION.test(text)) throw unsafe();
+      if (DECLARATION.test(text) || !tagsAreShort(text)) throw unsafe();
       // A worksheet, wherever the archive keeps it. A filtered view is stored as
       // hidden rows, so this also says "exported a filter".
-      if (SHEET_DATA.test(text) && HIDDEN_ROW_OR_COLUMN.test(text)) warnings.add("hidden_rows_or_columns");
+      if (hasHiddenRowsOrColumns(text)) warnings.add("hidden_rows_or_columns");
       parts.push({ name: entry.name, data });
     }
     return { ok: true, repacked: writeStoredZip(parts), warnings: [...warnings] };

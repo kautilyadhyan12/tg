@@ -3,8 +3,8 @@
 // past its cap. The last block reads a rebuilt archive with the real package.
 import zlib from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MEMBER_FILE_MAX_ARCHIVE_ENTRIES, MEMBER_FILE_MAX_INFLATED_BYTES } from "@app/shared";
-import { openZipSafely } from "../src/modules/orgs/memberList/zipSafe.js";
+import { MEMBER_FILE_MAX_ARCHIVE_ENTRIES, MEMBER_FILE_MAX_INFLATED_BYTES, MEMBER_FILE_MAX_TAG_CHARS } from "@app/shared";
+import { hasHiddenRowsOrColumns, openZipSafely, tagsAreShort } from "../src/modules/orgs/memberList/zipSafe.js";
 import { readRepackedXlsx } from "../src/modules/orgs/memberList/xlsx.adapter.js";
 import { buildZip, listZip, sheetXml, workbookParts, type KitPart } from "./memberList.zipKit.js";
 
@@ -241,5 +241,50 @@ describe("the deflate cap is the declared size", () => {
     expect(refusal(zip)).toEqual({ code: "unsafe_archive" });
     const caps = inflate.mock.calls.map(([, options]) => options?.maxOutputLength);
     expect(caps).toContain(1024);
+  });
+});
+
+describe("tags a part may hold (the Excel package slows past a long one)", () => {
+  /** A tag `length` characters long from its "<" to its ">". */
+  const tag = (length: number): string => `<c ${"a".repeat(length - 5)}/>`;
+
+  it.each([
+    ["no markup at all", "just text", true],
+    ["an empty part", "", true],
+    ["a declaration, a comment, CDATA and ordinary tags", '<?xml version="1.0"?><!-- note --><w><![CDATA[ <not a tag> ]]><c r="A1"/></w>', true],
+    ["a > inside a double-quoted value", '<c t="a>b" r="A1"/>', true],
+    ["a > inside a single-quoted value", "<c t='a>b' r='A1'/>", true],
+    ["a tag exactly at the limit", tag(MEMBER_FILE_MAX_TAG_CHARS), true],
+    ["a tag one character over", tag(MEMBER_FILE_MAX_TAG_CHARS + 1), false],
+    ["a tag never closed", "<c r=\"A1\"", false],
+    ["a > inside quotes, then the tag runs on", `<c t=">" ${"a ".repeat(MEMBER_FILE_MAX_TAG_CHARS)}`, false],
+    ["a quote never closed", `<c t="${"a".repeat(10)}>`, false],
+    ["a comment never closed", "<w><!-- > </w>", false],
+    ["CDATA never closed", "<w><![CDATA[ > </w>", false],
+    ["an instruction never closed", "<?xml version='1.0' >", false],
+    ["a long text node", `<t>${"a".repeat(4 * MEMBER_FILE_MAX_TAG_CHARS)}</t>`, true],
+    ["a long comment, closed", `<!--${"a".repeat(4 * MEMBER_FILE_MAX_TAG_CHARS)}-->`, true],
+    ["a < in a tag's value", '<c t="a<b"/>', true],
+  ])("%s", (_label, text, expected) => {
+    expect(tagsAreShort(text)).toBe(expected);
+  });
+
+  it("counts the tag helper right", () => {
+    expect(tag(MEMBER_FILE_MAX_TAG_CHARS).length).toBe(MEMBER_FILE_MAX_TAG_CHARS);
+  });
+
+  it("refuses a sheet holding a tag past the limit", () => {
+    const long = sheetXml([["Email"]]).replace("<sheetData>", `<sheetData><row r="9" ${"a".repeat(MEMBER_FILE_MAX_TAG_CHARS)}></row>`);
+    expect(refusal(buildZip(workbookParts(long)))).toEqual({ code: "unsafe_archive" });
+  });
+
+  it("checks tags and hidden rows in time linear in the part", () => {
+    // Each of these took minutes before (a row with no ">" scanned to the end of
+    // the part for every "<row"); a mebibyte now takes milliseconds.
+    const rowsNoClose = `<sheetData>${"<row a ".repeat(150_000)}`;
+    const t0 = performance.now();
+    expect(hasHiddenRowsOrColumns(rowsNoClose)).toBe(false);
+    expect(tagsAreShort(`<w>${"<c a='b'>".repeat(100_000)}</w>`)).toBe(true);
+    expect(performance.now() - t0).toBeLessThan(2_000);
   });
 });

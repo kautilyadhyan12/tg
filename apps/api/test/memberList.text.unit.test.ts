@@ -5,12 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MEMBER_FILE_MAX_CELL_CHARS,
   MEMBER_FILE_MAX_COLUMNS,
+  MEMBER_FILE_MAX_GRID_CELLS,
+  MEMBER_FILE_MAX_GRID_CHARS,
   MEMBER_FILE_MAX_SHEET_ROWS,
   memberFileResultSchema,
 } from "@app/shared";
 import { detectDelimiter, readCsvRecords, readSepLine } from "../src/modules/orgs/memberList/csv.js";
 import { assertMemberFileDecoders, decodeMemberText, decodeWindows1252, looksLikeMacLineEnds } from "../src/modules/orgs/memberList/decodeText.js";
-import { GridBuilder, cutCell } from "../src/modules/orgs/memberList/grid.js";
+import { GridBudget, GridBuilder, cutCell } from "../src/modules/orgs/memberList/grid.js";
 import { openTextFile } from "../src/modules/orgs/memberList/openFile.js";
 
 const bytes = (...parts: Array<string | number[]>): Buffer =>
@@ -216,7 +218,7 @@ describe("the CSV reader", () => {
 
 describe("the grid's limits", () => {
   const grid = (rows: string[][], writtenPastCut: boolean[] = []): ReturnType<GridBuilder["finish"]> => {
-    const g = new GridBuilder("Sheet");
+    const g = new GridBuilder("Sheet", new GridBudget());
     rows.forEach((row, i) => g.addRow(row, writtenPastCut[i] ?? false));
     return g.finish();
   };
@@ -249,9 +251,13 @@ describe("the grid's limits", () => {
   });
 
   it("keeps exactly the last row and cuts one written row more", () => {
-    const g = new GridBuilder(null);
-    for (let i = 0; i < MEMBER_FILE_MAX_SHEET_ROWS; i++) expect(g.addRow([`r${String(i)}`])).toBe(true);
-    expect(g.finish().truncated).toEqual(plain);
+    const full = (): GridBuilder => {
+      const g = new GridBuilder(null, new GridBudget());
+      for (let i = 0; i < MEMBER_FILE_MAX_SHEET_ROWS; i++) expect(g.addRow([`r${String(i)}`])).toBe(true);
+      return g;
+    };
+    expect(full().finish().truncated).toEqual(plain);
+    const g = full();
     expect(g.addRow([""])).toBe(true);
     expect(g.addRow(["one more"])).toBe(false);
     expect(g.addRow(["and another"])).toBe(false);
@@ -261,12 +267,24 @@ describe("the grid's limits", () => {
   });
 
   it("counts blank rows inside the sheet towards the cut, but not blank rows after it", () => {
-    const g = new GridBuilder(null);
-    g.addRow(["a"]);
-    for (let i = 0; i < MEMBER_FILE_MAX_SHEET_ROWS; i++) g.addRow([""]);
-    expect(g.finish()).toEqual({ name: null, rows: [["a"]], truncated: plain });
+    const blanks = (): GridBuilder => {
+      const g = new GridBuilder(null, new GridBudget());
+      g.addRow(["a"]);
+      for (let i = 0; i < MEMBER_FILE_MAX_SHEET_ROWS; i++) g.addRow([""]);
+      return g;
+    };
+    expect(blanks().finish()).toEqual({ name: null, rows: [["a"]], truncated: plain });
+    const g = blanks();
     expect(g.addRow(["b"])).toBe(false);
     expect(g.finish().truncated.rows).toBe(true);
+  });
+
+  it("keeps nothing more once the sheet is finished", () => {
+    const g = new GridBuilder(null, new GridBudget());
+    g.addRow(["a"]);
+    g.finish();
+    expect(g.addRow(["b"])).toBe(false);
+    expect(g.finish().rows).toEqual([["a"]]);
   });
 
   it("cuts a cell at its limit, never inside a character", () => {
@@ -310,9 +328,78 @@ describe("a text file, opened", () => {
   });
 
   it("stops reading at the row cut, even with millions of rows below it", () => {
-    const text = "a\n".repeat(MEMBER_FILE_MAX_SHEET_ROWS + 2_000_000);
-    const result = openTextFile(Buffer.from(text));
-    expect(result.ok && result.sheets[0]?.rows.length).toBe(MEMBER_FILE_MAX_SHEET_ROWS);
-    expect(result.ok && result.sheets[0]?.truncated).toEqual({ rows: true, columns: false });
+    // The grid alone would come out the same if the reader went on to the end,
+    // so the rows handed to the grid are counted: one past the cut, then stop.
+    const addRow = vi.spyOn(GridBuilder.prototype, "addRow");
+    try {
+      const text = "a\n".repeat(MEMBER_FILE_MAX_SHEET_ROWS + 2_000_000);
+      const result = openTextFile(Buffer.from(text));
+      expect(result.ok && result.sheets[0]?.rows.length).toBe(MEMBER_FILE_MAX_SHEET_ROWS);
+      expect(result.ok && result.sheets[0]?.truncated).toEqual({ rows: true, columns: false });
+      expect(addRow).toHaveBeenCalledTimes(MEMBER_FILE_MAX_SHEET_ROWS + 1);
+    } finally {
+      addRow.mockRestore();
+    }
+  });
+});
+
+describe("the grid's budget, all sheets together", () => {
+  const cell = "x".repeat(MEMBER_FILE_MAX_CELL_CHARS);
+
+  it("takes exactly its characters and stops one character past them", () => {
+    const budget = new GridBudget();
+    const g = new GridBuilder(null, budget);
+    const whole = Math.floor(MEMBER_FILE_MAX_GRID_CHARS / MEMBER_FILE_MAX_CELL_CHARS);
+    for (let i = 0; i < whole; i++) expect(g.addRow([cell])).toBe(true);
+    expect(g.addRow(["y".repeat(MEMBER_FILE_MAX_GRID_CHARS - whole * MEMBER_FILE_MAX_CELL_CHARS)])).toBe(true);
+    expect(budget.exceeded).toBe(false);
+    expect(g.addRow(["z"])).toBe(false);
+    expect(budget.exceeded).toBe(true);
+    expect(g.addRow(["z"])).toBe(false);
+  });
+
+  it("counts a cell as it will be posted: cut to its limit", () => {
+    const budget = new GridBudget();
+    const g = new GridBuilder(null, budget);
+    const rows = Math.floor(MEMBER_FILE_MAX_GRID_CHARS / MEMBER_FILE_MAX_CELL_CHARS);
+    for (let i = 0; i < rows; i++) expect(g.addRow([`${cell}${cell}`])).toBe(true);
+    expect(budget.exceeded).toBe(false);
+  });
+
+  it("counts every padded cell, so one wide row makes every row wide", () => {
+    const budget = new GridBudget();
+    const g = new GridBuilder(null, budget);
+    const rows = Math.floor(MEMBER_FILE_MAX_GRID_CELLS / MEMBER_FILE_MAX_COLUMNS);
+    for (let i = 0; i < rows - 1; i++) expect(g.addRow(["a"])).toBe(true);
+    const wide = Array<string>(MEMBER_FILE_MAX_COLUMNS).fill("b");
+    expect(g.addRow(wide)).toBe(true);
+    expect(budget.exceeded).toBe(false);
+    expect(g.finish().rows.length).toBe(rows);
+  });
+
+  it("carries one sheet's cells and characters into the next", () => {
+    const budget = new GridBudget();
+    const first = new GridBuilder("One", budget);
+    const half = Math.floor(MEMBER_FILE_MAX_GRID_CHARS / MEMBER_FILE_MAX_CELL_CHARS / 2);
+    for (let i = 0; i < half; i++) first.addRow([cell]);
+    first.finish();
+    const second = new GridBuilder("Two", budget);
+    for (let i = 0; i < half; i++) expect(second.addRow([cell])).toBe(true);
+    expect(second.addRow([cell, cell])).toBe(false);
+    expect(budget.exceeded).toBe(true);
+    const third = new GridBuilder("Three", budget);
+    expect(third.addRow(["a"])).toBe(false);
+  });
+
+  it("carries cells into the next sheet too", () => {
+    const budget = new GridBudget();
+    const first = new GridBuilder("One", budget);
+    const wide = Array<string>(MEMBER_FILE_MAX_COLUMNS).fill("a");
+    const rows = Math.floor(MEMBER_FILE_MAX_GRID_CELLS / MEMBER_FILE_MAX_COLUMNS / 2);
+    for (let i = 0; i < rows; i++) first.addRow(wide);
+    first.finish();
+    const second = new GridBuilder("Two", budget);
+    for (let i = 0; i < rows; i++) expect(second.addRow(wide)).toBe(true);
+    expect(second.addRow(["a"])).toBe(false);
   });
 });

@@ -32,6 +32,13 @@ describe("member file refusals", () => {
     expect(new Set(words).size).toBe(all.length);
   });
 
+  it("never speak of the file's name, which the server never sees", () => {
+    // Review of PR #85: "named like an Excel file" was said of a members.htm too.
+    for (const w of everyRefusal().map((r) => memberFileRefusalWords(r))) {
+      expect(w).not.toMatch(/\bnamed?\b|file name|extension/i);
+    }
+  });
+
   it("name the row of a quote left open, and the program for a zip that is not Excel", () => {
     expect(memberFileRefusalWords({ code: "unterminated_quote", row: 42 })).toMatch(/^Row 42 /);
     expect(memberFileRefusalWords({ code: "other_zip", archive: "numbers" })).toContain("Numbers");

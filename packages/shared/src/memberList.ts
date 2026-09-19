@@ -30,6 +30,21 @@ export const MEMBER_FILE_MAX_COLUMNS = 100;
 /** The longest cell kept, in characters; the rest of a longer cell is dropped
  *  (no field the list keeps is anywhere near it: a name, an address, a number). */
 export const MEMBER_FILE_MAX_CELL_CHARS = 2_000;
+/** The most cells a file's grid may hold, all sheets together: one sheet at its
+ *  cut. Excel's own 10,000 × 30 list is 300,030 cells (measured 2026-09-19). */
+export const MEMBER_FILE_MAX_GRID_CELLS = MEMBER_FILE_MAX_SHEET_ROWS * MEMBER_FILE_MAX_COLUMNS;
+/** The most characters a file's grid may hold, all sheets together: as many as
+ *  the largest CSV can, so an Excel file holds no more than a CSV may. Excel's
+ *  own 10,000 × 30 list is 2,900,908 characters (measured 2026-09-19). Counted in
+ *  the worker because a workbook can point a million cells at one shared string,
+ *  nearly free there and copied once per cell into the request's thread
+ *  (review of PR #85: a 0.8 MB file took that thread past 1 GB). */
+export const MEMBER_FILE_MAX_GRID_CHARS = MEMBER_FILE_MAX_BYTES;
+/** The longest tag an Excel part may hold, from its `<` to its `>`. The Excel
+ *  package takes 74 s over one closed 1 MiB tag and 173 s over an unclosed one
+ *  (measured 2026-09-19; 32 and 44 ms at 256 KiB); a real part's longest tag is
+ *  a few hundred characters. */
+export const MEMBER_FILE_MAX_TAG_CHARS = 64 * 1024;
 /** A file still being read after this long is refused and its reader stopped. */
 export const MEMBER_FILE_PARSE_TIMEOUT_MS = 15_000;
 /** How many files one server process reads at the same time. */
@@ -122,12 +137,16 @@ export type MemberFileResult = z.infer<typeof memberFileResultSchema>;
 
 const SAVE_AS_XLSX_OR_CSV = "choose File → Save As → Excel Workbook (.xlsx), or save it as CSV, and upload that.";
 
+/** Each sentence is true of EVERY file that draws it — the server never sees a
+ *  file's name (spec Part 3 §9.4), and one mark in the bytes can belong to more
+ *  than one program (review of PR #85). */
 const OTHER_ZIP_WORDS: Readonly<Record<MemberFileOtherZip, string>> = {
   opendocument:
-    "This is an OpenDocument spreadsheet (.ods). In LibreOffice or OpenOffice choose File → Save As → Excel 2007-365 (.xlsx), or save it as CSV, and upload that.",
-  numbers: "This is an Apple Numbers file. In Numbers choose File → Export To → Excel or CSV, and upload that.",
+    "This is an OpenDocument file, as LibreOffice and OpenOffice save. Open it there, choose File → Save As → Excel 2007-365 (.xlsx), or save it as CSV, and upload that.",
+  numbers:
+    "This is an Apple Numbers, Pages or Keynote file. If it is your member list in Numbers, choose File → Export To → Excel or CSV, and upload that.",
   excel_binary: `This is an Excel Binary Workbook (.xlsb). In Excel ${SAVE_AS_XLSX_OR_CSV}`,
-  other: "This is a zip file, not a spreadsheet. Upload your member list as a CSV or Excel (.xlsx) file.",
+  other: "This file is not a spreadsheet we can read. Upload your member list as a CSV or Excel (.xlsx) file.",
 };
 
 type PlainRefusalCode = (typeof PLAIN_REFUSAL_CODES)[number];
@@ -135,14 +154,15 @@ const PLAIN_WORDS: Readonly<Record<PlainRefusalCode, string>> = {
   empty_file: "This file is empty. Export your member list again and upload the new file.",
   too_big: "This file is over 5 MB. Save just the member sheet as CSV and try again.",
   old_excel_or_password:
-    "This looks like an old Excel file (.xls) or a workbook with a password. In Excel choose File → Save As → Excel Workbook (.xlsx), with no password, or save it as CSV.",
+    "This is an older Office file, such as an .xls, or a file with a password, which we can't open. In Excel choose File → Save As → Excel Workbook (.xlsx), with no password, or save it as CSV.",
   pdf: "This is a PDF. The member list has to be a spreadsheet: export it from your software as CSV or Excel (.xlsx) and upload that.",
-  web_page_or_xml: `This file is named like an Excel file but holds a web page or Excel's old XML format. Open it in Excel, ${SAVE_AS_XLSX_OR_CSV}`,
+  web_page_or_xml: `This file holds a web page or XML, not a spreadsheet we can read. If Excel opens it, ${SAVE_AS_XLSX_OR_CSV}`,
   not_a_spreadsheet: "This file is damaged or cut short. Export your member list again, as CSV or Excel (.xlsx), and upload the new file.",
-  unsafe_archive: "This Excel file is built in a way we can't open safely. Open it in Excel, save a fresh copy as .xlsx, and upload that.",
+  unsafe_archive:
+    "This file is built in a way we can't open safely. If it is an Excel file, open it in Excel, save a fresh copy as .xlsx, and upload that.",
   unreadable_excel: `We couldn't read this Excel file. Open it in Excel, ${SAVE_AS_XLSX_OR_CSV}`,
   unreadable_text:
-    "This file is neither a spreadsheet nor readable text. Upload your member list as a CSV or Excel (.xlsx) file; from Excel, “CSV UTF-8” keeps every letter.",
+    "We couldn't read this file as a spreadsheet or as text. Upload your member list as a CSV or Excel (.xlsx) file; from Excel, “CSV UTF-8” keeps every letter.",
   parse_timeout: "This file took too long to read. Save just the member sheet as CSV and upload that.",
   too_complex: "This file is too large or complex to read. Save just the member sheet as CSV and upload that.",
   busy: "Other files are being read right now. Try again in a minute.",

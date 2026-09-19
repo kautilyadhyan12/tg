@@ -7,7 +7,8 @@
 // needs more kills the worker, not the API. The cap does NOT cover Buffers —
 // the byte limits in `zipSafe.ts` and the upload size are what bound those.
 // At most MEMBER_FILE_PARSES_AT_ONCE files are open at once per process; one
-// more is refused as `busy` rather than queued behind them.
+// more is refused as `busy` rather than queued behind them. The route (3a-iii)
+// adds one file at a time per gym, so one account cannot hold both slots.
 //
 // The worker starts on `parseWorker.boot.mjs`, which loads the TypeScript worker
 // through tsx on every Node version (that file says why). Inside vitest too its
@@ -26,19 +27,31 @@ import {
 } from "@app/shared";
 import type { OpenableKind } from "./openFile.js";
 import { sniffMemberFile } from "./sniff.js";
+import { CRASH_NAME } from "./workerAnswer.js";
 
 const WORKER_FILE = new URL("./parseWorker.boot.mjs", import.meta.url);
 
 /** What the worker answers, checked before anything reads it. */
 const workerReplySchema = z.union([
   z.object({ done: memberFileResultSchema }),
-  z.object({ crashed: z.string() }),
+  z.object({ crashed: z.string().regex(CRASH_NAME) }),
 ]);
+
+/** The worker's answer as a result, or an error that names nothing from the
+ *  file: a crash by its error's class name only, any other shape by none. */
+export function readWorkerReply(message: unknown): MemberFileResult {
+  const reply = workerReplySchema.safeParse(message);
+  if (!reply.success) throw new Error("member file worker answered in a shape it never sends");
+  if ("done" in reply.data) return reply.data.done;
+  throw new Error(`member file worker failed inside: ${reply.data.crashed}`);
+}
 
 /** Test seams: production passes nothing. */
 export interface ParseMemberFileSeams {
   timeoutMs?: number;
   heapMb?: number;
+  /** Told each worker's exit code: 1 when it was terminated, 0 when it ended itself. */
+  onWorkerExit?: (exitCode: number) => void;
 }
 
 let open = 0;
@@ -64,6 +77,7 @@ function readInWorker(kind: OpenableKind, bytes: Uint8Array, seams: ParseMemberF
       transferList: [own.buffer],
       resourceLimits: { maxOldGenerationSizeMb: seams.heapMb ?? MEMBER_FILE_WORKER_HEAP_MB },
     });
+    worker.once("exit", (exitCode: number) => seams.onWorkerExit?.(exitCode));
     let settled = false;
     const settle = (finish: () => void): void => {
       if (settled) return;
@@ -79,10 +93,11 @@ function readInWorker(kind: OpenableKind, bytes: Uint8Array, seams: ParseMemberF
     }, seams.timeoutMs ?? MEMBER_FILE_PARSE_TIMEOUT_MS);
     worker.once("message", (message: unknown) => {
       settle(() => {
-        const reply = workerReplySchema.safeParse(message);
-        if (!reply.success) reject(new Error("member file worker answered in a shape it never sends"));
-        else if ("done" in reply.data) resolve(reply.data.done);
-        else reject(new Error(`member file worker failed inside: ${reply.data.crashed}`));
+        try {
+          resolve(readWorkerReply(message));
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("member file worker reply unreadable"));
+        }
       });
     });
     worker.once("error", (error: unknown) => {

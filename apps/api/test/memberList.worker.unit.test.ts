@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { MEMBER_LIST_MAX_DATA_ROWS } from "@app/shared";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { memberFilesOpen, parseMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
-import { buildZip, sharedStringsWorkbookParts } from "./memberList.zipKit.js";
+import { buildZip, sharedStringBombParts, sharedStringsWorkbookParts, sheetXml, workbookParts } from "./memberList.zipKit.js";
 
 const EXCEL = new URL("./fixtures/member-list/excel/", import.meta.url);
 const read = (name: string): Buffer => fs.readFileSync(new URL(name, EXCEL));
@@ -61,9 +61,22 @@ describe("the worker", () => {
   );
 
   it(
-    "stops a worker at the time limit and answers parse_timeout",
+    "stops a worker at the time limit, terminating it, and answers parse_timeout",
     async () => {
-      expect(await parseMemberFile(read("book.xlsx"), { timeoutMs: 1 })).toEqual({ ok: false, refusal: { code: "parse_timeout" } });
+      // A worker that ends by itself exits 0; one terminated exits 1. At 50 ms
+      // the worker has not even loaded its modules (about 750 ms), so only a
+      // terminate can end it before it answers.
+      let exited: (code: number) => void = () => undefined;
+      const exit = new Promise<number>((resolve) => {
+        exited = resolve;
+      });
+      expect(await parseMemberFile(read("book.xlsx"), { timeoutMs: 50, onWorkerExit: (code) => {
+        exited(code);
+      } })).toEqual({
+        ok: false,
+        refusal: { code: "parse_timeout" },
+      });
+      expect(await exit).toBe(1);
       expect(memberFilesOpen()).toBe(0);
       // The next file is read as usual.
       expect((await parseMemberFile(read("csv-utf8.csv"))).ok).toBe(true);
@@ -107,6 +120,36 @@ describe("the worker", () => {
       expect(pooled.toString("utf-8")).toBe("Email\r\nann@example.com\r\n");
       expect(neighbour.toString("utf-8")).toBe("a neighbour in the same pool");
       expect(big.equals(bigCopy)).toBe(true);
+    },
+    WORKER_TEST_MS,
+  );
+
+  it(
+    "refuses a workbook whose cells all point at one long string, before the grid reaches this thread",
+    async () => {
+      // Review of PR #85, C1: 300,000 cells on one 2,000-letter string took this
+      // thread's heap from 12 MB past 1 GB. The budget stops it in the worker.
+      const bomb = buildZip(sharedStringBombParts(3_000, 100, "अ".repeat(2_000)));
+      expect(bomb.length).toBeLessThan(1024 * 1024);
+      const heapBefore = process.memoryUsage().heapUsed;
+      expect(await parseMemberFile(bomb)).toEqual({ ok: false, refusal: { code: "too_complex" } });
+      expect(process.memoryUsage().heapUsed - heapBefore).toBeLessThan(100 * 1024 * 1024);
+    },
+    WORKER_TEST_MS,
+  );
+
+  it.each([
+    ["one tag never closed", `<row r="1" ${"a".repeat(1024 * 1024)}`],
+    ["a > inside quotes, then the tag runs on", `<row r="1"><c r="A1" t=">" ${"a ".repeat(512 * 1024)}`],
+    ["one long tag that does close", `<row r="1" ${"a".repeat(1024 * 1024)}></row>`],
+    ["rows with no > for the hidden-row check", "<row a ".repeat(150_000)],
+  ])(
+    "answers a sheet with %s well inside the time limit",
+    async (_label, inside) => {
+      const sheet = sheetXml([["Email"]]).replace("<sheetData>", `<sheetData>${inside}`);
+      const t0 = performance.now();
+      expect(await parseMemberFile(buildZip(workbookParts(sheet)))).toEqual({ ok: false, refusal: { code: "unsafe_archive" } });
+      expect(performance.now() - t0).toBeLessThan(5_000);
     },
     WORKER_TEST_MS,
   );

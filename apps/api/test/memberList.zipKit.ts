@@ -221,3 +221,18 @@ export function listZip(zip: Buffer): Array<{ name: string; method: number; flag
   }
   return out;
 }
+
+/** The review of PR #85's amplifier: every cell of a `rows` × `columns` sheet
+ *  points at ONE shared string. Tiny on disk and in the worker; one copy per cell
+ *  wherever the grid is posted. */
+export function sharedStringBombParts(rows: number, columns: number, text: string): KitPart[] {
+  const cells = Array.from({ length: columns }, (_, c) => `<c r="${columnName(c)}@" t="s"><v>0</v></c>`).join("");
+  const body = Array.from({ length: rows }, (_, r) => `<row r="${String(r + 1)}">${cells.replace(/@/g, String(r + 1))}</row>`).join("");
+  const parts = sharedStringsWorkbookParts([["x"]]);
+  const sheet = parts.find((p) => p.name === "xl/worksheets/sheet1.xml");
+  const strings = parts.find((p) => p.name === "xl/sharedStrings.xml");
+  if (sheet === undefined || strings === undefined) throw new Error("no sheet or strings");
+  sheet.data = xml(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`);
+  strings.data = xml(`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>${text}</t></si></sst>`);
+  return parts;
+}
