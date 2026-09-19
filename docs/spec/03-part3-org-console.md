@@ -717,8 +717,9 @@ together (Excel ends a Mac file's last line in CRLF), `macintosh` · else
 `unreadable_text`. **Windows-1252 is our own table, not Node's** (3a-i, measured
 2026-09-19): Node 24.11.1's `TextDecoder("windows-1252")` reads 0x80–0x9F as ISO-8859-1
 control characters — 27 bytes, among them € ’ “ ” and Š š Ž ž Œ œ Ÿ — against Python's
-cp1252; its `macintosh` matched mac_roman on all 256 bytes. So 1252 is latin-1 with
-those 27 mapped from the WHATWG index. Boot asserts `utf-8`, `utf-16le`, `utf-16be`
+cp1252 (Node 22.23.2, CI's and production's, decodes them right); its `macintosh`
+matched mac_roman on all 256 bytes. So 1252 is latin-1 with those 27 mapped from the
+WHATWG index — one answer on every Node. Boot asserts `utf-8`, `utf-16le`, `utf-16be`
 and `macintosh` exist (Node's official builds carry full ICU; a slim build would
 not). Excel in a comma-decimal country writes `;`.
 
@@ -732,8 +733,11 @@ kept as typed (Excel's behaviour). An unclosed quote at the end → `unterminate
 with its row. One hand-written state machine, table-tested — no CSV package.
 
 **The worker.** Everything after the sniff runs in a fresh `worker_threads` Worker per
-file: `execArgv: ["--import", "tsx"]` (what production, `tsx watch` and vitest all
-need), `resourceLimits.maxOldGenerationSizeMb: 256`, a 15 s wall clock then
+file, started on `parseWorker.boot.mjs`, two lines of plain JavaScript that load the
+TypeScript worker with tsx's `tsImport` (3a-i, found by CI: `execArgv: ["--import",
+"tsx"]` works on Node 24 but not on Node 22.23.2, where Node's own type stripping
+loaded the worker and its `./openFile.js` import was not found — production runs
+Node 22), `execArgv: []`, `resourceLimits.maxOldGenerationSizeMb: 256`, a 15 s wall clock then
 `terminate()`, the bytes TRANSFERRED not copied, the reply parsed by Zod. At most 2
 parses run at once per process; a third answers 503 `busy`. `resourceLimits` does not
 cover Buffers — the byte caps above are what bound memory; the worker is what keeps a
@@ -995,10 +999,11 @@ app, so it needs `members.confirm` (owner and manager by default), not `members.
 
 The builder measures a 10,000-row, 30-column file (time, peak memory) and pastes it.
 **Measured 2026-09-19 (3a-i)**, files saved by Excel 16 with invented people, through
-`parseMemberFile` on Node 24.11.1, the worker's modules already transpiled once:
-`.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) — 1,268 ms, the whole process's
-peak RSS 111 → 246 MB; CSV UTF-8 3.10 MiB — 493 ms, 99 → 159 MB. The request thread's
-longest stall was 21 ms for either (one more Zod pass of the reply: 28–30 ms).
+`parseMemberFile`, the worker's modules already transpiled once, on Node 22.23.2
+(production's) and 24.11.1: `.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) —
+1,227 and 1,098 ms, the whole process's peak RSS 129 → 233 and 109 → 247 MB; CSV
+UTF-8 3.10 MiB — 623 and 474 ms, 129 → 175 and 97 → 145 MB. The request thread's
+longest stall was 20–22 ms (one more Zod pass of the reply: 27–32 ms).
 
 Refusals are the SERVER'S sentences and a screen prints them as sent; each says the fix:
 `empty_file` · `too_big` ("…over 5 MB. Save just the member sheet as CSV and try
