@@ -1,0 +1,4 @@
+# Test files whose exact bytes are the test: a CSV's CRLF, bare CR or LF line ends
+# and its code page must reach every checkout unchanged (core.autocrlf would
+# otherwise rewrite them on Windows).
+apps/api/test/fixtures/member-list/** -text

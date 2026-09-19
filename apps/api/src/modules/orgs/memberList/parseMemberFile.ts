@@ -1,0 +1,114 @@
+// Opening an uploaded member file (spec Part 3 §9.4): the sniff on the request's
+// own thread, then everything else in a fresh worker thread per file.
+//
+// The worker is what keeps a slow file off the event loop and makes a hard
+// timeout possible at all: after MEMBER_FILE_PARSE_TIMEOUT_MS it is terminated
+// mid-parse. Its heap is capped at MEMBER_FILE_WORKER_HEAP_MB, and a file that
+// needs more kills the worker, not the API. The cap does NOT cover Buffers —
+// the byte limits in `zipSafe.ts` and the upload size are what bound those.
+// At most MEMBER_FILE_PARSES_AT_ONCE files are open at once per process; one
+// more is refused as `busy` rather than queued behind them.
+//
+// Inside vitest the worker's modules load through tsx, not vite, so nothing in
+// it can be mocked: the pure functions are tested directly, and this file for
+// its wiring (measured 2026-09-19: about 750 ms for a worker's first start).
+import { Worker } from "node:worker_threads";
+import { z } from "zod";
+import {
+  MEMBER_FILE_PARSES_AT_ONCE,
+  MEMBER_FILE_PARSE_TIMEOUT_MS,
+  MEMBER_FILE_WORKER_HEAP_MB,
+  memberFileResultSchema,
+  type MemberFileRefusal,
+  type MemberFileResult,
+} from "@app/shared";
+import type { OpenableKind } from "./openFile.js";
+import { sniffMemberFile } from "./sniff.js";
+
+const WORKER_FILE = new URL("./parseWorker.ts", import.meta.url);
+
+/** What the worker answers, checked before anything reads it. */
+const workerReplySchema = z.union([
+  z.object({ done: memberFileResultSchema }),
+  z.object({ crashed: z.string() }),
+]);
+
+/** Test seams: production passes nothing. */
+export interface ParseMemberFileSeams {
+  timeoutMs?: number;
+  heapMb?: number;
+}
+
+let open = 0;
+
+/** How many files are being read right now (for tests). */
+export const memberFilesOpen = (): number => open;
+
+const refused = (refusal: MemberFileRefusal): MemberFileResult => ({ ok: false, refusal });
+
+const codeOf = (error: unknown): string =>
+  error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "no code";
+
+function readInWorker(kind: OpenableKind, bytes: Uint8Array, seams: ParseMemberFileSeams): Promise<MemberFileResult> {
+  // The worker is handed its own copy, transferred rather than cloned: the
+  // caller's bytes may share an ArrayBuffer with other data (Node pools small
+  // Buffers), and a transfer would detach it under them.
+  const own = new Uint8Array(bytes);
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(WORKER_FILE, {
+      execArgv: ["--import", "tsx"],
+      workerData: { kind, bytes: own },
+      transferList: [own.buffer],
+      resourceLimits: { maxOldGenerationSizeMb: seams.heapMb ?? MEMBER_FILE_WORKER_HEAP_MB },
+    });
+    let settled = false;
+    const settle = (finish: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      finish();
+    };
+    const timer = setTimeout(() => {
+      settle(() => {
+        resolve(refused({ code: "parse_timeout" }));
+      });
+    }, seams.timeoutMs ?? MEMBER_FILE_PARSE_TIMEOUT_MS);
+    worker.once("message", (message: unknown) => {
+      settle(() => {
+        const reply = workerReplySchema.safeParse(message);
+        if (!reply.success) reject(new Error("member file worker answered in a shape it never sends"));
+        else if ("done" in reply.data) resolve(reply.data.done);
+        else reject(new Error(`member file worker failed inside: ${reply.data.crashed}`));
+      });
+    });
+    worker.once("error", (error: unknown) => {
+      settle(() => {
+        const code = codeOf(error);
+        // The file needed more memory than the worker may have.
+        if (code === "ERR_WORKER_OUT_OF_MEMORY") resolve(refused({ code: "too_complex" }));
+        else reject(new Error(`member file worker could not run (${code})`));
+      });
+    });
+    worker.once("exit", (exitCode: number) => {
+      settle(() => {
+        reject(new Error(`member file worker stopped (exit ${String(exitCode)}) without an answer`));
+      });
+    });
+  });
+}
+
+/** An uploaded file as a grid of text cells, or the refusal that says what to
+ *  do instead. Throws only for a fault of the server's own (the worker could not
+ *  start, or crashed in our code) — never with a cell in the message. */
+export async function parseMemberFile(bytes: Uint8Array, seams: ParseMemberFileSeams = {}): Promise<MemberFileResult> {
+  const sniffed = sniffMemberFile(bytes);
+  if (sniffed.kind === "refused") return refused(sniffed.refusal);
+  if (open >= MEMBER_FILE_PARSES_AT_ONCE) return refused({ code: "busy" });
+  open++;
+  try {
+    return await readInWorker(sniffed.kind, bytes, seams);
+  } finally {
+    open--;
+  }
+}
