@@ -680,10 +680,16 @@ browser's type are not sent and not used.
    `ERR_BUFFER_TOO_LARGE`, a length that differs from the central directory's, or a
    CRC-32 mismatch (`zlib.crc32`) → `unsafe_archive`. (Measured: 50 MB of spaces
    deflates to 50,971 bytes and the cap stops it.)
-5. A part containing `<!DOCTYPE` or `<!ENTITY` → `unsafe_archive`. A part holding
-   `<sheetData` (a worksheet, whatever its path) with `hidden="1"` or `hidden="true"`
-   on a `<row` or `<col` → warning `hidden_rows_or_columns` (a filtered view is stored
-   as hidden rows, so this also catches "exported a filter").
+5. A part containing `<!DOCTYPE` or `<!ENTITY` → `unsafe_archive`. So is a part with a
+   tag longer than 64 KiB from its `<` to the first `>` outside a quoted value, or a
+   comment, CDATA section or processing instruction never closed (review of PR #85,
+   measured: the package took 74 s over one closed 1 MiB tag, 94 s over one whose
+   early `>` sat inside quotes, 173 s over one never closed — 32 and 44 ms at 256 KiB);
+   one linear pass. A part holding `<sheetData` (a worksheet, whatever its path) with
+   `hidden="1"` or `hidden="true"` on a `<row` or `<col` → warning
+   `hidden_rows_or_columns` (a filtered view is stored as hidden rows, so this also
+   catches "exported a filter"); the pattern never scans past the next `<` or `>`
+   (with `[^>]*?` it took 409 ms at 64 KiB, growing with the square of the size).
 6. Write a fresh archive of only those parts: stored, true sizes and CRCs, no data
    descriptors, no extra fields, no comment. ONLY this archive reaches the package —
    its sequential reader and our central-directory reader can then never disagree.
@@ -701,7 +707,13 @@ something was written past the cut; blank rows after the last written one are
 dropped, blank rows inside are kept (row numbers match the gym's sheet). A workbook the
 package cannot read is refused `unreadable_excel`; its error is never read (it can
 quote a cell). Excel's "Strict Open XML" `.xlsx` reads exactly as a normal one
-(measured 2026-09-19).
+(measured 2026-09-19). **The grid's budget** (review of PR #85, Critical): all sheets
+together hold at most 1,002,000 cells (one sheet at its cut) and 5,242,880 characters
+(as many as the largest CSV), counted in the worker as the grid will be posted —
+padded rows, cut cells — or the file is `too_complex`. A workbook can point every
+cell at one shared string: one string in the worker, a copy per cell once posted (a
+0.8 MB file took the request thread's heap past 1 GB). Excel's own 10,000 × 30 list
+is 300,030 cells and 2,900,908 characters.
 
 **CSV: decoding, measured on Excel 16 here** (ANSI code page 1252, list separator `,`):
 
@@ -742,8 +754,11 @@ TypeScript worker with tsx's `tsImport` (3a-i, found by CI: `execArgv: ["--impor
 "tsx"]` works on Node 24 but not on Node 22.23.2, where Node's own type stripping
 loaded the worker and its `./openFile.js` import was not found — production runs
 Node 22), `execArgv: []`, `resourceLimits.maxOldGenerationSizeMb: 256`, a 15 s wall clock then
-`terminate()`, the bytes TRANSFERRED not copied, the reply parsed by Zod. At most 2
-parses run at once per process; a third answers 503 `busy`. `resourceLimits` does not
+`terminate()`, the bytes copied once and the copy transferred (the caller's Buffer may
+share pooled memory, which a transfer would detach), the reply parsed by Zod; a
+crash comes back as its error's class name only. At most 2 parses run at once per
+process; a third answers 503 `busy`; 3a-iii's route also allows one parse per gym at a
+time, so one account cannot hold both. `resourceLimits` does not
 cover Buffers — the byte caps above are what bound memory; the worker is what keeps a
 slow parse off the event loop and makes a hard timeout possible at all. (Measured: a
 `.ts` worker spawned this way, importing a sibling module as `./x.js`, answers under
@@ -994,7 +1009,9 @@ app, so it needs `members.confirm` (owner and manager by default), not `members.
 | archive entries | 1,000 |
 | data rows · columns · characters in a cell | 10,000 · 100 · 2,000 |
 | header scan · value sample | 20 rows · 200 cells |
-| parse wall clock · at once · worker heap | 15 s · 2 · 256 MB |
+| parse wall clock · at once · worker heap | 15 s · 2 a process, 1 a gym (3a-iii) · 256 MB |
+| a grid's cells · characters, all sheets | 1,002,000 · 5,242,880 |
+| a tag in an Excel part | 64 KiB |
 | a staged upload lives | 60 minutes |
 | upload | 12 an hour a person, 40 an address (`ipMax` explicit: a front desk shares one) |
 | confirm | 30 an hour a person, 120 an address |
@@ -1004,24 +1021,30 @@ app, so it needs `members.confirm` (owner and manager by default), not `members.
 The builder measures a 10,000-row, 30-column file (time, peak memory) and pastes it.
 **Measured 2026-09-19 (3a-i)**, files saved by Excel 16 with invented people, through
 `parseMemberFile`, the worker's modules already transpiled once, on Node 22.23.2
-(production's) and 24.11.1: `.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) —
-1,227 and 1,098 ms, the whole process's peak RSS 129 → 233 and 109 → 247 MB; CSV
-UTF-8 3.10 MiB — 623 and 474 ms, 129 → 175 and 97 → 145 MB. The request thread's
-longest stall was 20–22 ms (one more Zod pass of the reply: 27–32 ms).
+(production's), three runs after round one's fixes (the tag check reads every tag):
+`.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) — 1,403–1,589 ms, the whole
+process's peak RSS 133 → 235 MB; CSV UTF-8 3.10 MiB — 608–908 ms, 134 → 171 MB. The
+request thread's longest stall was 19–24 ms (one more Zod pass of the reply: 39–49 ms).
 
 Refusals are the SERVER'S sentences and a screen prints them as sent; each says the fix:
 `empty_file` · `too_big` ("…over 5 MB. Save just the member sheet as CSV and try
-again.") · `old_excel_or_password` ("This looks like an old Excel file (.xls) or a
-workbook with a password. In Excel choose File → Save As → Excel Workbook (.xlsx),
-with no password, or save it as CSV.") · `pdf` · `other_zip` · `not_a_spreadsheet` ·
-`unsafe_archive` ("This Excel file is built in a way we can't open safely. Open it in
-Excel, save a fresh copy as .xlsx, and upload that.") · `web_page_or_xml` ·
+again.") · `old_excel_or_password` ("This is an older Office file, such as an .xls, or
+a file with a password, which we can't open. In Excel choose File → Save As → Excel
+Workbook (.xlsx), with no password, or save it as CSV.") · `pdf` · `other_zip` ·
+`not_a_spreadsheet` · `unsafe_archive` ("This file is built in a way we can't open
+safely. If it is an Excel file, open it in Excel, save a fresh copy as .xlsx, and
+upload that.") · `web_page_or_xml` ·
 `unreadable_excel` · `unreadable_text` · `unterminated_quote` · `too_many_rows` ·
 `too_many_columns` · `no_rows` · `parse_timeout` · `too_complex` ("This file is too
 large or complex to read. Save just the member sheet as CSV and upload that.") ·
 `busy` · `list_changed` · `large_change` · `upload_expired` · `upload_superseded`.
-`other_zip` names OpenDocument, Apple Numbers or Excel Binary where the archive says
-so, with that program's own way to save as `.xlsx` or CSV. A file with no email and no phone column is NOT refused: it
+`other_zip` names OpenDocument, Apple's Numbers, Pages or Keynote, or Excel Binary
+where the archive says so, with that program's own way to save as `.xlsx` or CSV.
+**Every sentence is true of every file that draws it** (review of PR #85): the server
+never sees a file's name, so no sentence speaks of one, and one mark in the bytes can
+belong to several programs (a compound file is also an old Word file; `Index/
+Document.iwa` is also Pages and Keynote; `mimetype` + `content.xml` is any
+OpenDocument file). A file with no email and no phone column is NOT refused: it
 answers `needsMapping: true` with its columns and samples.
 
 **Never logged, never in an error reply, never in Sentry:** a cell, a name, an
