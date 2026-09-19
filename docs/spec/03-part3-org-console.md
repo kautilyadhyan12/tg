@@ -314,6 +314,9 @@ where v1 designed it.
 
 ### 4.3 Members
 
+*(AMENDED 2026-09-19: the gym's own member list — upload, reconcile, invites, the
+code admitting at once, CSV export's escaping — is §9, which wins where this differs.)*
+
 **Purpose:** roster, seats, and the 30-second walk-in join.
 
 Header: **Seat meter** (`members / cap`, color at 90 %) · search · filters
@@ -553,7 +556,706 @@ layer then multiplies adoption. Don't invert it.
 
 ---
 
-*— End of Part 3. Remaining queue (v1 §23, one at a time): **Part 4 —
+## 9. The member list
+
+*(ADDED 2026-09-19, a planning chat with no code: RULINGS 2026-08-18, 2026-09-17 and
+2026-09-19; ROADMAP Stage 2 items 3 and 5. Where §4.3 or the 2026-08-18 design notes
+differ, this section wins: a list row carries no plan, fee or renewal date, and the
+uploaded line is not kept. AMENDED the same day on Kd's words (RULINGS 2026-09-19): a
+row keeps the gym's own STATUS word and the list can be filtered by it; nobody is
+emailed until staff press Invite; and a gym with no other software keeps its list in
+the app by hand. Every number marked "measured" came from a command run on 2026-09-19;
+the scripts are kept outside the repository, at `D:\Projects\ai-home-gym-member-list\`.)*
+
+### 9.1 What it is
+
+The member list is the gym's own list of its members, held in the app. It serves two
+kinds of gym with one mechanism:
+- **A gym with other software** exports its list (CSV or Excel) and uploads it whenever
+  it likes; each of those uploads is its WHOLE list as of today.
+- **A gym with no other software** uploads once (its spreadsheet, or a file from the
+  software it is leaving) or never, and keeps the list in the app by hand: staff add a
+  person, change one, take one off. An upload can also just ADD people.
+
+The server reads a file, says what it understood and what would change, and changes
+nothing until staff confirm. The list keeps each person's name, email, phone, member
+number and the gym's own status word ("Active", "Expired", "Frozen" …), and can be
+filtered by that word. Staff choose who gets the app — everyone, or a filter such as
+Active — and press **Invite**; only then is anyone emailed (9.12), once. For every app
+member of the gym the app knows one of three things — on the list · no longer on the
+list · never on the list. Nobody is ever removed on their own, and the list never
+blocks a join. Fees, renewal dates and payments are NOT part of it; they come later
+with the management features (9.11).
+
+### 9.2 Principles (each is a test in 9.10)
+
+1. **Source of truth, never a gate.** The list changes what the gym SEES. It grants
+   nothing in 3a, blocks nothing ever, and removes nobody by itself.
+2. **The table is the gym's list as it stands, exactly**: the newest whole-list
+   upload, plus what staff have added, changed or taken off since. A person who leaves
+   the list leaves the table. History is ONE timestamp on the membership,
+   `last_listed_at`.
+3. **Matching is worked out when asked, never stored.** App member ↔ list entry by
+   VERIFIED email, else by the phone the member gave. There is no link column, so
+   nothing can drift, and deleting an account needs no new statement.
+4. **A wrong match is worse than a missed one.** Exact keys only. A name never
+   matches anyone. A phone match clears a mark and grants nothing (RULINGS 2026-09-17).
+5. **Read, show, then write.** Upload → preview → confirm. A confirm applies to the
+   list the preview was worked out against, or refuses (Terraform's stale-plan rule).
+6. **The same file twice writes nothing**: zero rows touched, the version not bumped.
+7. **Keep only what a screen reads**: name, email, phone, member number, status. Every
+   other column is dropped in memory, never stored, never logged. The file is never
+   stored.
+8. **Nothing in the file is believed**: not its name, type, declared sizes or encoding.
+9. **Destructive steps carry a guard** sized to the gym (9.8), and an explicit
+   acknowledgement for that one action — never a setting.
+10. **Nobody is emailed until staff press Invite** (RULINGS 2026-09-19). A confirm
+    sends nothing. The status word only chooses who is INVITED; it never decides who
+    may join (RULINGS 2026-08-24, reaffirmed 2026-09-17: an upload is days old).
+11. **The gym's invite is its yes.** Signing in with an address joins a person without
+    a code only where the gym invited that address; everyone else uses the code.
+
+### 9.3 Slices — one chat and one pull request each
+
+| Slice | What lands | Packages | Model |
+|---|---|---|---|
+| 3a-i | Opening a file safely: type sniff, safe unzip and re-pack, the parse worker, CSV decoding and parsing → a grid of text cells. No database, no route. | `read-excel-file` | Opus xhigh |
+| 3a-ii | Understanding the grid: header row, column guesses, cleaning of name, email, phone, member number and status, placeholders, duplicates → rows and plain-word problems; `tools/read-member-file.ts`. No database, no route. | `libphonenumber-js` | Opus xhigh |
+| 3a-iii | The list on the server: migration, the reconcile rule, upload (whole list, or add) → preview → confirm, the reads with the status filter, the hourly expiry, the list going when a gym closes. | — | Opus xhigh |
+| 3a-iv | Keeping the list by hand: add one person, change one, take one off, put an app member on the list, remove the unlisted in one call (with its guard). | — | Opus xhigh |
+| 3b | The invites, sent when staff press Invite (9.12). | — | Opus xhigh |
+| 3c | The code admits at once (9.13). | — | Opus xhigh |
+| 5 | The screen (9.14). | — | Opus xhigh |
+
+Shared shapes and every constant in 9.9 live in `packages/shared/src/memberList.ts`
+(new; `orgs.ts` is already past 1,700 lines). Server code lives in
+`apps/api/src/modules/orgs/memberList/`. The word in code, routes and screens is
+**member list**; "roster" already means the app-members page in this module and is not
+reused. Phone parsing stays on the server (the web never imports the phone metadata).
+
+### 9.4 Opening a file safely (3a-i)
+
+**Measured, and the reason for this slice.** `read-excel-file` 9.3.10 unzips in Node
+with `unzipper-esm`, reads each part's LOCAL header and calls `Buffer.alloc(declared
+size)`; nothing caps inflated bytes. A 139-byte file whose header claimed 200 MB took
+the process from 46 MB to 447 MB; a 153 KB file of honest headers inflated to 150 MB
+(365 MB peak). A 5 MB upload could ask for gigabytes and kill the API. Its XML reader
+(`saxen`) defines no entities, so entity bombs do not apply, and formulas are never
+worked out (it reads the cached value). So the package is kept, and never sees a file
+we have not rebuilt ourselves.
+
+**Transport.** `POST` JSON `{ contentBase64, mode, mapping? }`, the photo scan's pattern
+(`analyze-photo`): no multipart, so no form can post it cross-site. `bodyLimit` 7.5 MB.
+Sign-in, the privilege check and the rate limit all run in `onRequest`, in that order,
+BEFORE the body is read — a stranger's 7 MB is never parsed. The file name and the
+browser's type are not sent and not used.
+
+**Sniff by content, never by name.**
+
+| First bytes | Treated as |
+|---|---|
+| `50 4B 03 04` (or `05 06`, `07 08`) | a ZIP → the safe unzip below |
+| `D0 CF 11 E0 A1 B1 1A E1` | refused `old_excel_or_password` — a legacy `.xls` AND a password-protected `.xlsx` both look like this |
+| `25 50 44 46` | refused `pdf` |
+| after any byte-order mark and white space, `<?xml` `<!doctype` `<!--` `<html` `<head` `<body` `<meta` `<table` `<style` `<workbook` or `MIME-Version:` | refused `web_page_or_xml` — an "Export to Excel" button that writes a web page or Excel 2003 XML under an `.xls` name (Kd, 2026-09-19; Excel's own Web Page, Single File Web Page and XML Spreadsheet 2003 saves are the fixtures) |
+| anything else | text → the CSV reader |
+
+**Safe unzip and re-pack** (`zipSafe`; Node's `zlib` only, no package):
+1. Find the end-of-central-directory record from the tail (last 65,557 bytes). None →
+   `not_a_spreadsheet`. Any ZIP64 record, any `0xFFFF`/`0xFFFFFFFF` sentinel, a disk
+   number other than 0 → `unsafe_archive` (ZIP64 is never needed under 5 MiB).
+2. Walk the central directory, bounds-checking every offset and length: at most 1,000
+   entries (Apache POI's figure); flag bit 0 (encrypted) → `old_excel_or_password`;
+   method 0 or 8 only; a name that is absolute, holds `..`, a backslash or NUL, or
+   repeats → `unsafe_archive`.
+3. It must hold `[Content_Types].xml` and `xl/workbook.xml`, else `other_zip` (naming
+   OpenDocument or Numbers where the archive says so). A macro part (`vbaProject.bin`)
+   is simply never read — step 6's allowlist leaves it behind.
+4. For each entry ending `.xml` or `.rels`: read its local header for the data start;
+   the data range must lie inside the file and must not overlap an earlier entry's
+   (the overlapping-files bomb). The parts' DECLARED sizes over 25 MiB in total →
+   `too_complex`, before a byte is inflated (an honest workbook that big is far past
+   10,000 rows, and its fix is the member sheet as CSV). Inflate each with
+   `zlib.inflateRawSync(slice, { maxOutputLength: its declared size })`.
+   `ERR_BUFFER_TOO_LARGE`, a length that differs from the central directory's, or a
+   CRC-32 mismatch (`zlib.crc32`) → `unsafe_archive`. (Measured: 50 MB of spaces
+   deflates to 50,971 bytes and the cap stops it.)
+5. A part containing `<!DOCTYPE` or `<!ENTITY` → `unsafe_archive`. A part holding
+   `<sheetData` (a worksheet, whatever its path) with `hidden="1"` or `hidden="true"`
+   on a `<row` or `<col` → warning `hidden_rows_or_columns` (a filtered view is stored
+   as hidden rows, so this also catches "exported a filter").
+6. Write a fresh archive of only those parts: stored, true sizes and CRCs, no data
+   descriptors, no extra fields, no comment. ONLY this archive reaches the package —
+   its sequential reader and our central-directory reader can then never disagree.
+
+**Reading it.** `readXlsxFile(repacked, { parseNumber: (s) => s, trim: false })`.
+`parseNumber` is what keeps a phone or member number exact (measured on a real Excel
+file: `"919876543210"`, `"1234567890123456"`). Every sheet comes back; a cell becomes
+text (string as is · TRUE/FALSE · a date as `YYYY-MM-DD` · empty). A sheet is cut at
+10,020 rows and 100 columns and marked `truncated: { rows, columns }` only where
+something was written past the cut; blank rows after the last written one are
+dropped, blank rows inside are kept (row numbers match the gym's sheet). A workbook the
+package cannot read is refused `unreadable_excel`; its error is never read (it can
+quote a cell). Excel's "Strict Open XML" `.xlsx` reads exactly as a normal one
+(measured 2026-09-19).
+
+**CSV: decoding, measured on Excel 16 here** (ANSI code page 1252, list separator `,`):
+
+| Excel's "Save as" | Bytes written |
+|---|---|
+| CSV UTF-8 | BOM `EF BB BF`, CRLF |
+| CSV (Comma delimited) | windows-1252, no BOM, CRLF; a letter outside 1252 (Ł, अ) is written as a literal `?` — lost at export |
+| Unicode Text | UTF-16LE with BOM `FF FE`, TAB-separated |
+| CSV (Macintosh) | Mac Roman, bare CR line ends — and CRLF after the last line |
+| CSV (MS-DOS) | the OEM code page, CRLF — cannot be told from 1252 by decoding |
+| every one of them | a 12-digit number in a General cell is written `9.19877E+11`, a 16-digit one `1.23457E+15`: the digits are gone before we see the file |
+
+Ladder: BOM → UTF-8, UTF-16LE or UTF-16BE · else strict UTF-8 (`TextDecoder`,
+`fatal: true`) · else, where bare CR line ends are at least as many as CRLF and LF
+together (Excel ends a Mac file's last line in CRLF), `macintosh` · else
+`windows-1252` (it never fails, so it is last). A NUL left after decoding →
+`unreadable_text`. **Windows-1252 is our own table, not Node's** (3a-i, measured
+2026-09-19): Node 24.11.1's `TextDecoder("windows-1252")` reads 0x80–0x9F as ISO-8859-1
+control characters — 27 bytes, among them € ’ “ ” and Š š Ž ž Œ œ Ÿ — against Python's
+cp1252; its `macintosh` matched mac_roman on all 256 bytes. So 1252 is latin-1 with
+those 27 mapped from the WHATWG index. Boot asserts `utf-8`, `utf-16le`, `utf-16be`
+and `macintosh` exist (Node's official builds carry full ICU; a slim build would
+not). Excel in a comma-decimal country writes `;`.
+
+**CSV: parsing.** A first line `sep=X` names the delimiter and is not data. Otherwise
+Papa Parse's published rule over `,` `;` TAB `|`: parse the first 10 non-empty records
+with each; keep those averaging more than 1.99 fields; lowest change in field count
+between rows wins, then most fields, then that order; none → `,` (a one-column list of
+emails is a real file). A quote opens a field only as its first character; `""` is a
+quote; CRLF, LF and CR end a record outside quotes; text after a closing quote is
+kept as typed (Excel's behaviour). An unclosed quote at the end → `unterminated_quote`
+with its row. One hand-written state machine, table-tested — no CSV package.
+
+**The worker.** Everything after the sniff runs in a fresh `worker_threads` Worker per
+file: `execArgv: ["--import", "tsx"]` (what production, `tsx watch` and vitest all
+need), `resourceLimits.maxOldGenerationSizeMb: 256`, a 15 s wall clock then
+`terminate()`, the bytes TRANSFERRED not copied, the reply parsed by Zod. At most 2
+parses run at once per process; a third answers 503 `busy`. `resourceLimits` does not
+cover Buffers — the byte caps above are what bound memory; the worker is what keeps a
+slow parse off the event loop and makes a hard timeout possible at all. (Measured: a
+`.ts` worker spawned this way, importing a sibling module as `./x.js`, answers under
+`node --import tsx` — about 750 ms for the first start — and inside vitest 2.1.9.
+Inside vitest the worker's modules load through tsx, not vite, so nothing in it can be
+mocked: test the pure functions directly and the worker for its wiring.)
+
+**Out of 3a-i:** `{ ok: true, kind, sheets: [{ name, rows: string[][], truncated:
+{ rows, columns } }], facts: { encoding?, delimiter? }, warnings }` (a CSV's one sheet
+has `name: null`; 3a-i's warnings are `hidden_rows_or_columns` and `encoding_guessed`)
+or `{ ok: false, refusal }` with one refusal from 9.9. The shapes and the refusal
+words are `packages/shared/src/memberList.ts`; the entry point is
+`parseMemberFile(bytes)`. A worker out of heap answers `too_complex`; a fault of our
+own code throws with the error's name only.
+
+### 9.5 Understanding the grid (3a-ii) — the rules that pick, each with a table test
+
+**Header row.** Over the first 20 non-empty rows: +2 for a cell that is a known header
+word (below), −3 for a cell that looks like an email or a phone VALUE; the best row
+scoring 2 or more is the header (first on a tie); none → the file has no header and
+columns are told by their values alone. **Sheet:** the first sheet that yields an
+email or phone column; the others are named in `other_sheets_ignored`.
+
+**Header words** are compared after: NFKC · lower case · accents off · `_ - . / \ ( ) :
+# *` and apostrophes to a space · spaces collapsed · a trailing ` 1` or ` primary`
+dropped. Seen in a real product's help pages or sample files (2026-09-19): Gymdesk,
+Zen Planner, Clubworx, Arketa, WellnessLiving, GymMaster, Magicline, Dynamics 365,
+Google Contacts, Mailchimp, Square, Stripe. No Indian or Brazilian product publishes
+its headers, so the list is a guess-assist over a mapping staff always see, never the
+contract.
+
+| Field | Words |
+|---|---|
+| first name | first name · firstname · member firstname · given name · fname · first · forename · vorname · prenom · nombre · nome · voornaam |
+| last name | last name · lastname · family name · lname · surname · last · nachname · nom · apellido · apellidos · sobrenome · achternaam · cognome — and `name` where a first-name column exists (Magicline) |
+| full name | full name · name · member name · client name · customer name · display name · nome completo · nombre completo · naam · nom complet |
+| email | email · e mail · email address · e mail address · email addresses · email id · mail · primary email · e mail 1 value · correo · correo electronico · courriel · e mailadres · endereco de e mail |
+| phone | mobile · mobile phone · mobile number · cell · cell phone · cellphone · whatsapp · phone · phone number · phone numbers · contact number · telephone · phone 1 value · home phone · home phone number · work phone · business phone · telefon · handy · mobil · telephone portable · portable · movil · telefono · telefone · celular · telefoon · mobiel · cellulare |
+| member number | member id · member no · member number · membership number · membership id · client id · customer id · check in code · barcode · barcode id · key tag · keyfob · fob · card number · reference id · external id · id · mitgliedsnummer · matricula · numero de socio · lidnummer · tessera |
+| status | status · member status · membership status · account status · client status · state · active · estado · situacao · statut · stato (the help pages read 2026-09-19 name none; a guess-assist like the rest) |
+
+A header holding any of **emergency · guardian · parent · spouse · partner · next of
+kin · referred · referrer · trainer · coach · sales · staff · employee · company ·
+employer** is NEVER name, email or phone: an emergency contact's number is not the
+member's. A header holding any of **payment · billing · invoice · marketing · email ·
+sms · waiver · card · subscription to** is NEVER status ("Email status: subscribed" is
+not a membership).
+
+**Guess = header, confirmed by values.** Up to 200 non-empty cells a column: the share
+shaped like an email; the share that parses as a possible phone for the gym's country.
+A header guess stands at a share of 0.6 or more; with no usable header a column is
+email or phone by values alone at 0.8 or more. Member number is never guessed from
+values. **Several email columns:** the exact word first, then one not holding
+secondary/alternate/other/work, then the most filled, then the leftmost. **Several
+phone columns:** mobile/cell/whatsapp, then phone/telephone/contact, then home, then
+work; then most filled; then leftmost. The losers are kept IN ORDER: a row whose first
+email or phone is empty or unreadable falls back to the next column. **Remembered:**
+if the header row's fingerprint equals the gym's last confirmed upload's, its mapping
+is used again (`confidence: "remembered"`). Staff can always send their own
+`mapping` — `{ sheet?, headerRow (or null), fullName?, firstName?, lastName?, email:
+[], phone: [], memberNumber?, status? }` by column index — by uploading again; the server never
+keeps unmapped columns, so re-mapping is a fresh upload from the file the browser
+still holds.
+
+**Cleaning a row**, in this order: each cell → placeholders → usable → identity key →
+duplicates. Every cell first: NFKC, U+00A0 and zero-width characters out, control
+characters out, trimmed.
+- **Name:** full name, or first + last; spaces collapsed; at most 120 characters; may
+  be empty (screens show the email instead).
+- **Email:** `mailto:` off; the address out of `Name <a@b>`; split on `; , / |` and
+  spaces and the first piece that passes wins; trailing `. , ; :` off; longer than 254
+  → unreadable BEFORE any pattern runs; then `authEmailSchema` — the very rule sign-in
+  uses, so list email and sign-in email are equal by construction. Exact match only;
+  Gmail dots and `+tags` wait for the one shared rule Stage 3 item 2b builds.
+- **Phone** (`libphonenumber-js/max` 1.13.13, measured 2026-09-19; `/min` checks
+  length only): text only (a non-string THROWS `TypeError`, not `ParseError`) · every
+  Unicode decimal digit folded to ASCII (the package folds full-width and
+  Arabic-Indic; it does NOT fold Devanagari — `९८७६५४३२१०` → nothing) · `tel:`, a
+  leading apostrophe and Unicode dashes handled · a trailing `.0` stripped (left in,
+  `919876543210.0` becomes `+919198765432100`) · scientific notation is expanded only
+  when every digit is present (`9.19876543210E+11` → `919876543210`), else the cell is
+  `shortened_by_excel` and never repaired · split on `/ ; , |`, " or " and line breaks
+  (two numbers in one cell otherwise GLUE: `555-1234 / 555-9876` →
+  `+155512345559876`) · each piece `parsePhoneNumberFromString(piece,
+  { defaultCountry: the gym's country, extract: false })` · the first piece that
+  `isPossible()` wins and is stored as E.164, extension dropped · `!isValid()` is only
+  counted (`phones_unusual`) — both sides use one package version, so a number range
+  newer than its metadata still matches itself. No country on the gym → only a number
+  written with `+` is read; the rest count as `phones_need_country`. Never compare
+  `.country` (`07911 123456` in GB reads as Guernsey). Known and accepted: Argentina's
+  and Mexico's two spellings of one mobile, and Brazil's old 8-digit mobiles, do not
+  meet.
+- **Member number:** text; `.0` off; scientific notation as for phone; at most 64;
+  `0`, `-`, `n/a`, `na`, `none`, `null` are empty.
+- **Status:** the gym's OWN word, never ours — spaces collapsed, at most 40 characters,
+  grouped without regard to case, shown as first written; empty stays empty. A column
+  of yes/no, true/false or 1/0 under a header such as "Active" reads "Active" and "Not
+  active". A column with more than 20 different values is not a status column: it is
+  never guessed, and a hand mapping of it is refused in those words. The app attaches
+  no meaning to a status word — it filters and it chooses who is invited, nothing else
+  (9.2 rule 10) — so no word list of ours can be wrong about a gym's "Current" or
+  "Frozen".
+- **Placeholders:** an email or phone that appears on more than 5 rows of one file is
+  a front-desk placeholder and is dropped from every row carrying it (Segment's
+  identifier limit), counted and shown.
+- **Usable:** a row needs an email or a phone. Otherwise it is skipped as
+  `no_contact` — a name alone can match nobody and invite nobody, so it is not kept.
+- **Identity key:** `sha256` of `[email, phone, lower(member number), name folded]` —
+  NOT the status, so "Active" becoming "Expired" changes a row in place.
+  Equal keys in one file → the first is kept, the rest counted `duplicates`. Two
+  people sharing an email (a family) differ by name and are both kept; the preview
+  counts `shared_emails`. NO durable fact hangs on an entry's identity — the invite
+  record is keyed by email (9.12) and being in the app is worked out — so a corrected
+  spelling is honestly "one gone, one new" and costs nothing.
+
+**Warnings** (file level, plain words in 9.9): `hidden_rows_or_columns` ·
+`question_marks_in_names` (a `?` beside letters: the ANSI export above) ·
+`garbled_names` (one of `‚ ƒ „ † ‡ ˆ ‰ ‹` touching a letter, or `Š Œ Ž Ÿ` between two
+lower-case letters — `H‚lŠne` is a DOS file read as 1252, `Šimun` is a real name) ·
+`shortened_by_excel` · `phones_need_country` · `phones_unusual` · `shared_emails` ·
+`placeholders` · `other_sheets_ignored` · `encoding_guessed` · `no_header_row`.
+
+**`tools/read-member-file.ts <path> --country IN [--show 5]`** prints what the server
+understood (counts, mapping, warnings; row text only with `--show`). 3a-ii has no
+screen; this is how a real export is tried before one exists.
+
+### 9.6 Data (3a-iii's one migration; forward-only)
+
+```
+gym_member_lists                         one row per gym that has ever confirmed a list
+  gym_id uuid PK → gyms ON DELETE CASCADE
+  version integer NOT NULL DEFAULT 0     bumped by every change to the list, under the gym's row lock
+  last_confirmed_upload_id uuid NULL, last_confirmed_at timestamptz NULL, created_at
+
+gym_member_list_entries                  exactly the newest confirmed list
+  id uuid PK, gym_id uuid NOT NULL → gyms ON DELETE CASCADE
+  full_name text NOT NULL DEFAULT ''     CHECK length ≤ 120
+  email citext NULL                      CHECK length ≤ 254
+  phone_e164 text NULL                   CHECK ~ '^\+[1-9][0-9]{6,14}$'
+  member_number text NULL                CHECK length ≤ 64
+  status text NULL                       CHECK length ≤ 40 — the gym's own word; INDEX (gym_id, lower(status))
+  identity_key text NOT NULL             CHECK ~ '^[0-9a-f]{64}$'
+  source text NOT NULL                   CHECK IN ('upload','typed','member')
+  created_at
+  CHECK (email IS NOT NULL OR phone_e164 IS NOT NULL)
+  UNIQUE (gym_id, identity_key) · INDEX (gym_id, email) · INDEX (gym_id, phone_e164)
+
+gym_member_list_uploads                  staged → confirmed | superseded | expired
+  id uuid PK, gym_id → gyms ON DELETE CASCADE, uploaded_by_user_id → users
+  status text CHECK IN ('staged','confirmed','superseded','expired')
+  mode text CHECK IN ('whole_list','add')
+  file_kind text CHECK IN ('csv','xlsx'), file_sha256 text, file_bytes integer
+  header_fingerprint text NULL, mapping jsonb NOT NULL
+  base_version integer NOT NULL          the list's version the preview was worked out against
+  summary jsonb NOT NULL                 counts only — never a name, an address or a number
+  rows jsonb NULL                        the cleaned rows; NULL the moment it is confirmed, superseded or expired
+  created_at, expires_at NOT NULL (created_at + 60 min), confirmed_at NULL
+
+gym_members  + stated_phone_e164 text NULL   (same CHECK; written by 3c)
+             + last_listed_at timestamptz NULL
+             + INDEX (gym_id, stated_phone_e164) WHERE removed_at IS NULL AND stated_phone_e164 IS NOT NULL
+```
+
+No entry column points at a user, so `privacy/tables.ts` gains only
+`gym_member_list_uploads` (its uploader, on `gym_closures`' footing). The list is the
+gym's record, held for the gym: it is not in a person's export, a purge does not touch
+it, and an account deletion already closes the membership the match reads. When the
+archive sweep closes a gym, its three list tables' rows go in the same transaction.
+The hourly job `orgs.member_list_expiry` (injectable clock) expires staged uploads.
+
+### 9.7 The reconcile rule (3a-iii) — ONE pure function, one table test
+
+`reconcile({ rows, entries, members })` — the SQL only fetches the three sets, so the
+preview, the confirm, the reads and 3a-iv's removal cannot disagree.
+
+- **Who counts as a member here:** live (`removed_at IS NULL`), not `complimentary`,
+  not in `gym_staff` — the seat rule's own three conditions. The owner is member one
+  and is on no export; without this every gym's owner reads "not on your list".
+- **A member is on the list** when their VERIFIED email (`isEmailVerified`'s marker)
+  equals an entry's email, else when their `stated_phone_e164` equals an entry's phone.
+- **no longer listed** = not on the list and `last_listed_at` set (in a preview: or on
+  the list being replaced). **never listed** = the rest. A gym that has never
+  confirmed a list shows no marks at all.
+- **The list:** `new` = keys in the file and not the table · `changed` = the same key
+  with a different status · `unchanged` · `gone` = keys in the table and not the file.
+  An upload in `add` mode has no `gone`: it adds and changes, takes nobody off and
+  flags nobody. Of `new`: `alreadyInApp` · `canBeInvited` (has an email, not in the
+  app) · `noEmail`. Each count is also given per status word.
+- **Confirm**, in one transaction: lock the gym's row (the module's order: gym row,
+  then child rows) → lock the upload row → `confirmed` already → the stored answer,
+  `alreadyConfirmed: true` · `expired` / `superseded` → 409 · the list's `version` ≠
+  `base_version` → 409 `list_changed` · work the rule out AGAIN on what is true now →
+  the guard (9.8) → one `INSERT … SELECT FROM jsonb_to_recordset($1)`, one `UPDATE …
+  SET status … FROM jsonb_to_recordset($2)` and one `DELETE … identity_key = ANY($3)`
+  (parameters only; one round trip each, because the gym's row is held; NOTHING is
+  emailed) → stamp `last_listed_at = now()` on every member who is on the list
+  being replaced OR on the new one (so what the preview called "no longer listed"
+  reads the same after the confirm) → bump the version (not when nothing changed) →
+  the upload `confirmed`, `rows` NULL → audit `org.member_list_confirmed`, counts only.
+- Joining also takes the gym's row lock (`claimSeat`), so a join and a confirm cannot
+  interleave.
+
+### 9.8 The guard against a wrong file
+
+Staff export one location, a filtered view, or the wrong report, and the list
+collapses. Identity products stop on exactly this (Okta's import safeguard 20 %;
+Microsoft Entra's 500 deletions; Okta's entitlement safeguard, the one shipping both
+shapes: 10 % and 100). A percentage alone is useless at 50 people and a count alone at
+2,000, so: **a change is large when it is more than `max(10, 10 %)` of what it is
+measured against.**
+
+| Step | Measured | Against |
+|---|---|---|
+| confirm | entries that would go | the list's size |
+| confirm | members who would become "no longer listed" | members now on the list |
+| remove the unlisted (3a-iv) | members that would be removed | the gym's live members |
+
+A large change answers 409 `large_change` with the numbers, writes nothing, and goes
+through only with `acknowledgeLargeChange: true` on THAT request. New, changed and
+unchanged rows never trip it, so an upload in `add` mode never does. The preview of a
+whole-list upload that would take off more than half the list says so first and offers
+"add these people instead" — the likeliest wrong file is a list of new joiners.
+
+### 9.9 Routes, limits, refusals
+
+All under `/v1/orgs/:gymId/member-list`. Order: authenticate → privilege → live plan
+and not archived (`requireWritablePrivilege`, writes only) → rate limit → handler. A
+stranger and another gym's staff get the module's 404; staff without the tick 403; a
+gym with no plan 409 on writes while reads still answer. Every id is fetched with its
+gym in the `WHERE`.
+
+| Route | Tick | Slice |
+|---|---|---|
+| `POST /uploads` `{ contentBase64, mode: "whole_list" \| "add", mapping? }` → 201 the preview: file facts, columns (header, 3 samples, guess, confidence), mapping, counts (also per status word), skipped (first 200, with row numbers and reasons), warnings, `seat: { cap, liveMembers, listSize }`, the guard's numbers, `uploadId`, `expiresAt`, `sameAsLastUpload`. Supersedes the gym's earlier staged uploads. | `members.confirm` | 3a-iii |
+| `GET /uploads/:uploadId` · `GET /uploads/:uploadId/rows?group=new\|unchanged\|gone\|members_leaving&cursor` — the names behind every number, before anyone confirms | `members.confirm` | 3a-iii |
+| `POST /uploads/:uploadId/confirm` `{ acknowledgeLargeChange? }` | `members.confirm` | 3a-iii |
+| `GET /` → `{ hasList, version, lastConfirmedAt, counts, statuses: [{ label, count, inApp, canBeInvited }] }` · `GET /entries?filter=all\|in_app\|not_in_app&status=…&status=…&query&cursor` (a status is matched without regard to case; `status=` empty means "no status") | `members.confirm` | 3a-iii |
+| `POST /entries` `{ fullName?, email?, phone?, memberNumber?, status? }` (email or phone) → 201, or 200 `already_on_list` · `PATCH /entries/:entryId` (any of the five; the same cleaning; a change that lands on another entry's key → 409 `already_on_list`) · `DELETE /entries/:entryId` · `POST /entries/from-member/:userId` — put an app member of this gym on the list from their name, verified email and stated phone (the hand-kept gym's answer to "joined by code, not on your list") | `members.confirm` | 3a-iv |
+| `POST /remove-unlisted` `{ group: "no_longer_listed" \| "never_listed", version, expectedCount, acknowledgeLargeChange? }` — the set is worked out again under the lock; a different version or count → 409 `list_changed` and nobody is removed; each removal is `removeMember`'s own statements and audit row, entitlements busted after commit | `members.remove` | 3a-iv |
+
+No new tick: reading the list shows the email and phone of people who never joined the
+app, so it needs `members.confirm` (owner and manager by default), not `members.read`.
+
+| Constant | Value |
+|---|---|
+| file, decoded | 5 MiB |
+| inflated parts, in total | 25 MiB |
+| archive entries | 1,000 |
+| data rows · columns · characters in a cell | 10,000 · 100 · 2,000 |
+| header scan · value sample | 20 rows · 200 cells |
+| parse wall clock · at once · worker heap | 15 s · 2 · 256 MB |
+| a staged upload lives | 60 minutes |
+| upload | 12 an hour a person, 40 an address (`ipMax` explicit: a front desk shares one) |
+| confirm | 30 an hour a person, 120 an address |
+| type one in, take one off | 120 an hour a person, 600 an address |
+| remove the unlisted | 10 an hour a person, 40 an address |
+
+The builder measures a 10,000-row, 30-column file (time, peak memory) and pastes it.
+**Measured 2026-09-19 (3a-i)**, files saved by Excel 16 with invented people, through
+`parseMemberFile` on Node 24.11.1, the worker's modules already transpiled once:
+`.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) — 1,268 ms, the whole process's
+peak RSS 111 → 246 MB; CSV UTF-8 3.10 MiB — 493 ms, 99 → 159 MB. The request thread's
+longest stall was 21 ms for either (one more Zod pass of the reply: 28–30 ms).
+
+Refusals are the SERVER'S sentences and a screen prints them as sent; each says the fix:
+`empty_file` · `too_big` ("…over 5 MB. Save just the member sheet as CSV and try
+again.") · `old_excel_or_password` ("This looks like an old Excel file (.xls) or a
+workbook with a password. In Excel choose File → Save As → Excel Workbook (.xlsx),
+with no password, or save it as CSV.") · `pdf` · `other_zip` · `not_a_spreadsheet` ·
+`unsafe_archive` ("This Excel file is built in a way we can't open safely. Open it in
+Excel, save a fresh copy as .xlsx, and upload that.") · `web_page_or_xml` ·
+`unreadable_excel` · `unreadable_text` · `unterminated_quote` · `too_many_rows` ·
+`too_many_columns` · `no_rows` · `parse_timeout` · `too_complex` ("This file is too
+large or complex to read. Save just the member sheet as CSV and upload that.") ·
+`busy` · `list_changed` · `large_change` · `upload_expired` · `upload_superseded`.
+`other_zip` names OpenDocument, Apple Numbers or Excel Binary where the archive says
+so, with that program's own way to save as `.xlsx` or CSV. A file with no email and no phone column is NOT refused: it
+answers `needsMapping: true` with its columns and samples.
+
+**Never logged, never in an error reply, never in Sentry:** a cell, a name, an
+address, a number, the body. Logs carry ids, counts and codes.
+
+### 9.10 Tests, and what the reviewer RUNS
+
+*Fixtures* in `apps/api/test/fixtures/member-list/`, every person invented: real Excel
+files made here by COM automation (Excel 16 is installed: `.xlsx`, CSV UTF-8, CSV
+comma, Unicode Text, CSV Macintosh, CSV MS-DOS — accented, Polish and Devanagari names,
+phones as text and as numbers, leading zeros, a 16-digit id) · a Google Sheets `.xlsx`
+and `.csv` (Kd downloads them once; exact steps in 3a-i's plan) · an archive with data
+descriptors, as streaming writers leave them (3a-i builds it in the test:
+`openpyxl` is not installed here, and the reader's path is the same) · hand-written
+text: `;` and TAB and `|`, `sep=`, quoted line breaks, a title block above the header,
+a totals row, a blank row mid-file, no header row, one column of emails. *Bombs are
+built in the test, never committed:* a lying size, a 1,000:1 deflate, overlapping
+entries, ZIP64, an encrypted entry, 1,001 entries, a `<!DOCTYPE`, junk before the
+archive, a name with `..`.
+
+*Table tests written BEFORE review* (CLAUDE.md §4): the phone table (the 52 measured
+vectors of 2026-09-19, plus `447911123456` in GB and every spreadsheet-damage row) ·
+header words and the two never-lists · several email and phone columns · the header
+row · the status column (the gym's own words kept, case grouped, yes/no under
+"Active", 21 different values refused, "Payment status" and "Email status" never
+taken) · the decoding ladder · the delimiter rule · the CSV state machine ·
+placeholders · identity keys (a status change is NOT a new person) · `reconcile` over
+every class: email verified and not, case, phone only, staff, owner, complimentary,
+removed, two gyms, a shared family email, listed → dropped → back, never listed, a gym
+with no list, a status that changed, `add` mode (nobody goes, nobody is flagged) · the
+guard at its edges (10, 11, 10 %, one over; never in `add` mode).
+
+*Wiring, each with the named break that must turn it red:* the real worker is spawned
+once per kind · two confirms at once (one applies, both 200, rows written once) · a
+confirm after a typed person (409) · a superseded and an expired upload · the same
+file twice (no row's `xmin` moves, the version does not) · a join racing a confirm ·
+a confirm emails nobody (the capturing sender stays empty) · a status change updates
+the row in place · "put on the list" with another gym's member (404) ·
+every route: the happy path, a validation failure, a stranger, another gym's staff
+with this gym's ids, a trainer, a gym with no plan · the rate limit at ONE fixed
+address with several staff · the real Sentry SDK with a recording transport and a
+forced fault on the upload route: no body, no cell · a log capture holding a sentinel
+address from the fixture: never present · the archive sweep and the expiry job with an
+injected clock · `db.migration.test.ts` reads each new CHECK back against the shared
+constants.
+
+*The reviewer runs:* the bombs and the real exports through the live route on local
+Postgres and the real Redis, several gyms and staff; the mutation harness on the
+reconcile rule and on remove-unlisted (other people's data).
+
+### 9.11 Known limits, written down so nobody finds them by surprise
+
+Legacy `.xls` and password-protected workbooks are refused with the fix in the words
+(the package reads `.xlsx` only) · so are OpenDocument, Apple Numbers, Excel Binary and
+a web page or Excel 2003 XML named `.xls`; CSV (any of the four delimiters, or
+tab-separated text) and `.xlsx` are the formats, as Kd confirmed on 2026-09-19 · a
+workbook whose XML passes 25 MiB is refused `too_complex` (Excel's own 10,000 × 30 is
+15 MiB) · a CSV saved as "CSV (MS-DOS)" is warned about, not
+decoded · hidden rows ARE read, with a warning · a 12-digit phone saved to CSV from a
+General cell is unrecoverable and is said so · Gmail dots and `+tags`, Argentina,
+Mexico and Brazil's old mobiles do not match · a number range newer than the phone
+package's metadata counts as "unusual" and still matches itself · a file with no
+status column has no status filter, and a status is never worked out from an expiry
+date (day-first and month-first dates cannot be told apart safely) — the gym filters in
+its own software before exporting.
+
+**Not part of the member list, and built later:** fees, plans, renewal and expiry
+dates, payments, reminders to pay. Kd ruled on 2026-09-19 that the app WILL be a gym
+management app and that the management features are built later (ROADMAP Stage 2 item
+15); the member list is its first piece — who the members are — and holds none of the
+rest. Until item 15 is built those columns of a gym's file are not kept, so a gym that
+moves to the app keeps its own export to load them from then.
+
+### 9.12 The invites (3b) — the frame; its own plan settles the rest with Kd
+
+**Who is emailed, and when** (RULINGS 2026-09-19: *"they send a invite click invite
+button and a message is send to the members via email with join link"*). Nothing is
+sent by a confirm. Staff press **Invite** — for everyone, or for the status words they
+ticked ("Active", "Pending") — and the button says the number before it sends:
+`POST /v1/orgs/:gymId/member-list/invites` `{ statuses?: string[], version,
+expectedCount }` (`members.confirm`, a gym on a plan; a different version or count →
+409 and nothing is queued). It queues every entry in that group that has an email, is
+not in the app, has no invite record for this gym and no suppression, and answers how
+many were queued and how many were skipped for each reason. Adding one person by hand
+offers "Add and invite" (the same call for that one entry). **One email per person per
+gym, ever; no reminders and no bulk "send again"** — in *Perkins v. LinkedIn* (N.D.
+Cal. 2014, about $13M) the invitation was consented to and the two reminders were not.
+Whether staff may re-send to ONE person who asks is 3b's plan to put to Kd.
+
+**Records.** `gym_invites`, keyed `(gym_id, email_hmac)` — HMAC-SHA256 of the
+lower-cased address under a server secret. It outlives the list entry, so a broken
+export followed by a good one cannot email anyone twice; Resend's own
+`Idempotency-Key` lasts 24 hours and is only the retry guard (the invite's id).
+`email_suppressions (email_hmac, gym_id NULL = every gym, reason)`: an unsubscribe or
+a complaint is for THAT gym, a hard bounce for every gym (Amazon SES's documented
+multi-tenant pattern; Resend's own list is account-wide and cannot say "this gym
+only"). Suppress rather than delete, and keep no more than the hash (ICO).
+
+**Sending.** A queue job in the worker, never inside the request. Before each send:
+the address rule, a cached MX lookup for the domain, RFC 2142 role addresses
+(`info@`, `admin@`, `sales@`, `support@` …) skipped, suppressions, "already in the
+app". A gym's first 50 go and the rest wait for their results; a daily cap per gym,
+tighter for a gym on trial (whose member cap is 300 anyway); a gym stops at 2 % hard
+bounces once 50 have gone, or on any complaint in its first 100; one cap for the whole
+platform (`INVITE_EMAILS_PER_DAY`, beside `CODE_EMAILS_PER_DAY`) and a kill switch; a
+gym the breaker stopped goes on Kd's "have a look" list (Stage 3 item 2e).
+
+**Abuse, named.** Anyone can make a gym and upload strangers' addresses; without care
+our domain is a spam and phishing relay. So the message is FIXED; the only words a gym
+writes into it are its name and city, stripped of links, `@` and control characters
+and cut at 60; every link goes to our own domain; trial gyms are capped as above.
+
+**The message.** Subject "You're a member of {gym} — get the app" (RULINGS). It says
+who sent it and why. The join link is `{WEB_ORIGIN}/join/{slug}` and is NOT a
+credential: joining needs a sign-in with that same address (a code or Google proves
+it), so a forwarded email admits nobody. Footer: "Sent by {app} on behalf of {gym}",
+the GYM's postal address, the unsubscribe link. Both `List-Unsubscribe` headers (RFC
+8058); the POST takes no cookie, no login and no redirect, accepts
+`multipart/form-data` and `application/x-www-form-urlencoded`, and answers a blank
+200; GET shows a page; the token is an HMAC, opaque; honoured at once; the link works
+for at least 60 days (CASL's figure covers the rest). Open and click tracking stay off
+(Resend's default): the join link is never rewritten. The gym's postal address has no
+column today (`gyms.city` only): 3b adds the Settings field, and a gym without one
+cannot send.
+
+**The webhook.** `POST /v1/webhooks/resend`: Svix signature over the RAW body
+(`svix-id.svix-timestamp.body`, HMAC-SHA256, the secret base64 after `whsec_`, a
+5-minute window, constant-time compare) → dedupe by `svix-id` → 2xx → the worker
+updates the invite. `email.bounced` (permanent) → suppressed for every gym;
+`email.complained` → suppressed for that gym, and its breaker.
+
+**Joining.** A person signed in with a VERIFIED address that an active, on-a-plan gym
+has INVITED (an invite record for that gym and address — being on the list is not
+enough: a gym that invited only its "Active" members has not said yes to the rest)
+joins through `claimSeat` (the seat cap holds). An unsubscribe stops emails, never the
+join. Everyone else joins with the code (9.13) and is matched to the list all the
+same. One tap or none is Kd's (ROADMAP). Recommended: ONE tap, on a screen showing
+"What {gym} can see" — joining starts sharing a person's activity with the gym, and
+nobody should start sharing because a third party typed their address.
+
+**"Staff create his account" (Kd, 2026-09-19), as built.** Staff add the walk-in's
+name and email and press "Add and invite". The account itself comes into being when
+HE signs in with that address — the app has no passwords, an account is made by
+proving an address (RULINGS 2026-09-07), and only he can tap the health and consent
+screens — and the moment he does, he is in that gym with no code. A walk-in with no
+email is added with a phone and joins with the gym's code; the phone puts him on the
+list.
+
+**The email provider's limits, and the standard answer to them.** Resend's Acceptable
+Use Policy (read 2026-09-19; last updated 2026-08-27): "Your complaint rate must be
+lower than 0.08%"; "Your bounce rate must be lower than 4%"; "your account may be shut
+down without warning". Sign-in codes go out through the same account. What every app
+that sends invites does about this, and ALL this plan does (RULINGS 2026-09-19 — Kd
+refused a second account and asking the provider's permission as invented and
+uncertain; they are struck): (a) invites go out from a sub-domain of their own
+(ROADMAP 3b; Resend's own advice for keeping one kind of mail from hurting another);
+(b) the automatic hygiene under "Sending" above — addresses checked first, small
+batches, a gym stopped when its bounces pass 2 %, a dead address never emailed twice,
+one-click unsubscribe — which is what keeps the account under those limits; (c) the
+join link can also be copied and shared by the gym itself, as §4.3's Invite sheet
+already has (the code, QR, WhatsApp share). If the account were ever closed all the
+same, sign-in codes stop until the key and the sending domain are moved to another
+provider; the email sender already sits behind one seam (`EmailTransport`,
+`email/resend.ts`), so that is a settings change, not a rebuild. The gym's tick at
+upload that it may share its list (9.14) stays. Prices read 2026-09-19: Resend free
+3,000 a month and 100 a day, Pro $20 for 50,000; 10 requests a second a team; a batch
+call takes 100.
+
+**The law, for the lawyer review (Stage 4 item 3) — research, not advice.** US
+CAN-SPAM: this is a commercial message (16 CFR 316.3's subject-line test) — a postal
+address, opt-out within 10 business days, up to $53,088 an email; the gym named in
+From is the sender, we are the initiator. Canada CASL: consent is implied during a
+membership and two years after; BOTH parties named, a mailing address, unsubscribe
+within 10 business days. UK and EU: only the GYM can rely on the soft opt-in (PECR
+reg 22(3)); we send as its processor — an Art 28 agreement with each gym, standard
+contractual clauses for EU → India. Australia and New Zealand: name the authorising
+business; unsubscribe within 5 working days. India: no anti-spam law for email; DPDP
+processor duties from about 2027-05-13. Brazil: LGPD legitimate interest with the
+right to object. Gmail counts its 5,000-a-day bulk line across the whole primary
+domain, so a sub-domain does not split it; Gmail and Yahoo want SPF, DKIM, DMARC and
+one-click unsubscribe for this kind of mail.
+
+### 9.13 The code admits at once (3c) — the frame
+
+A valid code → `claimSeat` under the gym's row lock → a member at once;
+`last_listed_at` stamped if they are on the list. "Not on your list yet" is shown TO
+THE GYM ONLY: no member-facing reply ever carries a list state, which is what keeps
+the phone question from telling anyone whose number a gym holds. After joining: "Your
+phone number, as {gym} has it" (optional) → `PUT /v1/orgs/:gymId/membership/phone` →
+read like a list phone but accepted at `isPossible()`, stored in `stated_phone_e164`;
+the same reply and the same timing whether or not it matches; 5 changes a day a
+person with an explicit `ipMax` (a gym's members share its wi-fi); never logged. No
+application is created any more; the waiting room's sweep, reminders and nudge are
+switched off in the worker, not deleted (production starts empty, so no row needs
+moving). The join door, setup's code screen and My Gyms say "You're in". What a FULL
+gym's door does is Kd's (ROADMAP), and 3b's join meets the same wall.
+
+### 9.14 The screen (item 5) — the frame
+
+Members gains **Member list**. Upload → the preview, PHONE-FIRST (RULINGS 2026-08-18:
+a tappable list of problems, never a thousand-row grid): the counts in words, each
+opening its names; every column with its samples and a dropdown to correct the guess;
+the warnings; for a large change, the numbers and a typed confirmation; the tick that
+the gym may share this list (words: Kd and the lawyer); "this is my whole list" or
+"add these people"; Confirm. Then the result line: "12 new · 3 no longer on your list
+— remove all? · 2 joined by code, not on your list" (ROADMAP's line said "12 new,
+invited"; since RULINGS 2026-09-19 nothing is sent by a confirm) — remove-all shows
+the names, then asks. **The list itself:** the gym's own status words as filter chips
+with their counts ("Active 312 · Expired 88 · no status 5"), a filter for in the app /
+not in the app, search, and ONE **Invite** button that always says who it will reach
+("Invite 214 people" — those shown who have an email, are not in the app and were
+never invited) and says afterwards who was skipped and why. Add a person ("Add" · "Add
+and invite"), change one, take one off; on an app member who is not on the list, "Put
+on the list". A gym that would rather send the invite itself gets the same words and
+join link to copy. Each member row says on the list · no longer · never (only once a
+list exists), with last active and streak. **CSV export:** a name or any free
+text starting `= + - @`, TAB, CR, LF or full-width `＝＋－＠` gets a TAB inside the
+quoted field (OWASP's advice since 2026-01: Excel strips an apostrophe when the file
+is saved again); email and E.164 phone columns are shapes the server checked and are
+written as they are (a blanket rule breaks `+44…`, and `-10` → `10` is a documented
+casualty elsewhere); a save-and-reopen test. Members are told when confirmed or
+removed, as a removal tells them today.
+
+### 9.15 Where the facts came from (read or measured 2026-09-19)
+
+Measured here: Excel 16's six export formats · `read-excel-file` 9.3.10 on a real
+workbook and on two built bombs · `zlib`'s `maxOutputLength` and `crc32` · the
+`TextDecoder` labels (`ibm850` is NOT supported) · a `.ts` worker under tsx and
+vitest · `libphonenumber-js` 1.13.13, 52 vectors. Read: Okta import safeguard
+(help.okta.com, `usgp-import-safeguard`, `usgp-safeguard-threshold`) · Microsoft Entra
+"prevent accidental deletes" · Terraform's stale-plan check (`backend_local.go`) ·
+Segment identity resolution settings · HubSpot import de-duplication · OWASP CSV
+Injection (community.owasp.org) · D. Fifield, "A better zip bomb" (WOOT '19) · Apache
+POI `ZipSecureFile` · Papa Parse's delimiter guess (its source) · RFC 4180 · RFC 8058 ·
+resend.com `legal/acceptable-use`, `pricing`, rate limit, webhooks, suppressions,
+unsubscribe for transactional email · Svix payload verification · Gmail and Yahoo
+sender rules · FTC CAN-SPAM guide and 16 CFR 316 · CASL and SOR/2012-36 · ICO on
+direct marketing and the soft opt-in · ACMA spam rules · AWS SES tenant-level
+suppression and reputation thresholds · *Perkins v. LinkedIn* · Google's libphonenumber
+FAQ. No primary source was found for: what Google Sheets writes, any Indian or
+Brazilian gym product's export headers, how common Mac Roman or DOS files are.
+
+
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
 `calc_version`/dishware/corrections tables, Part 2's definition tables,
 and the two catalog decisions — Mountain Pose & Brisk Walking) · Part 5 —
