@@ -61,7 +61,7 @@ describe("an honest workbook", () => {
     expect(refusal(zip)).toBe("opened");
   });
 
-  it("keeps a number past JavaScript's precision exactly as the file wrote it", async () => {
+  it("writes every number in the plain digits the file holds, never through a JavaScript number", async () => {
     const sheet =
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
       '<row r="1"><c r="A1"><v>12345678901234567890</v></c><c r="B1"><v>9.1987654321E+11</v></c><c r="C1"><v>0.30000000000000004</v></c></row>' +
@@ -69,7 +69,7 @@ describe("an honest workbook", () => {
     const result = openZipSafely(buildZip(workbookParts(sheet)));
     if (!result.ok) throw new Error("refused");
     const sheets = await readRepackedXlsx(result.repacked);
-    expect(sheets?.[0]?.rows).toEqual([["12345678901234567890", "9.1987654321E+11", "0.30000000000000004"]]);
+    expect(sheets?.[0]?.rows).toEqual([["12345678901234567890", "919876543210", "0.30000000000000004"]]);
   });
 
   it("reads through the package from the rebuilt archive", async () => {

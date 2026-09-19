@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { memberFileResultSchema, type MemberFileResult } from "@app/shared";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
-import { cellText } from "../src/modules/orgs/memberList/xlsx.adapter.js";
+import { cellText, plainNumberText } from "../src/modules/orgs/memberList/xlsx.adapter.js";
 
 const EXCEL = new URL("./fixtures/member-list/excel/", import.meta.url);
 const read = (name: string): Buffer => fs.readFileSync(new URL(name, EXCEL));
@@ -85,6 +85,70 @@ describe("every CSV kind Excel saves", () => {
     // é is 82 in code page 850 and ‚ in 1252; ë is 89 and ‰; ü is 81, which
     // 1252 leaves undefined (a control character).
     expect(names?.slice(1, 3)).toEqual(["Jos‚ ?lvarez", "Zo‰ M\u0081ller"]);
+  });
+});
+
+describe("Google Sheets (the Excel book imported, then downloaded by Kd, 2026-09-19)", () => {
+  const GOOGLE = new URL("./fixtures/member-list/google/", import.meta.url);
+
+  async function openGoogle(name: string): Promise<MemberFileResult> {
+    const bytes = fs.readFileSync(new URL(name, GOOGLE));
+    const sniffed = sniffMemberFile(bytes);
+    if (sniffed.kind === "refused") return { ok: false, refusal: sniffed.refusal };
+    return memberFileResultSchema.parse(await openMemberFileContents(sniffed.kind, bytes));
+  }
+
+  it("google-sheets.xlsx: data descriptors, numbers stored as 9.1987654321E11 read as their digits", async () => {
+    // Google writes each part with a data descriptor (flag 0x0808) and every
+    // number in exponent form; the digits are all there and come out plain.
+    const rows = WORKBOOK_ROWS.map((row, i) => (i === 7 ? [row[0] ?? "", "Ann\nLee", ...row.slice(2)] : row));
+    expect(await openGoogle("google-sheets.xlsx")).toEqual({
+      ok: true,
+      kind: "xlsx",
+      sheets: [sheet("Members", rows), sheet("Staff", [["Coach"], ["Sam Coach"]])],
+      facts: {},
+      warnings: ["hidden_rows_or_columns"],
+    });
+  });
+
+  it("google-sheets.csv: UTF-8 with no mark, dates with slashes, the 16-digit number shortened by Google", async () => {
+    const rows = WORKBOOK_ROWS.map((row, i) => {
+      const slashed = row.map((cell, c) => (c === 4 && i > 0 ? cell.replace(/-/g, "/") : cell));
+      if (i === 5) return ["1.23457E+15", ...slashed.slice(1)];
+      if (i === 7) return [slashed[0] ?? "", "Ann\nLee", ...slashed.slice(2)];
+      return slashed;
+    });
+    expect(await openGoogle("google-sheets.csv")).toEqual({
+      ok: true,
+      kind: "csv",
+      sheets: [sheet(null, rows)],
+      facts: { encoding: "utf-8", delimiter: "," },
+      warnings: [],
+    });
+  });
+});
+
+describe("a number cell's stored text, in plain digits", () => {
+  it.each([
+    ["Excel's plain digits", "919876543210", "919876543210"],
+    ["Google's exponent form", "9.1987654321E11", "919876543210"],
+    ["a 16-digit member number", "1.234567890123456E15", "1234567890123456"],
+    ["past JavaScript's precision", "1.2345678901234567890123E22", "12345678901234567890123"],
+    ["a plus sign on the exponent", "4.155552671E+9", "4155552671"],
+    ["a lower-case e", "4.155552671e9", "4155552671"],
+    ["a whole number with no point", "5E3", "5000"],
+    ["a point that stays inside the digits", "12.5E1", "125"],
+    ["a decimal left over", "1.25E1", "12.5"],
+    ["a negative exponent", "1.5E-3", "0.0015"],
+    ["a negative number", "-2.5E2", "-250"],
+    ["zeros", "0.00E0", "0"],
+    ["a negative zero", "-0E0", "0"],
+    ["leading zeros", "005E1", "50"],
+    ["an exponent past the limit, kept as stored", "1E31", "1E31"],
+    ["a plain decimal, unchanged", "0.30000000000000004", "0.30000000000000004"],
+    ["not a number, unchanged", "12 34", "12 34"],
+  ])("%s: %s → %s", (_label, stored, text) => {
+    expect(plainNumberText(stored)).toBe(text);
   });
 });
 
