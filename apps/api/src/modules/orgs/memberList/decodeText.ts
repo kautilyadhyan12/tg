@@ -16,9 +16,11 @@
 // 24.11.1: `new TextDecoder("windows-1252")` reads the 27 letters and signs at
 // 0x80–0x9F as invisible control characters, as ISO-8859-1 does — € ‚ „ … ' ' " "
 // – — ™ and the letters Š š Ž ž Œ œ Ÿ of Czech, Croatian, Slovenian and French
-// names (compared byte for byte with Python's cp1252). Its `macintosh` matched
-// Python's mac_roman on all 256 bytes. So 1252 is latin-1, which maps every byte
-// to the same code point, with those 27 put right from the WHATWG table.
+// names (compared byte for byte with Python's cp1252). Node 22.23.2, which CI and
+// production run, decodes them right, so the same file would read differently on
+// Kd's machine and on the server. Its `macintosh` matched Python's mac_roman on all
+// 256 bytes. So 1252 is latin-1, which maps every byte to the same code point, with
+// those 27 put right from the WHATWG table: one answer on every Node.
 import type { MemberFileEncoding, MemberFileRefusal } from "@app/shared";
 
 export type DecodedText =

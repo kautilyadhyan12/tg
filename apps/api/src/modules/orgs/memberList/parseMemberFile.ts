@@ -9,9 +9,11 @@
 // At most MEMBER_FILE_PARSES_AT_ONCE files are open at once per process; one
 // more is refused as `busy` rather than queued behind them.
 //
-// Inside vitest the worker's modules load through tsx, not vite, so nothing in
-// it can be mocked: the pure functions are tested directly, and this file for
-// its wiring (measured 2026-09-19: about 750 ms for a worker's first start).
+// The worker starts on `parseWorker.boot.mjs`, which loads the TypeScript worker
+// through tsx on every Node version (that file says why). Inside vitest too its
+// modules load through tsx, not vite, so nothing in it can be mocked: the pure
+// functions are tested directly, and this file for its wiring (measured
+// 2026-09-19: about 750 ms for a worker's first start).
 import { Worker } from "node:worker_threads";
 import { z } from "zod";
 import {
@@ -25,7 +27,7 @@ import {
 import type { OpenableKind } from "./openFile.js";
 import { sniffMemberFile } from "./sniff.js";
 
-const WORKER_FILE = new URL("./parseWorker.ts", import.meta.url);
+const WORKER_FILE = new URL("./parseWorker.boot.mjs", import.meta.url);
 
 /** What the worker answers, checked before anything reads it. */
 const workerReplySchema = z.union([
@@ -56,7 +58,8 @@ function readInWorker(kind: OpenableKind, bytes: Uint8Array, seams: ParseMemberF
   const own = new Uint8Array(bytes);
   return new Promise((resolve, reject) => {
     const worker = new Worker(WORKER_FILE, {
-      execArgv: ["--import", "tsx"],
+      // Nothing inherited from the parent's command line: the entry loads tsx itself.
+      execArgv: [],
       workerData: { kind, bytes: own },
       transferList: [own.buffer],
       resourceLimits: { maxOldGenerationSizeMb: seams.heapMb ?? MEMBER_FILE_WORKER_HEAP_MB },
