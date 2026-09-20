@@ -42,7 +42,15 @@ if (read.needsMapping) console.log("NO EMAIL OR PHONE COLUMN FOUND — staff wou
 
 console.log("\nColumns");
 for (const column of read.columns) {
-  const said = column.guess === null ? "" : ` → ${column.guess} (${column.confidence ?? "?"})`;
+  // A column whose heading claimed a field it was not given is one the server
+  // disbelieved — its cells disagreed, or it names somebody who is not the
+  // member. Item 5's screen says it in words; this says it here.
+  const said =
+    column.guess !== null
+      ? ` → ${column.guess} (${column.confidence ?? "?"})`
+      : column.headerSays !== null
+        ? ` → named ${column.headerSays}, NOT used`
+        : "";
   console.log(`  ${String(column.index).padStart(3)} ${(column.header ?? "").slice(0, 28).padEnd(30)}${said.padEnd(28)}${column.samples.map((s) => s.slice(0, 20)).join(" | ")}`);
 }
 
