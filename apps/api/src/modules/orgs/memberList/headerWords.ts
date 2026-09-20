@@ -86,7 +86,7 @@ const WORDS: readonly HeaderWord[] = [
     rank: 1,
   })),
   ...["mobile", "mobile phone", "mobile number", "cell", "cell phone", "cellphone", "whatsapp"].map((word) => ({ word, field: "phone" as const, rank: MOBILE })),
-  ...["phone", "phone number", "phone numbers", "contact number", "telephone", "phone 1 value"].map((word) => ({
+  ...["phone", "phone number", "phone numbers", "contact number", "contact no", "telephone", "telephone number", "tel", "phone 1 value"].map((word) => ({
     word,
     field: "phone" as const,
     rank: ANY_PHONE,
@@ -97,6 +97,9 @@ const WORDS: readonly HeaderWord[] = [
     "member id",
     "member no",
     "member number",
+    "membership no",
+    "client number",
+    "customer number",
     "membership number",
     "membership id",
     "client id",

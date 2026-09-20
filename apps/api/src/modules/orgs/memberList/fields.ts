@@ -71,6 +71,25 @@ export interface NumberReading {
   shortened: boolean;
 }
 
+/** Whether a run of digits is shaped like a payment card: the length of one and
+ *  the check digit of one (Luhn's). Gym software calls a member's door fob a
+ *  "card number", so that heading is read as a member number — but an export
+ *  whose "Card Number" really is a bank card must not leave its digits in our
+ *  list. A member number is shown on a screen and matched on; it is never worth
+ *  holding somebody's card for. A number that only LOOKS like a card is dropped
+ *  too: the person keeps their name, email and phone, and nothing is lost that
+ *  a gym cannot type again. */
+export function looksLikeAPaymentCard(text: string): boolean {
+  if (!/^[0-9]{13,19}$/.test(text)) return false;
+  let sum = 0;
+  for (let i = 0; i < text.length; i++) {
+    const digit = Number(text[text.length - 1 - i]);
+    const doubled = i % 2 === 1 ? digit * 2 : digit;
+    sum += doubled > 9 ? doubled - 9 : doubled;
+  }
+  return sum % 10 === 0;
+}
+
 /** The gym's own number for a member, as text: it is shown, matched on and
  *  never counted with. */
 export function cleanMemberNumber(raw: string): NumberReading {
@@ -83,6 +102,7 @@ export function cleanMemberNumber(raw: string): NumberReading {
   if (EMPTY_WORDS.has(value.toLowerCase())) return { value: null, shortened: false };
   // Dropped whole, never cut: half a member number is another member's number.
   if (value.length > MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS) return { value: null, shortened: false };
+  if (looksLikeAPaymentCard(value)) return { value: null, shortened: false };
   return { value, shortened: false };
 }
 

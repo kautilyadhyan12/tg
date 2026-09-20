@@ -972,6 +972,29 @@ to the gym:
   column refused this way is still shown with `headerSays`, so a gym that really does
   keep members under one of those words maps it by hand.
 
+**AMENDED 2026-09-20, fourth time: a card number we must not keep.** Gym software
+calls a member's door fob a "card number", which is why that heading reads as a
+member number — but an export whose "Card Number" is a BANK card must not leave its
+digits here. A value shaped like a payment card (13–19 digits) AND carrying a card's
+check digit (Luhn) is dropped: the person keeps their name, email and phone, and the
+list holds nothing worth stealing. Measured: our own 16-digit fixture member number
+is not card-shaped and survives. Heading words added the same day from 37 real
+headings — `tel`, `contact no`, `membership no`, `client number`, `customer number`;
+`account number` and other bank-sounding words are deliberately NOT read.
+
+**Several gyms at once (measured 2026-09-20, Node 22.23.2)**: the biggest file allowed
+uploaded by 1, 2, 3 and 5 gyms at the same moment — two are read, the rest answer
+`busy` ("Other files are being read right now. Try again in a minute."), nothing
+crosses between gyms, the request thread stalls at most 54 ms and the process stays
+at 123–134 MB. The cap is what keeps the server standing; more gyms means more
+capacity, not a bigger cap on one box.
+
+**Known limit, written down rather than patched**: where the ONLY address column in a
+file belongs to somebody else under a word no list has ("Buddy Email"), it is read as
+the member's. No list can be complete. What closes it is the preview: nobody is
+emailed until staff press Invite (§9.2 rule 10), and the column's heading, its
+`headerSays` and three of its own cells are on that screen. Item 5 (§9.14) is
+accepted only if staff can see WHOSE address is about to be invited.
 **ENGLISH ONLY (Kd, RULINGS 2026-09-20).** The heading words are English; the German,
 French, Spanish, Portuguese, Dutch and Italian words 3a-ii shipped with are struck. A
 file whose headings are in another language is not refused and nothing of it is guessed

@@ -3,7 +3,7 @@
 // Written as one table over every class of case, before review.
 import { describe, expect, it } from "vitest";
 import { MEMBER_LIST_MAX_EMAIL_CHARS, MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS, MEMBER_LIST_MAX_NAME_CHARS, MEMBER_LIST_MAX_STATUS_CHARS, authEmailSchema } from "@app/shared";
-import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "../src/modules/orgs/memberList/fields.js";
+import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord, looksLikeAPaymentCard } from "../src/modules/orgs/memberList/fields.js";
 
 const ch = (code: number): string => String.fromCodePoint(code);
 
@@ -101,6 +101,29 @@ describe("a member number", () => {
   it("is dropped whole rather than cut, because half a number is another member's", () => {
     const tooLong = "A".repeat(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS + 1);
     expect(cleanMemberNumber(tooLong)).toEqual({ value: null, shortened: false });
+  });
+
+  // A gym's software calls the door fob a "card number", so that heading is
+  // read as a member number — but an export whose card number is a BANK card
+  // must not leave its digits in our list.
+  it.each([
+    ["a test Visa number", "4111111111111111"],
+    ["a test Mastercard number", "5555555555554444"],
+    ["a test Amex number", "378282246310005"],
+    ["a 16-digit number with a card's check digit", "4242424242424242"],
+  ])("%s is never kept", (_label, card) => {
+    expect(looksLikeAPaymentCard(card)).toBe(true);
+    expect(cleanMemberNumber(card)).toEqual({ value: null, shortened: false });
+  });
+
+  it.each([
+    ["a long member number that is not shaped like a card", "1234567890123456"],
+    ["a door fob number", "0001234567"],
+    ["a member number with letters", "MEM-4111111111111111"],
+    ["a short number", "12345"],
+  ])("%s is kept", (_label, number) => {
+    expect(looksLikeAPaymentCard(number)).toBe(false);
+    expect(cleanMemberNumber(number).value).toBe(number);
   });
 });
 
