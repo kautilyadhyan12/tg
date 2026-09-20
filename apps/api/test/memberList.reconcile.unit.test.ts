@@ -291,6 +291,26 @@ describe("reconcile: what an upload would do to the list", () => {
     expect(out.counts.canBeInvited).toBe(0);
   });
 
+  it("a member the list holds TWICE is theirs by address first, and by phone only as the backup", () => {
+    // §9.7's order, and the tie-break the database had to be taught as well: this member
+    // is reachable both ways, and the two entries say different things about them. The
+    // PHONE entry is the older one, so anything that picks by age alone picks it — and
+    // then shows staff "Frozen, OLD-1" for somebody the list calls "Active, NEW-2".
+    const greta = person({ fullName: "Greta Olsen", email: "greta@gym.com", phone: "+447911000111" });
+    const byPhone = { ...entry(person({ fullName: "Greta (phone row)", phone: "+447911000111" }), "Frozen"), memberNumber: "OLD-1" };
+    const byEmail = { ...entry(person({ fullName: "Greta (email row)", email: "greta@gym.com" }), "Active"), memberNumber: "NEW-2" };
+    const out = reconcile({
+      rows: [],
+      entries: [byPhone, byEmail],
+      members: [member({ userId: "u1", email: greta.email, statedPhone: greta.phone })],
+      mode: "whole_list",
+      hasList: true,
+    });
+    // The file holds nobody, so she is leaving — shown with what the list says about
+    // her, which must be her ADDRESS entry's words, not her phone entry's.
+    expect(out.membersLeaving.map((p) => [p.wasStatus, p.memberNumber])).toEqual([["Active", "NEW-2"]]);
+  });
+
   // -------------------------------------------------------------------------
   // THE MARKS — the one thing staff act on, and the one that accuses somebody
   // -------------------------------------------------------------------------

@@ -525,9 +525,18 @@ export async function stagedContacts(
  *  full reasoning for both; this statement is the same rule with one more column, and a
  *  test drives the two side by side so they cannot drift.
  *
- *  A FAMILY SHARING ONE ADDRESS has several entries against it; `ORDER BY e.created_at`
- *  inside the lateral takes the first, which is what `reconcile` does in this process,
- *  because the list itself offers nothing to choose between them. */
+ *  **THE EMAIL CHANNEL WINS, AND ONLY THEN THE OLDEST ENTRY.** §9.7 matches on the
+ *  verified address first and falls to the phone only when there is none, which is what
+ *  `reconcile`'s `entryFor` does in this process — so `by_email DESC` comes before
+ *  `created_at` in the order. Ordering by age alone answered a different person's row:
+ *  a member whose proved address matches a NEWER entry and whose stated phone matches an
+ *  OLDER one was shown with the older entry's status word and member number ("was
+ *  Frozen, OLD-1" where the list says "Active, NEW-2"). Both the single `OR` lateral and
+ *  the first UNION ALL had it; the review of PR #87 found it in the re-check.
+ *
+ *  A FAMILY SHARING ONE ADDRESS has several entries against it; `ORDER BY created_at`
+ *  within a channel takes the first, which is again what `reconcile` does, because the
+ *  list itself offers nothing to choose between them. */
 export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<MemberAgainstList[]> {
   const rows = await sql<
     {
@@ -559,19 +568,19 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     LEFT JOIN LATERAL (
       SELECT c.id, c.status, c.member_number
       FROM (
-        (SELECT x.id, x.status, x.member_number, x.created_at
+        (SELECT x.id, x.status, x.member_number, x.created_at, true AS by_email
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email
          ORDER BY x.created_at, x.id
          LIMIT 1)
         UNION ALL
-        (SELECT x.id, x.status, x.member_number, x.created_at
+        (SELECT x.id, x.status, x.member_number, x.created_at, false AS by_email
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.created_at, x.id
          LIMIT 1)
       ) c
-      ORDER BY c.created_at, c.id
+      ORDER BY c.by_email DESC, c.created_at, c.id
       LIMIT 1
     ) e ON true
     WHERE m.gym_id = ${gymId}

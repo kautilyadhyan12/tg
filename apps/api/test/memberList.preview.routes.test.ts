@@ -1074,6 +1074,49 @@ d("member list: upload and preview (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "a member the list holds twice is theirs by address first: the database answers §9.7's order, not the oldest row",
+    async () => {
+      const owner = await makeUser("order-owner");
+      const member = await makeUser("order-member");
+      const org = await makeOrg(owner.cookies, "Channel Order Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+      const phone = "+447911000111";
+      await sql`
+        UPDATE gym_members SET stated_phone_e164 = ${phone}
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      // THE OLDER ROW REACHES HER BY PHONE and says one thing…
+      await sql`
+        INSERT INTO gym_member_list_entries
+          (gym_id, full_name, email, phone_e164, status, member_number, identity_key, source, created_at)
+        VALUES (${org.org.id}, 'Greta (phone row)', NULL, ${phone}, 'Frozen', 'OLD-1',
+                ${"f".repeat(64)}, 'upload', now() - interval '10 days')`;
+      // …the NEWER one reaches her by the address she proved, and says another. §9.7
+      // matches on the address first and falls to the phone only when there is none, so
+      // this is her entry. Ordering the two by age alone picked the other one, and staff
+      // read "Frozen, OLD-1" about somebody the list calls Active.
+      await sql`
+        INSERT INTO gym_member_list_entries
+          (gym_id, full_name, email, phone_e164, status, member_number, identity_key, source)
+        VALUES (${org.org.id}, 'Greta (email row)', ${member.email}, NULL, 'Active', 'NEW-2',
+                ${"a".repeat(63) + "b"}, 'upload')`;
+
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Somebody New", "order-new@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+
+      const page = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=members_leaving`, owner.cookies);
+      const people = (JSON.parse(page.body) as { page: { people: { wasStatus: string | null; memberNumber: string | null }[] } }).page.people;
+      expect(people.map((p) => [p.wasStatus, p.memberNumber])).toEqual([["Active", "NEW-2"]]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // A PAGE OF NAMES DOES NOT COST THE WHOLE FILE (§9.9)
   // =========================================================================
