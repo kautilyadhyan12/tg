@@ -71,7 +71,16 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
  *  a gym with no live plan refuses every write, and an upload is one. A huge
  *  seat cap so seats can never be what makes a test pass or fail, and
  *  `trial_days = 0` so it stays invisible to `startGymTrial`'s lowest-capped
- *  query and cannot disturb the billing suites' band assertions. */
+ *  query and cannot disturb the billing suites' band assertions.
+ *
+ *  **INR, NOT GBP, THOUGH THE FIXTURE GYM IS BRITISH — and the reason is a
+ *  sibling suite.** `orgs.routes.test.ts` proves a gym in a currency with no price
+ *  book is refused rather than guessed at, and it picks GBP; it even checks that
+ *  GBP is unseeded first, "because this test is worthless if the currency it picks
+ *  turns out to be seeded". A GBP plan here seeded it, and that suite went red on
+ *  CI while every suite passed locally, because the two share one database and the
+ *  order they run in decides whether this plan exists yet. Nothing about a member
+ *  list reads the plan's currency; the subscription is written directly. */
 const LIVE_PLAN = "zz_memberlist_live";
 
 interface CreatedOrg {
@@ -238,7 +247,7 @@ d("member list: upload and preview (real Postgres)", () => {
     await sql`
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
                          seat_cap, trial_days, rank, entitlements, member_entitlements)
-      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month',
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month',
               100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv), {

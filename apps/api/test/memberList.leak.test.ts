@@ -88,7 +88,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
       await sql`
         INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
                            seat_cap, trial_days, rank, entitlements, member_entitlements)
-        VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month',
+        VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month',
                 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
         ON CONFLICT (code) DO UPDATE SET active = true`;
 
