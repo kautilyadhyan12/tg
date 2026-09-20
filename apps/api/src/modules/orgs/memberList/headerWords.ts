@@ -1,11 +1,18 @@
 // Which heading means which field (spec Part 3 §9.5). Every word below was seen
 // in a real product's help pages or sample export on 2026-09-19 — Gymdesk, Zen
 // Planner, Clubworx, Arketa, WellnessLiving, GymMaster, Magicline, Dynamics 365,
-// Google Contacts, Mailchimp, Square, Stripe — plus the German, French, Spanish,
-// Portuguese, Dutch and Italian a European gym's own software writes. No Indian
-// or Brazilian product publishes its headings, so this list is a guess-assist
-// over a mapping staff always see, never the contract: a wrong guess is shown
-// beside three of the column's own cells and staff can say which is which.
+// Google Contacts, Mailchimp, Square, Stripe.
+//
+// **ENGLISH ONLY** (Kd, 2026-09-20): the app is for English-speaking countries,
+// so an English heading is the only one guessed. A file whose headings are in
+// another language is not refused and nothing of it is guessed wrong — its
+// columns come back unmapped with three of their own cells each, and staff say
+// which is which. The PEOPLE in an English gym's file are another matter: a
+// member called José Álvarez or Zoë Müller is read, matched and invited like
+// anyone else, in whatever alphabet their name is written.
+//
+// This list is a guess-assist over a mapping staff always see, never the
+// contract: a wrong guess is shown beside three of the column's own cells.
 //
 // A heading is matched by WHOLE WORDS it holds, not by being one: "Member Email
 // Address" holds "email address", "Secondary Email" holds "email". That is what
@@ -60,37 +67,26 @@ const WORK_PHONE = 3;
 /** Anything a heading says is not the main one of its kind ranks after every
  *  column that does not say so, whatever its own word was. */
 const NOT_THE_MAIN_ONE = 10;
+/** A heading that IS its word — "Email" — ranks before one that merely HOLDS
+ *  it — "Nominee Email", "Father's Name", "Agent Email". No list of words can
+ *  ever name everyone a form asks about beside the member, so this is what
+ *  holds where the never-list below has not heard of the word: whatever the
+ *  qualifier is, the plain column wins. */
+const SAYS_MORE_THAN_THE_WORD = 5;
 
 const WORDS: readonly HeaderWord[] = [
-  ...["first name", "firstname", "member firstname", "given name", "fname", "first", "forename", "vorname", "prenom", "nombre", "nome", "voornaam"].map(
-    (word) => ({ word, field: "firstName" as const, rank: 0 }),
-  ),
-  ...["last name", "lastname", "family name", "lname", "surname", "last", "nachname", "nom", "apellido", "apellidos", "sobrenome", "achternaam", "cognome"].map(
-    (word) => ({ word, field: "lastName" as const, rank: 0 }),
-  ),
-  ...["full name", "name", "member name", "client name", "customer name", "display name", "nome completo", "nombre completo", "naam", "nom complet"].map(
-    (word) => ({ word, field: "fullName" as const, rank: 0 }),
-  ),
+  ...["first name", "firstname", "member firstname", "given name", "fname", "first", "forename"].map((word) => ({ word, field: "firstName" as const, rank: 0 })),
+  ...["last name", "lastname", "family name", "lname", "surname", "last"].map((word) => ({ word, field: "lastName" as const, rank: 0 })),
+  ...["full name", "name", "member name", "client name", "customer name", "display name"].map((word) => ({ word, field: "fullName" as const, rank: 0 })),
   // The bare word is the one a gym means when it has only one email column.
   ...["email", "e mail"].map((word) => ({ word, field: "email" as const, rank: 0 })),
-  ...[
-    "email address",
-    "e mail address",
-    "email addresses",
-    "email id",
-    "mail",
-    "primary email",
-    "e mail 1 value",
-    "correo",
-    "correo electronico",
-    "courriel",
-    "e mailadres",
-    "endereco de e mail",
-  ].map((word) => ({ word, field: "email" as const, rank: 1 })),
-  ...["mobile", "mobile phone", "mobile number", "cell", "cell phone", "cellphone", "whatsapp", "handy", "mobil", "telephone portable", "portable", "movil", "celular", "mobiel", "cellulare"].map(
-    (word) => ({ word, field: "phone" as const, rank: MOBILE }),
-  ),
-  ...["phone", "phone number", "phone numbers", "contact number", "telephone", "phone 1 value", "telefon", "telefono", "telefone", "telefoon"].map((word) => ({
+  ...["email address", "e mail address", "email addresses", "email id", "mail", "primary email", "e mail 1 value"].map((word) => ({
+    word,
+    field: "email" as const,
+    rank: 1,
+  })),
+  ...["mobile", "mobile phone", "mobile number", "cell", "cell phone", "cellphone", "whatsapp"].map((word) => ({ word, field: "phone" as const, rank: MOBILE })),
+  ...["phone", "phone number", "phone numbers", "contact number", "telephone", "phone 1 value"].map((word) => ({
     word,
     field: "phone" as const,
     rank: ANY_PHONE,
@@ -115,13 +111,8 @@ const WORDS: readonly HeaderWord[] = [
     "reference id",
     "external id",
     "id",
-    "mitgliedsnummer",
-    "matricula",
-    "numero de socio",
-    "lidnummer",
-    "tessera",
   ].map((word) => ({ word, field: "memberNumber" as const, rank: 0 })),
-  ...["status", "member status", "membership status", "account status", "client status", "estado", "situacao", "statut", "stato"].map((word) => ({
+  ...["status", "member status", "membership status", "account status", "client status"].map((word) => ({
     word,
     field: "status" as const,
     rank: 0,
@@ -134,7 +125,19 @@ const WORDS: readonly HeaderWord[] = [
 
 /** An emergency contact's number is not the member's, and a salesperson is not
  *  a member either (§9.5). A heading holding any of these is never the name,
- *  the email or the phone — not by its heading, and not by its cells. */
+ *  the email or the phone — not by its heading, and not by its cells.
+ *
+ *  THIS IS THE LIST THAT DECIDES WHO GETS INVITED. An address read from the
+ *  wrong column is an invitation sent to somebody who is not a member, and the
+ *  gym's invitation is its yes (§9.2 rule 11) — so that person would join the
+ *  gym. The words below are the ones a membership form asks for BESIDE the
+ *  member: an emergency contact and a next of kin, the parent or guardian a
+ *  junior membership needs, the family a family membership covers, the friend
+ *  who referred them, the doctor or physio a clinic's file names, and the
+ *  employer, sponsor or corporate account that pays. A column refused by this
+ *  list is still SHOWN to staff, with what its heading claimed (`headerSays`),
+ *  so a gym that really does keep members under one of these words can map it
+ *  by hand. */
 const NEVER_CONTACT = [
   "emergency",
   "guardian",
@@ -142,10 +145,39 @@ const NEVER_CONTACT = [
   "spouse",
   "partner",
   "next of kin",
+  "kin",
+  "nominee",
+  "father",
+  "mother",
+  "husband",
+  "wife",
+  "son",
+  "daughter",
+  "brother",
+  "sister",
+  "relative",
+  "family member",
+  "friend",
+  "guarantor",
+  "sponsor",
+  "reference",
   "referred",
   "referrer",
+  "witness",
+  "attendant",
+  "caretaker",
+  "carer",
+  "doctor",
+  "physician",
+  "physio",
+  "therapist",
   "trainer",
   "coach",
+  "agent",
+  "broker",
+  "manager",
+  "contact person",
+  "corporate",
   "sales",
   "staff",
   "employee",
@@ -157,7 +189,7 @@ const NEVER_CONTACT = [
 const NEVER_STATUS = ["payment", "billing", "invoice", "marketing", "email", "e mail", "sms", "waiver", "card", "subscription to"];
 /** Words that say a column is the spare one of its kind. A trailing "1" is
  *  taken off by `normaliseHeader`, so any digit left is a 2nd or a 3rd. */
-const NOT_MAIN_WORDS = ["secondary", "alternate", "alternative", "other", "work", "2", "3", "4", "5", "6", "7", "8", "9"];
+const NOT_MAIN_WORDS = ["secondary", "alternate", "alternative", "other", "work", "office", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 export interface HeaderReading {
   /** The field the heading names, by the longest word it holds. Null where it
@@ -195,7 +227,7 @@ export function readHeader(raw: string): HeaderReading {
   const spare = NOT_MAIN_WORDS.some((word) => holds(header, word));
   return {
     field: tied ? null : best.field,
-    rank: best.rank + (spare ? NOT_THE_MAIN_ONE : 0),
+    rank: best.rank + (header === best.word ? 0 : SAYS_MORE_THAN_THE_WORD) + (spare ? NOT_THE_MAIN_ONE : 0),
     word: best.word,
     isHeaderWord: true,
     never,

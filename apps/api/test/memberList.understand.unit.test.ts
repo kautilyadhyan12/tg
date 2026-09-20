@@ -448,6 +448,48 @@ describe("the mapping this gym used last time", () => {
   });
 });
 
+describe("whose email would be invited", () => {
+  // The worst thing this card can get wrong: an address read from the wrong
+  // column is an invitation to somebody who is not a member, and the gym's
+  // invitation is its yes (§9.2 rule 11) — that person joins the gym.
+  const withNominee = [
+    ["Nominee Email", "Email", "Full Name"],
+    ["nominee1@example.com", "member1@example.com", "Ann Lee"],
+    ["nominee2@example.com", "", "Bo Chen"],
+    ["nominee3@example.com", "member3@example.com", "Cara Diaz"],
+  ];
+
+  it("never the nominee's, even where the member's own column is empty", () => {
+    const found = read(withNominee);
+    expect(found.mapping.email).toEqual([1]);
+    expect(found.rows.map((row) => row.email)).toEqual(["member1@example.com", "member3@example.com"]);
+    // Bo Chen has nothing of his own in the file, so he is reported as having
+    // no contact details — never invited at the address beside his name.
+    expect(found.counts).toMatchObject({ dataRows: 3, kept: 2, noContact: 1 });
+    expect(found.skipped).toEqual([{ row: 3, reason: "no_contact" }]);
+    expect(found.columns[0]).toMatchObject({ header: "Nominee Email", headerSays: "email", guess: null });
+  });
+
+  it("nobody's, where the only email column in the file is somebody else's", () => {
+    const rows = [
+      ["Father's Name", "Nominee Email", "Full Name"],
+      ["Raj Sharma", "nominee1@example.com", "Ann Lee"],
+      ["Bob Chen", "nominee2@example.com", "Bo Chen"],
+    ];
+    const found = read(rows);
+    // Nothing of the member's is readable, so staff are asked rather than
+    // three strangers being invited into the gym.
+    expect(found.needsMapping).toBe(true);
+    expect(found.rows).toEqual([]);
+  });
+
+  it("the member's own, where staff say that is what the column is", () => {
+    const mapping: MemberListMapping = { sheet: null, headerRow: 0, fullName: 2, firstName: null, lastName: null, email: [0], phone: [], memberNumber: null, status: null };
+    const found = read(withNominee, { mapping });
+    expect(found.rows.map((row) => row.email)).toEqual(["nominee1@example.com", "nominee2@example.com", "nominee3@example.com"]);
+  });
+});
+
 describe("a column the server disbelieved", () => {
   it("says what its heading claimed, so a screen can tell staff why it was not used", () => {
     const rows = [["Email", "Mobile"], ["N/A", "9876543210"], ["N/A", "9876543211"], ["cara@example.com", "9876543212"]];

@@ -954,6 +954,31 @@ country's metadata and over files of its own):
 - A vertical tab or a form feed inside a cell is a line break, not a character to drop:
   two numbers written one above the other are two numbers, never one glued number.
 
+**AMENDED 2026-09-20, third time: whose email gets invited** (Kd asked, after the round
+closed, whether anything here is still wrong, "because this is the most critical feature
+of the application"). Two real faults were found by running realistic headings through
+the reader, and both would have sent an invitation to somebody who is not a member —
+which, because the gym's invite is its yes (§9.2 rule 11), would have joined that person
+to the gym:
+- **`Nominee Email` outranked `Email`** and became the column every member was invited
+  at, because the ranking read the WORD matched and not the heading. Now a heading that
+  IS its word beats one that merely HOLDS it, whatever the other word is — which holds
+  even for a qualifier no list has ever heard of (`Zzyzx Email` ranks after `Email`).
+- **25 of 37 headings naming somebody who is not the member read as the member's own**:
+  nominee, father, mother, husband, wife, son, daughter, brother, sister, relative,
+  family member, friend, guarantor, sponsor, reference, witness, attendant, caretaker,
+  carer, doctor, physician, physio, therapist, agent, broker, manager, contact person,
+  corporate, kin. All are on the never-list now; 0 of 37 are read as the member's. A
+  column refused this way is still shown with `headerSays`, so a gym that really does
+  keep members under one of those words maps it by hand.
+
+**ENGLISH ONLY (Kd, RULINGS 2026-09-20).** The heading words are English; the German,
+French, Spanish, Portuguese, Dutch and Italian words 3a-ii shipped with are struck. A
+file whose headings are in another language is not refused and nothing of it is guessed
+wrong — its columns come back unmapped for staff to map. This is about the file's
+HEADINGS, not its people: a member called José Álvarez or Zoë Müller is read, matched
+and invited like anyone else, and every country's phone numbers are still read.
+
 ### 9.6 Data (3a-iii's one migration; forward-only)
 
 ```

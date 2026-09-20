@@ -27,7 +27,7 @@ describe("a heading in one shape", () => {
     ["a dot and brackets", "Phone (Mobile)", "phone mobile"],
     ["an underscore", "member_number", "member number"],
     ["a slash", "Mobile/Cell", "mobile cell"],
-    ["an accent", `T${ch(0xe9)}l${ch(0xe9)}phone`, "telephone"],
+    ["an accent, which a name in an English gym's file carries too", `Jos${ch(0xe9)} ${ch(0xc1)}lvarez`, "jose alvarez"],
     ["a curly apostrophe (an apostrophe is a space, as every other mark is)", `Member${ch(0x2019)}s name`, "member s name"],
     ["a no-break space", `Full${ch(0xa0)}Name`, "full name"],
     ["a trailing 1, as Google Contacts writes", "E-mail 1", "e mail"],
@@ -45,39 +45,49 @@ describe("what a heading names", () => {
     ["Email", "email"],
     ["E-mail Address", "email"],
     ["Email ID", "email"],
-    ["Correo electrónico", "email"],
-    ["E-mailadres", "email"],
+    ["Primary Email", "email"],
     ["Mobile", "phone"],
     ["Mobile Number", "phone"],
     ["Cell Phone", "phone"],
     ["WhatsApp", "phone"],
     ["Contact Number", "phone"],
-    ["Telefone", "phone"],
-    ["Handy", "phone"],
+    ["Home Phone", "phone"],
     ["Full Name", "fullName"],
     ["Member Name", "fullName"],
-    ["Naam", "fullName"],
-    ["Nome completo", "fullName"],
+    ["Client Name", "fullName"],
+    ["Display Name", "fullName"],
     ["First Name", "firstName"],
-    ["Vorname", "firstName"],
-    ["Prénom", "firstName"],
+    ["Given Name", "firstName"],
     ["Last Name", "lastName"],
     ["Surname", "lastName"],
-    ["Nachname", "lastName"],
-    ["Cognome", "lastName"],
+    ["Family Name", "lastName"],
     ["Member ID", "memberNumber"],
     ["Membership Number", "memberNumber"],
     ["Check-in Code", "memberNumber"],
     ["Key Tag", "memberNumber"],
     ["Barcode", "memberNumber"],
-    ["Mitgliedsnummer", "memberNumber"],
-    ["Número de socio", "memberNumber"],
+    ["External ID", "memberNumber"],
     ["Status", "status"],
     ["Membership Status", "status"],
-    ["Estado", "status"],
-    ["Situação", "status"],
+    ["Account Status", "status"],
   ])("%s", (header, field) => {
     expect(readHeader(header).field).toBe(field);
+  });
+
+  // Kd, 2026-09-20: the app is for English-speaking countries, so only an
+  // English heading is guessed. A file in another language is not refused and
+  // nothing of it is guessed WRONG — staff say which column is which.
+  it.each([
+    ["German", "Vorname"],
+    ["German", "Mitgliedsnummer"],
+    ["French", "Courriel"],
+    ["Spanish", "Correo electrónico"],
+    ["Spanish", "Número de socio"],
+    ["Portuguese", "Situação"],
+    ["Dutch", "E-mailadres"],
+    ["Italian", "Cognome"],
+  ])("a %s heading (%s) names no field of ours", (_language, header) => {
+    expect(readHeader(header).field).toBe(null);
   });
 
   it.each([
@@ -105,7 +115,8 @@ describe("what a heading names", () => {
   it("the longer word wins where one holds the other", () => {
     expect(readHeader("Client Email ID").field).toBe("email");
     expect(readHeader("Customer ID").field).toBe("memberNumber");
-    expect(readHeader("Nome completo").field).toBe("fullName");
+    expect(readHeader("Full Name").field).toBe("fullName");
+    expect(readHeader("Membership Status").field).toBe("status");
   });
 });
 
@@ -125,6 +136,35 @@ describe("a heading that names somebody who is not the member", () => {
     ["Employee Name", "fullName"],
     ["Company Phone", "phone"],
     ["Employer Name", "fullName"],
+    // Every membership form asks for somebody beside the member. An address
+    // read from one of these columns is an invitation sent to a person who is
+    // not a member, and the gym's invitation is its yes (§9.2 rule 11).
+    ["Nominee Email", "email"],
+    ["Nominee Name", "fullName"],
+    ["Father's Name", "fullName"],
+    ["Mother's Name", "fullName"],
+    ["Husband Name", "fullName"],
+    ["Wife Phone", "phone"],
+    ["Son Name", "fullName"],
+    ["Daughter Email", "email"],
+    ["Brother Phone", "phone"],
+    ["Relative Phone", "phone"],
+    ["Family Member Email", "email"],
+    ["Friend Name", "fullName"],
+    ["Guarantor Email", "email"],
+    ["Sponsor Email", "email"],
+    ["Reference Name", "fullName"],
+    ["Witness Name", "fullName"],
+    ["Attendant Name", "fullName"],
+    ["Caretaker Phone", "phone"],
+    ["Doctor Phone", "phone"],
+    ["Physio Name", "fullName"],
+    ["Therapist Email", "email"],
+    ["Agent Email", "email"],
+    ["Broker Phone", "phone"],
+    ["Manager Email", "email"],
+    ["Contact Person Email", "email"],
+    ["Corporate Contact Email", "email"],
   ];
 
   it.each(NOT_THE_MEMBERS)("%s is never the member's %s", (header, field) => {
@@ -148,6 +188,15 @@ describe("a heading that names somebody who is not the member", () => {
   it("an ordinary heading forbids nothing", () => {
     expect(readHeader("Mobile").never.size).toBe(0);
   });
+
+  it.each([["Family Name"], ["Surname"], ["Reference ID"], ["Member Number"], ["Mobile Number"], ["Email Address"]])(
+    "%s is the member's own, and is not caught by the list",
+    (header) => {
+      const reading = readHeader(header);
+      expect(reading.field).not.toBe(null);
+      if (reading.field !== null) expect(reading.never.has(reading.field)).toBe(false);
+    },
+  );
 });
 
 describe("which of several columns of one kind is the main one", () => {
@@ -176,10 +225,26 @@ describe("which of several columns of one kind is the main one", () => {
     expect(rankOf(spare)).toBeGreaterThan(rankOf(main));
   });
 
-  it("a work number is still the last of the phone columns", () => {
-    for (const header of ["Mobile", "Phone", "Home Phone", "Other Phone", "Alternate Mobile"]) {
+  it("a work number is the last of the four kinds a heading can name", () => {
+    for (const header of ["Mobile", "Phone", "Home Phone"]) {
       expect(rankOf("Work Phone")).toBeGreaterThan(rankOf(header));
     }
+  });
+
+  it("a heading that IS the word beats one that merely holds it, whatever the other word is", () => {
+    // No list can name everyone a membership form asks about beside the member,
+    // so the plain column has to win on its own — even where the qualifier is a
+    // word nobody here has ever seen.
+    for (const header of ["Nominee Email", "Father's Email", "Zzyzx Email", "Member Email"]) {
+      expect(rankOf(header)).toBeGreaterThan(rankOf("Email"));
+    }
+    expect(rankOf("Klingon Mobile")).toBeGreaterThan(rankOf("Mobile"));
+  });
+
+  it("does not demote a heading a real product writes, which is a word in its own right", () => {
+    // "Member Name" is Magicline's own heading, not "Name" with a qualifier.
+    expect(rankOf("Member Name")).toBe(rankOf("Name"));
+    expect(rankOf("Mobile Number")).toBe(rankOf("Mobile"));
   });
 });
 
