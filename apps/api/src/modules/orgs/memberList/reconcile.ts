@@ -307,6 +307,38 @@ export function membersAgainstNewList(
   return { marks, membersLeaving, listedNow };
 }
 
+/** THE THREE ANSWERS ABOUT THE PEOPLE A FILE WOULD ADD (§9.6): already in the app ·
+ *  could be invited (has an address and is not in the app) · no address at all.
+ *
+ *  **ONE FUNCTION, CALLED WHERE THE FILE IS STAGED AND AGAIN ON EVERY READ** (review of
+ *  PR #87, High-A). The read counted its own way once, and worked `canBeInvited` out by
+ *  SUBTRACTION — everybody with an address, minus everybody already in the app. That is
+ *  the same number only while every member the file reaches also has an address IN the
+ *  file, and §9.7's backup match means one need not: a member is matched by the phone
+ *  number they gave the gym. One such row made the upload answer `canBeInvited: 0` and
+ *  a second look at the same upload answer **-1** — a number `memberListChangeCounts`
+ *  forbids, on a screen staff were about to act on. Counted directly, in one place,
+ *  there is nothing left to drift.
+ *
+ *  **They do not partition, and that is deliberate**: somebody already in the app whose
+ *  row carries no address is counted under `alreadyInApp` AND under `noEmail`, because
+ *  both sentences are true of them. The three are facts about the new people, not slices
+ *  of them, so no test may assert that they sum to `new`. */
+export function inviteCounts(
+  people: readonly { email: string | null; inApp: boolean }[],
+): { alreadyInApp: number; canBeInvited: number; noEmail: number } {
+  let alreadyInApp = 0;
+  let canBeInvited = 0;
+  let noEmail = 0;
+  for (const person of people) {
+    const reachable = foldEmail(person.email) !== null;
+    if (person.inApp) alreadyInApp += 1;
+    else if (reachable) canBeInvited += 1;
+    if (!reachable) noEmail += 1;
+  }
+  return { alreadyInApp, canBeInvited, noEmail };
+}
+
 /** WHAT THIS UPLOAD WOULD DO — and, with no rows, what the stored list says now.
  *
  *  The order of the work is the order the answers depend on each other: who the
@@ -438,9 +470,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
     changed: changed.length,
     unchanged: unchanged.length,
     gone: gone.length,
-    alreadyInApp: fresh.filter((person) => person.inApp).length,
-    canBeInvited: fresh.filter((person) => !person.inApp && foldEmail(person.email) !== null).length,
-    noEmail: fresh.filter((person) => foldEmail(person.email) === null).length,
+    ...inviteCounts(fresh),
   };
 
   const listSize = entries.length;

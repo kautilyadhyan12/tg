@@ -977,8 +977,11 @@ d("member list: upload and preview (real Postgres)", () => {
       ]);
       const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
       expect(preview.list).toMatchObject({ new: 3, alreadyInApp: 1, canBeInvited: 1, noEmail: 1 });
-      // The three always add up to `new`: a screen prints them as a breakdown of it.
-      expect(preview.list.alreadyInApp + preview.list.canBeInvited + preview.list.noEmail).toBe(preview.list.new);
+      // They happen to add up to `new` HERE, and that is a fact about these three
+      // people, never a rule — the person with no address is not the person already in
+      // the app. Asserting the sum as an invariant is what let High-A through: it is
+      // algebraically true of any subtraction, whatever the numbers underneath are.
+      // The test below is the case where it is false.
 
       const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
       const people = (JSON.parse(res.body) as { page: { people: { fullName: string; email: string | null; inApp: boolean }[] } }).page.people;
@@ -987,6 +990,86 @@ d("member list: upload and preview (real Postgres)", () => {
         ["Can Be Invited", "split-invite@example.com", false],
         ["Already Here", member.email, true],
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a member matched by the phone the gym holds, with no address in the file: the upload and a second look say the same thing, and no count goes below zero",
+    async () => {
+      const owner = await makeUser("bothways-owner");
+      const member = await makeUser("bothways-member");
+      const org = await makeOrg(owner.cookies, "Both Ways Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+
+      // THE CASE THAT BREAKS COUNTING BY SUBTRACTION. This member is reachable by the
+      // phone number they gave the gym (§9.7's backup match) and the file holds NO
+      // address for them — so they are "already in the app" and "no email" at once,
+      // and "everybody with an address minus everybody in the app" is one too few.
+      const phone = "+447911224477";
+      await sql`
+        UPDATE gym_members SET stated_phone_e164 = ${phone}
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+
+      const file = csv([
+        ["Full Name", "Email", "Mobile", "Status"],
+        ["Phone Only Member", "", phone, "Active"],
+        ["Really Invitable", "bothways-invite@example.com", "", "Active"],
+      ]);
+
+      const posted = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(posted.list).toMatchObject({ new: 2, alreadyInApp: 1, canBeInvited: 1, noEmail: 1 });
+
+      // THE SECOND LOOK IS THE HALF THAT WAS WRONG: the same upload, read back, once
+      // answered `canBeInvited: 0` here — and with the member alone in the file, -1,
+      // which `memberListChangeCounts` forbids and a screen would have printed.
+      const reread = body(await get(`${uploadsUrl(org.org.id)}/${posted.uploadId}`, owner.cookies)).preview;
+      expect(reread.list).toEqual(posted.list);
+      expect(reread.list.canBeInvited).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the gym's list matches a member whose address differs only in case, exactly as the pure rule does",
+    async () => {
+      const owner = await makeUser("case-owner");
+      const member = await makeUser("case-member");
+      const org = await makeOrg(owner.cookies, "Case Folding Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+
+      // THE ADDRESS IS THE SAME ADDRESS, WRITTEN DIFFERENTLY. `users.email` is a citext
+      // column precisely so that it is, and `reconcile` folds both sides before it
+      // compares them. The statement that asks the same question in SQL must agree: it
+      // once cast the column to `text` on its way past, which made it case-SENSITIVE,
+      // so this member and this entry were the same person to the rule and two people
+      // to the database (review of PR #87, High-B). Set here rather than registered,
+      // because what is under test is the statement, not what sign-in stores today.
+      const shouted = member.email.toUpperCase();
+      await sql`UPDATE users SET email = ${shouted} WHERE id = ${member.userId}`;
+
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      await sql`
+        INSERT INTO gym_member_list_entries
+          (gym_id, full_name, email, phone_e164, status, identity_key, source)
+        VALUES (${org.org.id}, 'Case Member', ${member.email}, NULL, 'Active',
+                ${"e".repeat(64)}, 'upload')`;
+
+      // A file that does not hold them. They are on the list today and not on the new
+      // one, so they are leaving — which is only true if the entry was matched to them.
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Somebody New", "case-new@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.members).toEqual({ leaving: 1, listedNow: 1 });
+
+      const page = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=members_leaving`, owner.cookies);
+      const people = (JSON.parse(page.body) as { page: { people: { wasStatus: string | null }[] } }).page.people;
+      // The entry's own words came back with the match, so it really was joined.
+      expect(people.map((p) => p.wasStatus)).toEqual(["Active"]);
     },
     TEST_TIMEOUT_MS,
   );

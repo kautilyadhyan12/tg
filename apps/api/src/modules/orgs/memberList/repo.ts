@@ -499,10 +499,26 @@ export async function stagedContacts(
  *  fresh on every read of a preview.
  *
  *  It is `listMembers` plus the one question that used to cost fetching every entry into
- *  this process: does an entry of this gym match this member? Asked as an EXISTS per
- *  member, which the list's own `(gym_id, email)` and `(gym_id, phone_e164)` indexes
- *  answer, and the matched entry's own words come back with it so a leaving member can
- *  be shown with what the list still says about them.
+ *  this process: does an entry of this gym match this member? The matched entry's own
+ *  words come back with it, so a leaving member can be shown with what the list still
+ *  says about them.
+ *
+ *  **THE SHAPE IS THE WHOLE POINT, AND THE FIRST VERSION OF IT READ TWO MILLION ROWS TO
+ *  ANSWER TWO HUNDRED QUESTIONS** (review of PR #87, High-B). It asked one lateral with
+ *  `email = … OR phone_e164 = …`, and used neither index: an `OR` across two columns
+ *  rules both out, and casting `u.email` to `text` cast the citext COLUMN to text with
+ *  it, so the index on it no longer applied. Measured on 200 members against 10,000
+ *  entries: a sequential scan per member, 284–339 ms, on the single Postgres connection
+ *  the whole API shares — and it ran on the preview read and on every page of names,
+ *  growing as members × entries. Split into a UNION ALL of the two matches, each its
+ *  own indexed lookup, the same answer costs single-digit milliseconds.
+ *
+ *  **The citext comparison is also the correct one.** `x.email = u.email` is citext to
+ *  citext, which folds case exactly as `reconcile`'s `foldEmail` does in this process.
+ *  The cast made it text to text, so SQL answered case-SENSITIVELY while the pure rule
+ *  answered case-insensitively — the two could disagree about one person, and a test
+ *  drives that case directly rather than trusting that sign-in lower-cases everything
+ *  it stores today.
  *
  *  **THE EMAIL IS THE VERIFIED ONE OR NOTHING, and the three conditions are the seat
  *  rule's own** — live, not complimentary, not staff. `listMembers`' header carries the
@@ -527,7 +543,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
   >`
     SELECT m.user_id,
            u.display_name,
-           v.email,
+           CASE WHEN v.proved THEN u.email::text ELSE NULL END AS email,
            m.stated_phone_e164,
            (m.last_listed_at IS NOT NULL) AS ever_listed,
            e.status        AS entry_status,
@@ -536,21 +552,26 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     CROSS JOIN LATERAL (
-      SELECT CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM one_time_tokens t
-                 WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
-               THEN u.email::text
-               ELSE NULL
-             END AS email
+      SELECT EXISTS (
+               SELECT 1 FROM one_time_tokens t
+               WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL) AS proved
     ) v
     LEFT JOIN LATERAL (
-      SELECT x.id, x.status, x.member_number
-      FROM gym_member_list_entries x
-      WHERE x.gym_id = m.gym_id
-        AND ((v.email IS NOT NULL AND x.email = v.email)
-             OR (m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164))
-      ORDER BY x.created_at, x.id
+      SELECT c.id, c.status, c.member_number
+      FROM (
+        (SELECT x.id, x.status, x.member_number, x.created_at
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email
+         ORDER BY x.created_at, x.id
+         LIMIT 1)
+        UNION ALL
+        (SELECT x.id, x.status, x.member_number, x.created_at
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         ORDER BY x.created_at, x.id
+         LIMIT 1)
+      ) c
+      ORDER BY c.created_at, c.id
       LIMIT 1
     ) e ON true
     WHERE m.gym_id = ${gymId}

@@ -54,7 +54,7 @@ import type { RedisLike } from "../../../redis.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { understandMemberFile } from "./parseMemberFile.js";
-import { membersAgainstNewList, reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
+import { inviteCounts, membersAgainstNewList, reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
 import * as repo from "./repo.js";
 
 export interface MemberListDeps {
@@ -133,9 +133,9 @@ async function measure(
   gymId: string,
   understanding: MemberListUnderstanding,
   mode: MemberListMode,
+  state: repo.ListState | null,
 ): Promise<{ measured: Measured; groups: MemberListGroups; rows: MemberListUnderstanding["rows"] }> {
-  const [state, entries, members, seatCap] = await Promise.all([
-    repo.listState(deps.sql, gymId),
+  const [entries, members, seatCap] = await Promise.all([
     repo.listEntries(deps.sql, gymId),
     repo.listMembers(deps.sql, gymId),
     orgRepo.gymSeatCap(deps.sql, gymId),
@@ -239,16 +239,16 @@ async function freshMemberSide(
   upload: repo.UploadRow,
   groups: MemberListGroups,
   stored: MemberListUploadSummary,
+  state: repo.ListState | null,
 ): Promise<{
   counts: MemberListUploadSummary;
   membersLeaving: MemberListPreviewPerson[];
   inApp: (person: { email: string | null; phone: string | null }) => boolean;
 } | null> {
-  const [contacts, members, seatCap, state] = await Promise.all([
+  const [contacts, members, seatCap] = await Promise.all([
     repo.stagedContacts(deps.sql, gymId, upload.id),
     repo.membersAgainstList(deps.sql, gymId),
     orgRepo.gymSeatCap(deps.sql, gymId),
-    repo.listState(deps.sql, gymId),
   ]);
   if (contacts === null) return null;
   const inApp = reachedBy(members);
@@ -269,15 +269,19 @@ async function freshMemberSide(
     },
     state !== null,
   );
-  const fresh = groups.new.filter((row) => inApp(personAt(row.at))).length;
-  const withEmail = groups.new.filter((row) => (personAt(row.at).email ?? "") !== "").length;
+  // THE SAME RULE THE STAGING USED, not a second way of counting the same people
+  // (review of PR #87, High-A). `inviteCounts` is where both answers come from, so the
+  // upload and a second look at it cannot say different things about one person.
   const counts: MemberListUploadSummary = {
     ...stored,
     list: {
       ...stored.list,
-      alreadyInApp: fresh,
-      canBeInvited: withEmail - fresh,
-      noEmail: groups.new.length - withEmail,
+      ...inviteCounts(
+        groups.new.map((row) => {
+          const person = personAt(row.at);
+          return { email: person.email, inApp: inApp(person) };
+        }),
+      ),
     },
     members: { leaving: side.membersLeaving.length, listedNow: side.listedNow },
     guard: {
@@ -400,7 +404,7 @@ export async function previewUpload(
   // The rule drops any row whose person is on an earlier one, and the grouping
   // points into what it KEPT — so the rows stored are the rule's own, never the
   // reader's, or a stored place would name somebody who was never on the list.
-  const { measured, groups, rows } = await measure(deps, gymId, understood, input.mode);
+  const { measured, groups, rows } = await measure(deps, gymId, understood, input.mode, state);
   const file: MemberListStagedFile = { understanding: { ...understood, rows }, groups };
   const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured });
 
@@ -501,7 +505,7 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
       repo.stagedGroups(deps.sql, gymId, upload.id),
     ]);
     if (shell === null || groups === null) throw expired();
-    const side = await freshMemberSide(deps, gymId, upload, groups, upload.summary);
+    const side = await freshMemberSide(deps, gymId, upload, groups, upload.summary, state);
     if (side === null) throw expired();
     return {
       shell,
@@ -517,8 +521,8 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
   // longer exists and the whole comparison runs again over the stored rows.
   const file = await repo.stagedFile(deps.sql, gymId, upload.id);
   if (file === null) throw expired();
-  const { measured, groups } = await measure(deps, gymId, file.understanding, upload.mode);
-  const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts);
+  const { measured, groups } = await measure(deps, gymId, file.understanding, upload.mode, state);
+  const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts, state);
   if (side === null) throw expired();
   return {
     shell: shellOf(file),
