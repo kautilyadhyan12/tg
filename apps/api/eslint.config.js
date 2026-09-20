@@ -9,7 +9,9 @@ export default [
     // shape every harness in `apps/web/tools/` already has). The typed lint
     // rules cannot parse a file the project service does not own, so the base
     // config errors on them rather than checking them. Scoped to `.mjs` under
-    // `tools/` alone — nothing in `src` or `test` is exempted by this.
-    ignores: ["tools/**/*.mjs"],
+    // `tools/` alone — nothing in `src` or `test` is exempted by this, but for
+    // the member file worker's two-line entry, plain JavaScript so it can load
+    // tsx on Node 22 (its own comment says why).
+    ignores: ["tools/**/*.mjs", "src/modules/orgs/memberList/parseWorker.boot.mjs"],
   },
 ];

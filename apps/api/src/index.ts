@@ -1,8 +1,10 @@
 // apps/api boot: parse env once (R2.3) → build → listen. Graceful shutdown.
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { assertMemberFileDecoders } from "./modules/orgs/memberList/decodeText.js";
 
 const config = loadConfig(process.env);
+assertMemberFileDecoders();
 const app = await buildApp(config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -50,6 +50,7 @@
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "posthog-node": "^5.39.4",
+    "read-excel-file": "9.3.10",
     "tsx": "^4.23.0",
     "zod": "^3.24.1"
   }
