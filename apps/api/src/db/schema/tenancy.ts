@@ -501,6 +501,22 @@ export const gymMembers = pgTable(
     consentAt: timestamp("consent_at", { withTimezone: true }),
     hiddenFromBoards: boolean("hidden_from_boards").notNull().default(false),
     complimentary: boolean("complimentary").notNull().default(false), // owner seat (Part 3 §4.0); excluded from seat counts
+    /** THE PHONE NUMBER THIS PERSON GAVE THE GYM — the second way a member is
+     *  matched to the gym's uploaded list (Part 3 §9.7), after their verified
+     *  email. A gym's export often holds a phone number and no address, and the
+     *  app never asks anybody for a phone number, so without this a whole export
+     *  can match nobody. It is written when somebody joins by a gym code and is
+     *  asked for it (3c) — never guessed, and never copied off the list itself,
+     *  which would make "is this member on the list" answer itself. */
+    statedPhoneE164: text("stated_phone_e164"),
+    /** THE LAST TIME THIS PERSON WAS ON THIS GYM'S CONFIRMED LIST (§9.7). It is
+     *  what tells "dropped off the list" from "never was on it": a member with
+     *  this set and no entry matching them today is `no longer listed`, which is
+     *  the one thing staff act on; a member without it was never listed and is
+     *  nobody's mistake. Stamped by a confirm on everyone the list being replaced
+     *  OR the new one holds, so what a preview called "no longer listed" reads
+     *  the same after the confirm. */
+    lastListedAt: timestamp("last_listed_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -515,6 +531,18 @@ export const gymMembers = pgTable(
     index("gym_members_code_live_idx").on(t.codeId).where(sql`${t.removedAt} IS NULL`),
     index("gym_members_user_removed_idx").on(t.userId, t.removedAt), // entitlement resolver
     index("gym_members_gym_joined_idx").on(t.gymId, t.joinedAt), // interval joins (rollups)
+    // Matching an uploaded list to this gym's members by the number they gave the
+    // gym (§9.7). Partial on both conditions: only live memberships are matched,
+    // and today every row's `stated_phone_e164` is NULL, so the index stays
+    // empty until 3c starts asking.
+    index("gym_members_gym_stated_phone_idx")
+      .on(t.gymId, t.statedPhoneE164)
+      .where(sql`${t.removedAt} IS NULL AND ${t.statedPhoneE164} IS NOT NULL`),
+    // THE ONE SHAPE A PHONE NUMBER IS KEPT IN, here as it is on a list entry:
+    // `MEMBER_LIST_PHONE_E164` in `@app/shared`. Matching compares the two
+    // columns directly, so a number stored one way here and another way there
+    // would match nobody and nothing would say why.
+    check("gym_members_stated_phone_check", sql`${t.statedPhoneE164} IS NULL OR ${t.statedPhoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
   ],
 );
 

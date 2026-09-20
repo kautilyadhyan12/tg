@@ -225,6 +225,13 @@
       "when": 1788220800015,
       "tag": "0032_own_ring_numbers",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788220800016,
+      "tag": "0033_member_list",
+      "breakpoints": true
     }
   ]
 }

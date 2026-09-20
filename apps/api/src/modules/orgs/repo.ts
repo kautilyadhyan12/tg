@@ -1376,13 +1376,26 @@ async function claimSeat(
  *  a subscription row exists.
  *
  *  Status set is §4.1's, so `past_due` still grants during v1 §10's grace. */
-async function seatCapFor(tx: TransactionSql, gymId: string): Promise<number | null> {
+async function seatCapFor(tx: SqlOrTx, gymId: string): Promise<number | null> {
   const rows = await tx<{ seat_cap: number | null }[]>`
     SELECT p.seat_cap
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
   return rows[0]?.seat_cap ?? null;
+}
+
+/** THE SAME QUESTION, FOR A CALLER OUTSIDE A TRANSACTION — the member list's
+ *  preview, which shows staff where the gym stands on seats before they invite
+ *  anybody (Part 3 §9.9). Exported rather than copied: the granting statuses
+ *  above are already written in three places with a test holding them together,
+ *  and a fourth would be a fourth answer to "is this gym paying".
+ *
+ *  It caps NOTHING here. A gym's list may be longer than its seats — being on a
+ *  list is not holding a seat — so this is a number on a screen, and the refusal
+ *  stays where seats are actually taken (`claimSeat`). */
+export async function gymSeatCap(sql: SqlOrTx, gymId: string): Promise<number | null> {
+  return await seatCapFor(sql, gymId);
 }
 
 /** DOES THIS GYM HAVE A LIVE PLAN — the one question Part 3 §4.2's read-only

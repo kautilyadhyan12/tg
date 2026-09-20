@@ -36,6 +36,7 @@ import {
   updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
+import { registerMemberListRoutes } from "./memberList/routes.js";
 import * as service from "./service.js";
 
 /** Zod-parse a request part; 400 with issue paths/codes only (R3.10 — never
@@ -85,6 +86,11 @@ export function registerOrgRoutes(
     // alternative is the empty catch that rule forbids).
     log: app.log,
   };
+
+  // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
+  // the same console behind the same two gates, on the same deps, and a second
+  // registration point would be a second place to forget one of them.
+  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

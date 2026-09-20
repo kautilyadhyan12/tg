@@ -110,6 +110,7 @@
 // excludes the state it produces, so a second run in the same second changes
 // nothing and a retried job is free.
 import type { Sql } from "postgres";
+import { deleteListForGym as deleteMemberListForGym } from "./memberList/repo.js";
 import { insertAudit } from "./repo.js";
 
 /** HOW LONG A GYM KEEPS ITS CONSOLE AFTER ITS PLAN ENDS — Kd's ruling of
@@ -304,6 +305,17 @@ export async function archiveLapsedGyms(
         targetId: row.id,
         meta: { via: "archive_sweep" },
       });
+      // THE GYM'S MEMBER LIST GOES WITH THE GYM, in this same transaction (Part 3
+      // §9.6). The list is a name, an email address and a phone number for every
+      // person a gym gave us, most of whom never opened this app: it is held FOR
+      // the gym, so when the gym ends there is nobody left it is held for. A
+      // person's own export does not carry it and the Day-14 purge does not touch
+      // it, which makes this the only thing that ever ends it.
+      //
+      // INSIDE THE TRANSACTION, not after it, and that is the whole point: "gym
+      // archived, list kept" is a state nothing else in the system would ever
+      // notice, and a separate statement is one timeout away from producing it.
+      await deleteMemberListForGym(tx, row.id);
     }
     return rows;
   });

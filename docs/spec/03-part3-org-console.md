@@ -621,11 +621,14 @@ with the management features (9.11).
 |---|---|---|---|
 | 3a-i | Opening a file safely: type sniff, safe unzip and re-pack, the parse worker, CSV decoding and parsing → a grid of text cells. No database, no route. | `read-excel-file` | Opus xhigh |
 | 3a-ii | Understanding the grid: header row, column guesses, cleaning of name, email, phone, member number and status, placeholders, duplicates → rows and plain-word problems; `tools/read-member-file.ts`. No database, no route. | `libphonenumber-js` | Opus xhigh |
-| 3a-iii | The list on the server: migration, the reconcile rule, upload (whole list, or add) → preview → confirm, the reads with the status filter, the hourly expiry, the list going when a gym closes. | — | Opus xhigh |
+| 3a-iii-a | The list on the server, half one: the migration, the reconcile rule, upload (whole list, or add) → preview, the names behind every number, the hourly expiry, the list going when a gym closes. It writes ONE staged row and changes nothing about anybody's membership. | — | Opus xhigh |
+| 3a-iii-b | Half two: press Confirm — the one transaction that writes the list, the wrong-file guard, and the reads with the status filter. | — | Opus xhigh |
 | 3a-iv | Keeping the list by hand: add one person, change one, take one off, put an app member on the list, remove the unlisted in one call (with its guard). | — | Opus xhigh |
 | 3b | The invites, sent when staff press Invite (9.12). | — | Opus xhigh |
 | 3c | The code admits at once (9.13). | — | Opus xhigh |
 | 5 | The screen (9.14). | — | Opus xhigh |
+
+**Split 2026-09-20, building 3a-iii** (the chat's own sizing call, CLAUDE.md §2.3): one chat for one migration, six routes, the guard and 9.10's whole test matrix was too much, and the honest cut is between the half that decides nothing and the half that changes a gym's records. The two are built back to back.
 
 Shared shapes and every constant in 9.9 live in `packages/shared/src/memberList.ts`
 (new; `orgs.ts` is already past 1,700 lines). Server code lives in
@@ -1046,6 +1049,13 @@ it, and an account deletion already closes the membership the match reads. When 
 archive sweep closes a gym, its three list tables' rows go in the same transaction.
 The hourly job `orgs.member_list_expiry` (injectable clock) expires staged uploads.
 
+**Out of 3a-iii-a (built 2026-09-20).** Migration `0033`, forward-only, exactly the three tables and the two membership columns above. Four things the shipped shape settles:
+
+- **`rows` holds the WHOLE understanding of the file, not only the cleaned rows** — wider than this section's column name suggests, on purpose. Everything a file's own cells can reach goes in one place and leaves in one statement: the rows, the columns with three of their cells each, the warnings (two of which quote a cell's words — a shared front-desk address, an ignored sheet's name) and the file's own facts. Split across two columns, the day somebody adds a field to one of them is the day a member's address outlives the file it came from, and nothing would say so. `summary` keeps counts, and the gym's own status words, which say nothing about any one person and are what make a confirmed upload's record readable.
+- **A CHECK, not a promise: `status = 'staged' OR rows IS NULL`.** "This upload is finished with and is still holding a member's name, address and phone number" is a state no screen would ever show and nothing else in the system would notice, including a hand-run statement during an incident. `(status = 'confirmed') = (confirmed_at IS NOT NULL)` is there for the same reason.
+- **`expires_at` has no DEFAULT.** The expiry job and its tests drive an injectable clock; `now() + interval` would be a second clock in the database that no test can move.
+- **`gym_members.stated_phone_e164` carries the same CHECK as an entry's phone** — `MEMBER_LIST_PHONE_E164` in `@app/shared`, read back against the code's own pattern by `db.migration.test.ts`. Matching compares the two columns directly, so a number stored one way here and another way there would match nobody and nothing would say why.
+
 ### 9.7 The reconcile rule (3a-iii) — ONE pure function, one table test
 
 `reconcile({ rows, entries, members })` — the SQL only fetches the three sets, so the
@@ -1077,6 +1087,14 @@ preview, the confirm, the reads and 3a-iv's removal cannot disagree.
   the upload `confirmed`, `rows` NULL → audit `org.member_list_confirmed`, counts only.
 - Joining also takes the gym's row lock (`claimSeat`), so a join and a confirm cannot
   interleave.
+
+**Out of 3a-iii-a (built 2026-09-20).** `reconcile({ rows, entries, members, mode, hasList })` in `apps/api/src/modules/orgs/memberList/reconcile.ts`. Pure: no clock, no database, no randomness — `everListed` arrives as a boolean rather than a date, because the rule needs to know that a member was once listed and never when. Five things the shipped rule settles:
+
+- **The list to measure against is DERIVED, so `add` mode takes nobody off without a branch saying so.** A whole-list upload's new list is the file; an add's is the file plus everybody already on the list. Every "would this member still be listed" question is asked of that, so `leaving` is empty in `add` mode as a consequence rather than as an exception a later edit could drop.
+- **THE SAME RULE ANSWERS "WHAT DOES THE LIST SAY TODAY".** Called with no rows and in `add` mode, the list to measure against is the stored list itself: nothing is new, changed, unchanged or gone, and every member's mark is what the console should print beside them now. That is what 3a-iii-b's read-back calls, so the marks cannot come from a second query with a second opinion.
+- **A status word is compared with its case and spaces folded**, so two exports of one gym writing "Active" and "ACTIVE" are `unchanged` and nobody reads five hundred false changes. The word STORED is still the gym's own. The word SHOWN in the per-status counts is the one the FILE wrote first, in the file's own row order — found by a deliberate break: taking it as the groups are counted (new before changed) read back a word the gym never wrote at the top of its own list.
+- **`leaving` is "on the list now and not on the new one", never "not on the new one".** A member who dropped off months ago is already `no_longer_listed`; counting them as leaving again would put them in the wrong-file guard's numbers for every upload for ever.
+- **A member is matched to an ENTRY, not merely to the list**, so a family sharing one address is answered correctly: the kid's entry can come off while the member on the same address stays `on_list`, because the file still holds that address.
 
 ### 9.8 The guard against a wrong file
 
@@ -1171,6 +1189,15 @@ answers `needsMapping: true` with its columns and samples.
 
 **Never logged, never in an error reply, never in Sentry:** a cell, a name, an
 address, a number, the body. Logs carry ids, counts and codes.
+
+**Out of 3a-iii-a (built 2026-09-20).** The three read/stage routes above are live; the confirm and the two list reads are 3a-iii-b's. Four things the shipped routes settle:
+
+- **THE RATE LIMITER IS CALLED FROM INSIDE THE HANDLER, AFTER THE PRIVILEGE GATE**, which is CLAUDE.md §4's order and against this module's habit of hanging a limiter on the route (which puts it first). A stranger's 404 and a trainer's 403 must not spend the front desk's own allowance, and reading a file costs a worker, 5 MiB and up to fifteen seconds, so the cheap refusals belong in front of the limiter as well as in front of the work. The service takes the limiter as an argument and answers null when it has replied 429 itself.
+- **`ipMax` is explicit on both limiters** (12 an hour a person and 40 an address for an upload; 600 and 2,000 for a read). A gym's front desk is one address with several staff signed in, and a per-address ceiling equal to the per-person one throttles the second person to touch the screen. A test drives it at ONE fixed address.
+- **One file per gym at a time is a Redis counter**, the same primitive the rate limiters use, with a window of the parse timeout plus a second so a reader that dies without releasing its place cannot lock a gym out for longer than a file could have taken. Redis down fails OPEN, loudly, as the rate limiters do: the per-process ceiling of two still stands, and refusing every gym's upload because a cache blinked is the worse answer.
+- **A preview is always worked out afresh, never read out of the stored `summary`.** The summary is the record of what was first shown; what staff need on a second look is what the file would do NOW. A preview past its own hour is answered as expired by the clock whether or not the hourly job has run, so nothing correct waits for a sweep.
+
+**`tools/preview-member-list.ts <file> --gym=<slug> --database-url=… [--mode=add] [--show=N]`** prints the whole preview through the service the route calls. It is how a real export is tried before item 5's screen exists, and it is what the reviewer runs. It names its own database and never reads `apps/api/.env`, for `import-usda.ts`'s recorded reason. Without `--show` no cell of the file reaches the screen.
 
 ### 9.10 Tests, and what the reviewer RUNS
 

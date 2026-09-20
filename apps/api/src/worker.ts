@@ -24,6 +24,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
+import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
@@ -56,6 +57,7 @@ export const ORGS_SWEEP_JOB = "orgs.join_sweep";
 export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
 export const ORGS_ARCHIVE_JOB = "orgs.archive";
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
+export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -187,6 +189,38 @@ try {
   process.exit(1);
 }
 
+// A FILE NOBODY SAID YES TO (Part 3 §9.6). Hourly at minute 45, clear of every
+// other schedule on this queue, for the reason the blocks above give: one worker
+// process runs them all, and stacking them makes a slow job look like a late one.
+//
+// HOURLY AGAINST A ONE-HOUR LIFE, said out loud: a staged upload's cells can
+// therefore sit for up to two hours rather than one. That is deliberate and it
+// costs nothing anybody can see — a preview past its hour is answered as expired
+// by the reader whichever state the column is in (`repo.uploadFor`), so this job
+// decides only how soon the cells are freed, never what staff are shown. Running
+// it every minute would buy a little privacy margin at the price of 1,440 runs a
+// day against a table that is almost always empty.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_MEMBER_LIST_EXPIRY_JOB,
+    { pattern: "45 * * * *" },
+    {
+      name: ORGS_MEMBER_LIST_EXPIRY_JOB,
+      opts: {
+        // R3.5: one set-based statement whose WHERE excludes the state it
+        // produces, so a retry is a no-op.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the member-list expiry schedule");
+  process.exit(1);
+}
+
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
 // **THE ONLY SCHEDULE ON THIS QUEUE THAT IS NOT NIGHTLY, AND THE REASON IS THE
 // WHOLE POINT OF THE JOB.** §3.2 asks for "nightly at 02:00 **org TZ**", and no
@@ -243,7 +277,8 @@ const worker = new Worker(
       job.name !== ORGS_SWEEP_JOB &&
       job.name !== ORGS_TRIAL_SWEEP_JOB &&
       job.name !== ORGS_ARCHIVE_JOB &&
-      job.name !== ORGS_ROLLUP_JOB
+      job.name !== ORGS_ROLLUP_JOB &&
+      job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -301,6 +336,18 @@ const worker = new Worker(
       const rolled = await rollUpGymDays({ sql, log });
       log.info(
         { ...rolled, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Returns here for the same reason as its four siblings: one statement, so
+    // the run either applied or raised, and a raise is already an unhandled
+    // rejection that lands the job on the failed set.
+    if (job.name === ORGS_MEMBER_LIST_EXPIRY_JOB) {
+      const gone = await expireStagedMemberListUploads({ sql, log });
+      log.info(
+        { ...gone, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

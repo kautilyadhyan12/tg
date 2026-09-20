@@ -17,6 +17,11 @@ import {
   fitnessGoalSchema,
   orgTypeSchema,
   weightGoalSchema,
+  MEMBER_FILE_MAX_BYTES,
+  MEMBER_LIST_PHONE_E164,
+  memberListEntrySourceSchema,
+  memberListModeSchema,
+  memberListUploadStatusSchema,
 } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -1785,5 +1790,153 @@ d("0001_init on a real database", () => {
     // The cascade is real, not merely declared: the row went with the person.
     const left = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM user_nutrition_targets WHERE user_id = ${userId}`;
     expect(left[0]?.n).toBe("0");
+  });
+  /** `0033`'s THREE MEMBER-LIST TABLES (Part 3 §9.6) — the CHECKs read back
+   *  against the shared constants they are supposed to be, and the two that are
+   *  GUARANTEES rather than shapes driven at the database rather than trusted.
+   *
+   *  **THE ONE THAT MATTERS MOST HERE IS `rows_only_staged`.** "This upload is
+   *  finished with, and it is still holding a member's name, email address and
+   *  phone number" is a state no screen would ever show and no test outside this
+   *  one would notice. The service and the repo both empty the column; the CHECK is
+   *  what holds it for every later writer, including a hand-run statement during an
+   *  incident. So it is driven here by trying to produce the state. */
+  it("0033's member-list CHECKs bite at the database, and the phone shape is the shared one", async () => {
+    // The phone column holds ONE shape, and it is `MEMBER_LIST_PHONE_E164` in
+    // @app/shared — the same definition the reader clamps to and the row schema
+    // refuses (review of PR #86). Read off the constraint, not off the migration
+    // text, and compared with the code's own pattern: two copies that drift mean a
+    // number the reader produces and the column rejects, which is a 500 on an
+    // upload and nine thousand good members lost with it.
+    const [phoneRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_member_list_entries'::regclass
+        AND conname = 'gym_member_list_entries_phone_check'`;
+    const phoneDef = phoneRow?.def;
+    if (phoneDef === undefined) throw new Error("gym_member_list_entries_phone_check is not on the table");
+    expect(phoneDef).toContain(MEMBER_LIST_PHONE_E164.source);
+
+    // The membership's own column carries the SAME shape, because matching
+    // compares the two directly.
+    const [statedRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_members'::regclass AND conname = 'gym_members_stated_phone_check'`;
+    expect(statedRow?.def).toContain(MEMBER_LIST_PHONE_E164.source);
+
+    // The three word-lists in the DDL are the three enums in the code.
+    const listed = async (table: string, constraint: string) => {
+      const [row] = await sql<{ def: string }[]>`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = ${table}::regclass AND conname = ${constraint}`;
+      const def = row?.def;
+      if (def === undefined) throw new Error(`${constraint} is not on ${table}`);
+      // `[^']*` for the privilege guard's own recorded reason: a narrow character
+      // class silently skips any name outside it.
+      return [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
+    };
+    expect(await listed("gym_member_list_uploads", "gym_member_list_uploads_status_check")).toEqual(
+      [...memberListUploadStatusSchema.options].sort(),
+    );
+    expect(await listed("gym_member_list_uploads", "gym_member_list_uploads_mode_check")).toEqual(
+      [...memberListModeSchema.options].sort(),
+    );
+    expect(await listed("gym_member_list_entries", "gym_member_list_entries_source_check")).toEqual(
+      [...memberListEntrySourceSchema.options].sort(),
+    );
+
+    // And the size limits are the shared ones, not numbers somebody typed twice.
+    const [bytesRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_member_list_uploads'::regclass
+        AND conname = 'gym_member_list_uploads_file_bytes_check'`;
+    expect(bytesRow?.def).toContain(String(MEMBER_FILE_MAX_BYTES));
+
+    // ── The guarantees, driven ────────────────────────────────────────────────
+    const seeded = await sql<{ id: string }[]>`
+      INSERT INTO users (display_name) VALUES ('mlist-0033-check') RETURNING id`;
+    const owner = seeded[0]?.id;
+    if (owner === undefined) throw new Error("member-list fixture insert failed");
+    try {
+      const [gym] = await sql<{ id: string }[]>`
+        INSERT INTO gyms (slug, name, country, timezone, owner_user_id)
+        VALUES (${`mlistmig-${owner.slice(0, 8)}`}, 'Migration List Gym', 'GB', 'Europe/London', ${owner})
+        RETURNING id`;
+      const gymId = gym?.id;
+      if (gymId === undefined) throw new Error("could not seed a gym");
+
+      const stage = async (status: string, rows: string | null) =>
+        await sql`
+          INSERT INTO gym_member_list_uploads
+            (gym_id, uploaded_by_user_id, status, mode, file_kind, file_sha256, file_bytes,
+             mapping, base_version, summary, rows, expires_at, confirmed_at)
+          VALUES (${gymId}, ${owner}, ${status}, 'whole_list', 'csv', ${"b".repeat(64)}, 10,
+                  '{}'::jsonb, 0, '{}'::jsonb, ${rows}::jsonb, now() + interval '1 hour',
+                  ${status === "confirmed" ? sql`now()` : null})`;
+
+      // A staged upload may hold the file's cells. That is the whole point of it.
+      await stage("staged", '{"rows":[]}');
+      // A FINISHED one may not, in any of the three finished states. Each is tried
+      // separately: one rejected state would otherwise cover for two allowed ones.
+      for (const status of ["confirmed", "superseded", "expired"]) {
+        await expect(stage(status, '{"rows":[]}')).rejects.toThrow(/rows_only_staged/);
+        // …and the same row with no cells is fine, so it is the CELLS being
+        // refused and not the status.
+        await stage(status, null);
+      }
+
+      // `confirmed_at` and `confirmed` stand or fall together, both ways round.
+      await expect(
+        sql`
+          INSERT INTO gym_member_list_uploads
+            (gym_id, uploaded_by_user_id, status, mode, file_kind, file_sha256, file_bytes,
+             mapping, base_version, summary, expires_at, confirmed_at)
+          VALUES (${gymId}, ${owner}, 'staged', 'add', 'csv', ${"c".repeat(64)}, 10,
+                  '{}'::jsonb, 0, '{}'::jsonb, now(), now())`,
+      ).rejects.toThrow(/confirmed_at/);
+
+      // AN ENTRY WITH NO WAY TO REACH THE PERSON IS NOT A ROW. Somebody with
+      // neither an address nor a phone number can be neither matched to an app
+      // member nor invited, so the list has no use for them and the table says so.
+      await expect(
+        sql`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, identity_key, source)
+          VALUES (${gymId}, 'Nobody Reachable', ${"d".repeat(64)}, 'upload')`,
+      ).rejects.toThrow(/contact/);
+
+      // ONE PERSON PER GYM, and the key is the name, email, phone and member
+      // number — NOT the status, which is what makes "Active" becoming "Expired" a
+      // change in place. Two rows of one key are refused; the same key in ANOTHER
+      // gym is a different person and is not.
+      const key = "e".repeat(64);
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, status)
+        VALUES (${gymId}, 'Ann Lee', 'ann-mig@example.com', ${key}, 'upload', 'Active')`;
+      await expect(
+        sql`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, status)
+          VALUES (${gymId}, 'Ann Lee', 'ann-mig@example.com', ${key}, 'upload', 'Expired')`,
+      ).rejects.toThrow(/identity_uq/);
+
+      const [other] = await sql<{ id: string }[]>`
+        INSERT INTO gyms (slug, name, country, timezone, owner_user_id)
+        VALUES (${`mlistmig2-${owner.slice(0, 8)}`}, 'Other List Gym', 'GB', 'Europe/London', ${owner})
+        RETURNING id`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+        VALUES (${other?.id ?? gymId}, 'Ann Lee', 'ann-mig@example.com', ${key}, 'upload')`;
+
+      // THE LIST GOES WITH THE GYM — the cascade behind `archiveSweep.ts`'s own
+      // delete, declared AND driven.
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${gymId}, 1)`;
+      await sql`DELETE FROM gyms WHERE id = ${gymId}`;
+      const left = await sql<{ n: number }[]>`
+        SELECT (SELECT count(*)::int FROM gym_member_list_entries WHERE gym_id = ${gymId})
+             + (SELECT count(*)::int FROM gym_member_list_uploads WHERE gym_id = ${gymId})
+             + (SELECT count(*)::int FROM gym_member_lists WHERE gym_id = ${gymId}) AS n`;
+      expect(left[0]?.n).toBe(0);
+    } finally {
+      await sql`DELETE FROM gyms WHERE owner_user_id = ${owner}`;
+      await sql`DELETE FROM users WHERE id = ${owner}`;
+    }
   });
 });
