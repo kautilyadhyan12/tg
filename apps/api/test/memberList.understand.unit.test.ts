@@ -12,6 +12,7 @@ import {
   type MemberFileWarning,
   type MemberListMapping,
   type MemberListUnderstanding,
+  memberFileRefusalWords,
   memberListUnderstandResultSchema,
 } from "@app/shared";
 import { type UnderstandOptions, fingerprintOf, understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
@@ -154,9 +155,8 @@ describe("the same person twice", () => {
   });
 
   it("is not two people because their status changed", () => {
-    const withStatus = (status: string): string => status;
-    const first = read([["Full Name", "Email", "Status"], ["Ann Lee", "ann@example.com", withStatus("Active")]]);
-    const later = read([["Full Name", "Email", "Status"], ["Ann Lee", "ann@example.com", withStatus("Expired")]]);
+    const first = read([["Full Name", "Email", "Status"], ["Ann Lee", "ann@example.com", "Active"]]);
+    const later = read([["Full Name", "Email", "Status"], ["Ann Lee", "ann@example.com", "Expired"]]);
     expect(first.rows[0]?.identityKey).toBe(later.rows[0]?.identityKey);
     expect(first.rows[0]?.status).toBe("Active");
     expect(later.rows[0]?.status).toBe("Expired");
@@ -273,6 +273,18 @@ describe("what the file says about itself", () => {
     expect(found.warnings).toContainEqual({ code: "other_sheets_ignored", sheets: ["Instructions", "Classes"] });
     expect(found.counts.kept).toBe(3);
   });
+
+  it("names a sheet with no name of its own by its place in the workbook, not by its place in what is left", () => {
+    const found = readGrid(
+      gridOf([
+        { name: null, rows: [["How to use this export"]] },
+        { name: null, rows: PEOPLE },
+        { name: null, rows: [["Class", "Time"], ["Yoga", "07:00"]] },
+      ]),
+    );
+    expect(found.sheet.index).toBe(1);
+    expect(found.warnings).toContainEqual({ code: "other_sheets_ignored", sheets: ["Sheet 1", "Sheet 3"] });
+  });
 });
 
 describe("a file nothing can be read from", () => {
@@ -299,6 +311,22 @@ describe("a file nothing can be read from", () => {
     const rows: string[][] = [["Full Name", "Email"]];
     for (let i = 0; i <= MEMBER_LIST_MAX_DATA_ROWS; i++) rows.push([`Person ${String(i)}`, `p${String(i)}@example.com`]);
     expect(refusalOf(gridOf([{ rows }]))).toBe("too_many_rows");
+  });
+
+  it("says something true of a sheet cut short by its BLANK rows, which hold far fewer people", () => {
+    // Review of PR #86: a list of 5,011 people with a blank row after each one
+    // runs past the sheet's cut, and was told it "holds more than 10,000
+    // people". The words a gym is shown have to be true of its own file (§9.9).
+    const rows: string[][] = [["Full Name", "Email"]];
+    for (let i = 0; i < 5011; i++) {
+      rows.push([`Person ${String(i)}`, `p${String(i)}@example.com`]);
+      rows.push([]);
+    }
+    const cut: SheetInput = { rows, truncated: { rows: true, columns: false } };
+    expect(refusalOf(gridOf([cut]))).toBe("too_many_rows");
+    const words = memberFileRefusalWords({ code: "too_many_rows" });
+    expect(words).not.toMatch(/holds more than/i);
+    expect(words).toMatch(/blank rows/i);
   });
 
   it("takes a file of exactly as many people as one list may", () => {
@@ -420,6 +448,26 @@ describe("the mapping this gym used last time", () => {
   });
 });
 
+describe("a column the server disbelieved", () => {
+  it("says what its heading claimed, so a screen can tell staff why it was not used", () => {
+    const rows = [["Email", "Mobile"], ["N/A", "9876543210"], ["N/A", "9876543211"], ["cara@example.com", "9876543212"]];
+    const found = read(rows);
+    expect(found.columns[0]).toMatchObject({ header: "Email", headerSays: "email", guess: null, confidence: null });
+    expect(found.counts.withEmail).toBe(0);
+  });
+
+  it("says the same of a heading that names somebody who is not the member", () => {
+    const rows = [["Email", "Emergency Contact Phone"], ["ann@example.com", "9876543210"], ["bo@example.com", "9876543211"]];
+    expect(read(rows).columns[1]).toMatchObject({ headerSays: "phone", guess: null });
+  });
+
+  it("claims nothing for a column whose heading names no field at all", () => {
+    expect(read(PEOPLE).columns[3]).toMatchObject({ header: "Mobile", headerSays: "phone", guess: "phone" });
+    const joined = read([["Full Name", "Email", "Joined"], ["Ann Lee", "ann@example.com", "2024-01-05"], ["Bo Chen", "bo@example.com", "2024-02-01"]]);
+    expect(joined.columns[2]).toMatchObject({ header: "Joined", headerSays: null, guess: null });
+  });
+});
+
 describe("a row whose first column is empty", () => {
   it("falls back to the next email column, in order", () => {
     const rows = [
@@ -440,5 +488,17 @@ describe("a row whose first column is empty", () => {
       ["9876543211", "9876543212", "b@example.com"],
     ];
     expect(read(rows).rows.map((row) => row.phone)).toEqual(["+919876543210", "+919876543211"]);
+  });
+
+  it("keeps the row, its email and the whole file when one cell holds a number no list could hold", () => {
+    const rows = [
+      ["Full Name", "Email", "Mobile"],
+      ["Ann Lee", "ann@example.com", "030 123456789012"],
+      ["Bo Chen", "bo@example.com", "030 12345678"],
+      ["Cara Diaz", "cara@example.com", "030 12345679"],
+    ];
+    const found = read(rows, { country: "DE" });
+    expect(found.counts).toMatchObject({ kept: 3, withEmail: 3, withPhone: 2 });
+    expect(found.rows[0]).toMatchObject({ fullName: "Ann Lee", email: "ann@example.com", phone: null });
   });
 });

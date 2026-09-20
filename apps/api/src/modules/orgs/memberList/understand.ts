@@ -236,7 +236,9 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
 
   const warnings: MemberListWarning[] = grid.warnings.map((code) => ({ code }));
   if (headerRow === null) warnings.push({ code: "no_header_row" });
-  const ignored = grid.sheets.filter((_, index) => index !== sheetIndex).map((other, index) => other.name ?? `Sheet ${String(index + 1)}`);
+  // Named before the read one is taken out, so an unnamed sheet is called by
+  // its own place in the workbook and never by its place in what is left.
+  const ignored = grid.sheets.map((other, index) => other.name ?? `Sheet ${String(index + 1)}`).filter((_, index) => index !== sheetIndex);
   if (ignored.length > 0) warnings.push({ code: "other_sheets_ignored", sheets: ignored });
 
   const describe = (map: MemberListMapping): MemberListColumn[] => describeColumns(stats, map, confidence, whole);

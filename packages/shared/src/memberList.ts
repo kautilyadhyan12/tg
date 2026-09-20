@@ -175,7 +175,7 @@ const PLAIN_WORDS: Readonly<Record<PlainRefusalCode, string>> = {
   unreadable_text:
     "We couldn't read this file as a spreadsheet or as text. Upload your member list as a CSV or Excel (.xlsx) file; from Excel, “CSV UTF-8” keeps every letter.",
   too_many_rows:
-    "This file holds more than 10,000 people, which is more than one list can. Split it — one file for each location, say — and upload them one at a time.",
+    "This sheet is longer than we can read. A member list may hold 10,000 people: take out any blank rows between them, or split the file — one for each location, say — and upload again.",
   too_many_columns:
     "This sheet is more than 100 columns wide. Copy the columns your member list needs into a new sheet, and upload that.",
   no_rows: "This file has no people in it, only headings or empty rows. Export your member list again and upload the new file.",
@@ -238,6 +238,14 @@ export const MEMBER_LIST_MOST_COLUMNS_PER_FIELD = 5;
  *  what the server is looking at. */
 export const MEMBER_LIST_COLUMN_SAMPLES = 3;
 
+/** The ONE shape a phone number is kept in: E.164, 7 to 15 digits, which is
+ *  ITU-T E.164 itself and 3a-iii's column CHECK. The reader clamps to it and
+ *  the row below refuses anything else, so a number the phone package calls
+ *  "possible" but that no list could hold is never produced at all (review of
+ *  PR #86: a German number with a long direct dial reads as 16 digits and
+ *  Gibraltar's as 19, and one such cell failed the whole file's own contract). */
+export const MEMBER_LIST_PHONE_E164 = /^\+[1-9][0-9]{6,14}$/;
+
 /** The longest name kept; a longer one is cut. */
 export const MEMBER_LIST_MAX_NAME_CHARS = 120;
 /** Longer than this is not an address at all (RFC 5321) and is never parsed. */
@@ -289,6 +297,11 @@ export const memberListColumnSchema = z.object({
   samples: z.array(z.string()).max(MEMBER_LIST_COLUMN_SAMPLES),
   guess: memberListFieldSchema.nullable(),
   confidence: memberListConfidenceSchema.nullable(),
+  /** What the heading CLAIMED, before the column's own cells were looked at.
+   *  A column with `headerSays` and no `guess` is one the server disbelieved —
+   *  its cells disagreed with its heading, or it names somebody who is not the
+   *  member — which is the one thing staff can act on (review of PR #86). */
+  headerSays: memberListFieldSchema.nullable(),
 });
 export type MemberListColumn = z.infer<typeof memberListColumnSchema>;
 
@@ -302,7 +315,7 @@ export const memberListRowSchema = z.object({
   row: z.number().int().positive(),
   fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
   email: z.string().max(MEMBER_LIST_MAX_EMAIL_CHARS).nullable(),
-  phone: z.string().regex(/^\+[1-9][0-9]{6,14}$/).nullable(),
+  phone: z.string().regex(MEMBER_LIST_PHONE_E164).nullable(),
   memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
   status: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable(),
   identityKey: sha256Schema,

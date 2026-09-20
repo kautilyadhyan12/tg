@@ -69,6 +69,10 @@ export interface ParseMemberFileSeams {
   /** Told when each worker's thread has ended, with its exit code (a terminated
    *  worker exits 1 on Windows and 0 on CI's Linux, so the code is not a signal). */
   onWorkerExit?: (exitCode: number) => void;
+  /** Told what the worker posted, BEFORE it is parsed — the only way to see
+   *  what really crossed into this thread, since the parse strips every key it
+   *  does not know (review of PR #86). */
+  onReply?: (message: unknown) => void;
 }
 
 let open = 0;
@@ -118,6 +122,7 @@ function readInWorker<T>(
     worker.once("message", (message: unknown) => {
       settle(() => {
         try {
+          seams.onReply?.(message);
           resolve(readAnswer(message));
         } catch (error) {
           reject(error instanceof Error ? error : new Error("member file worker reply unreadable"));

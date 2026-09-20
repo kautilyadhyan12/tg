@@ -896,8 +896,8 @@ file is opened, so what crosses into the request's own thread is the rows a list
 and never the file's cells. Measured 2026-09-20 on Node 22.23.2 (production's), the
 biggest list allowed (10,000 × 30, 3.15 MiB CSV): understanding it costs 559–634 ms —
 which the API would otherwise answer nothing else during — so in the worker the whole
-read is 1,328–1,398 ms with the request thread's longest stall 14–15 ms and its RSS
-96 → 130 MB (3a-i alone: 19–24 ms). The route (3a-iii) calls this, never
+read is 1,326–1,472 ms with the request thread's longest stall 11–15 ms and its RSS
+97 → 136 MB (3a-i alone: 19–24 ms). The route (3a-iii) calls this, never
 `parseMemberFile`, which stays as 3a-i left it.
 
 **Refusals this step raises** (from 3a-i's cut, which marks a sheet rather than
@@ -932,6 +932,27 @@ for a hand mapping of a column holding more than 20 different words.
   `facts.delimiter`), so the preview can show how the file was read without the grid.
 - A member number longer than 64 characters is dropped whole, never cut: half a member
   number is another member's number.
+
+**AMENDED 2026-09-20 again, by PR #86's review round one** (it ran the reader over every
+country's metadata and over files of its own):
+- **There is ONE shape a phone number may be kept in** — `MEMBER_LIST_PHONE_E164`,
+  E.164's own 7 to 15 digits — and the reader clamps to it. The package's "possible" is
+  wider: measured, a German number with a long direct dial reads as 16 digits, one
+  written for Gibraltar as 19, and one whose leading zero was stripped as 6. Such a cell
+  is not stored; the row falls through to its next phone column and keeps its email.
+  Before this, one cell of row 4,000 made the whole file fail its own contract in the
+  request's thread — a 500 for 3a-iii and nine thousand good members lost.
+- `too_many_rows` is drawn by two kinds of file — more than 10,000 people, and a sheet
+  cut short by its blank rows (the grid counts blanks against its row cap, so a list of
+  5,011 people with a blank row after each one trips it). Its sentence is now true of
+  both: "This sheet is longer than we can read. A member list may hold 10,000 people:
+  take out any blank rows between them, or split the file…".
+- Every column carries `headerSays`, what its heading CLAIMED before its cells were
+  looked at. A column with `headerSays` and no `guess` is one the server disbelieved —
+  an "Email" column whose cells say "N/A", or a heading that names somebody who is not
+  the member — which is the one thing staff can act on.
+- A vertical tab or a form feed inside a cell is a line break, not a character to drop:
+  two numbers written one above the other are two numbers, never one glued number.
 
 ### 9.6 Data (3a-iii's one migration; forward-only)
 
@@ -1074,9 +1095,10 @@ The builder measures a 10,000-row, 30-column file (time, peak memory) and pastes
 process's peak RSS 133 → 235 MB; CSV UTF-8 3.10 MiB — 608–908 ms, 134 → 171 MB. The
 request thread's longest stall was 19–24 ms (one more Zod pass of the reply: 39–49 ms).
 **Measured 2026-09-20 (3a-ii)**, the same size of file read AND understood in the
-worker, three runs on Node 22.23.2: 1,328–1,398 ms all told, the request thread's
-longest stall 14–15 ms, its RSS 96 → 130 MB and the process's peak 203–234 MB.
-Understanding the grid is 559–634 ms of that, which is why it runs there (§9.5).
+worker, three runs on Node 22.23.2 after round one's fixes: 1,326–1,472 ms all told,
+the request thread's longest stall 11–15 ms, its RSS 97 → 136 MB and the process's peak
+201–234 MB. Understanding the grid is 559–634 ms of that, which is why it runs there
+(§9.5).
 
 Refusals are the SERVER'S sentences and a screen prints them as sent; each says the fix:
 `empty_file` · `too_big` ("…over 5 MB. Save just the member sheet as CSV and try

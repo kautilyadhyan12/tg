@@ -6,7 +6,7 @@
 // beside it, run over files nobody here typed.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type MemberFileGrid, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
+import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
 import { understandMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
@@ -138,13 +138,35 @@ describe("Google Sheets, as Kd downloaded it", () => {
 describe("through the real worker, which is how the route reads a file", () => {
   const job = { country: "IN", mapping: null, remembered: null };
 
-  it("gives exactly what understanding it here gives, and never the file's cells", async () => {
+  it("gives exactly what understanding it here gives", async () => {
     const bytes = fs.readFileSync(new URL("excel/book.xlsx", FIXTURES));
-    const throughWorker = await understandMemberFile(bytes, job);
-    expect(throughWorker).toEqual(await understand("excel/book.xlsx"));
-    // What crosses back is the people, not the grid: 3a-i's cells stay in the
-    // worker, and the request's own thread never holds them (§9.5).
-    expect(throughWorker).not.toHaveProperty("sheets");
+    expect(await understandMemberFile(bytes, job)).toEqual(await understand("excel/book.xlsx"));
+  });
+
+  it("posts the people and NOT the file's cells", async () => {
+    // What is asserted is the message the worker really posted, before it is
+    // parsed: the parse strips every key it does not know, so the answer alone
+    // could never show the grid crossing into this thread (review of PR #86).
+    const bytes = fs.readFileSync(new URL("excel/book.xlsx", FIXTURES));
+    let posted: unknown = null;
+    await understandMemberFile(bytes, job, {
+      onReply: (message) => {
+        posted = message;
+      },
+    });
+    expect(posted).not.toBe(null);
+    const answer: unknown = posted !== null && typeof posted === "object" && "done" in posted ? posted.done : null;
+    expect(answer).not.toBe(null);
+    // No grid of cells anywhere in what was posted: the only `sheets` in it is
+    // the warning that names the sheets NOT read.
+    expect(answer === null || typeof answer !== "object" ? [] : Object.keys(answer)).not.toContain("sheets");
+    const asText = JSON.stringify(posted);
+    // A cell from the sheet that was NOT read never crosses at all.
+    expect(asText).not.toContain("Sam Coach");
+    // The joining date is on all seven rows of the grid and in no row a list
+    // keeps: at most the three samples of its column may cross.
+    expect(asText.match(/2024-\d\d-\d\d/g) ?? []).toHaveLength(MEMBER_LIST_COLUMN_SAMPLES);
+    expect(asText).toContain("+447911123456");
   });
 
   it("answers a refusal from opening the file as a refusal", async () => {

@@ -20,6 +20,7 @@
 // The country of the number is never read back (`.country`): measured, a
 // perfectly ordinary British mobile comes back as Guernsey. Only its E.164 text
 // is kept, which is what one member's number is matched to another's by.
+import { MEMBER_LIST_PHONE_E164 } from "@app/shared";
 import { type CountryCode, getCountries, parsePhoneNumberFromString } from "libphonenumber-js/max";
 import { couldBePhone, digitCount, expandScientific, normaliseCell } from "./cells.js";
 
@@ -35,7 +36,7 @@ export function readCountry(value: string | null | undefined): CountryCode | nul
 /** Two numbers in one cell are written apart by one of these, or on two lines.
  *  A space is NOT one of them: most of the world writes one number with spaces
  *  in it. */
-const PIECES = /[/;,|\n\r]|\s+or\s+/i;
+const PIECES = /[/;,|\n\r\u000b\u000c]|\s+or\s+/i;
 /** A whole number a spreadsheet wrote as a decimal. Loose on purpose: Google
  *  Sheets writes "+91 98765 43210.0", which is a number with a point on the end
  *  and not a decimal at all. What is left still has to look like a number. */
@@ -92,6 +93,13 @@ export function readPhone(raw: string, country: CountryCode | null): PhoneReadin
       parsed = undefined;
     }
     if (parsed === undefined || !parsed.isPossible()) continue;
+    // "Possible" to the package is WIDER than a list can hold: measured, a
+    // German number with a long direct dial reads as 16 digits and one written
+    // for Gibraltar as 19, and a number with a stripped leading zero as 6. Such
+    // a cell is not a number we can keep, so the row falls through to its next
+    // phone column and keeps its email — rather than the whole file failing its
+    // own contract on one cell of row 4,000 (review of PR #86).
+    if (!MEMBER_LIST_PHONE_E164.test(parsed.number)) continue;
     return { e164: parsed.number, unusual: !parsed.isValid(), shortened: false, needsCountry: false };
   }
   return { e164: null, unusual: false, shortened, needsCountry };

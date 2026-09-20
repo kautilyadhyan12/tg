@@ -15,10 +15,13 @@
 /** Zero-width characters a copy-and-paste leaves behind, and the mark a file
  *  keeps after its first line. They are removed, not turned into spaces. */
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/g;
-/** C0 and C1 control characters, except the three that end a line or a column
- *  (kept so `phone.ts` can still see two numbers written one above the other).
- *  Excel writes U+000B inside a cell for a line break typed with Alt+Enter. */
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
+/** C0 and C1 control characters, except the five that end a line, a page or a
+ *  column: they are kept so `phone.ts` can still see two numbers written one
+ *  above the other, and `tidyCell` turns each into a space. (Excel writes a
+ *  line break typed with Alt+Enter as CRLF inside the cell — checked in
+ *  `book.xlsx` — but a file from another program may use U+000B or U+000C, and
+ *  a number glued to the next one is a number belonging to nobody.) */
+const CONTROL = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g;
 const WHITESPACE = /\s+/g;
 
 /** The zero of every decimal digit block a member file could plausibly carry.

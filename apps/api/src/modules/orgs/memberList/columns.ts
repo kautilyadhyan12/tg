@@ -246,6 +246,7 @@ export function describeColumns(
       samples: stat.samples,
       guess,
       confidence: guess === null ? null : (whole ?? confidence.get(stat.index) ?? null),
+      headerSays: stat.reading?.field ?? null,
     };
   });
 }

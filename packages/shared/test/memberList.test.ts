@@ -122,7 +122,7 @@ describe("what the server says it understood (3a-ii)", () => {
     sheet: { index: 0, name: null },
     headerRow: 0,
     headerFingerprint: "a".repeat(64),
-    columns: [{ index: 0, header: "Email", samples: ["ann@example.com"], guess: "email", confidence: "header" }],
+    columns: [{ index: 0, header: "Email", samples: ["ann@example.com"], guess: "email", confidence: "header", headerSays: "email" }],
     mapping,
     needsMapping: false,
     rows: [{ row: 2, fullName: "Ann Lee", email: "ann@example.com", phone: "+919876543210", memberNumber: "000123", status: "Active", identityKey: "b".repeat(64) }],

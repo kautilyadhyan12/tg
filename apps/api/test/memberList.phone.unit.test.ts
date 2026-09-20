@@ -7,6 +7,8 @@
 // package alone answers: the four rows marked "the package alone" are exactly
 // the ones our own rules exist for.
 import { describe, expect, it } from "vitest";
+import { MEMBER_LIST_PHONE_E164 } from "@app/shared";
+import { getCountries } from "libphonenumber-js/max";
 import { type PhoneReading, isPhoneValue, readCountry, readPhone } from "../src/modules/orgs/memberList/phone.js";
 
 const ch = (code: number): string => String.fromCodePoint(code);
@@ -121,6 +123,8 @@ describe("two numbers in one cell", () => {
     ["a pipe", "9876543210 | 9876543211", "IN", "+919876543210"],
     ['the word "or"', "9876543210 or 9876543211", "IN", "+919876543210"],
     ["two lines, as Alt+Enter writes them", "9876543210\n9876543211", "IN", "+919876543210"],
+    ["a vertical tab, which some programs write for a line break inside a cell", `9876543210${ch(0x0b)}9876543211`, "IN", "+919876543210"],
+    ["a form feed", `9876543210${ch(0x0c)}9876543211`, "IN", "+919876543210"],
     ["the first unreadable, the second good", "N/A / 9876543210", "IN", "+919876543210"],
     ["the first shortened, the second good", "9.19877E+11 / 9876543210", "IN", "+919876543210"],
   ])("%s", (_label, cell, country, expected) => {
@@ -162,6 +166,37 @@ describe("what is never read as somebody's number", () => {
 
   it("a name with digits in it is never handed to the package", () => {
     expect(e164("Flat 12, 45 Church Street, Jorhat 785001", "IN")).toBe(null);
+  });
+});
+
+describe("a number no list could hold", () => {
+  // Review of PR #86: the phone package's "possible" is wider than E.164's own
+  // 7 to 15 digits, and one such cell used to fail the whole file's contract in
+  // the request's thread — nine thousand good members lost to row 4,000.
+  it.each([
+    ["a German number with a long direct dial", "+49 30 1234567890 12", null],
+    ["the same typed as one run of digits", "030 123456789012", "DE"],
+    ["fourteen digits under a German gym", "35237900473776", "DE"],
+    ["a number whose leading zero was stripped", "+4904243", null],
+    ["a long run written for Gibraltar", "008153942982595231308", "GI"],
+  ])("%s is not stored at all", (_label, cell, country) => {
+    expect(e164(cell, country)).toBe(null);
+  });
+
+  it("never answers a number outside the one shape a list keeps, in any country", () => {
+    const checked: string[] = [];
+    for (const country of getCountries()) {
+      for (let digits = 5; digits <= 20; digits++) {
+        for (const cell of ["1".repeat(digits), `0${"1".repeat(digits)}`, `9${"8".repeat(digits - 1)}`]) {
+          const found = readPhone(cell, country).e164;
+          if (found === null) continue;
+          checked.push(found);
+          expect(found).toMatch(MEMBER_LIST_PHONE_E164);
+        }
+      }
+    }
+    // The sweep has to actually read numbers, or it proves nothing.
+    expect(checked.length).toBeGreaterThan(1000);
   });
 });
 
