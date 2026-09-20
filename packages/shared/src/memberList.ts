@@ -427,3 +427,370 @@ export function memberListWarningWords(warning: MemberListWarning): string {
       return `This file has more than one sheet. Only the one with the members was read; these were ignored: ${warning.sheets.join(", ")}.`;
   }
 }
+
+// ── Out of 3a-iii: the gym's list on the server (§9.6–§9.9) ─────────────────
+// An upload is STAGED and answered with a preview; nothing about the gym's
+// people changes and nobody is emailed until staff confirm it (§9.2 rule 10).
+// The words and numbers below are the ones the preview, the confirm and every
+// later read all share, so a screen and the server cannot disagree about what a
+// count means.
+
+/** The most base64 characters a file's bytes can arrive as: `MEMBER_FILE_MAX_BYTES`
+ *  encoded, which is four characters for every three bytes, rounded up to the
+ *  next group of four. A body longer than this holds no file we would accept, so
+ *  it is refused before anything is decoded. */
+export const MEMBER_FILE_MAX_BASE64_CHARS = Math.ceil(MEMBER_FILE_MAX_BYTES / 3) * 4;
+
+/** How long a staged upload lives before it is thrown away (§9.9). A preview is
+ *  worked out against the list as it was, so it goes stale; an hour is long
+ *  enough for staff to read the names behind the numbers, and short enough that
+ *  the cells of a file nobody confirmed are not kept. */
+export const MEMBER_LIST_UPLOAD_TTL_MINUTES = 60;
+
+/** How many files ONE GYM has being read at a time, beside the two a server
+ *  process (review of PR #85: two slow files held both places for every gym). */
+export const MEMBER_LIST_PARSES_PER_GYM = 1;
+
+/** A change is large when it is more than this MANY and more than this SHARE of
+ *  what it is measured against (§9.8). A share alone is useless at 50 people and
+ *  a count alone at 2,000, which is why identity products ship both (Okta's
+ *  import safeguard 20 %, Microsoft Entra's 500 deletions, Okta's entitlement
+ *  safeguard 10 % and 100). */
+export const MEMBER_LIST_LARGE_CHANGE_LEAST = 10;
+export const MEMBER_LIST_LARGE_CHANGE_SHARE = 0.1;
+
+/** Whether taking `changing` off `of` is a large change: more than
+ *  `max(10, 10 %)`. THE ONE RULE — the preview's numbers and the confirm's
+ *  refusal both read it, so a screen can never promise what the server refuses.
+ *  `of` is 0 for a gym with no list, where the most this allows is 10 and
+ *  nothing can go anyway. */
+export function isLargeMemberListChange(changing: number, of: number): boolean {
+  return changing > Math.max(MEMBER_LIST_LARGE_CHANGE_LEAST, MEMBER_LIST_LARGE_CHANGE_SHARE * of);
+}
+
+/** More of the list than this coming off a whole-list upload is the likeliest
+ *  wrong file — a list of new joiners exported instead of everybody — so the
+ *  preview says so first and offers "add these people instead" (§9.8). */
+export const MEMBER_LIST_MOST_OF_LIST_SHARE = 0.5;
+
+/** How many names one page of the preview's rows holds. */
+export const MEMBER_LIST_ROWS_PAGE = 100;
+
+/** What an upload says it is: the gym's WHOLE list, or people to ADD to it. An
+ *  add takes nobody off and flags nobody, which is what makes it the safe answer
+ *  to a wrong file. */
+export const memberListModeSchema = z.enum(["whole_list", "add"]);
+export type MemberListMode = z.infer<typeof memberListModeSchema>;
+
+/** Where a staged upload has got to. `superseded` is the gym's earlier staged
+ *  upload once a newer one arrives; `expired` is one nobody confirmed in time. */
+export const memberListUploadStatusSchema = z.enum(["staged", "confirmed", "superseded", "expired"]);
+export type MemberListUploadStatus = z.infer<typeof memberListUploadStatusSchema>;
+
+/** How somebody came to be on the list: out of a file, typed in by staff
+ *  (3a-iv), or copied from an app member who joined by code (3a-iv). */
+export const memberListEntrySourceSchema = z.enum(["upload", "typed", "member"]);
+export type MemberListEntrySource = z.infer<typeof memberListEntrySourceSchema>;
+
+/** Which people a preview's names are asked for. `members_leaving` is not a
+ *  group of the file at all — it is this gym's own app members who would be
+ *  marked "no longer listed" — and it is here because it is the one staff most
+ *  need to read before they confirm anything. */
+export const memberListRowGroupSchema = z.enum(["new", "changed", "unchanged", "gone", "members_leaving"]);
+export type MemberListRowGroup = z.infer<typeof memberListRowGroupSchema>;
+
+/** What an upload would do to the list (§9.7). `new`, `changed`, `unchanged` and
+ *  `gone` are told apart by the identity key, so a person whose status went from
+ *  "Active" to "Expired" is CHANGED and not one person gone and another arrived.
+ *  The three under `new` split it up: already in the app · could be invited (has
+ *  an email and is not in the app) · no email, so nobody can be invited.
+ *  An upload in `add` mode never has any `gone`. */
+export const memberListChangeCountsSchema = z.object({
+  new: z.number().int().min(0),
+  changed: z.number().int().min(0),
+  unchanged: z.number().int().min(0),
+  gone: z.number().int().min(0),
+  alreadyInApp: z.number().int().min(0),
+  canBeInvited: z.number().int().min(0),
+  noEmail: z.number().int().min(0),
+});
+export type MemberListChangeCounts = z.infer<typeof memberListChangeCountsSchema>;
+
+/** One of the gym's own status words, with what the upload does to the people
+ *  carrying it. The app attaches no meaning to the word itself. */
+export const memberListStatusChangeSchema = z.object({
+  label: z.string(),
+  count: z.number().int().min(0),
+  new: z.number().int().min(0),
+  changed: z.number().int().min(0),
+  unchanged: z.number().int().min(0),
+  gone: z.number().int().min(0),
+});
+export type MemberListStatusChange = z.infer<typeof memberListStatusChangeSchema>;
+
+/** The gym's own app members against this upload. `listedNow` is how many of
+ *  them the list being replaced holds, which is what `leaving` is measured
+ *  against (§9.8). Neither number is ever a name. */
+export const memberListMembersSchema = z.object({
+  leaving: z.number().int().min(0),
+  listedNow: z.number().int().min(0),
+});
+export type MemberListMembers = z.infer<typeof memberListMembersSchema>;
+
+/** The wrong-file guard's own numbers, worked out for the preview and worked out
+ *  AGAIN under the lock when anybody confirms (§9.8). `needsTick` true means the
+ *  confirm refuses unless that one request carries the tick.
+ *  `mostOfListWouldGo` is the preview's louder warning: more than half the list
+ *  coming off, where the answer is usually "add these people instead". */
+export const memberListGuardSchema = z.object({
+  entriesGoing: z.number().int().min(0),
+  listSize: z.number().int().min(0),
+  membersLeaving: z.number().int().min(0),
+  membersListedNow: z.number().int().min(0),
+  needsTick: z.boolean(),
+  mostOfListWouldGo: z.boolean(),
+});
+export type MemberListGuard = z.infer<typeof memberListGuardSchema>;
+
+/** Where the gym stands on its plan's seats, so staff can see before they invite
+ *  anybody that the list may be bigger than the gym can admit. `cap` is null
+ *  when nothing caps it. Nothing here refuses an upload: a list may be longer
+ *  than the seats, because being on a gym's list is not holding a seat. */
+export const memberListSeatSchema = z.object({
+  cap: z.number().int().min(0).nullable(),
+  liveMembers: z.number().int().min(0),
+  listSize: z.number().int().min(0),
+});
+export type MemberListSeat = z.infer<typeof memberListSeatSchema>;
+
+/** THE PREVIEW — what an upload WOULD do, and the only answer the upload route
+ *  gives. Everything in it is a count, a column's own heading with three of its
+ *  cells, or a sentence; the people themselves are read one page at a time from
+ *  the rows route, so a screen shows a number before it shows anybody's address.
+ *
+ *  `needsMapping` true means no email and no phone column could be found: the
+ *  file is NOT refused (§9.9) — the columns and their cells come back so staff
+ *  can say which is which, and the list counts are all zero because no person
+ *  could be read out of it. */
+export const memberListPreviewSchema = z.object({
+  uploadId: z.string().uuid(),
+  mode: memberListModeSchema,
+  expiresAt: z.string(),
+  /** The gym's last CONFIRMED upload was byte for byte this file. Confirming it
+   *  again writes nothing, and the screen can say so. */
+  sameAsLastUpload: z.boolean(),
+  kind: z.enum(["xlsx", "csv"]),
+  facts: memberFileFactsSchema,
+  sheet: z.object({ index: z.number().int().min(0), name: z.string().nullable() }),
+  headerRow: z.number().int().min(0).nullable(),
+  columns: z.array(memberListColumnSchema),
+  mapping: memberListMappingSchema,
+  needsMapping: z.boolean(),
+  /** What the FILE held, as understanding it counted (§9.5). */
+  file: memberListUnderstandingSchema.shape.counts,
+  /** What it would do to the LIST. */
+  list: memberListChangeCountsSchema,
+  statuses: z.array(memberListStatusChangeSchema),
+  members: memberListMembersSchema,
+  skipped: z.array(memberListSkippedSchema).max(MEMBER_LIST_SKIPPED_SHOWN),
+  warnings: z.array(memberListWarningSchema),
+  seat: memberListSeatSchema,
+  guard: memberListGuardSchema,
+});
+export type MemberListPreview = z.infer<typeof memberListPreviewSchema>;
+
+/** One person on a preview's page of names, and where they came from. A row of
+ *  the FILE carries its own row number; a member who would be marked "no longer
+ *  listed" is not in the file at all, so `row` is null for them. */
+export const memberListPreviewPersonSchema = z.object({
+  row: z.number().int().positive().nullable(),
+  fullName: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  memberNumber: z.string().nullable(),
+  status: z.string().nullable(),
+  /** The status this person carries on the list TODAY, for a `changed` row; null
+   *  everywhere else, so a screen can print "Active → Frozen" without asking
+   *  twice. */
+  wasStatus: z.string().nullable(),
+  inApp: z.boolean(),
+});
+export type MemberListPreviewPerson = z.infer<typeof memberListPreviewPersonSchema>;
+
+/** One page of the names behind a preview's numbers, before anybody confirms. */
+export const memberListRowsPageSchema = z.object({
+  group: memberListRowGroupSchema,
+  total: z.number().int().min(0),
+  people: z.array(memberListPreviewPersonSchema).max(MEMBER_LIST_ROWS_PAGE),
+  /** Where the next page starts, or null at the end. */
+  cursor: z.number().int().min(0).nullable(),
+});
+export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
+
+/** WHAT THE SERVER UNDERSTOOD OF A STAGED UPLOAD'S FILE, held in one document
+ *  that is thrown away the moment the upload is confirmed, superseded or expired
+ *  (§9.6: `rows` becomes NULL).
+ *
+ *  **IT IS THE WHOLE UNDERSTANDING, NOT ONLY THE ROWS, AND THAT IS WIDER THAN
+ *  §9.6's COLUMN NAME SUGGESTS** — on purpose. Everything a file's own cells can
+ *  reach goes in one place and leaves in one statement: the rows, the columns with
+ *  three of their cells each, the warnings (two of which quote a cell's words — a
+ *  shared front-desk address, an ignored sheet's name), and the file's own facts.
+ *  Split across two columns, the day somebody adds a field to one of them is the
+ *  day a member's address outlives the file it came from, and nothing would say
+ *  so. The upload's `summary` is what survives, and it is counts.
+ *
+ *  It is parsed on the way back out of the database like any other outside input:
+ *  our own write today is a document some later migration or hand-run statement
+ *  could leave half-shaped, and a preview built on an unparsed document is a
+ *  screen showing something false. */
+/** WHICH PEOPLE FELL INTO WHICH GROUP, worked out ONCE when the file was staged.
+ *
+ *  **THIS IS WHAT STOPS A PAGE OF NAMES COSTING THE WHOLE FILE.** Without it, showing
+ *  a hundred names meant reading every row back out of the database, checking it
+ *  against every person already on the list, and then throwing all but a hundred away
+ *  — measured at 33 seconds of work, and 12 seconds of the server answering nobody,
+ *  to look through one ten-thousand-person gym. With it, a page is a hundred rows cut
+ *  out of the stored file by the database itself.
+ *
+ *  **TWO SHAPES, because the groups are two different things.** `new`, `changed` and
+ *  `unchanged` are people IN the file, so they are kept as their places in `rows`
+ *  (counting from 0) — a number each, not a second copy of everybody. `gone` and
+ *  `gone` is somebody the file does NOT hold — a person coming off the list —
+ *  so there is nothing to point at and they are kept as they will be shown.
+ *
+ *  **THE GYM'S OWN APP MEMBERS ARE NOT IN HERE AT ALL** (review of PR #87, High-1 and
+ *  High-2). Who would be marked as having dropped off is worked out on every read: it
+ *  is an answer about members, so storing it both went stale and put a member's own
+ *  name, PROVED email address and phone number into a table the Day-14 purge does not
+ *  touch and a person's own export does not carry.
+ *
+ *  **IT IS AS FRESH AS THE PREVIEW IT BELONGS TO, AND NO FRESHER.** It was worked out
+ *  against the list at `base_version`; if the list has moved since, the whole preview
+ *  is stale and is worked out again from the rows (9.7's rule, unchanged). So this is
+ *  not a cache that can be wrong — it is the answer, with the version it is the answer
+ *  for stored beside it. */
+/** One person of the FILE in a group: where they sit in `rows`, plus the one thing the
+ *  row itself cannot say — what the list said about them before, so a screen can print
+ *  "Active → Frozen".
+ *
+ *  **`inApp` IS NOT HERE, AND THAT IS THE WHOLE POINT** (review of PR #87, High-1).
+ *  Whether somebody is already in the app is a fact about one of the GYM's OWN MEMBERS,
+ *  and nothing a gym does to its list moves when a member joins, proves their address
+ *  or leaves. Stored, it went stale the moment somebody signed up — and staff read
+ *  "Amara Okafor, not in the app" for the preview's whole hour while she was, which is
+ *  exactly the burst RULINGS 2026-09-20 describes. So no fact about a member is ever
+ *  stored: every one of them is worked out again on every read, which cannot go stale
+ *  by construction, where a longer freshness check could miss a case and go quiet. */
+const memberListGroupedRowSchema = z
+  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable() })
+  .strict();
+
+/** Somebody the gym's list holds who is not in the file — stored as the GYM's own
+ *  record of them, which is what the list is. `inApp` is filled in on every read, for
+ *  the reason above. */
+export const memberListStoredPersonSchema = memberListPreviewPersonSchema.omit({ inApp: true });
+export type MemberListStoredPerson = z.infer<typeof memberListStoredPersonSchema>;
+
+export const memberListGroupsSchema = z
+  .object({
+    new: z.array(memberListGroupedRowSchema),
+    changed: z.array(memberListGroupedRowSchema),
+    unchanged: z.array(memberListGroupedRowSchema),
+    gone: z.array(memberListStoredPersonSchema),
+  })
+  .strict();
+export type MemberListGroups = z.infer<typeof memberListGroupsSchema>;
+
+/** EVERYTHING THE SERVER UNDERSTOOD OF A STAGED FILE EXCEPT THE ROWS. A preview is
+ *  built from this, and it stays small whatever the file holds — at most a hundred
+ *  columns of three sample cells each, two hundred skipped rows and a few warnings —
+ *  so showing a gym what its file would do never costs reading ten thousand people
+ *  back out of the database. */
+export const memberListStagedShellSchema = memberListUnderstandingSchema.omit({ rows: true });
+export type MemberListStagedShell = z.infer<typeof memberListStagedShellSchema>;
+
+export const memberListStagedFileSchema = z
+  .object({ understanding: memberListUnderstandingSchema, groups: memberListGroupsSchema })
+  .strict();
+export type MemberListStagedFile = z.infer<typeof memberListStagedFileSchema>;
+
+/** THE COUNTS OF AN UPLOAD, kept for the record after its cells have gone
+ *  (§9.6: `summary`, counts only — never a name, an address or a number). The
+ *  gym's own status WORDS are here, because "Active" and "Frozen" say nothing
+ *  about any one person and a confirmed upload's record is unreadable without
+ *  them. */
+export const memberListUploadSummarySchema = z
+  .object({
+    file: memberListUnderstandingSchema.shape.counts,
+    list: memberListChangeCountsSchema,
+    statuses: z.array(memberListStatusChangeSchema),
+    members: memberListMembersSchema,
+    guard: memberListGuardSchema,
+    needsMapping: z.boolean(),
+    /** Where the gym stood on seats when the file was read. Counts, like everything
+     *  else here. It is kept so that reading a preview back does not have to fetch
+     *  every member again just to say "42 of 500 seats": the seat rule lives in one
+     *  place (`repo.listMembers`) and a second copy of it in a COUNT would be a
+     *  second answer to "who costs this gym money". */
+    seat: memberListSeatSchema,
+  })
+  .strict();
+export type MemberListUploadSummary = z.infer<typeof memberListUploadSummarySchema>;
+
+/** Why a staged upload cannot be read or confirmed any more. Each is the
+ *  SERVER'S sentence, printed as sent (§9.9), and each says what to do. */
+export const memberListUploadGoneSchema = z.enum(["upload_expired", "upload_superseded", "upload_already_confirmed"]);
+export type MemberListUploadGone = z.infer<typeof memberListUploadGoneSchema>;
+
+export const MEMBER_LIST_UPLOAD_GONE_WORDS: Readonly<Record<MemberListUploadGone, string>> = {
+  upload_expired: "This preview has expired, so nothing was changed. Upload the file again to see it fresh.",
+  upload_superseded: "A newer file has been uploaded for this gym, so this preview is out of date. Use the newest one.",
+  upload_already_confirmed: "This file has already been applied to the list, so there is nothing left to confirm.",
+};
+
+// ── The routes' own shapes (§9.9) ───────────────────────────────────────────
+
+/** UPLOAD A FILE. `contentBase64` is the file's bytes; staff may paste rows
+ *  copied out of a spreadsheet instead (RULINGS 2026-09-20), which arrive as
+ *  tab-separated text and are read by the same reader, so this needs nothing of
+ *  its own for them.
+ *
+ *  The length ceiling is the file limit encoded, checked before anything is
+ *  decoded: a body longer than this cannot hold a file we would accept, and
+ *  refusing it on its length costs nothing.
+ *
+ *  `mapping` is staff saying which column is which. Sent, NOTHING is guessed
+ *  (§9.5) — which is the answer for a gym whose headings are in another language,
+ *  or in no row at all. */
+export const memberListUploadRequestSchema = z
+  .object({
+    contentBase64: z.string().min(1).max(MEMBER_FILE_MAX_BASE64_CHARS),
+    mode: memberListModeSchema,
+    mapping: memberListMappingSchema.optional(),
+  })
+  .strict();
+export type MemberListUploadRequest = z.infer<typeof memberListUploadRequestSchema>;
+
+export const memberListPreviewResponseSchema = z.object({ preview: memberListPreviewSchema });
+export type MemberListPreviewResponse = z.infer<typeof memberListPreviewResponseSchema>;
+
+/** WHICH NAMES, AND FROM WHERE. `cursor` is an offset into the group, and it is a
+ *  STRING on the wire parsed into a number, never coerced from one (trap #5): a
+ *  query parameter is text, and `z.coerce.number()` would read "" as 0 and
+ *  "1e3" as 1,000. Its ceiling is one digit past the longest list allowed, so no
+ *  cursor can be a number nothing could index. */
+export const memberListRowsQuerySchema = z
+  .object({
+    group: memberListRowGroupSchema,
+    cursor: z
+      .string()
+      .regex(/^(?:0|[1-9][0-9]{0,4})$/)
+      .transform(Number)
+      .optional(),
+  })
+  .strict();
+export type MemberListRowsQuery = z.infer<typeof memberListRowsQuerySchema>;
+
+export const memberListRowsResponseSchema = z.object({ page: memberListRowsPageSchema });
+export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema>;

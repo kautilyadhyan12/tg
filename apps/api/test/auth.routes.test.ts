@@ -85,12 +85,23 @@ d("auth routes (real Postgres)", () => {
   };
 
   beforeAll(async () => {
-    // Clean slate for this suite's fixtures (FK cascades clear tokens; the
-    // workouts FK is RESTRICT, so a prior run's workouts go first — the
-    // pattern also matches the sync suite's p21-sync-% users).
-    await sql`DELETE FROM workouts WHERE user_id IN
-      (SELECT id FROM users WHERE email LIKE 'p21-%@example.com')`;
-    await sql`DELETE FROM users WHERE email LIKE 'p21-%@example.com'`;
+    // Clean slate for THIS suite's fixtures (FK cascades clear tokens; the
+    // workouts FK is RESTRICT, so a prior run's workouts go first).
+    //
+    // **`p21-sync-%` IS EXCLUDED BECAUSE IT IS SOMEBODY ELSE'S**, and a plain
+    // `p21-%` reached it: `workouts.sync.test.ts` runs at the same moment as this
+    // file and owns those users. Whichever suite got here first destroyed the
+    // other — the sync suite's cookies answering 401 once its users were deleted
+    // mid-test, or this delete failing outright on the workouts FK the sync suite
+    // had just written. Seen both ways round on two full-suite runs, 2026-09-21.
+    // A suite's clean slate is its own fixtures, never a pattern that reaches
+    // another file's.
+    const mine = sql`
+      SELECT id FROM users
+      WHERE email LIKE 'p21-%@example.com' AND email NOT LIKE 'p21-sync-%@example.com'`;
+    await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM users
+      WHERE email LIKE 'p21-%@example.com' AND email NOT LIKE 'p21-sync-%@example.com'`;
     await sql`
       INSERT INTO users (email, password_hash, hash_algo, display_name)
       VALUES (${LEGACY_EMAIL}, ${LEGACY_HASH}, 'bcrypt', 'Legacy Fixture')`;

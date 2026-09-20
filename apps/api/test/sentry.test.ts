@@ -27,6 +27,16 @@ const HEADER = `header-${randomUUID()}`;
 const QUERY = `query-${randomUUID()}`;
 const OUTGOING = `food-search-${randomUUID()}`;
 const TYPED_EMAIL = `${randomUUID()}@example.com`;
+/** A MEMBER FILE'S BYTES, and one person in it. The upload route's body is a gym's
+ *  whole list — thousands of names, addresses and phone numbers — which is the biggest
+ *  single thing in this app that a request body can carry, so it is driven here beside
+ *  the photo. The SDK takes a body per REQUEST, not per route, so a fault on any route
+ *  carrying this body is the case that matters. */
+const MEMBER_NAME = `Marian-${randomUUID()}`;
+const memberFile = Buffer.from(
+  [`Full Name,Email`, `${MEMBER_NAME},${randomUUID()}@realgym.example`].join("\r\n"),
+  "utf8",
+).toString("base64");
 const photo = (() => { const bytes = randomBytes(3000); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
 
 /** What the SDK holds of the request it is serving, as far as this test reads it. */
@@ -90,7 +100,7 @@ d("what reaches Sentry: the real SDK, a real port, a recording transport", () =>
     };
     const scan = await post("/v1/nutrition/analyze-photo", { imageBase64: photo, mimeType: "image/jpeg" });
     expect(scan).toMatchObject({ status: 503, body: { error: "nutrition_unavailable" } });
-    const fault = await post("/v1/sentry-probe/fault", { email: TYPED_EMAIL });
+    const fault = await post("/v1/sentry-probe/fault", { email: TYPED_EMAIL, contentBase64: memberFile, mode: "whole_list" });
     expect(fault).toMatchObject({ status: 500, body: { error: "internal_error" } });
     expect(await Sentry.flush(5000)).toBe(true);
 
@@ -110,8 +120,10 @@ d("what reaches Sentry: the real SDK, a real port, a recording transport", () =>
       refreshCookie: sent.includes(refresh),
       header: sent.includes(HEADER),
       query: sent.includes(QUERY),
+      memberFile: sent.includes(memberFile.slice(0, 60)) || sent.includes(memberFile.slice(-60)),
+      memberName: sent.includes(MEMBER_NAME),
       outgoingCallWords: sent.includes(OUTGOING),
-    }).toEqual({ photo: false, typedEmail: false, accessCookie: false, refreshCookie: false, header: false, query: false, outgoingCallWords: false });
+    }).toEqual({ photo: false, typedEmail: false, accessCookie: false, refreshCookie: false, header: false, query: false, memberFile: false, memberName: false, outgoingCallWords: false });
     // The SDK was serving the scan's request, and kept none of its body.
     expect(held?.normalizedRequest.method).toBe("POST");
     expect(held?.normalizedRequest.data).toBeUndefined();

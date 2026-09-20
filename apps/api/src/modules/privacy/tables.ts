@@ -317,6 +317,15 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_cheers",
   "gym_nudges",
   "gym_closures",
+  // gym_member_list_uploads.uploaded_by_user_id — WHICH MEMBER OF STAFF UPLOADED
+  // A MEMBER LIST (Part 3 §9.6), on gym_closures' footing: it is the gym's own
+  // record of who changed its membership, and the only user link in the three
+  // member-list tables. The list itself points at no user — an entry is a name,
+  // an address and a phone number the GYM gave us about somebody who may never
+  // have opened this app — so the entries and the list row are not on any of
+  // these lists at all: they are not a person's own data to export or purge, and
+  // what ends them is the gym closing (archiveSweep.ts deletes all three).
+  "gym_member_list_uploads",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

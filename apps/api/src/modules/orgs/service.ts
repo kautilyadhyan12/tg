@@ -782,8 +782,13 @@ function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[
  *  distinction is deliberate: 403 confirms the org exists, which lets anyone
  *  with a uuid enumerate gyms. Insufficient PRIVILEGE inside an org they do
  *  belong to is a genuine 403 — they already know it exists. */
-async function requirePrivilege(
-  deps: OrgsDeps,
+/** Exported for `memberList/service.ts`, which is the same console behind the
+ *  same two gates and must not grow a fourth copy of either: four readers of
+ *  one authorisation rule is four answers to "may this person see the gym's
+ *  members", and the one a screen believes would not be the one the server
+ *  enforces. */
+export async function requirePrivilege(
+  deps: Pick<OrgsDeps, "sql">,
   gymId: string,
   userId: string,
   privilege: OrgPrivilege,
@@ -898,8 +903,8 @@ function archivedMessage(orgType: OrgType): string {
  *  write admitted as a trial expires is one the owner could have made a second
  *  earlier. Widening it to a lock would serialise every console write in a gym
  *  for a guarantee nobody can observe. */
-async function requireWritablePrivilege(
-  deps: OrgsDeps,
+export async function requireWritablePrivilege(
+  deps: Pick<OrgsDeps, "sql">,
   gymId: string,
   userId: string,
   privilege: OrgPrivilege,

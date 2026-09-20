@@ -145,6 +145,18 @@ and the word list is the backstop, never the mechanism.
 
 **Dependencies.** A new dependency needs Kd's yes in the plan, with the reason.
 
+**Cost at full size (Kd, 2026-09-20, after the member-list preview).** A card that
+reads or writes a list of PEOPLE is not done until it says what it costs at the
+BIGGEST size the app allows, measured with a command like every other number here —
+and the number that matters is not how long it takes, it is **how long the server
+answers nobody**, because that time is taken from every other gym and every member
+using the app at that moment. Measure it for each thing staff will actually do: the
+upload, the preview, one page of names, a sweep. 3a-iii-a shipped with a page of a
+hundred names blocking the whole server for 121 ms — a hundred pages for one gym,
+twelve seconds of answering nobody — and no rule asked, so nothing found it until Kd
+did. The launch shape to measure against is 20 gyms of 200 (RULINGS 2026-09-20), and a
+number that is comfortable there is still stated, not assumed.
+
 **Numbers.** Any count, size, threshold or "the file contains X" claim comes from a
 command run in this session, with its output shown. Otherwise write "unverified".
 
@@ -200,6 +212,49 @@ Re-check, in this chat: cover only the fixes in <commit>. For each of your findi
 say closed or still open, with file:line. Report anything a fix broke. No new sweep
 of the rest of the diff. If nothing Critical/High is open, say so in one line: the
 round ends there.
+```
+
+**The two extra passes, for a FEATURE that touches sign-in, money, other people's
+data, uploads, or anything that parses an outside reply or sends data out** (Kd,
+2026-09-20; moved from the card to the FEATURE on 2026-09-21, the chat's call on Kd's
+question). Each goes in a FRESH chat of its own, never two in one (Kd, 2026-09-21),
+and their findings are fixed the way round one's are.
+
+**They run ONCE, over the whole feature's diff, when its last card is built and BEFORE
+anybody uses it** — not after every card. A feature is a roadmap line's family (3a-i to
+3a-iv is one feature, not four), and the gate is USE, not merge: a card merges on round
+one alone, because nothing on `master` is in front of a real person before launch. Two
+reasons it is safe and better, not merely cheaper. Round one already carries a security
+pass of its own on every card (§6's prompt asks for it), so this is depth, not first
+cover. And half a feature cannot be attacked properly: a data-integrity reviewer has
+almost nothing to bite on in a card that deliberately writes nothing, while the card
+that writes is reviewed without the one that stages. **If a card WILL be used before
+its feature is finished** — Kd or a real gym touching its screen, or anything that sends
+a real email — both passes run before that use, not after it.
+
+A feature outside that list gets neither.
+
+```
+Act as a hostile security reviewer. Read CLAUDE.md §4 and RULINGS.md. Do not modify
+anything. Attack the diff of <commits or branch>: authentication bypass, authorisation
+bypass and IDOR (one gym reading another's people), injection, information leakage,
+sensitive data in logs, error replies or Sentry, insecure file handling, replay,
+broken or bypassable rate limiting, enumeration, and denial of service. RUN it — the
+real route on local Postgres and the real Redis, several gyms and several staff at ONE
+fixed address. For every finding give the exact code path (file:line), the attack a
+real person could carry out, its severity, and a one-line fix. Do not call the code
+safe because the tests pass.
+```
+
+```
+Act as a data-integrity reviewer. Read CLAUDE.md §4 and RULINGS.md. Do not modify
+anything. Assume two staff, or two requests, do the same thing at the same instant,
+and that any request can arrive twice. In the diff of <commits or branch> find every
+operation that can produce a duplicate row, a lost update, an inconsistent state, a
+duplicate job, a duplicate email, or a half-finished change — and every check-then-act
+that two requests can pass together. Say where a transaction, a unique constraint, a
+lock, an idempotency key or one atomic statement is required instead. RUN the races
+you name. file:line and a one-line fix for each.
 ```
 
 ## 7. Layout
