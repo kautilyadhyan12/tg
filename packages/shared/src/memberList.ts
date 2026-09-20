@@ -656,30 +656,48 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  **TWO SHAPES, because the groups are two different things.** `new`, `changed` and
  *  `unchanged` are people IN the file, so they are kept as their places in `rows`
  *  (counting from 0) — a number each, not a second copy of everybody. `gone` and
- *  `membersLeaving` are people the file does NOT hold — somebody coming off the list,
- *  and an app member about to be marked as dropped off — so there is nothing to point
- *  at and they are kept as they will be shown.
+ *  `gone` is somebody the file does NOT hold — a person coming off the list —
+ *  so there is nothing to point at and they are kept as they will be shown.
+ *
+ *  **THE GYM'S OWN APP MEMBERS ARE NOT IN HERE AT ALL** (review of PR #87, High-1 and
+ *  High-2). Who would be marked as having dropped off is worked out on every read: it
+ *  is an answer about members, so storing it both went stale and put a member's own
+ *  name, PROVED email address and phone number into a table the Day-14 purge does not
+ *  touch and a person's own export does not carry.
  *
  *  **IT IS AS FRESH AS THE PREVIEW IT BELONGS TO, AND NO FRESHER.** It was worked out
  *  against the list at `base_version`; if the list has moved since, the whole preview
  *  is stale and is worked out again from the rows (9.7's rule, unchanged). So this is
  *  not a cache that can be wrong — it is the answer, with the version it is the answer
  *  for stored beside it. */
-/** One person of the FILE in a group: where they sit in `rows`, plus the two things
- *  about them that the rows themselves cannot say — what the list said about them
- *  before (so a screen can print "Active → Frozen") and whether they are already in
- *  the app. Three small values rather than a second copy of the person. */
+/** One person of the FILE in a group: where they sit in `rows`, plus the one thing the
+ *  row itself cannot say — what the list said about them before, so a screen can print
+ *  "Active → Frozen".
+ *
+ *  **`inApp` IS NOT HERE, AND THAT IS THE WHOLE POINT** (review of PR #87, High-1).
+ *  Whether somebody is already in the app is a fact about one of the GYM's OWN MEMBERS,
+ *  and nothing a gym does to its list moves when a member joins, proves their address
+ *  or leaves. Stored, it went stale the moment somebody signed up — and staff read
+ *  "Amara Okafor, not in the app" for the preview's whole hour while she was, which is
+ *  exactly the burst RULINGS 2026-09-20 describes. So no fact about a member is ever
+ *  stored: every one of them is worked out again on every read, which cannot go stale
+ *  by construction, where a longer freshness check could miss a case and go quiet. */
 const memberListGroupedRowSchema = z
-  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), inApp: z.boolean() })
+  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable() })
   .strict();
+
+/** Somebody the gym's list holds who is not in the file — stored as the GYM's own
+ *  record of them, which is what the list is. `inApp` is filled in on every read, for
+ *  the reason above. */
+export const memberListStoredPersonSchema = memberListPreviewPersonSchema.omit({ inApp: true });
+export type MemberListStoredPerson = z.infer<typeof memberListStoredPersonSchema>;
 
 export const memberListGroupsSchema = z
   .object({
     new: z.array(memberListGroupedRowSchema),
     changed: z.array(memberListGroupedRowSchema),
     unchanged: z.array(memberListGroupedRowSchema),
-    gone: z.array(memberListPreviewPersonSchema),
-    membersLeaving: z.array(memberListPreviewPersonSchema),
+    gone: z.array(memberListStoredPersonSchema),
   })
   .strict();
 export type MemberListGroups = z.infer<typeof memberListGroupsSchema>;

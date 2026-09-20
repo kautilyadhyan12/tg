@@ -761,6 +761,237 @@ d("member list: upload and preview (real Postgres)", () => {
   );
 
   // =========================================================================
+  // NOTHING ABOUT A MEMBER IS STORED, SO NOTHING ABOUT A MEMBER GOES STALE
+  // (review of PR #87, High-1 and High-2)
+  // =========================================================================
+  it(
+    "a member who joins AFTER the file was staged shows up on the very next read — no fact about a member is ever stored",
+    async () => {
+      const owner = await makeUser("fresh-owner");
+      const joiner = await makeUser("fresh-joiner");
+      const org = await makeOrg(owner.cookies, "Freshness Gym");
+
+      // Three people the gym's list does not hold. One of them is about to sign up.
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Amara Okafor", joiner.email, "Active"],
+        ["Bea Lindqvist", "fresh-bea@example.com", "Active"],
+        ["Cai Zhang", "fresh-cai@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.list).toMatchObject({ new: 3, alreadyInApp: 0, canBeInvited: 3 });
+      expect(preview.seat.liveMembers).toBe(0);
+
+      const names = async () => {
+        const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
+        expect(res.statusCode).toBe(200);
+        return (JSON.parse(res.body) as { page: { people: { fullName: string; inApp: boolean }[] } }).page.people;
+      };
+      expect((await names()).find((p) => p.fullName === "Amara Okafor")?.inApp).toBe(false);
+
+      // NOW SHE SIGNS UP AND PROVES HER ADDRESS — the burst RULINGS 2026-09-20
+      // describes: a list goes up and people join over the next hours, on the gym's own
+      // wi-fi. Nothing about the gym's LIST has moved, so its version has not either.
+      await joinAsMember(joiner.cookies, org, owner.cookies);
+      await verify(joiner.email);
+
+      // THE SAME PREVIEW, READ AGAIN, MUST SAY SO. Stored, it kept saying "not in the
+      // app" about a named person for the preview's whole hour, and offered to invite
+      // somebody who was already here (review of PR #87, High-1).
+      const again = body(await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}`, owner.cookies)).preview;
+      expect(again.list).toMatchObject({ new: 3, alreadyInApp: 1, canBeInvited: 2 });
+      expect(again.seat.liveMembers).toBe(1);
+      expect((await names()).find((p) => p.fullName === "Amara Okafor")?.inApp).toBe(true);
+
+      // And the file-versus-list half is still served from the store: the counts that
+      // depend on the LIST are unchanged, because the list is unchanged.
+      expect(again.list).toMatchObject({ changed: 0, unchanged: 0, gone: 0 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "nothing about one of the gym's own members is written into the staged file — not their name, their proved address or their number",
+    async () => {
+      const owner = await makeUser("nostore-owner");
+      const member = await makeUser("nostore-member");
+      const org = await makeOrg(owner.cookies, "Nothing Stored Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+      const phone = "+447911998877";
+      await sql`
+        UPDATE gym_members SET stated_phone_e164 = ${phone}, last_listed_at = now()
+        WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+
+      // They are on the gym's list today — under the gym's OWN name for them and the
+      // gym's OWN address, which is an old one. What ties the two together is the phone
+      // number, so the member's proved address is nowhere in the gym's record of them
+      // and the two are told apart by this test rather than being the same string.
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      await sql`
+        INSERT INTO gym_member_list_entries
+          (gym_id, full_name, email, phone_e164, status, identity_key, source)
+        VALUES (${org.org.id}, 'Dawn A.', 'nostore-gym-says@example.com', ${phone}, 'Active',
+                ${"c".repeat(64)}, 'upload')`;
+
+      // …and the file that arrives does not hold them, so they are the one person staff
+      // most need to see: an app member about to be marked as having dropped off.
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Someone Else", "nostore-else@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.members).toEqual({ leaving: 1, listedNow: 1 });
+
+      // THE STAGED DOCUMENT HOLDS NOTHING OF THEIRS. The list is the GYM's record of
+      // people the gym told us about; a member's own name, the address they PROVED to
+      // this app and the number they gave belong to them, and this table is not in
+      // their export and is not touched by the Day-14 purge (review of PR #87, High-2).
+      const stored = await sql<{ doc: string }[]>`
+        SELECT rows::text AS doc FROM gym_member_list_uploads WHERE id = ${preview.uploadId}`;
+      const doc = stored[0]?.doc ?? "";
+      expect(doc.length).toBeGreaterThan(0);
+      expect({
+        theirAppName: doc.includes("List nostore-member"),
+        theirProvedAddress: doc.includes(member.email),
+        // The gym's own record of them, which IS the gym's to keep, is a different
+        // thing and is stored — under the words and the address the GYM wrote.
+        theGymsNameForThem: doc.includes("Dawn A."),
+        theGymsAddressForThem: doc.includes("nostore-gym-says@example.com"),
+      }).toEqual({
+        theirAppName: false,
+        theirProvedAddress: false,
+        theGymsNameForThem: true,
+        theGymsAddressForThem: true,
+      });
+
+      // And they are still shown, because the answer is worked out on every read.
+      const page = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=members_leaving`, owner.cookies);
+      expect(page.statusCode).toBe(200);
+      const people = (JSON.parse(page.body) as { page: { total: number; people: { email: string | null; phone: string | null; wasStatus: string | null }[] } }).page;
+      expect(people.total).toBe(1);
+      // Shown with the app's OWN facts about them — which is exactly why they cannot
+      // be stored: they are the member's, not the gym's.
+      expect(people.people[0]).toMatchObject({ email: member.email, phone, wasStatus: "Active" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ["no group at all", "?"],
+    ["a group nobody has", "?group=everybody"],
+    ["a cursor that is not a number", "?group=new&cursor=abc"],
+    ["an empty cursor", "?group=new&cursor="],
+    ["a cursor in exponent form", "?group=new&cursor=1e3"],
+    ["a negative cursor", "?group=new&cursor=-1"],
+    ["a cursor with a leading zero", "?group=new&cursor=00"],
+    ["a cursor past anything a list could hold", "?group=new&cursor=100000"],
+    ["a query key nobody asked for", "?group=new&limit=5"],
+  ])("the names route refuses %s", async (_label, query) => {
+    const owner = await makeUser(`bad-${_label.replace(/[^a-z]/gi, "").slice(0, 12)}`);
+    const org = await makeOrg(owner.cookies, "Bad Query Gym");
+    const preview = body(await upload(org.org.id, owner.cookies)).preview;
+    const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows${query}`, owner.cookies);
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({ error: "validation_error" });
+    // The reply names the path and the code, never the value (R3.10).
+    expect(res.body).not.toContain("everybody");
+  }, TEST_TIMEOUT_MS);
+
+  it(
+    "both read routes refuse an upload id that is not a uuid, and answer 404 for a well-shaped one that is not this gym's",
+    async () => {
+      const owner = await makeUser("badid-owner");
+      const org = await makeOrg(owner.cookies, "Bad Id Gym");
+      for (const path of [`${uploadsUrl(org.org.id)}/not-a-uuid`, `${uploadsUrl(org.org.id)}/not-a-uuid/rows?group=new`]) {
+        const res = await get(path, owner.cookies);
+        expect(res.statusCode, path).toBe(400);
+        expect(JSON.parse(res.body)).toMatchObject({ error: "validation_error" });
+      }
+      const stranger = "00000000-0000-4000-8000-000000000000";
+      expect((await get(`${uploadsUrl(org.org.id)}/${stranger}`, owner.cookies)).statusCode).toBe(404);
+      expect((await get(`${uploadsUrl(org.org.id)}/${stranger}/rows?group=new`, owner.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an ADD takes nobody off, and that holds for the gym's own members as well as its list",
+    async () => {
+      const owner = await makeUser("addmem-owner");
+      const member = await makeUser("addmem-member");
+      const org = await makeOrg(owner.cookies, "Add Keeps Everyone Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+
+      // The member is on the gym's list today.
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+        VALUES (${org.org.id}, 'Add Member', ${member.email}, 'Active', ${"d".repeat(64)}, 'upload')`;
+
+      // A file that does not mention them at all.
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Brand New", "addmem-new@example.com", "Active"],
+      ]);
+
+      // AS A WHOLE LIST they would come off, and they are flagged.
+      const whole = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(whole.list.gone).toBe(1);
+      expect(whole.members).toEqual({ leaving: 1, listedNow: 1 });
+
+      // AS AN ADD nobody comes off and nobody is flagged — including the member, whose
+      // side of the answer is worked out separately from the list's and could get this
+      // wrong on its own.
+      const added = body(await upload(org.org.id, owner.cookies, { bytes: file, mode: "add" })).preview;
+      expect(added.list.gone).toBe(0);
+      expect(added.members).toEqual({ leaving: 0, listedNow: 1 });
+      expect(added.guard).toMatchObject({ entriesGoing: 0, membersLeaving: 0, needsTick: false, mostOfListWouldGo: false });
+
+      const page = await get(`${uploadsUrl(org.org.id)}/${added.uploadId}/rows?group=members_leaving`, owner.cookies);
+      expect(page.statusCode).toBe(200);
+      expect((JSON.parse(page.body) as { page: { total: number } }).page.total).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a file where only some people have an address: each of the three counts under 'new' is about the right person",
+    async () => {
+      const owner = await makeUser("split-owner");
+      const member = await makeUser("split-member");
+      const org = await makeOrg(owner.cookies, "Split Counts Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+
+      // The FIRST person has no email at all. Everything the app knows about these
+      // people is read back by place, so a row without an address must keep its place:
+      // drop it and everybody after is answered with somebody else's address, which is
+      // the shape of mistake that shows up as a wrong count and never as an error.
+      const file = csv([
+        ["Full Name", "Email", "Mobile", "Status"],
+        ["Phone Only", "", "+447911224466", "Active"],
+        ["Can Be Invited", "split-invite@example.com", "", "Active"],
+        ["Already Here", member.email, "", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.list).toMatchObject({ new: 3, alreadyInApp: 1, canBeInvited: 1, noEmail: 1 });
+      // The three always add up to `new`: a screen prints them as a breakdown of it.
+      expect(preview.list.alreadyInApp + preview.list.canBeInvited + preview.list.noEmail).toBe(preview.list.new);
+
+      const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
+      const people = (JSON.parse(res.body) as { page: { people: { fullName: string; email: string | null; inApp: boolean }[] } }).page.people;
+      expect(people.map((p) => [p.fullName, p.email, p.inApp])).toEqual([
+        ["Phone Only", null, false],
+        ["Can Be Invited", "split-invite@example.com", false],
+        ["Already Here", member.email, true],
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
   // A PAGE OF NAMES DOES NOT COST THE WHOLE FILE (§9.9)
   // =========================================================================
 
@@ -799,7 +1030,9 @@ d("member list: upload and preview (real Postgres)", () => {
       };
       expect((await names()).people.map((p) => p.fullName).sort()).toEqual(["Page One", "Page Three", "Page Two"]);
 
-      // **NOW TAKE THE WHOLE LIST AWAY UNDERNEATH IT.** The grouping was worked out
+      // **NOW TAKE THE WHOLE LIST AWAY UNDERNEATH IT** — the LIST, which is what the
+      // stored grouping is about. Everything about the gym's own MEMBERS is worked out
+      // again on every read and has its own test above. The grouping was worked out
       // when the file was staged, against the list at that version, and it is stored
       // beside the rows — so a page still answers the same three people, and reads
       // nothing of the list to do it. Before this was stored, a page re-ran the whole

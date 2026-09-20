@@ -196,9 +196,15 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           statusWord: false,
           fileBody: false,
         });
-        // The capture really was listening: the server logged SOMETHING while all
-        // that happened, so "no leak" is not "no log".
-        expect(written.length).toBeGreaterThan(0);
+        // THE CAPTURE REALLY WAS LISTENING, and to the REQUESTS — not merely to the
+        // server starting up. `written.length > 0` was the first version of this
+        // control and the boot lines alone satisfied it, so it would have stayed green
+        // with request logging switched off entirely, which is the one setting that
+        // makes every assertion above vacuous (review of PR #87). What is asserted now
+        // is a line that only exists because a request was served, and the uploads
+        // route's own url in it.
+        expect(written).toContain('"msg":"request completed"');
+        expect(written).toContain(`${uploads}"`);
       } finally {
         await app.close();
         await cleanup();

@@ -234,6 +234,79 @@ function statusBreakdown(
   return [...byWord.values()].filter((row) => row.count > 0);
 }
 
+/** One of the gym's own app members, with what its list says about them today. The
+ *  three extra answers come from the entries where this is built inside `reconcile`,
+ *  and from one statement (`repo.membersAgainstList`) where a read builds it — the same
+ *  question asked of the same data, never a second opinion. */
+export interface MemberOnList extends ListMember {
+  onList: boolean;
+  entryStatus: string | null;
+  entryMemberNumber: string | null;
+}
+
+export interface MembersSide {
+  marks: ReconciledMember[];
+  membersLeaving: ReconciledPerson[];
+  /** How many of the gym's members the list being replaced holds — what `leaving` is
+   *  measured against by the wrong-file guard (§9.8). */
+  listedNow: number;
+}
+
+/** WHAT AN UPLOAD WOULD DO TO THE GYM'S OWN MEMBERS — pure, and worked out fresh on
+ *  every single read.
+ *
+ *  **NOTHING THIS ANSWERS IS EVER STORED** (review of PR #87, High-1 and High-2). Every
+ *  one of these answers moves when a member joins, proves their address, gives the gym a
+ *  phone number or leaves — and none of those touches the gym's LIST, so the list's own
+ *  version cannot say when they are stale. Stored, "Amara Okafor, not in the app" was
+ *  read by staff for a whole hour after Amara signed up. And storing a leaving member's
+ *  name, proved address and phone number put a person's own data in a table the Day-14
+ *  purge does not touch. Computing it every time cannot go stale by construction, which
+ *  a longer freshness check could not promise.
+ *
+ *  `reachesNewList` is the one thing the caller supplies: whether the list AFTER this
+ *  upload can reach this member. `reconcile` answers it from the file's rows it holds; a
+ *  read answers it from the staged file's contacts (`repo.stagedContacts`). */
+export function membersAgainstNewList(
+  members: readonly MemberOnList[],
+  reachesNewList: (member: MemberOnList) => boolean,
+  hasList: boolean,
+): MembersSide {
+  const marks: ReconciledMember[] = [];
+  const membersLeaving: ReconciledPerson[] = [];
+  let listedNow = 0;
+  for (const member of members) {
+    const onNewList = reachesNewList(member);
+    if (member.onList) listedNow += 1;
+    const leaving = member.onList && !onNewList;
+    if (hasList) {
+      marks.push({
+        userId: member.userId,
+        mark: onNewList ? "on_list" : member.onList || member.everListed ? "no_longer_listed" : "never_listed",
+        leaving,
+      });
+    }
+    if (!leaving) continue;
+    // Their name and address are the app's OWN, not the file's — the file is exactly
+    // where they are missing from — which is why none of this is stored. `wasStatus` is
+    // what the list still says about them, what staff read to judge whether the file is
+    // wrong or the person really has left.
+    membersLeaving.push({
+      identityKey: "",
+      at: null,
+      row: null,
+      fullName: member.fullName,
+      email: member.email,
+      phone: member.statedPhone,
+      memberNumber: member.entryMemberNumber,
+      status: null,
+      wasStatus: member.entryStatus,
+      inApp: true,
+    });
+  }
+  return { marks, membersLeaving, listedNow };
+}
+
 /** WHAT THIS UPLOAD WOULD DO — and, with no rows, what the stored list says now.
  *
  *  The order of the work is the order the answers depend on each other: who the
@@ -344,44 +417,21 @@ export function reconcile(input: ReconcileInput): Reconciled {
     const phone = foldPhone(person.phone);
     return (phone === null ? undefined : entryByPhone.get(phone)) ?? null;
   };
-  const marks: ReconciledMember[] = [];
-  const membersLeaving: ReconciledPerson[] = [];
-  let listedNow = 0;
-  for (const member of members) {
-    const contact = { email: member.email, phone: member.statedPhone };
-    const theirEntry = entryFor(contact);
-    const onListNow = theirEntry !== null;
-    const onNewList = reaches(contact, newEmails, newPhones);
-    if (onListNow) listedNow += 1;
-    const leaving = onListNow && !onNewList;
-    if (hasList) {
-      marks.push({
-        userId: member.userId,
-        mark: onNewList ? "on_list" : onListNow || member.everListed ? "no_longer_listed" : "never_listed",
-        leaving,
-      });
-    }
-    if (!leaving) continue;
-    // Their name and address are the app's own, not the file's — the file is
-    // exactly where they are missing from. `wasStatus` is what the list still
-    // says about them, which is what staff read to judge whether the file is
-    // wrong or the person really has left.
-    // `leaving` is true only where an entry matched, so the entry is there: the
-    // compiler follows that through the two booleans above and no fallback is
-    // written for a case the rule cannot reach.
-    membersLeaving.push({
-      identityKey: theirEntry.identityKey,
-      at: null,
-      row: null,
-      fullName: member.fullName,
-      email: member.email,
-      phone: member.statedPhone,
-      memberNumber: theirEntry.memberNumber,
-      status: null,
-      wasStatus: theirEntry.status,
-      inApp: true,
-    });
-  }
+  // THE MEMBERS' SIDE IS THE SAME RULE A READ USES, called here with the entries
+  // this function was handed and there with one statement's answer. One function,
+  // so a preview read an hour later cannot say something different about a person
+  // than the preview that was staged.
+  const onTheList = members.map((member) => {
+    const entry = entryFor({ email: member.email, phone: member.statedPhone });
+    return {
+      ...member,
+      onList: entry !== null,
+      entryStatus: entry?.status ?? null,
+      entryMemberNumber: entry?.memberNumber ?? null,
+    };
+  });
+  const side = membersAgainstNewList(onTheList, (member) => reaches({ email: member.email, phone: member.statedPhone }, newEmails, newPhones), hasList);
+  const { marks, membersLeaving, listedNow } = side;
 
   const counts: MemberListChangeCounts = {
     new: fresh.length,

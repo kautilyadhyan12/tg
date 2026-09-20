@@ -26,6 +26,7 @@
 import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import {
+  isLargeMemberListChange,
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
   MEMBER_LIST_PARSES_PER_GYM,
@@ -45,6 +46,7 @@ import {
   type MemberListSeat,
   type MemberListStagedFile,
   type MemberListStagedShell,
+  type MemberListStoredPerson,
   type MemberListUnderstanding,
   type MemberListUploadSummary,
 } from "@app/shared";
@@ -52,7 +54,7 @@ import type { RedisLike } from "../../../redis.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { understandMemberFile } from "./parseMemberFile.js";
-import { reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
+import { membersAgainstNewList, reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
 import * as repo from "./repo.js";
 
 export interface MemberListDeps {
@@ -182,12 +184,17 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       // Everybody in these three groups came out of a row, so the index is there.
       // `?? 0` would quietly put the first person of the file in somebody else's
       // place, so a missing one is a fault of this module and says so.
-      at: person.at ?? raise(`a person of the file has no place in it: ${person.identityKey}`),
+      at: person.at ?? raise(`a person of the file has no place in it (upload's ${String(person.row)})`),
       wasStatus: person.wasStatus,
-      inApp: person.inApp,
     }));
-  const shown = (people: readonly ReconciledPerson[]): MemberListPreviewPerson[] =>
-    people.map((person) => ({
+  // Somebody coming off the list is the GYM's own record of them, and is stored. Not
+  // `inApp`: that is a fact about one of the gym's members and is filled in on every
+  // read, like every other member fact (review of PR #87, High-1).
+  return {
+    new: inFile(reconciled.new),
+    changed: inFile(reconciled.changed),
+    unchanged: inFile(reconciled.unchanged),
+    gone: reconciled.gone.map((person) => ({
       row: person.row,
       fullName: person.fullName,
       email: person.email,
@@ -195,14 +202,107 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       memberNumber: person.memberNumber,
       status: person.status,
       wasStatus: person.wasStatus,
-      inApp: person.inApp,
-    }));
+    })),
+  };
+}
+
+/** WHETHER SOMEBODY IS ALREADY IN THE APP, worked out from the gym's own members as
+ *  they are right now. Two sets and a lookup: the one question every count about the
+ *  app's side of a preview turns on. */
+function reachedBy(members: readonly repo.MemberAgainstList[]): (person: { email: string | null; phone: string | null }) => boolean {
+  const emails = new Set<string>();
+  const phones = new Set<string>();
+  for (const member of members) {
+    const email = (member.email ?? "").trim().toLowerCase();
+    if (email !== "") emails.add(email);
+    const phone = (member.statedPhone ?? "").trim();
+    if (phone !== "") phones.add(phone);
+  }
+  return (person) => {
+    const email = (person.email ?? "").trim().toLowerCase();
+    if (email !== "" && emails.has(email)) return true;
+    const phone = (person.phone ?? "").trim();
+    return phone !== "" && phones.has(phone);
+  };
+}
+
+/** EVERYTHING A PREVIEW SAYS ABOUT THE GYM'S OWN MEMBERS, worked out fresh.
+ *
+ *  Called on every read of a staged preview, and never read out of the store. It takes
+ *  the file's contacts by place (`repo.stagedContacts`) and the gym's members with
+ *  what its list says about each of them (`repo.membersAgainstList`), and answers the
+ *  member half of the counts, the guard and the leaving group — through the same pure
+ *  rule the stage used (`membersAgainstNewList`). */
+async function freshMemberSide(
+  deps: MemberListDeps,
+  gymId: string,
+  upload: repo.UploadRow,
+  groups: MemberListGroups,
+  stored: MemberListUploadSummary,
+): Promise<{
+  counts: MemberListUploadSummary;
+  membersLeaving: MemberListPreviewPerson[];
+  inApp: (person: { email: string | null; phone: string | null }) => boolean;
+} | null> {
+  const [contacts, members, seatCap, state] = await Promise.all([
+    repo.stagedContacts(deps.sql, gymId, upload.id),
+    repo.membersAgainstList(deps.sql, gymId),
+    orgRepo.gymSeatCap(deps.sql, gymId),
+    repo.listState(deps.sql, gymId),
+  ]);
+  if (contacts === null) return null;
+  const inApp = reachedBy(members);
+  const personAt = (at: number) => ({ email: contacts.emails[at] ?? null, phone: contacts.phones[at] ?? null });
+  // A member is on the list AFTER this upload when the file reaches them — or, for an
+  // add, when the list already did, because an add takes nobody off. Exactly what
+  // `reconcile` derives from the rows it holds; here the rows are two arrays of strings.
+  const fileEmails = new Set(contacts.emails.flatMap((e) => (e === null ? [] : [e.trim().toLowerCase()])));
+  const filePhones = new Set(contacts.phones.flatMap((p) => (p === null ? [] : [p.trim()])));
+  const side = membersAgainstNewList(
+    members,
+    (member) => {
+      const email = (member.email ?? "").trim().toLowerCase();
+      if (email !== "" && fileEmails.has(email)) return true;
+      const phone = (member.statedPhone ?? "").trim();
+      if (phone !== "" && filePhones.has(phone)) return true;
+      return upload.mode === "add" && member.onList;
+    },
+    state !== null,
+  );
+  const fresh = groups.new.filter((row) => inApp(personAt(row.at))).length;
+  const withEmail = groups.new.filter((row) => (personAt(row.at).email ?? "") !== "").length;
+  const counts: MemberListUploadSummary = {
+    ...stored,
+    list: {
+      ...stored.list,
+      alreadyInApp: fresh,
+      canBeInvited: withEmail - fresh,
+      noEmail: groups.new.length - withEmail,
+    },
+    members: { leaving: side.membersLeaving.length, listedNow: side.listedNow },
+    guard: {
+      ...stored.guard,
+      membersLeaving: side.membersLeaving.length,
+      membersListedNow: side.listedNow,
+      needsTick:
+        isLargeMemberListChange(stored.guard.entriesGoing, stored.guard.listSize) ||
+        isLargeMemberListChange(side.membersLeaving.length, side.listedNow),
+    },
+    seat: { ...stored.seat, cap: seatCap, liveMembers: members.length },
+  };
   return {
-    new: inFile(reconciled.new),
-    changed: inFile(reconciled.changed),
-    unchanged: inFile(reconciled.unchanged),
-    gone: shown(reconciled.gone),
-    membersLeaving: shown(reconciled.membersLeaving),
+    counts,
+    membersLeaving: side.membersLeaving.map((person) => ({
+      row: person.row,
+      fullName: person.fullName,
+      email: person.email,
+      phone: person.phone,
+      memberNumber: person.memberNumber,
+      status: person.status,
+      wasStatus: person.wasStatus,
+      inApp: true,
+    })),
+    inApp,
   };
 }
 
@@ -361,21 +461,74 @@ async function stagedOr409(
   return upload;
 }
 
-/** Whether the list has moved since this preview was worked out. While it has not,
- *  the stored answer IS the answer; once it has, everything about the preview has to
- *  be worked out again (§9.7). */
-async function hasMoved(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<boolean> {
-  const state = await repo.listState(deps.sql, gymId);
-  return (state?.version ?? 0) !== upload.baseVersion;
+const expired = (): OrgsError =>
+  new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
+
+/** WHAT A READ WORKS FROM.
+ *
+ *  **The FILE-versus-LIST half comes from the store while the list has not moved**, and
+ *  the list's own version says when it has — a confirm or a typed-in person, nothing
+ *  else. That half is the expensive one (every row against every entry), and its
+ *  freshness question has exactly one answer.
+ *
+ *  **The MEMBERS' half is always worked out again**, because nothing a gym does to its
+ *  list moves when a member joins, proves an address, gives the gym a number or leaves
+ *  (review of PR #87, High-1). */
+interface Read {
+  shell: MemberListStagedShell;
+  groups: MemberListGroups;
+  /** The whole file, and only where the list has MOVED. A page must be cut out of the
+   *  same grouping the counts came from: on the slow path that grouping was just worked
+   *  out in this process and the stored one is about a list that no longer exists, so
+   *  asking the database for a page would answer a different question from the one the
+   *  preview answered (caught by the test that pins the two together). */
+  file: MemberListStagedFile | null;
+  counts: MemberListUploadSummary;
+  membersLeaving: MemberListPreviewPerson[];
+  inApp: (person: { email: string | null; phone: string | null }) => boolean;
+  lastFileSha256: string | null;
 }
 
-/** The whole document, and the fault if it has gone between two statements. */
-async function fileOr409(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<MemberListStagedFile> {
-  const file = await repo.stagedFile(deps.sql, gymId, upload.id);
-  if (file === null) {
-    throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
+async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<Read> {
+  const state = await repo.listState(deps.sql, gymId);
+  const moved = (state?.version ?? 0) !== upload.baseVersion;
+  if (!moved) {
+    // THE FAST PATH, and the one every screen takes: everything but the rows, which the
+    // database drops before the answer crosses to this process, plus the members' half
+    // worked out fresh from two small statements.
+    const [shell, groups] = await Promise.all([
+      repo.stagedShell(deps.sql, gymId, upload.id),
+      repo.stagedGroups(deps.sql, gymId, upload.id),
+    ]);
+    if (shell === null || groups === null) throw expired();
+    const side = await freshMemberSide(deps, gymId, upload, groups, upload.summary);
+    if (side === null) throw expired();
+    return {
+      shell,
+      groups,
+      file: null,
+      counts: side.counts,
+      membersLeaving: side.membersLeaving,
+      inApp: side.inApp,
+      lastFileSha256: state?.lastFileSha256 ?? null,
+    };
   }
-  return file;
+  // THE LIST HAS MOVED, so the stored file-versus-list answer is about a list that no
+  // longer exists and the whole comparison runs again over the stored rows.
+  const file = await repo.stagedFile(deps.sql, gymId, upload.id);
+  if (file === null) throw expired();
+  const { measured, groups } = await measure(deps, gymId, file.understanding, upload.mode);
+  const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts);
+  if (side === null) throw expired();
+  return {
+    shell: shellOf(file),
+    groups,
+    file,
+    counts: side.counts,
+    membersLeaving: side.membersLeaving,
+    inApp: side.inApp,
+    lastFileSha256: measured.lastFileSha256,
+  };
 }
 
 /** READ A STAGED PREVIEW BACK. */
@@ -388,46 +541,49 @@ export async function readPreview(
 ): Promise<MemberListPreview | null> {
   const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
   if (upload === null) return null;
-  const moved = await hasMoved(deps, gymId, upload);
-  if (!moved) {
-    // THE FAST PATH, and the one every screen takes: everything but the rows, which
-    // the database drops before the answer crosses to this process.
-    const shell = await repo.stagedShell(deps.sql, gymId, upload.id);
-    if (shell === null) {
-      throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
-    }
-    const state = await repo.listState(deps.sql, gymId);
-    return {
-      uploadId: upload.id,
-      ...assemble({
-        mode: upload.mode,
-        expiresAt: upload.expiresAt,
-        fileSha256: upload.fileSha256,
-        shell,
-        measured: { counts: upload.summary, seat: upload.summary.seat, lastFileSha256: state?.lastFileSha256 ?? null },
-      }),
-    };
-  }
-  // THE LIST HAS MOVED, so the stored answer is about a list that no longer exists
-  // and the whole thing is worked out again from the rows.
-  const file = await fileOr409(deps, gymId, upload);
-  const { measured } = await measure(deps, gymId, file.understanding, upload.mode);
+  const read = await readStaged(deps, gymId, upload);
   return {
     uploadId: upload.id,
     ...assemble({
       mode: upload.mode,
       expiresAt: upload.expiresAt,
       fileSha256: upload.fileSha256,
-      shell: shellOf(file),
-      measured,
+      shell: read.shell,
+      measured: { counts: read.counts, seat: read.counts.seat, lastFileSha256: read.lastFileSha256 },
     }),
   };
 }
 
-/** THE NAMES BEHIND ONE NUMBER, one page at a time — the thing that makes a
- *  preview worth having (§9.9: "the names behind every number, before anyone
- *  confirms"). A screen shows counts first and a person's address only when staff
- *  ask for it, which is why this is a route of its own and not part of the preview. */
+/** One page of a group, cut in this process out of a grouping just worked out — the same
+ *  merge `repo.stagedPage` asks the database for, for the path where the answer is
+ *  already in hand. */
+function cutHere(read: Read, group: MemberListRowGroup, cursor: number): { total: number; people: MemberListStoredPerson[] } {
+  const file = read.file;
+  if (file === null) raise("cutHere was called without the file it cuts from");
+  if (group === "gone") {
+    return { total: read.groups.gone.length, people: read.groups.gone.slice(cursor, cursor + MEMBER_LIST_ROWS_PAGE) };
+  }
+  const places = group === "new" ? read.groups.new : group === "changed" ? read.groups.changed : read.groups.unchanged;
+  const people = places.slice(cursor, cursor + MEMBER_LIST_ROWS_PAGE).map((place) => {
+    const row = file.understanding.rows[place.at];
+    if (row === undefined) raise(`a group names row ${String(place.at)}, which the file does not hold`);
+    return {
+      row: row.row,
+      fullName: row.fullName,
+      email: row.email,
+      phone: row.phone,
+      memberNumber: row.memberNumber,
+      status: row.status,
+      wasStatus: place.wasStatus,
+    };
+  });
+  return { total: places.length, people };
+}
+
+/** THE NAMES BEHIND ONE NUMBER, one page at a time — the thing that makes a preview
+ *  worth having (§9.9: "the names behind every number, before anyone confirms"). A
+ *  screen shows counts first and a person's address only when staff ask for it, which is
+ *  why this is a route of its own and not part of the preview. */
 export async function readPreviewRows(
   deps: MemberListDeps,
   userId: string,
@@ -439,57 +595,37 @@ export async function readPreviewRows(
 ): Promise<MemberListRowsPage | null> {
   const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
   if (upload === null) return null;
-  if (!(await hasMoved(deps, gymId, upload))) {
-    // THE FAST PATH: a hundred rows cut out of the stored file by the database.
-    // Nothing here reads the rest of the file, and nothing re-runs the rule.
-    const page = await repo.stagedPage(deps.sql, gymId, upload.id, group, cursor, MEMBER_LIST_ROWS_PAGE);
-    if (page === null) {
-      throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
-    }
+  const read = await readStaged(deps, gymId, upload);
+
+  // THE GYM'S OWN MEMBERS ABOUT TO BE MARKED AS DROPPED OFF are not in the file and are
+  // not stored: they were worked out a moment ago, so this group is cut here.
+  if (group === "members_leaving") {
+    const page = read.membersLeaving.slice(cursor, cursor + MEMBER_LIST_ROWS_PAGE);
     return {
       group,
-      total: page.total,
-      people: page.people,
-      cursor: cursor + page.people.length < page.total ? cursor + page.people.length : null,
+      total: read.membersLeaving.length,
+      people: page,
+      cursor: cursor + page.length < read.membersLeaving.length ? cursor + page.length : null,
     };
   }
-  // THE LIST HAS MOVED: the stored grouping is about a list that no longer exists,
-  // so it is worked out again and cut here.
-  const file = await fileOr409(deps, gymId, upload);
-  const { groups } = await measure(deps, gymId, file.understanding, upload.mode);
-  const people = peopleOf(groups, file, group);
-  const page = people.slice(cursor, cursor + MEMBER_LIST_ROWS_PAGE);
+
+  // ON THE SLOW PATH the grouping was worked out a moment ago in this process, so the
+  // page is cut from THAT, never from the stored one — which is about a list that no
+  // longer exists and would answer a different question from the counts just shown.
+  const picked =
+    read.file === null
+      ? await repo.stagedPage(deps.sql, gymId, upload.id, group, cursor, MEMBER_LIST_ROWS_PAGE)
+      : cutHere(read, group, cursor);
+  if (picked === null) throw expired();
+  // A hundred rows out of the stored file, with "already in the app" answered from the
+  // gym's members AS THEY ARE NOW. Every person on a page carries their own address and
+  // number, whichever group they came from, so one answer serves all four groups and
+  // nothing has to be looked up by place.
+  const people = picked.people.map((person) => ({ ...person, inApp: read.inApp(person) }));
   return {
     group,
-    total: people.length,
-    people: page,
-    cursor: cursor + page.length < people.length ? cursor + page.length : null,
+    total: picked.total,
+    people,
+    cursor: cursor + people.length < picked.total ? cursor + people.length : null,
   };
-}
-
-/** One group as people, out of a grouping and the rows it points into — the same
- *  merge `stagedPage` asks the database for, written once here for the path where
- *  the answer has just been worked out in this process. */
-function peopleOf(
-  groups: MemberListGroups,
-  file: MemberListStagedFile,
-  group: MemberListRowGroup,
-): MemberListPreviewPerson[] {
-  if (group === "gone") return groups.gone;
-  if (group === "members_leaving") return groups.membersLeaving;
-  const picked = group === "new" ? groups.new : group === "changed" ? groups.changed : groups.unchanged;
-  return picked.map((at) => {
-    const row = file.understanding.rows[at.at];
-    if (row === undefined) raise(`a group names row ${String(at.at)}, which the file does not hold`);
-    return {
-      row: row.row,
-      fullName: row.fullName,
-      email: row.email,
-      phone: row.phone,
-      memberNumber: row.memberNumber,
-      status: row.status,
-      wasStatus: at.wasStatus,
-      inApp: at.inApp,
-    };
-  });
 }

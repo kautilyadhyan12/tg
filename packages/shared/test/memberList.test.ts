@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  isLargeMemberListChange,
+  MEMBER_FILE_MAX_BASE64_CHARS,
+  MEMBER_LIST_UPLOAD_GONE_WORDS,
+  memberListModeSchema,
+  memberListRowsQuerySchema,
+  memberListUploadGoneSchema,
+  memberListUploadRequestSchema,
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_MAX_COLUMNS,
   MEMBER_LIST_SKIP_WORDS,
@@ -191,6 +198,85 @@ describe("the words a warning is shown with", () => {
   it("say what a skipped row was skipped for", () => {
     for (const reason of memberListSkipReasonSchema.options) {
       expect(MEMBER_LIST_SKIP_WORDS[reason].endsWith(".")).toBe(true);
+    }
+  });
+});
+
+describe("what the list's own shapes promise (3a-iii)", () => {
+  it("the base64 ceiling is the file limit encoded, and nothing smaller", () => {
+    // A body is refused on its LENGTH before a byte is decoded, so the ceiling has to
+    // be at least what the biggest allowed file encodes to — one character short and
+    // the largest legal file is refused for being too long.
+    const biggest = Math.ceil(MEMBER_FILE_MAX_BYTES / 3) * 4;
+    expect(MEMBER_FILE_MAX_BASE64_CHARS).toBe(biggest);
+    expect(Buffer.alloc(MEMBER_FILE_MAX_BYTES).toString("base64").length).toBeLessThanOrEqual(MEMBER_FILE_MAX_BASE64_CHARS);
+    // And not so generous that a body no file could fill gets through the schema.
+    expect(Buffer.alloc(MEMBER_FILE_MAX_BYTES + 1024).toString("base64").length).toBeGreaterThan(MEMBER_FILE_MAX_BASE64_CHARS);
+  });
+
+  it.each([
+    ["nothing", undefined, true, undefined],
+    ["the first page", "0", true, 0],
+    ["a page part way in", "500", true, 500],
+    ["the last page a list could have", "9900", true, 9900],
+    ["a number past any list", "100000", false, undefined],
+    ["text", "abc", false, undefined],
+    ["nothing at all", "", false, undefined],
+    ["exponent form", "1e3", false, undefined],
+    ["a negative", "-1", false, undefined],
+    ["a leading zero", "00", false, undefined],
+    ["a decimal", "1.5", false, undefined],
+    ["spaces", " 5 ", false, undefined],
+  ])("the cursor takes %s", (_label, cursor, ok, expected) => {
+    // A query parameter is TEXT and is parsed into a number, never coerced from one
+    // (trap #5): `z.coerce.number()` reads "" as 0 and "1e3" as 1,000, so a screen
+    // asking for nothing would silently be answered the first page.
+    const parsed = memberListRowsQuerySchema.safeParse(cursor === undefined ? { group: "new" } : { group: "new", cursor });
+    expect(parsed.success, String(cursor)).toBe(ok);
+    if (parsed.success) expect(parsed.data.cursor).toBe(expected);
+  });
+
+  it("the rows query takes only what it names", () => {
+    expect(memberListRowsQuerySchema.safeParse({ group: "new", limit: "5" }).success).toBe(false);
+    expect(memberListRowsQuerySchema.safeParse({}).success).toBe(false);
+    expect(memberListRowsQuerySchema.safeParse({ group: "everybody" }).success).toBe(false);
+  });
+
+  it.each([
+    [10, 100, false],
+    [11, 100, true],
+    [10, 50, false],
+    [11, 50, true],
+    [200, 2000, false],
+    [201, 2000, true],
+    [10, 0, false],
+    [11, 0, true],
+    [9, 9, false],
+    [0, 0, false],
+  ])("a change of %i out of %i needs a tick: %s", (changing, of, large) => {
+    // max(10, 10 %), and the edges are the whole rule: a share alone is useless at 50
+    // people and a count alone at 2,000 (§9.8). The same function answers the preview's
+    // numbers and the confirm's refusal, so a screen can never promise what the server
+    // will refuse.
+    expect(isLargeMemberListChange(changing, of)).toBe(large);
+  });
+
+  it("an upload is either the whole list or people to add, and nothing else", () => {
+    expect([...memberListModeSchema.options].sort()).toEqual(["add", "whole_list"]);
+    expect(memberListUploadRequestSchema.safeParse({ contentBase64: "AAAA", mode: "replace" }).success).toBe(false);
+    expect(memberListUploadRequestSchema.safeParse({ contentBase64: "AAAA", mode: "add" }).success).toBe(true);
+    // A body with nothing in it is refused by the shape, before the service is reached.
+    expect(memberListUploadRequestSchema.safeParse({ contentBase64: "", mode: "add" }).success).toBe(false);
+  });
+
+  it("every sentence for an upload that has gone says what to do about it", () => {
+    for (const gone of memberListUploadGoneSchema.options) {
+      const said = MEMBER_LIST_UPLOAD_GONE_WORDS[gone];
+      expect(said.length).toBeGreaterThan(20);
+      expect(said.endsWith(".")).toBe(true);
+      // The server never sees a file's name and never says one (§9.9).
+      expect(said).not.toContain(".csv");
+      expect(said).not.toContain(".xlsx");
     }
   });
 });

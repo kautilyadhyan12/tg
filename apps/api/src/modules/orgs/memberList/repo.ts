@@ -16,16 +16,18 @@
 import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  memberListGroupsSchema,
   memberListMappingSchema,
   memberListModeSchema,
-  memberListPreviewPersonSchema,
+  memberListStoredPersonSchema,
   memberListStagedFileSchema,
   memberListStagedShellSchema,
   memberListUploadStatusSchema,
   memberListUploadSummarySchema,
+  type MemberListGroups,
   type MemberListMapping,
   type MemberListMode,
-  type MemberListPreviewPerson,
+  type MemberListStoredPerson,
   type MemberListRowGroup,
   type MemberListStagedFile,
   type MemberListStagedShell,
@@ -64,6 +66,16 @@ export interface ListState {
    *  mapped them by hand, and it must not have to do it every month. */
   lastMapping: MemberListMapping | null;
   lastHeaderFingerprint: string | null;
+}
+
+/** One of the gym's own app members, and what its list says about them today. */
+export interface MemberAgainstList extends ListMember {
+  /** An entry of this gym matches their verified email, else their stated phone. */
+  onList: boolean;
+  /** That entry's own status word and member number, for showing a leaving member with
+   *  what the list still says about them. Null where no entry matches. */
+  entryStatus: string | null;
+  entryMemberNumber: string | null;
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -366,10 +378,13 @@ export async function stagedShell(sql: SqlOrTx, gymId: string, uploadId: string)
  *  twelve seconds in which the server answered nobody at all.
  *
  *  The grouping was worked out once, when the file was staged (`memberListGroupsSchema`).
- *  For a group of people IN the file, each entry is a place in `rows` plus the two
- *  things the row itself cannot say, and the row is merged with them here — by the
- *  database, so only the hundred rows of this page are ever built. For `gone` and
- *  `membersLeaving`, whom the file does not hold, the entries are already the answer.
+ *  For a group of people IN the file, each entry is a place in `rows` plus the one
+ *  thing the row itself cannot say — what the list said about them before — and the
+ *  row is merged with it here, by the database, so only the hundred rows of this page
+ *  are ever built. For `gone`, whom the file does not hold, the entries are already
+ *  the answer. **Nothing here says whether somebody is in the app**: that is a fact
+ *  about one of the gym's members, never stored, and the service fills it in from the
+ *  members as they are now (review of PR #87, High-1).
  *
  *  `WITH ORDINALITY` numbers the group in its own order from 1, so the cursor is a
  *  plain offset into that order and no row's place depends on how jsonb stores it.
@@ -384,7 +399,7 @@ export async function stagedPage(
   group: MemberListRowGroup,
   cursor: number,
   limit: number,
-): Promise<{ total: number; people: MemberListPreviewPerson[] } | null> {
+): Promise<{ total: number; people: MemberListStoredPerson[] } | null> {
   // The two shapes are read by two statements rather than one with a branch inside
   // it: a CASE over jsonb in the middle of a lateral is the kind of SQL nobody reads
   // twice, and these are two different questions.
@@ -396,7 +411,7 @@ export async function stagedPage(
                COALESCE((
                  SELECT jsonb_agg(
                           (u.rows -> 'understanding' -> 'rows' -> ((g ->> 'at')::int))
-                          || jsonb_build_object('wasStatus', g -> 'wasStatus', 'inApp', g -> 'inApp')
+                          || jsonb_build_object('wasStatus', g -> 'wasStatus')
                           ORDER BY ord)
                  FROM jsonb_array_elements(u.rows -> 'groups' -> ${key}) WITH ORDINALITY AS t(g, ord)
                  WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
@@ -422,10 +437,138 @@ export async function stagedPage(
   // end of the rows is caught by the people below, where the merge yields a null the
   // person shape refuses.
   const page = z
-    .object({ total: z.number().int().min(0), people: z.array(memberListPreviewPersonSchema) })
+    .object({ total: z.number().int().min(0), people: z.array(memberListStoredPersonSchema) })
     .safeParse({ total: row.total, people: row.people });
   if (!page.success) throw new Error(`member-list upload ${uploadId} holds a group that no longer parses`);
   return page.data;
+}
+
+/** THE GROUPING ALONE — which people fell into which group, without the rows they point
+ *  into. Small whatever the file holds: a place and a status word each, and the gym's own
+ *  record of anybody coming off the list. A preview is built from this and `stagedShell`,
+ *  so neither read fetches ten thousand people back into this process. */
+export async function stagedGroups(sql: SqlOrTx, gymId: string, uploadId: string): Promise<MemberListGroups | null> {
+  const rows = await sql<{ groups: unknown }[]>`
+    SELECT rows -> 'groups' AS groups
+    FROM gym_member_list_uploads
+    WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
+  const held = rows[0]?.groups;
+  if (held === undefined || held === null) return null;
+  const parsed = memberListGroupsSchema.safeParse(held);
+  if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds groups that no longer parse`);
+  return parsed.data;
+}
+
+/** HOW THE FILE CAN REACH EACH OF ITS PEOPLE — the emails and the phone numbers of the
+ *  staged rows, in the rows' own order, and nothing else.
+ *
+ *  **IT EXISTS SO THAT A READ CAN ANSWER EVERY QUESTION ABOUT THE GYM'S OWN MEMBERS
+ *  AFRESH WITHOUT READING THE WHOLE FILE** (review of PR #87, High-1). Whether somebody
+ *  is already in the app, how many seats are used, which members would be marked as
+ *  having dropped off — none of those can be stored, because nothing a gym does to its
+ *  LIST moves when a member joins or proves an address. All of them need only these two
+ *  arrays of strings, which the database builds and which cost a fraction of parsing ten
+ *  thousand people back into objects.
+ *
+ *  `jsonb_path_query_array` keeps the rows' order, so index `n` here is the same person
+ *  as place `n` in a stored group. A row with no email answers JSON null and keeps its
+ *  place; dropping the nulls would shift everybody after it onto somebody else. */
+export async function stagedContacts(
+  sql: SqlOrTx,
+  gymId: string,
+  uploadId: string,
+): Promise<{ emails: (string | null)[]; phones: (string | null)[] } | null> {
+  const rows = await sql<{ emails: unknown; phones: unknown }[]>`
+    SELECT jsonb_path_query_array(rows, '$.understanding.rows[*].email') AS emails,
+           jsonb_path_query_array(rows, '$.understanding.rows[*].phone') AS phones
+    FROM gym_member_list_uploads
+    WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const parsed = z
+    .object({ emails: z.array(z.string().nullable()), phones: z.array(z.string().nullable()) })
+    .safeParse({ emails: row.emails, phones: row.phones });
+  if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds rows that no longer parse`);
+  if (parsed.data.emails.length !== parsed.data.phones.length) {
+    throw new Error(`member-list upload ${uploadId} holds ${String(parsed.data.emails.length)} emails and ${String(parsed.data.phones.length)} phones`);
+  }
+  return parsed.data;
+}
+
+/** THE GYM'S OWN APP MEMBERS, AND WHETHER ITS LIST HOLDS THEM — one statement, read
+ *  fresh on every read of a preview.
+ *
+ *  It is `listMembers` plus the one question that used to cost fetching every entry into
+ *  this process: does an entry of this gym match this member? Asked as an EXISTS per
+ *  member, which the list's own `(gym_id, email)` and `(gym_id, phone_e164)` indexes
+ *  answer, and the matched entry's own words come back with it so a leaving member can
+ *  be shown with what the list still says about them.
+ *
+ *  **THE EMAIL IS THE VERIFIED ONE OR NOTHING, and the three conditions are the seat
+ *  rule's own** — live, not complimentary, not staff. `listMembers`' header carries the
+ *  full reasoning for both; this statement is the same rule with one more column, and a
+ *  test drives the two side by side so they cannot drift.
+ *
+ *  A FAMILY SHARING ONE ADDRESS has several entries against it; `ORDER BY e.created_at`
+ *  inside the lateral takes the first, which is what `reconcile` does in this process,
+ *  because the list itself offers nothing to choose between them. */
+export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<MemberAgainstList[]> {
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      stated_phone_e164: string | null;
+      ever_listed: boolean;
+      entry_status: string | null;
+      entry_member_number: string | null;
+      on_list: boolean;
+    }[]
+  >`
+    SELECT m.user_id,
+           u.display_name,
+           v.email,
+           m.stated_phone_e164,
+           (m.last_listed_at IS NOT NULL) AS ever_listed,
+           e.status        AS entry_status,
+           e.member_number AS entry_member_number,
+           (e.id IS NOT NULL) AS on_list
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+               WHEN EXISTS (
+                 SELECT 1 FROM one_time_tokens t
+                 WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
+               THEN u.email::text
+               ELSE NULL
+             END AS email
+    ) v
+    LEFT JOIN LATERAL (
+      SELECT x.id, x.status, x.member_number
+      FROM gym_member_list_entries x
+      WHERE x.gym_id = m.gym_id
+        AND ((v.email IS NOT NULL AND x.email = v.email)
+             OR (m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164))
+      ORDER BY x.created_at, x.id
+      LIMIT 1
+    ) e ON true
+    WHERE m.gym_id = ${gymId}
+      AND m.removed_at IS NULL
+      AND m.complimentary = false
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
+    ORDER BY m.joined_at, m.user_id`;
+  return rows.map((row) => ({
+    userId: row.user_id,
+    fullName: row.display_name,
+    email: row.email,
+    statedPhone: row.stated_phone_e164,
+    everListed: row.ever_listed,
+    onList: row.on_list,
+    entryStatus: row.entry_status,
+    entryMemberNumber: row.entry_member_number,
+  }));
 }
 
 /** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a
