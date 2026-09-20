@@ -92,6 +92,15 @@ export interface ReconciledMember {
  *  member who would be marked as having dropped off it. */
 export interface ReconciledPerson {
   identityKey: string;
+  /** WHERE THIS PERSON SITS IN THE ROWS THIS RULE WAS GIVEN, counting from 0, and
+   *  null for somebody who is not in the file at all.
+   *
+   *  It exists so that a page of names can be cut straight out of the stored file
+   *  instead of working the whole comparison out again (spec 9.9). It is an index
+   *  into `Reconciled.rows` — the rows AFTER duplicates were dropped — and never
+   *  into whatever array the caller happened to hand in, which is why that array
+   *  comes back alongside it. */
+  at: number | null;
   row: number | null;
   fullName: string;
   email: string | null;
@@ -104,6 +113,10 @@ export interface ReconciledPerson {
 }
 
 export interface Reconciled {
+  /** The rows this answer is about, with duplicates dropped — what every `at`
+   *  counts into. Stored beside the groups, so an index can never point at a row
+   *  that was never kept. */
+  rows: MemberListRow[];
   /** In the file and not on the list. */
   new: ReconciledPerson[];
   /** On the list under the same identity, carrying a different status word. */
@@ -264,10 +277,11 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const changed: ReconciledPerson[] = [];
   const unchanged: ReconciledPerson[] = [];
   const kept = new Set<string>();
-  for (const row of rows) {
+  for (const [at, row] of rows.entries()) {
     const entry = entriesByKey.get(row.identityKey);
     const person: ReconciledPerson = {
       identityKey: row.identityKey,
+      at,
       row: row.row,
       fullName: row.fullName,
       email: row.email,
@@ -297,6 +311,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
           .filter((entry) => !kept.has(entry.identityKey))
           .map((entry) => ({
             identityKey: entry.identityKey,
+            at: null,
             row: null,
             fullName: entry.fullName,
             email: entry.email,
@@ -356,6 +371,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
     // written for a case the rule cannot reach.
     membersLeaving.push({
       identityKey: theirEntry.identityKey,
+      at: null,
       row: null,
       fullName: member.fullName,
       email: member.email,
@@ -391,6 +407,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   };
 
   return {
+    rows,
     new: fresh,
     changed,
     unchanged,

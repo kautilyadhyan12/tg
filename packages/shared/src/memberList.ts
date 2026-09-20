@@ -644,7 +644,57 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  our own write today is a document some later migration or hand-run statement
  *  could leave half-shaped, and a preview built on an unparsed document is a
  *  screen showing something false. */
-export const memberListStagedFileSchema = memberListUnderstandingSchema;
+/** WHICH PEOPLE FELL INTO WHICH GROUP, worked out ONCE when the file was staged.
+ *
+ *  **THIS IS WHAT STOPS A PAGE OF NAMES COSTING THE WHOLE FILE.** Without it, showing
+ *  a hundred names meant reading every row back out of the database, checking it
+ *  against every person already on the list, and then throwing all but a hundred away
+ *  — measured at 33 seconds of work, and 12 seconds of the server answering nobody,
+ *  to look through one ten-thousand-person gym. With it, a page is a hundred rows cut
+ *  out of the stored file by the database itself.
+ *
+ *  **TWO SHAPES, because the groups are two different things.** `new`, `changed` and
+ *  `unchanged` are people IN the file, so they are kept as their places in `rows`
+ *  (counting from 0) — a number each, not a second copy of everybody. `gone` and
+ *  `membersLeaving` are people the file does NOT hold — somebody coming off the list,
+ *  and an app member about to be marked as dropped off — so there is nothing to point
+ *  at and they are kept as they will be shown.
+ *
+ *  **IT IS AS FRESH AS THE PREVIEW IT BELONGS TO, AND NO FRESHER.** It was worked out
+ *  against the list at `base_version`; if the list has moved since, the whole preview
+ *  is stale and is worked out again from the rows (9.7's rule, unchanged). So this is
+ *  not a cache that can be wrong — it is the answer, with the version it is the answer
+ *  for stored beside it. */
+/** One person of the FILE in a group: where they sit in `rows`, plus the two things
+ *  about them that the rows themselves cannot say — what the list said about them
+ *  before (so a screen can print "Active → Frozen") and whether they are already in
+ *  the app. Three small values rather than a second copy of the person. */
+const memberListGroupedRowSchema = z
+  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), inApp: z.boolean() })
+  .strict();
+
+export const memberListGroupsSchema = z
+  .object({
+    new: z.array(memberListGroupedRowSchema),
+    changed: z.array(memberListGroupedRowSchema),
+    unchanged: z.array(memberListGroupedRowSchema),
+    gone: z.array(memberListPreviewPersonSchema),
+    membersLeaving: z.array(memberListPreviewPersonSchema),
+  })
+  .strict();
+export type MemberListGroups = z.infer<typeof memberListGroupsSchema>;
+
+/** EVERYTHING THE SERVER UNDERSTOOD OF A STAGED FILE EXCEPT THE ROWS. A preview is
+ *  built from this, and it stays small whatever the file holds — at most a hundred
+ *  columns of three sample cells each, two hundred skipped rows and a few warnings —
+ *  so showing a gym what its file would do never costs reading ten thousand people
+ *  back out of the database. */
+export const memberListStagedShellSchema = memberListUnderstandingSchema.omit({ rows: true });
+export type MemberListStagedShell = z.infer<typeof memberListStagedShellSchema>;
+
+export const memberListStagedFileSchema = z
+  .object({ understanding: memberListUnderstandingSchema, groups: memberListGroupsSchema })
+  .strict();
 export type MemberListStagedFile = z.infer<typeof memberListStagedFileSchema>;
 
 /** THE COUNTS OF AN UPLOAD, kept for the record after its cells have gone
@@ -660,6 +710,12 @@ export const memberListUploadSummarySchema = z
     members: memberListMembersSchema,
     guard: memberListGuardSchema,
     needsMapping: z.boolean(),
+    /** Where the gym stood on seats when the file was read. Counts, like everything
+     *  else here. It is kept so that reading a preview back does not have to fetch
+     *  every member again just to say "42 of 500 seats": the seat rule lives in one
+     *  place (`repo.listMembers`) and a second copy of it in a COUNT would be a
+     *  second answer to "who costs this gym money". */
+    seat: memberListSeatSchema,
   })
   .strict();
 export type MemberListUploadSummary = z.infer<typeof memberListUploadSummarySchema>;

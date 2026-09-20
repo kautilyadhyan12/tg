@@ -33,20 +33,26 @@ import {
   MEMBER_LIST_UPLOAD_GONE_WORDS,
   MEMBER_LIST_UPLOAD_TTL_MINUTES,
   memberFileRefusalWords,
+  memberListStagedShellSchema,
   type MemberFileRefusal,
   type MemberListMapping,
   type MemberListMode,
   type MemberListPreview,
   type MemberListRowGroup,
   type MemberListRowsPage,
+  type MemberListGroups,
+  type MemberListPreviewPerson,
+  type MemberListSeat,
   type MemberListStagedFile,
+  type MemberListStagedShell,
+  type MemberListUnderstanding,
   type MemberListUploadSummary,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { understandMemberFile } from "./parseMemberFile.js";
-import { reconcile, type Reconciled } from "./reconcile.js";
+import { reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
 import * as repo from "./repo.js";
 
 export interface MemberListDeps {
@@ -101,92 +107,141 @@ async function withOneReaderPerGym<T>(deps: MemberListDeps, gymId: string, work:
   }
 }
 
-interface Against {
-  reconciled: Reconciled;
-  seatCap: number | null;
-  liveMembers: number;
-  /** The sha256 of the file the gym last CONFIRMED, so "you have applied this
-   *  file already" is answered from the list's own state and not from a guess. */
+/** WHAT AN UPLOAD WOULD DO, and where the answer came from.
+ *
+ *  **THERE ARE TWO PATHS AND THE FAST ONE IS ALMOST ALWAYS THE RIGHT ONE.** A
+ *  preview is worked out once, when the file is staged, against the list at that
+ *  moment — the version it was measured against is stored on the upload. While the
+ *  list has not moved, that answer is not a cache that might be wrong: it IS the
+ *  answer, and reading it back costs one small query. Only when the list HAS moved
+ *  — a confirm, or somebody typed a person in — is it stale, and then the whole
+ *  comparison is run again from the stored rows, which is the expensive path and
+ *  the rare one. */
+interface Measured {
+  counts: MemberListUploadSummary;
+  seat: MemberListSeat;
   lastFileSha256: string | null;
 }
 
-/** THE THREE SETS, FETCHED ONCE, AND THE RULE RUN OVER THEM. Everything a preview
- *  says about the list comes through here, so the POST that stages an upload and
- *  the GET that reads it back cannot answer differently. */
-async function against(
+/** THE THREE SETS, FETCHED ONCE, AND THE RULE RUN OVER THEM (§9.7). It answers the
+ *  counts, the grouping, AND the rows the rule kept — the three together, because a
+ *  grouping stored beside rows it does not match would name the wrong people. */
+async function measure(
   deps: MemberListDeps,
   gymId: string,
-  file: MemberListStagedFile,
+  understanding: MemberListUnderstanding,
   mode: MemberListMode,
-): Promise<Against> {
+): Promise<{ measured: Measured; groups: MemberListGroups; rows: MemberListUnderstanding["rows"] }> {
   const [state, entries, members, seatCap] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.listEntries(deps.sql, gymId),
     repo.listMembers(deps.sql, gymId),
     orgRepo.gymSeatCap(deps.sql, gymId),
   ]);
+  const reconciled = reconcile({
+    rows: understanding.rows,
+    entries,
+    members,
+    mode,
+    hasList: state !== null,
+  });
+  const counts: MemberListUploadSummary = {
+    file: understanding.counts,
+    list: reconciled.counts,
+    statuses: reconciled.statuses,
+    members: reconciled.members,
+    guard: reconciled.guard,
+    needsMapping: understanding.needsMapping,
+    seat: {
+      cap: seatCap,
+      // The members the rule was handed ARE the gym's live, paid-for members — the
+      // seat rule's own three conditions (`repo.listMembers`). Counting them again
+      // in SQL would be a second answer to one question.
+      liveMembers: members.length,
+      // What the list would BE, not what it is: the number staff are deciding about.
+      // An add keeps everybody already on it; a whole list is the file.
+      listSize:
+        mode === "add"
+          ? reconciled.guard.listSize + reconciled.counts.new
+          : reconciled.counts.new + reconciled.counts.changed + reconciled.counts.unchanged,
+    },
+  };
   return {
-    reconciled: reconcile({ rows: file.rows, entries, members, mode, hasList: state !== null }),
-    seatCap,
-    // The members the rule was handed ARE the gym's live, paid-for members — the
-    // seat rule's own three conditions (`repo.listMembers`). Counting them again
-    // in SQL would be a second answer to one question.
-    liveMembers: members.length,
-    lastFileSha256: state?.lastFileSha256 ?? null,
+    measured: { counts, seat: counts.seat, lastFileSha256: state?.lastFileSha256 ?? null },
+    groups: groupsOf(reconciled),
+    rows: reconciled.rows,
   };
 }
 
-/** THE PREVIEW, ASSEMBLED — everything the file said, everything the list said,
- *  and nothing worked out twice. Written once and called by both routes, which is
- *  what stops the answer drifting between the upload and a second look at it. */
+/** The grouping, as it is stored beside the rows (`memberListGroupsSchema`): a place
+ *  and two derived values for everybody in the file, and the people the file does not
+ *  hold written out as they will be shown. */
+function groupsOf(reconciled: Reconciled): MemberListGroups {
+  const inFile = (people: readonly ReconciledPerson[]) =>
+    people.map((person) => ({
+      // Everybody in these three groups came out of a row, so the index is there.
+      // `?? 0` would quietly put the first person of the file in somebody else's
+      // place, so a missing one is a fault of this module and says so.
+      at: person.at ?? raise(`a person of the file has no place in it: ${person.identityKey}`),
+      wasStatus: person.wasStatus,
+      inApp: person.inApp,
+    }));
+  const shown = (people: readonly ReconciledPerson[]): MemberListPreviewPerson[] =>
+    people.map((person) => ({
+      row: person.row,
+      fullName: person.fullName,
+      email: person.email,
+      phone: person.phone,
+      memberNumber: person.memberNumber,
+      status: person.status,
+      wasStatus: person.wasStatus,
+      inApp: person.inApp,
+    }));
+  return {
+    new: inFile(reconciled.new),
+    changed: inFile(reconciled.changed),
+    unchanged: inFile(reconciled.unchanged),
+    gone: shown(reconciled.gone),
+    membersLeaving: shown(reconciled.membersLeaving),
+  };
+}
+
+function raise(message: string): never {
+  throw new Error(message);
+}
+
+/** THE PREVIEW, ASSEMBLED — the file's small parts and the answer about the list,
+ *  from wherever that answer came. Written once and used by both routes, which is
+ *  what stops them drifting apart. */
 function assemble(input: {
   mode: MemberListMode;
   expiresAt: Date;
   fileSha256: string;
-  file: MemberListStagedFile;
-  against: Against;
+  shell: MemberListStagedShell;
+  measured: Measured;
 }): Omit<MemberListPreview, "uploadId"> {
-  const { reconciled } = input.against;
-  const { file } = input;
+  const { shell, measured } = input;
   return {
     mode: input.mode,
     expiresAt: input.expiresAt.toISOString(),
-    sameAsLastUpload: input.against.lastFileSha256 === input.fileSha256,
-    kind: file.kind,
-    facts: file.facts,
-    sheet: file.sheet,
-    headerRow: file.headerRow,
-    columns: file.columns,
-    mapping: file.mapping,
-    needsMapping: file.needsMapping,
-    file: file.counts,
-    list: reconciled.counts,
-    statuses: reconciled.statuses,
-    members: reconciled.members,
-    skipped: file.skipped,
-    warnings: file.warnings,
-    seat: {
-      cap: input.against.seatCap,
-      liveMembers: input.against.liveMembers,
-      // What the list would BE, not what it is: the number staff are deciding
-      // about. An add keeps everybody already on it; a whole list is the file.
-      listSize:
-        input.mode === "add"
-          ? reconciled.guard.listSize + reconciled.counts.new
-          : reconciled.counts.new + reconciled.counts.changed + reconciled.counts.unchanged,
-    },
-    guard: reconciled.guard,
+    sameAsLastUpload: measured.lastFileSha256 === input.fileSha256,
+    kind: shell.kind,
+    facts: shell.facts,
+    sheet: shell.sheet,
+    headerRow: shell.headerRow,
+    columns: shell.columns,
+    mapping: shell.mapping,
+    needsMapping: shell.needsMapping,
+    file: measured.counts.file,
+    list: measured.counts.list,
+    statuses: measured.counts.statuses,
+    members: measured.counts.members,
+    skipped: shell.skipped,
+    warnings: shell.warnings,
+    seat: measured.seat,
+    guard: measured.counts.guard,
   };
 }
-
-const summaryOf = (preview: Omit<MemberListPreview, "uploadId">): MemberListUploadSummary => ({
-  file: preview.file,
-  list: preview.list,
-  statuses: preview.statuses,
-  members: preview.members,
-  guard: preview.guard,
-  needsMapping: preview.needsMapping,
-});
 
 export interface PreviewInput {
   contentBase64: string;
@@ -242,8 +297,12 @@ export async function previewUpload(
 
   const fileSha256 = createHash("sha256").update(bytes).digest("hex");
   const expiresAt = new Date(deps.now().getTime() + MEMBER_LIST_UPLOAD_TTL_MINUTES * 60_000);
-  const measured = await against(deps, gymId, understood, input.mode);
-  const body = assemble({ mode: input.mode, expiresAt, fileSha256, file: understood, against: measured });
+  // The rule drops any row whose person is on an earlier one, and the grouping
+  // points into what it KEPT — so the rows stored are the rule's own, never the
+  // reader's, or a stored place would name somebody who was never on the list.
+  const { measured, groups, rows } = await measure(deps, gymId, understood, input.mode);
+  const file: MemberListStagedFile = { understanding: { ...understood, rows }, groups };
+  const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured });
 
   const uploadId = await repo.stageUpload(deps.sql, {
     gymId,
@@ -257,12 +316,18 @@ export async function previewUpload(
     baseVersion: state?.version ?? 0,
     // The record is the answer staff read, assembled once: a summary worked out
     // separately would be a second opinion about one file.
-    summary: summaryOf(body),
-    file: understood,
+    summary: measured.counts,
+    file,
     expiresAt,
   });
   return { uploadId, ...body };
 }
+
+/** The file's small parts — everything the server understood of it EXCEPT the rows,
+ *  which is what a preview is built from. The same shape `repo.stagedShell` reads back
+ *  out of the database, written here for the path that has the whole thing in hand. */
+const shellOf = (file: MemberListStagedFile): MemberListStagedShell =>
+  memberListStagedShellSchema.parse(file.understanding);
 
 /** The staged upload of this gym, or the sentence saying why there is none.
  *  Reading a preview is a READ, so it is not held back by the gym's plan (§4.2's
@@ -274,7 +339,7 @@ async function stagedOr409(
   gymId: string,
   uploadId: string,
   limit: () => Promise<boolean>,
-): Promise<(repo.UploadRow & { file: MemberListStagedFile }) | null> {
+): Promise<repo.UploadRow | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   // After the gate, never before it (the file header says why): a stranger's 404
   // and a trainer's 403 must not spend the front desk's own allowance.
@@ -284,7 +349,7 @@ async function stagedOr409(
   // somebody may simply hold, and telling them it exists somewhere else is the
   // whole leak this module is built to prevent.
   if (upload === null) throw new OrgsError(404, "upload_not_found", "That upload could not be found.");
-  if (upload.status !== "staged" || upload.file === null) {
+  if (upload.status !== "staged" || !upload.hasCells) {
     const gone =
       upload.status === "confirmed"
         ? "upload_already_confirmed"
@@ -293,14 +358,27 @@ async function stagedOr409(
           : "upload_expired";
     throw new OrgsError(409, gone, MEMBER_LIST_UPLOAD_GONE_WORDS[gone]);
   }
-  return { ...upload, file: upload.file };
+  return upload;
 }
 
-/** READ A STAGED PREVIEW BACK. It is worked out AGAIN over the list as it stands,
- *  never read out of the stored summary: the summary is the record of what was
- *  first shown, and what staff need on a second look is what the file would do
- *  NOW. Nothing in this half can move the list between the two, and the confirm
- *  that can is refused by its own version check (§9.7). */
+/** Whether the list has moved since this preview was worked out. While it has not,
+ *  the stored answer IS the answer; once it has, everything about the preview has to
+ *  be worked out again (§9.7). */
+async function hasMoved(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<boolean> {
+  const state = await repo.listState(deps.sql, gymId);
+  return (state?.version ?? 0) !== upload.baseVersion;
+}
+
+/** The whole document, and the fault if it has gone between two statements. */
+async function fileOr409(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<MemberListStagedFile> {
+  const file = await repo.stagedFile(deps.sql, gymId, upload.id);
+  if (file === null) {
+    throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
+  }
+  return file;
+}
+
+/** READ A STAGED PREVIEW BACK. */
 export async function readPreview(
   deps: MemberListDeps,
   userId: string,
@@ -310,15 +388,38 @@ export async function readPreview(
 ): Promise<MemberListPreview | null> {
   const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
   if (upload === null) return null;
-  const measured = await against(deps, gymId, upload.file, upload.mode);
+  const moved = await hasMoved(deps, gymId, upload);
+  if (!moved) {
+    // THE FAST PATH, and the one every screen takes: everything but the rows, which
+    // the database drops before the answer crosses to this process.
+    const shell = await repo.stagedShell(deps.sql, gymId, upload.id);
+    if (shell === null) {
+      throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
+    }
+    const state = await repo.listState(deps.sql, gymId);
+    return {
+      uploadId: upload.id,
+      ...assemble({
+        mode: upload.mode,
+        expiresAt: upload.expiresAt,
+        fileSha256: upload.fileSha256,
+        shell,
+        measured: { counts: upload.summary, seat: upload.summary.seat, lastFileSha256: state?.lastFileSha256 ?? null },
+      }),
+    };
+  }
+  // THE LIST HAS MOVED, so the stored answer is about a list that no longer exists
+  // and the whole thing is worked out again from the rows.
+  const file = await fileOr409(deps, gymId, upload);
+  const { measured } = await measure(deps, gymId, file.understanding, upload.mode);
   return {
     uploadId: upload.id,
     ...assemble({
       mode: upload.mode,
       expiresAt: upload.expiresAt,
       fileSha256: upload.fileSha256,
-      file: upload.file,
-      against: measured,
+      shell: shellOf(file),
+      measured,
     }),
   };
 }
@@ -326,8 +427,7 @@ export async function readPreview(
 /** THE NAMES BEHIND ONE NUMBER, one page at a time — the thing that makes a
  *  preview worth having (§9.9: "the names behind every number, before anyone
  *  confirms"). A screen shows counts first and a person's address only when staff
- *  ask for it, which is why this is a route of its own and not part of the
- *  preview. */
+ *  ask for it, which is why this is a route of its own and not part of the preview. */
 export async function readPreviewRows(
   deps: MemberListDeps,
   userId: string,
@@ -339,33 +439,57 @@ export async function readPreviewRows(
 ): Promise<MemberListRowsPage | null> {
   const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
   if (upload === null) return null;
-  const { reconciled } = await against(deps, gymId, upload.file, upload.mode);
-  const people =
-    group === "new"
-      ? reconciled.new
-      : group === "changed"
-        ? reconciled.changed
-        : group === "unchanged"
-          ? reconciled.unchanged
-          : group === "gone"
-            ? reconciled.gone
-            : reconciled.membersLeaving;
+  if (!(await hasMoved(deps, gymId, upload))) {
+    // THE FAST PATH: a hundred rows cut out of the stored file by the database.
+    // Nothing here reads the rest of the file, and nothing re-runs the rule.
+    const page = await repo.stagedPage(deps.sql, gymId, upload.id, group, cursor, MEMBER_LIST_ROWS_PAGE);
+    if (page === null) {
+      throw new OrgsError(409, "upload_expired", MEMBER_LIST_UPLOAD_GONE_WORDS.upload_expired);
+    }
+    return {
+      group,
+      total: page.total,
+      people: page.people,
+      cursor: cursor + page.people.length < page.total ? cursor + page.people.length : null,
+    };
+  }
+  // THE LIST HAS MOVED: the stored grouping is about a list that no longer exists,
+  // so it is worked out again and cut here.
+  const file = await fileOr409(deps, gymId, upload);
+  const { groups } = await measure(deps, gymId, file.understanding, upload.mode);
+  const people = peopleOf(groups, file, group);
   const page = people.slice(cursor, cursor + MEMBER_LIST_ROWS_PAGE);
   return {
     group,
     total: people.length,
-    // The identity key is deliberately NOT sent. It is the list's own handle on a
-    // person and a screen has no use for it; what staff read is who this is.
-    people: page.map((person) => ({
-      row: person.row,
-      fullName: person.fullName,
-      email: person.email,
-      phone: person.phone,
-      memberNumber: person.memberNumber,
-      status: person.status,
-      wasStatus: person.wasStatus,
-      inApp: person.inApp,
-    })),
+    people: page,
     cursor: cursor + page.length < people.length ? cursor + page.length : null,
   };
+}
+
+/** One group as people, out of a grouping and the rows it points into — the same
+ *  merge `stagedPage` asks the database for, written once here for the path where
+ *  the answer has just been worked out in this process. */
+function peopleOf(
+  groups: MemberListGroups,
+  file: MemberListStagedFile,
+  group: MemberListRowGroup,
+): MemberListPreviewPerson[] {
+  if (group === "gone") return groups.gone;
+  if (group === "members_leaving") return groups.membersLeaving;
+  const picked = group === "new" ? groups.new : group === "changed" ? groups.changed : groups.unchanged;
+  return picked.map((at) => {
+    const row = file.understanding.rows[at.at];
+    if (row === undefined) raise(`a group names row ${String(at.at)}, which the file does not hold`);
+    return {
+      row: row.row,
+      fullName: row.fullName,
+      email: row.email,
+      phone: row.phone,
+      memberNumber: row.memberNumber,
+      status: row.status,
+      wasStatus: at.wasStatus,
+      inApp: at.inApp,
+    };
+  });
 }

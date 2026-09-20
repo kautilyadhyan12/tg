@@ -200,6 +200,36 @@ describe("reconcile: what an upload would do to the list", () => {
     });
   }
 
+  it("the places it reports count into the rows IT kept, not the rows it was given", () => {
+    // Understanding a file already drops a row whose person is on an earlier one, so
+    // this can only happen if that ever changes — but the two must not be able to come
+    // apart quietly, because a place that counts into the wrong array names the wrong
+    // person on a screen. The rule hands back the rows its places belong to, and the
+    // upload stores THOSE.
+    const out = reconcile({
+      rows: [row(2, ann, "Active"), row(3, ann, "Frozen"), row(4, bob, "Active")],
+      entries: [],
+      members: [],
+      mode: "whole_list",
+      hasList: true,
+    });
+    expect(out.rows.map((r) => r.row)).toEqual([2, 4]);
+    expect(out.new.map((p) => p.at)).toEqual([0, 1]);
+    for (const person of out.new) {
+      expect(out.rows[person.at ?? -1]?.identityKey).toBe(person.identityKey);
+    }
+    // Nobody outside the file has a place at all.
+    const leaving = reconcile({
+      rows: [],
+      entries: [entry(ann, "Active")],
+      members: [member({ userId: "u1", email: "ann@gym.com" })],
+      mode: "whole_list",
+      hasList: true,
+    });
+    expect(leaving.gone.map((p) => p.at)).toEqual([null]);
+    expect(leaving.membersLeaving.map((p) => p.at)).toEqual([null]);
+  });
+
   // -------------------------------------------------------------------------
   // WHO CAN BE INVITED — the split under `new`
   // -------------------------------------------------------------------------

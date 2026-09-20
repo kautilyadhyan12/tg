@@ -752,6 +752,189 @@ d("member list: upload and preview (real Postgres)", () => {
   );
 
   // =========================================================================
+  // A PAGE OF NAMES DOES NOT COST THE WHOLE FILE (§9.9)
+  // =========================================================================
+
+  it(
+    "a page is cut out of the stored file: it does not read the gym's list again, and it does not re-run the rule",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const org = await makeOrg(owner.cookies, "Paging Gym");
+
+      // A list of three people, confirmed as the second half will confirm one, so the
+      // upload below has something to compare against and lands in `unchanged`.
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Page One", "page1@example.com", "Active"],
+        ["Page Two", "page2@example.com", "Active"],
+        ["Page Three", "page3@example.com", "Active"],
+      ]);
+      const seeded = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      const rows = await sql<{ doc: { understanding: { rows: { fullName: string; email: string; identityKey: string }[] } } }[]>`
+        SELECT rows AS doc FROM gym_member_list_uploads WHERE id = ${seeded.uploadId}`;
+      const people = rows[0]?.doc.understanding.rows ?? [];
+      expect(people).toHaveLength(3);
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      for (const person of people) {
+        await sql`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${person.identityKey}, 'upload')`;
+      }
+
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.list).toMatchObject({ new: 0, changed: 0, unchanged: 3, gone: 0 });
+      const names = async () => {
+        const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=unchanged`, owner.cookies);
+        expect(res.statusCode).toBe(200);
+        return (JSON.parse(res.body) as { page: { total: number; people: { fullName: string }[] } }).page;
+      };
+      expect((await names()).people.map((p) => p.fullName).sort()).toEqual(["Page One", "Page Three", "Page Two"]);
+
+      // **NOW TAKE THE WHOLE LIST AWAY UNDERNEATH IT.** The grouping was worked out
+      // when the file was staged, against the list at that version, and it is stored
+      // beside the rows — so a page still answers the same three people, and reads
+      // nothing of the list to do it. Before this was stored, a page re-ran the whole
+      // comparison: with the entries gone, all three would have moved to `new` and
+      // `unchanged` would have come back empty. That is what this pins.
+      //
+      // It is also the honest statement of the design: a preview is the answer as of
+      // the version it was measured against, and nothing the app itself does changes
+      // the list without moving that version.
+      await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${org.org.id}`;
+      const after = await names();
+      expect(after.total).toBe(3);
+      expect(after.people.map((p) => p.fullName).sort()).toEqual(["Page One", "Page Three", "Page Two"]);
+
+      // And the preview's counts come back from what was stored, not worked out over
+      // a list that is no longer there.
+      const reread = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}`, owner.cookies);
+      expect(reread.statusCode).toBe(200);
+      expect(body(reread).preview.list).toMatchObject({ new: 0, changed: 0, unchanged: 3, gone: 0 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a page of CHANGED people carries what the list said before, so a screen can print Active to Frozen",
+    async () => {
+      const owner = await makeUser("was-owner");
+      const org = await makeOrg(owner.cookies, "Was Status Gym");
+      const before = csv([
+        ["Full Name", "Email", "Status"],
+        ["Was One", "was1@example.com", "Active"],
+      ]);
+      const staged = body(await upload(org.org.id, owner.cookies, { bytes: before })).preview;
+      const rows = await sql<{ doc: { understanding: { rows: { fullName: string; email: string; identityKey: string }[] } } }[]>`
+        SELECT rows AS doc FROM gym_member_list_uploads WHERE id = ${staged.uploadId}`;
+      const person = rows[0]?.doc.understanding.rows[0];
+      if (person === undefined) throw new Error("the staged file holds no rows");
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+        VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${person.identityKey}, 'upload')`;
+
+      // The same person, now Frozen.
+      const after = csv([
+        ["Full Name", "Email", "Status"],
+        ["Was One", "was1@example.com", "Frozen"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: after })).preview;
+      expect(preview.list).toMatchObject({ changed: 1, new: 0, unchanged: 0, gone: 0 });
+
+      // THE PAGE CARRIES BOTH WORDS. The rows in the stored file hold only the new
+      // one; what the list said before is worked out by the rule and stored beside
+      // the place, so a page can print the change without asking the list again.
+      const page = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=changed`, owner.cookies);
+      expect(page.statusCode).toBe(200);
+      const people = (JSON.parse(page.body) as { page: { people: { fullName: string; status: string | null; wasStatus: string | null }[] } }).page.people;
+      expect(people).toEqual([
+        expect.objectContaining({ fullName: "Was One", status: "Frozen", wasStatus: "Active" }),
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "once the gym's list MOVES, the whole answer is worked out again rather than served stale",
+    async () => {
+      const owner = await makeUser("moved-owner");
+      const org = await makeOrg(owner.cookies, "Moved List Gym");
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Moved One", "moved1@example.com", "Active"],
+        ["Moved Two", "moved2@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      // The gym has no list, so both people are new.
+      expect(preview.list).toMatchObject({ new: 2, unchanged: 0 });
+
+      // The list moves: one of them is now on it, and the version says so. This is
+      // what a confirm or a typed-in person does (3a-iii-b and 3a-iv).
+      const rows = await sql<{ doc: { understanding: { rows: { fullName: string; email: string; identityKey: string }[] } } }[]>`
+        SELECT rows AS doc FROM gym_member_list_uploads WHERE id = ${preview.uploadId}`;
+      const first = rows[0]?.doc.understanding.rows[0];
+      if (first === undefined) throw new Error("the staged file holds no rows");
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+        VALUES (${org.org.id}, ${first.fullName}, ${first.email}, 'Active', ${first.identityKey}, 'upload')`;
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 7)`;
+
+      // The stored answer said "2 new". The version has moved, so it is thrown away
+      // and the comparison runs again over the stored rows: one of them is on the list
+      // now and has not changed.
+      const reread = body(await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}`, owner.cookies)).preview;
+      expect(reread.list).toMatchObject({ new: 1, changed: 0, unchanged: 1, gone: 0 });
+
+      // And so does a page of names.
+      const page = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=unchanged`, owner.cookies);
+      expect(page.statusCode).toBe(200);
+      const people = (JSON.parse(page.body) as { page: { total: number; people: { fullName: string }[] } }).page;
+      expect(people.total).toBe(1);
+      expect(people.people[0]?.fullName).toBe(first.fullName);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a page walks the whole of a big group without ever asking for more than a hundred people",
+    async () => {
+      const owner = await makeUser("walk-owner");
+      const org = await makeOrg(owner.cookies, "Walking Gym");
+      // 250 people, so the walk is three pages and the last one is short.
+      const many = csv([
+        ["Full Name", "Email", "Status"],
+        ...Array.from({ length: 250 }, (_, i) => [`Walker ${String(i)}`, `walk${String(i)}@example.com`, "Active"]),
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: many })).preview;
+      expect(preview.list.new).toBe(250);
+
+      const seen: string[] = [];
+      let cursor: number | null = 0;
+      let pages = 0;
+      while (cursor !== null) {
+        const res = await get(
+          `${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new&cursor=${String(cursor)}`,
+          owner.cookies,
+        );
+        expect(res.statusCode).toBe(200);
+        const page = (JSON.parse(res.body) as { page: { total: number; people: { fullName: string }[]; cursor: number | null } }).page;
+        expect(page.total).toBe(250);
+        expect(page.people.length).toBeLessThanOrEqual(100);
+        seen.push(...page.people.map((p) => p.fullName));
+        cursor = page.cursor;
+        pages += 1;
+        if (pages > 5) throw new Error("the cursor is not ending");
+      }
+      // Three pages, everybody once, nobody twice, and in the file's own order.
+      expect(pages).toBe(3);
+      expect(new Set(seen).size).toBe(250);
+      expect(seen[0]).toBe("Walker 0");
+      expect(seen[249]).toBe("Walker 249");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
   // ONE FILE PER GYM AT A TIME (§9.9)
   // =========================================================================
 

@@ -18,12 +18,17 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   memberListMappingSchema,
   memberListModeSchema,
+  memberListPreviewPersonSchema,
   memberListStagedFileSchema,
+  memberListStagedShellSchema,
   memberListUploadStatusSchema,
   memberListUploadSummarySchema,
   type MemberListMapping,
   type MemberListMode,
+  type MemberListPreviewPerson,
+  type MemberListRowGroup,
   type MemberListStagedFile,
+  type MemberListStagedShell,
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
@@ -41,7 +46,6 @@ const storedShapeSchema = z.object({
   fileKind: z.enum(["csv", "xlsx"]),
   mapping: memberListMappingSchema,
   summary: memberListUploadSummarySchema,
-  file: memberListStagedFileSchema.nullable(),
 });
 
 /** Where a gym's list stands, and what its last confirmed upload was. Null for a
@@ -244,9 +248,14 @@ export interface UploadRow {
   mapping: MemberListMapping;
   baseVersion: number;
   summary: MemberListUploadSummary;
-  /** What the server understood of the file, or null once the upload is
-   *  finished with. */
-  file: MemberListStagedFile | null;
+  /** Whether the file's own cells are still held. **The cells themselves are NOT
+   *  read here**, and that is the point: at ten thousand people the document is the
+   *  most expensive thing in this module to fetch and to parse, and neither route
+   *  needs all of it. A page asks the database for its hundred rows
+   *  (`stagedPage`); a preview asks for everything except the rows
+   *  (`stagedShell`); only a preview whose list has MOVED since it was staged pays
+   *  for the whole thing (`stagedFile`). */
+  hasCells: boolean;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -278,13 +287,13 @@ export async function uploadFor(
       mapping: unknown;
       base_version: number;
       summary: unknown;
-      rows: unknown;
+      has_rows: boolean;
       created_at: Date;
       expires_at: Date;
     }[]
   >`
     SELECT id, status, mode, file_kind, file_sha256, file_bytes, header_fingerprint,
-           mapping, base_version, summary, rows, created_at, expires_at
+           mapping, base_version, summary, (rows IS NOT NULL) AS has_rows, created_at, expires_at
     FROM gym_member_list_uploads
     WHERE gym_id = ${gymId} AND id = ${uploadId}`;
   const row = rows[0];
@@ -300,7 +309,6 @@ export async function uploadFor(
     fileKind: row.file_kind,
     mapping: row.mapping,
     summary: row.summary,
-    file: row.rows,
   });
   // A document we wrote that no longer parses is a fault of the server's own, not
   // of whoever asked: loud, and with no cell in the message.
@@ -321,10 +329,109 @@ export async function uploadFor(
     summary: shape.data.summary,
     // An expired upload's cells are answered as gone even before the sweep has
     // emptied the column, so the two agree at every instant.
-    file: stale ? null : shape.data.file,
+    hasCells: !stale && row.has_rows,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
   };
+}
+
+/** EVERYTHING THE SERVER UNDERSTOOD OF THE FILE EXCEPT THE ROWS — the columns with
+ *  their sample cells, the warnings, the skipped rows, the file's own facts and its
+ *  counts. This is what a preview is built from, and it stays small whatever the file
+ *  holds: a hundred columns of three samples each, at most two hundred skipped rows,
+ *  and a handful of warnings.
+ *
+ *  `- 'rows'` is the whole optimisation: the database drops the ten thousand people
+ *  before the answer crosses to this process, so nothing here parses them. */
+export async function stagedShell(sql: SqlOrTx, gymId: string, uploadId: string): Promise<MemberListStagedShell | null> {
+  const rows = await sql<{ shell: unknown }[]>`
+    SELECT (rows -> 'understanding') - 'rows' AS shell
+    FROM gym_member_list_uploads
+    WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
+  const held = rows[0]?.shell;
+  if (held === undefined || held === null) return null;
+  const parsed = memberListStagedShellSchema.safeParse(held);
+  if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds a file document that no longer parses`);
+  return parsed.data;
+}
+
+/** ONE PAGE OF A GROUP, CUT OUT BY THE DATABASE.
+ *
+ *  **NOTHING HERE READS THE WHOLE FILE, AND THAT IS THE WHOLE REASON THIS FUNCTION
+ *  EXISTS.** A page used to cost a fetch of every row, a parse of every row, a fetch
+ *  of every person already on the list and a full re-run of the comparison rule — to
+ *  show a hundred names. Measured before the change: a page of a ten-thousand-person
+ *  gym took 242-414 ms and stalled this process for up to 121 ms, the same whichever
+ *  page it was, so looking through one gym's list was 33 seconds of work and about
+ *  twelve seconds in which the server answered nobody at all.
+ *
+ *  The grouping was worked out once, when the file was staged (`memberListGroupsSchema`).
+ *  For a group of people IN the file, each entry is a place in `rows` plus the two
+ *  things the row itself cannot say, and the row is merged with them here — by the
+ *  database, so only the hundred rows of this page are ever built. For `gone` and
+ *  `membersLeaving`, whom the file does not hold, the entries are already the answer.
+ *
+ *  `WITH ORDINALITY` numbers the group in its own order from 1, so the cursor is a
+ *  plain offset into that order and no row's place depends on how jsonb stores it.
+ *
+ *  Both bounds are whole numbers worked out HERE and cast in the statement: Postgres
+ *  cannot add two parameters it has no type for (`operator is not unique: unknown +
+ *  unknown`), and arithmetic on a page's edge belongs where the numbers already are. */
+export async function stagedPage(
+  sql: SqlOrTx,
+  gymId: string,
+  uploadId: string,
+  group: MemberListRowGroup,
+  cursor: number,
+  limit: number,
+): Promise<{ total: number; people: MemberListPreviewPerson[] } | null> {
+  // The two shapes are read by two statements rather than one with a branch inside
+  // it: a CASE over jsonb in the middle of a lateral is the kind of SQL nobody reads
+  // twice, and these are two different questions.
+  const inTheFile = group === "new" || group === "changed" || group === "unchanged";
+  const key = group === "members_leaving" ? "membersLeaving" : group;
+  const rows = inTheFile
+    ? await sql<{ total: number; people: unknown }[]>`
+        SELECT jsonb_array_length(u.rows -> 'groups' -> ${key}) AS total,
+               COALESCE((
+                 SELECT jsonb_agg(
+                          (u.rows -> 'understanding' -> 'rows' -> ((g ->> 'at')::int))
+                          || jsonb_build_object('wasStatus', g -> 'wasStatus', 'inApp', g -> 'inApp')
+                          ORDER BY ord)
+                 FROM jsonb_array_elements(u.rows -> 'groups' -> ${key}) WITH ORDINALITY AS t(g, ord)
+                 WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
+               ), '[]'::jsonb) AS people
+        FROM gym_member_list_uploads u
+        WHERE u.gym_id = ${gymId} AND u.id = ${uploadId} AND u.rows IS NOT NULL`
+    : await sql<{ total: number; people: unknown }[]>`
+        SELECT jsonb_array_length(u.rows -> 'groups' -> ${key}) AS total,
+               COALESCE((
+                 SELECT jsonb_agg(g ORDER BY ord)
+                 FROM jsonb_array_elements(u.rows -> 'groups' -> ${key}) WITH ORDINALITY AS t(g, ord)
+                 WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
+               ), '[]'::jsonb) AS people
+        FROM gym_member_list_uploads u
+        WHERE u.gym_id = ${gymId} AND u.id = ${uploadId} AND u.rows IS NOT NULL`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const people = z.array(memberListPreviewPersonSchema).safeParse(row.people);
+  if (!people.success) throw new Error(`member-list upload ${uploadId} holds a group that no longer parses`);
+  return { total: row.total, people: people.data };
+}
+
+/** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a
+ *  preview whose gym has changed its list since the file was staged, which makes the
+ *  stored grouping stale and the comparison worth running again (§9.7). Rare by
+ *  construction: nothing but a confirm or a typed-in person moves the version. */
+export async function stagedFile(sql: SqlOrTx, gymId: string, uploadId: string): Promise<MemberListStagedFile | null> {
+  const rows = await sql<{ rows: unknown }[]>`
+    SELECT rows FROM gym_member_list_uploads
+    WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
+  const held = rows[0]?.rows;
+  if (held === undefined || held === null) return null;
+  const parsed = memberListStagedFileSchema.safeParse(held);
+  if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds cells that no longer parse`);
+  return parsed.data;
 }
 
 /** THE HOURLY HOUSEKEEPING (§9.6, `orgs.member_list_expiry`): a staged upload
