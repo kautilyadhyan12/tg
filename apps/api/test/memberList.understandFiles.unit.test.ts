@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileRefusalWords, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
-import { understandMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
+import { memberFilesOpen, understandMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
 import { understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
@@ -214,9 +214,13 @@ describe("many gyms, each uploading its own file", () => {
     expect(bravoAlone).toHaveLength(5);
     for (const person of a1) expect(person).not.toContain("Bravo");
     for (const person of b1) expect(person).not.toContain("Alpha");
-  });
+    // Six readers are started here, each its own thread: CI's two cores take
+    // seconds over what this machine does in one (measured on CI, 2026-09-20).
+  }, 30_000);
 
   it("a third gym at the very same moment is asked to wait, and nobody's file is harmed", async () => {
+    // No file left open by the test above, or the count below means nothing.
+    expect(memberFilesOpen()).toBe(0);
     const files = [fileFor("Charlie", 2), fileFor("Delta", 2), fileFor("Echo", 2)];
     const answers = await Promise.all(files.map(async (bytes) => understandMemberFile(bytes, job)));
     const read = answers.flatMap((answer) => (answer.ok ? [answer] : []));
@@ -226,7 +230,7 @@ describe("many gyms, each uploading its own file", () => {
     for (const answer of read) expect(answer.counts.kept).toBe(2);
     // The one asked to wait is told so in words, and nothing of it was read.
     for (const refusal of waiting) expect(memberFileRefusalWords(refusal)).toContain("Try again");
-  });
+  }, 30_000);
 });
 
 describe("a gym with no country set", () => {
