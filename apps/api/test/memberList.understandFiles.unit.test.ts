@@ -6,7 +6,7 @@
 // beside it, run over files nobody here typed.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
+import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileRefusalWords, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
 import { understandMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
@@ -179,6 +179,53 @@ describe("through the real worker, which is how the route reads a file", () => {
     const bytes = fs.readFileSync(new URL("excel/book.xlsx", FIXTURES));
     const result = await understandMemberFile(bytes, job, { timeoutMs: 1 });
     expect(result).toEqual({ ok: false, refusal: { code: "parse_timeout" } });
+  });
+});
+
+describe("many gyms, each uploading its own file", () => {
+  // The question a gym owner asks: if another gym uploads at the same moment,
+  // can their people end up on my list? Each file is read in a worker thread of
+  // its own, with its own memory, and nothing in this module is shared between
+  // two reads — but that is a claim, so it is checked by running them together.
+  const fileFor = (gym: string, people: number): Buffer => {
+    const rows = ["Full Name,Email,Mobile"];
+    for (let i = 1; i <= people; i++) rows.push(`${gym} Member ${String(i)},member${String(i)}@${gym.toLowerCase()}.example.com,98765432${String(10 + i)}`);
+    return Buffer.from(`${rows.join("\r\n")}\r\n`, "utf8");
+  };
+  const job = { country: "IN", mapping: null, remembered: null };
+  const peopleIn = async (bytes: Buffer): Promise<string[]> => {
+    const found = await understandMemberFile(bytes, job);
+    if (!found.ok) throw new Error(`refused: ${found.refusal.code}`);
+    return found.rows.map((row) => `${row.fullName} ${row.email ?? "-"}`);
+  };
+
+  it("each gets its own file's people back, never another gym's", async () => {
+    const alpha = fileFor("Alpha", 3);
+    const bravo = fileFor("Bravo", 5);
+    const [alphaAlone, bravoAlone] = [await peopleIn(alpha), await peopleIn(bravo)];
+    // Now both at the same moment, in both orders.
+    const [a1, b1] = await Promise.all([peopleIn(alpha), peopleIn(bravo)]);
+    const [b2, a2] = await Promise.all([peopleIn(bravo), peopleIn(alpha)]);
+    expect(a1).toEqual(alphaAlone);
+    expect(a2).toEqual(alphaAlone);
+    expect(b1).toEqual(bravoAlone);
+    expect(b2).toEqual(bravoAlone);
+    expect(alphaAlone).toHaveLength(3);
+    expect(bravoAlone).toHaveLength(5);
+    for (const person of a1) expect(person).not.toContain("Bravo");
+    for (const person of b1) expect(person).not.toContain("Alpha");
+  });
+
+  it("a third gym at the very same moment is asked to wait, and nobody's file is harmed", async () => {
+    const files = [fileFor("Charlie", 2), fileFor("Delta", 2), fileFor("Echo", 2)];
+    const answers = await Promise.all(files.map(async (bytes) => understandMemberFile(bytes, job)));
+    const read = answers.flatMap((answer) => (answer.ok ? [answer] : []));
+    const waiting = answers.flatMap((answer) => (!answer.ok && answer.refusal.code === "busy" ? [answer.refusal] : []));
+    expect(read.length + waiting.length).toBe(3);
+    expect(waiting.length).toBeLessThanOrEqual(1);
+    for (const answer of read) expect(answer.counts.kept).toBe(2);
+    // The one asked to wait is told so in words, and nothing of it was read.
+    for (const refusal of waiting) expect(memberFileRefusalWords(refusal)).toContain("Try again");
   });
 });
 
