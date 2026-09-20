@@ -214,11 +214,25 @@ of the rest of the diff. If nothing Critical/High is open, say so in one line: t
 round ends there.
 ```
 
-**The two extra passes, for a card that touches sign-in, money, other people's data,
-uploads, or anything that parses an outside reply or sends data out** (Kd,
-2026-09-20). They are ROUND ONE's siblings, not its replacement: each goes in a FRESH
-chat of its own, after round one has closed, and its findings are fixed the same way.
-A card outside that list gets neither.
+**The two extra passes, for a FEATURE that touches sign-in, money, other people's
+data, uploads, or anything that parses an outside reply or sends data out** (Kd,
+2026-09-20; moved from the card to the FEATURE on 2026-09-21, the chat's call on Kd's
+question). Each goes in a FRESH chat of its own, never two in one (Kd, 2026-09-21),
+and their findings are fixed the way round one's are.
+
+**They run ONCE, over the whole feature's diff, when its last card is built and BEFORE
+anybody uses it** — not after every card. A feature is a roadmap line's family (3a-i to
+3a-iv is one feature, not four), and the gate is USE, not merge: a card merges on round
+one alone, because nothing on `master` is in front of a real person before launch. Two
+reasons it is safe and better, not merely cheaper. Round one already carries a security
+pass of its own on every card (§6's prompt asks for it), so this is depth, not first
+cover. And half a feature cannot be attacked properly: a data-integrity reviewer has
+almost nothing to bite on in a card that deliberately writes nothing, while the card
+that writes is reviewed without the one that stages. **If a card WILL be used before
+its feature is finished** — Kd or a real gym touching its screen, or anything that sends
+a real email — both passes run before that use, not after it.
+
+A feature outside that list gets neither.
 
 ```
 Act as a hostile security reviewer. Read CLAUDE.md §4 and RULINGS.md. Do not modify
