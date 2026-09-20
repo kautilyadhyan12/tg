@@ -905,6 +905,101 @@ d("member list: upload and preview (real Postgres)", () => {
   );
 
   it(
+    "every group can be paged, including the two the file does not hold, and each page's total is the number the preview showed",
+    async () => {
+      const owner = await makeUser("groups-owner");
+      const member = await makeUser("groups-member");
+      const org = await makeOrg(owner.cookies, "Every Group Gym");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      await verify(member.email);
+
+      // Last month: three people, one of them this gym's own app member.
+      const before = csv([
+        ["Full Name", "Email", "Status"],
+        ["Group Stay", "stay@example.com", "Active"],
+        ["Group Change", "change@example.com", "Active"],
+        ["Group Member", member.email, "Active"],
+      ]);
+      const seeded = body(await upload(org.org.id, owner.cookies, { bytes: before })).preview;
+      const stored = await sql<{ doc: { understanding: { rows: { fullName: string; email: string; identityKey: string }[] } } }[]>`
+        SELECT rows AS doc FROM gym_member_list_uploads WHERE id = ${seeded.uploadId}`;
+      const people = stored[0]?.doc.understanding.rows ?? [];
+      expect(people).toHaveLength(3);
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      for (const person of people) {
+        await sql`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${person.identityKey}, 'upload')`;
+      }
+      await sql`UPDATE gym_members SET last_listed_at = now() WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+
+      // This month: one unchanged, one changed, one new — and the gym's own app member
+      // is MISSING, so they are the person staff most need to see before confirming.
+      const now = csv([
+        ["Full Name", "Email", "Status"],
+        ["Group Stay", "stay@example.com", "Active"],
+        ["Group Change", "change@example.com", "Frozen"],
+        ["Group New", "new@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: now })).preview;
+      expect(preview.list).toMatchObject({ new: 1, changed: 1, unchanged: 1, gone: 1 });
+      expect(preview.members).toEqual({ leaving: 1, listedNow: 1 });
+
+      const page = async (group: string) => {
+        const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=${group}`, owner.cookies);
+        expect(res.statusCode, group).toBe(200);
+        return (JSON.parse(res.body) as {
+          page: { group: string; total: number; people: { fullName: string; wasStatus: string | null; inApp: boolean }[] };
+        }).page;
+      };
+
+      // EVERY GROUP, INCLUDING THE TWO WHOSE PEOPLE ARE NOT IN THE FILE. `gone` is
+      // somebody coming off the list and `members_leaving` is an app member about to be
+      // marked as dropped off — neither is a row of the file, so neither is read the way
+      // the other three are, and `members_leaving` is the one group whose name on the
+      // wire is not the name it is stored under.
+      expect((await page("unchanged")).people.map((p) => p.fullName)).toEqual(["Group Stay"]);
+      expect((await page("changed")).people).toEqual([
+        expect.objectContaining({ fullName: "Group Change", wasStatus: "Active" }),
+      ]);
+      expect((await page("new")).people.map((p) => p.fullName)).toEqual(["Group New"]);
+      expect((await page("gone")).people).toEqual([
+        expect.objectContaining({ fullName: "Group Member", wasStatus: "Active", inApp: true }),
+      ]);
+      const leaving = await page("members_leaving");
+      expect(leaving.total).toBe(1);
+      // Their name is the app's own, not the file's — the file is exactly where they
+      // are missing from — and what the list still says about them is carried too.
+      expect(leaving.people).toEqual([
+        expect.objectContaining({ wasStatus: "Active", inApp: true, row: null }),
+      ]);
+
+      // EVERY PAGE'S TOTAL IS THE NUMBER THE PREVIEW SHOWED. The counts and the names
+      // are two views of one answer, worked out once and stored together; a screen
+      // prints the first and pages the second, and they must never disagree.
+      expect({
+        new: (await page("new")).total,
+        changed: (await page("changed")).total,
+        unchanged: (await page("unchanged")).total,
+        gone: (await page("gone")).total,
+        leaving: (await page("members_leaving")).total,
+      }).toEqual({
+        new: preview.list.new,
+        changed: preview.list.changed,
+        unchanged: preview.list.unchanged,
+        gone: preview.list.gone,
+        leaving: preview.members.leaving,
+      });
+
+      // And the list's own handle on a person never leaves the server: a screen has no
+      // use for it, and it is the one field that would let two gyms' pages be compared.
+      const raw = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
+      expect(raw.body).not.toContain("identityKey");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a page walks the whole of a big group without ever asking for more than a hundred people",
     async () => {
       const owner = await makeUser("walk-owner");

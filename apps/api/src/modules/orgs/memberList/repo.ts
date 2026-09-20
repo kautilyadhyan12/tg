@@ -414,9 +414,18 @@ export async function stagedPage(
         WHERE u.gym_id = ${gymId} AND u.id = ${uploadId} AND u.rows IS NOT NULL`;
   const row = rows[0];
   if (row === undefined) return null;
-  const people = z.array(memberListPreviewPersonSchema).safeParse(row.people);
-  if (!people.success) throw new Error(`member-list upload ${uploadId} holds a group that no longer parses`);
-  return { total: row.total, people: people.data };
+  // THE TOTAL IS PARSED TOO, and not because a document we wrote is expected to be
+  // wrong: `jsonb_array_length` of a key that is not there answers SQL NULL, not an
+  // error, so a document missing a group — one written before this shape existed, or
+  // by a hand-run statement — would send `total: null` to a screen and break the
+  // reply's own contract with nothing anywhere saying so. A place pointing past the
+  // end of the rows is caught by the people below, where the merge yields a null the
+  // person shape refuses.
+  const page = z
+    .object({ total: z.number().int().min(0), people: z.array(memberListPreviewPersonSchema) })
+    .safeParse({ total: row.total, people: row.people });
+  if (!page.success) throw new Error(`member-list upload ${uploadId} holds a group that no longer parses`);
+  return page.data;
 }
 
 /** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a
