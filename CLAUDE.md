@@ -145,6 +145,18 @@ and the word list is the backstop, never the mechanism.
 
 **Dependencies.** A new dependency needs Kd's yes in the plan, with the reason.
 
+**Cost at full size (Kd, 2026-09-20, after the member-list preview).** A card that
+reads or writes a list of PEOPLE is not done until it says what it costs at the
+BIGGEST size the app allows, measured with a command like every other number here —
+and the number that matters is not how long it takes, it is **how long the server
+answers nobody**, because that time is taken from every other gym and every member
+using the app at that moment. Measure it for each thing staff will actually do: the
+upload, the preview, one page of names, a sweep. 3a-iii-a shipped with a page of a
+hundred names blocking the whole server for 121 ms — a hundred pages for one gym,
+twelve seconds of answering nobody — and no rule asked, so nothing found it until Kd
+did. The launch shape to measure against is 20 gyms of 200 (RULINGS 2026-09-20), and a
+number that is comfortable there is still stated, not assumed.
+
 **Numbers.** Any count, size, threshold or "the file contains X" claim comes from a
 command run in this session, with its output shown. Otherwise write "unverified".
 
@@ -200,6 +212,35 @@ Re-check, in this chat: cover only the fixes in <commit>. For each of your findi
 say closed or still open, with file:line. Report anything a fix broke. No new sweep
 of the rest of the diff. If nothing Critical/High is open, say so in one line: the
 round ends there.
+```
+
+**The two extra passes, for a card that touches sign-in, money, other people's data,
+uploads, or anything that parses an outside reply or sends data out** (Kd,
+2026-09-20). They are ROUND ONE's siblings, not its replacement: each goes in a FRESH
+chat of its own, after round one has closed, and its findings are fixed the same way.
+A card outside that list gets neither.
+
+```
+Act as a hostile security reviewer. Read CLAUDE.md §4 and RULINGS.md. Do not modify
+anything. Attack the diff of <commits or branch>: authentication bypass, authorisation
+bypass and IDOR (one gym reading another's people), injection, information leakage,
+sensitive data in logs, error replies or Sentry, insecure file handling, replay,
+broken or bypassable rate limiting, enumeration, and denial of service. RUN it — the
+real route on local Postgres and the real Redis, several gyms and several staff at ONE
+fixed address. For every finding give the exact code path (file:line), the attack a
+real person could carry out, its severity, and a one-line fix. Do not call the code
+safe because the tests pass.
+```
+
+```
+Act as a data-integrity reviewer. Read CLAUDE.md §4 and RULINGS.md. Do not modify
+anything. Assume two staff, or two requests, do the same thing at the same instant,
+and that any request can arrive twice. In the diff of <commits or branch> find every
+operation that can produce a duplicate row, a lost update, an inconsistent state, a
+duplicate job, a duplicate email, or a half-finished change — and every check-then-act
+that two requests can pass together. Say where a transaction, a unique constraint, a
+lock, an idempotency key or one atomic statement is required instead. RUN the races
+you name. file:line and a one-line fix for each.
 ```
 
 ## 7. Layout
