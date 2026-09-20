@@ -215,8 +215,9 @@ const partText = (part: Buffer): string => new TextDecoder("utf-8").decode(part)
 const DECLARATION = /<!(?:doctype|entity)/i;
 const SHEET_DATA = /<(?:[\w.-]+:)?sheetData\b/;
 /** Never scans past the next `<` or `>`: with `[^>]*?` every `<row` of a part
- *  with no `>` scanned to its end, 409 ms at 64 KiB and four times as long for
- *  each doubling (review of PR #85). */
+ *  with no `>` scanned to its end, growing with the square of the size — 409 ms
+ *  at 64 KiB measured here on the pattern alone, 759 ms by the review of PR #85,
+ *  which found it, and 4.0 s at 128 KiB. */
 const HIDDEN_ROW_OR_COLUMN = /<(?:[\w.-]+:)?(?:row|col)\b[^<>]*?\shidden\s*=\s*["'](?:1|true)["']/;
 
 export const hasHiddenRowsOrColumns = (text: string): boolean => SHEET_DATA.test(text) && HIDDEN_ROW_OR_COLUMN.test(text);

@@ -689,7 +689,8 @@ browser's type are not sent and not used.
    `hidden="1"` or `hidden="true"` on a `<row` or `<col` → warning
    `hidden_rows_or_columns` (a filtered view is stored as hidden rows, so this also
    catches "exported a filter"); the pattern never scans past the next `<` or `>`
-   (with `[^>]*?` it took 409 ms at 64 KiB, growing with the square of the size).
+   (with `[^>]*?` it grew with the square of the size: at 64 KiB 409 ms measured in
+   the building chat on the pattern alone and 759 ms in the review that found it).
 6. Write a fresh archive of only those parts: stored, true sizes and CRCs, no data
    descriptors, no extra fields, no comment. ONLY this archive reaches the package —
    its sequential reader and our central-directory reader can then never disagree.
