@@ -886,6 +886,122 @@ lower-case letters — `H‚lŠne` is a DOS file read as 1252, `Šimun` is a rea
 understood (counts, mapping, warnings; row text only with `--show`). 3a-ii has no
 screen; this is how a real export is tried before one exists.
 
+**Out of 3a-ii:** `understandMemberFile(bytes, { country, mapping, remembered })` →
+`{ ok: true, kind, facts, sheet: { index, name }, headerRow, headerFingerprint,
+columns: [{ index, header, samples, guess, confidence }], mapping, needsMapping, rows,
+counts: { dataRows, kept, noContact, duplicates, withEmail, withPhone,
+withMemberNumber, withStatus }, statuses: [{ label, count }], skipped, warnings }` or
+`{ ok: false, refusal }`. **The understanding runs IN THE WORKER**, straight after the
+file is opened, so what crosses into the request's own thread is the rows a list keeps
+and never the file's cells. Measured 2026-09-20 on Node 22.23.2 (production's), the
+biggest list allowed (10,000 × 30, 3.15 MiB CSV): understanding it costs 559–634 ms —
+which the API would otherwise answer nothing else during — so in the worker the whole
+read is 1,326–1,472 ms with the request thread's longest stall 11–15 ms and its RSS
+97 → 136 MB (3a-i alone: 19–24 ms). The route (3a-iii) calls this, never
+`parseMemberFile`, which stays as 3a-i left it.
+
+**Refusals this step raises** (from 3a-i's cut, which marks a sheet rather than
+refusing it): `too_many_columns` (the sheet is wider than 100), `too_many_rows` (cut
+short, or more than 10,000 people under the headings), `no_rows` (headings and nothing
+else), and — new, 2026-09-20 — `mapped_column_not_status` with the column staff chose,
+for a hand mapping of a column holding more than 20 different words.
+
+**AMENDED 2026-09-20, found building 3a-ii** (each one a table test):
+- The heading fingerprint is taken from the heading ROW itself, not from the columns as
+  read, so a remembered mapping is tried BEFORE anything is guessed — including the
+  sheet. A gym whose headings we cannot read at all is exactly the gym that mapped them
+  by hand, and it must not do it again every month.
+- With no country set on the gym, a phone column is found by SHAPE, not by parsing.
+  Otherwise a gym whose numbers are all local loses the column altogether and is never
+  told to set its country. What is READ is unchanged: only a number written with its
+  own country code, the rest counted `phones_need_country`.
+- A joining date is a possible phone number to the package — measured, `2024/01/05`
+  reads as a valid German landline — so a cell shaped like a date or a time is never a
+  phone value. Without this, a headerless file's date column becomes its phone column.
+- `question_marks_in_names` counts a `?` anywhere in a name, not one beside a letter:
+  Excel's ANSI export wrote `अमित` as `????`, with no letter left beside the marks.
+- A cell written `Ann Lee <ann@gym.com>` counts as an email value, as the cleaner reads
+  it; a note that happens to hold an address does not (it has spaces around it).
+- At most 5 columns a field (`MEMBER_LIST_MOST_COLUMNS_PER_FIELD`). Every column after
+  the fifth is another number to read on every one of 10,000 rows, and no gym's export
+  has six email columns.
+- The phone package is never asked about a cell that could not hold a number (7 to 24
+  digits, at most 6 letters, no date or time): it costs about 0.04 ms a call, and a
+  100-column file would otherwise spend most of a second on cells that are names.
+- The understanding carries the file's own facts (`kind`, `facts.encoding`,
+  `facts.delimiter`), so the preview can show how the file was read without the grid.
+- A member number longer than 64 characters is dropped whole, never cut: half a member
+  number is another member's number.
+
+**AMENDED 2026-09-20 again, by PR #86's review round one** (it ran the reader over every
+country's metadata and over files of its own):
+- **There is ONE shape a phone number may be kept in** — `MEMBER_LIST_PHONE_E164`,
+  E.164's own 7 to 15 digits — and the reader clamps to it. The package's "possible" is
+  wider: measured, a German number with a long direct dial reads as 16 digits, one
+  written for Gibraltar as 19, and one whose leading zero was stripped as 6. Such a cell
+  is not stored; the row falls through to its next phone column and keeps its email.
+  Before this, one cell of row 4,000 made the whole file fail its own contract in the
+  request's thread — a 500 for 3a-iii and nine thousand good members lost.
+- `too_many_rows` is drawn by two kinds of file — more than 10,000 people, and a sheet
+  cut short by its blank rows (the grid counts blanks against its row cap, so a list of
+  5,011 people with a blank row after each one trips it). Its sentence is now true of
+  both: "This sheet is longer than we can read. A member list may hold 10,000 people:
+  take out any blank rows between them, or split the file…".
+- Every column carries `headerSays`, what its heading CLAIMED before its cells were
+  looked at. A column with `headerSays` and no `guess` is one the server disbelieved —
+  an "Email" column whose cells say "N/A", or a heading that names somebody who is not
+  the member — which is the one thing staff can act on.
+- A vertical tab or a form feed inside a cell is a line break, not a character to drop:
+  two numbers written one above the other are two numbers, never one glued number.
+
+**AMENDED 2026-09-20, third time: whose email gets invited** (Kd asked, after the round
+closed, whether anything here is still wrong, "because this is the most critical feature
+of the application"). Two real faults were found by running realistic headings through
+the reader, and both would have sent an invitation to somebody who is not a member —
+which, because the gym's invite is its yes (§9.2 rule 11), would have joined that person
+to the gym:
+- **`Nominee Email` outranked `Email`** and became the column every member was invited
+  at, because the ranking read the WORD matched and not the heading. Now a heading that
+  IS its word beats one that merely HOLDS it, whatever the other word is — which holds
+  even for a qualifier no list has ever heard of (`Zzyzx Email` ranks after `Email`).
+- **25 of 37 headings naming somebody who is not the member read as the member's own**:
+  nominee, father, mother, husband, wife, son, daughter, brother, sister, relative,
+  family member, friend, guarantor, sponsor, reference, witness, attendant, caretaker,
+  carer, doctor, physician, physio, therapist, agent, broker, manager, contact person,
+  corporate, kin. All are on the never-list now; 0 of 37 are read as the member's. A
+  column refused this way is still shown with `headerSays`, so a gym that really does
+  keep members under one of those words maps it by hand.
+
+**AMENDED 2026-09-20, fourth time: a card number we must not keep.** Gym software
+calls a member's door fob a "card number", which is why that heading reads as a
+member number — but an export whose "Card Number" is a BANK card must not leave its
+digits here. A value shaped like a payment card (13–19 digits) AND carrying a card's
+check digit (Luhn) is dropped: the person keeps their name, email and phone, and the
+list holds nothing worth stealing. Measured: our own 16-digit fixture member number
+is not card-shaped and survives. Heading words added the same day from 37 real
+headings — `tel`, `contact no`, `membership no`, `client number`, `customer number`;
+`account number` and other bank-sounding words are deliberately NOT read.
+
+**Several gyms at once (measured 2026-09-20, Node 22.23.2)**: the biggest file allowed
+uploaded by 1, 2, 3 and 5 gyms at the same moment — two are read, the rest answer
+`busy` ("Other files are being read right now. Try again in a minute."), nothing
+crosses between gyms, the request thread stalls at most 54 ms and the process stays
+at 123–134 MB. The cap is what keeps the server standing; more gyms means more
+capacity, not a bigger cap on one box.
+
+**Known limit, written down rather than patched**: where the ONLY address column in a
+file belongs to somebody else under a word no list has ("Buddy Email"), it is read as
+the member's. No list can be complete. What closes it is the preview: nobody is
+emailed until staff press Invite (§9.2 rule 10), and the column's heading, its
+`headerSays` and three of its own cells are on that screen. Item 5 (§9.14) is
+accepted only if staff can see WHOSE address is about to be invited.
+**ENGLISH ONLY (Kd, RULINGS 2026-09-20).** The heading words are English; the German,
+French, Spanish, Portuguese, Dutch and Italian words 3a-ii shipped with are struck. A
+file whose headings are in another language is not refused and nothing of it is guessed
+wrong — its columns come back unmapped for staff to map. This is about the file's
+HEADINGS, not its people: a member called José Álvarez or Zoë Müller is read, matched
+and invited like anyone else, and every country's phone numbers are still read.
+
 ### 9.6 Data (3a-iii's one migration; forward-only)
 
 ```
@@ -1026,6 +1142,11 @@ The builder measures a 10,000-row, 30-column file (time, peak memory) and pastes
 `.xlsx` 1.68 MiB (its XML parts 15.07 MiB inflated) — 1,403–1,589 ms, the whole
 process's peak RSS 133 → 235 MB; CSV UTF-8 3.10 MiB — 608–908 ms, 134 → 171 MB. The
 request thread's longest stall was 19–24 ms (one more Zod pass of the reply: 39–49 ms).
+**Measured 2026-09-20 (3a-ii)**, the same size of file read AND understood in the
+worker, three runs on Node 22.23.2 after round one's fixes: 1,326–1,472 ms all told,
+the request thread's longest stall 11–15 ms, its RSS 97 → 136 MB and the process's peak
+201–234 MB. Understanding the grid is 559–634 ms of that, which is why it runs there
+(§9.5).
 
 Refusals are the SERVER'S sentences and a screen prints them as sent; each says the fix:
 `empty_file` · `too_big` ("…over 5 MB. Save just the member sheet as CSV and try
@@ -1038,7 +1159,7 @@ upload that.") · `web_page_or_xml` ·
 `unreadable_excel` · `unreadable_text` · `unterminated_quote` · `too_many_rows` ·
 `too_many_columns` · `no_rows` · `parse_timeout` · `too_complex` ("This file is too
 large or complex to read. Save just the member sheet as CSV and upload that.") ·
-`busy` · `list_changed` · `large_change` · `upload_expired` · `upload_superseded`.
+`busy` · `mapped_column_not_status` (3a-ii: the column staff chose as the status holds more than 20 different words) · `list_changed` · `large_change` · `upload_expired` · `upload_superseded`.
 `other_zip` names OpenDocument, Apple's Numbers, Pages or Keynote, or Excel Binary
 where the archive says so, with that program's own way to save as `.xlsx` or CSV.
 **Every sentence is true of every file that draws it** (review of PR #85): the server
@@ -1246,7 +1367,12 @@ gym's door does is Kd's (ROADMAP), and 3b's join meets the same wall.
 
 ### 9.14 The screen (item 5) — the frame
 
-Members gains **Member list**. Upload → the preview, PHONE-FIRST (RULINGS 2026-08-18:
+Members gains **Member list**. Upload — or **paste rows copied from a spreadsheet**
+into a box, for a gym that would rather not save a file (Kd, 2026-09-20; Mailchimp's
+other way in). A paste needs nothing new on the server: what a spreadsheet puts on the
+clipboard is tab-separated text, which 3a-i's reader already opens, so the pasted text
+is sent as the upload's bytes and everything after it — the preview, the confirm, the
+guard — is the one path. Then → the preview, PHONE-FIRST (RULINGS 2026-08-18:
 a tappable list of problems, never a thousand-row grid): the counts in words, each
 opening its names; every column with its samples and a dropdown to correct the guess;
 the warnings; for a large change, the numbers and a typed confirmation; the tick that

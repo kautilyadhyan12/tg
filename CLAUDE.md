@@ -28,6 +28,14 @@ at a specific `[archive :line]` for detail. Never quote it as a rule.
    anything that parses an outside reply or sends data out, or a rule that picks,
    ranks or thresholds; **Fable max** for a planning or redesign chat that writes no
    code. If Kd's current setting differs, say so before building.
+   Its plan also names, in ONE line, **the worst thing this card could do to a real
+   person** — a stranger invited into a gym, a wrong allergen shown, somebody else's
+   details on a screen — and that line is the FIRST test written (Kd, RULINGS
+   2026-09-20, after 3a-ii shipped a review-passed card that would have invited a
+   member's nominee instead of the member). Where a card decides something about a
+   person from a list of words, the test cases come from OUTSIDE the code — real
+   exports, real labels, real wording — and INCLUDE words the list does not have.
+   A card that touches nobody says so in that line and moves on.
 2. **Kd says go.** No code before that. If he answers a different question than the one
    asked, ask again in one line; never treat a musing as a ruling and never treat your
    own suggestion as his decision.
@@ -127,6 +135,13 @@ test. A rule that picks, ranks or thresholds (which entry wins, which portion ap
 ships with a table test over every class of case BEFORE review; the reviewer is never
 the first to sweep it. Mutation harnesses (`apps/*/tools/mutate-*.mjs`) are run only when
 sign-in, money or other-people's-data code changes, never as a routine step and never in CI.
+
+**The worst thing (RULINGS 2026-09-20).** A rule that decides something about a PERSON
+is tested against the world, not against itself: a table built from the code's own word
+list proves only that the list matches itself. Go and get real cases — a real export's
+headings, a real label's wording — and include what the list has never heard of. The
+structural rule comes first where one exists (a plain heading beats a qualified one),
+and the word list is the backstop, never the mechanism.
 
 **Dependencies.** A new dependency needs Kd's yes in the plan, with the reason.
 
