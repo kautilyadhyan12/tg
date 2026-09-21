@@ -1792,7 +1792,8 @@ case and spaces folded and shown in the file's own first spelling (9.7), each wi
 chips and counts, each capped as the status chips are. A payment status is never read
 as a membership status (9.5), and no status is ever worked out from a date (9.11).
 
-**Records outlive the list.** *(The chat's design call, put to Kd with Part 3.)* A
+**Records outlive the list.** *(The chat's design call, put to Kd with Part 3 and
+agreed: RULINGS 2026-09-21.)* A
 management app's member record is durable: a person who leaves a whole-list upload, or
 is taken off by hand, is marked **former** with the date — not deleted, as 9.2 rule 2
 had it — so visits, reports and a returning member's history survive, which is how
@@ -1884,6 +1885,124 @@ format choice) and "Migrating from a different provider" (the sentence on card a
 bank data; self-serve import) · PushPress help: "Migration of your Members/Clients from
 Another Platform into Core" (name, email, phone, plans, discounts, billing info; card
 data requested between processors after the list is loaded).
+
+---
+
+## 12. Check-in at the front desk
+
+*(ADDED 2026-09-21, the same planning chat: Part 3 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It replaces
+the member's own tap (§4 of the attendance work, RULINGS 2026-08-31 to 2026-09-03) as
+the way a visit is made. Opus xhigh: other people's data, and a signed pass.)*
+
+**The worst thing this section could do to a real person:** give a stranger a green
+tick on somebody else's pass — or let whoever stands at an unattended desk tablet read
+the gym's members. The first tests written: a pass that is old, used, another gym's or
+another person's never checks anybody in; and a desk device's key reaches NOTHING but
+the scan — not the list, not a search, not Settings.
+
+### 12.1 The shape
+
+The member shows, the gym reads — how PushPress and Gymdesk work (read 2026-09-21).
+Three ways a visit is made, and the log says which: **pass** (the app's QR, read by a
+USB scanner that types like a keyboard, or by the tablet's camera) · **key tag** (the
+gym's existing barcode, which is the member number of §11) · **staff** (a signed-in
+member of staff finds the person and taps Check in). The member's own tap is switched
+off (12.7). Door machines and the gym's other software stay after launch (RULINGS
+2026-09-17).
+
+### 12.2 The pass
+
+`GET /v1/orgs/:gymId/pass` (a live member of that gym) answers a short opaque string
+the app draws as a QR: gym, person and a 30-second window, signed with a server secret
+(HMAC-SHA256), about 60 characters so a cheap scanner reads it off a phone. The app
+asks again every 30 seconds while the pass is on screen. The scan accepts the current
+window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key that
+lives as long as the window), so a screenshot or a second phone showing the same pass
+gets "Show a fresh pass". 10 passes a minute a person. The phone needs the internet to
+show a pass; a pass the phone can make offline is the phone app's later work.
+
+### 12.3 The desk device
+
+Settings → **Check-in devices** (`org.manage`): add one, name it ("Front desk"), and
+the console shows a one-time link to open ON that tablet or computer; opening it stores
+the device's key as an httpOnly cookie for the check-in page alone. `gym_checkin_
+devices`: gym · name · key hash · made by · last seen · switched off at. The key
+authorises exactly one call, `POST /v1/checkin/scan`, for its own gym — no list, no
+search, no read of any kind — and the owner switches a device off in one tap. The page
+is a big input that always holds the focus (a USB scanner types the code and presses
+Enter), a camera button (`jsqr`), and the result: green with the name · grey "Show a
+fresh pass" · red "Not a member of {gym}" · orange under a green tick for the gym's
+own status or payment word. It shows one result at a time and clears it after a few
+seconds, so the last person's name is not left on the screen. Finding a person BY NAME
+is never on this page: it is staff's, in the console (12.5).
+
+### 12.4 The scan rule — ONE pure function, one table test
+
+In: what was read (a pass · a member number · staff's pick), the gym, the time, the
+gym's opening periods, the person's record and membership. Out: `checked_in` ·
+`already` (with the first time) · `fresh_pass_needed` · `not_a_member`, and beside the
+first two the gym's own status and payment words as a notice. It NEVER blocks on a
+status, a payment word or the hour. **Twice:** the visit's place in the day is the
+opening period the scan falls in, or "outside hours" when it falls in none, and the
+table's own uniqueness — gym, person, day, period (`slot_key`, built 2026-09-01) —
+makes a second scan the same visit. A member number that fits two records asks staff
+which. The table test covers every class: each way in × member · former · removed ·
+never a member · another gym's person × first scan · same period · next period ·
+outside hours × the pass fresh · old · used · garbled.
+
+### 12.5 Staff check-in, and the live log
+
+The console's Attendance page gains a search and **Check in** for signed-in staff with
+a new tick, `attendance.mark` (owner and manager by default; the owner can give it to
+a trainer) — logged with who did it. The page refreshes itself every 5 seconds
+(`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
+which member of staff. Adding a visit for an earlier time is a later card.
+
+### 12.6 Data
+
+A visit hangs on the member's RECORD (§11), so a person without the app is counted:
+`gym_attendance` gains `entry_id` and `device_id`, `user_id` becomes optional with a
+CHECK that one of the two is there, and `method` grows to `manual` (the old tap's
+rows) · `pass` · `key_tag` · `staff`. When the person has the app the row carries
+their `user_id` as well — written once, at the scan — so the streak, the leaderboard
+and the active day (ROADMAP Stage 2 item 1a) read it unchanged. A former record keeps
+its visits. Gyms never see a person's visits to ANOTHER gym (§2.4).
+
+### 12.7 What is switched off
+
+The member's tap (`POST /v1/orgs/:gymId/attendance`) answers 410 behind one switch;
+its code and suite stay. Settings' "manual attendance" switch goes from the screen.
+My Gyms shows the pass where the "I'm here" button was. The phone that notices it is
+at the gym (ROADMAP Stage 5 item 8) is struck, never built.
+
+### 12.8 Limits
+
+A device: 120 scans a minute. Every refusal looks the same from outside and says
+nothing about who is or is not a member beyond the one red line. A device key is
+random, stored hashed, and useless for anything but the scan.
+
+### 12.9 Packages, cards, the two extra passes
+
+`qrcode-generator` (MIT, no dependencies of its own) draws the pass; `jsqr`
+(Apache-2.0) reads a QR from the tablet's camera; a USB scanner needs nothing. Kd's yes
+to both: RULINGS 2026-09-21. Cards, after 3a-v-b (a visit needs the durable record):
+**16a** the server — the scan rule, the pass, the devices, the migration · **16b** the
+desk page, Check-in devices in Settings, staff check-in and the live log · **16c** the
+member's side — the pass on the member web (the test rig until the phone app), the tap
+switched off. Check-in is ONE feature for CLAUDE.md §6: both extra passes run once
+over 16a to 16c, before any gym uses it.
+
+### 12.10 Where the facts came from (read 2026-09-21)
+
+PushPress help: "How to Check Members into Open Gym Using Barcode Scanner" (the USB
+scanner at about $20; members scan their card or the member app's QR at a computer
+open on the check-in page) and "Kiosk Mode Check-Ins with the Staff App" (a locked
+screen with no staff powers) · Gymdesk docs: "Attendance Tracking" (kiosk: name,
+numeric code, QR by the device's camera, barcode by a connected scanner that types
+like a keyboard; check-in from the member app) and its guide "How to Set Up a Gym
+Check-In System for Under $150". Neither product's public pages state a rule for a
+second scan; ours is the one already built (`slot_key`).
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
