@@ -2145,6 +2145,204 @@ class scheduling (the next person on the waitlist is told by SMS or push). Not o
 that day, and general to every product the chat knows: the week calendar, and a desk
 check-in marking a booking attended — each card checks its own before it builds.
 
+---
+
+## 14. Money between a member and their gym
+
+*(ADDED 2026-09-22, the same planning chat: Part 5 of Kd's planning document, agreed
+that day — RULINGS 2026-09-22, two lines. A frame. What people pay US — the price list,
+trials, Paddle — is `05-part5-billing.md`, amended the same day. Opus xhigh: money.)*
+
+**The worst thing this section could do to a real person:** charge a member twice, or
+after they cancelled; let a stranger move money through a gym's payment account; or
+show "Overdue" at the front desk about somebody who has paid. The first tests written:
+the same payment message arriving twice records ONE payment; a cancelled membership is
+never billed again; nothing that opens a gym's payment account — a token, a secret —
+ever appears in a log line, an error, a reply or Sentry.
+
+### 14.1 The shape: a register and a notebook, and a card machine plugged in later
+
+The app never holds a member's money and takes no part of it (Kd). It keeps the gym's
+NOTEBOOK — what each person owes, their bills, their payments — and its REGISTER — the
+desk's Sell screen. A payment company is the card machine: one adapter each behind ONE
+interface, so that adding or changing a company touches nothing else, and no company's
+SDK types cross the adapter (CLAUDE.md §4, Money). Everything in 14.2 to 14.4 works
+with no company connected, which is what is built first (Kd: the payment parts *"WILL
+BE BUILT BUT ACTUAL MERCHANTS WILL BE CONNECTED LATER"*).
+
+### 14.2 The notebook
+
+For every held membership (§13.2): a billing schedule (the next date and amount, from
+the type's price and period, in integer minor units of the gym's currency), **bills**
+(`gym_member_bills`: person's record, what for, amount, due on, status `open` · `paid`
+· `void` · `refunded`) and **payments** (`gym_member_payments`: bill, amount, how —
+`cash` · `card_at_desk` · `bank_transfer` · `link` · a connected company — when, who
+recorded it, the company's own id where there is one, UNIQUE so the same event twice
+is one row). Paid · due · overdue is worked out by the server from those rows on an
+injectable clock, never stored as a word that can go stale. A daily worker opens the
+next bill for a repeating membership, safe to run twice (one bill a membership a
+period). Staff record a payment, void a bill, or note a refund; every change has an
+audit row of amounts and ids, never a card detail. `billing.members` is a new tick
+(owner and manager), apart from `billing.manage`, which is the gym's own plan with us.
+The status word a gym's FILE carried (§11) stays what that gym sees until it starts
+billing here; the two are never mixed on one person.
+
+### 14.3 The register
+
+**Sell**: staff pick a product or a membership type (a day pass, a bottle of water),
+the person or "walk-in", how they paid — one bill and one payment in one transaction,
+with an idempotency key. `gym_products` (name, price, whether stock is counted and how
+much). **Discounts and promo codes** on membership types: so much off or a percentage,
+from and until, a limit of uses, counted under a lock; the price a person was sold at
+is written on their membership, so a later change of price or promo never rewrites it.
+
+### 14.4 Pay by the gym's own link
+
+A gym pastes its own payment link for a membership type (any company: RULINGS
+2026-09-15). The member's app shows **Pay {gym}**, which opens it outside the app;
+staff tick the bill paid. Only `https` links, shown with their host named, never
+fetched by our server.
+
+### 14.5 The Connect buttons — later, and only the normal way
+
+A gym presses **Connect**, signs in at the payment company, approves, and comes back:
+OAuth, the company's own page, no key typed or pasted by anybody (Kd refused the
+limited-key idea on 2026-09-21; struck). The tokens are kept encrypted under a key
+from the platform's secret store, never logged, refreshed by the worker, and dropped
+at Disconnect. With a company connected: the member saves a card or a bank mandate on
+the COMPANY's own page (card numbers never reach our server), repeating memberships
+are charged by the company on the notebook's schedule, and its webhooks tick bills
+paid or failed — signature checked on the raw body, deduped by the company's event id,
+acknowledged, then a worker fetches the real object (CLAUDE.md §4). A failed payment
+makes the bill overdue and tells the gym; retry rules are the company's. The order
+(RULINGS 2026-09-22), Stripe left out because its partner programme is invite-only for
+a business in India:
+
+| Button | Gyms in | What it moves | What is known (read 2026-09-22) |
+|---|---|---|---|
+| **Square** | US, Canada, UK, Ireland, France, Spain, Australia, Japan | cards; a saved card charged each period (Subscriptions API); desk readers later | Square staff, its developer forum: "developers from any country can build apps using Square's APIs, but payment processing … only works for sellers in the supported countries". Its developer terms require OAuth for an app that serves sellers. Application fees need an account in the seller's country — and Kd takes none. |
+| **GoCardless** | UK, Europe, Australia, also US and Canada | the member's BANK account each period (Direct Debit, SEPA, ACH) | The UK's usual way to pay a gym. A partner app is made in its sandbox; before going live its team reviews "a demonstration video" and aims to answer "within 5 working days"; it asks for a live account and a live app, and states no country rule for the partner. |
+| **Razorpay** | India | cards, UPI, bank mandates | Its Technology Partner programme: OAuth to a business's own account, after the partner's KYC — an Indian business. |
+
+Whether an owner in India can finish each sign-up is proved only by doing it; it is
+free, and Kd's to do when he chooses. Nothing in 14.2 to 14.4 waits for it.
+
+### 14.6 Cards
+
+**18a** the notebook · **18b** the register, discounts and promo codes · **18c** Pay by
+link · **18d** the first Connect button, once its developer account exists · **18e**,
+**18f** the others. 18a needs 17a. ONE feature for CLAUDE.md §6; the extra passes run
+over 18a–18c before a gym uses them, and again over each Connect button — reviewed by
+RUNNING the company's real sandbox, never a mock alone.
+
+### 14.7 Where the facts came from (read 2026-09-21 and 2026-09-22)
+
+Square: developer forum thread "Square app development for devs out of US" (a staff
+reply), "International Development", "Test in Unsupported Regions", its developer
+terms, "Subscriptions API" · Square support: "International availability" (eight
+countries; an account's country cannot be changed) · Stripe support: "Stripe accounts
+are invite-only in India" · GoCardless docs: "For Partner Integrators", "Going Live
+with your integration" · GoCardless's own guides (82 % of UK gym payments by Direct
+Debit; in the US since 2018) · Razorpay docs: "Technology Partners", "Integrate with
+Razorpay OAuth" · Paddle: pricing, identity verification.
+
+---
+
+## 15. The gym's shared page
+
+*(ADDED 2026-09-22, the same planning chat: Part 6 of Kd's planning document — his
+"common dashboard" — agreed that day, one question open; RULINGS 2026-09-22. A frame.
+It takes in ROADMAP Stage 2 items 1b, 6, 10 and 11. Opus xhigh: other people's words
+and pictures.)*
+
+**The worst thing this section could do to a real person:** let somebody be shamed in
+front of their whole gym — a cruel post, a photo of them they never agreed to — or show
+a person's food or weight to their gym without their say. The first tests written: a
+reported post is removed by staff in one tap and is gone for everyone; a blocked
+person's posts are gone for the one who blocked them; a member who chose "hide me"
+appears to nobody else on any board or challenge; nothing about food or weight reaches
+a trainer's screen by a path the person did not open.
+
+### 15.1 The page
+
+One page a gym — **Updates · Events · Leaderboard · Challenges** — for its live
+members in the phone app (the member web until it exists) and its staff in the
+browser. A former member, a removed one and a stranger get a 404.
+
+### 15.2 Updates
+
+`gym_posts`: who, words (2,000 characters), up to 4 photos or 1 video, pinned or not,
+when, removed at and by whom. Staff always post; **a gym setting decides whether
+members may** (off to start). **Reactions — one tap from a small fixed set — and NO
+comments, and no private chat** (RULINGS 2026-08-25, kept 2026-09-22). Photos: checked
+by their first bytes, size-capped, stripped of location tags, stored on R2 under keys
+the server makes, served by signed URLs (CLAUDE.md §4, Uploads). Videos: up to one
+minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by a
+one-time upload address the server asks for, played from Stream, deleted there when
+the post goes.
+
+### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
+
+**Report** on every post, with a reason; reports land in a staff queue
+(`posts.moderate`, owner and manager) where a post is removed in one tap and a person
+can be stopped from posting. **Block**: a member never again sees a blocked member's
+posts or reactions. A bad-words filter HOLDS a post for staff rather than refusing it.
+A support address is shown. Kd can remove any post and pause any gym (RULINGS
+2026-08-27). Everyone here is a real, invited member under their own name, which is
+the main protection; rate limits stop a flood (10 posts a day a member, with the usual
+per-address ceiling).
+
+### 15.4 Events
+
+Name, words, place, start and end in the gym's time zone, places or no limit. "I'm
+coming" is 13.4's Book rule on an event row — one counting rule in the app, not two.
+
+### 15.5 The leaderboard — only checked facts
+
+Tabs, each ranking ONE thing, each for this week · this month · all time, in the gym's
+time zone: **Visits** (§12 rows by pass, key tag or staff; one a period of the day) ·
+**Classes** (bookings marked attended) · **Streak** (weeks in a row with at least one
+visit) · **Workouts** (days with an app workout — one a day at most, so logging ten
+changes nothing) · **Running** (GPS distance recorded by the phone app, with sanity
+limits on speed; shown once running exists). Equal numbers share a place. A number
+somebody typed is never ranked. "Hide me" (RULINGS 2026-09-07) greys a person's row to
+everybody else and keeps it for the gym; the info symbol says exactly what each tab
+counts. Worked out by one query a tab over indexed rows, its cost measured at 2,100
+members (CLAUDE.md §4, cost at full size). It replaces item 1b's single scored list.
+
+### 15.6 Challenges (the document's "leagues and tournaments")
+
+`gym_challenges`: name, words, from and until, what is counted (one of 15.5's checked
+facts), everyone or people who join, alone or in teams (staff make the teams, or
+members pick one), a prize in words. Its board is 15.5's query over its dates and its
+people; at the end the result is posted to Updates. Knock-out brackets are later.
+
+### 15.7 A gym's own plan for a member
+
+A trainer with `plans.write` (a new tick) opens a member's weekly workout plan and
+daily food numbers as the APP built them, changes them, and saves a copy marked "From
+{gym}"; the member switches between App's plan · My own · Gym's plan (the rings'
+switch, 7a-iv-e). The server runs the health rules over a gym's numbers exactly as
+over typed ones (never under the calorie floor; no cut for a health yes, Safe mode or
+under 18). It waits for the app's own plan builder (ROADMAP Stage 1 items 6a and 6b).
+**OPEN (RULINGS 2026-09-22):** whether the trainer sees the member's food, weight and
+plan only after the member's own tap, or at once on joining. Until Kd rules, §2.4's
+promise stands: only by the person's choice.
+
+### 15.8 Cards
+
+**19a** the leaderboard's tabs (after 16a; takes item 1b's place) · **19b** Updates,
+reactions and the safety tools (needs R2, Stage 4 item 4, and a Cloudflare Stream
+account — Kd's, $5 a month for each 1,000 minutes kept and $1 for each 1,000 watched)
+· **19c** events · **19d** challenges · **19e** a gym's own plan (after Stage 1 items
+6a and 6b). ONE feature for CLAUDE.md §6.
+
+### 15.9 Where the facts came from (read 2026-09-22)
+
+SugarWOD's own pages (a gym feed with photos, comments and fist bumps; gym
+leaderboards) · Apple's App Review Guidelines, 1.2 (a filter, a report, a block,
+published contact details) · Cloudflare Stream's pricing page.
+
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
 `calc_version`/dishware/corrections tables, Part 2's definition tables,
