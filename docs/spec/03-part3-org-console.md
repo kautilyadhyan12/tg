@@ -36,6 +36,14 @@ premium-aspiring gyms, boutique/PT studios, physio clinics) resolve to
 is a *pitch*, not a product fork), `studio` (boutique/PT), `clinic` —
 implemented per Part 2B §7 as vocabulary + feature-matrix overrides on v1
 §8's tenancy. No new architecture.
+4. **(2026-09-21) The console is the browser's alone, and join codes are abandoned**
+(RULINGS 2026-09-21; the design is §10). The member app is the phone's alone: this
+console is never built into it, and it must work in a PHONE's browser as well as a
+computer's. Every mention in this Part of a join code, a poster or a QR that joins —
+§2.2's "Invite (share code / print poster)" and "Create / rotate / expire codes",
+§4.0's first code, §4.3's Invite sheet, §4.7's **Codes**, §9.13 — is superseded by
+§10: a person comes into an organisation only by an invitation to their email
+address. Staff are invited the same way (§10.3) and a seat is counted as §10.4 says.
 
 ---
 
@@ -590,7 +598,10 @@ with the management features (9.11).
 ### 9.2 Principles (each is a test in 9.10)
 
 1. **Source of truth, never a gate.** The list changes what the gym SEES. It grants
-   nothing in 3a, blocks nothing ever, and removes nobody by itself.
+   nothing in 3a, blocks nothing ever, and removes nobody by itself. *(2026-09-21: join
+   codes are abandoned, so the way IN is now the gym's invitation, §10.2. What this
+   principle still means: a status word, a later upload or dropping off the list never
+   blocks or removes anybody by itself — the INVITE is the gym's yes, the list is not.)*
 2. **The table is the gym's list as it stands, exactly**: the newest whole-list
    upload, plus what staff have added, changed or taken off since. A person who leaves
    the list leaves the table. History is ONE timestamp on the membership,
@@ -612,8 +623,9 @@ with the management features (9.11).
 10. **Nobody is emailed until staff press Invite** (RULINGS 2026-09-19). A confirm
     sends nothing. The status word only chooses who is INVITED; it never decides who
     may join (RULINGS 2026-08-24, reaffirmed 2026-09-17: an upload is days old).
-11. **The gym's invite is its yes.** Signing in with an address joins a person without
-    a code only where the gym invited that address; everyone else uses the code.
+11. **The gym's invite is its yes.** Signing in with an address joins a person only
+    where the gym invited that address. ~~Everyone else uses the code.~~ *(2026-09-21:
+    there is no code; everyone else asks the front desk to add their email, §10.2.)*
 
 ### 9.3 Slices — one chat and one pull request each
 
@@ -624,9 +636,12 @@ with the management features (9.11).
 | 3a-iii-a | The list on the server, half one: the migration, the reconcile rule, upload (whole list, or add) → preview, the names behind every number, the hourly expiry, the list going when a gym closes. It writes ONE staged row and changes nothing about anybody's membership. | — | Opus xhigh |
 | 3a-iii-b | Half two: press Confirm — the one transaction that writes the list, the wrong-file guard, and the reads with the status filter. | — | Opus xhigh |
 | 3a-iv | Keeping the list by hand: add one person, change one, take one off, put an app member on the list, remove the unlisted in one call (with its guard). | — | Opus xhigh |
-| 3b | The invites, sent when staff press Invite (9.12). | — | Opus xhigh |
-| 3c | The code admits at once (9.13). | — | Opus xhigh |
-| 5 | The screen (9.14). | — | Opus xhigh |
+| 3b-i | The invites, sent when staff press Invite (9.12): the records, the queue, the checks before a send, the webhook, unsubscribe. | — | Opus xhigh |
+| 3b-ii | Joining by invitation (9.12 "Joining", 10.2): the invitation waiting after sign-in, ONE tap, `claimSeat`; one person's invitation sent again. | — | Opus xhigh |
+| ~~3c~~ | ~~The code admits at once (9.13).~~ **Struck 2026-09-21**; its number now carries "codes switched off" (10.6). | — | Opus xhigh |
+| 5 | The screen (9.14), in two pull requests: 5a upload, preview, confirm · 5b the list, Invite, by hand, export. | — | Opus xhigh |
+| 4a | Staff invited by email (10.3). | — | Opus xhigh |
+| 4c | A seat is a person using the member app (10.4). | — | Opus xhigh |
 
 **Split 2026-09-20, building 3a-iii** (the chat's own sizing call, CLAUDE.md §2.3): one chat for one migration, six routes, the guard and 9.10's whole test matrix was too much, and the honest cut is between the half that decides nothing and the half that changes a gym's records. The two are built back to back.
 
@@ -1365,7 +1380,13 @@ many were queued and how many were skipped for each reason. Adding one person by
 offers "Add and invite" (the same call for that one entry). **One email per person per
 gym, ever; no reminders and no bulk "send again"** — in *Perkins v. LinkedIn* (N.D.
 Cal. 2014, about $13M) the invitation was consented to and the two reminders were not.
-Whether staff may re-send to ONE person who asks is 3b's plan to put to Kd.
+~~Whether staff may re-send to ONE person who asks is 3b's plan to put to Kd.~~
+**Answered 2026-09-21 (RULINGS): yes.** With codes abandoned the invitation is the only
+way in, so a lost email must be replaceable: staff may send ONE person's invitation
+again when that person asks (the person is at the desk, or wrote to the gym) —
+`POST …/member-list/entries/:entryId/invite/resend`, `members.confirm`, at most 3 for
+one entry in 30 days and 20 a day a gym, never to a suppressed address, never in bulk
+and never on a timer. It is a new message to somebody who asked for it, not a reminder.
 
 **Records.** `gym_invites`, keyed `(gym_id, email_hmac)` — HMAC-SHA256 of the
 lower-cased address under a server secret. It outlives the list entry, so a broken
@@ -1413,18 +1434,22 @@ updates the invite. `email.bounced` (permanent) → suppressed for every gym;
 has INVITED (an invite record for that gym and address — being on the list is not
 enough: a gym that invited only its "Active" members has not said yes to the rest)
 joins through `claimSeat` (the seat cap holds). An unsubscribe stops emails, never the
-join. Everyone else joins with the code (9.13) and is matched to the list all the
-same. One tap or none is Kd's (ROADMAP). Recommended: ONE tap, on a screen showing
-"What {gym} can see" — joining starts sharing a person's activity with the gym, and
-nobody should start sharing because a third party typed their address.
+join. ~~Everyone else joins with the code (9.13) and is matched to the list all the
+same. One tap or none is Kd's (ROADMAP).~~ **Settled 2026-09-21 (RULINGS): there is no
+code, and it is ONE tap** — on a screen showing "What {gym} can see": joining starts
+sharing a person's activity with the gym, and nobody should start sharing because a
+third party typed their address. Everyone else is told to ask the front desk to add
+their email. The whole join is §10.2.
 
 **"Staff create his account" (Kd, 2026-09-19), as built.** Staff add the walk-in's
 name and email and press "Add and invite". The account itself comes into being when
 HE signs in with that address — the app has no passwords, an account is made by
 proving an address (RULINGS 2026-09-07), and only he can tap the health and consent
-screens — and the moment he does, he is in that gym with no code. A walk-in with no
-email is added with a phone and joins with the gym's code; the phone puts him on the
-list.
+screens — and the moment he does (and taps Join, §10.2), he is in that gym with no
+code. ~~A walk-in with no email is added with a phone and joins with the gym's code;
+the phone puts him on the list.~~ *(2026-09-21: a walk-in with no email goes on the
+list with his phone and gets no app until the front desk adds an address for him —
+every product read that day needs an email for app access.)*
 
 **The email provider's limits, and the standard answer to them.** Resend's Acceptable
 Use Policy (read 2026-09-19; last updated 2026-08-27): "Your complaint rate must be
@@ -1460,7 +1485,12 @@ right to object. Gmail counts its 5,000-a-day bulk line across the whole primary
 domain, so a sub-domain does not split it; Gmail and Yahoo want SPF, DKIM, DMARC and
 one-click unsubscribe for this kind of mail.
 
-### 9.13 The code admits at once (3c) — the frame
+### 9.13 ~~The code admits at once (3c) — the frame~~ STRUCK 2026-09-21, never built
+
+*(RULINGS 2026-09-21: join codes are abandoned. Nothing below is built; it is kept for
+its words. What replaces it is §10.2, the join by invitation, and §10.6, the codes
+switched off. What survives: the waiting room's sweep, reminders and nudge are
+switched off in the worker, not deleted.)*
 
 A valid code → `claimSeat` under the gym's row lock → a member at once;
 `last_listed_at` stamped if they are on the list. "Not on your list yet" is shown TO
@@ -1490,7 +1520,9 @@ the gym may share this list (words: Kd and the lawyer); "this is my whole list" 
 "add these people"; Confirm. Then the result line: "12 new · 3 no longer on your list
 — remove all? · 2 joined by code, not on your list" (ROADMAP's line said "12 new,
 invited"; since RULINGS 2026-09-19 nothing is sent by a confirm) — remove-all shows
-the names, then asks. **The list itself:** the gym's own status words as filter chips
+the names, then asks. *(2026-09-21: nobody joins by code any more, so the "joined by
+code, not on your list" part of that line is gone; "Put on the list" stays for an app
+member whose entry was taken off.)* **The list itself:** the gym's own status words as filter chips
 with their counts ("Active 312 · Expired 88 · no status 5"), a filter for in the app /
 not in the app, search, and ONE **Invite** button that always says who it will reach
 ("Invite 214 people" — those shown who have an email, are not in the app and were
@@ -1524,6 +1556,191 @@ direct marketing and the soft opt-in · ACMA spam rules · AWS SES tenant-level
 suppression and reputation thresholds · *Perkins v. LinkedIn* · Google's libphonenumber
 FAQ. No primary source was found for: what Google Sheets writes, any Indian or
 Brazilian gym product's export headers, how common Mac Roman or DOS files are.
+
+---
+
+## 10. Getting in — invitations, staff, seats, one phone
+
+*(ADDED 2026-09-21, a planning chat with no code: Part 1 of Kd's planning document
+`PLANINGDOC.pdf`, agreed that day — RULINGS 2026-09-21, five lines. Frames, as 9.12 to
+9.14 are: each card's own ten-line plan settles the rest with Kd. Where §2.2, §4.0,
+§4.3, §4.7 or §9 differ, this section wins. Every card here is **Opus xhigh**: sign-in,
+other people's data, sending email.)*
+
+### 10.1 The shape
+
+- **The browser is the console's and the phone is the member app's.** One account a
+  person, proved by an email address (code, Google, Apple). The member web lives only
+  until the phone app exists; nothing here is designed for it beyond staying TRUE.
+- **Member and staff are two separate things.** A person is a MEMBER of an
+  organisation by an accepted member invitation (10.2), and STAFF by an accepted staff
+  invitation (10.3) or by having created it. Neither implies the other.
+- **An invitation hangs on the ADDRESS, never on a link, a code or a phone.** Proving
+  the address at sign-in is the whole credential. No link in any email carries a token.
+- **A person who belongs to no organisation** signs in as usual and never meets any of
+  this.
+
+**The worst thing this section could do to a real person:** let a stranger into a gym —
+reading its members' names on the leaderboard, or, as staff, their emails — because an
+invitation opened for somebody other than the address it was sent to. It is the FIRST
+test of 3b-ii and of 4a, written before anything else, with cases from outside the
+code: a forwarded email, an address differing only in case (the same person), a Gmail
+address differing by dots (NOT the same person here — exact keys only, 9.2 rule 4),
+Apple's relay address, a second account, another gym's invitation id.
+
+### 10.2 Joining as a member (3b-ii)
+
+**When an invitation admits.** All of: a `gym_invites` record (9.12) for this gym and
+this address that is `pending` · a list entry with that address STILL on the gym's list
+(the list is the gym's yes today; a person who was invited and has since dropped off a
+whole-list upload is not let in, and is let in again the moment a good upload restores
+them) · the organisation active and on a plan · a free seat (10.4). `gym_invites`
+therefore gains a state — `pending` · `accepted` · `declined` · `withdrawn` (staff took
+the entry off, or removed the member: signing in again must not walk them back in;
+"Invite again" is the one-person re-send of 9.12 and makes it `pending`). Whether the
+email was delivered is NOT part of it: the press of Invite is the yes, and nobody can
+sign in with a dead address.
+
+**The flow.** The email's link is `{WEB_ORIGIN}/join/{slug}`: on a phone with the app
+it opens the app, otherwise it shows the two store buttons, and until the phone app
+exists it opens the web sign-in. The person signs in with the address the gym has.
+`GET /v1/orgs/invitations` lists what is waiting for the caller's VERIFIED address —
+member and staff invitations alike: organisation name, city, logo, kind, role — worked
+out from the address's HMAC, so a caller can only ever see invitations to an address
+they have proved. It is shown straight after "Before you start" (4d) and BEFORE setup,
+so a person who stops halfway through setup is already in their gym (the reason
+RULINGS 2026-07-19 gave for applying a code first), and again in Settings → Gym.
+`POST /v1/orgs/invitations/:id/accept` — the ONE tap, on the "What {gym} can see"
+sheet — takes the gym's row lock, checks everything above AGAIN, `claimSeat`s (a
+membership with no code), marks the invitation `accepted`, stamps `last_listed_at`, and
+records the consent time. Twice is a 200 that says already a member. `…/decline` marks
+it `declined`; the gym sees that and sends nothing more.
+
+**The honest walls.** No invitation for this address: "No invitation for {address}.
+Your gym invites the email address it has for you — sign in with that one, or ask the
+front desk to add this one." It shows the signed-in address, which is what explains an
+Apple relay address to its owner. A full gym: "{gym} has no free places right now —
+tell the front desk", and the entry reads "invited · waiting for a place" to staff.
+Neither reply says anything about any other address.
+
+**Limits.** Accept and decline 10 an hour a person with an explicit `ipMax` sized for a
+gym's wi-fi at an induction (ROADMAP Stage 4 item 10's lesson); the list read 60.
+
+### 10.3 Staff are invited by email (4a)
+
+**Data.** `gym_staff_invites`: gym · email (citext, kept readable: the owner must see
+whom they invited) · role · invited by · created · expires (7 days) · accepted at and
+by whom · revoked at · last sent · send count. One pending invitation an address a gym.
+
+**Routes**, all `staff.manage` (owner only): `POST /v1/orgs/:gymId/staff/invites`
+`{ email, role }` → 201 with the same body and the same timing whether or not that
+address has an account (the account-existence oracle `packages/shared/src/orgs.ts`
+warned about is why the old route looked only inside the roster) · `GET` the pending
+ones · `DELETE …/:id` cancels · `POST …/:id/resend` restarts the 7 days, at most 3
+times. 20 pending and 20 sends a day a gym. The roles offered are manager and trainer;
+a second owner is item 4b's hand-over.
+
+**Accepting.** The invitation appears in 10.2's `GET /v1/orgs/invitations` with its
+role. Accept writes a `gym_staff` row with the role's default ticks and **no
+membership**. A new person who came in through the Manage door with an invitation
+waiting lands ON it, never on "create your organisation" (today `/console` sends anyone
+who runs nothing to `/console/new`). Audit rows for invited, accepted, cancelled.
+
+**The email** is fixed words — "{owner's name} invited you to help run {gym} as
+{role}. Sign in with this email address" — with a link to the console's sign-in and no
+token, sent from the invites sub-domain through 9.12's checks and suppressions, the
+gym's name stripped as 9.12 strips it.
+
+**What changes in code that exists.** `addStaff` keeps appointing somebody who is
+already a member. `removeMember`'s `is_staff` refusal goes: with staff and member
+separate, ending a staff person's membership leaves their keys, and RULINGS
+2026-08-22's question ("do they also stop being a member?") is asked in both
+directions. Marking attendance still needs a membership.
+
+### 10.4 A seat is a person using the member app (4c)
+
+**The rule.** A seat is a LIVE `gym_members` row — the owner's and staff's included.
+`claimSeat`'s count loses `complimentary = false` and `NOT EXISTS gym_staff`, and so
+does every mirror of it (`listMembers`, the member list's seat meter). The member
+features already follow the membership row and nothing else
+(`entitlements/repo.ts`), so a staff login with no membership is the free app on a
+phone, which is the point: **a fake "staff member" gains a console login and no app.**
+Staff logins are free and unlimited.
+
+**Two questions that 3a-iii answered with one flag, and must stay two.** 9.7 keeps
+staff and the owner OUT of the list's marks, the leavers and remove-all, so a gym is
+never told it has lost its own owner by an export that holds only customers. That
+stays. What changes is only what COUNTS: `seatCounted` splits into "counts as a seat"
+(every live member) and "in the marks" (not staff, not the owner), with a table test
+over member · staff only · staff and member · owner only · owner and member · removed ·
+another gym, against: counts as a seat · gets the gym's member features · is in the
+marks. The fraud itself is a route test: appointing five members as staff frees no
+seat.
+
+**The owner's automatic free membership ends.** Creating an organisation asks "Do you
+train here too?" and a yes is an ordinary seat. `gym_members.complimentary` stays a
+column and is written `false` from now on (production starts empty, RULINGS
+2026-07-13; its other readers were the per-code join counts, which go in 10.6).
+
+### 10.5 One phone at a time (with the phone app's sign-in, ROADMAP Stage 5)
+
+`refresh_tokens` gains `client` (`web` · `phone`, existing rows `web`) and a nullable
+`revoked_reason`. A successful PHONE sign-in, in its own transaction and under the
+user's row lock, revokes every other live `phone` family of that person with the
+reason `signed_in_elsewhere` — a reason of its own, so an ordinary second sign-in never
+reads as a stolen token in the audit trail (`revokeAllRefreshTokens`'s three callers
+are all security events). The old phone's next refresh is a 401 that names it, and the
+app says "You were signed out because your account was signed in on another phone",
+with Sign in again. `web` families are never touched, so an owner keeps the console
+open while training. Nothing has to be done on the old phone first. Left to Stage 5's
+sync design: workouts the old phone had not yet sent are kept for the same account's
+next sign-in and wiped for any other account's. The `client` word comes from the app's
+own request; proving it (Play Integrity, App Attest) is after launch — what it guards is
+a shared login, not a secret.
+
+### 10.6 Join codes switched off (3c) — built LAST in this section
+
+So that no build exists in which nobody can join. **Server:** `POST /v1/orgs/join`, the
+applications routes and the five code routes answer `410` `join_codes_retired` behind
+one switch; handlers, tables and their suites stay, the suites running with the switch
+on so the code does not rot unseen; creating an organisation mints no code; the
+waiting room's sweep, reminders and nudge stop in the worker. **Console:** the code
+cards on Overview and the "your gym is ready" code become "Bring your members in"
+(the member list); the applications queue on Members goes off; `codes.invite` and
+`codes.manage` stay in the privilege vocabulary (stored snapshots and the table's
+CHECK name them) and gate nothing reachable. **Member web — the least that keeps it
+true, since it is to be deleted:** `/org/join` becomes the invitations page, so an old
+poster link lands somewhere honest; the code box in Settings → Gym and setup's "Your
+code" screen give way to the invitations list of 10.2 (setup is eleven screens); the
+carried code (`CarryJoinCode`, `landingRoute.js`, the sign-in page's "Sign in to use
+your code", the Google return) leaves the sign-in routing. **Tests:** every retired
+route answers 410 to a member, staff and a stranger; no screen draws a code box; an
+old link lands on the invitations page; sign-in no longer reads the kept code.
+
+### 10.7 Order, and the two extra passes
+
+3a-iv → 3b-i → 3b-ii → 5a → 5b → 4a → 4c → 3c. "Getting in" is ONE feature for
+CLAUDE.md §6: the hostile-security pass and the data-integrity pass run once over all
+of it (3a-i to 3c, 4a, 4c) after 3c, each in a fresh chat, before any gym uses it.
+
+### 10.8 Asked again in the planning document, and already built (9.7)
+
+The same file uploaded twice writes nothing. A person whose details changed is updated
+in place, never doubled — matched by email, else by phone. A person missing from a
+whole-list upload is flagged for staff and never removed by the upload. A walk-in
+added at the desk on the 22nd is matched by his email when the file of the 25th holds
+him; if that file is the whole list and does not hold him, he is flagged, not removed.
+
+### 10.9 Where the facts came from (read 2026-09-21)
+
+PushPress help: "How can I invite new members and share access to the PushPress
+Members app?" and "PushPress Login Overview for Admins, Coaches, and Members" · ABC
+Trainerize help: "How To Add Clients" · Gymdesk docs: "Gym Staff", and its pricing
+page (active members, unlimited staff accounts). Read in the code that day:
+`orgs/repo.ts` `claimSeat` and `addStaff`, `entitlements/repo.ts`, `db/schema/
+identity.ts` `refresh_tokens`, `orgs/routes.ts`, and the fifteen web places that show
+or take a join code. No source was found for a gym app that limits an account to one
+device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
