@@ -16,6 +16,8 @@
 import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  MEMBER_LIST_STATUS_CHIPS_MAX,
+  memberListEntrySourceSchema,
   memberListGroupsSchema,
   memberListMappingSchema,
   memberListModeSchema,
@@ -24,6 +26,7 @@ import {
   memberListStagedShellSchema,
   memberListUploadStatusSchema,
   memberListUploadSummarySchema,
+  type MemberListEntrySource,
   type MemberListGroups,
   type MemberListMapping,
   type MemberListMode,
@@ -72,6 +75,15 @@ export interface ListState {
 export interface MemberAgainstList extends ListMember {
   /** An entry of this gym matches their verified email, else their stated phone. */
   onList: boolean;
+  /** WHICH entry, so a read of the kept list can say which of its people are already
+   *  members here. Null where no entry matches.
+   *
+   *  **It is the entry this ONE member matched, chosen by §9.7's own order, not every
+   *  entry that could reach them.** A family sharing one address has several entries
+   *  against it and `reconcile`'s `entryFor` takes the first; this takes the same one,
+   *  so the list's "already in the app" ticks and the preview's agree about a household
+   *  instead of the screen and the rule telling a gym two different stories. */
+  entryId: string | null;
   /** That entry's own status word and member number, for showing a leaving member with
    *  what the list still says about them. Null where no entry matches. */
   entryStatus: string | null;
@@ -131,7 +143,7 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
     SELECT identity_key, full_name, email::text AS email, phone_e164, member_number, status
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId}
-    ORDER BY created_at, id`;
+    ORDER BY listed_seq`;
   return rows.map((row) => ({
     identityKey: row.identity_key,
     fullName: row.full_name,
@@ -167,10 +179,14 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
+      seat_counted: boolean;
     }[]
   >`
     SELECT m.user_id,
            u.display_name,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
            CASE
              WHEN EXISTS (
                SELECT 1 FROM one_time_tokens t
@@ -184,9 +200,6 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     JOIN users u ON u.id = m.user_id
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -194,6 +207,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     email: row.email,
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
+    seatCounted: row.seat_counted,
   }));
 }
 
@@ -228,7 +242,7 @@ export interface StageUpload {
  *  holds for every later writer too. */
 export async function stageUpload(sql: Sql, input: StageUpload): Promise<string> {
   return await sql.begin(async (tx) => {
-    await tx`SELECT 1 FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
+    await lockGym(tx, input.gymId);
     await tx`
       UPDATE gym_member_list_uploads
       SET status = 'superseded', rows = NULL
@@ -270,6 +284,11 @@ export interface UploadRow {
   hasCells: boolean;
   createdAt: Date;
   expiresAt: Date;
+  /** When THIS upload was applied, or null. Read back for a confirm that finds its
+   *  upload already confirmed: the answer has to be this file's own instant, and
+   *  `gym_member_lists.last_confirmed_at` would be a LATER upload's the moment the
+   *  gym has confirmed anything since. */
+  confirmedAt: Date | null;
 }
 
 /** ONE UPLOAD OF THIS GYM, by both ids together. There is deliberately no
@@ -281,35 +300,75 @@ export interface UploadRow {
  *  and nothing correct may depend on it having run: a preview read a minute after
  *  its hour must be as gone as one read a day later. `now` is handed in so the
  *  clock is the caller's and a test can move it. */
+interface UploadColumns {
+  id: string;
+  status: string;
+  mode: string;
+  file_kind: string;
+  file_sha256: string;
+  file_bytes: number;
+  header_fingerprint: string | null;
+  mapping: unknown;
+  base_version: number;
+  summary: unknown;
+  has_rows: boolean;
+  created_at: Date;
+  expires_at: Date;
+  confirmed_at: Date | null;
+}
+
 export async function uploadFor(
   sql: SqlOrTx,
   gymId: string,
   uploadId: string,
   now: Date,
 ): Promise<UploadRow | null> {
-  const rows = await sql<
-    {
-      id: string;
-      status: string;
-      mode: string;
-      file_kind: string;
-      file_sha256: string;
-      file_bytes: number;
-      header_fingerprint: string | null;
-      mapping: unknown;
-      base_version: number;
-      summary: unknown;
-      has_rows: boolean;
-      created_at: Date;
-      expires_at: Date;
-    }[]
-  >`
+  const rows = await sql<UploadColumns[]>`
     SELECT id, status, mode, file_kind, file_sha256, file_bytes, header_fingerprint,
-           mapping, base_version, summary, (rows IS NOT NULL) AS has_rows, created_at, expires_at
+           mapping, base_version, summary, (rows IS NOT NULL) AS has_rows, created_at,
+           expires_at, confirmed_at
     FROM gym_member_list_uploads
     WHERE gym_id = ${gymId} AND id = ${uploadId}`;
   const row = rows[0];
   if (row === undefined) return null;
+  return toUploadRow(row, uploadId, now);
+}
+
+/** THE SAME UPLOAD, WITH ITS ROW LOCKED — the confirm's second lock, taken after the
+ *  gym's (§9.7's order: gym row, then child rows, which `stageUpload` states once and
+ *  everything here follows).
+ *
+ *  **THE GYM'S LOCK ALREADY SERIALISES TWO CONFIRMS OF THIS GYM, so this one is not
+ *  what makes the confirm safe** — it is what stops an upload's own row moving under a
+ *  transaction that has decided to confirm it, including from the expiry sweep, which
+ *  takes no gym lock at all and would otherwise be free to mark it `expired` between
+ *  this read and the UPDATE that confirms it.
+ *
+ *  `FOR UPDATE` and not `FOR NO KEY UPDATE`: this row is nobody's foreign key target
+ *  except `gym_member_lists.last_confirmed_upload_id`, which the same transaction
+ *  writes. */
+export async function lockUploadFor(
+  tx: TransactionSql,
+  gymId: string,
+  uploadId: string,
+  now: Date,
+): Promise<UploadRow | null> {
+  const rows = await tx<UploadColumns[]>`
+    SELECT id, status, mode, file_kind, file_sha256, file_bytes, header_fingerprint,
+           mapping, base_version, summary, (rows IS NOT NULL) AS has_rows, created_at,
+           expires_at, confirmed_at
+    FROM gym_member_list_uploads
+    WHERE gym_id = ${gymId} AND id = ${uploadId}
+    FOR UPDATE`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return toUploadRow(row, uploadId, now);
+}
+
+/** One upload row's columns as this module is willing to believe them. Written once
+ *  and used by both readers above, so a locked read and an unlocked one can never
+ *  disagree about whether an upload has expired or what it holds. */
+function toUploadRow(row: UploadColumns, uploadId: string, now: Date): UploadRow {
   // PARSED, NOT CAST, INCLUDING THE THREE TEXT COLUMNS WITH A CHECK BEHIND THEM.
   // The CHECK is what makes the parse succeed; the parse is what makes the type
   // true. A cast here would be the one place in the module where the compiler's
@@ -344,6 +403,7 @@ export async function uploadFor(
     hasCells: !stale && row.has_rows,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
+    confirmedAt: row.confirmed_at,
   };
 }
 
@@ -525,18 +585,21 @@ export async function stagedContacts(
  *  full reasoning for both; this statement is the same rule with one more column, and a
  *  test drives the two side by side so they cannot drift.
  *
- *  **THE EMAIL CHANNEL WINS, AND ONLY THEN THE OLDEST ENTRY.** §9.7 matches on the
- *  verified address first and falls to the phone only when there is none, which is what
- *  `reconcile`'s `entryFor` does in this process — so `by_email DESC` comes before
- *  `created_at` in the order. Ordering by age alone answered a different person's row:
+ *  **THE EMAIL CHANNEL WINS, AND ONLY THEN THE FIRST ENTRY ON THE LIST.** §9.7 matches
+ *  on the verified address first and falls to the phone only when there is none, which is
+ *  what `reconcile`'s `entryFor` does in this process — so `by_email DESC` comes before
+ *  the list's own order. Ordering by age alone answered a different person's row:
  *  a member whose proved address matches a NEWER entry and whose stated phone matches an
  *  OLDER one was shown with the older entry's status word and member number ("was
  *  Frozen, OLD-1" where the list says "Active, NEW-2"). Both the single `OR` lateral and
  *  the first UNION ALL had it; the review of PR #87 found it in the re-check.
  *
- *  A FAMILY SHARING ONE ADDRESS has several entries against it; `ORDER BY created_at`
- *  within a channel takes the first, which is again what `reconcile` does, because the
- *  list itself offers nothing to choose between them. */
+ *  A FAMILY SHARING ONE ADDRESS has several entries against it, and the first of them is
+ *  what `reconcile` takes, because the list itself offers nothing to choose between
+ *  them. **`ORDER BY created_at` did NOT take the first** — one confirm gives every row
+ *  the same instant, so the tie fell to a random uuid and this lateral could answer a
+ *  different entry from the pure rule about the same member, and a different one again on
+ *  the next read. `listed_seq` is what "first" means; see the column's own note. */
 export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<MemberAgainstList[]> {
   const rows = await sql<
     {
@@ -545,6 +608,8 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
+      seat_counted: boolean;
+      entry_id: string | null;
       entry_status: string | null;
       entry_member_number: string | null;
       on_list: boolean;
@@ -552,9 +617,13 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
   >`
     SELECT m.user_id,
            u.display_name,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
            CASE WHEN v.proved THEN u.email::text ELSE NULL END AS email,
            m.stated_phone_e164,
            (m.last_listed_at IS NOT NULL) AS ever_listed,
+           e.id            AS entry_id,
            e.status        AS entry_status,
            e.member_number AS entry_member_number,
            (e.id IS NOT NULL) AS on_list
@@ -568,26 +637,23 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     LEFT JOIN LATERAL (
       SELECT c.id, c.status, c.member_number
       FROM (
-        (SELECT x.id, x.status, x.member_number, x.created_at, true AS by_email
+        (SELECT x.id, x.status, x.member_number, x.listed_seq, true AS by_email
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email
-         ORDER BY x.created_at, x.id
+         ORDER BY x.listed_seq
          LIMIT 1)
         UNION ALL
-        (SELECT x.id, x.status, x.member_number, x.created_at, false AS by_email
+        (SELECT x.id, x.status, x.member_number, x.listed_seq, false AS by_email
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
-         ORDER BY x.created_at, x.id
+         ORDER BY x.listed_seq
          LIMIT 1)
       ) c
-      ORDER BY c.by_email DESC, c.created_at, c.id
+      ORDER BY c.by_email DESC, c.listed_seq
       LIMIT 1
     ) e ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -595,7 +661,9 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     email: row.email,
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
+    seatCounted: row.seat_counted,
     onList: row.on_list,
+    entryId: row.entry_id,
     entryStatus: row.entry_status,
     entryMemberNumber: row.entry_member_number,
   }));
@@ -648,4 +716,492 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string): Promi
   await tx`DELETE FROM gym_member_list_uploads WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_lists WHERE gym_id = ${gymId}`;
+}
+
+// ── PRESSING CONFIRM (3a-iii-b; §9.7) ───────────────────────────────────────
+//
+// **EVERY STATEMENT BELOW RUNS INSIDE ONE TRANSACTION THAT HOLDS THE GYM'S ROW**,
+// which the service takes before it reads anything it will decide on. Each is
+// written to be safe run twice, because a transaction that is retried after a
+// serialisation failure runs them all again: the insert conflicts away, the update
+// writes the word that is already there, the delete deletes nothing the second time.
+
+/** A uuid that is never any row's id, for the unused half of the cursor comparison
+ *  on the first page. The boolean beside it is what decides which half counts;
+ *  Postgres still has to be handed a value of the right type for the branch it will
+ *  not take. */
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+
+/** THE GYM'S ROW, LOCKED — the module's one lock order, gym row then child rows.
+ *
+ *  Written once and called by everything here for a reason the module has already
+ *  been bitten by elsewhere: an ordering decided per-function is an ordering that
+ *  eventually reverses somewhere and deadlocks. The JOIN door takes the APPLICATION
+ *  row first and then this one (`claimSeat`'s caller), which is a different pair, so
+ *  the two paths meet only here — and both take THIS row, which is exactly why a
+ *  join and a confirm cannot interleave (§9.7). */
+export async function lockGym(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+}
+
+/** One person as the list stores them. Not `ListEntry`: that one carries the
+ *  identity key of somebody already on the list, and this is what goes ON it. */
+export interface EntryToWrite {
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  memberNumber: string | null;
+  status: string | null;
+  identityKey: string;
+}
+
+/** THE PEOPLE A CONFIRM ADDS — ONE STATEMENT, WHATEVER THE FILE HOLDS.
+ *
+ *  **`jsonb_to_recordset` IS NOT A STYLE CHOICE AND THE MEASUREMENT IS WHY** (§9.9,
+ *  measured 2026-09-20): `postgres.js` refuses more than 65,534 parameters in one
+ *  statement, so a row of placeholders per person fails at about eight thousand
+ *  people — inside the ten thousand this module accepts. One document is one
+ *  parameter, so this statement is the same size for a gym of ten and a gym of ten
+ *  thousand, and there is no size at which the confirm stops working.
+ *
+ *  **`ON CONFLICT DO NOTHING` ON THE IDENTITY KEY is what makes a repeated confirm
+ *  write nothing** rather than raise, which matters because a raised 23505 aborts
+ *  the whole surrounding transaction — the same declarative idempotence the join
+ *  door uses, for the same reason.
+ *
+ *  It returns what it actually inserted, and the caller checks that against what the
+ *  rule said it would: under the gym's lock the two cannot differ, so a difference
+ *  is a fault of ours and the confirm refuses rather than reporting a number that is
+ *  not what happened. */
+export async function insertEntries(
+  tx: TransactionSql,
+  gymId: string,
+  people: readonly EntryToWrite[],
+  source: MemberListEntrySource,
+): Promise<number> {
+  if (people.length === 0) return 0;
+  const payload = people.map((person, index) => ({
+    full_name: person.fullName,
+    email: person.email,
+    phone_e164: person.phone,
+    member_number: person.memberNumber,
+    status: person.status,
+    identity_key: person.identityKey,
+    // THE FILE'S OWN ROW ORDER, which `listed_seq` is then stamped in: see the
+    // column's own note for the three answers that hang on it.
+    ord: index,
+  }));
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_member_list_entries
+      (gym_id, full_name, email, phone_e164, member_number, status, identity_key, source)
+    SELECT ${gymId}, r.full_name, r.email, r.phone_e164, r.member_number, r.status,
+           r.identity_key, ${source}
+    FROM jsonb_to_recordset(${tx.json(payload)})
+      AS r(full_name text, email text, phone_e164 text, member_number text,
+           status text, identity_key text, ord int)
+    ORDER BY r.ord
+    ON CONFLICT (gym_id, identity_key) DO NOTHING
+    RETURNING id`;
+  return rows.length;
+}
+
+/** THE PEOPLE WHOSE STATUS WORD MOVED — one statement, in place.
+ *
+ *  **ONLY THE STATUS, AND THAT IS THE WHOLE OF `changed`** (§9.7). The identity key
+ *  is built from the name, address, phone and member number, so two entries sharing
+ *  a key cannot differ in any of them: a person whose NAME changed is honestly a new
+ *  person and somebody gone, which §9.5 settled and costs nothing because nothing
+ *  durable hangs on the key. Writing the other four here would be four columns that
+ *  cannot have changed, and one day one of them would be written from the wrong row. */
+export async function updateEntryStatuses(
+  tx: TransactionSql,
+  gymId: string,
+  changes: readonly { identityKey: string; status: string | null }[],
+): Promise<number> {
+  if (changes.length === 0) return 0;
+  const payload = changes.map((change) => ({ identity_key: change.identityKey, status: change.status }));
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries e
+    SET status = r.status
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)
+    WHERE e.gym_id = ${gymId} AND e.identity_key = r.identity_key
+    RETURNING e.id`;
+  return rows.length;
+}
+
+/** THE PEOPLE COMING OFF — one statement, keys only.
+ *
+ *  An array of keys rather than a document because there is nothing to carry but the
+ *  key, and `= ANY($1)` is one parameter like the document is: the eight-thousand
+ *  ceiling above is about placeholders, not about how many values one array holds. */
+export async function deleteEntries(
+  tx: TransactionSql,
+  gymId: string,
+  identityKeys: readonly string[],
+): Promise<number> {
+  if (identityKeys.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    DELETE FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[])
+    RETURNING id`;
+  return rows.length;
+}
+
+/** "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — stamped on every member the list being
+ *  replaced holds OR the new one does (§9.7, `reconcile`'s `onEitherList`).
+ *
+ *  **THE OLD LIST'S PEOPLE ARE STAMPED TOO, AND THAT IS THE POINT OF THE UNION.**
+ *  What the preview called "no longer listed" has to read the same after the confirm;
+ *  `last_listed_at` is the only thing that tells a member who dropped OFF a list from
+ *  one who was never on it, so a member coming off today gets their stamp on the way
+ *  out and reads as "no longer listed" rather than "never listed" — the gym being
+ *  told it never had somebody it has just removed.
+ *
+ *  `removed_at IS NULL` because a membership that has ended is not on anybody's list
+ *  and its columns are its record of what was true when it ended. */
+export async function stampListed(
+  tx: TransactionSql,
+  gymId: string,
+  userIds: readonly string[],
+  at: Date,
+): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const rows = await tx<{ user_id: string }[]>`
+    UPDATE gym_members
+    SET last_listed_at = ${at}
+    WHERE gym_id = ${gymId} AND user_id = ANY(${userIds}::uuid[]) AND removed_at IS NULL
+    RETURNING user_id`;
+  return rows.length;
+}
+
+/** THE LIST ITSELF, MOVED ON — created on a gym's first confirm and updated after,
+ *  in ONE statement so there is no "does the row exist yet" to get wrong.
+ *
+ *  **THE VERSION IS BUMPED ONLY WHEN SOMETHING CHANGED** (§9.7). It is what a preview
+ *  is measured against, so bumping it for a confirm that wrote nothing would throw
+ *  away every other preview open in the gym for no reason — and the same file
+ *  uploaded twice is exactly the case where nothing changed.
+ *
+ *  **`last_confirmed_at` AND THE UPLOAD MOVE EVEN THEN**, because the gym DID confirm
+ *  this file and the record of which file the list came from is what a mapping is
+ *  remembered from next month (§9.5). */
+export async function moveListOn(
+  tx: TransactionSql,
+  input: { gymId: string; uploadId: string; at: Date; bump: boolean },
+): Promise<number> {
+  const step = input.bump ? 1 : 0;
+  const rows = await tx<{ version: number }[]>`
+    INSERT INTO gym_member_lists (gym_id, version, last_confirmed_upload_id, last_confirmed_at)
+    VALUES (${input.gymId}, ${step}, ${input.uploadId}, ${input.at})
+    ON CONFLICT (gym_id) DO UPDATE
+      SET version = gym_member_lists.version + ${step},
+          last_confirmed_upload_id = EXCLUDED.last_confirmed_upload_id,
+          last_confirmed_at = EXCLUDED.last_confirmed_at
+    RETURNING version`;
+  const version = rows[0]?.version;
+  if (version === undefined) throw new Error("moving a member list on returned no row");
+  return version;
+}
+
+/** THE UPLOAD, FINISHED WITH — and its cells gone in the same statement that says so.
+ *
+ *  `rows = NULL` beside the status is §9.6's CHECK made to hold rather than promised:
+ *  a confirmed upload still holding a member's name, address and phone number is a
+ *  state nothing else in the system would ever notice.
+ *
+ *  **`summary` IS OVERWRITTEN WITH WHAT WAS APPLIED, not what the preview guessed.**
+ *  The rule was worked out again under the lock on the list as it is now, and that
+ *  answer is the one this upload's record keeps — so pressing Confirm a second time
+ *  reads back what the first press did and not a stale story about the same file.
+ *
+ *  `AND status = 'staged'` is the last word on a race this transaction already holds
+ *  the gym's lock against: it costs nothing and it means no path can ever confirm an
+ *  upload twice, including one that arrives some day without the lock. */
+export async function markUploadConfirmed(
+  tx: TransactionSql,
+  input: { gymId: string; uploadId: string; at: Date; summary: MemberListUploadSummary },
+): Promise<void> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_uploads
+    SET status = 'confirmed', confirmed_at = ${input.at}, rows = NULL,
+        summary = ${tx.json(input.summary)}
+    WHERE gym_id = ${input.gymId} AND id = ${input.uploadId} AND status = 'staged'
+    RETURNING id`;
+  if (rows.length !== 1) {
+    throw new Error(`confirming member-list upload ${input.uploadId} moved ${String(rows.length)} rows`);
+  }
+}
+
+// ── READING THE LIST THE GYM KEEPS (3a-iii-b; §9.9) ─────────────────────────
+
+/** One of the gym's own status words on its kept list, with the three numbers a
+ *  filter chip shows. */
+/** The chips AND the whole-list numbers, from ONE statement. The chips are capped
+ *  (`MEMBER_LIST_STATUS_CHIPS_MAX`); the totals never are. */
+export interface StatusCounts {
+  totals: { entries: number; inApp: number; canBeInvited: number; noEmail: number };
+  statuses: StatusCountRow[];
+}
+
+export interface StatusCountRow {
+  label: string;
+  count: number;
+  inApp: number;
+  canBeInvited: number;
+  noEmail: number;
+}
+
+/** WHAT THE LIST HOLDS, BY THE GYM'S OWN WORD — one pass over this gym's entries.
+ *
+ *  **"ALREADY IN THE APP" IS AN ARRAY OF ENTRY IDS HANDED IN, AND THAT IS THE SHAPE
+ *  THAT KEEPS THIS CHEAP AND KEEPS IT HONEST.** The question is "does one of this
+ *  gym's members reach this entry", and the answer already exists in exactly one
+ *  place: `membersAgainstList`, which the preview reads too, matching on the proved
+ *  address first and the stated phone second. Asked again here — an EXISTS per entry
+ *  against the members — it would be ten thousand lookups to answer two hundred
+ *  questions, the shape review of PR #87 found costing 207 ms on the one connection
+ *  the whole API shares, AND it would be a second opinion that could disagree with
+ *  the preview about one person. The members are bounded by what a gym can hold, so
+ *  the array is small where the entries are many.
+ *
+ *  **THE WORDS ARE FOLDED THE WAY THE RULE FOLDS THEM.** `lower(coalesce(status,''))`
+ *  is `reconcile`'s `foldStatus` in SQL — a stored word is already trimmed with its
+ *  spaces collapsed (`cleanStatus`), so lower-casing is the whole of the difference,
+ *  and a status of NULL and one of '' are one group here as they are one word there.
+ *  The `(gym_id, lower(status))` index does not serve the coalesce and is not asked
+ *  to: this reads every entry of the gym once whatever it does, because the email and
+ *  the id are not in that index either.
+ *
+ *  **THE LABEL IS THE SPELLING THE LIST WROTE FIRST**, which is §9.5's rule for the
+ *  preview applied to the kept list, so a gym reading its own chips sees its own word
+ *  and not whichever row the database happened to reach first — which is exactly what it
+ *  did read while this ordered by `created_at`, because one confirm gives every row the
+ *  same instant and the tie fell to a random uuid. Measured: 16 of 40 confirms whose file
+ *  wrote "Active" first read the chip back as "ACTIVE". See `listed_seq`'s own note. */
+export async function listStatusCounts(
+  sql: SqlOrTx,
+  gymId: string,
+  inAppEntryIds: readonly string[],
+): Promise<StatusCounts> {
+  const rows = await sql<
+    {
+      t_entries: number;
+      t_in_app: number;
+      t_can_be_invited: number;
+      t_no_email: number;
+      label: string | null;
+      count: number | null;
+      in_app: number | null;
+      can_be_invited: number | null;
+      no_email: number | null;
+    }[]
+  >`
+    WITH grouped AS (
+      SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,
+             count(*)::int AS count,
+             count(*) FILTER (WHERE e.id = ANY(${inAppEntryIds}::uuid[]))::int AS in_app,
+             count(*) FILTER (
+               WHERE e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL)::int AS can_be_invited,
+             count(*) FILTER (WHERE e.email IS NULL)::int AS no_email,
+             min(e.listed_seq) AS first_seq
+      FROM gym_member_list_entries e
+      WHERE e.gym_id = ${gymId}
+      GROUP BY lower(coalesce(e.status, ''))
+    ),
+    -- THE WHOLE LIST, COUNTED BEFORE THE CHIPS ARE CUT. The chips have a ceiling and
+    -- these numbers must not: summing the CAPPED rows made a gym past the ceiling
+    -- read "200 people" over a list of 205, and left canBeInvited short by the
+    -- truncated groups (review of PR #88, High-3). One statement still answers both,
+    -- which is the point — two would be two answers to one question.
+    totals AS (
+      SELECT coalesce(sum(count), 0)::int AS t_entries,
+             coalesce(sum(in_app), 0)::int AS t_in_app,
+             coalesce(sum(can_be_invited), 0)::int AS t_can_be_invited,
+             coalesce(sum(no_email), 0)::int AS t_no_email
+      FROM grouped
+    )
+    SELECT t.t_entries, t.t_in_app, t.t_can_be_invited, t.t_no_email,
+           g.label, g.count, g.in_app, g.can_be_invited, g.no_email
+    FROM totals t
+    LEFT JOIN LATERAL (
+      SELECT * FROM grouped
+    -- THE GROUPS COME BACK IN THE LIST'S OWN ORDER, which is one column now and
+    -- needs no tie-break at all: listed_seq is unique, where created_at is
+    -- shared by every row one confirm writes and left the order to a random uuid.
+      ORDER BY grouped.first_seq
+      -- The reply's own ceiling, so a gym that has accumulated status words across
+      -- many add-uploads cannot grow this answer without bound (see the constant's
+      -- note). The totals above are taken before it.
+      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}
+    ) g ON true`;
+  const first = rows[0];
+  const totals = {
+    entries: first?.t_entries ?? 0,
+    inApp: first?.t_in_app ?? 0,
+    canBeInvited: first?.t_can_be_invited ?? 0,
+    noEmail: first?.t_no_email ?? 0,
+  };
+  // A GYM WITH NO ENTRIES STILL ANSWERS ONE ROW, because the totals are on the
+  // outside — that is what lets an empty list carry its zeroes. `count` is null
+  // there and never null for a real group, which is the test for it: `label` is
+  // not, since the people with NO status are a real group whose label is null.
+  const statuses = rows
+    .filter((row) => row.count !== null)
+    .map((row) => ({
+      // "" is the people with no status at all — the same empty label the entries
+      // filter reads as "no status" (§9.9), and the same one the preview's own
+      // breakdown uses.
+      label: row.label ?? "",
+      count: row.count ?? 0,
+      inApp: row.in_app ?? 0,
+      canBeInvited: row.can_be_invited ?? 0,
+      noEmail: row.no_email ?? 0,
+    }));
+  return { totals, statuses };
+}
+
+/** One person on the kept list, as a page of it shows them. */
+export interface EntryRow {
+  entryId: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  memberNumber: string | null;
+  status: string | null;
+  source: MemberListEntrySource;
+  inApp: boolean;
+}
+
+export interface EntriesPageInput {
+  gymId: string;
+  inAppEntryIds: readonly string[];
+  /** Null is "everybody"; an empty list would be "nobody" and is not a filter
+   *  anybody can ask for, which is why the two are told apart rather than both
+   *  arriving as `[]`. Each word is already folded by the caller. */
+  statuses: readonly string[] | null;
+  filter: "all" | "in_app" | "not_in_app";
+  /** Already escaped for LIKE by the caller, or null. */
+  like: string | null;
+  cursor: { name: string; id: string } | null;
+  limit: number;
+}
+
+/** ONE PAGE OF THE LIST, AND HOW MANY THE FILTERS MATCH IN ALL — one statement.
+ *
+ *  **THE TOTAL IS COUNTED OVER THE SAME FILTERED SET THE PAGE IS CUT FROM**, in the
+ *  same statement, so a screen saying "312 Active" and the names under it can never
+ *  be answers to two different questions asked a moment apart.
+ *
+ *  **THE ONE-ROW `totals` ON THE OUTSIDE IS WHAT MAKES AN EMPTY PAGE STILL CARRY ITS
+ *  TOTAL.** `SELECT (SELECT count(*) …) FROM filtered` answers nothing at all when
+ *  the page is empty — no rows in, no rows out — and a search that matches nobody
+ *  would have come back with no total rather than zero. A LEFT JOIN LATERAL onto a
+ *  count that always has exactly one row cannot do that.
+ *
+ *  **THE CURSOR IS THE LAST PERSON, NOT A PLACE.** Paging by offset through a list a
+ *  colleague is editing skips people and shows others twice; `(full_name, id) >
+ *  (last name, last id)` cannot, and the id is in it so two people with the same name
+ *  are still two pages apart rather than one blocking the other. The comparison and
+ *  the ORDER BY read the same column with the same collation, which is what keeps
+ *  them agreeing about what "after" means. */
+export async function entriesPage(
+  sql: SqlOrTx,
+  input: EntriesPageInput,
+): Promise<{ total: number; entries: EntryRow[] }> {
+  const statuses = input.statuses === null ? null : [...input.statuses];
+  const rows = await sql<
+    {
+      total: number;
+      id: string | null;
+      full_name: string | null;
+      email: string | null;
+      phone_e164: string | null;
+      member_number: string | null;
+      status: string | null;
+      source: string | null;
+      in_app: boolean | null;
+    }[]
+  >`
+    WITH filtered AS (
+      SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, e.member_number,
+             e.status, e.source,
+             (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app
+      FROM gym_member_list_entries e
+      WHERE e.gym_id = ${input.gymId}
+        AND (${statuses}::text[] IS NULL
+             OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
+        AND (${input.like}::text IS NULL
+             OR e.full_name ILIKE ${input.like}::text
+             OR e.email::text ILIKE ${input.like}::text
+             OR coalesce(e.phone_e164, '') ILIKE ${input.like}::text
+             OR coalesce(e.member_number, '') ILIKE ${input.like}::text)
+        AND (${input.filter}::text = 'all'
+             OR (${input.filter}::text = 'in_app'
+                 AND e.id = ANY(${input.inAppEntryIds}::uuid[]))
+             OR (${input.filter}::text = 'not_in_app'
+                 AND e.id <> ALL(${input.inAppEntryIds}::uuid[])))
+    ),
+    totals AS (SELECT count(*)::int AS total FROM filtered)
+    SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
+           f.status, f.source, f.in_app
+    FROM totals t
+    LEFT JOIN LATERAL (
+      SELECT *
+      FROM filtered
+      WHERE ${input.cursor === null}
+         OR (filtered.full_name, filtered.id)
+            > (${input.cursor?.name ?? ""}::text, ${input.cursor?.id ?? EMPTY_UUID}::uuid)
+      ORDER BY filtered.full_name, filtered.id
+      LIMIT ${input.limit}
+    ) f ON true`;
+  const total = rows[0]?.total ?? 0;
+  const entries: EntryRow[] = [];
+  for (const row of rows) {
+    // The LEFT JOIN gives one all-null row when the page is empty, which is how the
+    // total survives; it is not a person and is skipped here.
+    if (row.id === null) continue;
+    const source = memberListEntrySourceSchema.safeParse(row.source);
+    if (!source.success) throw new Error(`member-list entry ${row.id} holds a source that no longer parses`);
+    entries.push({
+      entryId: row.id,
+      fullName: row.full_name ?? "",
+      email: row.email,
+      phone: row.phone_e164,
+      memberNumber: row.member_number,
+      status: row.status,
+      source: source.data,
+      inApp: row.in_app ?? false,
+    });
+  }
+  return { total, entries };
+}
+
+/** TELL POSTGRES WHAT IS NOW IN THE TABLE, after a confirm has filled it.
+ *
+ *  A confirm writes up to ten thousand rows into a table whose statistics still say
+ *  it holds ONE — statistics are table-wide, so that is the true state before
+ *  anybody has a list — and the planner then costs the per-member lookup in
+ *  `membersAgainstList` against a table it believes is empty. That statement answers
+ *  everything about a gym's own people and runs on the preview read and on every
+ *  page of names, on the ONE connection the whole API shares.
+ *
+ *  **Measured 2026-09-21** (`.cost/stale.ts`, 10,000 entries against 200 members,
+ *  three runs each, the processor at its full 2,592 MHz): stale **39.7 · 22.1 ·
+ *  21.6 ms**, and after this **10.2 · 9.8 · 9.3 ms**. Walking the whole list a page
+ *  at a time straight after a confirm was **3,198 ms** with it and **4,514 ms**
+ *  without. Autovacuum reaches the same place by itself within about a minute; the
+ *  minute in question is the one where staff are looking at the list they have just
+ *  confirmed and paging through it.
+ *
+ *  Postgres's own manual says to run this after a bulk load, which is exactly what a
+ *  confirm is. **It costs 269 ms at ten thousand rows**, once, and a gym confirms a
+ *  list about once a month. It is a modest win bought cheaply, not a rescue: an
+ *  earlier note here claimed a hundredfold and 3,152 ms, which is not reproducible
+ *  and is struck.
+ *
+ *  **IT RUNS AFTER THE TRANSACTION HAS COMMITTED**, so the gym's row lock is already
+ *  released and nothing waits on it but the connection; and it is HOUSEKEEPING, so a
+ *  failure is warned about and never fails a confirm that has already been applied. */
+export async function analyseEntries(sql: Sql): Promise<void> {
+  await sql`ANALYZE gym_member_list_entries`;
 }

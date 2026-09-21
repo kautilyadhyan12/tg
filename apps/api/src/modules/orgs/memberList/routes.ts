@@ -10,6 +10,9 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
   MEMBER_FILE_MAX_BASE64_CHARS,
+  MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
+  memberListConfirmRequestSchema,
+  memberListEntriesQuerySchema,
   memberListRowsQuerySchema,
   memberListUploadRequestSchema,
 } from "@app/shared";
@@ -163,4 +166,85 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       return reply.status(200).send({ page });
     },
   );
+
+
+  /** CONFIRMING IS ITS OWN ALLOWANCE, and a much looser one than uploading: it
+   *  reads no file and spawns no worker, and staff correcting a mapping and
+   *  pressing again must not be throttled into thinking the button is broken.
+   *  30 an hour each, 120 from one address (§9.9) — `ipMax` explicit, for the
+   *  front desk that is one address with several staff signed in on it. */
+  const confirmLimit = createDualRateLimit({
+    name: "memberlist_confirm",
+    max: 30,
+    ipMax: 120,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const confirmGate = gate(confirmLimit);
+
+  app.post(
+    "/v1/orgs/:gymId/member-list/uploads/:uploadId/confirm",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(memberListParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      // A body is optional on the wire and `{}` here, so a screen that sends
+      // nothing is asking for a confirm without the tick rather than a 400.
+      const body = parseOr400(memberListConfirmRequestSchema, req.body ?? {}, req, reply);
+      if (body === null) return;
+      const answer = await service.confirmUpload(
+        listDeps,
+        requireUserId(req),
+        params.gymId,
+        params.uploadId,
+        { acknowledgeLargeChange: body.acknowledgeLargeChange ?? false },
+        confirmGate(req, reply),
+      );
+      switch (answer.kind) {
+        case "rate_limited":
+          // The limiter has already answered 429.
+          return;
+        case "confirmed":
+          return reply.status(200).send({ confirmed: answer.confirmed });
+        case "list_changed":
+          // 409 WITH THE NUMBERS, not a bare sentence: a screen has to be able to
+          // say which version it measured and which the list is on, or "somebody
+          // changed it" is a dead end for the person standing at the desk.
+          return reply.status(409).send({
+            error: "list_changed",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed,
+            baseVersion: answer.baseVersion,
+            version: answer.version,
+            requestId: req.id,
+          });
+        case "large_change":
+          return reply.status(409).send({
+            error: "large_change",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.large_change,
+            guard: answer.guard,
+            requestId: req.id,
+          });
+      }
+    },
+  );
+
+  app.get("/v1/orgs/:gymId/member-list", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await service.readList(listDeps, requireUserId(req), params.gymId, readGate(req, reply));
+    // Null means the limiter has already answered.
+    if (list === null) return;
+    return reply.status(200).send({ list });
+  });
+
+  app.get("/v1/orgs/:gymId/member-list/entries", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListEntriesQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await service.readEntries(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
+  });
 }

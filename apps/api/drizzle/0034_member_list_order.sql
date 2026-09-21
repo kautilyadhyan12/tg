@@ -1,0 +1,27 @@
+-- WHERE A PERSON CAME IN THE GYM'S LIST (Part 3 §9.7, §9.9; ROADMAP Stage 2
+-- item 3a-iii-b). Forward-only, one new column and one index.
+--
+-- Hand-written, for the recorded reason `0016`-`0033` were: `drizzle/meta/`
+-- stops at `0012_snapshot.json`, so `drizzle-kit generate` re-emits everything
+-- since. Its journal entry is part of this commit.
+--
+-- WHY IT EXISTS. Three answers hang on "which entry came first" — the spelling
+-- shown on a status chip and the order the chips come in (§9.9), which entry a
+-- member is matched to when a family shares one address (§9.7), and the order
+-- the pure rule is handed the list in — and `0033` gave the table nothing that
+-- could say. `created_at` defaults to `now()`, which is the TRANSACTION's clock,
+-- so every row one confirm writes carries the same instant to the microsecond
+-- and the tie fell to `id`, which is `gen_random_uuid()`. Measured 2026-09-21 on
+-- a copy of this table: of 40 confirms whose file wrote "Active" before
+-- "ACTIVE", 16 read the gym's own chip back as "ACTIVE", and the answer could
+-- differ between two reads a second apart.
+--
+-- A SEQUENCE AND NOT THE FILE'S ROW NUMBER, because a second confirm and
+-- 3a-iv's typed-in person must APPEND rather than restart at one. The confirm's
+-- INSERT orders by the file's own row order, so the numbers follow the list.
+--
+-- Existing rows take the sequence in whatever order the table rewrite reaches
+-- them: there is no order to recover for them, and the next confirm rewrites
+-- the gym's entries anyway. Production launches empty (RULINGS 2026-07-13).
+ALTER TABLE "gym_member_list_entries" ADD COLUMN "listed_seq" bigserial NOT NULL;--> statement-breakpoint
+CREATE INDEX "gym_member_list_entries_gym_seq_idx" ON "gym_member_list_entries" ("gym_id","listed_seq");

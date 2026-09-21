@@ -38,10 +38,21 @@ export interface ListEntry {
   status: string | null;
 }
 
-/** One of the gym's own app members, as the match reads them: live, not
- *  complimentary, not staff — the seat rule's own three conditions, applied by
- *  the caller's SQL (§9.7). The owner is member one and is on no export, so
- *  without those conditions every gym's owner would read "not on your list".
+/** One of the gym's own app members: LIVE, and that is the only condition the
+ *  caller's SQL applies. `seatCounted` carries the rest of the seat rule.
+ *
+ *  **TWO QUESTIONS ARE ASKED OF THIS LIST AND THEY ARE NOT THE SAME QUESTION**, which
+ *  is the whole reason the flag exists (review of PR #88, High-1). "Does one of this
+ *  gym's people already have the app" is true of the owner, of a trainer who trains
+ *  here too, and of somebody on a free place. "Does this person occupy a PAID SEAT"
+ *  is not — the seat rule excludes complimentary members and staff, and §9.7 excludes
+ *  them from the marks for a good reason: the owner is member one and may be on no
+ *  export, so without that every gym's owner would read "no longer listed".
+ *
+ *  Answering the FIRST question with the second is what this fixes. It printed "not
+ *  in the app" beside three people who were holding it, and counted them in
+ *  `canBeInvited` — the number 3b's Invite button acts on. A real gym's export has
+ *  its owner and its trainers on it.
  *
  *  `email` is their VERIFIED address or null: an address nobody has proved is
  *  nobody's proof, and matching on one would let a stranger who typed a member's
@@ -56,6 +67,10 @@ export interface ListMember {
   email: string | null;
   statedPhone: string | null;
   everListed: boolean;
+  /** Whether this member occupies a paid seat: live, not complimentary, not staff.
+   *  The marks, `leaving`, the guard and the seat count use only these; "already in
+   *  the app" uses every live member. */
+  seatCounted: boolean;
 }
 
 export interface ReconcileInput {
@@ -133,6 +148,9 @@ export interface Reconciled {
   members: MemberListMembers;
   guard: MemberListGuard;
   marks: ReconciledMember[];
+  /** The gym's own members who are on the list being replaced or would be on the new
+   *  one — what a confirm stamps `last_listed_at` on (§9.7). See `MembersSide`. */
+  onEitherList: string[];
 }
 
 /** One spelling for a status word, so two exports of one gym writing "Active"
@@ -250,6 +268,22 @@ export interface MembersSide {
   /** How many of the gym's members the list being replaced holds — what `leaving` is
    *  measured against by the wrong-file guard (§9.8). */
   listedNow: number;
+  /** EVERY MEMBER THE OLD LIST HOLDS OR THE NEW ONE WOULD — §9.7's "stamp
+   *  `last_listed_at` on every member who is on the list being replaced OR on the new
+   *  one", as user ids, worked out by the same rule that decides every other member
+   *  answer here.
+   *
+   *  **The UNION is the whole point and each half is there for its own reason.** The new
+   *  list's people are stamped because they are listed now; the OLD list's people are
+   *  stamped so that somebody the preview called "no longer listed" still reads as
+   *  no longer listed after the confirm — without it, a member who has just come off
+   *  would fall back to "never listed" and the gym would be told it had never had them.
+   *
+   *  **IT IS NOT GATED ON `hasList`, AND `marks` IS.** A gym's very first confirm has no
+   *  list to be missing from, so there are no marks to print — but everybody the file
+   *  reaches is listed from that moment, and computing this inside the gate would leave
+   *  a gym's first two hundred members unstamped with nothing to say so. */
+  onEitherList: string[];
 }
 
 /** WHAT AN UPLOAD WOULD DO TO THE GYM'S OWN MEMBERS — pure, and worked out fresh on
@@ -274,11 +308,14 @@ export function membersAgainstNewList(
 ): MembersSide {
   const marks: ReconciledMember[] = [];
   const membersLeaving: ReconciledPerson[] = [];
+  const onEitherList: string[] = [];
   let listedNow = 0;
   for (const member of members) {
     const onNewList = reachesNewList(member);
     if (member.onList) listedNow += 1;
     const leaving = member.onList && !onNewList;
+    // Outside the `hasList` gate deliberately — see the field's own note.
+    if (onNewList || member.onList) onEitherList.push(member.userId);
     if (hasList) {
       marks.push({
         userId: member.userId,
@@ -304,7 +341,7 @@ export function membersAgainstNewList(
       inApp: true,
     });
   }
-  return { marks, membersLeaving, listedNow };
+  return { marks, membersLeaving, listedNow, onEitherList };
 }
 
 /** THE THREE ANSWERS ABOUT THE PEOPLE A FILE WOULD ADD (§9.6): already in the app ·
@@ -363,7 +400,8 @@ export function reconcile(input: ReconcileInput): Reconciled {
   for (const entry of entries) entriesByKey.set(entry.identityKey, entry);
 
   // How the gym's own members are reached, so "is this person already in the
-  // app" is one lookup per person rather than a scan per person.
+  // app" is one lookup per person rather than a scan per person. EVERY live member
+  // counts here, seat or no seat: the owner and the trainers have the app too.
   const memberEmails = new Set<string>();
   const memberPhones = new Set<string>();
   for (const member of members) addContact({ email: member.email, phone: member.statedPhone }, memberEmails, memberPhones);
@@ -453,17 +491,22 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // this function was handed and there with one statement's answer. One function,
   // so a preview read an hour later cannot say something different about a person
   // than the preview that was staged.
-  const onTheList = members.map((member) => {
-    const entry = entryFor({ email: member.email, phone: member.statedPhone });
-    return {
-      ...member,
-      onList: entry !== null,
-      entryStatus: entry?.status ?? null,
-      entryMemberNumber: entry?.memberNumber ?? null,
-    };
-  });
+  // ...and THIS half is the seat rule's own set, because a mark, a leaver and the
+  // guard's numbers are about the paid places, and because §9.7 keeps the owner out
+  // of "no longer listed".
+  const onTheList = members
+    .filter((member) => member.seatCounted)
+    .map((member) => {
+      const entry = entryFor({ email: member.email, phone: member.statedPhone });
+      return {
+        ...member,
+        onList: entry !== null,
+        entryStatus: entry?.status ?? null,
+        entryMemberNumber: entry?.memberNumber ?? null,
+      };
+    });
   const side = membersAgainstNewList(onTheList, (member) => reaches({ email: member.email, phone: member.statedPhone }, newEmails, newPhones), hasList);
-  const { marks, membersLeaving, listedNow } = side;
+  const { marks, membersLeaving, listedNow, onEitherList } = side;
 
   const counts: MemberListChangeCounts = {
     new: fresh.length,
@@ -498,5 +541,6 @@ export function reconcile(input: ReconcileInput): Reconciled {
     members: { leaving: membersLeaving.length, listedNow },
     guard,
     marks,
+    onEitherList,
   };
 }

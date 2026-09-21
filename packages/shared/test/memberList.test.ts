@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   isLargeMemberListChange,
+  MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
+  memberListConfirmRequestSchema,
+  memberListConfirmedSchema,
+  memberListViewSchema,
+  memberListStatusCountSchema,
+  memberListEntriesQuerySchema,
+  memberListEntriesPageSchema,
+  memberListEntrySchema,
+  MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_QUERY_MAX_CHARS,
+  MEMBER_LIST_STATUS_FILTERS_MAX,
+  MEMBER_LIST_MAX_STATUS_CHARS,
+  MEMBER_LIST_MAX_STATUS_WORDS,
   MEMBER_FILE_MAX_BASE64_CHARS,
   MEMBER_LIST_UPLOAD_GONE_WORDS,
   memberListModeSchema,
@@ -278,5 +291,133 @@ describe("what the list's own shapes promise (3a-iii)", () => {
       expect(said).not.toContain(".csv");
       expect(said).not.toContain(".xlsx");
     }
+  });
+});
+
+describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () => {
+  it("the tick is optional and nothing else may ride with it", () => {
+    expect(memberListConfirmRequestSchema.parse({})).toEqual({});
+    expect(memberListConfirmRequestSchema.parse({ acknowledgeLargeChange: true })).toEqual({ acknowledgeLargeChange: true });
+    // A STRING IS NOT A TICK. "false" is truthy, so a screen sending the word
+    // would apply a large change nobody acknowledged.
+    expect(memberListConfirmRequestSchema.safeParse({ acknowledgeLargeChange: "true" }).success).toBe(false);
+    expect(memberListConfirmRequestSchema.safeParse({ acknowledgeLargeChange: 1 }).success).toBe(false);
+    // Strict: a field nobody reads must not be quietly accepted.
+    expect(memberListConfirmRequestSchema.safeParse({ force: true }).success).toBe(false);
+  });
+
+  it("both refusals that carry numbers say what to do, and neither can hold a person", () => {
+    for (const said of Object.values(MEMBER_LIST_CONFIRM_REFUSAL_WORDS)) {
+      expect(said.length).toBeGreaterThan(20);
+      expect(said.endsWith(".")).toBe(true);
+      // The server never sees a file's name and never says one (§9.9).
+      expect(said).not.toContain(".csv");
+      expect(said).not.toContain(".xlsx");
+    }
+    // They are DIFFERENT sentences: a list that moved and a change that is too
+    // big are two different things for staff to do something about.
+    expect(MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed).not.toEqual(MEMBER_LIST_CONFIRM_REFUSAL_WORDS.large_change);
+  });
+
+  it("what a confirm answers is counts and instants, never a name", () => {
+    const answer = {
+      uploadId: "11111111-2222-3333-4444-555555555555",
+      alreadyConfirmed: false,
+      version: 3,
+      confirmedAt: new Date().toISOString(),
+      applied: { new: 1, changed: 2, unchanged: 3, gone: 4, alreadyInApp: 1, canBeInvited: 0, noEmail: 0 },
+      statuses: [{ label: "Active", count: 6, new: 1, changed: 2, unchanged: 3, gone: 0 }],
+      members: { leaving: 1, listedNow: 5 },
+    };
+    expect(memberListConfirmedSchema.parse(answer)).toEqual(answer);
+    // A negative count is not a count. The preview half shipped a bug that
+    // answered -1 for `canBeInvited`; the schema is what would have caught it.
+    expect(memberListConfirmedSchema.safeParse({ ...answer, version: -1 }).success).toBe(false);
+    expect(
+      memberListConfirmedSchema.safeParse({ ...answer, applied: { ...answer.applied, canBeInvited: -1 } }).success,
+    ).toBe(false);
+    expect(memberListConfirmedSchema.safeParse({ ...answer, uploadId: "not-a-uuid" }).success).toBe(false);
+  });
+
+  it("the list a gym reads back is counts and its own words", () => {
+    const view = {
+      hasList: true,
+      version: 2,
+      lastConfirmedAt: new Date().toISOString(),
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1 },
+      statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
+    };
+    expect(memberListViewSchema.parse(view)).toEqual(view);
+    // A GYM WITH NO LIST IS A SCREEN, NOT A MISSING ONE: every field still has to
+    // be answerable at zero.
+    expect(
+      memberListViewSchema.parse({
+        hasList: false,
+        version: 0,
+        lastConfirmedAt: null,
+        counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 },
+        statuses: [],
+      }).hasList,
+    ).toBe(false);
+    // "" IS A LABEL — the people with no status at all, which a gym whose export
+    // has no status column is entirely made of.
+    expect(memberListStatusCountSchema.parse({ label: "", count: 4, inApp: 0, canBeInvited: 4 }).label).toBe("");
+  });
+
+  it("which people to show: the filters a screen may ask for, and the ones it may not", () => {
+    expect(memberListEntriesQuerySchema.parse({})).toEqual({});
+    expect(memberListEntriesQuerySchema.parse({ filter: "in_app" }).filter).toBe("in_app");
+    expect(memberListEntriesQuerySchema.safeParse({ filter: "everybody" }).success).toBe(false);
+    // ONE STATUS ARRIVES AS A STRING AND SEVERAL AS AN ARRAY — what a query string
+    // actually does with a repeated key, and both have to be read.
+    expect(memberListEntriesQuerySchema.parse({ status: "Active" }).status).toBe("Active");
+    expect(memberListEntriesQuerySchema.parse({ status: ["Active", "Frozen"] }).status).toEqual(["Active", "Frozen"]);
+    // AN EMPTY STATUS IS A REAL FILTER — "the people with no status at all" — so
+    // it must not be rejected as an empty string.
+    expect(memberListEntriesQuerySchema.parse({ status: "" }).status).toBe("");
+    // The ceilings: a word longer than a status can be, more words than a screen
+    // has chips, and a search longer than a search.
+    expect(memberListEntriesQuerySchema.safeParse({ status: "x".repeat(MEMBER_LIST_MAX_STATUS_CHARS + 1) }).success).toBe(false);
+    expect(
+      memberListEntriesQuerySchema.safeParse({ status: Array.from({ length: MEMBER_LIST_STATUS_FILTERS_MAX + 1 }, () => "a") }).success,
+    ).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ query: "x".repeat(MEMBER_LIST_QUERY_MAX_CHARS + 1) }).success).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ cursor: "x".repeat(513) }).success).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ nonsense: 1 }).success).toBe(false);
+  });
+
+  it("a status filter can always carry every chip a file is allowed to produce", () => {
+    // The reader refuses a status column holding more than MEMBER_LIST_MAX_STATUS_WORDS
+    // different words, so a screen showing one chip each can never need more than
+    // that — plus the "no status" chip. The filter's own ceiling sits above it, and
+    // this is what holds the two together rather than a comment.
+    expect(MEMBER_LIST_STATUS_FILTERS_MAX).toBeGreaterThan(MEMBER_LIST_MAX_STATUS_WORDS);
+  });
+
+  it("a page of the list is bounded, and its cursor is either a place to go or the end", () => {
+    const entry = {
+      entryId: "11111111-2222-3333-4444-555555555555",
+      fullName: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "+447911123456",
+      memberNumber: "M-1",
+      status: "Active",
+      source: "upload" as const,
+      inApp: false,
+    };
+    expect(memberListEntriesPageSchema.parse({ total: 1, entries: [entry], cursor: null }).cursor).toBeNull();
+    expect(
+      memberListEntriesPageSchema.safeParse({
+        total: 1,
+        entries: Array.from({ length: MEMBER_LIST_ENTRIES_PAGE + 1 }, () => entry),
+        cursor: null,
+      }).success,
+    ).toBe(false);
+    // Every field a gym's own record may leave empty is nullable, and the id is
+    // not: 3a-iv changes and removes a person by it.
+    expect(
+      memberListEntrySchema.parse({ ...entry, email: null, phone: null, memberNumber: null, status: null }).entryId,
+    ).toBe(entry.entryId);
+    expect(memberListEntrySchema.safeParse({ ...entry, source: "invented" }).success).toBe(false);
   });
 });

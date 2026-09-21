@@ -58,6 +58,9 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
   email: null,
   statedPhone: null,
   everListed: false,
+  // A paid seat unless a case says otherwise, which is what every case here was
+  // written against; the owner-and-staff case sets it false explicitly.
+  seatCounted: true,
   ...over,
 });
 
@@ -554,5 +557,88 @@ describe("reconcile: what an upload would do to the list", () => {
       { userId: "off", mark: "no_longer_listed", leaving: false },
       { userId: "never", mark: "never_listed", leaving: false },
     ]);
+  });
+
+
+  // -------------------------------------------------------------------------
+  // WHO A CONFIRM STAMPS AS LISTED (3a-iii-b, §9.7's `last_listed_at`)
+  // -------------------------------------------------------------------------
+  //
+  // The union of "on the list being replaced" and "on the list that would
+  // replace it". Each half is here for its own reason and the tests below name
+  // both: without the new list's people nobody is ever stamped; without the old
+  // list's, somebody taken off today reads as NEVER LISTED tomorrow, and the gym
+  // is told it never had a member it has just removed.
+
+  it("stamps the people the new list reaches and the people the old one held, and nobody else", () => {
+    const out = reconcile({
+      // Ann stays on, Cal arrives, Bob comes off.
+      rows: [row(1, ann, "Active"), row(2, cal, "Active")],
+      entries: [entry(ann, "Active"), entry(bob, "Active")],
+      members: [
+        member({ userId: "stays", email: "ann@gym.com" }),
+        member({ userId: "arrives", statedPhone: "+447911123456" }),
+        member({ userId: "leaves", email: "bob@gym.com" }),
+        member({ userId: "never", email: "zoe@gym.com" }),
+      ],
+      mode: "whole_list",
+      hasList: true,
+    });
+    // `leaves` IS IN THE SET though they are coming off, and `never` is not
+    // though they are a member of the gym.
+    expect([...out.onEitherList].sort()).toEqual(["arrives", "leaves", "stays"]);
+    expect(out.marks).toEqual([
+      { userId: "stays", mark: "on_list", leaving: false },
+      { userId: "arrives", mark: "on_list", leaving: false },
+      { userId: "leaves", mark: "no_longer_listed", leaving: true },
+      { userId: "never", mark: "never_listed", leaving: false },
+    ]);
+  });
+
+  it("a gym's FIRST confirm stamps everybody the file reaches, though it prints no marks at all", () => {
+    const out = reconcile({
+      rows: [row(1, ann, "Active"), row(2, cal, "Active")],
+      entries: [],
+      members: [
+        member({ userId: "in-file", email: "ann@gym.com" }),
+        member({ userId: "by-phone", statedPhone: "+447911123456" }),
+        member({ userId: "not-in-file", email: "zoe@gym.com" }),
+      ],
+      mode: "whole_list",
+      hasList: false,
+    });
+    // NO MARKS: a gym with nothing to be missing from accuses nobody (§9.7).
+    expect(out.marks).toEqual([]);
+    // AND YET THE STAMP SET IS FULL. Computing it inside the `hasList` gate
+    // would leave a gym's first two hundred members unstamped, with nothing in
+    // the system to say so — and every one of them would read "never listed"
+    // the day one of them came off.
+    expect([...out.onEitherList].sort()).toEqual(["by-phone", "in-file"]);
+  });
+
+  it("in ADD mode nobody the list already held falls out of the stamp, because an add takes nobody off", () => {
+    const out = reconcile({
+      rows: [row(1, cal, "Active")],
+      entries: [entry(ann, "Active")],
+      members: [member({ userId: "held", email: "ann@gym.com" }), member({ userId: "added", statedPhone: "+447911123456" })],
+      mode: "add",
+      hasList: true,
+    });
+    expect([...out.onEitherList].sort()).toEqual(["added", "held"]);
+    expect(out.membersLeaving).toEqual([]);
+  });
+
+  it("asked what the list says today — no rows, ADD mode — it stamps exactly the members the list holds", () => {
+    const out = reconcile({
+      rows: [],
+      entries: [entry(ann, "Active")],
+      members: [
+        member({ userId: "on", email: "ann@gym.com" }),
+        member({ userId: "off", email: "bob@gym.com", everListed: true }),
+      ],
+      mode: "add",
+      hasList: true,
+    });
+    expect(out.onEitherList).toEqual(["on"]);
   });
 });
