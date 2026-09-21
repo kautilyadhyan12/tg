@@ -614,9 +614,12 @@ with the management features (9.11).
 5. **Read, show, then write.** Upload → preview → confirm. A confirm applies to the
    list the preview was worked out against, or refuses (Terraform's stale-plan rule).
 6. **The same file twice writes nothing**: zero rows touched, the version not bumped.
-7. **Keep only what a screen reads**: name, email, phone, member number, status. Every
-   other column is dropped in memory, never stored, never logged. The file is never
-   stored.
+7. ~~**Keep only what a screen reads**: name, email, phone, member number, status. Every
+   other column is dropped in memory, never stored, never logged.~~ **REVERSED
+   2026-09-21 (RULINGS; §11): keep what the gym gave us, minus the never-keep list** —
+   ten standard fields and the gym's own extra columns. What stands: a never-keep
+   column is dropped in the worker, never stored, never logged; and the file itself is
+   never stored.
 8. **Nothing in the file is believed**: not its name, type, declared sizes or encoding.
 9. **Destructive steps carry a guard** sized to the gym (9.8), and an explicit
    acknowledgement for that one action — never a setting.
@@ -1364,7 +1367,11 @@ dates, payments, reminders to pay. Kd ruled on 2026-09-19 that the app WILL be a
 management app and that the management features are built later (ROADMAP Stage 2 item
 15); the member list is its first piece — who the members are — and holds none of the
 rest. Until item 15 is built those columns of a gym's file are not kept, so a gym that
-moves to the app keeps its own export to load them from then.
+moves to the app keeps its own export to load them from then. **AMENDED 2026-09-21
+(RULINGS; §11):** the file's membership type, its dates, its payment-status word and
+every other column ARE kept now, minus §11.2's never-keep list. What is still later:
+taking payments, plans as things the gym sells in the app, reminders to pay (Parts 4,
+5 and 7 of the re-plan). A status is still never worked out from a date.
 
 ### 9.12 The invites (3b) — the frame; its own plan settles the rest with Kd
 
@@ -1741,6 +1748,142 @@ page (active members, unlimited staff accounts). Read in the code that day:
 identity.ts` `refresh_tokens`, `orgs/routes.ts`, and the fifteen web places that show
 or take a join code. No source was found for a gym app that limits an account to one
 device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
+
+---
+
+## 11. The member record — what is kept from a gym's file
+
+*(ADDED 2026-09-21, the same planning chat: Part 2 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It reverses
+9.2 rule 7 and amends 9.1, 9.5 to 9.7 and 9.11; where they differ, this wins. Opus
+xhigh: uploads, other people's data, and rules that decide whose column is whose.)*
+
+**The worst thing this section could do to a real person:** leave their bank card
+number or a medical note in our database — or keep somebody ELSE's address (an
+emergency contact's, a parent's) as the member's own. The first tests written: a
+card-shaped number is dropped from ANY column; nothing of a never-keep column reaches
+the database, a log line or Sentry; a contact who is not the member can never become
+the member's email or phone (9.5's structural rule, carried to every new field). The
+cases come from outside the code — real exports' headings, real products' templates —
+and include words no list holds ("PIN code" is a postcode in India and a door PIN
+elsewhere).
+
+### 11.1 What a record holds
+
+**Standard fields** — typed columns the app reads: name · email · phone · member
+number · status (the gym's word) · **membership type** (the gym's word: "Gold",
+"Student 12 months") · **joined on** (date) · **ends or renews on** (date, with which
+of the two its heading said, so a screen can say "Renews 3 Oct" or "Ends 3 Oct"; a file
+with both keeps the second as an extra field) · **payment status** (the gym's word:
+"Paid", "Overdue") · **date of birth**. It is the core of Gymdesk's own import list
+(read 2026-09-21: name, date of birth, gender, status, member type, join date,
+cancellation date, phones, emails, address, check-in code, notes, emergency contacts,
+custom fields).
+
+**Extra fields** — every other column, kept as TEXT under the gym's own heading: a
+small catalogue per gym (`gym_member_list_fields`: key, the label as the gym wrote it,
+order) and one JSON document on the entry. At most 40 a gym; a cell is cut at 500
+characters and the preview says how many were. Shown on the person's page; searched
+with the rest; not filter chips in the first build. A second email or phone is an
+extra field and is NEVER invited or matched on.
+
+**Words stay the gym's.** Status, membership type and payment status are compared with
+case and spaces folded and shown in the file's own first spelling (9.7), each with its
+chips and counts, each capped as the status chips are. A payment status is never read
+as a membership status (9.5), and no status is ever worked out from a date (9.11).
+
+**Records outlive the list.** *(The chat's design call, put to Kd with Part 3.)* A
+management app's member record is durable: a person who leaves a whole-list upload, or
+is taken off by hand, is marked **former** with the date — not deleted, as 9.2 rule 2
+had it — so visits, reports and a returning member's history survive, which is how
+every product read that day keeps its ex-members. A former record admits nobody
+(10.2), is never invited, is filtered out by default, and the gym can delete it for
+good.
+
+### 11.2 Never kept
+
+Decided by what the CELLS are wherever a check exists, and by the heading only as the
+backstop (CLAUDE.md §4, "the worst thing"):
+
+| Class | Found by |
+|---|---|
+| Payment card numbers | 13 to 19 digits (spaces and dashes allowed) that pass the card check digit — in ANY column; the cell is dropped, and a column that is mostly such cells is dropped whole |
+| Bank account details | an IBAN by its own check digits; account, routing, sort-code and IFSC columns by heading |
+| Government ID numbers | the shapes that have one (US SSN, Canada's SIN with its check digit, India's Aadhaar with its check digit and PAN, the UK's NI number); passport and licence columns by heading |
+| Passwords, PINs, door codes | by heading — and "PIN code", "Pincode", "Postal" are an ADDRESS, the table test says so |
+| Medical and health notes | by heading (medical, health, injury, condition, allergy, medication, PAR-Q, disability, doctor …) |
+
+A never-keep column is named in the preview with its reason ("not kept: looks like
+bank card numbers") and cannot be switched back on. Its cells are dropped in the parse
+worker, before any row crosses to the request thread, and never appear in a staged
+upload, a log line, an error or Sentry. The same rules run on what staff TYPE: a
+card-shaped number typed into any field is refused. A free-text "Notes" column is
+kept — what staff wrote there is the gym's own, which the gym's promise and the
+data-processing agreement cover (ROADMAP Stage 4 item 3); for the lawyer.
+
+### 11.3 Reading the new fields (extends 9.5)
+
+Heading words from real products' files, confirmed by the cells: a date column is one
+whose cells read as dates; a membership type has few distinct words and is not the
+status; a payment status holds payment words. **Dates:** a typed Excel date is taken
+as it is; text is read ISO first; day-first or month-first is settled PER COLUMN by
+any cell whose first or second part is over 12, else by the gym's country, and the
+preview says "We read 03/04/2026 as 3 April 2026" with a switch to flip the column. A
+cell that is no date is left empty and counted, never guessed. Staff can change any
+guess or choose "don't keep"; the choice is remembered by the heading fingerprint
+(3a-ii).
+
+### 11.4 The reconcile rule over the wider row (extends 9.7)
+
+Who is the same person is unchanged — email, else phone. "Changed" is any kept field
+that differs, and the preview counts the changes field by field. Each entry remembers
+WHICH fields staff edited by hand since the last upload (names, never values); an
+upload that would overwrite one lists them and needs a tick on that request, as the
+wrong-file guard does; after the tick the file wins. "Gone" marks the record former
+(11.1) instead of deleting it, and a returning person is the same record again.
+
+### 11.5 Filters and Invite
+
+`GET …/entries` filters by status, membership type, payment status (each a list of the
+gym's words), in the app or not, invitation state, current or former, and search. The
+Invite call (9.12) takes the same filter in place of `statuses`, with the version and
+the count the person saw.
+
+### 11.6 One person's page, and editing by hand (3a-iv)
+
+`GET …/entries/:entryId` — every kept field, the extra fields, the invitation's state
+and, for somebody in the app, only what §2.4 lets a gym see (last active, streak,
+visits). `PATCH` changes any field under the never-keep rules; "Add member" is the
+same form with **Add** and **Add and invite**. The audit row holds the NAMES of the
+fields that changed, never their values. The member app never shows a gym's notes.
+
+### 11.7 Moving from other software
+
+A step before the upload, "Which software are you leaving?": that product's own export
+steps in plain words, and a preset that pre-fills the column matching. A preset is
+DATA in `packages/shared`, built only from a real export or the vendor's published
+template or help page, and cites it; no preset means the ordinary guess. The whole
+move is self-serve, as Gymdesk's is. What a file does not bring, and the screen says
+so: saved cards (they move between payment companies — Part 5), attendance history (a
+later import), documents and photos.
+
+### 11.8 Cost at full size, and cards
+
+Measured again at 10,000 people × 30 kept columns: the staged document's size, the
+preview, a page, the confirm, a bystander's longest wait — into 9.9's table. Cards,
+built BEFORE 3a-iv so that card is written once: **3a-v-a** reading the wider row (the
+new fields, dates, the never-keep rules — no database) · **3a-v-b** keeping it (one
+migration, the reconcile rule over the wider row, former records, the filters). The
+screens (5a, 5b) then carry the column matching with "don't keep", the person's page
+and the chips.
+
+### 11.9 Where the facts came from (read 2026-09-21)
+
+Gymdesk docs: "Data Imports Overview" (its field list, custom member fields, the date
+format choice) and "Migrating from a different provider" (the sentence on card and
+bank data; self-serve import) · PushPress help: "Migration of your Members/Clients from
+Another Platform into Core" (name, email, phone, plans, discounts, billing info; card
+data requested between processors after the list is loaded).
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
