@@ -23,6 +23,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { expireStagedMemberListUploads } from "../src/modules/orgs/memberList/expiry.js";
+import { MEMBER_LIST_STATUS_CHIPS_MAX } from "@app/shared";
 import type { MemberListConfirmed, MemberListEntriesPage, MemberListPreview, MemberListView } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -917,6 +918,50 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         after = await lastAnalyze();
       }
       expect(after, "the statistics were refreshed after the confirm").toBeGreaterThan(before);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // **THE CHIPS ARE CAPPED AND THE COUNTS ARE NOT.** `statuses` has a ceiling so one
+  // reply cannot grow without bound, and `counts` is the whole list — always. They are
+  // answered by one statement precisely so a screen cannot show "200 people" in its
+  // header and 205 in the list underneath (review of PR #88, High-3: the cap was added
+  // and the counts went on being the capped rows added up, which made the header short
+  // by everyone in the truncated groups, `canBeInvited` included).
+  //
+  // A FILE cannot carry this many words — a column with more than
+  // `MEMBER_LIST_MAX_STATUS_WORDS` different ones is not a status (§9.5) — so the state
+  // is built the way a real gym reaches it: entries accumulated, which `add` uploads do
+  // a score of words at a time and 3a-iv's typed person does one at a time.
+  it(
+    "past the chip ceiling the counts are still the whole list, and the chips stop at the cap",
+    async () => {
+      const owner = await makeUser("cap-owner");
+      const org = await makeOrg(owner.cookies, "Cap Gym");
+      const OVER = 205;
+      const rows = Array.from({ length: OVER }, (_, i) => ({
+        gym_id: org.org.id,
+        full_name: `Capped ${String(i).padStart(4, "0")}`,
+        email: `cap-${String(i)}-${org.org.id.slice(0, 8)}@members.example`,
+        // One distinct word per person, which is the shape that reaches the ceiling.
+        status: `Word-${String(i).padStart(4, "0")}`,
+        identity_key: String(i).padStart(4, "0").repeat(16),
+        source: "upload",
+      }));
+      await sql`INSERT INTO gym_member_list_entries ${sql(rows)}`;
+      await sql`
+        INSERT INTO gym_member_lists (gym_id, version, last_confirmed_at)
+        VALUES (${org.org.id}, 1, now())
+        ON CONFLICT (gym_id) DO UPDATE SET version = 1`;
+
+      const list = listOf(await get(listUrl(org.org.id), owner.cookies));
+      // THE HEADER IS THE WHOLE LIST.
+      expect(list.counts).toEqual({ entries: OVER, inApp: 0, canBeInvited: OVER, noEmail: 0 });
+      // ...and the chips stop at the ceiling rather than growing with the gym's history.
+      expect(list.statuses.length).toBe(MEMBER_LIST_STATUS_CHIPS_MAX);
+      // The ones kept are the list's OWN first words, not an arbitrary 200.
+      expect(list.statuses[0]?.label).toBe("Word-0000");
+      expect(list.statuses.at(-1)?.label).toBe(`Word-${String(MEMBER_LIST_STATUS_CHIPS_MAX - 1).padStart(4, "0")}`);
     },
     TEST_TIMEOUT_MS,
   );

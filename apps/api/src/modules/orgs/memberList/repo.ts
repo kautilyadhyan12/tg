@@ -936,6 +936,13 @@ export async function markUploadConfirmed(
 
 /** One of the gym's own status words on its kept list, with the three numbers a
  *  filter chip shows. */
+/** The chips AND the whole-list numbers, from ONE statement. The chips are capped
+ *  (`MEMBER_LIST_STATUS_CHIPS_MAX`); the totals never are. */
+export interface StatusCounts {
+  totals: { entries: number; inApp: number; canBeInvited: number; noEmail: number };
+  statuses: StatusCountRow[];
+}
+
 export interface StatusCountRow {
   label: string;
   count: number;
@@ -975,36 +982,82 @@ export async function listStatusCounts(
   sql: SqlOrTx,
   gymId: string,
   inAppEntryIds: readonly string[],
-): Promise<StatusCountRow[]> {
+): Promise<StatusCounts> {
   const rows = await sql<
-    { label: string | null; count: number; in_app: number; can_be_invited: number; no_email: number }[]
+    {
+      t_entries: number;
+      t_in_app: number;
+      t_can_be_invited: number;
+      t_no_email: number;
+      label: string | null;
+      count: number | null;
+      in_app: number | null;
+      can_be_invited: number | null;
+      no_email: number | null;
+    }[]
   >`
-    SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,
-           count(*)::int AS count,
-           count(*) FILTER (WHERE e.id = ANY(${inAppEntryIds}::uuid[]))::int AS in_app,
-           count(*) FILTER (
-             WHERE e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL)::int AS can_be_invited,
-           count(*) FILTER (WHERE e.email IS NULL)::int AS no_email
-    FROM gym_member_list_entries e
-    WHERE e.gym_id = ${gymId}
-    GROUP BY lower(coalesce(e.status, ''))
+    WITH grouped AS (
+      SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,
+             count(*)::int AS count,
+             count(*) FILTER (WHERE e.id = ANY(${inAppEntryIds}::uuid[]))::int AS in_app,
+             count(*) FILTER (
+               WHERE e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL)::int AS can_be_invited,
+             count(*) FILTER (WHERE e.email IS NULL)::int AS no_email,
+             min(e.listed_seq) AS first_seq
+      FROM gym_member_list_entries e
+      WHERE e.gym_id = ${gymId}
+      GROUP BY lower(coalesce(e.status, ''))
+    ),
+    -- THE WHOLE LIST, COUNTED BEFORE THE CHIPS ARE CUT. The chips have a ceiling and
+    -- these numbers must not: summing the CAPPED rows made a gym past the ceiling
+    -- read "200 people" over a list of 205, and left canBeInvited short by the
+    -- truncated groups (review of PR #88, High-3). One statement still answers both,
+    -- which is the point — two would be two answers to one question.
+    totals AS (
+      SELECT coalesce(sum(count), 0)::int AS t_entries,
+             coalesce(sum(in_app), 0)::int AS t_in_app,
+             coalesce(sum(can_be_invited), 0)::int AS t_can_be_invited,
+             coalesce(sum(no_email), 0)::int AS t_no_email
+      FROM grouped
+    )
+    SELECT t.t_entries, t.t_in_app, t.t_can_be_invited, t.t_no_email,
+           g.label, g.count, g.in_app, g.can_be_invited, g.no_email
+    FROM totals t
+    LEFT JOIN LATERAL (
+      SELECT * FROM grouped
     -- THE GROUPS COME BACK IN THE LIST'S OWN ORDER, which is one column now and
     -- needs no tie-break at all: listed_seq is unique, where created_at is
     -- shared by every row one confirm writes and left the order to a random uuid.
-    ORDER BY min(e.listed_seq)
-    -- The reply's own ceiling, so a gym that has accumulated status words across many
-    -- add-uploads cannot grow this answer without bound (see the constant's note).
-    LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}`;
-  return rows.map((row) => ({
-    // "" is the people with no status at all — the same empty label the entries
-    // filter reads as "no status" (§9.9), and the same one the preview's own
-    // breakdown uses.
-    label: row.label ?? "",
-    count: row.count,
-    inApp: row.in_app,
-    canBeInvited: row.can_be_invited,
-    noEmail: row.no_email,
-  }));
+      ORDER BY grouped.first_seq
+      -- The reply's own ceiling, so a gym that has accumulated status words across
+      -- many add-uploads cannot grow this answer without bound (see the constant's
+      -- note). The totals above are taken before it.
+      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}
+    ) g ON true`;
+  const first = rows[0];
+  const totals = {
+    entries: first?.t_entries ?? 0,
+    inApp: first?.t_in_app ?? 0,
+    canBeInvited: first?.t_can_be_invited ?? 0,
+    noEmail: first?.t_no_email ?? 0,
+  };
+  // A GYM WITH NO ENTRIES STILL ANSWERS ONE ROW, because the totals are on the
+  // outside — that is what lets an empty list carry its zeroes. `count` is null
+  // there and never null for a real group, which is the test for it: `label` is
+  // not, since the people with NO status are a real group whose label is null.
+  const statuses = rows
+    .filter((row) => row.count !== null)
+    .map((row) => ({
+      // "" is the people with no status at all — the same empty label the entries
+      // filter reads as "no status" (§9.9), and the same one the preview's own
+      // breakdown uses.
+      label: row.label ?? "",
+      count: row.count ?? 0,
+      inApp: row.in_app ?? 0,
+      canBeInvited: row.can_be_invited ?? 0,
+      noEmail: row.no_email ?? 0,
+    }));
+  return { totals, statuses };
 }
 
 /** One person on the kept list, as a page of it shows them. */

@@ -930,23 +930,23 @@ export async function readList(
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
   ]);
-  const rows = await repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members));
-  // THE WHOLE-LIST NUMBERS ARE THE STATUS ROWS ADDED UP, never a second query. Two
+  const { totals, statuses } = await repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members));
+  // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
   // the screen would show both at once.
-  const counts: MemberListCounts = { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 };
-  for (const row of rows) {
-    counts.entries += row.count;
-    counts.inApp += row.inApp;
-    counts.canBeInvited += row.canBeInvited;
-    counts.noEmail += row.noEmail;
-  }
+  //
+  // **They are no longer the chips ADDED UP, and that is the fix, not a tidy-up.** The
+  // chips have a ceiling and these numbers must not — adding up the capped rows made a
+  // gym past the ceiling read "200 people" above a list of 205, with `canBeInvited`
+  // short by the truncated groups (review of PR #88, High-3). The sum now happens
+  // inside the statement, before the cut.
+  const counts: MemberListCounts = totals;
   return {
     hasList: state !== null,
     version: state?.version ?? 0,
     lastConfirmedAt: state?.lastConfirmedAt?.toISOString() ?? null,
     counts,
-    statuses: rows.map((row) => ({
+    statuses: statuses.map((row) => ({
       label: row.label,
       count: row.count,
       inApp: row.inApp,

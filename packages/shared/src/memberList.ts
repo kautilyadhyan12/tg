@@ -908,8 +908,14 @@ export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
  *  Ten times the per-file rule, so no gym using status words as status words is ever
  *  cut: this is a ceiling on an unbounded reply, not a limit anybody should meet. The
  *  read LIMITs to it, and the chips come back in the list's own order, so what a gym
- *  past the ceiling loses is its rarest words and never a count of PEOPLE —
- *  `counts` is measured over the whole list either way, by a different statement. */
+ *  past the ceiling loses is its rarest words and never a count of PEOPLE.
+ *
+ *  **`counts` IS THE WHOLE LIST AND THE CAP DOES NOT REACH IT** — summed inside the
+ *  same statement, BEFORE the cut, which is not what the first version of this did.
+ *  It added the capped rows up, so a gym past the ceiling read "200 people" above a
+ *  list of 205 and `canBeInvited` was short by the truncated groups (review of PR
+ *  #88, High-3). There is no second statement to disagree with: one query answers the
+ *  header and the chips, which is the whole reason it is one query. */
 export const MEMBER_LIST_STATUS_CHIPS_MAX = 200;
 
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
