@@ -3,12 +3,18 @@
 // against a real gym — and it is what the reviewer runs the real exports through.
 //
 //   corepack pnpm --filter api exec tsx tools/preview-member-list.ts <path> \
-//     --gym=<slug> --database-url=postgres://… [--mode=add] [--show=5]
+//     --gym=<slug> --database-url=postgres://… [--mode=add] [--show=5] \
+//     [--confirm [--acknowledge-large-change]]
 //
 // It calls the SERVICE the route calls, so the reader, the one reconcile rule and
-// the wrong-file guard are the ones that answer a request. Nothing about anybody's
-// membership changes and nobody is emailed: it stages one upload row, exactly as
-// the route does, and prints the preview.
+// the wrong-file guard are the ones that answer a request. Without `--confirm`
+// nothing about anybody's membership changes and nobody is emailed: it stages one
+// upload row, exactly as the route does, and prints the preview.
+//
+// **`--confirm` IS THE ONLY THING HERE THAT WRITES** (3a-iii-b). It applies the
+// preview it has just printed, under the gym's row lock, and then reads the list
+// back — which is how a reviewer puts a real export through the whole of this
+// feature. Still nobody is emailed: that is 3b's button and nothing here has it.
 //
 // THE DATABASE IS NAMED BY THIS TOOL'S OWN ARGUMENT AND NOTHING ELSE. It does not
 // read `apps/api/.env`, and it does not fall back to `DATABASE_URL`: on Kd's
@@ -51,6 +57,11 @@ if (!("url" in chosen)) {
   );
 }
 const mode: MemberListMode = arg("mode") === "add" ? "add" : "whole_list";
+/** WITHOUT THIS FLAG THE TOOL CHANGES NOTHING, which is what it has always
+ *  promised. With it, the preview is applied through the same service the route
+ *  calls — the lock, the stale-preview refusal and the wrong-file guard included —
+ *  and the gym's list is written. */
+const confirming = process.argv.includes("--confirm");
 const show = Number(arg("show") ?? "0");
 if (!Number.isInteger(show) || show < 0) throw new Error("--show must be a whole number of rows");
 
@@ -164,7 +175,62 @@ try {
     }
   }
 
-  console.log(`\nStaged as ${preview.uploadId}, expires ${preview.expiresAt}. NOTHING was changed and NOBODY was emailed.`);
+  if (!confirming) {
+    console.log(`\nStaged as ${preview.uploadId}, expires ${preview.expiresAt}. NOTHING was changed and NOBODY was emailed.`);
+  } else {
+    // **THIS IS THE ONE THING IN THIS TOOL THAT WRITES**, and it is behind its own
+    // flag for that reason. It calls the same service the route calls, so the lock,
+    // the stale-preview refusal and the wrong-file guard are the real ones.
+    console.log("\n--- CONFIRMING (this WRITES to the gym's list) ---");
+    const answer = await service.confirmUpload(
+      deps,
+      gym.owner_user_id,
+      gym.id,
+      preview.uploadId,
+      { acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change") },
+      () => Promise.resolve(true),
+    );
+    if (answer.kind === "rate_limited") throw new Error("the rate limiter refused, which this tool cannot happen upon");
+    if (answer.kind === "list_changed") {
+      console.log(
+        `REFUSED (list_changed): the preview was measured against version ${String(answer.baseVersion)} and the list is on ${String(answer.version)}.\nNOTHING was changed.`,
+      );
+      process.exitCode = 1;
+    } else if (answer.kind === "large_change") {
+      console.log(
+        `REFUSED (large_change): ${String(answer.guard.entriesGoing)} of ${String(answer.guard.listSize)} would come off, ` +
+          `${String(answer.guard.membersLeaving)} of ${String(answer.guard.membersListedNow)} app members would be marked as dropped off.\n` +
+          "NOTHING was changed. Re-run with --acknowledge-large-change to go ahead.",
+      );
+      process.exitCode = 1;
+    } else {
+      const done = answer.confirmed;
+      console.log(
+        done.alreadyConfirmed
+          ? `Already applied at ${done.confirmedAt} — this press changed nothing.`
+          : `Applied at ${done.confirmedAt}.`,
+      );
+      console.log(
+        `  added ${String(done.applied.new)} · changed ${String(done.applied.changed)} · unchanged ${String(done.applied.unchanged)} · off ${String(done.applied.gone)}`,
+      );
+      console.log(`  the list is now on version ${String(done.version)} · NOBODY was emailed`);
+
+      const list = await service.readList(deps, gym.owner_user_id, gym.id, () => Promise.resolve(true));
+      if (list !== null) {
+        console.log("\nThe list now holds");
+        console.log(
+          `  ${String(list.counts.entries)} people · ${String(list.counts.inApp)} already in the app · ` +
+            `${String(list.counts.canBeInvited)} could be invited · ${String(list.counts.noEmail)} with no address`,
+        );
+        for (const word of list.statuses) {
+          console.log(
+            `  ${(word.label === "" ? "(no status)" : word.label).padEnd(24)} ${String(word.count).padStart(5)}` +
+              `   in the app ${String(word.inApp)} · could be invited ${String(word.canBeInvited)}`,
+          );
+        }
+      }
+    }
+  }
 } catch (err) {
   if (err instanceof OrgsError) {
     console.log(`REFUSED (${err.code})\n${err.message}`);

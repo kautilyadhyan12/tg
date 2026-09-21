@@ -33,6 +33,15 @@ const TYPED_EMAIL = `${randomUUID()}@example.com`;
  *  the photo. The SDK takes a body per REQUEST, not per route, so a fault on any route
  *  carrying this body is the case that matters. */
 const MEMBER_NAME = `Marian-${randomUUID()}`;
+/** A person inside a DATABASE ERROR rather than inside a request body — the other
+ *  way a member's details can reach a crash report, and the one nothing in the app
+ *  had ever looked at. Postgres writes the whole refused row into the error. */
+const ROW_NAME = `Amara-${randomUUID()}`;
+const ROW_ADDRESS = `${randomUUID()}@realgym.example`;
+/** Made at run time like the two above, and for the same reason: Sentry sends the
+ *  SOURCE LINES around each stack frame, so a phone number written as a literal in
+ *  the probe route below would be reported as part of the code and read as a leak. */
+const ROW_PHONE = `+4479${String(randomBytes(4).readUInt32BE(0)).padStart(8, "0").slice(0, 8)}`;
 const memberFile = Buffer.from(
   [`Full Name,Email`, `${MEMBER_NAME},${randomUUID()}@realgym.example`].join("\r\n"),
   "utf8",
@@ -71,6 +80,20 @@ d("what reaches Sentry: the real SDK, a real port, a recording transport", () =>
     app = built;
     // Any route's unhandled fault goes through the app's central error handler.
     built.post("/v1/sentry-probe/fault", () => Promise.reject(new Error("a fault nobody expected")));
+    /** A REAL DATABASE REFUSAL, drawn by breaking a real CHECK on the member-list
+     *  table. Postgres puts the WHOLE failing row into the error's `detail` — the
+     *  person's name, address and phone number — and this is the route that proves
+     *  none of it reaches Sentry (spec Part 3 §9.9; the hazard 3a-iii-a recorded
+     *  for the confirm, which is the first statement in the feature that can draw
+     *  one). The CHECK is evaluated before the foreign key, so no gym has to exist. */
+    built.post("/v1/sentry-probe/db-fault", async () => {
+      await sql`
+        INSERT INTO gym_member_list_entries
+          (gym_id, full_name, email, phone_e164, member_number, status, identity_key, source)
+        VALUES ('11111111-2222-3333-4444-555555555555', ${ROW_NAME}, ${ROW_ADDRESS}, ${ROW_PHONE},
+                'MBR-1', ${"x".repeat(60)}, ${"a".repeat(64)}, 'upload')`;
+      return { never: true };
+    });
     const inject = (path: string, body: unknown) => built.inject({ method: "POST", url: path, headers: { "content-type": "application/json" }, payload: JSON.stringify(body) });
     expect((await inject("/v1/auth/register", { email: EMAIL, password: PASSWORD, displayName: "Sentry Probe" })).statusCode).toBe(201);
     const login = await inject("/v1/auth/login", { email: EMAIL, password: PASSWORD });
@@ -127,5 +150,32 @@ d("what reaches Sentry: the real SDK, a real port, a recording transport", () =>
     // The SDK was serving the scan's request, and kept none of its body.
     expect(held?.normalizedRequest.method).toBe("POST");
     expect(held?.normalizedRequest.data).toBeUndefined();
+  }, 30_000);
+
+  it("a database refusal reaches Sentry as the rule that refused, never as the row it refused", async () => {
+    envelopes.length = 0;
+    const res = await fetch(`${base}/v1/sentry-probe/db-fault`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(500);
+    const { requestId } = z.object({ error: z.string(), requestId: z.string() }).parse(await res.json());
+    expect(await Sentry.flush(5000)).toBe(true);
+
+    const events = envelopes.filter((e) => e.includes('"exception"'));
+    expect(events).toHaveLength(1);
+    const sent = events.join("\n");
+    // THE CONTROL: the fault really was reported, and it says which rule refused.
+    expect(sent).toContain(`"requestId":"${requestId}"`);
+    expect(sent).toContain("violates check constraint");
+    // AND NOT THE PERSON IN THE ROW. Without `scrubbedForSentry` the SDK is handed
+    // an error whose `detail` is "Failing row contains (…, Amara …, …@…, +44…)".
+    expect({
+      name: sent.includes(ROW_NAME),
+      address: sent.includes(ROW_ADDRESS),
+      phone: sent.includes(ROW_PHONE),
+      failingRow: sent.includes("Failing row contains"),
+    }).toEqual({ name: false, address: false, phone: false, failingRow: false });
   }, 30_000);
 });

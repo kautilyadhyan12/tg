@@ -26,7 +26,7 @@
 // own decision (§9.2 rule 11) and it is 3b's; an upload and a confirm write rows
 // and send nothing.
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigserial, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { check } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
@@ -83,6 +83,24 @@ export const gymMemberListEntries = pgTable(
     status: text("status"),
     identityKey: text("identity_key").notNull(),
     source: text("source").notNull(),
+    // WHERE THIS PERSON CAME IN THE LIST, and the only column that can say so.
+    //
+    // **`created_at` CANNOT, AND THAT IS NOT A SUBTLETY — IT IS THE WHOLE REASON
+    // THIS COLUMN EXISTS.** `now()` is the TRANSACTION's clock, so every row one
+    // confirm writes carries the same instant to the microsecond; ordering by it
+    // leaves the tie to `id`, which is `gen_random_uuid()`. Measured 2026-09-21 on
+    // a copy of this table: of 40 confirms whose file wrote "Active" before
+    // "ACTIVE", 16 read the gym's own chip back as "ACTIVE". Three separate
+    // answers hang on "which entry came first" — the spelling shown on a status
+    // chip and the order the chips come in (§9.9), which entry a member is matched
+    // to when a family shares one address (§9.7), and the order the pure rule is
+    // handed the list in — so all three were random, and two reads a second apart
+    // could disagree.
+    //
+    // A sequence, not the file's row number, because a later confirm and 3a-iv's
+    // typed-in person must APPEND rather than restart at one. The confirm's INSERT
+    // orders by the file's own row order so the numbers follow the list.
+    listedSeq: bigserial("listed_seq", { mode: "bigint" }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -92,6 +110,9 @@ export const gymMemberListEntries = pgTable(
     // "how many Active, how many Frozen" — read once per console load, and the
     // filter behind the list screen's status chips (§9.9).
     index("gym_member_list_entries_gym_status_idx").on(t.gymId, sql`lower(${t.status})`),
+    // The gym's list in its own order, which every preview and every confirm reads
+    // whole: an ordered index scan instead of a sort of up to ten thousand rows.
+    index("gym_member_list_entries_gym_seq_idx").on(t.gymId, t.listedSeq),
     check("gym_member_list_entries_full_name_check", sql`length(${t.fullName}) <= 120`),
     check("gym_member_list_entries_email_check", sql`${t.email} IS NULL OR length(${t.email}) <= 254`),
     check("gym_member_list_entries_phone_check", sql`${t.phoneE164} IS NULL OR ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),

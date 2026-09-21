@@ -24,11 +24,12 @@
 // to fifteen seconds, so the cheap refusals belong in front of the limiter as well
 // as in front of the work.
 import { createHash } from "node:crypto";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import {
   isLargeMemberListChange,
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
+  MEMBER_LIST_ENTRIES_PAGE,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
   MEMBER_LIST_UPLOAD_GONE_WORDS,
@@ -36,6 +37,11 @@ import {
   memberFileRefusalWords,
   memberListStagedShellSchema,
   type MemberFileRefusal,
+  type MemberListConfirmed,
+  type MemberListCounts,
+  type MemberListEntriesPage,
+  type MemberListEntriesQuery,
+  type MemberListGuard,
   type MemberListMapping,
   type MemberListMode,
   type MemberListPreview,
@@ -49,10 +55,13 @@ import {
   type MemberListStoredPerson,
   type MemberListUnderstanding,
   type MemberListUploadSummary,
+  type MemberListView,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
+import { insertAudit } from "../repo.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { understandMemberFile } from "./parseMemberFile.js";
 import { inviteCounts, membersAgainstNewList, reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
 import * as repo from "./repo.js";
@@ -126,19 +135,27 @@ interface Measured {
 }
 
 /** THE THREE SETS, FETCHED ONCE, AND THE RULE RUN OVER THEM (§9.7). It answers the
- *  counts, the grouping, AND the rows the rule kept — the three together, because a
- *  grouping stored beside rows it does not match would name the wrong people. */
+ *  counts AND the whole reconciled answer — the grouping, the rows the rule kept and
+ *  the groups themselves — because a grouping stored beside rows it does not match
+ *  would name the wrong people, and the confirm writes from the same answer the
+ *  preview shows.
+ *
+ *  **IT TAKES AN EXECUTOR AND NOT `deps`, SO THE CONFIRM CAN RUN IT INSIDE ITS OWN
+ *  TRANSACTION.** The API's Postgres pool is one connection: a query sent on
+ *  `deps.sql` while a transaction holds that connection waits for the transaction,
+ *  which is waiting for the query. Passing `tx` in is what makes the rule's three
+ *  sets the ones the lock is holding still, rather than a second, later read. */
 async function measure(
-  deps: MemberListDeps,
+  sql: Sql | TransactionSql,
   gymId: string,
   understanding: MemberListUnderstanding,
   mode: MemberListMode,
   state: repo.ListState | null,
-): Promise<{ measured: Measured; groups: MemberListGroups; rows: MemberListUnderstanding["rows"] }> {
+): Promise<{ measured: Measured; reconciled: Reconciled }> {
   const [entries, members, seatCap] = await Promise.all([
-    repo.listEntries(deps.sql, gymId),
-    repo.listMembers(deps.sql, gymId),
-    orgRepo.gymSeatCap(deps.sql, gymId),
+    repo.listEntries(sql, gymId),
+    repo.listMembers(sql, gymId),
+    orgRepo.gymSeatCap(sql, gymId),
   ]);
   const reconciled = reconcile({
     rows: understanding.rows,
@@ -170,8 +187,7 @@ async function measure(
   };
   return {
     measured: { counts, seat: counts.seat, lastFileSha256: state?.lastFileSha256 ?? null },
-    groups: groupsOf(reconciled),
-    rows: reconciled.rows,
+    reconciled,
   };
 }
 
@@ -404,8 +420,11 @@ export async function previewUpload(
   // The rule drops any row whose person is on an earlier one, and the grouping
   // points into what it KEPT — so the rows stored are the rule's own, never the
   // reader's, or a stored place would name somebody who was never on the list.
-  const { measured, groups, rows } = await measure(deps, gymId, understood, input.mode, state);
-  const file: MemberListStagedFile = { understanding: { ...understood, rows }, groups };
+  const { measured, reconciled } = await measure(deps.sql, gymId, understood, input.mode, state);
+  const file: MemberListStagedFile = {
+    understanding: { ...understood, rows: reconciled.rows },
+    groups: groupsOf(reconciled),
+  };
   const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured });
 
   const uploadId = await repo.stageUpload(deps.sql, {
@@ -521,7 +540,8 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
   // longer exists and the whole comparison runs again over the stored rows.
   const file = await repo.stagedFile(deps.sql, gymId, upload.id);
   if (file === null) throw expired();
-  const { measured, groups } = await measure(deps, gymId, file.understanding, upload.mode, state);
+  const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state);
+  const groups = groupsOf(reconciled);
   const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts, state);
   if (side === null) throw expired();
   return {
@@ -631,5 +651,358 @@ export async function readPreviewRows(
     total: picked.total,
     people,
     cursor: cursor + people.length < picked.total ? cursor + people.length : null,
+  };
+}
+
+// ── PRESSING CONFIRM, AND THE LIST YOU KEEP (3a-iii-b; §9.7–§9.9) ───────────
+//
+// **THIS IS THE HALF THAT CHANGES A GYM'S RECORDS**, and everything above it exists
+// so that by the time anybody presses this button they have already seen what it
+// will do. Three things make it safe, and none of them is the preview:
+//
+//   1. The gym's row is LOCKED for the whole of it, so two staff pressing at the
+//      same moment apply once and a member joining cannot slip into the middle.
+//   2. The rule is worked out AGAIN, under that lock, on the list as it is at that
+//      instant — the preview is what staff READ, never what is applied.
+//   3. The list's version has to be the one the preview was measured against, or
+//      nothing is written and staff are told (§9.8's `list_changed`).
+//
+// **AND NOBODY IS EMAILED.** Not one message, whatever the file holds: the gym's
+// invite is its own decision and its own button (§9.2 rule 10, RULINGS 2026-09-19).
+
+/** What pressing Confirm came to. Four answers rather than three exceptions,
+ *  because two of them carry NUMBERS a screen has to show — how much would go, or
+ *  which version we measured against — and an error message is a bad place to put
+ *  a number somebody has to act on. */
+export type ConfirmAnswer =
+  | { kind: "confirmed"; confirmed: MemberListConfirmed }
+  | { kind: "list_changed"; baseVersion: number; version: number }
+  | { kind: "large_change"; guard: MemberListGuard }
+  /** The limiter has answered 429 itself and the handler is finished. */
+  | { kind: "rate_limited" };
+
+/** The answer a confirm gives when its upload was ALREADY applied — read back out of
+ *  the upload's own record rather than worked out again.
+ *
+ *  **IT IS A 200 AND IT IS THE SAME SENTENCE AS THE FIRST PRESS.** A screen whose
+ *  reply was lost, or two staff pressing one button, must not read "that file has
+ *  already been applied" as a failure — nothing is wrong, and the numbers they need
+ *  are the ones the confirm actually applied, which is exactly what it wrote into
+ *  `summary` on its way out.
+ *
+ *  `version` is the list's version NOW and not this upload's, because that is what a
+ *  later removal has to name; `confirmedAt` is this upload's own instant, which
+ *  `gym_member_lists.last_confirmed_at` would not be once the gym has confirmed
+ *  anything since. */
+function storedAnswer(upload: repo.UploadRow, version: number): MemberListConfirmed {
+  if (upload.confirmedAt === null) {
+    // `(status = 'confirmed') = (confirmed_at IS NOT NULL)` is a CHECK on the table,
+    // so this is a state the database forbids. Loud rather than a made-up instant.
+    throw new Error(`member-list upload ${upload.id} is confirmed with no instant`);
+  }
+  return {
+    uploadId: upload.id,
+    alreadyConfirmed: true,
+    version,
+    confirmedAt: upload.confirmedAt.toISOString(),
+    applied: upload.summary.list,
+    statuses: upload.summary.statuses,
+    members: upload.summary.members,
+  };
+}
+
+/** A person of the file as the list stores them. The identity key is the rule's, not
+ *  built again here: two ways of deciding who one person is would be two lists. */
+const toEntry = (person: ReconciledPerson): repo.EntryToWrite => ({
+  fullName: person.fullName,
+  email: person.email,
+  phone: person.phone,
+  memberNumber: person.memberNumber,
+  status: person.status,
+  identityKey: person.identityKey,
+});
+
+/** APPLY A STAGED UPLOAD TO THE GYM'S LIST — the one transaction that writes it.
+ *
+ *  **EVERY STATEMENT INSIDE USES `tx` AND NOT `deps.sql`, AND THAT IS NOT A STYLE
+ *  POINT.** The API's Postgres pool is ONE connection: a query sent on `deps.sql`
+ *  while this transaction holds it would wait for the transaction, which is waiting
+ *  for the query — the whole API stopped, not just this request.
+ *
+ *  **THE PRIVILEGE GATE AND THE LIMITER COME BEFORE THE TRANSACTION**, which is
+ *  CLAUDE.md §4's order and also keeps the gym's row lock held for the shortest time
+ *  it can be: nothing that can refuse this request cheaply happens inside the lock. */
+export async function confirmUpload(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  uploadId: string,
+  input: { acknowledgeLargeChange: boolean },
+  limit: () => Promise<boolean>,
+): Promise<ConfirmAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+
+  const answer = await deps.sql.begin(async (tx): Promise<ConfirmAnswer> => {
+    // THE MODULE'S LOCK ORDER: the gym's row, then the child rows (§9.7). The join
+    // door takes this same row, which is what makes a join and a confirm unable to
+    // interleave — a member cannot appear half-way through the rule being worked out.
+    await repo.lockGym(tx, gymId);
+    const upload = await repo.lockUploadFor(tx, gymId, uploadId, at);
+    // NOT FOUND AND NOT THIS GYM'S ARE ONE ANSWER, as everywhere else in this module.
+    if (upload === null) throw new OrgsError(404, "upload_not_found", "That upload could not be found.");
+
+    const before = await repo.listState(tx, gymId);
+    if (upload.status === "confirmed") return { kind: "confirmed", confirmed: storedAnswer(upload, before?.version ?? 0) };
+    if (upload.status !== "staged" || !upload.hasCells) {
+      const gone = upload.status === "superseded" ? "upload_superseded" : "upload_expired";
+      throw new OrgsError(409, gone, MEMBER_LIST_UPLOAD_GONE_WORDS[gone]);
+    }
+
+    // THE PREVIEW HAS TO BE ABOUT THE LIST THAT IS STILL THERE. Anything that moves
+    // the list — an earlier confirm, somebody typed in — moves the version, and what
+    // staff read is then an answer about a list that no longer exists. Refused with
+    // both numbers, and NOTHING is written.
+    const version = before?.version ?? 0;
+    if (version !== upload.baseVersion) {
+      return { kind: "list_changed", baseVersion: upload.baseVersion, version };
+    }
+
+    const file = await repo.stagedFile(tx, gymId, uploadId);
+    if (file === null) throw expired();
+
+    // THE RULE, RUN AGAIN, ON WHAT IS TRUE NOW. Not the stored grouping: that one is
+    // about the list at `base_version`, and although the version says it has not
+    // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
+    // an address or left while the preview was on the screen, and who is "already in
+    // the app" moved with them (review of PR #87, High-1).
+    const { measured, reconciled } = await measure(tx, gymId, file.understanding, upload.mode, before);
+
+    // THE WRONG-FILE GUARD (§9.8), measured on THIS answer and ticked on THIS
+    // request. A gym that acknowledged a large change an hour ago has acknowledged
+    // nothing about this press, which is why the tick is a field of the request and
+    // never a flag on the upload.
+    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {
+      return { kind: "large_change", guard: reconciled.guard };
+    }
+
+    // THREE STATEMENTS, EACH THE SAME SIZE WHATEVER THE FILE HOLDS, each safe to run
+    // twice. What each one did is checked against what the rule said it would: under
+    // this lock they cannot differ, so a difference is a fault of ours, and a confirm
+    // that cannot say truthfully what it applied writes nothing at all.
+    const added = await repo.insertEntries(tx, gymId, reconciled.new.map(toEntry), "upload");
+    expectApplied(added, reconciled.new.length, "added", uploadId);
+    const updated = await repo.updateEntryStatuses(
+      tx,
+      gymId,
+      reconciled.changed.map((person) => ({ identityKey: person.identityKey, status: person.status })),
+    );
+    expectApplied(updated, reconciled.changed.length, "changed", uploadId);
+    const removed = await repo.deleteEntries(tx, gymId, reconciled.gone.map((person) => person.identityKey));
+    expectApplied(removed, reconciled.gone.length, "removed", uploadId);
+
+    // "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — on everybody the old list held or
+    // the new one does, so what the preview called "no longer listed" still reads
+    // that way after the confirm instead of falling back to "never listed".
+    await repo.stampListed(tx, gymId, reconciled.onEitherList, at);
+
+    // The version moves only when something actually changed (§9.7): bumping it for a
+    // confirm that wrote nothing would throw away every other preview open in the gym
+    // for no reason, and the same file uploaded twice is exactly that case.
+    const bump = added + updated + removed > 0;
+    const after = await repo.moveListOn(tx, { gymId, uploadId, at, bump });
+    // The cells go in the same statement that marks it confirmed, and `summary`
+    // becomes what was APPLIED rather than what the preview guessed.
+    await repo.markUploadConfirmed(tx, { gymId, uploadId, at, summary: measured.counts });
+
+    // COUNTS ONLY (§9.7). An audit row of this is read by a human weeks later asking
+    // what happened to a gym's list; a name or an address on it would be a person's
+    // own data in a table nothing purges.
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_confirmed",
+      targetType: "member_list_upload",
+      targetId: uploadId,
+      meta: {
+        mode: upload.mode,
+        added: String(added),
+        updated: String(updated),
+        removed: String(removed),
+        unchanged: String(reconciled.counts.unchanged),
+        membersLeaving: String(reconciled.members.leaving),
+        version: String(after),
+        ...(input.acknowledgeLargeChange ? { acknowledgedLargeChange: "true" } : {}),
+      },
+    });
+
+    // NOTHING ABOVE SENDS AN EMAIL, and a test drives it: the capturing sender stays
+    // empty through a confirm that adds two hundred people.
+    return {
+      kind: "confirmed",
+      confirmed: {
+        uploadId,
+        alreadyConfirmed: false,
+        version: after,
+        confirmedAt: at.toISOString(),
+        applied: reconciled.counts,
+        statuses: reconciled.statuses,
+        members: reconciled.members,
+      },
+    };
+  });
+
+  // **THE TABLE'S STATISTICS ARE PART OF APPLYING A LIST, NOT AN OPTIMISATION.**
+  // A confirm bulk-loads a gym's people into a table whose statistics may still say
+  // it holds almost nothing, and the planner then costs the per-member lookup behind
+  // every read of that list as if it were free — measured at the biggest list
+  // allowed, **3,152 ms a read before this and 24.7 ms after**, on the one connection
+  // the whole API shares. Autovacuum puts it right by itself within about a minute,
+  // and that minute is exactly the one in which staff look at the list they have just
+  // pressed Confirm on. Postgres's own manual says to do this after a bulk load.
+  //
+  // AFTER THE COMMIT, so the gym's row lock is already released; and HOUSEKEEPING, so
+  // it is warned about and never fails a confirm that has already been applied.
+  if (answer.kind === "confirmed" && !answer.confirmed.alreadyConfirmed && changedAnything(answer.confirmed)) {
+    try {
+      await repo.analyseEntries(deps.sql);
+    } catch (err) {
+      deps.log.warn(
+        { event: "memberlist.analyse_failed", gymId, error: err instanceof Error ? err.name : "unknown" },
+        "member list entries could not be analysed after a confirm",
+      );
+    }
+  }
+  return answer;
+}
+
+/** Whether a confirm actually wrote a row. Nothing written means the statistics are
+ *  as true as they were a moment ago. */
+const changedAnything = (done: MemberListConfirmed): boolean =>
+  done.applied.new > 0 || done.applied.changed > 0 || done.applied.gone > 0;
+
+/** What a statement did, against what the rule said it would. Loud, with no cell in
+ *  the message — the numbers are counts and the id is an upload's. */
+function expectApplied(did: number, said: number, what: string, uploadId: string): void {
+  if (did === said) return;
+  throw new Error(
+    `member-list upload ${uploadId} ${what} ${String(did)} entries where the rule said ${String(said)}`,
+  );
+}
+
+/** WHICH OF THE GYM'S OWN ENTRIES ARE ALREADY MEMBERS HERE — the entry ids, deduped.
+ *
+ *  One member matches at most one entry (§9.7's order, `membersAgainstList`), and two
+ *  members can land on the same entry — a household on one address — so the ids are
+ *  put through a Set before anything counts them. Counting `members.length` instead
+ *  would say a gym of two has two people on a list that holds one. */
+function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
+  const ids = new Set<string>();
+  for (const member of members) if (member.entryId !== null) ids.add(member.entryId);
+  return [...ids];
+}
+
+/** THE LIST AS IT STANDS (§9.9's `GET /`).
+ *
+ *  Reading it is a READ, so a gym with no live plan still gets it: what a gym that
+ *  stopped paying cannot do is CHANGE things, and nothing is hidden from it (§4.2's
+ *  read-only console). It still needs `members.confirm` and not `members.read` — it
+ *  holds the addresses of people who never opened this app. */
+export async function readList(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListView | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const [state, members] = await Promise.all([
+    repo.listState(deps.sql, gymId),
+    repo.membersAgainstList(deps.sql, gymId),
+  ]);
+  const rows = await repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members));
+  // THE WHOLE-LIST NUMBERS ARE THE STATUS ROWS ADDED UP, never a second query. Two
+  // statements counting one gym's people two ways is two answers to one question, and
+  // the screen would show both at once.
+  const counts: MemberListCounts = { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 };
+  for (const row of rows) {
+    counts.entries += row.count;
+    counts.inApp += row.inApp;
+    counts.canBeInvited += row.canBeInvited;
+    counts.noEmail += row.noEmail;
+  }
+  return {
+    hasList: state !== null,
+    version: state?.version ?? 0,
+    lastConfirmedAt: state?.lastConfirmedAt?.toISOString() ?? null,
+    counts,
+    statuses: rows.map((row) => ({
+      label: row.label,
+      count: row.count,
+      inApp: row.inApp,
+      canBeInvited: row.canBeInvited,
+    })),
+  };
+}
+
+/** A search as LIKE reads it. The three characters LIKE gives its own meaning to are
+ *  escaped, so a member number of `10%` finds that member and not every member. */
+const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+/** ONE PAGE OF THE LIST THE GYM KEEPS (§9.9's `GET /entries`).
+ *
+ *  **A PAGE IS FETCHED ONE LONGER THAN IT IS SHOWN**, which is how "is there a next
+ *  page" is answered without a second count and without ever offering staff a cursor
+ *  that leads to an empty page. */
+export async function readEntries(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: MemberListEntriesQuery,
+  limit: () => Promise<boolean>,
+): Promise<MemberListEntriesPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+
+  // Parsed, not trusted, and not quietly ignored either: a cursor that does not
+  // decode is a 400, never "start again from the top", which would silently restart
+  // somebody's walk through ten thousand names.
+  const cursor = query.cursor === undefined ? null : decodeEntryCursor(query.cursor);
+  if (query.cursor !== undefined && cursor === null) {
+    throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");
+  }
+
+  // A status is matched with its case and spaces folded, exactly as the rule folds
+  // one, and "" is the people with no status at all (§9.9).
+  const asked = query.status === undefined ? null : Array.isArray(query.status) ? query.status : [query.status];
+  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim().toLowerCase()))];
+  const typed = (query.query ?? "").trim();
+
+  const members = await repo.membersAgainstList(deps.sql, gymId);
+  const page = await repo.entriesPage(deps.sql, {
+    gymId,
+    inAppEntryIds: inAppEntryIds(members),
+    statuses,
+    filter: query.filter ?? "all",
+    like: typed === "" ? null : `%${escapeLike(typed)}%`,
+    cursor,
+    limit: MEMBER_LIST_ENTRIES_PAGE + 1,
+  });
+  const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
+  const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
+  return {
+    total: page.total,
+    entries: shown.map((entry) => ({
+      entryId: entry.entryId,
+      fullName: entry.fullName,
+      email: entry.email,
+      phone: entry.phone,
+      memberNumber: entry.memberNumber,
+      status: entry.status,
+      source: entry.source,
+      inApp: entry.inApp,
+    })),
+    cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };
 }

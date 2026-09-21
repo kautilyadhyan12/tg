@@ -133,6 +133,9 @@ export interface Reconciled {
   members: MemberListMembers;
   guard: MemberListGuard;
   marks: ReconciledMember[];
+  /** The gym's own members who are on the list being replaced or would be on the new
+   *  one — what a confirm stamps `last_listed_at` on (§9.7). See `MembersSide`. */
+  onEitherList: string[];
 }
 
 /** One spelling for a status word, so two exports of one gym writing "Active"
@@ -250,6 +253,22 @@ export interface MembersSide {
   /** How many of the gym's members the list being replaced holds — what `leaving` is
    *  measured against by the wrong-file guard (§9.8). */
   listedNow: number;
+  /** EVERY MEMBER THE OLD LIST HOLDS OR THE NEW ONE WOULD — §9.7's "stamp
+   *  `last_listed_at` on every member who is on the list being replaced OR on the new
+   *  one", as user ids, worked out by the same rule that decides every other member
+   *  answer here.
+   *
+   *  **The UNION is the whole point and each half is there for its own reason.** The new
+   *  list's people are stamped because they are listed now; the OLD list's people are
+   *  stamped so that somebody the preview called "no longer listed" still reads as
+   *  no longer listed after the confirm — without it, a member who has just come off
+   *  would fall back to "never listed" and the gym would be told it had never had them.
+   *
+   *  **IT IS NOT GATED ON `hasList`, AND `marks` IS.** A gym's very first confirm has no
+   *  list to be missing from, so there are no marks to print — but everybody the file
+   *  reaches is listed from that moment, and computing this inside the gate would leave
+   *  a gym's first two hundred members unstamped with nothing to say so. */
+  onEitherList: string[];
 }
 
 /** WHAT AN UPLOAD WOULD DO TO THE GYM'S OWN MEMBERS — pure, and worked out fresh on
@@ -274,11 +293,14 @@ export function membersAgainstNewList(
 ): MembersSide {
   const marks: ReconciledMember[] = [];
   const membersLeaving: ReconciledPerson[] = [];
+  const onEitherList: string[] = [];
   let listedNow = 0;
   for (const member of members) {
     const onNewList = reachesNewList(member);
     if (member.onList) listedNow += 1;
     const leaving = member.onList && !onNewList;
+    // Outside the `hasList` gate deliberately — see the field's own note.
+    if (onNewList || member.onList) onEitherList.push(member.userId);
     if (hasList) {
       marks.push({
         userId: member.userId,
@@ -304,7 +326,7 @@ export function membersAgainstNewList(
       inApp: true,
     });
   }
-  return { marks, membersLeaving, listedNow };
+  return { marks, membersLeaving, listedNow, onEitherList };
 }
 
 /** THE THREE ANSWERS ABOUT THE PEOPLE A FILE WOULD ADD (§9.6): already in the app ·
@@ -463,7 +485,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
     };
   });
   const side = membersAgainstNewList(onTheList, (member) => reaches({ email: member.email, phone: member.statedPhone }, newEmails, newPhones), hasList);
-  const { marks, membersLeaving, listedNow } = side;
+  const { marks, membersLeaving, listedNow, onEitherList } = side;
 
   const counts: MemberListChangeCounts = {
     new: fresh.length,
@@ -498,5 +520,6 @@ export function reconcile(input: ReconcileInput): Reconciled {
     members: { leaving: membersLeaving.length, listedNow },
     guard,
     marks,
+    onEitherList,
   };
 }

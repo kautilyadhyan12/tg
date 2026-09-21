@@ -794,3 +794,187 @@ export type MemberListRowsQuery = z.infer<typeof memberListRowsQuerySchema>;
 
 export const memberListRowsResponseSchema = z.object({ page: memberListRowsPageSchema });
 export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema>;
+
+// ── Pressing Confirm, and the list you keep (3a-iii-b; §9.7–§9.9) ───────────
+
+/** CONFIRM THIS UPLOAD. The one field is the tick the wrong-file guard asks for,
+ *  and it is asked for ON THAT REQUEST (§9.8): a gym that acknowledged a large
+ *  change an hour ago has acknowledged nothing about this press. Absent is the
+ *  same as false — so a screen that forgets to send it cannot apply one. */
+export const memberListConfirmRequestSchema = z
+  .object({ acknowledgeLargeChange: z.boolean().optional() })
+  .strict();
+export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSchema>;
+
+/** WHAT PRESSING CONFIRM DID.
+ *
+ *  **`applied` IS WHAT WAS APPLIED, NOT WHAT THE PREVIEW PROMISED.** The rule is
+ *  worked out AGAIN under the gym's lock, on the list as it is at that instant, and
+ *  these are that answer's numbers — which is also what the upload's own record
+ *  keeps, so pressing Confirm twice reads back the same sentence rather than a
+ *  second, different story about one file.
+ *
+ *  **`alreadyConfirmed` true means THIS PRESS CHANGED NOTHING** because the upload
+ *  was already applied. It is a 200 and not a refusal: two staff pressing one
+ *  button, or a screen retrying after the reply was lost, is not an error and must
+ *  not read like one.
+ *
+ *  `version` is the list's version NOW, which is what a later removal has to name
+ *  (3a-iv), so it is read live rather than stored. `confirmedAt` is THIS upload's
+ *  own instant and never a later upload's. */
+export const memberListConfirmedSchema = z.object({
+  uploadId: z.string().uuid(),
+  alreadyConfirmed: z.boolean(),
+  version: z.number().int().min(0),
+  confirmedAt: z.string(),
+  applied: memberListChangeCountsSchema,
+  statuses: z.array(memberListStatusChangeSchema),
+  members: memberListMembersSchema,
+});
+export type MemberListConfirmed = z.infer<typeof memberListConfirmedSchema>;
+
+export const memberListConfirmResponseSchema = z.object({ confirmed: memberListConfirmedSchema });
+export type MemberListConfirmResponse = z.infer<typeof memberListConfirmResponseSchema>;
+
+/** THE TWO REFUSALS THAT CARRY NUMBERS, and why they are not sentences alone.
+ *
+ *  Both mean "we did NOT do that, and here is what we saw", and a screen cannot ask
+ *  the right question without the figures: a large change has to show staff what
+ *  would go before it asks them to tick, and a changed list has to say which
+ *  version it measured against and which it found, or "somebody changed it" is a
+ *  dead end. Every other refusal in this module is a sentence alone, because there
+ *  is nothing to show. Neither carries anything about a PERSON — a version is the
+ *  gym's own list's, and the guard is counts. */
+export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
+  list_changed:
+    "Your list changed while you were looking at this preview, so nothing was applied. Upload the file again to see what it would do now.",
+  large_change:
+    "This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.",
+} as const;
+
+export const memberListListChangedSchema = z.object({
+  error: z.literal("list_changed"),
+  message: z.string(),
+  /** The version the preview was worked out against, and the one the list is on now. */
+  baseVersion: z.number().int().min(0),
+  version: z.number().int().min(0),
+});
+
+export const memberListLargeChangeSchema = z.object({
+  error: z.literal("large_change"),
+  message: z.string(),
+  guard: memberListGuardSchema,
+});
+
+/** WHAT THE GYM'S LIST HOLDS — for the whole list, and for each of its own status
+ *  words. `inApp` is how many of those people are already members here;
+ *  `canBeInvited` is how many have an email address and are not.
+ *
+ *  **THE THREE DO NOT PARTITION AND MUST NOT BE MADE TO**, which is `inviteCounts`'
+ *  own rule and holds here for the same reason: somebody already in the app whose
+ *  entry carries no address is counted under `inApp` AND under `noEmail`, because
+ *  both sentences are true of them. No test may assert that they sum to `entries`. */
+export const memberListCountsSchema = z.object({
+  entries: z.number().int().min(0),
+  inApp: z.number().int().min(0),
+  canBeInvited: z.number().int().min(0),
+  noEmail: z.number().int().min(0),
+});
+export type MemberListCounts = z.infer<typeof memberListCountsSchema>;
+
+/** One of the gym's own status words on the list it keeps, with the same numbers —
+ *  the filter chips of item 5's screen ("Active 312 · Frozen 88"), each able to say
+ *  how many people it could reach before anybody presses anything.
+ *
+ *  `label` is the gym's own spelling, and "" is the people with no status at all —
+ *  the same empty label `GET /entries` reads as "no status" (§9.9). */
+export const memberListStatusCountSchema = z.object({
+  label: z.string(),
+  count: z.number().int().min(0),
+  inApp: z.number().int().min(0),
+  canBeInvited: z.number().int().min(0),
+});
+export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
+
+/** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
+ *  false` with everything at zero rather than a 404: "you have no list yet" is a
+ *  screen, and a missing route is not. */
+export const memberListViewSchema = z.object({
+  hasList: z.boolean(),
+  version: z.number().int().min(0),
+  lastConfirmedAt: z.string().nullable(),
+  counts: memberListCountsSchema,
+  statuses: z.array(memberListStatusCountSchema),
+});
+export type MemberListView = z.infer<typeof memberListViewSchema>;
+
+export const memberListViewResponseSchema = z.object({ list: memberListViewSchema });
+export type MemberListViewResponse = z.infer<typeof memberListViewResponseSchema>;
+
+/** ONE PERSON ON THE LIST THE GYM KEEPS. The id is here because 3a-iv changes and
+ *  removes one by it; everything else is what the GYM said about them, plus the one
+ *  thing only this app knows — whether they are already a member here. */
+export const memberListEntrySchema = z.object({
+  entryId: z.string().uuid(),
+  fullName: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  memberNumber: z.string().nullable(),
+  status: z.string().nullable(),
+  source: memberListEntrySourceSchema,
+  inApp: z.boolean(),
+});
+export type MemberListEntry = z.infer<typeof memberListEntrySchema>;
+
+/** How many names one page of the kept list holds. */
+export const MEMBER_LIST_ENTRIES_PAGE = 100;
+
+/** The longest search staff can type: long enough for a full name and an address,
+ *  short enough that nothing unbounded reaches a scan of a gym's whole list. */
+export const MEMBER_LIST_QUERY_MAX_CHARS = 120;
+
+/** How many status words one request may filter on. A gym's list is capped at 20
+ *  different words when a column is read as a status (§9.5), and this sits above
+ *  that so ticking every chip on the screen is always allowed. */
+export const MEMBER_LIST_STATUS_FILTERS_MAX = 25;
+
+/** WHICH OF THE GYM'S OWN PEOPLE TO SHOW.
+ *
+ *  `status` may be given more than once, and an EMPTY one means "the people with no
+ *  status at all" (§9.9) — which is why it is a plain string and not a non-empty
+ *  one: a gym whose export has no status column has a whole list of them, and they
+ *  have to be reachable. A status is matched with its case and spaces folded, like
+ *  everywhere else in this module a status word is compared.
+ *
+ *  `cursor` is OPAQUE — the server's own record of where the last page ended, sent
+ *  straight back. A screen never builds one, so nothing here describes its
+ *  contents: what it is made of is the server's business, and it is parsed there
+ *  like any other outside input. */
+export const memberListEntriesQuerySchema = z
+  .object({
+    filter: z.enum(["all", "in_app", "not_in_app"]).optional(),
+    status: z
+      .union([
+        z.string().max(MEMBER_LIST_MAX_STATUS_CHARS),
+        z.array(z.string().max(MEMBER_LIST_MAX_STATUS_CHARS)).max(MEMBER_LIST_STATUS_FILTERS_MAX),
+      ])
+      .optional(),
+    query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
+    cursor: z.string().max(512).optional(),
+  })
+  .strict();
+export type MemberListEntriesQuery = z.infer<typeof memberListEntriesQuerySchema>;
+
+/** One page of the list the gym keeps. `total` is how many the filters match IN
+ *  ALL, not how many are on this page, so a screen can say "312 Active" without
+ *  asking a second question — and it is counted over the same filtered set the page
+ *  is cut from, in the same statement, so the two can never disagree. */
+export const memberListEntriesPageSchema = z.object({
+  total: z.number().int().min(0),
+  entries: z.array(memberListEntrySchema).max(MEMBER_LIST_ENTRIES_PAGE),
+  cursor: z.string().nullable(),
+});
+export type MemberListEntriesPage = z.infer<typeof memberListEntriesPageSchema>;
+
+export const memberListEntriesResponseSchema = z.object({ page: memberListEntriesPageSchema });
+export type MemberListEntriesResponse = z.infer<typeof memberListEntriesResponseSchema>;

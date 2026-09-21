@@ -38,6 +38,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
+import { safeErrorSerializer, scrubbedForSentry } from "./logSafety.js";
 import { sentryOptions } from "./sentry.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -83,7 +84,10 @@ export async function buildApp(
   /** A fault nobody expected goes to Sentry with its request id, and with
    *  nothing else from the request: sentryOptions takes the request off. */
   const reportError = (err: unknown, requestId: string): void => {
-    if (config.SENTRY_DSN !== undefined) Sentry.captureException(err, { extra: { requestId } });
+    // Scrubbed first: a database error carries the WHOLE failing row in `detail`
+    // (spec Part 3 §9.9, measured 2026-09-20), and an event carrying it would put a
+    // member's name, address and phone number in Sentry. See `logSafety.ts`.
+    if (config.SENTRY_DSN !== undefined) Sentry.captureException(scrubbedForSentry(err), { extra: { requestId } });
   };
 
   const app = Fastify({
@@ -99,6 +103,12 @@ export async function buildApp(
         ],
         censor: "[redacted]",
       },
+      // AN ERROR SAYS WHAT WENT WRONG, NEVER WHO IT WENT WRONG ABOUT. pino's own
+      // serializer copies every property of an error onto the line, and a database
+      // error carries the whole failing row in `detail` — a member's name, address
+      // and phone number (spec Part 3 §9.9). This is an allowlist; `logSafety.ts`
+      // says why that rather than a list of fields to strip.
+      serializers: { err: safeErrorSerializer },
     },
     disableRequestLogging: config.NODE_ENV === "test",
   });
