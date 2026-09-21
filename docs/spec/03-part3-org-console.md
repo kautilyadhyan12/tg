@@ -2004,6 +2004,147 @@ like a keyboard; check-in from the member app) and its guide "How to Set Up a Gy
 Check-In System for Under $150". Neither product's public pages state a rule for a
 second scan; ours is the one already built (`slot_key`).
 
+---
+
+## 13. What a gym sells, and its timetable
+
+*(ADDED 2026-09-21, the same planning chat: Part 4 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It is
+ROADMAP Stage 2 items 8 and 9's prices, planned. **Every number in this section is a
+starting value a gym can change in its own Settings** — Kd's words. Opus xhigh: rules
+that decide who gets the last place and whose pack is charged.)*
+
+**The worst thing this section could do to a real person:** tell two people "You're
+booked" for the last place, so that one is turned away at the door — or take a class
+off somebody's pack for a booking they never got. The first tests written: fifty
+people tap Book at the same instant on a class with one place left and exactly one has
+it; a pack is charged exactly once for a booking, however many times the request
+arrives, and gets the class back on a free cancel.
+
+### 13.1 Membership types — the gym's own price list
+
+`gym_membership_types`: name · kind (`recurring` · `one_time` · `pack` · `trial`; a
+**day pass is a pack of 1 valid for a day**, as PushPress makes a drop-in) · price in
+integer minor units of the gym's own currency (RULINGS 2026-08-18: the currency follows
+the gym's country) · for `recurring`, the period (so many weeks, months or years) · for
+`one_time` and `trial`, the length · for `pack`, the classes it holds and the days it
+lasts · what it includes (`all_classes` · so many bookings a week · `gym_only`) and
+which class types it covers (all, or a chosen set — personal training is one) ·
+archived, never deleted once anybody holds it. `memberships.manage` (owner and manager).
+
+### 13.2 A person's membership
+
+Held by the member's RECORD (§11), so a person without the app can hold one:
+type · starts on · ends or renews on (worked out from the type) · status (`active` ·
+`frozen` · `ended` · `cancelled`, text with a CHECK) · classes left, for a pack · paid
+through. **One pure transition function** moves the status, with an exhaustive test
+(CLAUDE.md §4, Money), on an injectable clock. Until Part 5 connects a payment company
+staff mark a period paid by hand — every product read that day lets staff record a
+cash payment — and Part 5's ledger takes those marks over, nothing rebuilt. **A gym
+that came from a file** links each of its membership-type WORDS to a type once ("Gold"
+→ Gold Monthly) and the people who carry that word hold the type, their file's dates
+kept. **A gym that keeps its other software** makes no types, and its file's words
+just show (§11).
+
+**The membership row carries its record.** Since 2026-09-21 a person joins only by
+accepting an invitation (§10.2), and the invitation knows which record it was for; so
+`gym_members` gains `entry_id`, written at the accept. It replaces 9.2 rule 3's
+"matching is worked out when asked" for everything after joining — a stored link is
+safe now that records are durable (§11.1) and nobody arrives by code — and it is what
+bookings, visits (§12.6) and "who may book" read. Staff changing a record's email does
+not move the link; deleting the record clears it.
+
+### 13.3 Classes and the calendar
+
+`gym_class_types` (name, words about it, minutes, places, usual coach, colour, open
+gym or not) · `gym_class_schedules` (type, weekdays, the LOCAL start time, from, until
+or open-ended, places and coach where they differ) · `gym_class_sessions`, one row for
+each day a class runs (its instant in UTC, its local date and time, places, coach,
+`scheduled` or `cancelled`, and whether it was changed on its own). A daily worker
+fills the calendar **8 weeks ahead**, safe to run twice (one session a schedule a
+local date). A recurring class is kept as the gym's clock time plus the gym's time
+zone and turned into an instant for each day, so a summer-time change never moves the
+6 pm class. Staff change or cancel **this day only** (the session is marked as changed
+alone and later edits of the schedule leave it be) or **this day and later** (the old
+schedule ends, a new one begins); people booked on a changed or cancelled day are told.
+An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
+trainer sees the lists of their own classes.
+
+### 13.4 Booking and the waitlist — ONE rule, table-tested and raced
+
+`gym_class_bookings`: session · person (the app account and the record) · status
+(`booked` · `waitlisted` · `cancelled` · `late_cancelled` · `attended` · `no_show`) ·
+when · whether a pack was charged · the request's idempotency key. **Book** is one
+transaction under the session's row lock: places counted inside it, the pack charged
+inside it, the same key twice the same answer. **Cancel** frees the place and, in the
+same transaction, gives it to the first in line — **only when the class is more than
+1 day away** (TeamUp's model and TeamUp's default, RULINGS 2026-09-21); inside that
+time everyone waiting is told "a place is free" and the first to claim it has it,
+through the same Book. **The gym's settings, with their starting values:** booking
+opens 7 days before and closes at the start · cancelling is free until 2 hours before ·
+the waitlist's hand-over time 1 day · the waitlist holds 20. After the free time a
+cancel is a late cancel, and not coming is a no-show (Mindbody's words): counted, shown
+to the gym, the pack keeps the charge; no money fee until Part 5. **Who may book:**
+where the gym has any membership type, a person whose held membership covers the class
+type — unlimited, or within their bookings a week (counted in the gym's own week), or
+a pack with a class left, charged at booking and given back by a free cancel; where it
+has none, any current member. The table test covers every class of case: kind of
+membership × places (free · last · full) × time (before opening · open · inside the
+free-cancel time · inside the hand-over time · after the start) × the request arriving
+twice. The races are RUN, across two app instances (3a-iii-b's lesson: one app has one
+database connection and cannot race itself).
+
+### 13.5 Personal training
+
+`gym_trainer_hours` (a member of staff, weekday, local from and to) and the session
+length they offer (Mindbody's are 30, 45, 60 and 90 minutes). Free times are worked
+out, never stored: the hours minus what is booked. An appointment is a row with the
+trainer and its time range, and **the database itself refuses two that overlap** for
+one trainer (an exclusion constraint on the range) — the structural rule, before any
+check in code. A member picks a free time, is booked at once, and the trainer is told;
+the same free-cancel time applies; PT packs are a pack type that covers personal
+training. A trainer keeps their own hours.
+
+### 13.6 The calendar, the desk and the messages
+
+Staff: a week view of classes and personal training, filtered by coach or type, each
+session opening its list (booked, waiting, came, no-show). Members: a list by day with
+Book · Cancel · Join waitlist · Claim, on the phone (the member web until the phone app
+exists), every time in the GYM's time zone and named where the phone's differs. A desk
+scan (§12) from 30 minutes before a booked class until it ends marks the booking
+`attended`; 15 minutes after the end a worker marks the rest `no_show`, safe to run
+twice. Booked · on the waitlist · moved in · a place is free · class changed or
+cancelled · PT booked or cancelled: fixed-word emails now, phone notifications with the
+phone app (Part 7 of the re-plan).
+
+### 13.7 Cost at full size, cards, the two extra passes
+
+Measured by the cards: a week's calendar for a gym of 2,100, a session's list, and the
+burst when a popular class opens — two hundred people booking inside a minute from the
+gym's own wi-fi, so every limit here carries an explicit per-address ceiling (ROADMAP
+Stage 4 item 10's lesson). Cards, every one Opus xhigh: **17a** membership types and a
+person's membership · **17b** classes and the calendar · **17c** booking and the
+waitlist, on the server · **17d** the member's side · **17e** personal training ·
+**17f** check-in meets bookings. 17a and 17c–17f need the durable record (3a-v-b) and
+`entry_id` on the membership (3b-ii); 17b needs neither and can be built beside the
+member list. ONE feature for CLAUDE.md §6: both extra passes run once over 17a–17f.
+
+### 13.8 Where the facts came from (read 2026-09-21)
+
+PushPress help: "Create, Edit & Delete Membership Plans" (recurring, non-recurring,
+session pack) and "Drop-ins — Best Practices" (a drop-in is a punchcard with a session
+count of 1); its barcode article names "plans with limited class access" · Gymdesk
+docs: "Setting Up Memberships" (recurring, one time, per-session, trial) · TeamUp help:
+"Waitlist overview" (added from the waitlist by itself only when the place opens more
+than a set time before the event, default 1 day; inside it the customer "will need to
+manually claim the spot") and "Cancelling classes, class schedules, and Class Types" ·
+Mindbody support: "How to manage early cancellations, late cancellations, and no-shows
+for classes" (the business sets the window; a fee or a visit deduction) and its
+scheduling page (session lengths, real-time trainer availability) · Glofox's blog on
+class scheduling (the next person on the waitlist is told by SMS or push). Not opened
+that day, and general to every product the chat knows: the week calendar, and a desk
+check-in marking a booking attended — each card checks its own before it builds.
+
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
 `calc_version`/dishware/corrections tables, Part 2's definition tables,
