@@ -66,7 +66,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
   });
 
   it(
-    "not a name, an address, a phone number, a member number or a status word — through an upload, a refusal, a page of names, and a fault",
+    "not a name, an address, a phone number, a member number or a status word — through an upload, a refusal, a page of names, a fault, and a confirm the database refuses",
     async () => {
       const cleanup = async () => {
         const mine = sql`
@@ -176,6 +176,36 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         // 5. A fault, with a member file as the request's body.
         const fault = await json("/v1/mleak-probe/fault", body, cookies);
         expect(fault.statusCode).toBe(500);
+
+        // 6. THE CARD'S OWN HAZARD, DRIVEN END TO END. Postgres puts the WHOLE failing
+        //    row into a CHECK violation's `detail`, and pino's stock serializer copies
+        //    every own property of an error onto the line. The confirm's INSERT of
+        //    entries is the first statement in this feature CHECKed against a gym's
+        //    real people, so it is the one that can draw one — and until now nothing
+        //    drove that path: the unit test logs a hand-built error and `sentry.test`
+        //    watches Sentry, not the log (review of PR #88).
+        //
+        //    A constraint that only this one name can violate, so nothing else running
+        //    against this shared database is affected, and it is dropped in `finally`.
+        const staged = await json(uploads, body, cookies);
+        expect(staged.statusCode).toBe(201);
+        const tripId = (JSON.parse(staged.body) as { preview: { uploadId: string } }).preview.uploadId;
+        try {
+          // SCOPED TO THIS GYM by its own id, so nothing else sharing this database
+          // can be refused by it. DDL takes no bind parameter, and a uuid we made
+          // ourselves is hex and dashes. Dropped in `finally` whatever happens.
+          await sql.unsafe(
+            `ALTER TABLE gym_member_list_entries ADD CONSTRAINT mleak_trip_wire ` +
+              `CHECK (gym_id <> '${gymId}'::uuid OR full_name NOT LIKE 'Marian %')`,
+          );
+          const refusedByCheck = await json(`${uploads}/${tripId}/confirm`, {}, cookies);
+          // It fails, and it fails as a fault rather than quietly writing a short list.
+          expect(refusedByCheck.statusCode).toBe(500);
+          // Nothing of the person is in the REPLY either.
+          expect(refusedByCheck.body).not.toContain(NAME);
+        } finally {
+          await sql`ALTER TABLE gym_member_list_entries DROP CONSTRAINT IF EXISTS mleak_trip_wire`;
+        }
 
         // …AND NONE OF IT IS IN THE LOG. Each sentinel is asserted on its own, so a
         // failure names which field escaped rather than only that something did.

@@ -38,10 +38,21 @@ export interface ListEntry {
   status: string | null;
 }
 
-/** One of the gym's own app members, as the match reads them: live, not
- *  complimentary, not staff — the seat rule's own three conditions, applied by
- *  the caller's SQL (§9.7). The owner is member one and is on no export, so
- *  without those conditions every gym's owner would read "not on your list".
+/** One of the gym's own app members: LIVE, and that is the only condition the
+ *  caller's SQL applies. `seatCounted` carries the rest of the seat rule.
+ *
+ *  **TWO QUESTIONS ARE ASKED OF THIS LIST AND THEY ARE NOT THE SAME QUESTION**, which
+ *  is the whole reason the flag exists (review of PR #88, High-1). "Does one of this
+ *  gym's people already have the app" is true of the owner, of a trainer who trains
+ *  here too, and of somebody on a free place. "Does this person occupy a PAID SEAT"
+ *  is not — the seat rule excludes complimentary members and staff, and §9.7 excludes
+ *  them from the marks for a good reason: the owner is member one and may be on no
+ *  export, so without that every gym's owner would read "no longer listed".
+ *
+ *  Answering the FIRST question with the second is what this fixes. It printed "not
+ *  in the app" beside three people who were holding it, and counted them in
+ *  `canBeInvited` — the number 3b's Invite button acts on. A real gym's export has
+ *  its owner and its trainers on it.
  *
  *  `email` is their VERIFIED address or null: an address nobody has proved is
  *  nobody's proof, and matching on one would let a stranger who typed a member's
@@ -56,6 +67,10 @@ export interface ListMember {
   email: string | null;
   statedPhone: string | null;
   everListed: boolean;
+  /** Whether this member occupies a paid seat: live, not complimentary, not staff.
+   *  The marks, `leaving`, the guard and the seat count use only these; "already in
+   *  the app" uses every live member. */
+  seatCounted: boolean;
 }
 
 export interface ReconcileInput {
@@ -385,7 +400,8 @@ export function reconcile(input: ReconcileInput): Reconciled {
   for (const entry of entries) entriesByKey.set(entry.identityKey, entry);
 
   // How the gym's own members are reached, so "is this person already in the
-  // app" is one lookup per person rather than a scan per person.
+  // app" is one lookup per person rather than a scan per person. EVERY live member
+  // counts here, seat or no seat: the owner and the trainers have the app too.
   const memberEmails = new Set<string>();
   const memberPhones = new Set<string>();
   for (const member of members) addContact({ email: member.email, phone: member.statedPhone }, memberEmails, memberPhones);
@@ -475,15 +491,20 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // this function was handed and there with one statement's answer. One function,
   // so a preview read an hour later cannot say something different about a person
   // than the preview that was staged.
-  const onTheList = members.map((member) => {
-    const entry = entryFor({ email: member.email, phone: member.statedPhone });
-    return {
-      ...member,
-      onList: entry !== null,
-      entryStatus: entry?.status ?? null,
-      entryMemberNumber: entry?.memberNumber ?? null,
-    };
-  });
+  // ...and THIS half is the seat rule's own set, because a mark, a leaver and the
+  // guard's numbers are about the paid places, and because §9.7 keeps the owner out
+  // of "no longer listed".
+  const onTheList = members
+    .filter((member) => member.seatCounted)
+    .map((member) => {
+      const entry = entryFor({ email: member.email, phone: member.statedPhone });
+      return {
+        ...member,
+        onList: entry !== null,
+        entryStatus: entry?.status ?? null,
+        entryMemberNumber: entry?.memberNumber ?? null,
+      };
+    });
   const side = membersAgainstNewList(onTheList, (member) => reaches({ email: member.email, phone: member.statedPhone }, newEmails, newPhones), hasList);
   const { marks, membersLeaving, listedNow, onEitherList } = side;
 

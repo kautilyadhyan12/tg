@@ -93,6 +93,11 @@ infra/api.env
 # dangerous here. The archive of the consumed ones is `.scratch/`, on disk and
 # out of git; the ones still in play stay at the root.
 .scratch/
+
+# Cost-at-full-size harnesses (CLAUDE.md §4). Scratch by intent: they name a
+# local database in plain text, and this repository is public. Nothing in here
+# is needed to build or test — the measured numbers live in the spec.
+apps/*/.cost/
 t3-*
 NEXT-*
 

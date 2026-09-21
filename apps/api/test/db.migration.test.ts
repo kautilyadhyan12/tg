@@ -2,6 +2,7 @@
 // Requires DATABASE_URL pointing at a database that has had `pnpm --filter api
 // migrate` applied. Skips visibly when unset so unit CI stays green; the
 // migration CI job / local Neon-branch run is where this executes.
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -1939,4 +1940,55 @@ d("0001_init on a real database", () => {
       await sql`DELETE FROM users WHERE id = ${owner}`;
     }
   });
+
+  /** `0034`'s ORDER COLUMN (Part 3 §9.7, §9.9). Three answers about a gym's own
+   *  list hang on "which entry came first" — the spelling on a status chip, the
+   *  order the chips come in, and which of a household sharing one address is
+   *  marked as being in the app — and `0033` had nothing that could say. This
+   *  reads the column back off the DEPLOYED database rather than off the
+   *  migration text, because a default that did not land leaves every row with
+   *  the same order and puts the coin toss straight back. */
+  it("0034's listed_seq is NOT NULL, defaulted from its own sequence, and indexed per gym", async () => {
+    const column = await sql<{ is_nullable: string; column_default: string | null; data_type: string }[]>`
+      SELECT is_nullable, column_default, data_type
+      FROM information_schema.columns
+      WHERE table_name = 'gym_member_list_entries' AND column_name = 'listed_seq'`;
+    expect(column[0], "listed_seq is on the table").toBeDefined();
+    expect(column[0]?.is_nullable).toBe("NO");
+    expect(column[0]?.data_type).toBe("bigint");
+    expect(column[0]?.column_default ?? "").toContain("nextval(");
+
+    const index = await sql<{ indexdef: string }[]>`
+      SELECT indexdef FROM pg_indexes
+      WHERE tablename = 'gym_member_list_entries'
+        AND indexname = 'gym_member_list_entries_gym_seq_idx'`;
+    expect(index[0], "the (gym_id, listed_seq) index is there").toBeDefined();
+    expect(index[0]?.indexdef).toContain("gym_id");
+    expect(index[0]?.indexdef).toContain("listed_seq");
+
+    // AND IT REALLY COUNTS UP, which is the whole point: two rows written in one
+    // statement must not share an order the way `created_at` does.
+    const owner = randomUUID();
+    const gymId = randomUUID();
+    try {
+      await sql`INSERT INTO users (id, email, display_name, password_hash)
+        VALUES (${owner}, ${`m34-${owner}@example.com`}, 'M34', 'x')`;
+      await sql`INSERT INTO gyms (id, slug, name, owner_user_id, country, timezone)
+        VALUES (${gymId}, ${`m34-${gymId.slice(0, 8)}`}, 'M34 Gym', ${owner}, 'GB', 'Europe/London')`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+        VALUES (${gymId}, 'First',  ${`m34a-${gymId.slice(0, 8)}@example.com`}, ${"a".repeat(64)}, 'upload'),
+               (${gymId}, 'Second', ${`m34b-${gymId.slice(0, 8)}@example.com`}, ${"b".repeat(64)}, 'upload')`;
+      const seqs = await sql<{ full_name: string; listed_seq: string }[]>`
+        SELECT full_name, listed_seq::text FROM gym_member_list_entries
+        WHERE gym_id = ${gymId} ORDER BY listed_seq`;
+      expect(seqs.map((r) => r.full_name)).toEqual(["First", "Second"]);
+      expect(seqs[0]?.listed_seq).not.toBe(seqs[1]?.listed_seq);
+    } finally {
+      await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
+      await sql`DELETE FROM gyms WHERE id = ${gymId}`;
+      await sql`DELETE FROM users WHERE id = ${owner}`;
+    }
+  });
+
 });

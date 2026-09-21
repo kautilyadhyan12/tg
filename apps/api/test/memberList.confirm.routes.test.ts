@@ -884,6 +884,43 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
     TEST_TIMEOUT_MS,
   );
 
+  // THE POST-CONFIRM `ANALYZE` IS OBSERVED, not assumed. Removing the call left the
+  // whole suite green (review of PR #88), because its only other observable is the
+  // warn path when it fails. `pg_stat_user_tables` is where it shows.
+  //
+  // **The honest limit of this one:** the statistics are the TABLE's, not this gym's,
+  // so another suite confirming a list in the same window could bump the timestamp
+  // too and hold this green with our own call gone. It is a shared-database test and
+  // that cannot be designed away here; what it does catch is the call being dropped
+  // outright, which is what actually happens in a refactor.
+  it(
+    "a confirm that changed something brings the table's statistics up to date",
+    async () => {
+      const owner = await makeUser("analyze-owner");
+      const org = await makeOrg(owner.cookies, "Analyze Gym");
+      const lastAnalyze = async () => {
+        const rows = await sql<{ at: Date | null }[]>`
+          SELECT greatest(last_analyze, last_autoanalyze) AS at
+          FROM pg_stat_user_tables WHERE relname = 'gym_member_list_entries'`;
+        return rows[0]?.at?.getTime() ?? 0;
+      };
+      const before = await lastAnalyze();
+
+      const preview = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+
+      // It runs AFTER the commit and the statistics collector is not instant, so this
+      // waits for it rather than reading once and hoping.
+      let after = await lastAnalyze();
+      for (let tries = 0; tries < 40 && after <= before; tries += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        after = await lastAnalyze();
+      }
+      expect(after, "the statistics were refreshed after the confirm").toBeGreaterThan(before);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "the spelling of a word only the people GOING carry is the list's own first, not its last",
     async () => {
@@ -906,6 +943,80 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const words = Object.fromEntries(applied.statuses.map((status) => [status.label, status]));
       expect(Object.keys(words).sort()).toEqual(["Active", "Frozen"]);
       expect(words["Frozen"]).toMatchObject({ gone: 2, count: 2 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // **EVERYBODY WITH THE APP COUNTS AS HAVING IT — the owner, a trainer who trains
+  // here too, and a complimentary member included.** "Is this person already in the
+  // app" and "does this person occupy a paid seat" are different questions, and only
+  // the second one excludes staff and complimentary people (§9.7's seat rule, which
+  // is right for the marks and for the guard). Answering the first with the second
+  // prints "not in the app" beside somebody who is holding it, and puts them in
+  // `canBeInvited` — the number 3b's Invite button acts on. A real gym's export has
+  // its owner and its trainers on it, which is the outside case RULINGS 2026-09-20
+  // asks for rather than one built from our own assumptions.
+  it(
+    "the owner, a training trainer and a complimentary member all read as being IN the app, and none of them can be invited",
+    async () => {
+      const owner = await makeUser("inapp-owner");
+      const trainer = await makeUser("inapp-trainer");
+      const comp = await makeUser("inapp-comp");
+      const plain = await makeUser("inapp-plain");
+      const org = await makeOrg(owner.cookies, "In App Gym");
+
+      // All four have accounts, all four are live members, all four are on the export.
+      await verify(owner.email);
+      for (const person of [trainer, comp, plain]) {
+        await joinAsMember(person.cookies, org, owner.cookies);
+        await verify(person.email);
+      }
+      // The trainer trains here AND is a member; the comp member is on a free place.
+      expect(
+        (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies))
+          .statusCode,
+      ).toBe(201);
+      await sql`
+        UPDATE gym_members SET complimentary = true
+        WHERE gym_id = ${org.org.id} AND user_id = (SELECT id FROM users WHERE email = ${comp.email})`;
+
+      const people: Person[] = [
+        { ...person(1, "Active"), email: owner.email, number: "M-OWNER" },
+        { ...person(2, "Active"), email: trainer.email, number: "M-TRAINER" },
+        { ...person(3, "Active"), email: comp.email, number: "M-COMP" },
+        { ...person(4, "Active"), email: plain.email, number: "M-PLAIN" },
+      ];
+      const preview = await stage(org.org.id, owner.cookies, file(people));
+      // THE PREVIEW SAYS IT FIRST, before anybody presses anything: all four are new to
+      // the LIST and none of them is new to the APP, so there is nobody to invite. The
+      // staging read had the same fault and would have offered three invites here.
+      expect(preview.list).toMatchObject({ new: 4, alreadyInApp: 4, canBeInvited: 0, noEmail: 0 });
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+
+      const page = pageOf(await get(`${listUrl(org.org.id)}/entries`, owner.cookies));
+      const numbered = (number: string) => page.entries.find((entry) => entry.memberNumber === number);
+      for (const number of ["M-OWNER", "M-TRAINER", "M-COMP", "M-PLAIN"]) {
+        expect(numbered(number)?.inApp, `${number} is in the app`).toBe(true);
+      }
+
+      // NOBODY HERE CAN BE INVITED — every one of them already has it.
+      const list = listOf(await get(listUrl(org.org.id), owner.cookies));
+      expect(list.counts).toEqual({ entries: 4, inApp: 4, canBeInvited: 0, noEmail: 0 });
+      expect(list.statuses[0]).toMatchObject({ label: "Active", count: 4, inApp: 4, canBeInvited: 0 });
+
+      // ...and the filter agrees with the flag, rather than answering separately.
+      const notInApp = pageOf(await get(`${listUrl(org.org.id)}/entries?filter=not_in_app`, owner.cookies));
+      expect(notInApp.total).toBe(0);
+      const inApp = pageOf(await get(`${listUrl(org.org.id)}/entries?filter=in_app`, owner.cookies));
+      expect(inApp.total).toBe(4);
+
+      // **AND THE OTHER HALF OF THE SAME RULE, which is what makes this a pair.**
+      // "Already in the app" is every live member; a MARK and a LEAVER are the paid
+      // seats only (§9.7), because the owner is member one and may be on no export —
+      // print "no longer listed" beside them and the gym is told it has lost its own
+      // owner. Next month's file drops all four: only the plain member is leaving.
+      const dropped = await stage(org.org.id, owner.cookies, file([person(9, "Active")]));
+      expect(dropped.members).toMatchObject({ leaving: 1, listedNow: 1 });
     },
     TEST_TIMEOUT_MS,
   );

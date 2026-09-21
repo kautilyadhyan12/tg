@@ -16,6 +16,7 @@
 import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  MEMBER_LIST_STATUS_CHIPS_MAX,
   memberListEntrySourceSchema,
   memberListGroupsSchema,
   memberListMappingSchema,
@@ -178,10 +179,14 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
+      seat_counted: boolean;
     }[]
   >`
     SELECT m.user_id,
            u.display_name,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
            CASE
              WHEN EXISTS (
                SELECT 1 FROM one_time_tokens t
@@ -195,9 +200,6 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     JOIN users u ON u.id = m.user_id
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -205,6 +207,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     email: row.email,
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
+    seatCounted: row.seat_counted,
   }));
 }
 
@@ -605,6 +608,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
+      seat_counted: boolean;
       entry_id: string | null;
       entry_status: string | null;
       entry_member_number: string | null;
@@ -613,6 +617,9 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
   >`
     SELECT m.user_id,
            u.display_name,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
            CASE WHEN v.proved THEN u.email::text ELSE NULL END AS email,
            m.stated_phone_e164,
            (m.last_listed_at IS NOT NULL) AS ever_listed,
@@ -647,9 +654,6 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     ) e ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -657,6 +661,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     email: row.email,
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
+    seatCounted: row.seat_counted,
     onList: row.on_list,
     entryId: row.entry_id,
     entryStatus: row.entry_status,
@@ -986,7 +991,10 @@ export async function listStatusCounts(
     -- THE GROUPS COME BACK IN THE LIST'S OWN ORDER, which is one column now and
     -- needs no tie-break at all: listed_seq is unique, where created_at is
     -- shared by every row one confirm writes and left the order to a random uuid.
-    ORDER BY min(e.listed_seq)`;
+    ORDER BY min(e.listed_seq)
+    -- The reply's own ceiling, so a gym that has accumulated status words across many
+    -- add-uploads cannot grow this answer without bound (see the constant's note).
+    LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}`;
   return rows.map((row) => ({
     // "" is the people with no status at all — the same empty label the entries
     // filter reads as "no status" (§9.9), and the same one the preview's own

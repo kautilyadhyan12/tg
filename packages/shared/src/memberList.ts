@@ -896,6 +896,22 @@ export const memberListStatusCountSchema = z.object({
 });
 export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
 
+/** THE MOST STATUS CHIPS ONE LIST CAN ANSWER WITH, and the reason it needs saying.
+ *
+ *  A FILE may hold `MEMBER_LIST_MAX_STATUS_WORDS` different words and no more, or the column is
+ *  not a status at all (§9.5). **A LIST is not a file**: a whole-list upload replaces
+ *  it, but an `add` keeps everyone already on it, so words accumulate across uploads,
+ *  and 3a-iv types them in one at a time. Nothing bounded that, so the reply grew with
+ *  the gym's history — up to one chip per person in the worst case (review of PR #88,
+ *  Low-5).
+ *
+ *  Ten times the per-file rule, so no gym using status words as status words is ever
+ *  cut: this is a ceiling on an unbounded reply, not a limit anybody should meet. The
+ *  read LIMITs to it, and the chips come back in the list's own order, so what a gym
+ *  past the ceiling loses is its rarest words and never a count of PEOPLE —
+ *  `counts` is measured over the whole list either way, by a different statement. */
+export const MEMBER_LIST_STATUS_CHIPS_MAX = 200;
+
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
  *  false` with everything at zero rather than a 404: "you have no list yet" is a
  *  screen, and a missing route is not. */
@@ -904,7 +920,7 @@ export const memberListViewSchema = z.object({
   version: z.number().int().min(0),
   lastConfirmedAt: z.string().nullable(),
   counts: memberListCountsSchema,
-  statuses: z.array(memberListStatusCountSchema),
+  statuses: z.array(memberListStatusCountSchema).max(MEMBER_LIST_STATUS_CHIPS_MAX),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 

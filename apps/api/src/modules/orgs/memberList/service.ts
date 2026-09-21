@@ -176,7 +176,7 @@ async function measure(
       // The members the rule was handed ARE the gym's live, paid-for members — the
       // seat rule's own three conditions (`repo.listMembers`). Counting them again
       // in SQL would be a second answer to one question.
-      liveMembers: members.length,
+      liveMembers: members.filter((member) => member.seatCounted).length,
       // What the list would BE, not what it is: the number staff are deciding about.
       // An add keeps everybody already on it; a whole list is the file.
       listSize:
@@ -275,7 +275,9 @@ async function freshMemberSide(
   const fileEmails = new Set(contacts.emails.flatMap((e) => (e === null ? [] : [e.trim().toLowerCase()])));
   const filePhones = new Set(contacts.phones.flatMap((p) => (p === null ? [] : [p.trim()])));
   const side = membersAgainstNewList(
-    members,
+    // The seat rule's own set: §9.7 keeps the owner and the staff out of "no longer
+    // listed". "Already in the app" is asked of every live member, just above.
+    members.filter((member) => member.seatCounted),
     (member) => {
       const email = (member.email ?? "").trim().toLowerCase();
       if (email !== "" && fileEmails.has(email)) return true;
@@ -308,7 +310,7 @@ async function freshMemberSide(
         isLargeMemberListChange(stored.guard.entriesGoing, stored.guard.listSize) ||
         isLargeMemberListChange(side.membersLeaving.length, side.listedNow),
     },
-    seat: { ...stored.seat, cap: seatCap, liveMembers: members.length },
+    seat: { ...stored.seat, cap: seatCap, liveMembers: members.filter((member) => member.seatCounted).length },
   };
   return {
     counts,
@@ -853,14 +855,12 @@ export async function confirmUpload(
     };
   });
 
-  // **THE TABLE'S STATISTICS ARE PART OF APPLYING A LIST, NOT AN OPTIMISATION.**
   // A confirm bulk-loads a gym's people into a table whose statistics may still say
   // it holds almost nothing, and the planner then costs the per-member lookup behind
-  // every read of that list as if it were free — measured at the biggest list
-  // allowed, **3,152 ms a read before this and 24.7 ms after**, on the one connection
-  // the whole API shares. Autovacuum puts it right by itself within about a minute,
-  // and that minute is exactly the one in which staff look at the list they have just
-  // pressed Confirm on. Postgres's own manual says to do this after a bulk load.
+  // every read of that list against a table it believes is empty. **What that is
+  // worth, measured, is in `repo.analyseEntries`'s own note and is not repeated
+  // here** — one number in one place (CLAUDE.md §4). It is a modest win bought
+  // cheaply, not a rescue.
   //
   // AFTER THE COMMIT, so the gym's row lock is already released; and HOUSEKEEPING, so
   // it is warned about and never fails a confirm that has already been applied.
@@ -884,7 +884,16 @@ const changedAnything = (done: MemberListConfirmed): boolean =>
 
 /** What a statement did, against what the rule said it would. Loud, with no cell in
  *  the message — the numbers are counts and the id is an upload's. */
-function expectApplied(did: number, said: number, what: string, uploadId: string): void {
+/** WHAT A STATEMENT DID, CHECKED AGAINST WHAT THE RULE SAID IT WOULD.
+ *
+ *  **NO ROUTE CAN DRIVE THIS AND THAT IS THE POINT OF IT** (review of PR #88): the
+ *  rule and the three statements run inside ONE transaction holding the gym's row, so
+ *  under that lock they cannot differ, and the file's own duplicates are folded by the
+ *  rule before the INSERT ever sees them. It is here for the case that is left — a
+ *  fault of OURS — where the alternative is reporting a number that is not what
+ *  happened. So it is exported and pinned directly, rather than claimed by a route
+ *  test that would stay green with the calls deleted. */
+export function expectApplied(did: number, said: number, what: string, uploadId: string): void {
   if (did === said) return;
   throw new Error(
     `member-list upload ${uploadId} ${what} ${String(did)} entries where the rule said ${String(said)}`,
