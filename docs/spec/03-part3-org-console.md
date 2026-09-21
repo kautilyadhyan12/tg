@@ -2343,6 +2343,98 @@ SugarWOD's own pages (a gym feed with photos, comments and fist bumps; gym
 leaderboards) · Apple's App Review Guidelines, 1.2 (a filter, a report, a block,
 published contact details) · Cloudflare Stream's pricing page.
 
+---
+
+## 16. Messages and reports
+
+*(ADDED 2026-09-22, the same planning chat: Part 7 of Kd's planning document, agreed
+that day — RULINGS 2026-09-22. A frame. It takes in ROADMAP Stage 2 items 2 and 12.
+Opus xhigh: it sends data out to real people.)*
+
+**The worst thing this section could do to a real person:** "We miss you" to somebody
+the gym removed; "Payment overdue" to somebody who paid; the same message fifty times
+because a job ran twice. The first tests written: a job run twice sends once; a former
+or removed member gets nothing; an overdue reminder is never made for a paid bill; a
+person who switched a kind of message off never gets it.
+
+### 16.1 The channel: in the app
+
+A gym's message to a member is a row in **the member's inbox** on that gym's page in
+the phone app (the member web until it exists), with a phone notification once the
+phone app has push (spec Part 6 §6) — Kd's change to the plan, RULINGS 2026-09-22.
+`gym_member_messages`: gym · person · kind · the words as sent · when · read at ·
+expires (30 days). **Email only where the person has no app**: the member's invitation
+(9.12), a staff invitation (10.3), a lead's follow-ups (16.3), the owner's weekly
+summary — and the sign-in code. **No SMS** (RULINGS 2026-09-17). The one gym message
+of RULINGS 2026-09-07 (a new one replaces the old; gone after 7 days) becomes the
+inbox's pinned note.
+
+### 16.2 The automatic messages
+
+Each a switch in Settings → Messages, each number the gym's to change: **Welcome** (on
+joining) · **Trial check-in** (day 2 of a trial membership) · **Trial ending** (2 days
+before) · **We miss you** (no visit for 10 days; once for each absence) · **Membership
+ending** (7 days before) · **Payment overdue** (3 days after a bill's due date, §14.2)
+· **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
+name and the person's first name; the gym may add ONE line of its own — 140
+characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
+by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
+membership and bills, what was already sent, the gym's clock), with a table test over
+every kind × every reason NOT to send: former · removed · switched off by the person ·
+already sent for this occasion · another automatic message that day · night by the
+gym's clock · the gym lapsed. `(gym, person, kind, occasion)` is UNIQUE, so a second
+run cannot send a second message. A member can switch each kind off, except a payment
+notice.
+
+### 16.3 Leads
+
+`gym_leads`: name · email · phone · where from · `new` · `contacted` · `on_trial` ·
+`joined` · `lost` · notes. Added by hand or by the upload (a list of leads is another
+kind of upload). Three follow-up EMAILS, fixed words, at once · day 3 · day 7, stopped
+the moment the status moves; they go through 9.12's checks, suppressions and
+unsubscribe, from the invites sub-domain, under the same caps. A lead who becomes a
+member is the same person: the record is made from the lead.
+
+### 16.4 At risk
+
+The console lists members whose visits have dropped — came in at least 2 of the last
+4 full weeks before, and not at all in the last 14 days; both numbers the gym's — each
+with their last visit and one tap to send a cheer (RULINGS 2026-09-02, 2026-09-05).
+It reads visits (§12), so a gym with no check-in in use is told the list needs one.
+It takes the place of "slipping away" (ROADMAP Stage 2 item 2). The owner's weekly
+summary email: new, left, at risk, visits against last week, money overdue.
+
+### 16.5 Reports
+
+One Reports page (`reports.read`: owner and manager), every figure with the info
+symbol that says exactly how it is worked out, and a CSV download. **Members**: active
+now · new and left this month · **churn** (those who left in the month over those
+active at its start) · retention (1 − churn) · the average stay of those who left —
+from the durable records of §11.1, which is why a leaver is kept. **Attendance**:
+visits by day and week · the busiest hours (weekday by hour) · visits a member a week ·
+how full classes are (booked over places) · no-shows. **Money** — read from the gym's
+notebook (§14.2), which holds the gym's prices and every payment though the app never
+holds the money: **MRR** (each active repeating membership's sold-at price as one
+month) · collected this month · overdue · **lifetime value** (monthly money a member
+over monthly churn). A gym that keeps its billing in other software has no money
+report and is told why. A figure with too little behind it — under three full months
+for churn and lifetime value — says "not enough data yet", never a made-up number
+(RULINGS 2026-07-15). Worked out when the page opens from indexed rows or §3.2's
+nightly rollups, the cost measured at 2,100 members with a bystander beside it.
+
+### 16.6 Cards
+
+**20a** the inbox and the message rule (its table test first) · **20b** the automatic
+messages and their switches · **20c** leads · **20d** At risk and the weekly summary ·
+**21a** reports: members and attendance · **21b** reports: money (after 18a). ONE
+feature each for CLAUDE.md §6 (20, 21).
+
+### 16.7 Where the facts came from (read 2026-09-22)
+
+Twilio support: "A2P 10DLC Sole Proprietor Brands FAQ" (the one-person registration is
+for the US and Canada) · the churn and lifetime-value formulas are the plain ones every
+subscription business uses; each card names its source before it builds.
+
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
 `calc_version`/dishware/corrections tables, Part 2's definition tables,
