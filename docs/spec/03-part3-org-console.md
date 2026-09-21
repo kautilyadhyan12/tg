@@ -2325,9 +2325,12 @@ daily food numbers as the APP built them, changes them, and saves a copy marked 
 switch, 7a-iv-e). The server runs the health rules over a gym's numbers exactly as
 over typed ones (never under the calorie floor; no cut for a health yes, Safe mode or
 under 18). It waits for the app's own plan builder (ROADMAP Stage 1 items 6a and 6b).
-**OPEN (RULINGS 2026-09-22):** whether the trainer sees the member's food, weight and
-plan only after the member's own tap, or at once on joining. Until Kd rules, §2.4's
-promise stands: only by the person's choice.
+**SETTLED 2026-09-22 (RULINGS): the tap is kept.** A trainer sees a member's food,
+weight and plan only after the member's own yes — ONE switch on the Join screen ("Let
+my coaches at {gym} see my food and weight, so they can build my plan"), off until
+tapped, changeable at any time in Settings → Gym; the trainer's list says who has
+shared. Without it the trainer can still write a plan from what the gym may see
+(§2.4), and the screen says what is hidden and why.
 
 ### 15.8 Cards
 
