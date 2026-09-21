@@ -1,0 +1,329 @@
+/**
+ * Mutation audit — the member list: the reconcile rule, the confirm that writes a
+ * gym's list, and the two reads of the list it keeps (ROADMAP 3a-iii, Part 3 §9.6-§9.9).
+ * Run from anywhere with Docker up:
+ *   `node apps/api/tools/mutate-member-list.mjs`            — every mutant
+ *   `node apps/api/tools/mutate-member-list.mjs --census`   — anchors only, no database
+ *   `node apps/api/tools/mutate-member-list.mjs 12`         — one mutant by number
+ *
+ * **CLAUDE.md §4: run when this slice changes, never as a routine step and never in
+ * CI.** It is here rather than in a chat's scratchpad because 3a-iv changes this same
+ * rule and the feature's two hard passes read it; a harness that dies with the chat
+ * that wrote it protects nothing.
+ *
+ * Every row is a rule the slice claims to hold, and the suite beside it must turn RED.
+ * Anchors are matched against the file's own bytes, and every file is restored and
+ * sha256-checked afterwards.
+ *
+ * **RUN `--census` FIRST, ALWAYS.** An anchor that no longer matches makes a mutant
+ * run GREEN, which reads exactly like a rule that holds — this is not hypothetical, it
+ * has happened twice in this feature (the orgs harness sat dead for five days, and the
+ * High-3 fix moved the chips' ORDER BY into a lateral and rotted a row here).
+ *
+ * **TWO MUTANTS ARE EXPECTED GREEN and it is not a gap**: the gym-row lock and the
+ * upload row's `FOR UPDATE`. No route-level race can tell them apart from the locks
+ * Postgres takes anyway — inserting an entry takes `FOR KEY SHARE` on the `gyms` row,
+ * and the confirm updates its own upload row before it commits — so telling them apart
+ * needs a seam inside the transaction. They are kept because they are the module's one
+ * lock order and because 3a-iv adds writers no route serialises for us.
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const SERVICE = `${ROOT}/apps/api/src/modules/orgs/memberList/service.ts`;
+const REPO = `${ROOT}/apps/api/src/modules/orgs/memberList/repo.ts`;
+const RECONCILE = `${ROOT}/apps/api/src/modules/orgs/memberList/reconcile.ts`;
+const CURSOR = `${ROOT}/apps/api/src/modules/orgs/memberList/cursor.ts`;
+
+const CONFIRM_SUITE = "memberList.confirm.routes.test.ts";
+const RULE_SUITE = "memberList.reconcile.unit.test.ts";
+
+/** file, what it breaks, the anchor, the replacement, which suite must go red. */
+const BREAKS = [
+  {
+    name: "tenancy: the upload is fetched by its id alone",
+    file: REPO,
+    from: "    WHERE gym_id = ${gymId} AND id = ${uploadId}\n    FOR UPDATE`;",
+    to: "    WHERE id = ${uploadId}\n    FOR UPDATE`;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the stale-preview check is dropped (a moved list is applied anyway)",
+    file: SERVICE,
+    from: "    if (version !== upload.baseVersion) {",
+    to: "    if (false && version !== upload.baseVersion) {",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the wrong-file guard is dropped",
+    file: SERVICE,
+    from: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
+    to: "    if (false && reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the tick is remembered from a previous request (it is stored, not asked)",
+    file: SERVICE,
+    from: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
+    to: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange && reconciled.gone.length !== 11) {",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the gym's row is not locked (two confirms can interleave)",
+    file: SERVICE,
+    from: "    await repo.lockGym(tx, gymId);",
+    to: "    if (false) await repo.lockGym(tx, gymId);",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "an already-confirmed upload is applied again",
+    file: SERVICE,
+    from: '    if (upload.status === "confirmed") return { kind: "confirmed", confirmed: storedAnswer(upload, before?.version ?? 0) };',
+    to: '    if (false) return { kind: "confirmed", confirmed: storedAnswer(upload, before?.version ?? 0) };',
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the version is bumped even when nothing changed",
+    file: SERVICE,
+    from: "    const bump = added + updated + removed > 0;",
+    to: "    const bump = true;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the upload's cells are kept after it is confirmed",
+    file: REPO,
+    from: "    SET status = 'confirmed', confirmed_at = ${input.at}, rows = NULL,",
+    to: "    SET status = 'confirmed', confirmed_at = ${input.at},",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "people coming off the list are not deleted",
+    file: SERVICE,
+    from: "    const removed = await repo.deleteEntries(tx, gymId, reconciled.gone.map((person) => person.identityKey));",
+    to: "    const removed = reconciled.gone.length;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "a changed status is not written",
+    file: REPO,
+    from: "    SET status = r.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
+    to: "    SET status = e.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "only the NEW list's members are stamped, not the ones coming off",
+    file: RECONCILE,
+    from: "    if (onNewList || member.onList) onEitherList.push(member.userId);",
+    to: "    if (onNewList) onEitherList.push(member.userId);",
+    suite: RULE_SUITE,
+  },
+  {
+    name: "the stamp is computed inside the hasList gate (a gym's first confirm stamps nobody)",
+    file: RECONCILE,
+    from: "    if (onNewList || member.onList) onEitherList.push(member.userId);",
+    to: "    if (hasList && (onNewList || member.onList)) onEitherList.push(member.userId);",
+    suite: RULE_SUITE,
+  },
+  {
+    name: "the audit row carries a person's name",
+    file: SERVICE,
+    from: "        mode: upload.mode,",
+    to: "        mode: upload.mode,\n        who: reconciled.new[0]?.fullName ?? reconciled.gone[0]?.fullName ?? 'none',",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the entries page counts only the rows it returns, not the filtered set",
+    file: REPO,
+    from: "    totals AS (SELECT count(*)::int AS total FROM filtered)",
+    to: "    totals AS (SELECT least(count(*), 100)::int AS total FROM filtered)",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the search's LIKE wildcards are not escaped",
+    file: SERVICE,
+    from: 'const escapeLike = (text: string): string => text.replace(/[\\\\%_]/g, (char) => `\\\\${char}`);',
+    to: "const escapeLike = (text: string): string => text;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "a bad cursor quietly starts again from the top",
+    file: SERVICE,
+    from: '    throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");',
+    to: "    /* silently from the top */",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "a status filter is matched with its case unfolded",
+    file: SERVICE,
+    from: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim().toLowerCase()))];",
+    to: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim()))];",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the in-app filter counts members rather than the entries they match",
+    file: SERVICE,
+    from: "  for (const member of members) if (member.entryId !== null) ids.add(member.entryId);",
+    to: "  for (const member of members) if (member.entryId !== null) ids.add(member.entryId);\n  ids.delete([...ids][0] ?? '');",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the cursor comparison includes the person it left off at (a page repeats somebody)",
+    file: REPO,
+    from: "            > (${input.cursor?.name ?? \"\"}::text, ${input.cursor?.id ?? EMPTY_UUID}::uuid)",
+    to: "            >= (${input.cursor?.name ?? \"\"}::text, ${input.cursor?.id ?? EMPTY_UUID}::uuid)",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "a cursor is decoded without being parsed (somebody else's document is believed)",
+    file: CURSOR,
+    from: "  const cursor = entryCursorSchema.safeParse(parsed);\n  return cursor.success ? cursor.data : null;",
+    to: "  const cursor = entryCursorSchema.safeParse(parsed);\n  return cursor.success ? cursor.data : { name: \"\", id: \"00000000-0000-0000-0000-000000000000\" };",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the chip's label is taken from the LAST spelling, not the list's first",
+    file: REPO,
+    from: "    SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,",
+    to: "    SELECT (array_agg(e.status ORDER BY e.listed_seq DESC))[1] AS label,",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the status chips come back in the reverse of the list's own order",
+    file: REPO,
+    from: "      ORDER BY grouped.first_seq",
+    to: "      ORDER BY grouped.first_seq DESC",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "a family sharing one address is answered by the LAST of them, not the first",
+    file: REPO,
+    from: "         ORDER BY x.listed_seq\n         LIMIT 1)",
+    to: "         ORDER BY x.listed_seq DESC\n         LIMIT 1)",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the pure rule is handed the gym's list in reverse",
+    file: REPO,
+    from: "    ORDER BY listed_seq`;",
+    to: "    ORDER BY listed_seq DESC`;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "listed_seq is stamped against the file's order instead of with it",
+    file: REPO,
+    from: "    ord: index,",
+    to: "    ord: -index,",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the upload row is not locked FOR UPDATE (what really serialises two presses)",
+    file: REPO,
+    from: "    WHERE gym_id = ${gymId} AND id = ${uploadId}\n    FOR UPDATE`;",
+    to: "    WHERE gym_id = ${gymId} AND id = ${uploadId}`;",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "only paid seats count as being in the app (the SQL half)",
+    file: REPO,
+    from: "      AND m.removed_at IS NULL",
+    to: "      AND m.removed_at IS NULL AND m.complimentary = false",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "only paid seats count as being in the app (the rule half)",
+    file: RECONCILE,
+    from: "  for (const member of members) addContact({ email: member.email, phone: member.statedPhone }, memberEmails, memberPhones);",
+    to: "  for (const member of members) if (member.seatCounted) addContact({ email: member.email, phone: member.statedPhone }, memberEmails, memberPhones);",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the marks and the leavers are measured over every live member, not the paid seats",
+    file: RECONCILE,
+    from: "    .filter((member) => member.seatCounted)",
+    to: "    .filter(() => true)",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the whole-list counts are the CAPPED chips added up, not the whole list",
+    file: SERVICE,
+    from: "  const counts: MemberListCounts = totals;",
+    to: "  const counts: MemberListCounts = statuses.reduce((sum, row) => ({ entries: sum.entries + row.count, inApp: sum.inApp + row.inApp, canBeInvited: sum.canBeInvited + row.canBeInvited, noEmail: sum.noEmail + row.noEmail }), { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 });",
+    suite: CONFIRM_SUITE,
+  },
+  {
+    name: "the status chips have no ceiling",
+    file: REPO,
+    from: "      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}",
+    to: "      LIMIT 100000",
+    suite: CONFIRM_SUITE,
+  },
+];
+
+const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
+
+/** AN ANCHOR HAS TO MATCH THE FILE'S OWN LINE ENDING. These files are CRLF in the
+ *  working tree (git checks them out that way here) and an anchor written with
+ *  plain \n silently fails to match — which makes a break run GREEN and read as a
+ *  rule that holds. */
+const eol = (text, file) => (readFileSync(file, "utf8").includes("\r\n") ? text.replace(/\n/g, "\r\n") : text);
+
+// THE ANCHOR CENSUS FIRST, and no database (harness anchors rot under small cards;
+// a break whose anchor no longer matches runs GREEN and looks like a passing rule).
+if (process.argv[2] === "--census") {
+  let missing = 0;
+  for (const [i, brk] of BREAKS.entries()) {
+    const text = readFileSync(brk.file, "utf8");
+    const ok = text.includes(eol(brk.from, brk.file));
+    if (!ok) missing += 1;
+    console.log(`${ok ? "ok     " : "MISSING"} #${i} ${brk.name}`);
+  }
+  console.log(`\n${BREAKS.length - missing}/${BREAKS.length} anchors present`);
+  process.exit(missing === 0 ? 0 : 1);
+}
+
+const only = process.argv[2] === undefined ? null : Number(process.argv[2]);
+const results = [];
+for (const [i, brk] of BREAKS.entries()) {
+  if (only !== null && only !== i) continue;
+  const before = readFileSync(brk.file, "utf8");
+  const beforeSha = sha(brk.file);
+  const from = eol(brk.from, brk.file);
+  if (!before.includes(from)) {
+    results.push({ i, name: brk.name, outcome: "ANCHOR MISSING" });
+    continue;
+  }
+  let broken = before.replace(from, eol(brk.to, brk.file));
+  if (brk.extra !== undefined) {
+    if (!broken.includes(brk.extra.from)) {
+      results.push({ i, name: brk.name, outcome: "EXTRA ANCHOR MISSING" });
+      continue;
+    }
+    broken = broken.replace(brk.extra.from, brk.extra.to);
+  }
+  writeFileSync(brk.file, broken);
+  let red = false;
+  let note = "";
+  try {
+    execFileSync("corepack", ["pnpm", "--filter", "api", "test:local", brk.suite], {
+      cwd: ROOT,
+      stdio: "pipe",
+      shell: true,
+      timeout: 600_000,
+    });
+  } catch (e) {
+    red = true;
+    note = String(e.status ?? "");
+  }
+  writeFileSync(brk.file, before);
+  const restored = sha(brk.file) === beforeSha;
+  results.push({ i, name: brk.name, outcome: red ? "RED" : "GREEN", restored, note });
+  console.log(`${red ? "RED  " : "GREEN"} #${i} ${brk.name}${restored ? "" : "  !! NOT RESTORED"}`);
+}
+console.log("\n--- summary ---");
+for (const r of results) console.log(`#${r.i} ${r.outcome}${r.restored === false ? " NOT-RESTORED" : ""} :: ${r.name}`);
+const green = results.filter((r) => r.outcome !== "RED");
+console.log(`\n${results.length - green.length}/${results.length} red`);
