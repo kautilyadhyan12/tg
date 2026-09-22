@@ -539,6 +539,22 @@ const BREAKS = [
     suite: WIDER_SUITE,
     pure: true,
   },
+  {
+    name: "round one High-4, the gym's own words: a card inside a status or a payment word reaches the staged file",
+    file: FIELDS,
+    from: "  return withoutCardNumbers(cut(text, MEMBER_LIST_MAX_STATUS_CHARS)).text;",
+    to: "  return cut(text, MEMBER_LIST_MAX_STATUS_CHARS);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4, a name: a card written beside a person's name is kept with it",
+    file: FIELDS,
+    from: "  if (full !== \"\") return withoutCardNumbers(cut(full, MEMBER_LIST_MAX_NAME_CHARS)).text;",
+    to: "  if (full !== \"\") return cut(full, MEMBER_LIST_MAX_NAME_CHARS);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");

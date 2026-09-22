@@ -837,6 +837,40 @@ describe("the gym's own columns", () => {
     expect(everything).not.toContain("5555 5555");
   });
 
+  it("A CARD WRITTEN INSIDE THE GYM'S OWN WORDS, OR INSIDE A NAME, IS TAKEN OUT OF THEM TOO", () => {
+    // Chasing the sample-cell miss found three more: the status, the membership word and
+    // the payment word are all cleaned through `cleanStatus`, and only a WHOLE-cell card
+    // was ever dropped from them — so "paid by card 4111 1111 1111 1111" in a payment
+    // column reached the STAGED file intact, and sat in the database for the hour that
+    // upload lives. The boundary that WRITES scrubbed it; the one that stages did not.
+    const found = read([
+      ["Name", "Email", "Status", "Membership Type", "Payment Status"],
+      ["Ann Lee 4111 1111 1111 1111", "ann@example.com", "Active", "Gold", "paid by card 5555 5555 5555 4444"],
+      ["Bo Chen", "bo@example.com", "Active", "Gold", "Paid"],
+    ]);
+    expect(found.rows[0]?.fullName).toBe("Ann Lee [card number removed]");
+    expect(found.rows[0]?.paymentStatus).toBe("paid by card [card number removed]");
+    // …and an ordinary word is untouched.
+    expect(found.rows[1]?.paymentStatus).toBe("Paid");
+    expect(found.rows[0]?.membershipType).toBe("Gold");
+    // NOT ONE DIGIT OF EITHER CARD anywhere in what the server answers — which is what
+    // is stored on the staged upload and read back into every preview.
+    const everything = JSON.stringify(found);
+    expect(everything).not.toContain("4111");
+    expect(everything).not.toContain("5555 5555");
+  });
+
+  it("…but a member NUMBER keeps its whole-cell rule, because its whole purpose is to be a long number", () => {
+    // Redacting a run that happens to pass Luhn costs a gym its own member numbers, and
+    // 3a-v-a measured how often that is: 7,269 of 100,000 made-up twelve-digit runs pass
+    // Aadhaar's check. A whole-cell card is still dropped (its own case, above).
+    const found = read([
+      ["Name", "Email", "Member No"],
+      ["Ann Lee", "ann@example.com", "1234567890123456789"],
+    ]);
+    expect(found.rows[0]?.memberNumber).toBe("1234567890123456789");
+  });
+
   it("AN UNNAMED COLUMN KEEPS ITS KEY WHEN A NAMED COLUMN IS INSERTED BEFORE IT (round one, High-3)", () => {
     // Keyed `column_<place>`, one unnamed column became a SECOND field the moment any
     // column was inserted to its left — and 3a-v-b makes that key DURABLE, so the same

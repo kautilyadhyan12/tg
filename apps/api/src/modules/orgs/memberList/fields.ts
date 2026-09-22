@@ -16,7 +16,7 @@ import {
   authEmailSchema,
 } from "@app/shared";
 import { expandScientific, tidyCell } from "./cells.js";
-import { cardShapedCell } from "./neverKeep.js";
+import { cardShapedCell, withoutCardNumbers } from "./neverKeep.js";
 
 /** Text cut to `most` characters, never between the two halves of a character
  *  outside the basic plane. */
@@ -27,12 +27,15 @@ export function cut(text: string, most: number): string {
 }
 
 /** A person's name, from one column or from two. Empty is allowed: a screen
- *  shows the email instead, and a list entry with no name is still a member. */
+ *  shows the email instead, and a list entry with no name is still a member.
+ *
+ *  A card number written INSIDE it is taken out here — see `cleanStatus`'s note for
+ *  why the scrub belongs at this boundary and not only at the one that writes. */
 export function cleanName(parts: { full?: string; first?: string; last?: string }): string {
   const full = tidyCell(parts.full ?? "");
-  if (full !== "") return cut(full, MEMBER_LIST_MAX_NAME_CHARS);
+  if (full !== "") return withoutCardNumbers(cut(full, MEMBER_LIST_MAX_NAME_CHARS)).text;
   const both = `${tidyCell(parts.first ?? "")} ${tidyCell(parts.last ?? "")}`.replace(/\s+/g, " ").trim();
-  return cut(both, MEMBER_LIST_MAX_NAME_CHARS);
+  return withoutCardNumbers(cut(both, MEMBER_LIST_MAX_NAME_CHARS)).text;
 }
 
 const MAILTO = /^mailto:/i;
@@ -104,10 +107,26 @@ export const isBooleanWord = (text: string): boolean => TRUE_WORDS.has(text.toLo
 
 /** The gym's own status word, as it wrote it. The app attaches no meaning to
  *  any of them — it filters by them and chooses who is invited by them, nothing
- *  else (§9.2 rule 10) — so no list of ours can be wrong about a gym's word. */
+ *  else (§9.2 rule 10) — so no list of ours can be wrong about a gym's word.
+ *
+ *  **A CARD NUMBER WRITTEN INSIDE ONE IS TAKEN OUT HERE, at the boundary where a raw
+ *  cell becomes a kept value, and that placement is the point.** The boundary that
+ *  WRITES scrubs it too (`extraFields.wordForWriting`), but between the two sits the
+ *  staged upload — a document holding the file's own cells in the database for an
+ *  hour, read back into every preview staff look at. Round one fixed the row's own
+ *  columns and left the three SAMPLE cells; chasing that found this: the status, the
+ *  membership word and the payment word are all cleaned through here, and only a
+ *  WHOLE-cell card was ever dropped from them, so "paid by card 4111 1111 1111 1111"
+ *  in a payment column reached the staged file intact.
+ *
+ *  The member NUMBER is deliberately not scrubbed this way and keeps its whole-cell
+ *  rule (see `cleanMemberNumber`): a member number's whole purpose is to be a long
+ *  number, which is exactly where redacting a run that happens to pass Luhn costs a
+ *  gym its own data. */
 export function cleanStatus(raw: string): string | null {
   const text = tidyCell(raw);
-  return text === "" ? null : cut(text, MEMBER_LIST_MAX_STATUS_CHARS);
+  if (text === "") return null;
+  return withoutCardNumbers(cut(text, MEMBER_LIST_MAX_STATUS_CHARS)).text;
 }
 
 /** A column of yes and no under a heading such as "Active" is a status: it
