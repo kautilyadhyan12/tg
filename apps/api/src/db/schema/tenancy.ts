@@ -676,9 +676,23 @@ export const gymStaff = pgTable(
   (t) => [
     primaryKey({ columns: [t.gymId, t.userId] }),
     check("gym_staff_role_check", sql`${t.role} IN ('owner','manager','trainer')`),
+    /** **THIS LIST WAS TWO PRIVILEGES BEHIND THE DATABASE UNTIL 2026-09-22.**
+     *  `0019_gym_attendance.sql` widened the deployed CHECK to take
+     *  `attendance.read` and this mirror was not moved with it, so a schema
+     *  regenerated from this file would have NARROWED a constraint that every
+     *  owner, manager and trainer row already relies on. Nothing caught it,
+     *  because the guard in `db.migration.test.ts` reads the DEPLOYED predicate
+     *  against `ORG_PRIVILEGES` and never against this line — which is the
+     *  right thing for it to read, and is why this comment exists instead.
+     *
+     *  Corrected here by 17b-i, which adds the tenth (`schedule.manage`,
+     *  migration `0035`), because a mirror that is already wrong is where the
+     *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
+     *  array, that array and `0035`'s CHECK are one vocabulary written three
+     *  times, and they move together or not at all. */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage']::text[]`,
     ),
   ],
 );

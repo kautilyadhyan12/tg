@@ -36,6 +36,7 @@ import {
   updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
+import { registerClassRoutes } from "./classes/routes.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import * as service from "./service.js";
 
@@ -91,6 +92,10 @@ export function registerOrgRoutes(
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
   registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis });
+
+  // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
+  // member list is: the same console, the same gates, the same deps.
+  registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

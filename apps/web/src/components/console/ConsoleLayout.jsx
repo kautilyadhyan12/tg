@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useParams } from 'react-router-dom';
-import { Building2, Users, Settings, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
+import { Building2, Users, Settings, CalendarClock, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
@@ -9,6 +9,7 @@ import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { canManageStaff } from '../../pages/console/staffView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
 import { canReadAttendance } from '../../pages/console/attendanceView';
+import { canManageSchedule } from '../../pages/console/classesView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 
 // The console's own shell — Part 3 §3.1: "Responsive web app (owners live on
@@ -145,6 +146,19 @@ export default function ConsoleLayout({ children }) {
         // and the screen prints the server's sentence.
         ...(canReadAttendance(viewerPrivileges(org))
           ? [{ to: `/console/${orgSlug}/attendance`, end: false, icon: ClipboardCheck, label: 'Attendance' }]
+          : []),
+        // THE TIMETABLE, on the same footing as Attendance above and for the
+        // same stated reason: a gym WORKS here rather than configuring itself.
+        // It sits after Attendance because a gym has to exist, have people and
+        // let them in before its classes matter.
+        //
+        // GATED ON `schedule.manage` — the POWER and never the job title
+        // (:11429's seam). Owner and manager hold it by default and an owner may
+        // tick it across or away, so the title and the power come apart by
+        // design. **Hiding is not the enforcement** (R3.3): every route refuses
+        // on its own and the screen prints the server's sentence.
+        ...(canManageSchedule(viewerPrivileges(org))
+          ? [{ to: `/console/${orgSlug}/classes`, end: false, icon: CalendarClock, label: 'Classes' }]
           : []),
         ...(settingsIsReachable(viewerPrivileges(org))
           ? [{ to: `/console/${orgSlug}/settings`, end: false, icon: Settings, label: 'Settings' }]

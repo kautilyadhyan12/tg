@@ -40,6 +40,7 @@ import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
 import ConsoleAttendance from './pages/console/Attendance';
+import ConsoleClasses  from './pages/console/Classes';
 import ConsoleSettings from './pages/console/Settings';
 
 export default function App() {
@@ -232,6 +233,16 @@ export default function App() {
             <Route path="/console/:orgSlug/attendance" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
                 <ConsoleLayout><ConsoleAttendance /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S TIMETABLE (Part 3 §13.3, ROADMAP 17b-i) — a section of
+                its own, on the same ruling Attendance is: Settings is where a
+                gym CONFIGURES itself, a section is where it WORKS. The nav draws
+                the tab only for somebody holding `schedule.manage`; the address
+                is reachable either way, and the server is the enforcement. */}
+            <Route path="/console/:orgSlug/classes" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+                <ConsoleLayout><ConsoleClasses /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

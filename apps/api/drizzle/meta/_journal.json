@@ -244,7 +244,14 @@
       "idx": 34,
       "version": "7",
       "when": 1788220800018,
-      "tag": "0035_member_record_kept",
+      "tag": "0035_gym_classes",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788220800019,
+      "tag": "0036_member_record_kept",
       "breakpoints": true
     }
   ]

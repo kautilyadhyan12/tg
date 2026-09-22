@@ -12,6 +12,8 @@ import {
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  gymClassesResponseSchema,
+  gymClassMutationResponseSchema,
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
@@ -629,6 +631,101 @@ export const orgService = {
       removeOrgStaffResponseSchema,
       'that removal',
       authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`),
+    ),
+
+  /** GET /v1/orgs/:gymId/classes — the gym's whole timetable (Part 3 §13.3).
+   *
+   *  **NOT PAGED, AND THAT IS THE SERVER'S PROMISE RATHER THAN THIS CLIENT'S
+   *  ASSUMPTION**: a gym holds at most sixty live classes and twelve repeats on
+   *  each, and its own timetable is a thing you look at whole.
+   *
+   *  Gated on `schedule.manage` — the READ as well as the writes, which is
+   *  narrower than §13.3 strictly needs and is the reversible direction (the
+   *  service says why). The calendar a trainer and a member want is 17b-ii's
+   *  and 17d's, and will have its own, wider, gate. */
+  getClasses: (gymId) =>
+    readThrough(
+      gymClassesResponseSchema,
+      "your gym's timetable",
+      authApi.get(`/v1/orgs/${gymId}/classes`),
+    ),
+
+  /** POST /v1/orgs/:gymId/classes — add a class.
+   *
+   *  **EVERY MUTATION BELOW ANSWERS WITH THE WHOLE TIMETABLE**, so this screen
+   *  never patches its own state from a narrower reply. Saving a repeat writes
+   *  up to eight weeks of dates, archiving a class takes them away and an edit
+   *  re-stamps them — "what changed" is never one row, and a client that
+   *  believed otherwise would draw a calendar the server does not hold.
+   *
+   *  Nothing here retries (R10.2): there is no Idempotency-Key on these routes,
+   *  and Save is the retry — a person pressing it. */
+  createClass: (gymId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that class',
+      authApi.post(`/v1/orgs/${gymId}/classes`, body),
+    ),
+
+  /** PUT /v1/orgs/:gymId/classes/:classTypeId — the WHOLE class, every time.
+   *
+   *  PUT and not PATCH because this REPLACES rather than merges, and the reason
+   *  is `places`: `null` means "no limit", and under a merge that would be
+   *  indistinguishable from "leave it alone" — so a gym clearing the cap on its
+   *  open-gym slot would silently keep it. */
+  updateClass: (gymId, classTypeId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that class',
+      authApi.put(`/v1/orgs/${gymId}/classes/${classTypeId}`, body),
+    ),
+
+  /** DELETE /v1/orgs/:gymId/classes/:classTypeId — take it off the timetable.
+   *
+   *  **What it performs is an ARCHIVE, not a delete**: the class keeps its name
+   *  in the archived list, its repeats stop, its FUTURE dates go and the days it
+   *  already ran stay as the gym's history. */
+  archiveClass: (gymId, classTypeId) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that class',
+      authApi.delete(`/v1/orgs/${gymId}/classes/${classTypeId}`),
+    ),
+
+  /** POST /v1/orgs/:gymId/classes/:classTypeId/restore — bring it back.
+   *
+   *  Kd's ruling, 2026-09-22, after being shown that TeamUp cannot reinstate an
+   *  archived Class Type and Mindbody can ("View inactive service categories" →
+   *  Activate). **Its repeats stay stopped**: the gym adds one again, and the
+   *  class's past dates were never touched. */
+  restoreClass: (gymId, classTypeId) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that class',
+      authApi.post(`/v1/orgs/${gymId}/classes/${classTypeId}/restore`, {}),
+    ),
+
+  /** POST /v1/orgs/:gymId/classes/:classTypeId/repeats — when it runs.
+   *
+   *  The body is the gym's own CLOCK TIME and its weekdays, never an instant:
+   *  the server turns each date into one against the gym's time zone, which is
+   *  what keeps a six o'clock class at six through a summer-time change. */
+  addClassRepeat: (gymId, classTypeId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that repeat',
+      authApi.post(`/v1/orgs/${gymId}/classes/${classTypeId}/repeats`, body),
+    ),
+
+  /** DELETE /v1/orgs/:gymId/class-repeats/:scheduleId — stop a repeat.
+   *
+   *  It takes the repeat's FUTURE dates with it and leaves the class itself
+   *  standing: "stop this repeat" is not "delete this class". */
+  stopClassRepeat: (gymId, scheduleId) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that repeat',
+      authApi.delete(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`),
     ),
 };
 

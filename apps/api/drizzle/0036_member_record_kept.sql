@@ -5,6 +5,12 @@
 -- stops at `0012_snapshot.json`, so `drizzle-kit generate` re-emits everything
 -- since. Its journal entry is part of this commit.
 --
+-- IT WAS WRITTEN AS `0035` AND RENUMBERED WHEN FOLDER B'S JOB MERGED FIRST
+-- (CLAUDE.md §8): two folders build at once, and the job that merges SECOND takes
+-- `master` in and renames its own migration to the next free number, re-stamping its
+-- journal entry after the other's. Drizzle applies migrations in the JOURNAL's time
+-- order, so an older-stamped one would be skipped on a database already past it.
+--
 -- WHAT CHANGES, IN ONE SENTENCE. 3a-v-a taught the file reader to read a gym's
 -- whole row; this is where that row is KEPT, and where a person who leaves the
 -- list stops being deleted.
