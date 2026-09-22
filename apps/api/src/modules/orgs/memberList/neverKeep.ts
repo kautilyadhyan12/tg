@@ -227,10 +227,9 @@ const POSTCODE_WORDS = [
  *  list of words can tell them apart — so the SHEET does. */
 const BARE_PIN_WORDS = ["pin", "pin no", "pin number", "pin nos"];
 
-/** Columns that say this sheet carries addresses, which is what makes a bare
- *  "PIN" a postcode (Gymdesk's own address fields: Street, City, State,
- *  Zip/Postal Code, Country). */
-const ADDRESS_WORDS = [
+/** The PLACE an address names. A heading that qualifies "PIN" with one of these
+ *  — "Address PIN", "City PIN", "Area PIN" — is writing a postcode. */
+const PLACE_WORDS = [
   "address",
   "address line",
   "street",
@@ -248,12 +247,20 @@ const ADDRESS_WORDS = [
   "landmark",
   "road",
   "lane",
-  "house",
-  "flat",
-  "apartment",
-  "building",
   "region",
 ];
+
+/** The DWELLING an address ends at, which is a different thing and must not
+ *  qualify a PIN (re-check of PR #90, Low B): nobody writes a postcode as
+ *  "Flat PIN", while a flat's or a building's entry code is exactly that. They
+ *  still count towards whether the SHEET carries an address, which is the
+ *  question `ADDRESS_WORDS` was written for. */
+const DWELLING_WORDS = ["house", "flat", "apartment", "building", "unit", "block", "door no", "house no", "flat no"];
+
+/** Columns that say this sheet carries addresses, which is half of what makes a
+ *  bare "PIN" a postcode (Gymdesk's own address fields: Street, City, State,
+ *  Zip/Postal Code, Country). */
+const ADDRESS_WORDS = [...PLACE_WORDS, ...DWELLING_WORDS];
 
 /** Words that make a column a credential whatever else it says. A gym's door
  *  code is not a member's secret, but it is still a key, and §11.2 keeps keys
@@ -574,7 +581,10 @@ export function neverKeptByHeader(raw: string | null, hints: SheetHints): Member
   //   3. ANY other qualifier — "Member PIN", "Gym PIN", "Check-in PIN", "App
   //      PIN", and whatever wording no list here has heard of — is a key.
   if (BARE_PIN_WORDS.some((word) => holdsTerm(header, word))) {
-    if (ADDRESS_WORDS.some((word) => holdsTerm(header, word))) return null;
+    // PLACE words, not every address word: "Flat PIN" and "Building PIN" are a
+    // dwelling's entry code, and `ADDRESS_WORDS` holds the dwelling words for
+    // the SHEET-level question, which is a different one (Low B).
+    if (PLACE_WORDS.some((word) => holdsTerm(header, word))) return null;
     if (BARE_PIN_WORDS.some((word) => isWord(header, word))) return hints.hasAddress && !hints.hasPostcode ? null : "password_or_pin";
     return "password_or_pin";
   }

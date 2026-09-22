@@ -250,6 +250,13 @@ describe("a postcode is an address, in every word the English-speaking world wri
     // ANY qualifier that is not part of an address makes it a key.
     ["Turnstile PIN"],
     ["Sauna PIN No"],
+    // Re-check of PR #90, Low B: a DWELLING qualifies a key at least as
+    // naturally as a postcode. Nobody writes a postcode as "Flat PIN".
+    ["Building PIN"],
+    ["Flat PIN"],
+    ["Apartment PIN"],
+    ["House PIN"],
+    ["Unit PIN"],
   ])("drops %s — a qualified PIN is a key, whatever the sheet carries", (header) => {
     for (const sheet of [NO_HINTS, WITH_ADDRESS, WITH_POSTCODE]) {
       expect(neverKeptByHeader(header, sheet)).toBe("password_or_pin");
@@ -263,6 +270,10 @@ describe("a postcode is an address, in every word the English-speaking world wri
     ["City PIN"],
     ["Area PIN"],
     ["Postal PIN"],
+    ["District PIN"],
+    // The two forms an Indian file really writes, which hold "address".
+    ["Permanent Address PIN"],
+    ["Current Address PIN"],
   ])("keeps %s, where the qualifier itself says it is an address", (header) => {
     for (const sheet of [NO_HINTS, WITH_ADDRESS]) expect(neverKeptByHeader(header, sheet)).toBe(null);
   });
@@ -274,6 +285,9 @@ describe("a postcode is an address, in every word the English-speaking world wri
   it("reads the sheet's own headings for that", () => {
     expect(sheetHints(["Name", "Email", "PIN"])).toEqual({ hasAddress: false, hasPostcode: false, hasBank: false });
     expect(sheetHints(["Name", "Street", "City", "PIN"])).toEqual({ hasAddress: true, hasPostcode: false, hasBank: false });
+    // A dwelling word still says the sheet carries an address, which is the
+    // question this one asks (Low B): only the PIN qualifier stopped using it.
+    expect(sheetHints(["Name", "Flat", "Building", "PIN"])).toEqual({ hasAddress: true, hasPostcode: false, hasBank: false });
     expect(sheetHints(["Name", "Street", "City", "Zip Code", "PIN"])).toEqual({ hasAddress: true, hasPostcode: true, hasBank: false });
     expect(sheetHints(["Name", "Zip Code"]).hasAddress).toBe(true);
     expect(sheetHints(["Name", "Sort Code"]).hasBank).toBe(true);
