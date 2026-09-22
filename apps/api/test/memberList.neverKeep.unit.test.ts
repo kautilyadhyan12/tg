@@ -207,6 +207,57 @@ describe("a postcode is an address, in every word the English-speaking world wri
   });
 });
 
+describe("every market the app is for, not one country's", () => {
+  // Kd, 2026-09-22: *"things should be built not only taking indian context but
+  // other countries as well"*. One row per market, for the wording that market
+  // actually uses on a membership form or a direct-debit mandate.
+  it.each([
+    ["the United States", "Social Security Number", "government_id"],
+    ["the United States", "ITIN", "government_id"],
+    ["the United States", "Routing Number", "bank_details"],
+    ["the United States", "ACH Details", "bank_details"],
+    ["Canada", "Social Insurance Number", "government_id"],
+    ["Canada", "Transit Number", "bank_details"],
+    ["Canada", "Institution Number", "bank_details"],
+    ["Canada", "Interac Email", "bank_details"],
+    ["the United Kingdom", "National Insurance Number", "government_id"],
+    ["the United Kingdom", "NI Number", "government_id"],
+    ["the United Kingdom", "Sort Code", "bank_details"],
+    ["the United Kingdom", "BACS Reference", "bank_details"],
+    ["Ireland", "PPS Number", "government_id"],
+    ["Ireland", "PPSN", "government_id"],
+    ["Ireland", "IBAN", "bank_details"],
+    ["Australia", "Tax File Number", "government_id"],
+    ["Australia", "TFN", "government_id"],
+    ["Australia", "Medicare Number", "government_id"],
+    ["Australia", "BSB", "bank_details"],
+    ["Australia", "PayID", "bank_details"],
+    ["New Zealand", "IRD Number", "government_id"],
+    ["New Zealand", "Bank Account Number", "bank_details"],
+    ["Singapore", "NRIC", "government_id"],
+    ["Singapore", "FIN", "government_id"],
+    ["the UAE", "Emirates ID", "government_id"],
+    ["the Philippines", "SSS Number", "government_id"],
+    ["South Africa", "Debit Order Details", "bank_details"],
+    ["Europe", "SEPA Mandate", "bank_details"],
+    ["India", "Aadhaar Number", "government_id"],
+    ["India", "PAN Card", "government_id"],
+    ["India", "IFSC Code", "bank_details"],
+    ["India", "UPI ID", "bank_details"],
+    ["everywhere", "Passport Number", "government_id"],
+    ["everywhere", "Driving Licence Number", "government_id"],
+  ])("drops %s's %s", (_where, header, reason) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).toBe(reason);
+  });
+
+  it("keeps a BUSINESS's number, which §11.2 is not about", () => {
+    // A gym's corporate account may honestly need one; it is not a member's
+    // own government ID, so it is kept as one of the gym's extra fields.
+    expect(neverKeptByHeader("ABN", NO_HINTS)).toBe(null);
+    expect(neverKeptByHeader("Company Registration Number", NO_HINTS)).toBe(null);
+  });
+});
+
 describe("an account number, settled by the sheet in the same way", () => {
   it("is the gym's own number where nothing else is a bank column", () => {
     expect(neverKeptByHeader("Account Number", NO_HINTS)).toBe(null);

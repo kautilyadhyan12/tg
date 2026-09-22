@@ -34,6 +34,7 @@ import { describe, expect, it } from "vitest";
 import {
   MEMBER_LIST_MAX_EXTRA_CHARS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
+  MEMBER_LIST_MAX_STATUS_CHARS,
   type MemberFileGrid,
   type MemberListMapping,
   type MemberListUnderstanding,
@@ -485,6 +486,66 @@ describe("the wider row", () => {
     const found = read(rows);
     expect(found.mapping.membershipType).toBe(null);
     expect(found.extraFields.map((field) => field.label)).toContain("Plan");
+  });
+});
+
+describe("the gym's OWN words, whatever they are", () => {
+  // Kd, 2026-09-22, asked why a membership type came out "Gold" and what
+  // happens when a gym's payment word is not "Overdue". The answer is that the
+  // app holds NO list of these words and never has (§9.2 rule 10, §11.1): the
+  // cell is kept exactly as the gym typed it. These rows are the proof, and
+  // not one of them is a word any list in this repo holds — several are not
+  // English at all.
+  const rows = [
+    ["Full Name", "Email", "Membership Status", "Membership Type", "Payment Status"],
+    ["Ann Lee", "ann@example.com", "On hold", "Platinum Elite 24mo", "Awaiting Direct Debit"],
+    ["Bo Chen", "bo@example.com", "Lapsed", "Founding Member", "Arrears - 2 months"],
+    ["Cara Diaz", "cara@example.com", "Cooling off", "Whanau Family Pass", "Part payment received"],
+    ["Dev Patel", "dev@example.com", "Dormant", "Ubuntu Community Rate", "Debit order bounced"],
+    ["Eve Nkosi", "eve@example.com", "Probezeit", "Jahreskarte Premium", "Lastschrift offen"],
+    ["Fay O'Brien", "fay@example.com", "Notice period", "Laoch Lifetime", "Paid up to March"],
+  ];
+
+  it("keeps every membership word exactly as the gym wrote it", () => {
+    expect(read(rows).rows.map((row) => row.membershipType)).toEqual([
+      "Platinum Elite 24mo",
+      "Founding Member",
+      "Whanau Family Pass",
+      "Ubuntu Community Rate",
+      "Jahreskarte Premium",
+      "Laoch Lifetime",
+    ]);
+  });
+
+  it("keeps every payment word exactly as the gym wrote it", () => {
+    expect(read(rows).rows.map((row) => row.paymentStatus)).toEqual([
+      "Awaiting Direct Debit",
+      "Arrears - 2 months",
+      "Part payment received",
+      "Debit order bounced",
+      "Lastschrift offen",
+      "Paid up to March",
+    ]);
+  });
+
+  it("keeps every status word exactly as the gym wrote it", () => {
+    expect(read(rows).rows.map((row) => row.status)).toEqual(["On hold", "Lapsed", "Cooling off", "Dormant", "Probezeit", "Notice period"]);
+  });
+
+  it("makes each of them a chip with its count, in the gym's own spelling", () => {
+    const found = read(rows);
+    expect(found.membershipTypes.map((chip) => chip.label)).toContain("Jahreskarte Premium");
+    expect(found.paymentStatuses.map((chip) => chip.label)).toContain("Lastschrift offen");
+    expect(found.statuses.map((chip) => chip.label)).toContain("Probezeit");
+  });
+
+  it("cuts a word longer than a word, rather than refusing the file", () => {
+    const long = "Platinum ".repeat(20);
+    const found = read([
+      ["Name", "Email", "Membership Type"],
+      ["Ann Lee", "ann@example.com", long],
+    ]);
+    expect(found.rows[0]?.membershipType?.length).toBe(MEMBER_LIST_MAX_STATUS_CHARS);
   });
 });
 

@@ -275,7 +275,13 @@ const PASSWORD_WORDS = [
   "api key",
 ];
 
-/** Bank details by heading, where the wording can mean nothing else. */
+/** Bank details by heading, where the wording can mean nothing else. Every
+ *  market the app is for has its own word for the same thing, and a list that
+ *  held only one country's would keep the others' (Kd, 2026-09-22): the UK's
+ *  sort code and BACS, the United States' routing/ABA and ACH, Australia's BSB
+ *  and PayID, New Zealand's bank account, Canada's transit and institution
+ *  numbers and Interac, Ireland and the rest of Europe's IBAN, BIC and SEPA,
+ *  and India's IFSC and UPI. */
 const BANK_WORDS = [
   "bank",
   "bank name",
@@ -285,18 +291,25 @@ const BANK_WORDS = [
   "iban",
   "swift",
   "bic",
+  "sepa",
   "sort code",
   "sortcode",
+  "bacs",
   "routing",
   "routing number",
   "aba",
   "bsb",
+  "payid",
+  "transit number",
+  "institution number",
+  "interac",
   "ifsc",
   "upi",
   "upi id",
   "vpa",
   "ach",
   "direct debit",
+  "debit order",
   "mandate",
   "mandate id",
   "card holder",
@@ -317,7 +330,15 @@ const BANK_WORDS = [
  *  settled by whether the sheet carries bank columns at all. */
 const BARE_ACCOUNT_WORDS = ["account number", "account no", "account nos", "a c no", "acct no", "acct number"];
 
-/** Government ID by heading, for the ones whose numbers carry no check. */
+/** Government ID by heading, for the ones whose numbers carry no check of
+ *  their own. Again one line per market, not one country's (Kd, 2026-09-22):
+ *  the United States' SSN and ITIN, Canada's SIN, the UK's National Insurance,
+ *  Ireland's PPS number, Australia's Tax File Number and Medicare number, New
+ *  Zealand's IRD number, Singapore's NRIC and FIN, the UAE's Emirates ID, the
+ *  Philippines' SSS, and India's Aadhaar, PAN and voter ID — beside the passport
+ *  and driving licence everybody has. A business's number (an ABN, a company
+ *  registration) is deliberately NOT here: §11.2 is about a member's own ID,
+ *  and a gym's corporate account may honestly need one. */
 const GOVERNMENT_WORDS = [
   "aadhaar",
   "aadhar",
@@ -329,8 +350,18 @@ const GOVERNMENT_WORDS = [
   "ssn",
   "social security",
   "social security number",
+  "itin",
   "sin",
   "social insurance",
+  "pps",
+  "pps number",
+  "ppsn",
+  "tfn",
+  "tax file number",
+  "ird",
+  "ird number",
+  "sss",
+  "sss number",
   "nric",
   "fin",
   "national id",
