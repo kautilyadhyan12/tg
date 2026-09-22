@@ -69,7 +69,7 @@ const ROWS: Row[] = [
     action: "restore",
     status: "cancelled",
     fixed: { started: false, repeatStopped: true },
-    verdict: "repeat_stopped",
+    verdict: "lift",
   },
 ];
 

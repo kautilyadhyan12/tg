@@ -431,7 +431,7 @@ d("the week view and this day only (real Postgres)", () => {
   // Round one, H-2: Stop and Remove took the gym's cancellations with them, and
   // a new repeat then wrote those dates fresh.
   it(
-    "a cancelled date outlives its repeat being stopped or its class removed, and no new repeat of that class runs on that day",
+    "a cancelled date outlives its repeat being stopped or its class removed and keeps that class off the day, until the gym lets it run",
     async () => {
       const owner = await makeUser("h2-owner");
       const org = await makeOrg(owner.cookies, "H2 Days Gym");
@@ -454,10 +454,14 @@ d("the week view and this day only (real Postgres)", () => {
       const shown = weekOf(await get(weekUrl(org.org.id, tue.localDate), owner.cookies)).sessions;
       expect(shown.find((s) => s.id === tue.id)).toMatchObject({ status: "cancelled", repeatStopped: true });
 
-      // It cannot be put back: its repeat no longer runs.
+      // With no live repeat of Spin on Tuesdays, there is nothing to let run:
+      // it says so and the day stays as it is (re-check, N-1).
       const back = await post(restoreUrl(org.org.id, tue.id), {}, owner.cookies);
       expect(back.statusCode).toBe(409);
-      expect(JSON.parse(back.body)).toMatchObject({ error: "class_repeat_stopped" });
+      expect(JSON.parse(back.body)).toMatchObject({
+        error: "class_no_repeat_that_day",
+        message: "No Spin repeats on Tuesdays now, so there is nothing to run on this day.",
+      });
       expect((await rowOf(tue.id)).status).toBe("cancelled");
 
       // A new repeat at the same time, and one at a new time: neither runs that Tuesday.
@@ -502,6 +506,18 @@ d("the week view and this day only (real Postgres)", () => {
       ).toBe(201);
       expect(await spinsOn(typeId, tue.localDate)).toEqual(["18:00 cancelled"]);
       expect(await spinsOn(typeId, wed.localDate)).toEqual(["07:00 scheduled"]);
+
+      // THE HOLD LIFTS (re-check, N-1): putting the kept day back lets the class's
+      // live repeats run that day — here the 07:00, an extra class rather than
+      // the old one moved — and the cancelled row goes, with an audit row.
+      const lifted = await post(restoreUrl(org.org.id, tue.id), {}, owner.cookies);
+      expect(lifted.statusCode).toBe(200);
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["07:00 scheduled"]);
+      expect(weekOf(lifted).sessions.some((s) => s.localDate === tue.localDate && s.startMinute === at(7))).toBe(true);
+      expect(await auditCount(org.org.id, "org.class_session_hold_lifted")).toBe(1);
+      // And the nightly job does not bring the old 18:00 back.
+      await fillClassSessionsJob({ sql, log: silent }, { gymIds: [org.org.id] });
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["07:00 scheduled"]);
     },
     TEST_TIMEOUT_MS,
   );

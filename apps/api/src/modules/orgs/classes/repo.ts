@@ -937,7 +937,7 @@ export type ClassDayOutcome =
   | { kind: "cancelled" }
   | { kind: "time_passed" }
   | { kind: "time_missing" }
-  | { kind: "repeat_stopped" }
+  | { kind: "no_repeat_that_day"; className: string; isoWeekday: number }
   | { kind: "clashes" };
 
 /** A change to one date: `change` carries the new values, the other two none. */
@@ -955,8 +955,14 @@ export type ClassDayInput =
  *  holds back from a slot the class has cancelled (`fill.ts`); a repeat edit
  *  re-stamps only length, places and coach; Stop and Remove delete running dates
  *  only. So a cancelled date stays cancelled whatever happens to its repeat, and
- *  when it is put back it runs as the repeat now does. A cancelled date whose
- *  repeat was stopped, or whose class was removed, cannot be put back.
+ *  when it is put back it runs as the repeat now does.
+ *
+ *  **A cancelled date whose repeat was stopped, or whose class was removed,**
+ *  keeps that class off the whole day (`fill.ts`). Putting it back LIFTS that
+ *  hold: the row goes and the class's live repeats that run on that weekday
+ *  write the day, in this transaction. With no such repeat there is nothing to
+ *  run, and it says so rather than deleting the gym's cancellation (re-check,
+ *  N-1).
  *
  *  **One class, one time, one date.** A date moved to a time, or put back at a
  *  time, where the same class already runs that day is refused; `fill.ts`
@@ -972,6 +978,8 @@ export async function changeSession(
     const [row] = await tx<
       {
         class_type_id: string;
+        name: string;
+        iso_weekday: number;
         local_date: string;
         local_start_minute: number;
         minutes: number;
@@ -985,7 +993,8 @@ export async function changeSession(
         repeat_stopped: boolean;
       }[]
     >`
-      SELECT x.class_type_id, x.local_date::text AS local_date, x.local_start_minute,
+      SELECT x.class_type_id, t.name, EXTRACT(ISODOW FROM x.local_date)::int AS iso_weekday,
+             x.local_date::text AS local_date, x.local_start_minute,
              x.minutes, x.places, x.coach_user_id, x.status,
              x.starts_at <= ${input.now} AS started,
              n.at AS new_starts_at,
@@ -1033,8 +1042,9 @@ export async function changeSession(
       case "cancelled":
       case "time_passed":
       case "time_missing":
-      case "repeat_stopped":
         return { kind: verdict };
+      case "lift":
+        return await liftHold(tx, input, row);
       case "write":
         break;
       default: {
@@ -1101,4 +1111,46 @@ export async function changeSession(
     });
     return { kind: "ok", localDate: row.local_date };
   });
+}
+
+/** LIFT A HOLD — put back a cancelled date whose repeat was stopped, or whose
+ *  class was removed (re-check, N-1). Called inside `changeSession`'s
+ *  transaction, under the gym's lock. */
+async function liftHold(
+  tx: TransactionSql,
+  input: { gymId: string; sessionId: string; actorUserId: string; now: Date },
+  row: { class_type_id: string; name: string; iso_weekday: number; local_date: string },
+): Promise<ClassDayOutcome> {
+  // The class's live repeats that run on that date.
+  const live = await tx<{ id: string }[]>`
+    SELECT s.id FROM gym_class_schedules s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    WHERE s.gym_id = ${input.gymId}
+      AND s.class_type_id = ${row.class_type_id}
+      AND s.ended_at IS NULL
+      AND t.archived_at IS NULL
+      AND ${row.iso_weekday}::int = ANY(s.weekdays)
+      AND s.starts_on <= ${row.local_date}::date
+      AND (s.ends_on IS NULL OR s.ends_on >= ${row.local_date}::date)`;
+  if (live.length === 0) {
+    return { kind: "no_repeat_that_day", className: row.name, isoWeekday: row.iso_weekday };
+  }
+
+  await tx`
+    DELETE FROM gym_class_sessions
+    WHERE id = ${input.sessionId} AND gym_id = ${input.gymId}`;
+  const filled = await fillClassSessions(tx, {
+    gymIds: [input.gymId],
+    scheduleIds: live.map((s) => s.id),
+    now: input.now,
+  });
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.class_session_hold_lifted",
+    targetType: "gym_class_session",
+    targetId: input.sessionId,
+    meta: { date: row.local_date, sessionsWritten: String(filled.sessions) },
+  });
+  return { kind: "ok", localDate: row.local_date };
 }

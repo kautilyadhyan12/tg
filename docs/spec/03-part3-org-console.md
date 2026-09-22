@@ -2150,7 +2150,8 @@ marks it changed alone. **A cancelled date stays cancelled**: the fill writes no
 where the class already has a date at that time, running or cancelled; Stop and
 Remove clear running dates only; and a cancelled date whose repeat was stopped, or
 whose class was removed, keeps that class off that whole day for any repeat added
-later, and cannot be put back. One class runs once at a given time on a given date: a
+later — until staff put it back, which lifts that hold and lets the class's live
+repeats run the day (with none on that weekday it says so and stays). One class runs once at a given time on a given date: a
 day cannot be moved or put back onto a time the class already runs. A day cannot be
 moved to a time the clocks skip on that date.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a

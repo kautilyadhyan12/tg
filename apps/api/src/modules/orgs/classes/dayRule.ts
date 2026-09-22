@@ -26,7 +26,8 @@ export interface DayFacts {
   newTimeMissing: boolean;
   /** Its repeat has been stopped, or its class removed (round one, H-2). Such a
    *  date is only ever a cancelled one — the running ones are deleted — and it
-   *  cannot be put back: nothing runs there any more. */
+   *  keeps its class off that whole day. Putting it back LIFTS that hold: the
+   *  row goes and the class's live repeats run that day (re-check, N-1). */
   repeatStopped: boolean;
 }
 
@@ -38,7 +39,8 @@ export type DayVerdict =
   | "cancelled"
   | "time_passed"
   | "time_missing"
-  | "repeat_stopped";
+  /** Put back a cancelled date whose repeat was stopped: lift the hold. */
+  | "lift";
 
 export function dayVerdict(action: DayAction, facts: DayFacts): DayVerdict {
   if (facts.started) return "started";
@@ -47,7 +49,7 @@ export function dayVerdict(action: DayAction, facts: DayFacts): DayVerdict {
       return facts.status === "cancelled" ? "nothing" : "write";
     case "restore":
       if (facts.status === "scheduled") return "nothing";
-      return facts.repeatStopped ? "repeat_stopped" : "write";
+      return facts.repeatStopped ? "lift" : "write";
     case "change":
       if (facts.status === "cancelled") return "cancelled";
       if (facts.unchanged) return "nothing";

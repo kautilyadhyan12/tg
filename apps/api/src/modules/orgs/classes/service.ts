@@ -380,6 +380,9 @@ export async function updateSchedule(
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
 
+/** ISO weekday 1–7, for the one sentence that names a day. */
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
 async function readWeekOr404(
   deps: ClassesDeps,
   gymId: string,
@@ -481,11 +484,11 @@ async function writeDay(
         "class_time_missing",
         "The clocks go forward on this day, so that time doesn't exist. Pick another time.",
       );
-    case "repeat_stopped":
+    case "no_repeat_that_day":
       throw new OrgsError(
         409,
-        "class_repeat_stopped",
-        "This class no longer repeats on this day, so it can't be put back.",
+        "class_no_repeat_that_day",
+        `No ${outcome.className} repeats on ${WEEKDAY_NAMES[outcome.isoWeekday - 1] ?? "that day"}s now, so there is nothing to run on this day.`,
       );
     case "clashes":
       throw new OrgsError(
