@@ -20,6 +20,22 @@ sync protocol in full · background-GPS Running · push, IAP, auth, assets ·
 EAS build/update pipeline · store listings & privacy labels · testing,
 sequence, risks.
 
+**AMENDED 2026-09-22 (RULINGS 2026-09-21 and 2026-09-22; Parts 1 and 8 of Kd's
+planning document).** Where this Part differs, RULINGS wins. The phone app is the
+MEMBER's alone: no console in it (the console is the browser's). `apps/mobile` was
+empty on that day. It is built in two versions. **First**: sign-in (code, Google,
+Apple) with ONE phone at a time (Part 3 §10.5) · "Before you start" · the invitations
+waiting for the signed-in address and Join, with the food-and-weight switch (Part 3
+§10.2, §15.7) · setup · the pass (Part 3 §12.2) · classes and booking (Part 3 §13) ·
+the gym's shared page (Part 3 §15) · the inbox and push (Part 3 §16.1) · meal scan,
+the food search and the rings · a workout logged by hand. **Second**: the camera
+coach (§3) · running (§5) · the offline layer (§4) · paying inside the app (§7). The
+support floor is an ORDINARY RECENT phone — the ₹10–12k device of §3.2, §3.5 and §14's
+acceptance line is dropped (Kd, 2026-09-22) — and §3.2's two-day spike stays as a test
+of the pose LIBRARY on such a phone. Android and iPhone are one Expo app; Kd works on
+Windows, so iPhone builds run in EAS's cloud. The member web stays as the testing
+place until the phone app holds everything, and is deleted then.
+
 ## 0. Amendments & locked context
 
 1. **Engine thread placement** (amends v1 §12's "landmarks stay in

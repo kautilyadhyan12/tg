@@ -66,7 +66,11 @@ const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  *  compose file itself records for `JWT_SECRET`. Port 5433 on the host, because
  *  5432 is often already taken by a native Postgres install (it is on the dev
  *  machine this was written on). */
-const LOCAL_URL = "postgres://aihg:aihg@localhost:5433/aihg";
+/** Folder B (CLAUDE.md §8) runs on its own database and Redis number inside the
+ *  same containers and says so with LOCAL_DATABASE_URL and LOCAL_REDIS_URL; unset,
+ *  the defaults are Folder A's. The ready line prints the database name so a
+ *  terminal can see which one it is testing on. */
+const LOCAL_URL = process.env["LOCAL_DATABASE_URL"] ?? "postgres://aihg:aihg@localhost:5433/aihg";
 const COMPOSE_UP = "docker compose -f infra/docker-compose.dev.yml up -d postgres redis";
 /** Derived, never re-typed: a hardcoded "localhost:5433" in the error text goes
  *  stale the moment the url above changes, and then the message tells you to
@@ -76,7 +80,7 @@ const LOCAL_HOST = new URL(LOCAL_URL).host;
 /** The compose Redis (port 6380 on the host), for test/redis.scripts.test.ts, the
  *  one test that runs the production Redis scripts; every other test keeps its
  *  in-memory Redis. */
-const LOCAL_REDIS_URL = "redis://localhost:6380";
+const LOCAL_REDIS_URL = process.env["LOCAL_REDIS_URL"] ?? "redis://localhost:6380";
 
 const require = createRequire(resolve(API_DIR, "package.json"));
 const postgres = require("postgres");
@@ -153,7 +157,7 @@ async function preflight() {
       process.exit(1);
     }
     console.log(
-      `test-local: ${LOCAL_HOST} ready — ${String(tables.n)} tables, ` +
+      `test-local: ${LOCAL_HOST}${new URL(LOCAL_URL).pathname} ready — ${String(tables.n)} tables, ` +
         `${String(ex.n)} exercises, ${String(pl.n)} plans.`,
     );
   } finally {

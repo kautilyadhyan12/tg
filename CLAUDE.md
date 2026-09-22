@@ -10,65 +10,105 @@ on 2026-09-07 when Kd ruled the old process too slow; the old playbook is kept a
 1. This file.
 2. `RULINGS.md` — Kd's decisions, one line each. They override any chat's judgement.
 3. `ROADMAP.md` — the ordered work list. Your task is the next unticked item unless Kd says otherwise.
-4. `HANDOFF.md` — the newest entry, to see where the last chat stopped.
-5. The spec section your task touches, in `docs/spec/` (nine files; §-references in
+4. `HANDOFF.md` — the newest entry, to see where the last terminal stopped.
+5. `FOLDER.md` at the root of the folder you are in — it says which folder this is (A or
+   B), which list of jobs it builds, and its own database, Redis number and ports (§8).
+   It is not in git; each folder has its own.
+6. The spec section your task touches, in `docs/spec/` (nine files; §-references in
    RULINGS point there). The spec says what to build; RULINGS wins where they differ.
 
 Everything in `archive/` is history. Do not read it unless a RULINGS line points you
 at a specific `[archive :line]` for detail. Never quote it as a rule.
 
-## 2. How a feature is built
+## 2. How a job is built
+
+A job is one ROADMAP line, one terminal, one branch and one pull request. Kd says
+"build the next thing" in a folder; the terminal takes the first unticked job of that
+folder's list (`FOLDER.md`, §8) whose needs are met, and says so if none is.
+
+**Three sizes of job** (Kd, RULINGS 2026-09-22). The plan says which, in its last
+line, next to the model and effort. When in doubt, the bigger size.
+
+| Size | What it is | What it gets |
+|---|---|---|
+| **Risky** | touches sign-in, money, other people's data, uploads, or anything that parses an outside reply or sends data out | everything below: the worst-thing test, the review and its re-check, a deliberate break of its ONE core rule (§4), and, once per feature, the two extra passes (§6) |
+| **Ordinary** | a server job with none of that | its tests, one review, and a re-check only if the review found a Critical or High |
+| **Screen or wording** | a screen, wording or display job that shows no personal data | its tests and Kd's click-through; no review |
 
 1. **Plan, ten lines or fewer, in plain English, to Kd.** What the user will see, what
    changes on the server, what you will test, anything that costs money or needs a
    new dependency. No file lists, no line numbers, no rule codes, no jargon.
-   Its last line recommends the model and effort for building the card, with a
+   Its last line names the job's size and recommends the model and effort, with a
    one-line reason (RULINGS 2026-09-17): **Opus high** for a small screen, wording
-   or display card; **Opus xhigh** for sign-in, money, other people's data, uploads,
+   or display job; **Opus xhigh** for sign-in, money, other people's data, uploads,
    anything that parses an outside reply or sends data out, or a rule that picks,
-   ranks or thresholds; **Fable max** for a planning or redesign chat that writes no
-   code. If Kd's current setting differs, say so before building.
-   Its plan also names, in ONE line, **the worst thing this card could do to a real
+   ranks or thresholds; **Fable max** for a planning or redesign terminal that writes
+   no code. If Kd's current setting differs, say so before building.
+   Its plan also names, in ONE line, **the worst thing this job could do to a real
    person** — a stranger invited into a gym, a wrong allergen shown, somebody else's
    details on a screen — and that line is the FIRST test written (Kd, RULINGS
-   2026-09-20, after 3a-ii shipped a review-passed card that would have invited a
-   member's nominee instead of the member). Where a card decides something about a
+   2026-09-20, after 3a-ii shipped a review-passed job that would have invited a
+   member's nominee instead of the member). Where a job decides something about a
    person from a list of words, the test cases come from OUTSIDE the code — real
    exports, real labels, real wording — and INCLUDE words the list does not have.
-   A card that touches nobody says so in that line and moves on.
+   A job that touches nobody says so in that line and moves on.
 2. **Kd says go.** No code before that. If he answers a different question than the one
    asked, ask again in one line; never treat a musing as a ruling and never treat your
    own suggestion as his decision.
-3. **Build the whole feature**, server and screen together when it is small enough,
-   with its tests written alongside. One feature per chat. If a feature is too big for
-   one chat, split it into user-visible halves and say so in the plan.
+3. **Build the whole job**, server and screen together when it is small enough, with
+   its tests written alongside. One job per terminal. If a job is too big for one
+   terminal, split it into user-visible halves and say so in the plan.
 4. **Prove it yourself.** Run typecheck, lint and the scoped tests and paste the real
    output. Never describe output you did not see; never summarise it instead of pasting it.
 5. **Click-through for Kd**: five to ten numbered steps with what he should see at each,
-   against the local servers. A card whose screen cannot be reached yet says so instead.
-6. **Independent review** — kept by Kd's ruling because it found real problems. A FRESH
-   chat reviews the diff (the round-one prompt is in §6). The building chat fixes every
-   finding. The re-check goes back to THAT SAME reviewer chat, never a fresh one: Kd
-   pastes the re-check prompt from §6 into it and it reads only the fixes. A High
-   found in a fix is fixed and confirmed in that same chat. The round ends when no
-   Critical/High is open: Lows found by a re-check are fixed and merged with no
-   further re-check and without asking (RULINGS 2026-09-16). Two rounds of Criticals
-   in the same code means stop and ask Kd for a redesign. Risky code — sign-in, money,
-   other people's data, uploads, anything that parses an outside reply or sends data
-   out — is reviewed by RUNNING it, not only by reading it: the real SDK, the real
-   Redis, a fixed address with several users.
-7. **Commit and open a pull request to `master`**; CI must be green; merge within a day
-   or two; delete the branch. Small commits, explicit file lists (`git add <files>`,
-   never `git add -A`). `master` takes pull requests only: GitHub refuses a direct
-   push, records included, and refuses a merge until the six checks pass (a skipped
-   check counts as passed).
-8. **Record**: one line in `RULINGS.md` for anything Kd decided; tick or add lines in
-   `ROADMAP.md`; ten lines in `HANDOFF.md`. That is all. No cards, no essays, no
-   review-round history anywhere, including code comments. Records ride on the
-   feature's pull request, never a pull request of their own: check minutes are
-   metered (GitHub Pro, 3,000 a month), so a push that changes only `.md` files runs
-   just the secrets scan, and every code push runs every check — the `what changed`
-   job in `.github/workflows/ci.yml` decides, not the chat.
+   against this folder's local servers (`FOLDER.md` has the ports). A job whose screen
+   cannot be reached yet says so instead.
+6. **Review, by file, never by paste** (Kd, RULINGS 2026-09-22; kept because a fresh
+   terminal finds what the builder cannot). A screen-or-wording job skips this step.
+   The reviewer is always a fresh terminal that KD opens, never an agent started inside
+   the building terminal: three such inside reviews once missed a fault that his own
+   fresh terminals found.
+   - The building terminal writes `reviews/<job>-1-review.md`: the round-one prompt
+     from §6 with the branch or commits filled in, and on its first line where the
+     findings go. Then it tells Kd the one line to type, and waits.
+   - Kd opens a new terminal in the same folder and types
+     `Review reviews/<job>-1-review.md`. That terminal reads the file, does what it
+     says, writes `reviews/<job>-2-findings.md`, and changes nothing else.
+   - Kd types `Fix the findings` in the building terminal. It reads the findings file,
+     fixes every one, commits, and writes `reviews/<job>-3-recheck.md` (the re-check
+     prompt from §6 with the fix commits filled in). For an ORDINARY job whose findings
+     hold no Critical or High, it fixes the Lows and skips the re-check.
+   - Kd types `Re-check reviews/<job>-3-recheck.md` in THAT SAME reviewer terminal,
+     never a fresh one. It reads only the fixes and writes `reviews/<job>-4-verdict.md`.
+     Kd types `Read the verdict` in the building terminal.
+   - The round ends when no Critical/High is open: Lows found by a re-check are fixed
+     and merged with no further re-check and without asking (RULINGS 2026-09-16). A
+     High found in a fix is fixed and confirmed in that same reviewer terminal. Two
+     rounds of Criticals in the same code means stop and ask Kd for a redesign. Risky
+     code is reviewed by RUNNING it, not only by reading it: the real SDK, the real
+     Redis, a fixed address with several users.
+   - A terminal whose whole message is `Review <file>` or `Re-check <file>` is the
+     reviewer: it reads that file, does what it says, writes where it says, and touches
+     nothing else in the folder. `reviews/` is ignored by git and never committed.
+7. **Commit and open a pull request to `master`**; CI must be green; delete the branch
+   after the merge. Small commits, explicit file lists (`git add <files>`, never
+   `git add -A`). `master` takes pull requests only: GitHub refuses a direct push,
+   records included, and refuses a merge until the six checks pass (a skipped check
+   counts as passed). **Merge when green** (Kd, RULINGS 2026-09-22): if Kd's start
+   text for the job says "merge when green", the building terminal merges its own pull
+   request once the checks are green and the review round is closed (or none was due),
+   deletes the branch, and says so. Without those words it ends with "say **merge** and
+   I merge it" and waits. If the tool refuses the merge because it cannot see those
+   words, say so in one line and ask Kd to type `merge`.
+8. **Record**: one line in `RULINGS.md` for anything Kd decided; in `ROADMAP.md` the
+   job's line becomes ONE line — its number, its name, `[x]`, the merge date and the
+   pull request — and anything longer moves whole to `archive/records/ROADMAP-stories.md`
+   (a NEW ROADMAP line is three lines at most); ten lines in `HANDOFF.md`. That is all.
+   No cards, no essays, no review-round history anywhere, including code comments.
+   Records ride on the job's own pull request, never a pull request of their own: a
+   push that changes only `.md` files runs just the secrets scan, and every code push
+   runs every check — the `what changed` job in `.github/workflows/ci.yml` decides,
+   not the terminal.
 
 ## 3. Writing for Kd
 
@@ -79,6 +119,8 @@ at a specific `[archive :line]` for detail. Never quote it as a rule.
   sees, money, legal, order of work). Engineering choices are yours: state them in one
   line and move on.
 - A hazard is raised together with its solutions and a recommendation, never alone.
+- His words: "terminal", not "chat"; "job", not "card". When a step needs a word of the
+  trade ("merge", "pull request", "branch"), say what it means in the same sentence.
 - Never remove, hide or shrink a feature on your own judgement. "Switched off" is not
   "deleted". A missing backend is a reason to build it, never to trim the screen.
 
@@ -133,8 +175,12 @@ and the cross-tenant denial. Database-backed tests run against the local Postgre
 (`pnpm --filter api test:local`, Docker Desktop running). A bug fix starts with a failing
 test. A rule that picks, ranks or thresholds (which entry wins, which portion applies)
 ships with a table test over every class of case BEFORE review; the reviewer is never
-the first to sweep it. Mutation harnesses (`apps/*/tools/mutate-*.mjs`) are run only when
-sign-in, money or other-people's-data code changes, never as a routine step and never in CI.
+the first to sweep it. **Deliberate breaks** (Kd, RULINGS 2026-09-22): for a RISKY job
+only, and only on its ONE core rule — the rule behind the plan's worst-thing line — the
+builder breaks that rule on purpose two or three ways, shows the test go red each time
+with the output pasted, and puts it back. Never on the rest of the job, never for an
+ordinary or screen job, never in CI. The harnesses in `apps/*/tools/mutate-*.mjs` are the
+tool where one already fits; a break made by hand and shown is the same proof.
 
 **The worst thing (RULINGS 2026-09-20).** A rule that decides something about a PERSON
 is tested against the world, not against itself: a table built from the code's own word
@@ -185,12 +231,18 @@ gitleaks protect --staged --no-banner
 ```
 
 Dev servers: api from `apps/api` with `DATABASE_URL` pointing at the LOCAL database
-(the `.env` there points at Kd's real Neon data; never run sweeps or seeds against it);
-web with `corepack pnpm --filter web dev`.
+(Folder A's `apps/api/.env` points at Kd's real Neon data; never run sweeps or seeds
+against it, and never `--env-file=.env` for anything that touches a gym); web with
+`corepack pnpm --filter web dev`. Each folder's `FOLDER.md` gives its own database name,
+Redis number, ports and the exact commands. Folder B sets `LOCAL_DATABASE_URL` and
+`LOCAL_REDIS_URL` before `test:local`, or its tests run on Folder A's database.
 
 ## 6. The review prompts
 
-Round one, pasted into a FRESH chat:
+Round one. The building terminal writes it into `reviews/<job>-1-review.md` with the
+branch or commits filled in, under this first line: *Write your findings to
+`reviews/<job>-2-findings.md`. Change nothing else in this folder.* Kd opens a fresh
+terminal in the same folder and types `Review reviews/<job>-1-review.md`:
 
 ```
 You are reviewing, not fixing. Read CLAUDE.md §4 and RULINGS.md. Audit the diff of
@@ -205,7 +257,10 @@ input parsing, idempotency, secrets and logs, SQL; (3) tests that would stay gre
 the thing they claim to check were broken. No praise, no restating the diff.
 ```
 
-The re-check, pasted into THAT SAME reviewer chat, never a fresh one:
+The re-check. The building terminal writes it into `reviews/<job>-3-recheck.md` with the
+fix commits filled in, under the first line *Write your verdict to
+`reviews/<job>-4-verdict.md`.* Kd types `Re-check reviews/<job>-3-recheck.md` into THAT
+SAME reviewer terminal, never a fresh one:
 
 ```
 Re-check, in this chat: cover only the fixes in <commit>. For each of your findings
@@ -217,8 +272,10 @@ round ends there.
 **The two extra passes, for a FEATURE that touches sign-in, money, other people's
 data, uploads, or anything that parses an outside reply or sends data out** (Kd,
 2026-09-20; moved from the card to the FEATURE on 2026-09-21, the chat's call on Kd's
-question). Each goes in a FRESH chat of its own, never two in one (Kd, 2026-09-21),
-and their findings are fixed the way round one's are.
+question). Each goes to a FRESH terminal of its own, never two in one (Kd, 2026-09-21),
+by file like round one: the building terminal writes `reviews/<feature>-security.md`
+and `reviews/<feature>-integrity.md`, Kd types `Review <file>` in a fresh terminal for
+each, and the findings are fixed the way round one's are.
 
 **They run ONCE, over the whole feature's diff, when its last card is built and BEFORE
 anybody uses it** — not after every card. A feature is a roadmap line's family (3a-i to
@@ -264,3 +321,24 @@ you name. file:line and a one-line fix for each.
 API client) · `packages/config` · `docs/spec` (the nine spec files) · `infra` (Docker,
 Caddy) · `RUNBOOK` (operational procedures) · `tools` and `apps/*/tools` (harnesses and
 seeds) · `archive` (history: records, old backends, old smoke sheets — never required).
+
+## 8. Two folders, two terminals
+
+Two DIFFERENT features are built at once (Kd, RULINGS 2026-09-22). Folder A is
+`D:\Projects\ai-home-gym`; Folder B is `D:\Projects\ai-home-gym-b`, a git worktree of
+the same repository (one `.git`, two checkouts, so a branch can be open in only one of
+them at a time). Each folder's `FOLDER.md` names its list of jobs, its own database,
+Redis number and ports; the two lists are in ROADMAP Stage 2's header.
+
+- Kd says "build the next thing" once in each folder. A terminal takes the first
+  unticked job of ITS folder's list whose needs are met, and if none is, says so
+  rather than taking the other folder's.
+- Records (RULINGS, ROADMAP, HANDOFF) are written on the job's own branch, each job
+  touching only its own lines, so the two folders' records never collide.
+- Jobs merge ONE at a time. The one that merges second first takes `master` in,
+  re-runs its checks, and, if both added a migration, renames its own to the next free
+  number and re-stamps its journal entry: Drizzle applies migrations in the journal's
+  time order and would skip an older-stamped one on a database already past it.
+- Each folder runs only its own servers, on its own ports, against its own database
+  and Redis number; the Docker containers are shared and started once.
+- `FOLDER.md` and `reviews/` are ignored by git: they are the folder's own.

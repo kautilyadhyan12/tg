@@ -109,3 +109,8 @@ NEXT-*
 # The archived review prompts are small and kept; their .diff outputs are derived from git history and are not.
 !archive/records/t3/*.md
 archive/records/t3/*.diff
+
+# Each folder's own note and its review files (CLAUDE.md §2.6 and §8): local to the
+# folder, never committed. Folder B is a git worktree of this repository.
+FOLDER.md
+reviews/

@@ -16,6 +16,17 @@ machines · checkout, trial, pilot-code, plan-change, dunning,
 cancel/refund flows · entitlement propagation · invoicing & tax hooks ·
 abuse safeguards · the test matrix that makes money code boring.
 
+**AMENDED 2026-09-22 (RULINGS that day, "What people pay US"; Part 5 of Kd's
+planning document).** Where this Part differs, RULINGS wins: ONE gym price list for
+every country, a month — up to 200 members $79 · up to 500 $129 · up to 1,000 $199 ·
+up to 1,500 $279 · up to 2,100 $379 · above that, contact us — and the INR book and
+the ₹449 individual price are gone; an individual pays $10 everywhere and has NO
+trial: a free app with limits and ONE meal scan a day; a gym's trial is 15 days, no
+card, capped at 200 members; a gym member scans 7 times a day; Paddle sells for us
+(5 % + 50¢ a payment, its page that day), gyms in the browser only; an individual
+buying inside the phone app pays through Apple or Google. Money between a member and
+their GYM is not this Part's: it is Part 3 §14.
+
 ## 0. Doctrine & schema addenda
 
 **The one rule everything obeys (v1 §10, made operational):** a webhook is

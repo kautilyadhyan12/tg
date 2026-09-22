@@ -36,6 +36,14 @@ premium-aspiring gyms, boutique/PT studios, physio clinics) resolve to
 is a *pitch*, not a product fork), `studio` (boutique/PT), `clinic` —
 implemented per Part 2B §7 as vocabulary + feature-matrix overrides on v1
 §8's tenancy. No new architecture.
+4. **(2026-09-21) The console is the browser's alone, and join codes are abandoned**
+(RULINGS 2026-09-21; the design is §10). The member app is the phone's alone: this
+console is never built into it, and it must work in a PHONE's browser as well as a
+computer's. Every mention in this Part of a join code, a poster or a QR that joins —
+§2.2's "Invite (share code / print poster)" and "Create / rotate / expire codes",
+§4.0's first code, §4.3's Invite sheet, §4.7's **Codes**, §9.13 — is superseded by
+§10: a person comes into an organisation only by an invitation to their email
+address. Staff are invited the same way (§10.3) and a seat is counted as §10.4 says.
 
 ---
 
@@ -590,7 +598,10 @@ with the management features (9.11).
 ### 9.2 Principles (each is a test in 9.10)
 
 1. **Source of truth, never a gate.** The list changes what the gym SEES. It grants
-   nothing in 3a, blocks nothing ever, and removes nobody by itself.
+   nothing in 3a, blocks nothing ever, and removes nobody by itself. *(2026-09-21: join
+   codes are abandoned, so the way IN is now the gym's invitation, §10.2. What this
+   principle still means: a status word, a later upload or dropping off the list never
+   blocks or removes anybody by itself — the INVITE is the gym's yes, the list is not.)*
 2. **The table is the gym's list as it stands, exactly**: the newest whole-list
    upload, plus what staff have added, changed or taken off since. A person who leaves
    the list leaves the table. History is ONE timestamp on the membership,
@@ -603,17 +614,21 @@ with the management features (9.11).
 5. **Read, show, then write.** Upload → preview → confirm. A confirm applies to the
    list the preview was worked out against, or refuses (Terraform's stale-plan rule).
 6. **The same file twice writes nothing**: zero rows touched, the version not bumped.
-7. **Keep only what a screen reads**: name, email, phone, member number, status. Every
-   other column is dropped in memory, never stored, never logged. The file is never
-   stored.
+7. ~~**Keep only what a screen reads**: name, email, phone, member number, status. Every
+   other column is dropped in memory, never stored, never logged.~~ **REVERSED
+   2026-09-21 (RULINGS; §11): keep what the gym gave us, minus the never-keep list** —
+   ten standard fields and the gym's own extra columns. What stands: a never-keep
+   column is dropped in the worker, never stored, never logged; and the file itself is
+   never stored.
 8. **Nothing in the file is believed**: not its name, type, declared sizes or encoding.
 9. **Destructive steps carry a guard** sized to the gym (9.8), and an explicit
    acknowledgement for that one action — never a setting.
 10. **Nobody is emailed until staff press Invite** (RULINGS 2026-09-19). A confirm
     sends nothing. The status word only chooses who is INVITED; it never decides who
     may join (RULINGS 2026-08-24, reaffirmed 2026-09-17: an upload is days old).
-11. **The gym's invite is its yes.** Signing in with an address joins a person without
-    a code only where the gym invited that address; everyone else uses the code.
+11. **The gym's invite is its yes.** Signing in with an address joins a person only
+    where the gym invited that address. ~~Everyone else uses the code.~~ *(2026-09-21:
+    there is no code; everyone else asks the front desk to add their email, §10.2.)*
 
 ### 9.3 Slices — one chat and one pull request each
 
@@ -624,9 +639,12 @@ with the management features (9.11).
 | 3a-iii-a | The list on the server, half one: the migration, the reconcile rule, upload (whole list, or add) → preview, the names behind every number, the hourly expiry, the list going when a gym closes. It writes ONE staged row and changes nothing about anybody's membership. | — | Opus xhigh |
 | 3a-iii-b | Half two: press Confirm — the one transaction that writes the list, the wrong-file guard, and the reads with the status filter. | — | Opus xhigh |
 | 3a-iv | Keeping the list by hand: add one person, change one, take one off, put an app member on the list, remove the unlisted in one call (with its guard). | — | Opus xhigh |
-| 3b | The invites, sent when staff press Invite (9.12). | — | Opus xhigh |
-| 3c | The code admits at once (9.13). | — | Opus xhigh |
-| 5 | The screen (9.14). | — | Opus xhigh |
+| 3b-i | The invites, sent when staff press Invite (9.12): the records, the queue, the checks before a send, the webhook, unsubscribe. | — | Opus xhigh |
+| 3b-ii | Joining by invitation (9.12 "Joining", 10.2): the invitation waiting after sign-in, ONE tap, `claimSeat`; one person's invitation sent again. | — | Opus xhigh |
+| ~~3c~~ | ~~The code admits at once (9.13).~~ **Struck 2026-09-21**; its number now carries "codes switched off" (10.6). | — | Opus xhigh |
+| 5 | The screen (9.14), in two pull requests: 5a upload, preview, confirm · 5b the list, Invite, by hand, export. | — | Opus xhigh |
+| 4a | Staff invited by email (10.3). | — | Opus xhigh |
+| 4c | A seat is a person using the member app (10.4). | — | Opus xhigh |
 
 **Split 2026-09-20, building 3a-iii** (the chat's own sizing call, CLAUDE.md §2.3): one chat for one migration, six routes, the guard and 9.10's whole test matrix was too much, and the honest cut is between the half that decides nothing and the half that changes a gym's records. The two are built back to back.
 
@@ -1349,7 +1367,11 @@ dates, payments, reminders to pay. Kd ruled on 2026-09-19 that the app WILL be a
 management app and that the management features are built later (ROADMAP Stage 2 item
 15); the member list is its first piece — who the members are — and holds none of the
 rest. Until item 15 is built those columns of a gym's file are not kept, so a gym that
-moves to the app keeps its own export to load them from then.
+moves to the app keeps its own export to load them from then. **AMENDED 2026-09-21
+(RULINGS; §11):** the file's membership type, its dates, its payment-status word and
+every other column ARE kept now, minus §11.2's never-keep list. What is still later:
+taking payments, plans as things the gym sells in the app, reminders to pay (Parts 4,
+5 and 7 of the re-plan). A status is still never worked out from a date.
 
 ### 9.12 The invites (3b) — the frame; its own plan settles the rest with Kd
 
@@ -1365,7 +1387,13 @@ many were queued and how many were skipped for each reason. Adding one person by
 offers "Add and invite" (the same call for that one entry). **One email per person per
 gym, ever; no reminders and no bulk "send again"** — in *Perkins v. LinkedIn* (N.D.
 Cal. 2014, about $13M) the invitation was consented to and the two reminders were not.
-Whether staff may re-send to ONE person who asks is 3b's plan to put to Kd.
+~~Whether staff may re-send to ONE person who asks is 3b's plan to put to Kd.~~
+**Answered 2026-09-21 (RULINGS): yes.** With codes abandoned the invitation is the only
+way in, so a lost email must be replaceable: staff may send ONE person's invitation
+again when that person asks (the person is at the desk, or wrote to the gym) —
+`POST …/member-list/entries/:entryId/invite/resend`, `members.confirm`, at most 3 for
+one entry in 30 days and 20 a day a gym, never to a suppressed address, never in bulk
+and never on a timer. It is a new message to somebody who asked for it, not a reminder.
 
 **Records.** `gym_invites`, keyed `(gym_id, email_hmac)` — HMAC-SHA256 of the
 lower-cased address under a server secret. It outlives the list entry, so a broken
@@ -1413,18 +1441,22 @@ updates the invite. `email.bounced` (permanent) → suppressed for every gym;
 has INVITED (an invite record for that gym and address — being on the list is not
 enough: a gym that invited only its "Active" members has not said yes to the rest)
 joins through `claimSeat` (the seat cap holds). An unsubscribe stops emails, never the
-join. Everyone else joins with the code (9.13) and is matched to the list all the
-same. One tap or none is Kd's (ROADMAP). Recommended: ONE tap, on a screen showing
-"What {gym} can see" — joining starts sharing a person's activity with the gym, and
-nobody should start sharing because a third party typed their address.
+join. ~~Everyone else joins with the code (9.13) and is matched to the list all the
+same. One tap or none is Kd's (ROADMAP).~~ **Settled 2026-09-21 (RULINGS): there is no
+code, and it is ONE tap** — on a screen showing "What {gym} can see": joining starts
+sharing a person's activity with the gym, and nobody should start sharing because a
+third party typed their address. Everyone else is told to ask the front desk to add
+their email. The whole join is §10.2.
 
 **"Staff create his account" (Kd, 2026-09-19), as built.** Staff add the walk-in's
 name and email and press "Add and invite". The account itself comes into being when
 HE signs in with that address — the app has no passwords, an account is made by
 proving an address (RULINGS 2026-09-07), and only he can tap the health and consent
-screens — and the moment he does, he is in that gym with no code. A walk-in with no
-email is added with a phone and joins with the gym's code; the phone puts him on the
-list.
+screens — and the moment he does (and taps Join, §10.2), he is in that gym with no
+code. ~~A walk-in with no email is added with a phone and joins with the gym's code;
+the phone puts him on the list.~~ *(2026-09-21: a walk-in with no email goes on the
+list with his phone and gets no app until the front desk adds an address for him —
+every product read that day needs an email for app access.)*
 
 **The email provider's limits, and the standard answer to them.** Resend's Acceptable
 Use Policy (read 2026-09-19; last updated 2026-08-27): "Your complaint rate must be
@@ -1460,7 +1492,12 @@ right to object. Gmail counts its 5,000-a-day bulk line across the whole primary
 domain, so a sub-domain does not split it; Gmail and Yahoo want SPF, DKIM, DMARC and
 one-click unsubscribe for this kind of mail.
 
-### 9.13 The code admits at once (3c) — the frame
+### 9.13 ~~The code admits at once (3c) — the frame~~ STRUCK 2026-09-21, never built
+
+*(RULINGS 2026-09-21: join codes are abandoned. Nothing below is built; it is kept for
+its words. What replaces it is §10.2, the join by invitation, and §10.6, the codes
+switched off. What survives: the waiting room's sweep, reminders and nudge are
+switched off in the worker, not deleted.)*
 
 A valid code → `claimSeat` under the gym's row lock → a member at once;
 `last_listed_at` stamped if they are on the list. "Not on your list yet" is shown TO
@@ -1490,7 +1527,9 @@ the gym may share this list (words: Kd and the lawyer); "this is my whole list" 
 "add these people"; Confirm. Then the result line: "12 new · 3 no longer on your list
 — remove all? · 2 joined by code, not on your list" (ROADMAP's line said "12 new,
 invited"; since RULINGS 2026-09-19 nothing is sent by a confirm) — remove-all shows
-the names, then asks. **The list itself:** the gym's own status words as filter chips
+the names, then asks. *(2026-09-21: nobody joins by code any more, so the "joined by
+code, not on your list" part of that line is gone; "Put on the list" stays for an app
+member whose entry was taken off.)* **The list itself:** the gym's own status words as filter chips
 with their counts ("Active 312 · Expired 88 · no status 5"), a filter for in the app /
 not in the app, search, and ONE **Invite** button that always says who it will reach
 ("Invite 214 people" — those shown who have an email, are not in the app and were
@@ -1524,6 +1563,880 @@ direct marketing and the soft opt-in · ACMA spam rules · AWS SES tenant-level
 suppression and reputation thresholds · *Perkins v. LinkedIn* · Google's libphonenumber
 FAQ. No primary source was found for: what Google Sheets writes, any Indian or
 Brazilian gym product's export headers, how common Mac Roman or DOS files are.
+
+---
+
+## 10. Getting in — invitations, staff, seats, one phone
+
+*(ADDED 2026-09-21, a planning chat with no code: Part 1 of Kd's planning document
+`PLANINGDOC.pdf`, agreed that day — RULINGS 2026-09-21, five lines. Frames, as 9.12 to
+9.14 are: each card's own ten-line plan settles the rest with Kd. Where §2.2, §4.0,
+§4.3, §4.7 or §9 differ, this section wins. Every card here is **Opus xhigh**: sign-in,
+other people's data, sending email.)*
+
+### 10.1 The shape
+
+- **The browser is the console's and the phone is the member app's.** One account a
+  person, proved by an email address (code, Google, Apple). The member web lives only
+  until the phone app exists; nothing here is designed for it beyond staying TRUE.
+- **Member and staff are two separate things.** A person is a MEMBER of an
+  organisation by an accepted member invitation (10.2), and STAFF by an accepted staff
+  invitation (10.3) or by having created it. Neither implies the other.
+- **An invitation hangs on the ADDRESS, never on a link, a code or a phone.** Proving
+  the address at sign-in is the whole credential. No link in any email carries a token.
+- **A person who belongs to no organisation** signs in as usual and never meets any of
+  this.
+
+**The worst thing this section could do to a real person:** let a stranger into a gym —
+reading its members' names on the leaderboard, or, as staff, their emails — because an
+invitation opened for somebody other than the address it was sent to. It is the FIRST
+test of 3b-ii and of 4a, written before anything else, with cases from outside the
+code: a forwarded email, an address differing only in case (the same person), a Gmail
+address differing by dots (NOT the same person here — exact keys only, 9.2 rule 4),
+Apple's relay address, a second account, another gym's invitation id.
+
+### 10.2 Joining as a member (3b-ii)
+
+**When an invitation admits.** All of: a `gym_invites` record (9.12) for this gym and
+this address that is `pending` · a list entry with that address STILL on the gym's list
+(the list is the gym's yes today; a person who was invited and has since dropped off a
+whole-list upload is not let in, and is let in again the moment a good upload restores
+them) · the organisation active and on a plan · a free seat (10.4). `gym_invites`
+therefore gains a state — `pending` · `accepted` · `declined` · `withdrawn` (staff took
+the entry off, or removed the member: signing in again must not walk them back in;
+"Invite again" is the one-person re-send of 9.12 and makes it `pending`). Whether the
+email was delivered is NOT part of it: the press of Invite is the yes, and nobody can
+sign in with a dead address.
+
+**The flow.** The email's link is `{WEB_ORIGIN}/join/{slug}`: on a phone with the app
+it opens the app, otherwise it shows the two store buttons, and until the phone app
+exists it opens the web sign-in. The person signs in with the address the gym has.
+`GET /v1/orgs/invitations` lists what is waiting for the caller's VERIFIED address —
+member and staff invitations alike: organisation name, city, logo, kind, role — worked
+out from the address's HMAC, so a caller can only ever see invitations to an address
+they have proved. It is shown straight after "Before you start" (4d) and BEFORE setup,
+so a person who stops halfway through setup is already in their gym (the reason
+RULINGS 2026-07-19 gave for applying a code first), and again in Settings → Gym.
+`POST /v1/orgs/invitations/:id/accept` — the ONE tap, on the "What {gym} can see"
+sheet — takes the gym's row lock, checks everything above AGAIN, `claimSeat`s (a
+membership with no code), marks the invitation `accepted`, stamps `last_listed_at`, and
+records the consent time. Twice is a 200 that says already a member. `…/decline` marks
+it `declined`; the gym sees that and sends nothing more.
+
+**The honest walls.** No invitation for this address: "No invitation for {address}.
+Your gym invites the email address it has for you — sign in with that one, or ask the
+front desk to add this one." It shows the signed-in address, which is what explains an
+Apple relay address to its owner. A full gym: "{gym} has no free places right now —
+tell the front desk", and the entry reads "invited · waiting for a place" to staff.
+Neither reply says anything about any other address.
+
+**Limits.** Accept and decline 10 an hour a person with an explicit `ipMax` sized for a
+gym's wi-fi at an induction (ROADMAP Stage 4 item 10's lesson); the list read 60.
+
+### 10.3 Staff are invited by email (4a)
+
+**Data.** `gym_staff_invites`: gym · email (citext, kept readable: the owner must see
+whom they invited) · role · invited by · created · expires (7 days) · accepted at and
+by whom · revoked at · last sent · send count. One pending invitation an address a gym.
+
+**Routes**, all `staff.manage` (owner only): `POST /v1/orgs/:gymId/staff/invites`
+`{ email, role }` → 201 with the same body and the same timing whether or not that
+address has an account (the account-existence oracle `packages/shared/src/orgs.ts`
+warned about is why the old route looked only inside the roster) · `GET` the pending
+ones · `DELETE …/:id` cancels · `POST …/:id/resend` restarts the 7 days, at most 3
+times. 20 pending and 20 sends a day a gym. The roles offered are manager and trainer;
+a second owner is item 4b's hand-over.
+
+**Accepting.** The invitation appears in 10.2's `GET /v1/orgs/invitations` with its
+role. Accept writes a `gym_staff` row with the role's default ticks and **no
+membership**. A new person who came in through the Manage door with an invitation
+waiting lands ON it, never on "create your organisation" (today `/console` sends anyone
+who runs nothing to `/console/new`). Audit rows for invited, accepted, cancelled.
+
+**The email** is fixed words — "{owner's name} invited you to help run {gym} as
+{role}. Sign in with this email address" — with a link to the console's sign-in and no
+token, sent from the invites sub-domain through 9.12's checks and suppressions, the
+gym's name stripped as 9.12 strips it.
+
+**What changes in code that exists.** `addStaff` keeps appointing somebody who is
+already a member. `removeMember`'s `is_staff` refusal goes: with staff and member
+separate, ending a staff person's membership leaves their keys, and RULINGS
+2026-08-22's question ("do they also stop being a member?") is asked in both
+directions. Marking attendance still needs a membership.
+
+### 10.4 A seat is a person using the member app (4c)
+
+**The rule.** A seat is a LIVE `gym_members` row — the owner's and staff's included.
+`claimSeat`'s count loses `complimentary = false` and `NOT EXISTS gym_staff`, and so
+does every mirror of it (`listMembers`, the member list's seat meter). The member
+features already follow the membership row and nothing else
+(`entitlements/repo.ts`), so a staff login with no membership is the free app on a
+phone, which is the point: **a fake "staff member" gains a console login and no app.**
+Staff logins are free and unlimited.
+
+**Two questions that 3a-iii answered with one flag, and must stay two.** 9.7 keeps
+staff and the owner OUT of the list's marks, the leavers and remove-all, so a gym is
+never told it has lost its own owner by an export that holds only customers. That
+stays. What changes is only what COUNTS: `seatCounted` splits into "counts as a seat"
+(every live member) and "in the marks" (not staff, not the owner), with a table test
+over member · staff only · staff and member · owner only · owner and member · removed ·
+another gym, against: counts as a seat · gets the gym's member features · is in the
+marks. The fraud itself is a route test: appointing five members as staff frees no
+seat.
+
+**The owner's automatic free membership ends.** Creating an organisation asks "Do you
+train here too?" and a yes is an ordinary seat. `gym_members.complimentary` stays a
+column and is written `false` from now on (production starts empty, RULINGS
+2026-07-13; its other readers were the per-code join counts, which go in 10.6).
+
+### 10.5 One phone at a time (with the phone app's sign-in, ROADMAP Stage 5)
+
+`refresh_tokens` gains `client` (`web` · `phone`, existing rows `web`) and a nullable
+`revoked_reason`. A successful PHONE sign-in, in its own transaction and under the
+user's row lock, revokes every other live `phone` family of that person with the
+reason `signed_in_elsewhere` — a reason of its own, so an ordinary second sign-in never
+reads as a stolen token in the audit trail (`revokeAllRefreshTokens`'s three callers
+are all security events). The old phone's next refresh is a 401 that names it, and the
+app says "You were signed out because your account was signed in on another phone",
+with Sign in again. `web` families are never touched, so an owner keeps the console
+open while training. Nothing has to be done on the old phone first. Left to Stage 5's
+sync design: workouts the old phone had not yet sent are kept for the same account's
+next sign-in and wiped for any other account's. The `client` word comes from the app's
+own request; proving it (Play Integrity, App Attest) is after launch — what it guards is
+a shared login, not a secret.
+
+### 10.6 Join codes switched off (3c) — built LAST in this section
+
+So that no build exists in which nobody can join. **Server:** `POST /v1/orgs/join`, the
+applications routes and the five code routes answer `410` `join_codes_retired` behind
+one switch; handlers, tables and their suites stay, the suites running with the switch
+on so the code does not rot unseen; creating an organisation mints no code; the
+waiting room's sweep, reminders and nudge stop in the worker. **Console:** the code
+cards on Overview and the "your gym is ready" code become "Bring your members in"
+(the member list); the applications queue on Members goes off; `codes.invite` and
+`codes.manage` stay in the privilege vocabulary (stored snapshots and the table's
+CHECK name them) and gate nothing reachable. **Member web — the least that keeps it
+true, since it is to be deleted:** `/org/join` becomes the invitations page, so an old
+poster link lands somewhere honest; the code box in Settings → Gym and setup's "Your
+code" screen give way to the invitations list of 10.2 (setup is eleven screens); the
+carried code (`CarryJoinCode`, `landingRoute.js`, the sign-in page's "Sign in to use
+your code", the Google return) leaves the sign-in routing. **Tests:** every retired
+route answers 410 to a member, staff and a stranger; no screen draws a code box; an
+old link lands on the invitations page; sign-in no longer reads the kept code.
+
+### 10.7 Order, and the two extra passes
+
+3a-iv → 3b-i → 3b-ii → 5a → 5b → 4a → 4c → 3c. "Getting in" is ONE feature for
+CLAUDE.md §6: the hostile-security pass and the data-integrity pass run once over all
+of it (3a-i to 3c, 4a, 4c) after 3c, each in a fresh chat, before any gym uses it.
+
+### 10.8 Asked again in the planning document, and already built (9.7)
+
+The same file uploaded twice writes nothing. A person whose details changed is updated
+in place, never doubled — matched by email, else by phone. A person missing from a
+whole-list upload is flagged for staff and never removed by the upload. A walk-in
+added at the desk on the 22nd is matched by his email when the file of the 25th holds
+him; if that file is the whole list and does not hold him, he is flagged, not removed.
+
+### 10.9 Where the facts came from (read 2026-09-21)
+
+PushPress help: "How can I invite new members and share access to the PushPress
+Members app?" and "PushPress Login Overview for Admins, Coaches, and Members" · ABC
+Trainerize help: "How To Add Clients" · Gymdesk docs: "Gym Staff", and its pricing
+page (active members, unlimited staff accounts). Read in the code that day:
+`orgs/repo.ts` `claimSeat` and `addStaff`, `entitlements/repo.ts`, `db/schema/
+identity.ts` `refresh_tokens`, `orgs/routes.ts`, and the fifteen web places that show
+or take a join code. No source was found for a gym app that limits an account to one
+device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
+
+---
+
+## 11. The member record — what is kept from a gym's file
+
+*(ADDED 2026-09-21, the same planning chat: Part 2 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It reverses
+9.2 rule 7 and amends 9.1, 9.5 to 9.7 and 9.11; where they differ, this wins. Opus
+xhigh: uploads, other people's data, and rules that decide whose column is whose.)*
+
+**The worst thing this section could do to a real person:** leave their bank card
+number or a medical note in our database — or keep somebody ELSE's address (an
+emergency contact's, a parent's) as the member's own. The first tests written: a
+card-shaped number is dropped from ANY column; nothing of a never-keep column reaches
+the database, a log line or Sentry; a contact who is not the member can never become
+the member's email or phone (9.5's structural rule, carried to every new field). The
+cases come from outside the code — real exports' headings, real products' templates —
+and include words no list holds ("PIN code" is a postcode in India and a door PIN
+elsewhere).
+
+### 11.1 What a record holds
+
+**Standard fields** — typed columns the app reads: name · email · phone · member
+number · status (the gym's word) · **membership type** (the gym's word: "Gold",
+"Student 12 months") · **joined on** (date) · **ends or renews on** (date, with which
+of the two its heading said, so a screen can say "Renews 3 Oct" or "Ends 3 Oct"; a file
+with both keeps the second as an extra field) · **payment status** (the gym's word:
+"Paid", "Overdue") · **date of birth**. It is the core of Gymdesk's own import list
+(read 2026-09-21: name, date of birth, gender, status, member type, join date,
+cancellation date, phones, emails, address, check-in code, notes, emergency contacts,
+custom fields).
+
+**Extra fields** — every other column, kept as TEXT under the gym's own heading: a
+small catalogue per gym (`gym_member_list_fields`: key, the label as the gym wrote it,
+order) and one JSON document on the entry. At most 40 a gym; a cell is cut at 500
+characters and the preview says how many were. Shown on the person's page; searched
+with the rest; not filter chips in the first build. A second email or phone is an
+extra field and is NEVER invited or matched on.
+
+**Words stay the gym's.** Status, membership type and payment status are compared with
+case and spaces folded and shown in the file's own first spelling (9.7), each with its
+chips and counts, each capped as the status chips are. A payment status is never read
+as a membership status (9.5), and no status is ever worked out from a date (9.11).
+
+**Records outlive the list.** *(The chat's design call, put to Kd with Part 3 and
+agreed: RULINGS 2026-09-21.)* A
+management app's member record is durable: a person who leaves a whole-list upload, or
+is taken off by hand, is marked **former** with the date — not deleted, as 9.2 rule 2
+had it — so visits, reports and a returning member's history survive, which is how
+every product read that day keeps its ex-members. A former record admits nobody
+(10.2), is never invited, is filtered out by default, and the gym can delete it for
+good.
+
+### 11.2 Never kept
+
+Decided by what the CELLS are wherever a check exists, and by the heading only as the
+backstop (CLAUDE.md §4, "the worst thing"):
+
+| Class | Found by |
+|---|---|
+| Payment card numbers | 13 to 19 digits (spaces and dashes allowed) that pass the card check digit — in ANY column; the cell is dropped, and a column that is mostly such cells is dropped whole |
+| Bank account details | an IBAN by its own check digits; account, routing, sort-code and IFSC columns by heading |
+| Government ID numbers | the shapes that have one (US SSN, Canada's SIN with its check digit, India's Aadhaar with its check digit and PAN, the UK's NI number); passport and licence columns by heading |
+| Passwords, PINs, door codes | by heading — and "PIN code", "Pincode", "Postal" are an ADDRESS, the table test says so |
+| Medical and health notes | by heading (medical, health, injury, condition, allergy, medication, PAR-Q, disability, doctor …) |
+
+A never-keep column is named in the preview with its reason ("not kept: looks like
+bank card numbers") and cannot be switched back on. Its cells are dropped in the parse
+worker, before any row crosses to the request thread, and never appear in a staged
+upload, a log line, an error or Sentry. The same rules run on what staff TYPE: a
+card-shaped number typed into any field is refused. A free-text "Notes" column is
+kept — what staff wrote there is the gym's own, which the gym's promise and the
+data-processing agreement cover (ROADMAP Stage 4 item 3); for the lawyer.
+
+### 11.3 Reading the new fields (extends 9.5)
+
+Heading words from real products' files, confirmed by the cells: a date column is one
+whose cells read as dates; a membership type has few distinct words and is not the
+status; a payment status holds payment words. **Dates:** a typed Excel date is taken
+as it is; text is read ISO first; day-first or month-first is settled PER COLUMN by
+any cell whose first or second part is over 12, else by the gym's country, and the
+preview says "We read 03/04/2026 as 3 April 2026" with a switch to flip the column. A
+cell that is no date is left empty and counted, never guessed. Staff can change any
+guess or choose "don't keep"; the choice is remembered by the heading fingerprint
+(3a-ii).
+
+### 11.4 The reconcile rule over the wider row (extends 9.7)
+
+Who is the same person is unchanged — email, else phone. "Changed" is any kept field
+that differs, and the preview counts the changes field by field. Each entry remembers
+WHICH fields staff edited by hand since the last upload (names, never values); an
+upload that would overwrite one lists them and needs a tick on that request, as the
+wrong-file guard does; after the tick the file wins. "Gone" marks the record former
+(11.1) instead of deleting it, and a returning person is the same record again.
+
+### 11.5 Filters and Invite
+
+`GET …/entries` filters by status, membership type, payment status (each a list of the
+gym's words), in the app or not, invitation state, current or former, and search. The
+Invite call (9.12) takes the same filter in place of `statuses`, with the version and
+the count the person saw.
+
+### 11.6 One person's page, and editing by hand (3a-iv)
+
+`GET …/entries/:entryId` — every kept field, the extra fields, the invitation's state
+and, for somebody in the app, only what §2.4 lets a gym see (last active, streak,
+visits). `PATCH` changes any field under the never-keep rules; "Add member" is the
+same form with **Add** and **Add and invite**. The audit row holds the NAMES of the
+fields that changed, never their values. The member app never shows a gym's notes.
+
+### 11.7 Moving from other software
+
+A step before the upload, "Which software are you leaving?": that product's own export
+steps in plain words, and a preset that pre-fills the column matching. A preset is
+DATA in `packages/shared`, built only from a real export or the vendor's published
+template or help page, and cites it; no preset means the ordinary guess. The whole
+move is self-serve, as Gymdesk's is. What a file does not bring, and the screen says
+so: saved cards (they move between payment companies — Part 5), attendance history (a
+later import), documents and photos.
+
+### 11.8 Cost at full size, and cards
+
+Measured again at 10,000 people × 30 kept columns: the staged document's size, the
+preview, a page, the confirm, a bystander's longest wait — into 9.9's table. Cards,
+built BEFORE 3a-iv so that card is written once: **3a-v-a** reading the wider row (the
+new fields, dates, the never-keep rules — no database) · **3a-v-b** keeping it (one
+migration, the reconcile rule over the wider row, former records, the filters). The
+screens (5a, 5b) then carry the column matching with "don't keep", the person's page
+and the chips.
+
+### 11.9 Where the facts came from (read 2026-09-21)
+
+Gymdesk docs: "Data Imports Overview" (its field list, custom member fields, the date
+format choice) and "Migrating from a different provider" (the sentence on card and
+bank data; self-serve import) · PushPress help: "Migration of your Members/Clients from
+Another Platform into Core" (name, email, phone, plans, discounts, billing info; card
+data requested between processors after the list is loaded).
+
+---
+
+## 12. Check-in at the front desk
+
+*(ADDED 2026-09-21, the same planning chat: Part 3 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It replaces
+the member's own tap (§4 of the attendance work, RULINGS 2026-08-31 to 2026-09-03) as
+the way a visit is made. Opus xhigh: other people's data, and a signed pass.)*
+
+**The worst thing this section could do to a real person:** give a stranger a green
+tick on somebody else's pass — or let whoever stands at an unattended desk tablet read
+the gym's members. The first tests written: a pass that is old, used, another gym's or
+another person's never checks anybody in; and a desk device's key reaches NOTHING but
+the scan — not the list, not a search, not Settings.
+
+### 12.1 The shape
+
+The member shows, the gym reads — how PushPress and Gymdesk work (read 2026-09-21).
+Three ways a visit is made, and the log says which: **pass** (the app's QR, read by a
+USB scanner that types like a keyboard, or by the tablet's camera) · **key tag** (the
+gym's existing barcode, which is the member number of §11) · **staff** (a signed-in
+member of staff finds the person and taps Check in). The member's own tap is switched
+off (12.7). Door machines and the gym's other software stay after launch (RULINGS
+2026-09-17).
+
+### 12.2 The pass
+
+`GET /v1/orgs/:gymId/pass` (a live member of that gym) answers a short opaque string
+the app draws as a QR: gym, person and a 30-second window, signed with a server secret
+(HMAC-SHA256), about 60 characters so a cheap scanner reads it off a phone. The app
+asks again every 30 seconds while the pass is on screen. The scan accepts the current
+window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key that
+lives as long as the window), so a screenshot or a second phone showing the same pass
+gets "Show a fresh pass". 10 passes a minute a person. The phone needs the internet to
+show a pass; a pass the phone can make offline is the phone app's later work.
+
+### 12.3 The desk device
+
+Settings → **Check-in devices** (`org.manage`): add one, name it ("Front desk"), and
+the console shows a one-time link to open ON that tablet or computer; opening it stores
+the device's key as an httpOnly cookie for the check-in page alone. `gym_checkin_
+devices`: gym · name · key hash · made by · last seen · switched off at. The key
+authorises exactly one call, `POST /v1/checkin/scan`, for its own gym — no list, no
+search, no read of any kind — and the owner switches a device off in one tap. The page
+is a big input that always holds the focus (a USB scanner types the code and presses
+Enter), a camera button (`jsqr`), and the result: green with the name · grey "Show a
+fresh pass" · red "Not a member of {gym}" · orange under a green tick for the gym's
+own status or payment word. It shows one result at a time and clears it after a few
+seconds, so the last person's name is not left on the screen. Finding a person BY NAME
+is never on this page: it is staff's, in the console (12.5).
+
+### 12.4 The scan rule — ONE pure function, one table test
+
+In: what was read (a pass · a member number · staff's pick), the gym, the time, the
+gym's opening periods, the person's record and membership. Out: `checked_in` ·
+`already` (with the first time) · `fresh_pass_needed` · `not_a_member`, and beside the
+first two the gym's own status and payment words as a notice. It NEVER blocks on a
+status, a payment word or the hour. **Twice:** the visit's place in the day is the
+opening period the scan falls in, or "outside hours" when it falls in none, and the
+table's own uniqueness — gym, person, day, period (`slot_key`, built 2026-09-01) —
+makes a second scan the same visit. A member number that fits two records asks staff
+which. The table test covers every class: each way in × member · former · removed ·
+never a member · another gym's person × first scan · same period · next period ·
+outside hours × the pass fresh · old · used · garbled.
+
+### 12.5 Staff check-in, and the live log
+
+The console's Attendance page gains a search and **Check in** for signed-in staff with
+a new tick, `attendance.mark` (owner and manager by default; the owner can give it to
+a trainer) — logged with who did it. The page refreshes itself every 5 seconds
+(`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
+which member of staff. Adding a visit for an earlier time is a later card.
+
+### 12.6 Data
+
+A visit hangs on the member's RECORD (§11), so a person without the app is counted:
+`gym_attendance` gains `entry_id` and `device_id`, `user_id` becomes optional with a
+CHECK that one of the two is there, and `method` grows to `manual` (the old tap's
+rows) · `pass` · `key_tag` · `staff`. When the person has the app the row carries
+their `user_id` as well — written once, at the scan — so the streak, the leaderboard
+and the active day (ROADMAP Stage 2 item 1a) read it unchanged. A former record keeps
+its visits. Gyms never see a person's visits to ANOTHER gym (§2.4).
+
+### 12.7 What is switched off
+
+The member's tap (`POST /v1/orgs/:gymId/attendance`) answers 410 behind one switch;
+its code and suite stay. Settings' "manual attendance" switch goes from the screen.
+My Gyms shows the pass where the "I'm here" button was. The phone that notices it is
+at the gym (ROADMAP Stage 5 item 8) is struck, never built.
+
+### 12.8 Limits
+
+A device: 120 scans a minute. Every refusal looks the same from outside and says
+nothing about who is or is not a member beyond the one red line. A device key is
+random, stored hashed, and useless for anything but the scan.
+
+### 12.9 Packages, cards, the two extra passes
+
+`qrcode-generator` (MIT, no dependencies of its own) draws the pass; `jsqr`
+(Apache-2.0) reads a QR from the tablet's camera; a USB scanner needs nothing. Kd's yes
+to both: RULINGS 2026-09-21. Cards, after 3a-v-b (a visit needs the durable record):
+**16a** the server — the scan rule, the pass, the devices, the migration · **16b** the
+desk page, Check-in devices in Settings, staff check-in and the live log · **16c** the
+member's side — the pass on the member web (the test rig until the phone app), the tap
+switched off. Check-in is ONE feature for CLAUDE.md §6: both extra passes run once
+over 16a to 16c, before any gym uses it.
+
+### 12.10 Where the facts came from (read 2026-09-21)
+
+PushPress help: "How to Check Members into Open Gym Using Barcode Scanner" (the USB
+scanner at about $20; members scan their card or the member app's QR at a computer
+open on the check-in page) and "Kiosk Mode Check-Ins with the Staff App" (a locked
+screen with no staff powers) · Gymdesk docs: "Attendance Tracking" (kiosk: name,
+numeric code, QR by the device's camera, barcode by a connected scanner that types
+like a keyboard; check-in from the member app) and its guide "How to Set Up a Gym
+Check-In System for Under $150". Neither product's public pages state a rule for a
+second scan; ours is the one already built (`slot_key`).
+
+---
+
+## 13. What a gym sells, and its timetable
+
+*(ADDED 2026-09-21, the same planning chat: Part 4 of Kd's planning document, agreed
+that day — RULINGS 2026-09-21. A frame; each card's plan settles the rest. It is
+ROADMAP Stage 2 items 8 and 9's prices, planned. **Every number in this section is a
+starting value a gym can change in its own Settings** — Kd's words. Opus xhigh: rules
+that decide who gets the last place and whose pack is charged.)*
+
+**The worst thing this section could do to a real person:** tell two people "You're
+booked" for the last place, so that one is turned away at the door — or take a class
+off somebody's pack for a booking they never got. The first tests written: fifty
+people tap Book at the same instant on a class with one place left and exactly one has
+it; a pack is charged exactly once for a booking, however many times the request
+arrives, and gets the class back on a free cancel.
+
+### 13.1 Membership types — the gym's own price list
+
+`gym_membership_types`: name · kind (`recurring` · `one_time` · `pack` · `trial`; a
+**day pass is a pack of 1 valid for a day**, as PushPress makes a drop-in) · price in
+integer minor units of the gym's own currency (RULINGS 2026-08-18: the currency follows
+the gym's country) · for `recurring`, the period (so many weeks, months or years) · for
+`one_time` and `trial`, the length · for `pack`, the classes it holds and the days it
+lasts · what it includes (`all_classes` · so many bookings a week · `gym_only`) and
+which class types it covers (all, or a chosen set — personal training is one) ·
+archived, never deleted once anybody holds it. `memberships.manage` (owner and manager).
+
+### 13.2 A person's membership
+
+Held by the member's RECORD (§11), so a person without the app can hold one:
+type · starts on · ends or renews on (worked out from the type) · status (`active` ·
+`frozen` · `ended` · `cancelled`, text with a CHECK) · classes left, for a pack · paid
+through. **One pure transition function** moves the status, with an exhaustive test
+(CLAUDE.md §4, Money), on an injectable clock. Until Part 5 connects a payment company
+staff mark a period paid by hand — every product read that day lets staff record a
+cash payment — and Part 5's ledger takes those marks over, nothing rebuilt. **A gym
+that came from a file** links each of its membership-type WORDS to a type once ("Gold"
+→ Gold Monthly) and the people who carry that word hold the type, their file's dates
+kept. **A gym that keeps its other software** makes no types, and its file's words
+just show (§11).
+
+**The membership row carries its record.** Since 2026-09-21 a person joins only by
+accepting an invitation (§10.2), and the invitation knows which record it was for; so
+`gym_members` gains `entry_id`, written at the accept. It replaces 9.2 rule 3's
+"matching is worked out when asked" for everything after joining — a stored link is
+safe now that records are durable (§11.1) and nobody arrives by code — and it is what
+bookings, visits (§12.6) and "who may book" read. Staff changing a record's email does
+not move the link; deleting the record clears it.
+
+### 13.3 Classes and the calendar
+
+`gym_class_types` (name, words about it, minutes, places, usual coach, colour, open
+gym or not) · `gym_class_schedules` (type, weekdays, the LOCAL start time, from, until
+or open-ended, places and coach where they differ) · `gym_class_sessions`, one row for
+each day a class runs (its instant in UTC, its local date and time, places, coach,
+`scheduled` or `cancelled`, and whether it was changed on its own). A daily worker
+fills the calendar **8 weeks ahead**, safe to run twice (one session a schedule a
+local date). A recurring class is kept as the gym's clock time plus the gym's time
+zone and turned into an instant for each day, so a summer-time change never moves the
+6 pm class. Staff change or cancel **this day only** (the session is marked as changed
+alone and later edits of the schedule leave it be) or **this day and later** (the old
+schedule ends, a new one begins); people booked on a changed or cancelled day are told.
+An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
+trainer sees the lists of their own classes.
+
+### 13.4 Booking and the waitlist — ONE rule, table-tested and raced
+
+`gym_class_bookings`: session · person (the app account and the record) · status
+(`booked` · `waitlisted` · `cancelled` · `late_cancelled` · `attended` · `no_show`) ·
+when · whether a pack was charged · the request's idempotency key. **Book** is one
+transaction under the session's row lock: places counted inside it, the pack charged
+inside it, the same key twice the same answer. **Cancel** frees the place and, in the
+same transaction, gives it to the first in line — **only when the class is more than
+1 day away** (TeamUp's model and TeamUp's default, RULINGS 2026-09-21); inside that
+time everyone waiting is told "a place is free" and the first to claim it has it,
+through the same Book. **The gym's settings, with their starting values:** booking
+opens 7 days before and closes at the start · cancelling is free until 2 hours before ·
+the waitlist's hand-over time 1 day · the waitlist holds 20. After the free time a
+cancel is a late cancel, and not coming is a no-show (Mindbody's words): counted, shown
+to the gym, the pack keeps the charge; no money fee until Part 5. **Who may book:**
+where the gym has any membership type, a person whose held membership covers the class
+type — unlimited, or within their bookings a week (counted in the gym's own week), or
+a pack with a class left, charged at booking and given back by a free cancel; where it
+has none, any current member. The table test covers every class of case: kind of
+membership × places (free · last · full) × time (before opening · open · inside the
+free-cancel time · inside the hand-over time · after the start) × the request arriving
+twice. The races are RUN, across two app instances (3a-iii-b's lesson: one app has one
+database connection and cannot race itself).
+
+### 13.5 Personal training
+
+`gym_trainer_hours` (a member of staff, weekday, local from and to) and the session
+length they offer (Mindbody's are 30, 45, 60 and 90 minutes). Free times are worked
+out, never stored: the hours minus what is booked. An appointment is a row with the
+trainer and its time range, and **the database itself refuses two that overlap** for
+one trainer (an exclusion constraint on the range) — the structural rule, before any
+check in code. A member picks a free time, is booked at once, and the trainer is told;
+the same free-cancel time applies; PT packs are a pack type that covers personal
+training. A trainer keeps their own hours.
+
+### 13.6 The calendar, the desk and the messages
+
+Staff: a week view of classes and personal training, filtered by coach or type, each
+session opening its list (booked, waiting, came, no-show). Members: a list by day with
+Book · Cancel · Join waitlist · Claim, on the phone (the member web until the phone app
+exists), every time in the GYM's time zone and named where the phone's differs. A desk
+scan (§12) from 30 minutes before a booked class until it ends marks the booking
+`attended`; 15 minutes after the end a worker marks the rest `no_show`, safe to run
+twice. Booked · on the waitlist · moved in · a place is free · class changed or
+cancelled · PT booked or cancelled: fixed-word emails now, phone notifications with the
+phone app (Part 7 of the re-plan).
+
+### 13.7 Cost at full size, cards, the two extra passes
+
+Measured by the cards: a week's calendar for a gym of 2,100, a session's list, and the
+burst when a popular class opens — two hundred people booking inside a minute from the
+gym's own wi-fi, so every limit here carries an explicit per-address ceiling (ROADMAP
+Stage 4 item 10's lesson). Cards, every one Opus xhigh: **17a** membership types and a
+person's membership · **17b** classes and the calendar · **17c** booking and the
+waitlist, on the server · **17d** the member's side · **17e** personal training ·
+**17f** check-in meets bookings. 17a and 17c–17f need the durable record (3a-v-b) and
+`entry_id` on the membership (3b-ii); 17b needs neither and can be built beside the
+member list. ONE feature for CLAUDE.md §6: both extra passes run once over 17a–17f.
+
+### 13.8 Where the facts came from (read 2026-09-21)
+
+PushPress help: "Create, Edit & Delete Membership Plans" (recurring, non-recurring,
+session pack) and "Drop-ins — Best Practices" (a drop-in is a punchcard with a session
+count of 1); its barcode article names "plans with limited class access" · Gymdesk
+docs: "Setting Up Memberships" (recurring, one time, per-session, trial) · TeamUp help:
+"Waitlist overview" (added from the waitlist by itself only when the place opens more
+than a set time before the event, default 1 day; inside it the customer "will need to
+manually claim the spot") and "Cancelling classes, class schedules, and Class Types" ·
+Mindbody support: "How to manage early cancellations, late cancellations, and no-shows
+for classes" (the business sets the window; a fee or a visit deduction) and its
+scheduling page (session lengths, real-time trainer availability) · Glofox's blog on
+class scheduling (the next person on the waitlist is told by SMS or push). Not opened
+that day, and general to every product the chat knows: the week calendar, and a desk
+check-in marking a booking attended — each card checks its own before it builds.
+
+---
+
+## 14. Money between a member and their gym
+
+*(ADDED 2026-09-22, the same planning chat: Part 5 of Kd's planning document, agreed
+that day — RULINGS 2026-09-22, two lines. A frame. What people pay US — the price list,
+trials, Paddle — is `05-part5-billing.md`, amended the same day. Opus xhigh: money.)*
+
+**The worst thing this section could do to a real person:** charge a member twice, or
+after they cancelled; let a stranger move money through a gym's payment account; or
+show "Overdue" at the front desk about somebody who has paid. The first tests written:
+the same payment message arriving twice records ONE payment; a cancelled membership is
+never billed again; nothing that opens a gym's payment account — a token, a secret —
+ever appears in a log line, an error, a reply or Sentry.
+
+### 14.1 The shape: a register and a notebook, and a card machine plugged in later
+
+The app never holds a member's money and takes no part of it (Kd). It keeps the gym's
+NOTEBOOK — what each person owes, their bills, their payments — and its REGISTER — the
+desk's Sell screen. A payment company is the card machine: one adapter each behind ONE
+interface, so that adding or changing a company touches nothing else, and no company's
+SDK types cross the adapter (CLAUDE.md §4, Money). Everything in 14.2 to 14.4 works
+with no company connected, which is what is built first (Kd: the payment parts *"WILL
+BE BUILT BUT ACTUAL MERCHANTS WILL BE CONNECTED LATER"*).
+
+### 14.2 The notebook
+
+For every held membership (§13.2): a billing schedule (the next date and amount, from
+the type's price and period, in integer minor units of the gym's currency), **bills**
+(`gym_member_bills`: person's record, what for, amount, due on, status `open` · `paid`
+· `void` · `refunded`) and **payments** (`gym_member_payments`: bill, amount, how —
+`cash` · `card_at_desk` · `bank_transfer` · `link` · a connected company — when, who
+recorded it, the company's own id where there is one, UNIQUE so the same event twice
+is one row). Paid · due · overdue is worked out by the server from those rows on an
+injectable clock, never stored as a word that can go stale. A daily worker opens the
+next bill for a repeating membership, safe to run twice (one bill a membership a
+period). Staff record a payment, void a bill, or note a refund; every change has an
+audit row of amounts and ids, never a card detail. `billing.members` is a new tick
+(owner and manager), apart from `billing.manage`, which is the gym's own plan with us.
+The status word a gym's FILE carried (§11) stays what that gym sees until it starts
+billing here; the two are never mixed on one person.
+
+### 14.3 The register
+
+**Sell**: staff pick a product or a membership type (a day pass, a bottle of water),
+the person or "walk-in", how they paid — one bill and one payment in one transaction,
+with an idempotency key. `gym_products` (name, price, whether stock is counted and how
+much). **Discounts and promo codes** on membership types: so much off or a percentage,
+from and until, a limit of uses, counted under a lock; the price a person was sold at
+is written on their membership, so a later change of price or promo never rewrites it.
+
+### 14.4 Pay by the gym's own link
+
+A gym pastes its own payment link for a membership type (any company: RULINGS
+2026-09-15). The member's app shows **Pay {gym}**, which opens it outside the app;
+staff tick the bill paid. Only `https` links, shown with their host named, never
+fetched by our server.
+
+### 14.5 The Connect buttons — later, and only the normal way
+
+A gym presses **Connect**, signs in at the payment company, approves, and comes back:
+OAuth, the company's own page, no key typed or pasted by anybody (Kd refused the
+limited-key idea on 2026-09-21; struck). The tokens are kept encrypted under a key
+from the platform's secret store, never logged, refreshed by the worker, and dropped
+at Disconnect. With a company connected: the member saves a card or a bank mandate on
+the COMPANY's own page (card numbers never reach our server), repeating memberships
+are charged by the company on the notebook's schedule, and its webhooks tick bills
+paid or failed — signature checked on the raw body, deduped by the company's event id,
+acknowledged, then a worker fetches the real object (CLAUDE.md §4). A failed payment
+makes the bill overdue and tells the gym; retry rules are the company's. The order
+(RULINGS 2026-09-22), Stripe left out because its partner programme is invite-only for
+a business in India:
+
+| Button | Gyms in | What it moves | What is known (read 2026-09-22) |
+|---|---|---|---|
+| **Square** | US, Canada, UK, Ireland, France, Spain, Australia, Japan | cards; a saved card charged each period (Subscriptions API); desk readers later | Square staff, its developer forum: "developers from any country can build apps using Square's APIs, but payment processing … only works for sellers in the supported countries". Its developer terms require OAuth for an app that serves sellers. Application fees need an account in the seller's country — and Kd takes none. |
+| **GoCardless** | UK, Europe, Australia, also US and Canada | the member's BANK account each period (Direct Debit, SEPA, ACH) | The UK's usual way to pay a gym. A partner app is made in its sandbox; before going live its team reviews "a demonstration video" and aims to answer "within 5 working days"; it asks for a live account and a live app, and states no country rule for the partner. |
+| **Razorpay** | India | cards, UPI, bank mandates | Its Technology Partner programme: OAuth to a business's own account, after the partner's KYC — an Indian business. |
+
+Whether an owner in India can finish each sign-up is proved only by doing it; it is
+free, and Kd's to do when he chooses. Nothing in 14.2 to 14.4 waits for it.
+
+### 14.6 Cards
+
+**18a** the notebook · **18b** the register, discounts and promo codes · **18c** Pay by
+link · **18d** the first Connect button, once its developer account exists · **18e**,
+**18f** the others. 18a needs 17a. ONE feature for CLAUDE.md §6; the extra passes run
+over 18a–18c before a gym uses them, and again over each Connect button — reviewed by
+RUNNING the company's real sandbox, never a mock alone.
+
+### 14.7 Where the facts came from (read 2026-09-21 and 2026-09-22)
+
+Square: developer forum thread "Square app development for devs out of US" (a staff
+reply), "International Development", "Test in Unsupported Regions", its developer
+terms, "Subscriptions API" · Square support: "International availability" (eight
+countries; an account's country cannot be changed) · Stripe support: "Stripe accounts
+are invite-only in India" · GoCardless docs: "For Partner Integrators", "Going Live
+with your integration" · GoCardless's own guides (82 % of UK gym payments by Direct
+Debit; in the US since 2018) · Razorpay docs: "Technology Partners", "Integrate with
+Razorpay OAuth" · Paddle: pricing, identity verification.
+
+---
+
+## 15. The gym's shared page
+
+*(ADDED 2026-09-22, the same planning chat: Part 6 of Kd's planning document — his
+"common dashboard" — agreed that day, one question open; RULINGS 2026-09-22. A frame.
+It takes in ROADMAP Stage 2 items 1b, 6, 10 and 11. Opus xhigh: other people's words
+and pictures.)*
+
+**The worst thing this section could do to a real person:** let somebody be shamed in
+front of their whole gym — a cruel post, a photo of them they never agreed to — or show
+a person's food or weight to their gym without their say. The first tests written: a
+reported post is removed by staff in one tap and is gone for everyone; a blocked
+person's posts are gone for the one who blocked them; a member who chose "hide me"
+appears to nobody else on any board or challenge; nothing about food or weight reaches
+a trainer's screen by a path the person did not open.
+
+### 15.1 The page
+
+One page a gym — **Updates · Events · Leaderboard · Challenges** — for its live
+members in the phone app (the member web until it exists) and its staff in the
+browser. A former member, a removed one and a stranger get a 404.
+
+### 15.2 Updates
+
+`gym_posts`: who, words (2,000 characters), up to 4 photos or 1 video, pinned or not,
+when, removed at and by whom. Staff always post; **a gym setting decides whether
+members may** (off to start). **Reactions — one tap from a small fixed set — and NO
+comments, and no private chat** (RULINGS 2026-08-25, kept 2026-09-22). Photos: checked
+by their first bytes, size-capped, stripped of location tags, stored on R2 under keys
+the server makes, served by signed URLs (CLAUDE.md §4, Uploads). Videos: up to one
+minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by a
+one-time upload address the server asks for, played from Stream, deleted there when
+the post goes.
+
+### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
+
+**Report** on every post, with a reason; reports land in a staff queue
+(`posts.moderate`, owner and manager) where a post is removed in one tap and a person
+can be stopped from posting. **Block**: a member never again sees a blocked member's
+posts or reactions. A bad-words filter HOLDS a post for staff rather than refusing it.
+A support address is shown. Kd can remove any post and pause any gym (RULINGS
+2026-08-27). Everyone here is a real, invited member under their own name, which is
+the main protection; rate limits stop a flood (10 posts a day a member, with the usual
+per-address ceiling).
+
+### 15.4 Events
+
+Name, words, place, start and end in the gym's time zone, places or no limit. "I'm
+coming" is 13.4's Book rule on an event row — one counting rule in the app, not two.
+
+### 15.5 The leaderboard — only checked facts
+
+Tabs, each ranking ONE thing, each for this week · this month · all time, in the gym's
+time zone: **Visits** (§12 rows by pass, key tag or staff; one a period of the day) ·
+**Classes** (bookings marked attended) · **Streak** (weeks in a row with at least one
+visit) · **Workouts** (days with an app workout — one a day at most, so logging ten
+changes nothing) · **Running** (GPS distance recorded by the phone app, with sanity
+limits on speed; shown once running exists). Equal numbers share a place. A number
+somebody typed is never ranked. "Hide me" (RULINGS 2026-09-07) greys a person's row to
+everybody else and keeps it for the gym; the info symbol says exactly what each tab
+counts. Worked out by one query a tab over indexed rows, its cost measured at 2,100
+members (CLAUDE.md §4, cost at full size). It replaces item 1b's single scored list.
+
+### 15.6 Challenges (the document's "leagues and tournaments")
+
+`gym_challenges`: name, words, from and until, what is counted (one of 15.5's checked
+facts), everyone or people who join, alone or in teams (staff make the teams, or
+members pick one), a prize in words. Its board is 15.5's query over its dates and its
+people; at the end the result is posted to Updates. Knock-out brackets are later.
+
+### 15.7 A gym's own plan for a member
+
+A trainer with `plans.write` (a new tick) opens a member's weekly workout plan and
+daily food numbers as the APP built them, changes them, and saves a copy marked "From
+{gym}"; the member switches between App's plan · My own · Gym's plan (the rings'
+switch, 7a-iv-e). The server runs the health rules over a gym's numbers exactly as
+over typed ones (never under the calorie floor; no cut for a health yes, Safe mode or
+under 18). It waits for the app's own plan builder (ROADMAP Stage 1 items 6a and 6b).
+**SETTLED 2026-09-22 (RULINGS): the tap is kept.** A trainer sees a member's food,
+weight and plan only after the member's own yes — ONE switch on the Join screen ("Let
+my coaches at {gym} see my food and weight, so they can build my plan"), off until
+tapped, changeable at any time in Settings → Gym; the trainer's list says who has
+shared. Without it the trainer can still write a plan from what the gym may see
+(§2.4), and the screen says what is hidden and why.
+
+### 15.8 Cards
+
+**19a** the leaderboard's tabs (after 16a; takes item 1b's place) · **19b** Updates,
+reactions and the safety tools (needs R2, Stage 4 item 4, and a Cloudflare Stream
+account — Kd's, $5 a month for each 1,000 minutes kept and $1 for each 1,000 watched)
+· **19c** events · **19d** challenges · **19e** a gym's own plan (after Stage 1 items
+6a and 6b). ONE feature for CLAUDE.md §6.
+
+### 15.9 Where the facts came from (read 2026-09-22)
+
+SugarWOD's own pages (a gym feed with photos, comments and fist bumps; gym
+leaderboards) · Apple's App Review Guidelines, 1.2 (a filter, a report, a block,
+published contact details) · Cloudflare Stream's pricing page.
+
+---
+
+## 16. Messages and reports
+
+*(ADDED 2026-09-22, the same planning chat: Part 7 of Kd's planning document, agreed
+that day — RULINGS 2026-09-22. A frame. It takes in ROADMAP Stage 2 items 2 and 12.
+Opus xhigh: it sends data out to real people.)*
+
+**The worst thing this section could do to a real person:** "We miss you" to somebody
+the gym removed; "Payment overdue" to somebody who paid; the same message fifty times
+because a job ran twice. The first tests written: a job run twice sends once; a former
+or removed member gets nothing; an overdue reminder is never made for a paid bill; a
+person who switched a kind of message off never gets it.
+
+### 16.1 The channel: in the app
+
+A gym's message to a member is a row in **the member's inbox** on that gym's page in
+the phone app (the member web until it exists), with a phone notification once the
+phone app has push (spec Part 6 §6) — Kd's change to the plan, RULINGS 2026-09-22.
+`gym_member_messages`: gym · person · kind · the words as sent · when · read at ·
+expires (30 days). **Email only where the person has no app**: the member's invitation
+(9.12), a staff invitation (10.3), a lead's follow-ups (16.3), the owner's weekly
+summary — and the sign-in code. **No SMS** (RULINGS 2026-09-17). The one gym message
+of RULINGS 2026-09-07 (a new one replaces the old; gone after 7 days) becomes the
+inbox's pinned note.
+
+### 16.2 The automatic messages
+
+Each a switch in Settings → Messages, each number the gym's to change: **Welcome** (on
+joining) · **Trial check-in** (day 2 of a trial membership) · **Trial ending** (2 days
+before) · **We miss you** (no visit for 10 days; once for each absence) · **Membership
+ending** (7 days before) · **Payment overdue** (3 days after a bill's due date, §14.2)
+· **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
+name and the person's first name; the gym may add ONE line of its own — 140
+characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
+by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
+membership and bills, what was already sent, the gym's clock), with a table test over
+every kind × every reason NOT to send: former · removed · switched off by the person ·
+already sent for this occasion · another automatic message that day · night by the
+gym's clock · the gym lapsed. `(gym, person, kind, occasion)` is UNIQUE, so a second
+run cannot send a second message. A member can switch each kind off, except a payment
+notice.
+
+### 16.3 Leads
+
+`gym_leads`: name · email · phone · where from · `new` · `contacted` · `on_trial` ·
+`joined` · `lost` · notes. Added by hand or by the upload (a list of leads is another
+kind of upload). Three follow-up EMAILS, fixed words, at once · day 3 · day 7, stopped
+the moment the status moves; they go through 9.12's checks, suppressions and
+unsubscribe, from the invites sub-domain, under the same caps. A lead who becomes a
+member is the same person: the record is made from the lead.
+
+### 16.4 At risk
+
+The console lists members whose visits have dropped — came in at least 2 of the last
+4 full weeks before, and not at all in the last 14 days; both numbers the gym's — each
+with their last visit and one tap to send a cheer (RULINGS 2026-09-02, 2026-09-05).
+It reads visits (§12), so a gym with no check-in in use is told the list needs one.
+It takes the place of "slipping away" (ROADMAP Stage 2 item 2). The owner's weekly
+summary email: new, left, at risk, visits against last week, money overdue.
+
+### 16.5 Reports
+
+One Reports page (`reports.read`: owner and manager), every figure with the info
+symbol that says exactly how it is worked out, and a CSV download. **Members**: active
+now · new and left this month · **churn** (those who left in the month over those
+active at its start) · retention (1 − churn) · the average stay of those who left —
+from the durable records of §11.1, which is why a leaver is kept. **Attendance**:
+visits by day and week · the busiest hours (weekday by hour) · visits a member a week ·
+how full classes are (booked over places) · no-shows. **Money** — read from the gym's
+notebook (§14.2), which holds the gym's prices and every payment though the app never
+holds the money: **MRR** (each active repeating membership's sold-at price as one
+month) · collected this month · overdue · **lifetime value** (monthly money a member
+over monthly churn). A gym that keeps its billing in other software has no money
+report and is told why. A figure with too little behind it — under three full months
+for churn and lifetime value — says "not enough data yet", never a made-up number
+(RULINGS 2026-07-15). Worked out when the page opens from indexed rows or §3.2's
+nightly rollups, the cost measured at 2,100 members with a bystander beside it.
+
+### 16.6 Cards
+
+**20a** the inbox and the message rule (its table test first) · **20b** the automatic
+messages and their switches · **20c** leads · **20d** At risk and the weekly summary ·
+**21a** reports: members and attendance · **21b** reports: money (after 18a). ONE
+feature each for CLAUDE.md §6 (20, 21).
+
+### 16.7 Where the facts came from (read 2026-09-22)
+
+Twilio support: "A2P 10DLC Sole Proprietor Brands FAQ" (the one-person registration is
+for the US and Canada) · the churn and lifetime-value formulas are the plain ones every
+subscription business uses; each card names its source before it builds.
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
