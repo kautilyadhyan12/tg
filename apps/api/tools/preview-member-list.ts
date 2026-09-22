@@ -187,7 +187,10 @@ try {
       gym.owner_user_id,
       gym.id,
       preview.uploadId,
-      { acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change") },
+      {
+        acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change"),
+        acknowledgeHandEdits: process.argv.includes("--acknowledge-hand-edits"),
+      },
       () => Promise.resolve(true),
     );
     if (answer.kind === "rate_limited") throw new Error("the rate limiter refused, which this tool cannot happen upon");
@@ -203,6 +206,13 @@ try {
           "NOTHING was changed. Re-run with --acknowledge-large-change to go ahead.",
       );
       process.exitCode = 1;
+    } else if (answer.kind === "hand_edits") {
+      console.log(
+        `REFUSED (hand_edits): this file would replace details typed in here on ${String(answer.handEdits.entries)} record(s) — ` +
+          `${answer.handEdits.fields.join(", ")}.
+NOTHING was changed. Re-run with --acknowledge-hand-edits to let the file win.`,
+      );
+      process.exitCode = 1;
     } else {
       const done = answer.confirmed;
       console.log(
@@ -211,7 +221,8 @@ try {
           : `Applied at ${done.confirmedAt}.`,
       );
       console.log(
-        `  added ${String(done.applied.new)} · changed ${String(done.applied.changed)} · unchanged ${String(done.applied.unchanged)} · off ${String(done.applied.gone)}`,
+        `  added ${String(done.applied.new)} (${String(done.applied.returning)} coming back) · changed ${String(done.applied.changed)} · ` +
+          `unchanged ${String(done.applied.unchanged)} · made former ${String(done.applied.gone)}`,
       );
       console.log(`  the list is now on version ${String(done.version)} · NOBODY was emailed`);
 
@@ -220,7 +231,8 @@ try {
         console.log("\nThe list now holds");
         console.log(
           `  ${String(list.counts.entries)} people · ${String(list.counts.inApp)} already in the app · ` +
-            `${String(list.counts.canBeInvited)} could be invited · ${String(list.counts.noEmail)} with no address`,
+            `${String(list.counts.canBeInvited)} could be invited · ${String(list.counts.noEmail)} with no address · ` +
+            `${String(list.counts.former)} former`,
         );
         for (const word of list.statuses) {
           console.log(

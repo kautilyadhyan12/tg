@@ -44,6 +44,7 @@ const HEADER_WORDS = `${ROOT}/apps/api/src/modules/orgs/memberList/headerWords.t
 const FIELDS = `${ROOT}/apps/api/src/modules/orgs/memberList/fields.ts`;
 const COLUMNS = `${ROOT}/apps/api/src/modules/orgs/memberList/columns.ts`;
 const UNDERSTAND = `${ROOT}/apps/api/src/modules/orgs/memberList/understand.ts`;
+const EXTRA_FIELDS = `${ROOT}/apps/api/src/modules/orgs/memberList/extraFields.ts`;
 
 const CONFIRM_SUITE = "memberList.confirm.routes.test.ts";
 const RULE_SUITE = "memberList.reconcile.unit.test.ts";
@@ -51,6 +52,10 @@ const RULE_SUITE = "memberList.reconcile.unit.test.ts";
  *  and run vitest straight rather than booting Postgres for each one. */
 const WIDER_SUITE = "memberList.wider.unit.test.ts";
 const NEVER_KEEP_SUITE = "memberList.neverKeep.unit.test.ts";
+/** 3a-v-b's suites: the table test for the rules that KEEP the wider row (pure), and
+ *  the routes that write it against real Postgres. */
+const KEEP_SUITE = "memberList.keep.unit.test.ts";
+const KEPT_SUITE = "memberList.kept.routes.test.ts";
 
 /** file, what it breaks, the anchor, the replacement, which suite must go red.
  *  `pure: true` runs the suite without a database. */
@@ -100,7 +105,7 @@ const BREAKS = [
   {
     name: "the version is bumped even when nothing changed",
     file: SERVICE,
-    from: "    const bump = added + updated + removed > 0;",
+    from: "    const bump = added + revived + updated + removed > 0;",
     to: "    const bump = true;",
     suite: CONFIRM_SUITE,
   },
@@ -112,17 +117,17 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "people coming off the list are not deleted",
+    name: "people coming off the list are not taken off it (3a-v-b: marked former, not deleted)",
     file: SERVICE,
-    from: "    const removed = await repo.deleteEntries(tx, gymId, reconciled.gone.map((person) => person.identityKey));",
+    from: "    const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);",
     to: "    const removed = reconciled.gone.length;",
     suite: CONFIRM_SUITE,
   },
   {
-    name: "a changed status is not written",
+    name: "a changed person's own status is not written",
     file: REPO,
-    from: "    SET status = r.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
-    to: "    SET status = e.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
+    from: "    SET status         = CASE WHEN ${carries.status} THEN r.status ELSE e.status END,",
+    to: "    SET status         = e.status,",
     suite: CONFIRM_SUITE,
   },
   {
@@ -168,10 +173,10 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "a status filter is matched with its case unfolded",
+    name: "a word filter is matched with its case unfolded (the status, the membership word and the payment word all)",
     file: SERVICE,
-    from: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim().toLowerCase()))];",
-    to: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim()))];",
+    from: "  return [...new Set(words.map((word) => word.trim().toLowerCase()))];",
+    to: "  return [...new Set(words.map((word) => word.trim()))];",
     suite: CONFIRM_SUITE,
   },
   {
@@ -198,15 +203,15 @@ const BREAKS = [
   {
     name: "the chip's label is taken from the LAST spelling, not the list's first",
     file: REPO,
-    from: "    SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,",
-    to: "    SELECT (array_agg(e.status ORDER BY e.listed_seq DESC))[1] AS label,",
+    from: "             (array_agg(mine.status ORDER BY mine.listed_seq))[1] AS label,",
+    to: "             (array_agg(mine.status ORDER BY mine.listed_seq DESC))[1] AS label,",
     suite: CONFIRM_SUITE,
   },
   {
-    name: "the status chips come back in the reverse of the list's own order",
+    name: "the chips come back in the reverse of the list's own order",
     file: REPO,
-    from: "      ORDER BY grouped.first_seq",
-    to: "      ORDER BY grouped.first_seq DESC",
+    from: "    ORDER BY c.kind, c.first_seq`;",
+    to: "    ORDER BY c.kind, c.first_seq DESC`;",
     suite: CONFIRM_SUITE,
   },
   {
@@ -266,10 +271,10 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "the status chips have no ceiling",
+    name: "the chips have no ceiling",
     file: REPO,
-    from: "      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}",
-    to: "      LIMIT 100000",
+    from: "      WHERE r.rn <= ${MEMBER_LIST_STATUS_CHIPS_MAX}",
+    to: "      WHERE r.rn <= 100000",
     suite: CONFIRM_SUITE,
   },
   // ---------------------------------------------------------------------
@@ -383,6 +388,85 @@ const BREAKS = [
     to: "  holdsWord(header, word);",
     suite: NEVER_KEEP_SUITE,
     pure: true,
+  },
+
+  // ── 3a-v-b: §11.2 AT THE BOUNDARY THAT WRITES ────────────────────────────────
+  //
+  // **THE ONE CORE RULE OF THIS JOB** (CLAUDE.md §4's deliberate breaks). Everything
+  // above tests what the file READER drops; these three test what the CONFIRM drops,
+  // which is the first place in this feature where a missed cell reaches a real table
+  // and sits there under a member's name.
+  {
+    name: "\u00a711.2: the confirm stops asking whether a cell of the gym's own column is a card",
+    file: EXTRA_FIELDS,
+    from: '    if (cell !== "" && cardShapedCell(cell)) {',
+    to: "    if (false) {",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.2: a dropped cell leaves its KEY OUT, so the merge keeps the card the write was dropping",
+    file: EXTRA_FIELDS,
+    from: '      document[field.key] = "";\n      continue;',
+    to: "      continue;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.2: a card can be written as one of the gym's own WORDS (a status of 4111 1111 1111 1111)",
+    file: EXTRA_FIELDS,
+    from: "  if (cardShapedCell(word)) return { value: null, card: true };",
+    to: "  if (false) return { value: null, card: true };",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  // ── 3a-v-b: A FORMER RECORD ADMITS NOBODY (\u00a711.1) ────────────────────────
+  //
+  // The job's other worst-thing line: an ex-member counted where an invite is decided.
+  {
+    name: "\u00a711.1: the rule measures everything against EVERY record, so a former one is still on the list",
+    file: RECONCILE,
+    from: "  const current = entries.filter((entry) => !entry.former);",
+    to: "  const current = entries;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.1: a member is matched to a FORMER record, so somebody the gym took off reads on your list",
+    file: REPO,
+    from: "         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND v.proved AND x.email = u.email",
+    to: "         WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.1: the list's counts and chips include the people the gym has taken off",
+    file: REPO,
+    from: "      WHERE e.gym_id = ${gymId} AND e.former_at IS NULL\n    ),",
+    to: "      WHERE e.gym_id = ${gymId}\n    ),",
+    suite: KEPT_SUITE,
+  },
+  // ── 3a-v-b: A CORRECTION IS NEVER WRITTEN OVER WITHOUT A TICK (\u00a711.4) ────
+  {
+    name: "\u00a711.4: the confirm applies a file that would replace staff's own corrections, with no tick",
+    file: SERVICE,
+    from: "    if (reconciled.handEdits.entries > 0 && !input.acknowledgeHandEdits) {",
+    to: "    if (false) {",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.4: a field the file does not CARRY is written anyway, so a narrower export empties the record",
+    file: SERVICE,
+    from: "  status: mapping.status !== null,\n  membershipType: mapping.membershipType !== null,",
+    to: "  status: true,\n  membershipType: true,",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.1: a person coming off the list is DELETED again, as \u00a79.2 rule 2 had it",
+    file: REPO,
+    from: "    UPDATE gym_member_list_entries\n    SET former_at = ${at}",
+    to: "    DELETE FROM gym_member_list_entries",
+    suite: KEPT_SUITE,
+    note: "expected GREEN on its own: marking an already-former row again is what this refuses, and no route can produce one",
   },
 ];
 
