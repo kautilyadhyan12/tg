@@ -44,6 +44,7 @@ const HEADER_WORDS = `${ROOT}/apps/api/src/modules/orgs/memberList/headerWords.t
 const FIELDS = `${ROOT}/apps/api/src/modules/orgs/memberList/fields.ts`;
 const COLUMNS = `${ROOT}/apps/api/src/modules/orgs/memberList/columns.ts`;
 const UNDERSTAND = `${ROOT}/apps/api/src/modules/orgs/memberList/understand.ts`;
+const EXTRA_FIELDS = `${ROOT}/apps/api/src/modules/orgs/memberList/extraFields.ts`;
 
 const CONFIRM_SUITE = "memberList.confirm.routes.test.ts";
 const RULE_SUITE = "memberList.reconcile.unit.test.ts";
@@ -51,6 +52,10 @@ const RULE_SUITE = "memberList.reconcile.unit.test.ts";
  *  and run vitest straight rather than booting Postgres for each one. */
 const WIDER_SUITE = "memberList.wider.unit.test.ts";
 const NEVER_KEEP_SUITE = "memberList.neverKeep.unit.test.ts";
+/** 3a-v-b's suites: the table test for the rules that KEEP the wider row (pure), and
+ *  the routes that write it against real Postgres. */
+const KEEP_SUITE = "memberList.keep.unit.test.ts";
+const KEPT_SUITE = "memberList.kept.routes.test.ts";
 
 /** file, what it breaks, the anchor, the replacement, which suite must go red.
  *  `pure: true` runs the suite without a database. */
@@ -100,7 +105,7 @@ const BREAKS = [
   {
     name: "the version is bumped even when nothing changed",
     file: SERVICE,
-    from: "    const bump = added + updated + removed > 0;",
+    from: "    const bump = added + revived + updated + removed > 0;",
     to: "    const bump = true;",
     suite: CONFIRM_SUITE,
   },
@@ -112,17 +117,17 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "people coming off the list are not deleted",
+    name: "people coming off the list are not taken off it (3a-v-b: marked former, not deleted)",
     file: SERVICE,
-    from: "    const removed = await repo.deleteEntries(tx, gymId, reconciled.gone.map((person) => person.identityKey));",
+    from: "    const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);",
     to: "    const removed = reconciled.gone.length;",
     suite: CONFIRM_SUITE,
   },
   {
-    name: "a changed status is not written",
+    name: "a changed person's own status is not written",
     file: REPO,
-    from: "    SET status = r.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
-    to: "    SET status = e.status\n    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)",
+    from: "    SET status         = CASE WHEN ${carries.status} THEN r.status ELSE e.status END,",
+    to: "    SET status         = e.status,",
     suite: CONFIRM_SUITE,
   },
   {
@@ -168,10 +173,10 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "a status filter is matched with its case unfolded",
+    name: "a word filter is matched with its case unfolded (the status, the membership word and the payment word all)",
     file: SERVICE,
-    from: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim().toLowerCase()))];",
-    to: "  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim()))];",
+    from: "  return [...new Set(words.map((word) => word.trim().toLowerCase()))];",
+    to: "  return [...new Set(words.map((word) => word.trim()))];",
     suite: CONFIRM_SUITE,
   },
   {
@@ -198,15 +203,15 @@ const BREAKS = [
   {
     name: "the chip's label is taken from the LAST spelling, not the list's first",
     file: REPO,
-    from: "    SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,",
-    to: "    SELECT (array_agg(e.status ORDER BY e.listed_seq DESC))[1] AS label,",
+    from: "             (array_agg(mine.status ORDER BY mine.listed_seq))[1] AS label,",
+    to: "             (array_agg(mine.status ORDER BY mine.listed_seq DESC))[1] AS label,",
     suite: CONFIRM_SUITE,
   },
   {
-    name: "the status chips come back in the reverse of the list's own order",
+    name: "the chips come back in the reverse of the list's own order",
     file: REPO,
-    from: "      ORDER BY grouped.first_seq",
-    to: "      ORDER BY grouped.first_seq DESC",
+    from: "    ORDER BY c.kind, c.first_seq`;",
+    to: "    ORDER BY c.kind, c.first_seq DESC`;",
     suite: CONFIRM_SUITE,
   },
   {
@@ -266,10 +271,10 @@ const BREAKS = [
     suite: CONFIRM_SUITE,
   },
   {
-    name: "the status chips have no ceiling",
+    name: "the chips have no ceiling",
     file: REPO,
-    from: "      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}",
-    to: "      LIMIT 100000",
+    from: "      WHERE r.rn <= ${MEMBER_LIST_STATUS_CHIPS_MAX}",
+    to: "      WHERE r.rn <= 100000",
     suite: CONFIRM_SUITE,
   },
   // ---------------------------------------------------------------------
@@ -315,7 +320,12 @@ const BREAKS = [
   {
     name: "§11.2: a card-shaped cell is still shown as one of its column's samples",
     file: COLUMNS,
-    from: "      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    // IT BREAKS BOTH HALVES NOW, and that is a finding of its own. Since round one a
+    // sample is scrubbed of a card written INSIDE it as well as skipped for being one,
+    // so dropping the `!card` guard alone left the whole-cell card redacted and the
+    // mutant ran GREEN — a rule guarded twice cannot be disproved by breaking it once.
+    // What this row is for is "a card-shaped cell is never SHOWN", so it takes out both.
+    from: "      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(withoutCardNumbers(text).text);",
     to: "      if (stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
     suite: WIDER_SUITE,
     pure: true,
@@ -382,6 +392,200 @@ const BREAKS = [
     from: "  word.length <= LONGEST_ABBREVIATION ? holdsWordExactly(header, word) : holdsWord(header, word);",
     to: "  holdsWord(header, word);",
     suite: NEVER_KEEP_SUITE,
+    pure: true,
+  },
+
+  // ── 3a-v-b: §11.2 AT THE BOUNDARY THAT WRITES ────────────────────────────────
+  //
+  // **THE ONE CORE RULE OF THIS JOB** (CLAUDE.md §4's deliberate breaks). Everything
+  // above tests what the file READER drops; these three test what the CONFIRM drops,
+  // which is the first place in this feature where a missed cell reaches a real table
+  // and sits there under a member's name.
+  {
+    name: "\u00a711.2: the confirm stops asking whether a cell of the gym's own column is a card",
+    file: EXTRA_FIELDS,
+    from: '    if (cell !== "" && cardShapedCell(cell)) {',
+    to: "    if (false) {",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.2: a dropped cell leaves its KEY OUT, so the merge keeps the card the write was dropping",
+    file: EXTRA_FIELDS,
+    from: '      document[field.key] = "";\n      continue;',
+    to: "      continue;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.2: a card can be written as one of the gym's own WORDS (a status of 4111 1111 1111 1111)",
+    file: EXTRA_FIELDS,
+    from: "  if (cardShapedCell(word)) return { value: null, card: true };",
+    to: "  if (false) return { value: null, card: true };",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  // ── 3a-v-b: A FORMER RECORD ADMITS NOBODY (\u00a711.1) ────────────────────────
+  //
+  // The job's other worst-thing line: an ex-member counted where an invite is decided.
+  {
+    name: "\u00a711.1: the rule measures everything against EVERY record, so a former one is still on the list",
+    file: RECONCILE,
+    from: "  const current = entries.filter((entry) => !entry.former);",
+    to: "  const current = entries;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.1: a member is matched to a FORMER record, so somebody the gym took off reads on your list",
+    file: REPO,
+    from: "         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND v.proved AND x.email = u.email",
+    to: "         WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.1: the list's counts and chips include the people the gym has taken off",
+    file: REPO,
+    from: "      WHERE e.gym_id = ${gymId} AND e.former_at IS NULL\n    ),",
+    to: "      WHERE e.gym_id = ${gymId}\n    ),",
+    suite: KEPT_SUITE,
+  },
+  // ── 3a-v-b: A CORRECTION IS NEVER WRITTEN OVER WITHOUT A TICK (\u00a711.4) ────
+  {
+    name: "\u00a711.4: the confirm applies a file that would replace staff's own corrections, with no tick",
+    file: SERVICE,
+    from: "    if (reconciled.handEdits.entries > 0 && !input.acknowledgeHandEdits) {",
+    to: "    if (false) {",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.4: a field the file does not CARRY is written anyway, so a narrower export empties the record",
+    file: SERVICE,
+    from: "  status: mapping.status !== null,\n  membershipType: mapping.membershipType !== null,",
+    to: "  status: true,\n  membershipType: true,",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "\u00a711.1: a person coming off the list is DELETED again, as \u00a79.2 rule 2 had it",
+    file: REPO,
+    from: "    UPDATE gym_member_list_entries\n    SET former_at = ${at}",
+    to: "    DELETE FROM gym_member_list_entries",
+    suite: KEPT_SUITE,
+    note: "expected GREEN on its own: marking an already-former row again is what this refuses, and no route can produce one",
+  },
+
+  // ── ROUND ONE'S OWN FOUR, each driven by the reviewer against the real service ─
+  {
+    name: "round one High-1: the gym's catalogue is written BEFORE the tick gates, so a refused confirm keeps it",
+    file: SERVICE,
+    from: "    await repo.addFields(tx, gymId, grown.fresh);",
+    to: "",
+    extra: {
+      from: "    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);",
+      to:
+        "    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);\n" +
+        "    await repo.addFields(tx, gymId, grown.fresh);",
+    },
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "round one High-2: the end-or-renewal KIND is compared without its day, so an empty cell is changed for ever",
+    file: RECONCILE,
+    from: "  const rowKind = row.endsOn === null ? null : endsOnKind;",
+    to: "  const rowKind = endsOnKind;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-3: an unnamed column is keyed by its place again, so inserting a column beside it makes a second field",
+    file: UNDERSTAND,
+    from: "    unnamed.n += 1;\n    key = `unnamed_${String(unnamed.n)}`;",
+    to: "    key = `unnamed_${String(taken.size + 1)}`;",
+    // THE READER'S suite, not the pure one: the key is made in `understand.ts`, and
+    // the first version of this row pointed at a table test that builds its fields BY
+    // HAND and never reaches the rule at all — so the mutant ran GREEN and read exactly
+    // like a rule that holds. Found by running it.
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4: a card written inside a note is written to the database with the note",
+    file: EXTRA_FIELDS,
+    from: "    const scrubbed = withoutCardNumbers(cell);",
+    to: "    const scrubbed = { text: cell, removed: 0 };",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4, the reader's half: a note reaches the staged file with its card still in it",
+    file: UNDERSTAND,
+    from: "    const scrubbed = withoutCardNumbers(raw);",
+    to: "    const scrubbed = { text: raw, removed: 0 };",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one Low-2: a former record cannot say that its person is in the app",
+    file: SERVICE,
+    from: "    inAppEntryIds: records === \"current\" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),",
+    to: "    inAppEntryIds: inAppEntryIds(members),",
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "round one High-4, the samples: a card inside a note is still SHOWN beside its heading",
+    file: COLUMNS,
+    from: "if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(withoutCardNumbers(text).text);",
+    to: "if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4, the gym's own words: a card inside a status or a payment word reaches the staged file",
+    file: FIELDS,
+    from: "  return cut(withoutCardNumbers(text).text, MEMBER_LIST_MAX_STATUS_CHARS);",
+    to: "  return cut(text, MEMBER_LIST_MAX_STATUS_CHARS);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4, a name: a card written beside a person's name is kept with it",
+    file: FIELDS,
+    from: "  if (full !== \"\") return cut(withoutCardNumbers(full).text, MEMBER_LIST_MAX_NAME_CHARS);",
+    to: "  if (full !== \"\") return cut(full, MEMBER_LIST_MAX_NAME_CHARS);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  // ── the re-check: the in-text card rule, and the length cap ─────────────────
+  {
+    name: "re-check Open-1: no issuer prefix, so any 13-19 digits that pass Luhn are a card",
+    file: NEVER_KEEP,
+    from: "const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksLikeAPaymentCard(digits);",
+    to: "const isCardNumber = (digits: string): boolean => looksLikeAPaymentCard(digits);",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check Open-1: any group may be short, so a list of small numbers becomes a card",
+    file: NEVER_KEEP,
+    from: "          if (next.digits.length !== 4 && next.digits.length !== 6) break;",
+    to: "",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check §3: a word is cut before its card is replaced, so the marker pushes it past the cap",
+    file: FIELDS,
+    from: "  return cut(withoutCardNumbers(text).text, MEMBER_LIST_MAX_STATUS_CHARS);",
+    to: "  return withoutCardNumbers(cut(text, MEMBER_LIST_MAX_STATUS_CHARS)).text;",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check §3: the write boundary does not cut after replacing a card",
+    file: EXTRA_FIELDS,
+    from: "  return { value: cut(scrubbed.text, MEMBER_LIST_MAX_STATUS_CHARS), card: true };",
+    to: "  return { value: scrubbed.text, card: true };",
+    suite: KEEP_SUITE,
     pure: true,
   },
 ];

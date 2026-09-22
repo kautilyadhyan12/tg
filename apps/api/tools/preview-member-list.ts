@@ -28,6 +28,8 @@ import { readFile } from "node:fs/promises";
 import postgres from "postgres";
 import {
   memberListWarningWords,
+  MEMBER_LIST_FIELD_WORDS,
+  MEMBER_LIST_NEVER_KEPT_WORDS,
   MEMBER_LIST_SKIP_WORDS,
   type MemberListMode,
   type MemberListRowGroup,
@@ -109,15 +111,25 @@ try {
   console.log("\nColumns");
   for (const column of preview.columns) {
     const said =
-      column.guess !== null
-        ? ` → ${column.guess} (${column.confidence ?? "?"})`
-        : column.headerSays !== null
-          ? ` → named ${column.headerSays}, NOT used`
-          : "";
+      column.neverKept !== null
+        ? ` → NOT KEPT (${column.neverKept})`
+        : column.guess !== null
+          ? ` → ${column.guess} (${column.confidence ?? "?"})`
+          : column.headerSays !== null
+            ? ` → named ${column.headerSays}, NOT used`
+            : " → the gym's own column";
     console.log(
       `  ${String(column.index).padStart(3)} ${(column.header ?? "").slice(0, 28).padEnd(30)}${said.padEnd(28)}` +
         column.samples.map((s) => s.slice(0, 20)).join(" | "),
     );
+  }
+
+  const dropped = preview.columns.filter((column) => column.neverKept !== null);
+  if (dropped.length > 0) {
+    console.log("\nNot kept, whatever the gym or its staff want (§11.2)");
+    for (const column of dropped) {
+      console.log(`  ${(column.header ?? "(no heading)").slice(0, 28).padEnd(30)}${MEMBER_LIST_NEVER_KEPT_WORDS[column.neverKept ?? "medical"]}`);
+    }
   }
 
   console.log("\nIn the file");
@@ -126,6 +138,23 @@ try {
   console.log("\nWhat it would do to the list");
   for (const [what, howMany] of Object.entries(preview.list)) console.log(`  ${what.padEnd(18)} ${String(howMany)}`);
   console.log(`  ${"members leaving".padEnd(18)} ${String(preview.members.leaving)} of ${String(preview.members.listedNow)} on the list now`);
+
+  if (preview.fieldChanges.length > 0 || preview.extraChanges.length > 0) {
+    console.log("\nWhat would change, field by field");
+    for (const change of preview.fieldChanges) {
+      console.log(`  ${MEMBER_LIST_FIELD_WORDS[change.field].padEnd(24)} ${String(change.count)}`);
+    }
+    for (const change of preview.extraChanges) {
+      console.log(`  ${change.label.slice(0, 22).padEnd(24)} ${String(change.count)}`);
+    }
+  }
+
+  if (preview.handEdits.entries > 0) {
+    console.log(
+      `\nWOULD REPLACE WHAT STAFF TYPED IN on ${String(preview.handEdits.entries)} record(s): ${preview.handEdits.fields.join(", ")}` +
+        "\n  Confirming needs --acknowledge-hand-edits.",
+    );
+  }
 
   if (preview.statuses.length > 0) {
     console.log("\nThe gym's own words");
@@ -187,7 +216,10 @@ try {
       gym.owner_user_id,
       gym.id,
       preview.uploadId,
-      { acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change") },
+      {
+        acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change"),
+        acknowledgeHandEdits: process.argv.includes("--acknowledge-hand-edits"),
+      },
       () => Promise.resolve(true),
     );
     if (answer.kind === "rate_limited") throw new Error("the rate limiter refused, which this tool cannot happen upon");
@@ -203,6 +235,13 @@ try {
           "NOTHING was changed. Re-run with --acknowledge-large-change to go ahead.",
       );
       process.exitCode = 1;
+    } else if (answer.kind === "hand_edits") {
+      console.log(
+        `REFUSED (hand_edits): this file would replace details typed in here on ${String(answer.handEdits.entries)} record(s) — ` +
+          `${answer.handEdits.fields.join(", ")}.
+NOTHING was changed. Re-run with --acknowledge-hand-edits to let the file win.`,
+      );
+      process.exitCode = 1;
     } else {
       const done = answer.confirmed;
       console.log(
@@ -211,7 +250,8 @@ try {
           : `Applied at ${done.confirmedAt}.`,
       );
       console.log(
-        `  added ${String(done.applied.new)} · changed ${String(done.applied.changed)} · unchanged ${String(done.applied.unchanged)} · off ${String(done.applied.gone)}`,
+        `  added ${String(done.applied.new)} (${String(done.applied.returning)} coming back) · changed ${String(done.applied.changed)} · ` +
+          `unchanged ${String(done.applied.unchanged)} · made former ${String(done.applied.gone)}`,
       );
       console.log(`  the list is now on version ${String(done.version)} · NOBODY was emailed`);
 
@@ -220,7 +260,8 @@ try {
         console.log("\nThe list now holds");
         console.log(
           `  ${String(list.counts.entries)} people · ${String(list.counts.inApp)} already in the app · ` +
-            `${String(list.counts.canBeInvited)} could be invited · ${String(list.counts.noEmail)} with no address`,
+            `${String(list.counts.canBeInvited)} could be invited · ${String(list.counts.noEmail)} with no address · ` +
+            `${String(list.counts.former)} former`,
         );
         for (const word of list.statuses) {
           console.log(

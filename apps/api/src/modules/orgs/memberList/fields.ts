@@ -16,7 +16,7 @@ import {
   authEmailSchema,
 } from "@app/shared";
 import { expandScientific, tidyCell } from "./cells.js";
-import { cardShapedCell } from "./neverKeep.js";
+import { cardShapedCell, withoutCardNumbers } from "./neverKeep.js";
 
 /** Text cut to `most` characters, never between the two halves of a character
  *  outside the basic plane. */
@@ -27,12 +27,13 @@ export function cut(text: string, most: number): string {
 }
 
 /** A person's name, from one column or from two. Empty is allowed: a screen
- *  shows the email instead, and a list entry with no name is still a member. */
+ *  shows the email instead, and a list entry with no name is still a member.
+ *  A card number inside it is removed before the cut (see `cleanStatus`). */
 export function cleanName(parts: { full?: string; first?: string; last?: string }): string {
   const full = tidyCell(parts.full ?? "");
-  if (full !== "") return cut(full, MEMBER_LIST_MAX_NAME_CHARS);
+  if (full !== "") return cut(withoutCardNumbers(full).text, MEMBER_LIST_MAX_NAME_CHARS);
   const both = `${tidyCell(parts.first ?? "")} ${tidyCell(parts.last ?? "")}`.replace(/\s+/g, " ").trim();
-  return cut(both, MEMBER_LIST_MAX_NAME_CHARS);
+  return cut(withoutCardNumbers(both).text, MEMBER_LIST_MAX_NAME_CHARS);
 }
 
 const MAILTO = /^mailto:/i;
@@ -104,10 +105,16 @@ export const isBooleanWord = (text: string): boolean => TRUE_WORDS.has(text.toLo
 
 /** The gym's own status word, as it wrote it. The app attaches no meaning to
  *  any of them — it filters by them and chooses who is invited by them, nothing
- *  else (§9.2 rule 10) — so no list of ours can be wrong about a gym's word. */
+ *  else (§9.2 rule 10) — so no list of ours can be wrong about a gym's word.
+ *
+ *  A card number written inside the word is removed first and the result cut to
+ *  length after, so the marker can never push a word past the cap the row schema
+ *  and the table enforce, and a cut can never leave part of a card behind. The
+ *  member NUMBER keeps its whole-cell rule instead (`cleanMemberNumber`). */
 export function cleanStatus(raw: string): string | null {
   const text = tidyCell(raw);
-  return text === "" ? null : cut(text, MEMBER_LIST_MAX_STATUS_CHARS);
+  if (text === "") return null;
+  return cut(withoutCardNumbers(text).text, MEMBER_LIST_MAX_STATUS_CHARS);
 }
 
 /** A column of yes and no under a heading such as "Active" is a status: it
