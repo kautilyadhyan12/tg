@@ -30,9 +30,14 @@ import {
   verhoeffValid,
 } from "../src/modules/orgs/memberList/neverKeep.js";
 
-const NO_HINTS = { hasAddress: false, hasBank: false };
-const WITH_ADDRESS = { hasAddress: true, hasBank: false };
-const WITH_BANK = { hasAddress: false, hasBank: true };
+const NO_HINTS = { hasAddress: false, hasPostcode: false, hasBank: false };
+/** A sheet with an address and NO column that says it is the postcode — an
+ *  Indian gym's "Address / City / PIN", where the bare PIN is the postcode. */
+const WITH_ADDRESS = { hasAddress: true, hasPostcode: false, hasBank: false };
+/** …and one that already has its postcode in a column of its own — a US gym's
+ *  "Address / City / Zip Code", where a bare PIN is the door code. */
+const WITH_POSTCODE = { hasAddress: true, hasPostcode: true, hasBank: false };
+const WITH_BANK = { hasAddress: false, hasPostcode: false, hasBank: true };
 
 describe("Luhn, and the card numbers the schemes publish for testing", () => {
   it.each(["4111111111111111", "4242424242424242", "5500000000000004", "5555555555554444", "340000000000009", "378282246310005", "6011000000000004"])(
@@ -160,6 +165,15 @@ describe("a heading, the backstop", () => {
     ["Belt"],
     ["Expiry Date"],
     ["Next Billing Date"],
+    // Review of PR #90, Low 6: a gym IS a health club, and a form's
+    // "Conditions Accepted" is a signature. Both were being thrown away with
+    // the words "this looks like medical or health notes", which was false of
+    // each, and the bare words "health" and "conditions" are what caught them.
+    ["Health Club Branch"],
+    ["Health Club"],
+    ["Conditions Accepted"],
+    ["Conditions Signed"],
+    ["Branch"],
   ])("%s is kept", (header) => {
     expect(neverKeptByHeader(header, NO_HINTS)).toBe(null);
   });
@@ -193,15 +207,42 @@ describe("a postcode is an address, in every word the English-speaking world wri
     expect(neverKeptByHeader("Pin No", NO_HINTS)).toBe("password_or_pin");
   });
 
-  it("still drops a PIN a heading says is a key, address or no address", () => {
-    for (const header of ["Door PIN", "Access PIN", "Gate PIN"]) {
-      expect(neverKeptByHeader(header, WITH_ADDRESS)).toBe("password_or_pin");
+  it("DROPS a bare PIN where the sheet already has a postcode column of its own", () => {
+    // Review of PR #90, Critical 3: a US gym's sheet carries "Zip Code" for the
+    // postcode, so a column headed "PIN" beside it is the door code — and it
+    // was being kept on every member because the sheet had an address at all.
+    expect(neverKeptByHeader("PIN", WITH_POSTCODE)).toBe("password_or_pin");
+    expect(neverKeptByHeader("Pin No", WITH_POSTCODE)).toBe("password_or_pin");
+    // …and the postcode column itself is still kept, of course.
+    expect(neverKeptByHeader("Zip Code", WITH_POSTCODE)).toBe(null);
+  });
+
+  it.each([
+    ["Door PIN"],
+    ["Access PIN"],
+    ["Gate PIN"],
+    // Review of PR #90, Critical 3: these say in their own heading that they
+    // are a key, and every one of them was kept on a sheet with an address.
+    ["Locker PIN"],
+    ["Access Card PIN"],
+    ["Card PIN"],
+    ["Locker Code"],
+    ["Key Code"],
+    ["Entry PIN"],
+  ])("still drops %s, whatever the sheet carries", (header) => {
+    for (const sheet of [NO_HINTS, WITH_ADDRESS, WITH_POSTCODE]) {
+      expect(neverKeptByHeader(header, sheet)).toBe("password_or_pin");
     }
   });
 
+  it("keeps a locker NUMBER, which is not a key", () => {
+    for (const sheet of [NO_HINTS, WITH_ADDRESS]) expect(neverKeptByHeader("Locker No", sheet)).toBe(null);
+  });
+
   it("reads the sheet's own headings for that", () => {
-    expect(sheetHints(["Name", "Email", "PIN"])).toEqual({ hasAddress: false, hasBank: false });
-    expect(sheetHints(["Name", "Street", "City", "PIN"]).hasAddress).toBe(true);
+    expect(sheetHints(["Name", "Email", "PIN"])).toEqual({ hasAddress: false, hasPostcode: false, hasBank: false });
+    expect(sheetHints(["Name", "Street", "City", "PIN"])).toEqual({ hasAddress: true, hasPostcode: false, hasBank: false });
+    expect(sheetHints(["Name", "Street", "City", "Zip Code", "PIN"])).toEqual({ hasAddress: true, hasPostcode: true, hasBank: false });
     expect(sheetHints(["Name", "Zip Code"]).hasAddress).toBe(true);
     expect(sheetHints(["Name", "Sort Code"]).hasBank).toBe(true);
   });
@@ -248,6 +289,36 @@ describe("every market the app is for, not one country's", () => {
     ["everywhere", "Driving Licence Number", "government_id"],
   ])("drops %s's %s", (_where, header, reason) => {
     expect(neverKeptByHeader(header, NO_HINTS)).toBe(reason);
+  });
+
+  it.each([
+    // Review of PR #90, High 4: the table above was built from the code's own
+    // word list, so every row used the LONG form the list already held. These
+    // are the short forms a real export writes, and every one was kept.
+    ["Australia", "Tax File No", "government_id"],
+    ["Ireland", "PPS No", "government_id"],
+    ["New Zealand", "IRD No", "government_id"],
+    ["the United Kingdom", "NI No", "government_id"],
+    ["the United States", "Driver's License", "government_id"],
+    ["the United Kingdom", "Driver's Licence", "government_id"],
+    ["anywhere", "Identity Number", "government_id"],
+    ["anywhere", "Identity No", "government_id"],
+    ["Canada", "Transit No", "bank_details"],
+    ["Canada", "Institution No", "bank_details"],
+    ["anywhere", "Beneficiary Account", "bank_details"],
+    ["anywhere", "Beneficiary Name", "bank_details"],
+  ])("drops %s's %s, the short form a real export writes", (_where, header, reason) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).toBe(reason);
+  });
+
+  it.each([
+    ["Passports"],
+    ["Aadhaar Numbers"],
+    ["Bank Accounts"],
+    ["Medical Conditions"],
+    ["Sort Codes"],
+  ])("drops %s, the plural of a word it holds", (header) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).not.toBe(null);
   });
 
   it("keeps a BUSINESS's number, which §11.2 is not about", () => {

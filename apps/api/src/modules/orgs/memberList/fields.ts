@@ -16,7 +16,7 @@ import {
   authEmailSchema,
 } from "@app/shared";
 import { expandScientific, tidyCell } from "./cells.js";
-import { looksLikeAPaymentCard } from "./neverKeep.js";
+import { cardShapedCell } from "./neverKeep.js";
 
 /** Text cut to `most` characters, never between the two halves of a character
  *  outside the basic plane. */
@@ -70,22 +70,30 @@ export interface NumberReading {
   value: string | null;
   /** A spreadsheet shortened it and its last digits are gone (§9.5). */
   shortened: boolean;
+  /** It was a payment card number and was dropped (§11.2), so the reader can
+   *  count it with the cards dropped everywhere else in the file. */
+  card: boolean;
 }
 
 /** The gym's own number for a member, as text: it is shown, matched on and
  *  never counted with. */
 export function cleanMemberNumber(raw: string): NumberReading {
   const text = tidyCell(raw);
-  if (text === "") return { value: null, shortened: false };
+  if (text === "") return { value: null, shortened: false, card: false };
   const scientific = expandScientific(text);
-  if (scientific.kind === "shortened") return { value: null, shortened: true };
+  if (scientific.kind === "shortened") return { value: null, shortened: true, card: false };
   const whole = NUMBER_TRAILING_ZEROS.exec(scientific.kind === "digits" ? scientific.digits : text);
   const value = whole?.[1] ?? (scientific.kind === "digits" ? scientific.digits : text);
-  if (EMPTY_WORDS.has(value.toLowerCase())) return { value: null, shortened: false };
+  if (EMPTY_WORDS.has(value.toLowerCase())) return { value: null, shortened: false, card: false };
   // Dropped whole, never cut: half a member number is another member's number.
-  if (value.length > MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS) return { value: null, shortened: false };
-  if (looksLikeAPaymentCard(value)) return { value: null, shortened: false };
-  return { value, shortened: false };
+  if (value.length > MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS) return { value: null, shortened: false, card: false };
+  // `cardShapedCell` and not the bare-digits rule (review of PR #90, Critical
+  // 1): a card typed the way a person types it — "4111 1111 1111 1111" — has
+  // spaces in it, and asking the bare-digits rule kept it as the member's own
+  // number while the same card without spaces was dropped. Every other place
+  // §11.2 drops a card cell asks this one; this was the odd one out.
+  if (cardShapedCell(value)) return { value: null, shortened: false, card: true };
+  return { value, shortened: false, card: false };
 }
 
 const TRUE_WORDS = new Set(["yes", "y", "true", "1"]);

@@ -33,7 +33,7 @@ import {
 } from "@app/shared";
 import type { CountryCode } from "libphonenumber-js/max";
 import { couldBePhone, looksLikeEmail, tidyCell } from "./cells.js";
-import { type DateEvidence, evidenceOf, looksLikeADate, mostlyDates } from "./dates.js";
+import { looksLikeADate, mostlyDates } from "./dates.js";
 import { isWritten } from "./grid.js";
 import { type HeaderReading, readHeader } from "./headerWords.js";
 import { type ColumnShapes, type SheetHints, cardShapedCell, governmentIdShaped, ibanShaped, neverKeptColumn, worthChecking } from "./neverKeep.js";
@@ -82,10 +82,11 @@ export interface ColumnStat {
   written: number;
   emails: number;
   phones: number;
-  /** Cells that read as a calendar day under one order or the other (§11.3). */
+  /** Cells that read as a calendar day under one order or the other (§11.3).
+   *  A SHARE, so the sample is the right window for it — unlike which way
+   *  round the column is written, which `evidenceInColumn` reads over every
+   *  row because one late cell is the whole proof (review of PR #90, High 5). */
   dates: number;
-  /** What each looked-at cell proved about the column's date order. */
-  dateEvidence: DateEvidence[];
   /** The different words the column holds, folded, counted up to one past the
    *  membership-type cap: what tells a status or a type from a note or a date. */
   distinct: number;
@@ -129,7 +130,6 @@ export function columnStats(rows: Rows, headerRow: number | null, country: Count
       emails: 0,
       phones: 0,
       dates: 0,
-      dateEvidence: [],
       distinct: 0,
       shapes: { written: 0, cards: 0, ibans: 0, governmentIds: 0 },
       neverKept: null,
@@ -159,10 +159,7 @@ export function columnStats(rows: Rows, headerRow: number | null, country: Count
       // never kept. Counted in the one pass the sample already costs.
       if (options.hints !== undefined) {
         if (words.size <= MEMBER_LIST_MAX_TYPE_WORDS) words.add(text.toLowerCase());
-        if (looksLikeADate(text)) {
-          stat.dates++;
-          stat.dateEvidence.push(evidenceOf(text));
-        }
+        if (looksLikeADate(text)) stat.dates++;
         stat.shapes.written++;
         if (card) stat.shapes.cards++;
         else if (worthChecking(text)) {

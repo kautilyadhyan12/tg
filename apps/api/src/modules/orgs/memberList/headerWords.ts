@@ -50,9 +50,26 @@ export function normaliseHeader(raw: string): string {
 
 /** Whether a normalised heading holds `word` as whole words. */
 const holds = (header: string, word: string): boolean => ` ${header} `.includes(` ${word} `);
-/** The same, for the never-keep rules next door, which read the same headings
- *  in the same shape: one reading of a heading, not two (§11.2). */
-export const holdsWord = holds;
+
+/** The same, but the PLURAL and possessive form counts as the word.
+ *
+ *  **THIS IS WHAT THE NEVER-LISTS ARE MATCHED WITH, AND IT IS NOT A NICETY**
+ *  (review of PR #90, Critical 2). `normaliseHeader` turns an apostrophe into a
+ *  space, so "Father’s Name" becomes `father s name` and DOES hold "father" —
+ *  but "Fathers Name", which is how a gym's export really writes it, becomes
+ *  `fathers name` and holds nothing. `Guardians Email`, `Parents Phone`,
+ *  `Mothers Mobile` and `Fathers Date of Birth` all walked past the list that
+ *  decides who gets invited, and the member was given the guardian's address.
+ *  Matching the plural here rather than stripping the "s" in `normaliseHeader`
+ *  keeps the apostrophe form working, which stripping would break. */
+const holdsOrPlural = (header: string, word: string): boolean => holds(header, word) || holds(header, `${word}s`);
+
+/** For the never-keep rules next door, which read the same headings in the same
+ *  shape and need the same plural: one reading of a heading, not two (§11.2). */
+export const holdsWord = holdsOrPlural;
+/** …and the strict form, where a heading must BE the word and not merely hold
+ *  it (the bare-PIN rule). */
+export const isWord = (header: string, word: string): boolean => header === word;
 
 interface HeaderWord {
   word: string;
@@ -367,9 +384,12 @@ const CONTACT_FIELDS: readonly MemberListField[] = [
 export function readHeader(raw: string): HeaderReading {
   const header = normaliseHeader(raw);
   const never = new Set<MemberListField>();
-  if (NEVER_CONTACT.some((word) => holds(header, word))) for (const field of CONTACT_FIELDS) never.add(field);
-  if (NEVER_STATUS.some((word) => holds(header, word))) never.add("status");
-  if (NEVER_TYPE.some((word) => holds(header, word))) never.add("membershipType");
+  // Every never-list is matched on the plural too (`holdsOrPlural`): these are
+  // the lists that REFUSE a column, so a form they miss is a wrong take, while
+  // a form the WORDS list above misses is only a column staff map by hand.
+  if (NEVER_CONTACT.some((word) => holdsOrPlural(header, word))) for (const field of CONTACT_FIELDS) never.add(field);
+  if (NEVER_STATUS.some((word) => holdsOrPlural(header, word))) never.add("status");
+  if (NEVER_TYPE.some((word) => holdsOrPlural(header, word))) never.add("membershipType");
 
   let best: HeaderWord | null = null;
   let tied = false;

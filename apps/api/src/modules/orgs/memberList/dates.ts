@@ -159,20 +159,49 @@ export interface SettledOrder {
   from: "file" | "country" | "chosen" | "none";
 }
 
+/** What a whole column's cells proved between them. */
+export interface ColumnEvidence {
+  dayFirst: boolean;
+  monthFirst: boolean;
+  /** At least one cell that could honestly have been read either way round —
+   *  which is what tells "the file said nothing" from "there was nothing to
+   *  say", and so what the preview shows staff. */
+  anyEither: boolean;
+}
+
+/** Everything a column's cells prove, over EVERY ROW of it.
+ *
+ *  **NOT OVER THE SAMPLE** (review of PR #90, High 5). Every other share in
+ *  this module — how many cells are emails, phones, dates — is measured over
+ *  the first `MEMBER_LIST_VALUE_SAMPLE_CELLS` cells, and for a SHARE that is
+ *  right: 200 cells say what a column is. This is not a share. One cell on row
+ *  207 whose day is over 12 is the whole proof of which way round a column is
+ *  written, and reading it from the sample settled a 207-row file by the gym's
+ *  country while the file itself said the opposite — 205 join dates read the
+ *  wrong way round and shown to staff as fact. It stops as soon as both are
+ *  seen, because a column that contradicts itself is decided by the country
+ *  whatever the rest of it says. */
+export function evidenceInColumn(cells: Iterable<string>): ColumnEvidence {
+  let dayFirst = false;
+  let monthFirst = false;
+  let anyEither = false;
+  for (const cell of cells) {
+    const seen = evidenceOf(cell);
+    if (seen === "dayFirst") dayFirst = true;
+    else if (seen === "monthFirst") monthFirst = true;
+    else if (seen === "either") anyEither = true;
+    if (dayFirst && monthFirst) break;
+  }
+  return { dayFirst, monthFirst, anyEither };
+}
+
 /** A column's order, settled once for the whole column (§11.3). The file's own
  *  evidence beats the country; staff's switch beats both. Where the file says
  *  one thing on one row and the other on another, the file is not trusted at
  *  all and the country decides — two rows cannot both be right. */
-export function settleOrder(evidence: readonly DateEvidence[], country: string | null, chosen: MemberListDateOrder | null): SettledOrder {
+export function settleOrder(evidence: ColumnEvidence, country: string | null, chosen: MemberListDateOrder | null): SettledOrder {
   if (chosen !== null) return { order: chosen, from: "chosen" };
-  let dayFirst = false;
-  let monthFirst = false;
-  let anyEither = false;
-  for (const seen of evidence) {
-    if (seen === "dayFirst") dayFirst = true;
-    else if (seen === "monthFirst") monthFirst = true;
-    else if (seen === "either") anyEither = true;
-  }
+  const { dayFirst, monthFirst, anyEither } = evidence;
   if (dayFirst !== monthFirst) return { order: dayFirst ? "dayFirst" : "monthFirst", from: "file" };
   // Nothing in the column could be read either way, so nothing was decided:
   // every cell said its own order (ISO, or a written-out month).

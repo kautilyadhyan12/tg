@@ -596,7 +596,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "dates_not_read":
       return `${numberWords(warning.rows, "cell in a date column is", "cells in date columns are")} not a date, so they were left empty rather than guessed. Check the date columns below.`;
     case "card_cells_dropped":
-      return `${numberWords(warning.rows, "cell was", "cells were")} dropped because it is shaped like a payment card number. We never store card details, wherever they sit in a file.`;
+      return `${numberWords(warning.rows, "cell was dropped because it is shaped like a payment card number", "cells were dropped because they are shaped like payment card numbers")}. We never store card details, wherever they sit in a file.`;
     case "extra_columns_left_out":
       return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
   }

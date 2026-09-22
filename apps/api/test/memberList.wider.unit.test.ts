@@ -185,6 +185,131 @@ describe("the worst thing — a payment card number, in a column called anything
   });
 });
 
+describe("the worst thing — the round-one Criticals, driven end to end", () => {
+  // Review of PR #90. Each of these was green on 2,555 tests and is here so it
+  // can never be green again. Every one goes through the whole reader.
+
+  it("drops a card typed the way a person types it, in the MEMBER NUMBER column", () => {
+    // Critical 1. `cleanMemberNumber` asked the bare-digits rule, so the same
+    // card was dropped without spaces and kept with them — as the member's own
+    // number, on the screen staff invite from. Four ordinary numbers keep the
+    // column under the 0.6 share, so the COLUMN rule cannot be what catches it.
+    const found = read([
+      ["Member ID", "Full Name", "Email"],
+      ["M1001", "Ann Lee", "ann@example.com"],
+      ["M1002", "Bo Chen", "bo@example.com"],
+      ["4111 1111 1111 1111", "Cara Diaz", "cara@example.com"],
+      [VISA_TEST_CARD, "Dan Ellis", "dan@example.com"],
+      ["M1005", "Eve Nair", "eve@example.com"],
+      ["M1006", "Fay Ray", "fay@example.com"],
+    ]);
+    expect(columnAt(found, 0).neverKept).toBe(null);
+    expect(found.rows.map((row) => row.memberNumber)).toEqual(["M1001", "M1002", null, null, "M1005", "M1006"]);
+    expect(everythingSaid(found)).not.toContain("4111");
+    // …and both drops are counted, which the member-number one never was.
+    expect(found.warnings).toContainEqual({ code: "card_cells_dropped", rows: 2 });
+  });
+
+  it.each([["Fathers Name"], ["Guardians Email"], ["Parents Email"], ["Mothers Mobile"], ["Nominees Email"], ["Spouses Email"], ["Relatives Phone"], ["Fathers Date of Birth"]])("never reads %s as the member's own", (header) => {
+    // Critical 2. `normaliseHeader` turns an apostrophe into a space, so
+    // "Father's Name" held "father" and matched — but "Fathers Name", which is
+    // how a gym's export really writes it, held nothing and walked past the
+    // list that decides WHO GETS INVITED.
+    const found = read([
+      ["Full Name", "Email", "Mobile", header],
+      ["Ann Lee", "ann@example.com", "9876543210", "ravi@example.com"],
+      ["Bo Chen", "bo@example.com", "9876543211", "mei@example.com"],
+    ]);
+    expect(columnAt(found, 3).guess).toBe(null);
+    expect(found.rows.map((row) => row.email)).toEqual(["ann@example.com", "bo@example.com"]);
+    expect(found.rows.map((row) => row.phone)).toEqual(["+919876543210", "+919876543211"]);
+    expect(found.rows.map((row) => row.dateOfBirth)).toEqual([null, null]);
+    expect(found.rows.map((row) => row.fullName)).toEqual(["Ann Lee", "Bo Chen"]);
+  });
+
+  it("does not fall back to a guardian's address when the member has none", () => {
+    // The end of Critical 2: the member's own cells empty, which is exactly the
+    // file a junior membership produces.
+    const found = read([
+      ["Full Name", "Email", "Mobile", "Guardians Email", "Guardians Mobile"],
+      ["Ann Lee", "", "", "ravi@example.com", "9000000001"],
+      ["Bo Chen", "", "", "mei@example.com", "9000000002"],
+    ]);
+    // No column of the member's OWN is usable, so the file is not refused and
+    // nothing is guessed: staff are asked which column is which (§9.5), and
+    // nobody is invited from a guardian's address in the meantime.
+    expect(found.needsMapping).toBe(true);
+    expect(found.rows).toEqual([]);
+    expect(found.mapping.email).toEqual([]);
+    expect(found.mapping.phone).toEqual([]);
+    expect(columnAt(found, 3).guess).toBe(null);
+    expect(columnAt(found, 4).guess).toBe(null);
+  });
+
+  it("drops a US gym's door PIN, because its postcode is already in its own column", () => {
+    // Critical 3. The sheet has an address, so a bare "PIN" was kept on every
+    // member — even beside an explicit "Zip Code".
+    const found = read(
+      [
+        ["Full Name", "Email", "Address", "City", "Zip Code", "PIN"],
+        ["Ann Bell", "ann@example.com", "12 Main St", "Austin", "78701", "4821"],
+        ["Bo Reed", "bo@example.com", "9 Oak Ave", "Austin", "78702", "9134"],
+      ],
+      { country: "US" },
+    );
+    expect(columnAt(found, 5).neverKept).toBe("password_or_pin");
+    expect(columnAt(found, 4).neverKept).toBe(null);
+    expect(extraOf(found, "Zip Code")).toEqual(["78701", "78702"]);
+    expect(everythingSaid(found)).not.toContain("4821");
+  });
+
+  it("still keeps an Indian gym's PIN, where the bare PIN IS the postcode", () => {
+    const found = read(
+      [
+        ["Full Name", "Email", "Address", "City", "PIN"],
+        ["Ann Lee", "ann@example.com", "12 MG Road", "Bengaluru", "560001"],
+      ],
+      { country: "IN" },
+    );
+    expect(columnAt(found, 4).neverKept).toBe(null);
+    expect(extraOf(found, "PIN")).toEqual(["560001"]);
+  });
+
+  it("drops the short forms a real export writes, and never reads one as a phone", () => {
+    // High 4. "Tax File No" and "Transit No" were kept — and being nine and ten
+    // digits, the values-only rule then took them as the member's PHONE, which
+    // is the invite channel. One member's own mobile cell is empty here, which
+    // is how the review found a member carrying a stranger's number.
+    const found = read(
+      [
+        ["Full Name", "Email", "Mobile", "Tax File No", "Driver's License", "Transit No"],
+        ["Ann Bell", "ann@example.com", "0412345671", "123456782", "NSW-1234567", "0012345678"],
+        ["Ben Cole", "ben@example.com", "", "123456783", "NSW-1234568", "0012345679"],
+      ],
+      { country: "AU" },
+    );
+    expect(columnAt(found, 3).neverKept).toBe("government_id");
+    expect(columnAt(found, 4).neverKept).toBe("government_id");
+    expect(columnAt(found, 5).neverKept).toBe("bank_details");
+    expect(found.mapping.phone).toEqual([2]);
+    expect(found.rows.map((row) => row.phone)).toEqual(["+61412345671", null]);
+    for (const cell of ["123456782", "123456783", "NSW-1234567", "0012345678"]) expect(everythingSaid(found)).not.toContain(cell);
+  });
+
+  it("reads a date column's order from EVERY row, not its first two hundred cells", () => {
+    // High 5. 205 cells that could be read either way, and the one cell that
+    // settles it past the sample: the whole column was read the wrong way round
+    // for a US gym and the preview said the COUNTRY had decided.
+    const rows: string[][] = [["Full Name", "Email", "Join Date"]];
+    for (let n = 0; n < 205; n++) rows.push([`Person ${String(n)}`, `p${String(n)}@example.com`, "02/05/2024"]);
+    rows.push(["Late One", "late@example.com", "25/12/2024"]);
+    const found = read(rows, { country: "US" });
+    expect(found.dateColumns[0]).toMatchObject({ order: "dayFirst", from: "file" });
+    expect(found.rows[0]?.joinedOn).toBe("2024-05-02");
+    expect(found.rows[205]?.joinedOn).toBe("2024-12-25");
+  });
+});
+
 describe("the worst thing — somebody else's details are never the member's", () => {
   // Gymdesk's own import fields name up to three emergency contacts with a
   // name, a phone and a relationship, and the parents' names beside them.

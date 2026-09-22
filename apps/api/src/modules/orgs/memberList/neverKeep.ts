@@ -25,7 +25,7 @@ import {
   type MemberListNeverKeptReason,
 } from "@app/shared";
 import { digitCount } from "./cells.js";
-import { holdsWord, normaliseHeader } from "./headerWords.js";
+import { holdsWord, isWord, normaliseHeader } from "./headerWords.js";
 
 // ---------------------------------------------------------------------------
 // Numbers that check themselves
@@ -265,10 +265,16 @@ const PASSWORD_WORDS = [
   "gate pin",
   "keypad code",
   "lock code",
+  "locker code",
+  "locker pin",
+  "key code",
   "alarm code",
   "access code",
   "access pin",
+  "access card pin",
+  "card pin",
   "entry code",
+  "entry pin",
   "login",
   "credential",
   "credentials",
@@ -301,7 +307,11 @@ const BANK_WORDS = [
   "bsb",
   "payid",
   "transit number",
+  "transit no",
   "institution number",
+  "institution no",
+  "beneficiary account",
+  "beneficiary name",
   "interac",
   "ifsc",
   "upi",
@@ -355,11 +365,14 @@ const GOVERNMENT_WORDS = [
   "social insurance",
   "pps",
   "pps number",
+  "pps no",
   "ppsn",
   "tfn",
   "tax file number",
+  "tax file no",
   "ird",
   "ird number",
+  "ird no",
   "sss",
   "sss number",
   "nric",
@@ -368,6 +381,7 @@ const GOVERNMENT_WORDS = [
   "national identity",
   "national insurance",
   "ni number",
+  "ni no",
   "nino",
   "passport",
   "passport no",
@@ -378,6 +392,9 @@ const GOVERNMENT_WORDS = [
   "drivers license",
   "driver licence",
   "driver license",
+  // `normaliseHeader` turns the apostrophe of "Driver's License" into a space.
+  "driver s licence",
+  "driver s license",
   "licence no",
   "license no",
   "licence number",
@@ -390,6 +407,8 @@ const GOVERNMENT_WORDS = [
   "voter id",
   "ration card",
   "identity card",
+  "identity number",
+  "identity no",
   "identity proof",
   "id proof",
   "govt id",
@@ -458,13 +477,35 @@ const MEDICAL_WORDS = [
 /** "Terms and Conditions" is not a medical condition, and a gym's waiver is a
  *  signature, not a diagnosis. Without this, the commonest column in a gym's
  *  own export would be thrown away as health data. */
-const NOT_MEDICAL_WORDS = ["terms", "t c", "waiver", "agreement", "policy", "contract", "air conditioning"];
+const NOT_MEDICAL_WORDS = [
+  "terms",
+  "t c",
+  "waiver",
+  "agreement",
+  "policy",
+  "contract",
+  "air conditioning",
+  // A gym is a HEALTH CLUB, and a form's "Conditions Accepted" is a signature
+  // (review of PR #90, Low 6): both were being thrown away with the words
+  // "this looks like medical or health notes", which was false of each.
+  "club",
+  "accepted",
+  "signed",
+  "branch",
+];
 
 /** What the SHEET as a whole says, worked out once and handed to every column:
  *  the two facts that settle a heading no list of words can settle on its own. */
 export interface SheetHints {
-  /** Any column that is part of an address, which makes a bare "PIN" a postcode. */
+  /** Any column that is part of an address, which is half of what makes a bare
+   *  "PIN" a postcode. */
   hasAddress: boolean;
+  /** A column that already says in its own heading that it is the postcode —
+   *  which is the OTHER half, and the one that was missing (review of PR #90,
+   *  Critical 3). A US gym's sheet has "Zip Code" for the postcode, so a column
+   *  headed "PIN" beside it is the door code and not a second postcode; without
+   *  this, every such gym's door code was kept on every member. */
+  hasPostcode: boolean;
   /** Any unmistakable bank column, which makes a bare "Account Number" a bank
    *  account rather than the gym's own number for a member. */
   hasBank: boolean;
@@ -473,14 +514,22 @@ export interface SheetHints {
 /** The sheet's two facts, from its headings alone. */
 export function sheetHints(headers: readonly (string | null)[]): SheetHints {
   let hasAddress = false;
+  let hasPostcode = false;
   let hasBank = false;
   for (const raw of headers) {
     if (raw === null || raw === "") continue;
     const header = normaliseHeader(raw);
-    if (POSTCODE_WORDS.some((word) => holdsWord(header, word)) || ADDRESS_WORDS.some((word) => holdsWord(header, word))) hasAddress = true;
+    // A bare "PIN" is not a postcode word, so a sheet whose postcode is a bare
+    // PIN does not count as already having one — which is what lets an Indian
+    // gym's "Address / City / PIN" keep its PIN while a US gym's
+    // "Address / City / Zip Code / PIN" drops one.
+    if (POSTCODE_WORDS.some((word) => holdsWord(header, word))) {
+      hasPostcode = true;
+      hasAddress = true;
+    } else if (ADDRESS_WORDS.some((word) => holdsWord(header, word))) hasAddress = true;
     if (BANK_WORDS.some((word) => holdsWord(header, word))) hasBank = true;
   }
-  return { hasAddress, hasBank };
+  return { hasAddress, hasPostcode, hasBank };
 }
 
 /** What a heading alone says a column must never be, or null where it says
@@ -496,8 +545,12 @@ export function neverKeptByHeader(raw: string | null, hints: SheetHints): Member
   if (hints.hasBank && BARE_ACCOUNT_WORDS.some((word) => holdsWord(header, word))) return "bank_details";
   if (GOVERNMENT_WORDS.some((word) => holdsWord(header, word))) return "government_id";
   if (PASSWORD_WORDS.some((word) => holdsWord(header, word))) return "password_or_pin";
-  // The one heading a word list cannot settle: the sheet does.
-  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return hints.hasAddress ? null : "password_or_pin";
+  // The one heading a word list cannot settle: the sheet does. It must BE a
+  // bare PIN word and not merely hold one (review of PR #90, Critical 3) —
+  // "Locker PIN" and "Access Card PIN" say in their own heading that they are a
+  // key, and were being kept on any sheet with an address — and the sheet must
+  // not already carry a column that says it is the postcode.
+  if (BARE_PIN_WORDS.some((word) => isWord(header, word))) return hints.hasAddress && !hints.hasPostcode ? null : "password_or_pin";
   if (MEDICAL_WORDS.some((word) => holdsWord(header, word)) && !NOT_MEDICAL_WORDS.some((word) => holdsWord(header, word))) return "medical";
   return null;
 }

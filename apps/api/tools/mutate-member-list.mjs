@@ -40,6 +40,8 @@ const RECONCILE = `${ROOT}/apps/api/src/modules/orgs/memberList/reconcile.ts`;
 const CURSOR = `${ROOT}/apps/api/src/modules/orgs/memberList/cursor.ts`;
 
 const NEVER_KEEP = `${ROOT}/apps/api/src/modules/orgs/memberList/neverKeep.ts`;
+const HEADER_WORDS = `${ROOT}/apps/api/src/modules/orgs/memberList/headerWords.ts`;
+const FIELDS = `${ROOT}/apps/api/src/modules/orgs/memberList/fields.ts`;
 const COLUMNS = `${ROOT}/apps/api/src/modules/orgs/memberList/columns.ts`;
 const UNDERSTAND = `${ROOT}/apps/api/src/modules/orgs/memberList/understand.ts`;
 
@@ -327,11 +329,40 @@ const BREAKS = [
     pure: true,
   },
   {
-    name: "§11.2: a bare PIN is read without asking the sheet, so a door code is kept as a postcode",
+    // REPLACED after round one (review of PR #90, test note 6). The old row
+    // broke this rule into "a bare PIN is always kept", which goes red only on
+    // a sheet with NO address — and Critical 3 shipped underneath it, because
+    // the shipped rule ALREADY kept a door PIN on every sheet that had one.
+    // This row now breaks it back to exactly what shipped and round one caught.
+    name: "§11.2: a bare PIN asks only whether the sheet has an address, and holds rather than IS its word",
     file: NEVER_KEEP,
-    from: '  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return hints.hasAddress ? null : "password_or_pin";',
-    to: "  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return null;",
+    from: '  if (BARE_PIN_WORDS.some((word) => isWord(header, word))) return hints.hasAddress && !hints.hasPostcode ? null : "password_or_pin";',
+    to: '  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return hints.hasAddress ? null : "password_or_pin";',
     suite: NEVER_KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: the member-number card check reads bare digits, so a card typed with spaces is kept (round one, Critical 1)",
+    file: FIELDS,
+    from: "  if (cardShapedCell(value)) return { value: null, shortened: false, card: true };",
+    to: '  if (/^[0-9]{13,19}$/.test(value) && cardShapedCell(value)) return { value: null, shortened: false, card: true };',
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.1: the never-lists stop matching the plural, so Guardians Email becomes the member's (round one, Critical 2)",
+    file: HEADER_WORDS,
+    from: "const holdsOrPlural = (header: string, word: string): boolean => holds(header, word) || holds(header, `${word}s`);",
+    to: "const holdsOrPlural = (header: string, word: string): boolean => holds(header, word);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.3: a date column's order is read from the first 200 cells again (round one, High 5)",
+    file: UNDERSTAND,
+    from: "evidenceInColumn(cellsDown(rows, firstDataRow, column));",
+    to: "evidenceInColumn([...cellsDown(rows, firstDataRow, column)].slice(0, 200));",
+    suite: WIDER_SUITE,
     pure: true,
   },
 ];

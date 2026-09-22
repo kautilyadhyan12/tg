@@ -48,7 +48,7 @@ import {
 import type { CountryCode } from "libphonenumber-js/max";
 import { tidyCell } from "./cells.js";
 import { type ColumnStat, type Rows, columnStats, describeColumns, findHeaderRow, guessMapping } from "./columns.js";
-import { evidenceOf, mostlyDates, readDay, settleOrder } from "./dates.js";
+import { evidenceInColumn, evidenceOf, mostlyDates, readDay, settleOrder } from "./dates.js";
 import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "./fields.js";
 import { isWritten } from "./grid.js";
 import { endsOrRenews, normaliseHeader, readHeader } from "./headerWords.js";
@@ -142,7 +142,7 @@ const droppedColumns = (stats: readonly ColumnStat[]): Set<number> =>
  *  carries bank columns (which makes a bare "Account Number" a bank account
  *  and not the gym's own number for a member). */
 function hintsOf(rows: Rows, headerRow: number | null): SheetHints {
-  if (headerRow === null) return { hasAddress: false, hasBank: false };
+  if (headerRow === null) return { hasAddress: false, hasPostcode: false, hasBank: false };
   return sheetHints((rows[headerRow] ?? []).map((cell) => tidyCell(cell)));
 }
 
@@ -201,6 +201,9 @@ interface Draft {
   unusualPhone: boolean;
   shortened: boolean;
   needsCountry: boolean;
+  /** The member-number cell was a payment card and was dropped (§11.2), so it
+   *  is counted with every other card cell rather than silently. */
+  cardCell: boolean;
 }
 
 /** One date column, its order already settled for the whole column (§11.3). */
@@ -332,6 +335,7 @@ function draftRow(row: readonly string[], at: number, mapping: MemberListMapping
     unusualPhone: phone.unusual,
     shortened: (phone.e164 === null && shortened) || (memberNumber.value === null && memberNumber.shortened),
     needsCountry: phone.e164 === null && needsCountry,
+    cardCell: memberNumber.card,
   };
 }
 
@@ -342,6 +346,14 @@ function placeholdersIn(counts: ReadonlyMap<string, number>): Set<string> {
   const found = new Set<string>();
   for (const [value, rows] of counts) if (rows > MEMBER_LIST_PLACEHOLDER_ROWS) found.add(value);
   return found;
+}
+
+/** One column's written cells, from the first data row to the last. */
+function* cellsDown(rows: Rows, from: number, column: number): Generator<string> {
+  for (let r = from; r < rows.length; r++) {
+    const cell = rows[r]?.[column];
+    if (cell !== undefined && isWritten(cell)) yield cell;
+  }
 }
 
 /** How many different words a column holds, and whether they are all a yes or
@@ -532,7 +544,13 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   for (const field of MEMBER_LIST_DATE_FIELDS) {
     const column = mapping[field];
     if (column === null) continue;
-    const settled = settleOrder(stats[column]?.dateEvidence ?? [], options.country, flipped.get(column) ?? null);
+    // Over EVERY row of the column, not the value sample: one cell on row 207
+    // whose day is over 12 is the whole proof of which way round a file writes
+    // its dates (review of PR #90, High 5). At most three columns, one cheap
+    // reading each, and it stops the moment the column contradicts itself.
+    const chosenOrder = flipped.get(column) ?? null;
+    const evidence = chosenOrder !== null ? { dayFirst: false, monthFirst: false, anyEither: false } : evidenceInColumn(cellsDown(rows, firstDataRow, column));
+    const settled = settleOrder(evidence, options.country, chosenOrder);
     datePlans.push({ field, column, order: settled.order, from: settled.from, notRead: 0, example: null });
   }
   const endsOnKind = mapping.endsOn === null ? null : endsOrRenews(stats[mapping.endsOn]?.header ?? null);
@@ -575,6 +593,7 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     const narrow = draftRow(row, r, mapping, country, status);
     // A name that is a card number is a card number, whatever column it sat in.
     const draft: Draft & Wide = { ...narrow, ...wideRow(row, plan, wideCounts) };
+    if (draft.cardCell) wideCounts.cards++;
     if (cardShapedCell(draft.fullName)) {
       wideCounts.cards++;
       draft.fullName = "";

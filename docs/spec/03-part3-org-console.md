@@ -1260,17 +1260,23 @@ per page.
 
 | 10,000 × 30 of the gym's own columns | keeping only the five old things | as shipped |
 |---|---|---|
-| understanding it, in the worker | — | 696 ms (the parse timeout is 15,000 ms) |
+| understanding it, in the worker | — | 707–770 ms (the parse timeout is 15,000 ms) |
 | what crosses to the request's thread | 3.2 MB | 9.2 MB |
-| **the request's thread answers nobody for** | **44 ms** | **118 ms** (83 ms checking the contract, 35 ms writing it out) |
+| **the request's thread answers nobody for** | **46–47 ms** | **86–95 ms** (61–68 ms checking the contract, 25–27 ms writing it out) |
 
 At the launch shape — 20 gyms of 200 (RULINGS 2026-09-20) — the same file costs the
 request's thread **4 ms** (81 ms in the worker, 0.2 MB across), and at a band-5 gym of
-2,100 it costs **34 ms** (300 ms in the worker, 1.9 MB). So Part 2 of the re-plan costs
-**+2 ms at launch, +17 ms at 2,100 and +39 ms at the biggest list allowed**. The 118 ms
+2,100 it costs **29 ms** (212 ms in the worker, 1.9 MB). So Part 2 of the re-plan costs
+**+3 ms at launch, +16 ms at 2,100 and +40 ms at the biggest list allowed**. The 95 ms
 sits beside the 61–63 ms the preview's own rule already blocks for on that same file and
 is accepted for the same reason (twelve uploads an hour a person); the pool of ONE is
-still what to fix for this screen (Stage 4 item 11), not this. **What is worth watching
+still what to fix for this screen (Stage 4 item 11), not this.
+
+*(Re-measured after round one’s fixes, three runs at each size. Round one’s High 5 made
+a date column’s order read every row of it rather than its first 200 cells, which costs
+the WORKER about 11 ms on the biggest file and the request’s thread nothing. The first
+table here reported a single run’s 118 ms; three runs put it at 86–95, and the honest
+number is the range.)* **What is worth watching
 is the 9.2 MB**, which is a staged upload's row in the database growing threefold —
 3a-v-b measures it again once that row is written per entry rather than as one document.
 

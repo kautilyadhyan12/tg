@@ -10,7 +10,7 @@
 // the last — because that is the rule the gym's file was written under. It is a
 // rule and not a guess, which is what lets this file have no clock in it.
 import { describe, expect, it } from "vitest";
-import { countryOrder, dayOf, evidenceOf, looksLikeADate, readDay, settleOrder } from "../src/modules/orgs/memberList/dates.js";
+import { countryOrder, dayOf, evidenceInColumn, evidenceOf, looksLikeADate, readDay, settleOrder } from "../src/modules/orgs/memberList/dates.js";
 
 describe("one cell", () => {
   it.each([
@@ -88,30 +88,55 @@ describe("what one cell proves about its column", () => {
 });
 
 describe("a whole column's order", () => {
+  // Driven through the column's own CELLS, not through a hand-written list of
+  // verdicts: a test of `settleOrder` alone could never have caught the window
+  // this rule reads them over (review of PR #90, High 5 and test note 5).
+  const order = (cells: readonly string[], country: string | null, chosen: "dayFirst" | "monthFirst" | null = null) =>
+    settleOrder(evidenceInColumn(cells), country, chosen);
+
   it("takes the file's own evidence over the country", () => {
-    expect(settleOrder(["either", "dayFirst", "either"], "US", null)).toEqual({ order: "dayFirst", from: "file" });
-    expect(settleOrder(["either", "monthFirst"], "IN", null)).toEqual({ order: "monthFirst", from: "file" });
+    expect(order(["03/04/2026", "25/12/2025", "05/06/2026"], "US")).toEqual({ order: "dayFirst", from: "file" });
+    expect(order(["03/04/2026", "12/25/2025"], "IN")).toEqual({ order: "monthFirst", from: "file" });
   });
 
   it("falls back to the country where the file says nothing either way", () => {
-    expect(settleOrder(["either", "either"], "IN", null)).toEqual({ order: "dayFirst", from: "country" });
-    expect(settleOrder(["either", "either"], "US", null)).toEqual({ order: "monthFirst", from: "country" });
-    expect(settleOrder(["either"], null, null)).toEqual({ order: "dayFirst", from: "country" });
+    expect(order(["03/04/2026", "05/06/2026"], "IN")).toEqual({ order: "dayFirst", from: "country" });
+    expect(order(["03/04/2026", "05/06/2026"], "US")).toEqual({ order: "monthFirst", from: "country" });
+    expect(order(["03/04/2026"], null)).toEqual({ order: "dayFirst", from: "country" });
   });
 
   it("falls back to the country where the file contradicts itself — two rows cannot both be right", () => {
-    expect(settleOrder(["dayFirst", "monthFirst"], "IN", null)).toEqual({ order: "dayFirst", from: "country" });
-    expect(settleOrder(["dayFirst", "monthFirst"], "US", null)).toEqual({ order: "monthFirst", from: "country" });
+    expect(order(["25/12/2025", "12/25/2025"], "IN")).toEqual({ order: "dayFirst", from: "country" });
+    expect(order(["25/12/2025", "12/25/2025"], "US")).toEqual({ order: "monthFirst", from: "country" });
   });
 
   it("says nothing was decided where every cell said its own order", () => {
-    expect(settleOrder(["none", "none"], "IN", null)).toEqual({ order: "dayFirst", from: "none" });
-    expect(settleOrder([], "IN", null)).toEqual({ order: "dayFirst", from: "none" });
+    expect(order(["2026-04-03", "3 Apr 2026"], "IN")).toEqual({ order: "dayFirst", from: "none" });
+    expect(order([], "IN")).toEqual({ order: "dayFirst", from: "none" });
   });
 
   it("lets staff's own switch beat both", () => {
-    expect(settleOrder(["dayFirst"], "IN", "monthFirst")).toEqual({ order: "monthFirst", from: "chosen" });
-    expect(settleOrder(["monthFirst"], "US", "dayFirst")).toEqual({ order: "dayFirst", from: "chosen" });
+    expect(order(["25/12/2025"], "IN", "monthFirst")).toEqual({ order: "monthFirst", from: "chosen" });
+    expect(order(["12/25/2025"], "US", "dayFirst")).toEqual({ order: "dayFirst", from: "chosen" });
+  });
+
+  it("READS EVERY ROW OF THE COLUMN, not its first two hundred cells", () => {
+    // The fault, exactly as the review drove it: 250 cells that could be read
+    // either way round, and the one cell that settles it sitting past the
+    // sample. Before the fix this was answered by the gym's country — and a US
+    // gym's 250 join dates were read month-first while the file said the
+    // opposite, and the preview told staff the country had decided.
+    const late = [...Array.from({ length: 250 }, () => "02/05/2024"), "25/12/2024"];
+    expect(order(late, "US")).toEqual({ order: "dayFirst", from: "file" });
+    expect(order(late, "IN")).toEqual({ order: "dayFirst", from: "file" });
+  });
+
+  it("stops reading once the column has contradicted itself", () => {
+    // Nothing past the contradiction can change the answer, so a million-row
+    // column costs two cells.
+    const cells = { read: 0, *[Symbol.iterator](): Generator<string> { for (const cell of ["25/12/2025", "12/25/2025", "03/04/2026"]) { this.read++; yield cell; } } };
+    expect(settleOrder(evidenceInColumn(cells), "IN", null)).toEqual({ order: "dayFirst", from: "country" });
+    expect(cells.read).toBe(2);
   });
 });
 
