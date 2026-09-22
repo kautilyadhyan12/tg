@@ -24,6 +24,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
+import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
@@ -58,6 +59,7 @@ export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
 export const ORGS_ARCHIVE_JOB = "orgs.archive";
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
+export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -257,6 +259,47 @@ try {
   process.exit(1);
 }
 
+// THE CALENDAR KEEPS EIGHT WEEKS IN FRONT OF IT (Part 3 §13.3, ROADMAP 17b-i).
+// 05:00 UTC — a sixth distinct minute-of-the-hour on this queue, for the reason
+// every block above gives: one worker process runs them all, and stacking two on
+// the same minute makes a slow job look like a late one in the logs.
+//
+// **DAILY, NOT HOURLY, AND THE ROLLUP'S REASON FOR BEING HOURLY DOES NOT APPLY.**
+// `orgs.daily_rollup` runs every hour because it closes a day at 02:00 in the
+// gym's own clock and no single UTC time is 02:00 everywhere. A HORIZON has no
+// such instant: "eight weeks ahead of this gym's today" is computed per gym
+// inside the statement, so one run serves Assam and New York alike, and a gym
+// whose local date has not yet turned over simply gets the answer it already has.
+//
+// A DAILY CADENCE AGAINST AN EIGHT-WEEK WINDOW, said out loud: a gym's far edge
+// can therefore sit at 55 days for part of a day. Nothing can see it — the
+// console shows four dates a repeat, and 17c's booking window opens seven days
+// out — and a missed run costs nothing either, because the fill asks "which
+// dates in the window have no row" rather than "what is new since yesterday".
+//
+// **A RUN THAT WRITES NOTHING IS THE NORMAL CASE**: the horizon moves one day at
+// a time, so a run writes one date per repeat per matching weekday.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_CLASS_FILL_JOB,
+    { pattern: "0 5 * * *" },
+    {
+      name: ORGS_CLASS_FILL_JOB,
+      opts: {
+        // R3.5: one `INSERT … ON CONFLICT DO NOTHING` against a unique index on
+        // (schedule_id, local_date), so a retry writes the same calendar.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the class calendar fill schedule");
+  process.exit(1);
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -278,7 +321,8 @@ const worker = new Worker(
       job.name !== ORGS_TRIAL_SWEEP_JOB &&
       job.name !== ORGS_ARCHIVE_JOB &&
       job.name !== ORGS_ROLLUP_JOB &&
-      job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB
+      job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
+      job.name !== ORGS_CLASS_FILL_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -348,6 +392,18 @@ const worker = new Worker(
       const gone = await expireStagedMemberListUploads({ sql, log });
       log.info(
         { ...gone, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Returns here for the same reason as its five siblings: one statement, so
+    // the run either applied or raised, and a raise is already an unhandled
+    // rejection that lands the job on the failed set.
+    if (job.name === ORGS_CLASS_FILL_JOB) {
+      const filled = await fillClassSessionsJob({ sql, log });
+      log.info(
+        { ...filled, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

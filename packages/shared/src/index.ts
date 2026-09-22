@@ -25,3 +25,4 @@ export * from "./plan.js";
 export * from "./health.js";
 export * from "./onboarding.js";
 export * from "./memberList.js";
+export * from "./classes.js";

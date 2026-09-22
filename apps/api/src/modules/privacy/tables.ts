@@ -202,7 +202,7 @@ export type PiiTable = (typeof PII_TABLES)[number];
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
 //   gym_join_applications · gym_attendance · gym_cheers · gym_nudges ·
-//   gym_closures ·
+//   gym_closures · gym_class_types · gym_class_sessions ·
 //   api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
 //   subscriptions.owner_id · exercise_definitions.published_by
 //
@@ -326,6 +326,31 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // these lists at all: they are not a person's own data to export or purge, and
   // what ends them is the gym closing (archiveSweep.ts deletes all three).
   "gym_member_list_uploads",
+  // gym_class_types.coach_user_id and gym_class_sessions.coach_user_id — WHICH
+  // MEMBER OF STAFF COACHES A CLASS (Part 3 §13.3, migration `0035`), joined on
+  // the day the tables were created and by the card that created them (the
+  // third time, after `gym_cheers` and `gym_nudges`).
+  //
+  // **IT IS A LINK TO A WORKER, NOT TO A MEMBER, AND THAT CHANGES WHAT THE
+  // OPEN QUESTION IS.** Every other gym row on this list records something
+  // about somebody's own use of a gym — they belonged, they asked to, they came
+  // in, they were cheered. This one records that a person was rostered to teach
+  // a class, which is employment-shaped rather than health-shaped. It is still
+  // a person's own data and still outlives their erasure, so it is recorded
+  // here and RULED WITH THE OTHERS; it is flagged as different so a ruling does
+  // not sweep a coach's rota into a decision made about attendance.
+  //
+  // **Its Day-0 half needs no handling, unlike `gym_attendance`'s**, and the FK
+  // is why: both columns are `ON DELETE set null`, so a coach's row genuinely
+  // deleted takes the name off the class and leaves the class standing. What
+  // stays after an ERASURE is what stays for every row here — §5.2 anonymises
+  // the `users` row rather than deleting it, so the FK never fires and the id
+  // points at a tombstone.
+  //
+  // `gym_class_schedules` is deliberately NOT here: it carries no user link at
+  // all. A repeat is a weekday, a clock time and a window.
+  "gym_class_types",
+  "gym_class_sessions",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

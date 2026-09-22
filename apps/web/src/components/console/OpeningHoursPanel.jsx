@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { ChevronDown, Copy, Loader2, Plus, X } from 'lucide-react';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
+// `_ _ : _ _`, shared with the Classes screen since 17b-i — see its own header.
+import TimePick from './TimePick';
 import {
   WEEKDAYS,
   closureAbsentReason,
@@ -9,16 +11,12 @@ import {
   copyDayToAll,
   daySummary,
   gymToday,
-  hourChoices,
-  joinClock,
-  minuteChoices,
   hoursDraft,
   hoursProblem,
   hoursRequest,
   hoursSummary,
   mintSessionId,
   sameHoursDraft,
-  splitClock,
 } from '../../pages/console/hoursView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -54,132 +52,6 @@ const inputStyle = {
   color: '#fff',
 };
 
-/** `_ _ : _ _` — HOUR, MINUTE, and AM/PM when the gym reads on a 12-hour clock.
- *
- *  Kd, 2026-09-01: *"in the time select this is what i meant _ _ : _ _ here when
- *  the gym clicks they can set the time theself by selecting number but you have
- *  give soem already set time"*. **The first version was ONE dropdown of 96
- *  pre-made times and he was right that it is the wrong shape** — a person
- *  setting a clock picks an hour and then a minute, and a 96-item list is a
- *  scroll where three short lists are three glances.
- *
- *  **Every box starts EMPTY and shows `--`.** Nothing is chosen on the gym's
- *  behalf, and `hoursProblem` refuses to save while any part is unfilled — a box
- *  sitting on the first option would be the screen answering a question nobody
- *  asked.
- *
- *  **24:00 lives in the HOUR list on the closing end only**, spelled out as
- *  midnight at the end of the day, and its minute is fixed at `00` because there
- *  is no 24:15. */
-function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
-  /** **THE THREE BOXES HOLD THEIR OWN HALF-FINISHED STATE, and they have to.**
-   *
-   *  The draft stores one string per end (`"06:30"`), which cannot express
-   *  *"the hour is 6 and the minute is not chosen yet"*. Deriving all three
-   *  boxes from that string meant picking the hour produced `''` — nothing is
-   *  complete — and the hour box snapped straight back to `--`. **The first
-   *  version did exactly that and the control was unusable: neither box would
-   *  hold what you picked.** Caught by the render test that drives the two
-   *  boxes separately, which is how a person uses them.
-   *
-   *  So the parts live here and the joined string goes OUT. `hoursProblem` is
-   *  still what refuses to save a row that is half-filled — nothing here
-   *  invents the missing half. */
-  const [parts, setParts] = useState(() => splitClock(value, clockFormat));
-  const [lastValue, setLastValue] = useState(value);
-  const [lastFormat, setLastFormat] = useState(clockFormat);
-
-  // The prop moved under us — a save came back, the week was copied across, or
-  // the gym switched clock. React's own pattern for state derived from a prop,
-  // so there is no frame in which the boxes and the row disagree.
-  if (value !== lastValue || clockFormat !== lastFormat) {
-    setLastValue(value);
-    setLastFormat(clockFormat);
-    setParts(splitClock(value, clockFormat));
-  }
-
-  const hours = hourChoices(kind, clockFormat);
-  const minutes = minuteChoices();
-  const endOfDay = parts.hour === 24;
-
-  const emit = (next) => {
-    const merged = { ...parts, ...next };
-    setParts(merged);
-    const joined = joinClock(merged, clockFormat);
-    // `lastValue` is moved with it so the sync above does not immediately
-    // overwrite a half-finished pick with the row's still-empty string.
-    setLastValue(joined);
-    onChange(joined);
-  };
-
-  const boxStyle = { ...inputStyle, opacity: disabled ? 0.5 : 1 };
-
-  return (
-    // `flex-nowrap` and `shrink-0`: the three boxes are ONE control and must
-    // never break across lines. Kd's screen wrapped them one per line — nine
-    // stacked fragments reading `--`, `:`, `--` — because the row had eight
-    // shrinkable children and no widths.
-    <span className="inline-flex flex-nowrap shrink-0 items-center gap-1">
-      <select
-        value={parts.hour === null ? '' : String(parts.hour)}
-        onChange={(e) => {
-          const hour = e.target.value === '' ? null : Number(e.target.value);
-          // The end-of-day entry has no minutes to choose, and picking it must
-          // not leave a stale `:45` behind it.
-          emit(hour === 24 ? { hour, minute: 0 } : { hour });
-        }}
-        disabled={disabled}
-        aria-label={`${label} hour`}
-        className="w-16 rounded-lg px-2 py-1.5 text-sm"
-        style={boxStyle}
-      >
-        <option value="">--</option>
-        {hours.map((h) => (
-          <option key={h.value} value={h.value}>
-            {h.label}
-          </option>
-        ))}
-      </select>
-
-      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        :
-      </span>
-
-      <select
-        value={parts.minute === null ? '' : String(parts.minute)}
-        onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
-        disabled={disabled || endOfDay}
-        aria-label={`${label} minute`}
-        className="w-16 rounded-lg px-2 py-1.5 text-sm"
-        style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
-      >
-        <option value="">--</option>
-        {minutes.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.label}
-          </option>
-        ))}
-      </select>
-
-      {/* AM/PM ONLY ON THE 12-HOUR CLOCK — it is meaningless on the other one,
-          and the end-of-day entry already says "midnight" in its own label. */}
-      {clockFormat === '12h' && !endOfDay ? (
-        <select
-          value={parts.meridiem ?? ''}
-          onChange={(e) => emit({ meridiem: e.target.value === '' ? null : e.target.value })}
-          disabled={disabled}
-          aria-label={`${label} AM or PM`}
-          className="w-20 rounded-lg px-2 py-1.5 text-sm"
-          style={boxStyle}
-        >
-          <option value="">--</option>
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
-        </select>
-      ) : null}
-    </span>
-  );
-}
 
 export default function OpeningHoursPanel({ org, privileges, readOnly = false }) {
   const allowed = canManageOrg(privileges);

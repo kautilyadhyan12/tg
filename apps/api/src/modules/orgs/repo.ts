@@ -2624,7 +2624,11 @@ export const ORG_CODES_MAX = ORG_CODES_LIMIT;
  *  module is org row → child rows, always, and it is stated in one place —
  *  `claimSeat` — for the same reason: an ordering decided per-function is an
  *  ordering that eventually reverses somewhere and deadlocks. */
-async function lockOrgRow(tx: TransactionSql, gymId: string): Promise<void> {
+/** Exported for `classes/repo.ts`, which is the same console writing a
+ *  different corner of the same gym: its caps and its calendar fill have to be
+ *  serialised against every other write to this gym, and a second lock helper
+ *  would be a second answer to "what does a console write hold". */
+export async function lockOrgRow(tx: TransactionSql, gymId: string): Promise<void> {
   await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
 }
 
