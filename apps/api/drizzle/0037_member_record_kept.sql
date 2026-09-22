@@ -5,7 +5,7 @@
 -- stops at `0012_snapshot.json`, so `drizzle-kit generate` re-emits everything
 -- since. Its journal entry is part of this commit.
 --
--- IT WAS WRITTEN AS `0035` AND RENUMBERED WHEN FOLDER B'S JOB MERGED FIRST
+-- IT WAS WRITTEN AS `0035` AND RENUMBERED TWICE, TO `0036` AND THEN `0037`, AS FOLDER B'S JOBS MERGED FIRST
 -- (CLAUDE.md §8): two folders build at once, and the job that merges SECOND takes
 -- `master` in and renames its own migration to the next free number, re-stamping its
 -- journal entry after the other's. Drizzle applies migrations in the JOURNAL's time

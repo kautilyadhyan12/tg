@@ -251,7 +251,14 @@
       "idx": 35,
       "version": "7",
       "when": 1788220800019,
-      "tag": "0036_member_record_kept",
+      "tag": "0036_class_repeat_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788220800020,
+      "tag": "0037_member_record_kept",
       "breakpoints": true
     }
   ]

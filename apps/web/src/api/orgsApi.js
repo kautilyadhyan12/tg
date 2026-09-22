@@ -717,6 +717,24 @@ export const orgService = {
       authApi.post(`/v1/orgs/${gymId}/classes/${classTypeId}/repeats`, body),
     ),
 
+  /** PUT /v1/orgs/:gymId/class-repeats/:scheduleId — change a repeat's length,
+   *  places or coach (RULINGS 2026-09-22: the repeat is the live answer, the
+   *  class is the default it started from).
+   *
+   *  **Its days, its time and its window are NOT in the body**, and that is the
+   *  route's own rule rather than an omission here: moving a repeat is "this day
+   *  and later", which ends the old repeat and begins a new one so the dates
+   *  already written keep the time they were written at (17b-ii-b).
+   *
+   *  Every field every time — the server replaces rather than merges, so
+   *  `places: null` means "no limit" and can never also mean "leave it alone". */
+  updateClassRepeat: (gymId, scheduleId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that repeat',
+      authApi.put(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`, body),
+    ),
+
   /** DELETE /v1/orgs/:gymId/class-repeats/:scheduleId — stop a repeat.
    *
    *  It takes the repeat's FUTURE dates with it and leaves the class itself

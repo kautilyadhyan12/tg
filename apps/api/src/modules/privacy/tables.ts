@@ -326,10 +326,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // these lists at all: they are not a person's own data to export or purge, and
   // what ends them is the gym closing (archiveSweep.ts deletes all three).
   "gym_member_list_uploads",
-  // gym_class_types.coach_user_id and gym_class_sessions.coach_user_id — WHICH
-  // MEMBER OF STAFF COACHES A CLASS (Part 3 §13.3, migration `0035`), joined on
-  // the day the tables were created and by the card that created them (the
-  // third time, after `gym_cheers` and `gym_nudges`).
+  // gym_class_types.coach_user_id, gym_class_schedules.coach_user_id and
+  // gym_class_sessions.coach_user_id — WHICH MEMBER OF STAFF COACHES A CLASS
+  // (Part 3 §13.3, migrations `0035` and `0036`), joined on the day the tables
+  // were created and by the card that created them (the third time, after
+  // `gym_cheers` and `gym_nudges`).
   //
   // **IT IS A LINK TO A WORKER, NOT TO A MEMBER, AND THAT CHANGES WHAT THE
   // OPEN QUESTION IS.** Every other gym row on this list records something
@@ -347,9 +348,15 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // the `users` row rather than deleting it, so the FK never fires and the id
   // points at a tombstone.
   //
-  // `gym_class_schedules` is deliberately NOT here: it carries no user link at
-  // all. A repeat is a weekday, a clock time and a window.
+  // **`gym_class_schedules` WAS DELIBERATELY NOT HERE UNTIL `0036`** — the entry
+  // read "it carries no user link at all. A repeat is a weekday, a clock time
+  // and a window." That stopped being true the day a repeat gained its own
+  // coach (RULINGS 2026-09-22: the repeat is the live answer, the class type is
+  // the default it started from), and it is on the same footing as its two
+  // neighbours: `ON DELETE set null`, so a coach genuinely deleted takes the
+  // name off the repeat and leaves the repeat standing.
   "gym_class_types",
+  "gym_class_schedules",
   "gym_class_sessions",
   "api_cost_events",
   "usage_daily",

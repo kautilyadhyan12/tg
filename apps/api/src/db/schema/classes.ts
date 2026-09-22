@@ -6,7 +6,8 @@
 //   gym_class_types      what the gym runs (name, length, places, colour,
 //                        usual coach, open gym or not);
 //   gym_class_schedules  when it repeats — the gym's own CLOCK TIME and its
-//                        weekdays, never an instant;
+//                        weekdays, never an instant — and, since `0036`, its
+//                        own length, places and coach;
 //   gym_class_sessions   one row per DATE a repeat runs on: the calendar.
 //
 // **THE ONE RULE:** a repeat is the gym's clock time plus `gyms.timezone`, and
@@ -14,10 +15,10 @@
 // keeps a six o'clock class at six o'clock across a summer-time change, and it
 // is why `local_start_minute` is here at all rather than a `timestamptz` alone.
 //
-// **THE COACH IS THE ONLY LINK TO `users` IN THESE THREE TABLES**, and both
-// tables that carry it are on `USER_LINKED_NOT_PURGED_TABLES` in
-// `modules/privacy/tables.ts`. The FK walk in `privacy.purge.test.ts` is what
-// refuses a table that is not.
+// **THE COACH IS THE ONLY LINK TO `users` IN THESE THREE TABLES**, and ALL
+// THREE carry it since `0036` put one on the repeat — so all three are on
+// `USER_LINKED_NOT_PURGED_TABLES` in `modules/privacy/tables.ts`. The FK walk
+// in `privacy.purge.test.ts` is what refuses a table that is not.
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -35,9 +36,10 @@ import { createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
 import { users } from "./identity.js";
 
-/** WHAT A GYM RUNS. It owns the length, the places and the usual coach; a
- *  REPEAT owns only WHEN — the card's one design decision, argued in
- *  `@app/shared`'s `classes.ts` and in the migration.
+/** WHAT A GYM RUNS. Its length, places and coach are the STARTING VALUES a new
+ *  repeat is filled in from; the repeat itself holds the live answer
+ *  (RULINGS 2026-09-22, migration `0036`). Changing them here changes nothing
+ *  already on the timetable.
  *
  *  `places` NULL is NO LIMIT, not "not set": open gym is the case that makes
  *  the distinction real, and 17c has to be able to ask whether there is a limit
@@ -87,7 +89,17 @@ export const gymClassTypes = pgTable(
   ],
 );
 
-/** WHEN IT REPEATS — the gym's clock time, its weekdays, and its window.
+/** WHEN IT REPEATS — the gym's clock time, its weekdays, its window, AND SINCE
+ *  `0036` ITS OWN LENGTH, PLACES AND COACH.
+ *
+ *  **THE REPEAT IS THE LIVE ANSWER AND THE CLASS TYPE IS THE DEFAULT IT STARTED
+ *  FROM** (Kd, RULINGS 2026-09-22, on the industry standard; 17b-i had shipped
+ *  these on the type alone). The three columns mean exactly what their twins on
+ *  `gym_class_types` mean — `places` NULL is NO LIMIT, `coach_user_id` NULL is
+ *  nobody named — so there is one reading of each, never a coalesce.
+ *
+ *  They are NOT NULL-means-inherit for that reason: a nullable "ask the type"
+ *  would be two answers to one question, which is the defect the ruling settles.
  *
  *  `weekdays` is ISO: Monday 1, Sunday 7 — `gym_hours.weekday`'s numbering and
  *  `EXTRACT(ISODOW …)`'s answer, so the fill compares without a lookup table.
@@ -113,6 +125,14 @@ export const gymClassSchedules = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on"),
     endedAt: timestamp("ended_at", { withTimezone: true }),
+    minutes: integer("minutes").notNull(),
+    places: integer("places"),
+    /** `ON DELETE set null`, the type's column's reasoning verbatim — and the
+     *  reason `gym_class_schedules` joins `USER_LINKED_NOT_PURGED_TABLES` in
+     *  this same commit, where its old entry said a repeat "carries no user
+     *  link at all". The FK walk in `privacy.purge.test.ts` refuses a table
+     *  that does not. */
+    coachUserId: uuid("coach_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -129,6 +149,13 @@ export const gymClassSchedules = pgTable(
     check(
       "gym_class_schedules_window_check",
       sql`${t.endsOn} IS NULL OR ${t.endsOn} >= ${t.startsOn}`,
+    ),
+    // The same bounds as the type's, and named so on purpose: one quantity with
+    // two homes must not have two sets of limits.
+    check("gym_class_schedules_minutes_check", sql`${t.minutes} BETWEEN 5 AND 600`),
+    check(
+      "gym_class_schedules_places_check",
+      sql`${t.places} IS NULL OR ${t.places} BETWEEN 1 AND 500`,
     ),
     index("gym_class_schedules_type_idx").on(t.classTypeId, t.endedAt, t.localStartMinute),
     index("gym_class_schedules_live_idx").on(t.gymId).where(sql`${t.endedAt} IS NULL`),
@@ -152,11 +179,13 @@ export const gymClassSchedules = pgTable(
  *  and both are this card's, so a flag added later would mean they shipped
  *  without the condition they exist to satisfy.
  *
- *  `minutes`, `places` and `coach_user_id` are COPIED at fill time, the shape
- *  `gym_attendance` already uses for its opening-hours window: once one day can
- *  be changed, a session's numbers are its own. An edit to the type re-stamps
- *  the future rows it still owns in the same transaction, so the screen and the
- *  calendar cannot disagree. */
+ *  `minutes`, `places` and `coach_user_id` are COPIED **from the REPEAT** at
+ *  fill time (from the type until `0036`), the shape `gym_attendance` already
+ *  uses for its opening-hours window: once one day can be changed, a session's
+ *  numbers are its own. An edit to the repeat re-stamps its future rows in the
+ *  same transaction, so the screen and the calendar cannot disagree; an edit to
+ *  the TYPE touches no calendar at all — it is only the value a new repeat
+ *  starts from. */
 export const gymClassSessions = pgTable(
   "gym_class_sessions",
   {

@@ -1991,7 +1991,7 @@ d("0001_init on a real database", () => {
     }
   });
 
-  /** `0036`'s WIDER, DURABLE RECORD (Part 3 §11.1, §11.4; ROADMAP 3a-v-b). Read off the
+  /** `0037`'s WIDER, DURABLE RECORD (Part 3 §11.1, §11.4; ROADMAP 3a-v-b). Read off the
    *  DEPLOYED database rather than the migration text, and the guarantees DRIVEN by
    *  trying to produce the state they forbid — which is the only way a CHECK that did not
    *  land shows up, since every writer above it is trying not to need it.
@@ -1999,7 +1999,7 @@ d("0001_init on a real database", () => {
    *  **THE ONE THAT MATTERS MOST IS `ends_on_kind_needs_day`.** "Renews" beside no date
    *  is half a sentence on a member's own page, and nothing else in the system would
    *  notice: the service pairs them, and this is what holds it for every later writer. */
-  it("0036's wider record: the new CHECKs bite at the database, and the gym's catalogue is one row per key", async () => {
+  it("0037's wider record: the new CHECKs bite at the database, and the gym's catalogue is one row per key", async () => {
     const dayColumns = await sql<{ column_name: string; data_type: string; is_nullable: string }[]>`
       SELECT column_name, data_type, is_nullable
       FROM information_schema.columns
@@ -2029,7 +2029,7 @@ d("0001_init on a real database", () => {
     expect(by.get("former_at")?.is_nullable).toBe("YES");
 
     const seeded = await sql<{ id: string }[]>`
-      INSERT INTO users (display_name) VALUES ('mlist-0036-check') RETURNING id`;
+      INSERT INTO users (display_name) VALUES ('mlist-0037-check') RETURNING id`;
     const owner = seeded[0]?.id;
     if (owner === undefined) throw new Error("member-list fixture insert failed");
     try {

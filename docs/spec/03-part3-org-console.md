@@ -1933,7 +1933,7 @@ migration, the reconcile rule over the wider row, former records, the filters). 
 screens (5a, 5b) then carry the column matching with "don't keep", the person's page
 and the chips.
 
-**Out of 3a-v-b (built 2026-09-22).** Migration `0036`, forward-only: nine columns on an entry and the gym's own catalogue, `gym_member_list_fields`. Everything §11.1, §11.4 and §11.5 describe is now written and read. What building it settled:
+**Out of 3a-v-b (built 2026-09-22).** Migration `0037`, forward-only: nine columns on an entry and the gym's own catalogue, `gym_member_list_fields`. Everything §11.1, §11.4 and §11.5 describe is now written and read. What building it settled:
 
 - **NOBODY IS DELETED, AND THE UNIQUE KEY IS WHAT MAKES A RETURN FREE.** A confirm marks the people a file no longer holds with `former_at` instead of deleting them, and `(gym_id, identity_key)` already covered a former row — so the upload that holds somebody again REVIVES that very row, keeping its id and everything that will hang off it (visits, reports). A revived person is `new` to the list as it stands, which is what staff are deciding about, and `returning` says how many of the new are not new to the gym. **A record that is already former is in no `gone`**: marking it again would write a fresh date over the day the person really left and would put them in the wrong-file guard's numbers for every upload for ever, which is the mistake `leaving` avoids on the members' side.
 - **A FORMER RECORD IS OFF THE LIST IN EVERY SENSE, AND THAT IS FOUR SEPARATE PLACES.** The rule measures every count, every match and every `gone` against the CURRENT records (one `filter`, not a condition each reader remembers); `membersAgainstList` carries `former_at IS NULL` in both of its channels, so a member matched to somebody the gym took off cannot read "on your list"; the chips and the whole-list counts read the current rows; and a page is cut from them unless `records=former|all` asks otherwise. `former` is its own number on the view and is part of no other, because `canBeInvited` is what 3b's Invite button acts on.
@@ -2138,6 +2138,11 @@ zone and turned into an instant for each day, so a summer-time change never move
 6 pm class. Staff change or cancel **this day only** (the session is marked as changed
 alone and later edits of the schedule leave it be) or **this day and later** (the old
 schedule ends, a new one begins); people booked on a changed or cancelled day are told.
+*(AMENDED 2026-09-22, RULINGS: a repeat carries its OWN coach, places and length — the
+class type holds them as the values a new repeat is filled in from and changes nothing
+already on the calendar, 17b-ii-a — and staff can change EVERY repeat of one class in
+one go, forward only from a date they pick and never a day changed on purpose, which is
+TeamUp's Bulk Edit, 17b-ii-b.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 
