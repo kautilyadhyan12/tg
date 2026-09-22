@@ -224,9 +224,16 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
    *  reply. The version and the entry count together are what every "nothing was
    *  written" assertion in this file is made of. */
   const stateOf = async (gymId: string) => {
-    const rows = await sql<{ entries: number; version: number; staged: number; confirmed: number }[]>`
+    const rows = await sql<{ entries: number; former: number; version: number; staged: number; confirmed: number }[]>`
       SELECT
-        (SELECT count(*)::int FROM gym_member_list_entries WHERE gym_id = ${gymId}) AS entries,
+        -- CURRENT RECORDS, and the FORMER ones counted beside them. Since 3a-v-b
+        -- (§11.1) a confirm marks the people a file no longer holds rather than
+        -- deleting them, so "the list" is the rows with no former_at — and a count
+        -- of every row would read 30 for a list of 20 with 10 taken off.
+        (SELECT count(*)::int FROM gym_member_list_entries
+          WHERE gym_id = ${gymId} AND former_at IS NULL) AS entries,
+        (SELECT count(*)::int FROM gym_member_list_entries
+          WHERE gym_id = ${gymId} AND former_at IS NOT NULL) AS former,
         (SELECT coalesce(max(version), 0)::int FROM gym_member_lists WHERE gym_id = ${gymId}) AS version,
         (SELECT count(*)::int FROM gym_member_list_uploads
           WHERE gym_id = ${gymId} AND status = 'staged') AS staged,
@@ -237,11 +244,22 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
     return state;
   };
 
+  /** The gym's own status words over the list AS IT STANDS (§11.1): the former records
+   *  are somebody the gym took off, and counting them here would say a list of four
+   *  holds five. `formerOn` is the same question about them. */
   const statusesOn = async (gymId: string) => {
     const rows = await sql<{ status: string | null; n: number }[]>`
       SELECT status, count(*)::int AS n FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} GROUP BY status ORDER BY status`;
+      WHERE gym_id = ${gymId} AND former_at IS NULL GROUP BY status ORDER BY status`;
     return rows.map((r) => `${r.status ?? "-"}:${String(r.n)}`);
+  };
+
+  /** The people the gym has taken off, by name and with the day they came off. */
+  const formerOn = async (gymId: string) => {
+    const rows = await sql<{ id: string; full_name: string; status: string | null; former_at: Date }[]>`
+      SELECT id, full_name, status, former_at FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND former_at IS NOT NULL ORDER BY full_name`;
+    return rows;
   };
 
   beforeAll(async () => {
@@ -303,7 +321,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(preview.list.new).toBe(4);
       const press = confirmUrl(org.org.id, preview.uploadId);
       const before = await stateOf(org.org.id);
-      expect(before).toEqual({ entries: 0, version: 0, staged: 1, confirmed: 0 });
+      expect(before).toEqual({ entries: 0, former: 0, version: 0, staged: 1, confirmed: 0 });
 
       // EVERY REFUSAL, AND AFTER EACH ONE THE LIST IS STILL EXACTLY WHAT IT WAS.
       // A confirm that answered 404 and wrote the rows anyway would pass a test
@@ -328,7 +346,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       for (const [target, cookies, code] of refusals) {
         expect((await post(target, {}, cookies)).statusCode).toBe(code);
         expect(await stateOf(org.org.id)).toEqual(before);
-        expect(await stateOf(rivalOrg.org.id)).toEqual({ entries: 0, version: 0, staged: 0, confirmed: 0 });
+        expect(await stateOf(rivalOrg.org.id)).toEqual({ entries: 0, former: 0, version: 0, staged: 0, confirmed: 0 });
       }
 
       // THE READS, the same five refusals — the list and a page of its people hold
@@ -348,7 +366,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const applied = await post(press, {}, owner.cookies);
       expect(applied.statusCode).toBe(200);
       expect(confirmed(applied).applied.new).toBe(4);
-      expect(await stateOf(org.org.id)).toEqual({ entries: 4, version: 1, staged: 0, confirmed: 1 });
+      expect(await stateOf(org.org.id)).toEqual({ entries: 4, former: 0, version: 1, staged: 0, confirmed: 1 });
       expect((await get(listUrl(org.org.id), owner.cookies)).statusCode).toBe(200);
       const mine = await get(`${listUrl(org.org.id)}/entries`, owner.cookies);
       expect(mine.statusCode).toBe(200);
@@ -446,14 +464,24 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const answer = confirmed(applied2);
       expect(answer.alreadyConfirmed).toBe(false);
       expect(answer.version).toBe(2);
-      expect(answer.applied).toMatchObject({ new: 1, changed: 1, unchanged: 2, gone: 1 });
+      expect(answer.applied).toMatchObject({ new: 1, changed: 1, unchanged: 2, gone: 1, returning: 0 });
 
       // THE LIST ITSELF, read from the table.
       expect(await statusesOn(org.org.id)).toEqual(["Active:2", "Frozen:2"]);
+      // **AND PERSON 4 IS STILL THERE, AS A FORMER RECORD WITH THE DAY THEY CAME OFF**
+      // — this assertion is the reverse of what this test said before 3a-v-b, when a
+      // confirm DELETED them (§9.2 rule 2). A management app keeps the record: the
+      // visits, the reports and a return all hang off it (§11.1).
+      const gone = await formerOn(org.org.id);
+      expect(gone.map((r) => r.full_name)).toEqual(["Member 0004"]);
+      // The word the list still holds about them, and a real instant.
+      expect(gone[0]?.status).toBe("Expired");
+      expect(gone[0]?.former_at).toBeInstanceOf(Date);
       const idsAfter = new Map(
         (
           await sql<{ identity_key: string; id: string }[]>`
-            SELECT identity_key, id FROM gym_member_list_entries WHERE gym_id = ${org.org.id}`
+            SELECT identity_key, id FROM gym_member_list_entries
+            WHERE gym_id = ${org.org.id} AND former_at IS NULL`
         ).map((r) => [r.identity_key, r.id]),
       );
       // Person 2's row is the SAME ROW carrying a different word — changed in
@@ -461,6 +489,10 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const two = idsBefore.find((r) => idsAfter.has(r.identity_key) && r.id === idsAfter.get(r.identity_key));
       expect(two).toBeDefined();
       expect(idsAfter.size).toBe(4);
+      // AND THE FORMER RECORD IS THE SAME ROW IT ALWAYS WAS, not a new one: its id is
+      // what a visit, a report or a returning member hangs off.
+      const four = idsBefore.find((r) => r.id === gone[0]?.id);
+      expect(four).toBeDefined();
 
       // THE UPLOAD IS FINISHED WITH AND ITS CELLS ARE GONE, in the same statement
       // that said so (§9.6's CHECK).
@@ -576,7 +608,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(two.alreadyConfirmed).toBe(true);
       expect(two.applied).toEqual(one.applied);
       expect(two.confirmedAt).toEqual(one.confirmedAt);
-      expect(await stateOf(org.org.id)).toEqual({ entries: 5, version: 1, staged: 0, confirmed: 1 });
+      expect(await stateOf(org.org.id)).toEqual({ entries: 5, former: 0, version: 1, staged: 0, confirmed: 1 });
 
       // TWO PRESSES AT THE SAME INSTANT, ACROSS TWO CONNECTIONS. `app.ts` builds
       // `postgres(url, { max: 1 })`, so two presses through ONE app queue on that
@@ -609,7 +641,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
         // Exactly one of them did the work; the other read the record.
         expect([confirmed(a).alreadyConfirmed, confirmed(b).alreadyConfirmed].sort()).toEqual([false, true]);
-        expect(await stateOf(org.org.id)).toEqual({ entries: 7, version: 2, staged: 0, confirmed: 2 });
+        expect(await stateOf(org.org.id)).toEqual({ entries: 7, former: 0, version: 2, staged: 0, confirmed: 2 });
       } finally {
         await twin.close();
       }
@@ -759,7 +791,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // BEFORE ANY LIST: a screen, not a 404.
       const empty = listOf(await get(listUrl(org.org.id), owner.cookies));
       expect(empty).toMatchObject({ hasList: false, version: 0, lastConfirmedAt: null });
-      expect(empty.counts).toEqual({ entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 });
+      expect(empty.counts).toEqual({ former: 0, entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 });
       expect(empty.statuses).toEqual([]);
 
       await joinAsMember(inApp.cookies, org, owner.cookies);
@@ -783,7 +815,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(list.lastConfirmedAt).not.toBeNull();
       // THE THREE NUMBERS DO NOT PARTITION AND MUST NOT BE MADE TO: one person is
       // in the app, three of the other four can be invited, one has no address.
-      expect(list.counts).toEqual({ entries: 5, inApp: 1, canBeInvited: 3, noEmail: 1 });
+      expect(list.counts).toEqual({ former: 0, entries: 5, inApp: 1, canBeInvited: 3, noEmail: 1 });
       const words = Object.fromEntries(list.statuses.map((s) => [s.label, s]));
       expect(Object.keys(words).sort()).toEqual(["Active", "Frozen"]);
       expect(words["Active"]).toMatchObject({ count: 3, inApp: 1, canBeInvited: 2 });
@@ -956,7 +988,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
       // THE HEADER IS THE WHOLE LIST.
-      expect(list.counts).toEqual({ entries: OVER, inApp: 0, canBeInvited: OVER, noEmail: 0 });
+      expect(list.counts).toEqual({ former: 0, entries: OVER, inApp: 0, canBeInvited: OVER, noEmail: 0 });
       // ...and the chips stop at the ceiling rather than growing with the gym's history.
       expect(list.statuses.length).toBe(MEMBER_LIST_STATUS_CHIPS_MAX);
       // The ones kept are the list's OWN first words, not an arbitrary 200.
@@ -1046,7 +1078,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       // NOBODY HERE CAN BE INVITED — every one of them already has it.
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
-      expect(list.counts).toEqual({ entries: 4, inApp: 4, canBeInvited: 0, noEmail: 0 });
+      expect(list.counts).toEqual({ former: 0, entries: 4, inApp: 4, canBeInvited: 0, noEmail: 0 });
       expect(list.statuses[0]).toMatchObject({ label: "Active", count: 4, inApp: 4, canBeInvited: 0 });
 
       // ...and the filter agrees with the flag, rather than answering separately.

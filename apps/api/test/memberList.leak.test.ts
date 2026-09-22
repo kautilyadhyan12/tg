@@ -31,14 +31,29 @@ const NAME = `Marian ${randomUUID()}`;
 const ADDRESS = `${randomUUID()}@realgym.example`;
 const PHONE = "+447911223344";
 const MEMBER_NUMBER = `MBR-${randomUUID()}`;
-const STATUS_WORD = `Frozen-${randomUUID()}`;
+/** **THE THREE WORDS FIT INSIDE `MEMBER_LIST_MAX_STATUS_CHARS`, AND THAT IS NOT
+ *  TIDINESS.** A gym's status, membership and payment words are each cut at 40
+ *  characters on the way in, so a 43-character sentinel is STORED as a 40-character
+ *  prefix — and `written.includes(sentinel)` could then never match, however loudly the
+ *  server printed it. The status sentinel here was `Frozen-${uuid}` (43) until 3a-v-b
+ *  added the other two and the entries filter refused one as too long, which is what
+ *  found it: a test that would have stayed green with the thing it checks broken. A
+ *  uuid is unique in 36, so two letters of prefix are the whole budget. */
+const STATUS_WORD = `F-${randomUUID()}`;
+/** THE WIDER RECORD'S OWN SENTINELS (3a-v-b, §11.1): the gym's membership and payment
+ *  words, a plain day, and a cell of one of the gym's OWN columns. The cell is the one
+ *  worth naming on its own — it is free text a gym can put anything in, and it is the
+ *  only value in this file that never existed before Part 2 of the re-plan. */
+const MEMBERSHIP_WORD = `G-${randomUUID()}`;
+const PAYMENT_WORD = `P-${randomUUID()}`;
+const OWN_CELL = `Locker-${randomUUID()}`;
 
 const csv = (rows: string[][]): Buffer => Buffer.from(rows.map((r) => r.join(",")).join("\r\n"), "utf8");
 
-/** One person, every field a sentinel. */
+/** One person, every field a sentinel — the five a list kept, and the wider record's. */
 const FILE = csv([
-  ["Full Name", "Email", "Mobile", "Member No", "Status"],
-  [NAME, ADDRESS, PHONE, MEMBER_NUMBER, STATUS_WORD],
+  ["Full Name", "Email", "Mobile", "Member No", "Status", "Membership Type", "Payment Status", "Join Date", "Locker No"],
+  [NAME, ADDRESS, PHONE, MEMBER_NUMBER, STATUS_WORD, MEMBERSHIP_WORD, PAYMENT_WORD, "03/04/2024", OWN_CELL],
 ]);
 
 d("a member file reaches no log (real Postgres, the loudest logger)", () => {
@@ -74,6 +89,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
             (SELECT id FROM users WHERE email LIKE 'mleak-t-%@example.com')`;
         await sql`DELETE FROM gym_member_list_uploads WHERE gym_id IN (${mine})`;
         await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine})`;
+        await sql`DELETE FROM gym_member_list_fields WHERE gym_id IN (${mine})`;
         await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine})`;
         await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
         await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
@@ -207,6 +223,39 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           await sql`ALTER TABLE gym_member_list_entries DROP CONSTRAINT IF EXISTS mleak_trip_wire`;
         }
 
+        // 7. THE PATHS 3a-v-b ADDED, each of which takes one of the gym's own words or
+        //    cells IN. The hand-edit refusal carries field NAMES, and the filters carry
+        //    a word a gym typed — so a request logger writing its query string writes a
+        //    member's membership word, and a refusal naming the record would write a
+        //    name. The list here is applied first, so all of it is real data.
+        const applied = await json(uploads, body, cookies);
+        expect(applied.statusCode).toBe(201);
+        const applyId = (JSON.parse(applied.body) as { preview: { uploadId: string } }).preview.uploadId;
+        expect((await json(`${uploads}/${applyId}/confirm`, {}, cookies)).statusCode).toBe(200);
+
+        const read = (path: string) =>
+          app.inject({ method: "GET", url: path, remoteAddress: "10.77.0.3", cookies });
+        const list = `/v1/orgs/${gymId}/member-list`;
+        // The gym's own word in a query string, which a request logger prints.
+        expect((await read(`${list}/entries?membershipType=${encodeURIComponent(MEMBERSHIP_WORD)}`)).statusCode).toBe(200);
+        expect((await read(`${list}/entries?paymentStatus=${encodeURIComponent(PAYMENT_WORD)}`)).statusCode).toBe(200);
+        expect((await read(`${list}/entries?records=former`)).statusCode).toBe(200);
+        expect((await read(list)).statusCode).toBe(200);
+
+        // AND THE HAND-EDIT REFUSAL, which is the one new reply that names FIELDS. A
+        // reply that named the person instead would put a member's name in a 409.
+        await sql`
+          UPDATE gym_member_list_entries
+          SET membership_type = ${`X-${randomUUID()}`}, hand_edited = ARRAY['membershipType']
+          WHERE gym_id = ${gymId}`;
+        const again = await json(uploads, body, cookies);
+        expect(again.statusCode).toBe(201);
+        const editId = (JSON.parse(again.body) as { preview: { uploadId: string } }).preview.uploadId;
+        const handRefusal = await json(`${uploads}/${editId}/confirm`, {}, cookies);
+        expect(handRefusal.statusCode).toBe(409);
+        expect(handRefusal.body).not.toContain(NAME);
+        expect(handRefusal.body).not.toContain(ADDRESS);
+
         // …AND NONE OF IT IS IN THE LOG. Each sentinel is asserted on its own, so a
         // failure names which field escaped rather than only that something did.
         expect({
@@ -215,6 +264,11 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           phone: written.includes(PHONE),
           memberNumber: written.includes(MEMBER_NUMBER),
           statusWord: written.includes(STATUS_WORD),
+          membershipWord: written.includes(MEMBERSHIP_WORD),
+          paymentWord: written.includes(PAYMENT_WORD),
+          // A cell of one of the gym's OWN columns: free text, and the one value here
+          // that did not exist before Part 2 of the re-plan.
+          ownColumnCell: written.includes(OWN_CELL),
           // The base64 body itself: a log line holding it holds every person in the
           // file, one decode away.
           fileBody: written.includes(body.contentBase64.slice(0, 60)),
@@ -224,6 +278,9 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           phone: false,
           memberNumber: false,
           statusWord: false,
+          membershipWord: false,
+          paymentWord: false,
+          ownColumnCell: false,
           fileBody: false,
         });
         // THE CAPTURE REALLY WAS LISTENING, and to the REQUESTS — not merely to the

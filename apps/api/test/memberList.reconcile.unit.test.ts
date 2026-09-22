@@ -16,7 +16,14 @@
 import { describe, expect, it } from "vitest";
 import { isLargeMemberListChange, type MemberListRow } from "@app/shared";
 import { identityKey } from "../src/modules/orgs/memberList/fields.js";
-import { reconcile, type ListEntry, type ListMember } from "../src/modules/orgs/memberList/reconcile.js";
+import {
+  reconcile,
+  type CarriedFields,
+  type ListEntry,
+  type ListMember,
+  type Reconciled,
+  type ReconcileInput,
+} from "../src/modules/orgs/memberList/reconcile.js";
 
 interface Person {
   fullName: string;
@@ -53,15 +60,46 @@ const row = (at: number, who: Person, status: string | null, wider: Partial<Memb
   ...wider,
 });
 
-/** The same person, already on the list. */
-const entry = (who: Person, status: string | null): ListEntry => ({
+/** The same person, already ON the list — a current record unless a case says
+ *  otherwise. The wider fields Part 2 added (§11.1) are empty here: the cases in this
+ *  file are about WHO is new, changed, gone or leaving, and `memberList.wider` covers
+ *  the wider record's own comparisons. */
+const entry = (who: Person, status: string | null, over: Partial<ListEntry> = {}): ListEntry => ({
   identityKey: identityKey(who),
   fullName: who.fullName,
   email: who.email,
   phone: who.phone,
   memberNumber: who.memberNumber,
   status,
+  membershipType: null,
+  joinedOn: null,
+  endsOn: null,
+  endsOnKind: null,
+  paymentStatus: null,
+  dateOfBirth: null,
+  extra: {},
+  handEdited: [],
+  former: false,
+  ...over,
 });
+
+/** EVERY FIELD THE FILE CARRIES, which is what these cases were all written against:
+ *  a file with a status column, and the rest empty on both sides. A file that carries
+ *  LESS is its own class of case and lives in `memberList.wider`. */
+const carriesEverything: CarriedFields = {
+  status: true,
+  membershipType: true,
+  joinedOn: true,
+  endsOn: true,
+  paymentStatus: true,
+  dateOfBirth: true,
+};
+
+/** The rule, with the three inputs Part 2 added defaulted to "an ordinary file with a
+ *  status column and none of the gym's own columns". A case that is ABOUT one of them
+ *  passes its own. */
+const run = (input: Omit<ReconcileInput, "keptFields" | "carries" | "endsOnKind"> & Partial<ReconcileInput>): Reconciled =>
+  reconcile({ keptFields: [], carries: carriesEverything, endsOnKind: null, ...input });
 
 const member = (over: Partial<ListMember> & { userId: string }): ListMember => ({
   fullName: `Member ${over.userId}`,
@@ -80,14 +118,14 @@ const cal = person({ fullName: "Cal Fox", phone: "+447911123456" });
 
 describe("reconcile: what an upload would do to the list", () => {
   it("a gym with no list has no new people and no marks — everything is new, nobody has dropped off", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active"), row(3, bob, "Frozen")],
       entries: [],
       members: [member({ userId: "u1", email: "ann@gym.com" })],
       mode: "whole_list",
       hasList: false,
     });
-    expect(out.counts).toEqual({ new: 2, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 1, canBeInvited: 1, noEmail: 0 });
+    expect(out.counts).toEqual({ new: 2, returning: 0, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 1, canBeInvited: 1, noEmail: 0 });
     // NOT ONE MARK. A gym that has never confirmed a list has nothing for anybody
     // to be missing from, so "never listed" beside every member would be an
     // accusation about nobody (§9.7).
@@ -197,7 +235,7 @@ describe("reconcile: what an upload would do to the list", () => {
 
   for (const c of cases) {
     it(c.label, () => {
-      const out = reconcile({ rows: c.rows, entries: c.entries, members: [], mode: c.mode, hasList: true });
+      const out = run({ rows: c.rows, entries: c.entries, members: [], mode: c.mode, hasList: true });
       expect({
         new: out.counts.new,
         changed: out.counts.changed,
@@ -219,7 +257,7 @@ describe("reconcile: what an upload would do to the list", () => {
     // apart quietly, because a place that counts into the wrong array names the wrong
     // person on a screen. The rule hands back the rows its places belong to, and the
     // upload stores THOSE.
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active"), row(3, ann, "Frozen"), row(4, bob, "Active")],
       entries: [],
       members: [],
@@ -232,7 +270,7 @@ describe("reconcile: what an upload would do to the list", () => {
       expect(out.rows[person.at ?? -1]?.identityKey).toBe(person.identityKey);
     }
     // Nobody outside the file has a place at all.
-    const leaving = reconcile({
+    const leaving = run({
       rows: [],
       entries: [entry(ann, "Active")],
       members: [member({ userId: "u1", email: "ann@gym.com" })],
@@ -248,7 +286,7 @@ describe("reconcile: what an upload would do to the list", () => {
   // -------------------------------------------------------------------------
 
   it("of the new people: already in the app · could be invited · no email", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active"), row(3, bob, "Active"), row(4, cal, "Active")],
       entries: [],
       members: [member({ userId: "u1", email: "ann@gym.com" })],
@@ -264,7 +302,7 @@ describe("reconcile: what an upload would do to the list", () => {
 
   it("an app member is matched by their address WHATEVER THE CASE either side wrote it in", () => {
     const shouty = person({ fullName: "Ann Lee", email: "ANN@GYM.COM" });
-    const out = reconcile({
+    const out = run({
       rows: [row(2, shouty, "Active")],
       entries: [],
       members: [member({ userId: "u1", email: "ann@gym.com" })],
@@ -279,7 +317,7 @@ describe("reconcile: what an upload would do to the list", () => {
     // The unverified case arrives here as a null email (the repo's CASE), and this
     // is what makes that null safe: a person who typed somebody else's address into
     // their own account must not be read as that somebody.
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active")],
       entries: [],
       members: [member({ userId: "u1", email: null })],
@@ -291,7 +329,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("a member with no address is matched by the phone number they gave the gym", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, cal, "Active")],
       entries: [],
       members: [member({ userId: "u1", statedPhone: "+447911123456" })],
@@ -312,7 +350,7 @@ describe("reconcile: what an upload would do to the list", () => {
     const greta = person({ fullName: "Greta Olsen", email: "greta@gym.com", phone: "+447911000111" });
     const byPhone = { ...entry(person({ fullName: "Greta (phone row)", phone: "+447911000111" }), "Frozen"), memberNumber: "OLD-1" };
     const byEmail = { ...entry(person({ fullName: "Greta (email row)", email: "greta@gym.com" }), "Active"), memberNumber: "NEW-2" };
-    const out = reconcile({
+    const out = run({
       rows: [],
       entries: [byPhone, byEmail],
       members: [member({ userId: "u1", email: greta.email, statedPhone: greta.phone })],
@@ -329,7 +367,7 @@ describe("reconcile: what an upload would do to the list", () => {
   // -------------------------------------------------------------------------
 
   it("on the list · dropped off it · never on it", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active")],
       entries: [entry(ann, "Active"), entry(bob, "Active")],
       members: [
@@ -354,7 +392,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("somebody who ALREADY dropped off is not leaving again", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active")],
       entries: [entry(ann, "Active")],
       members: [member({ userId: "long-gone", email: "bob@gym.com", everListed: true })],
@@ -368,7 +406,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("listed, dropped, then BACK on a later file reads as on the list again", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active")],
       entries: [],
       members: [member({ userId: "u1", email: "ann@gym.com", everListed: true })],
@@ -379,7 +417,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("an ADD flags NOBODY, however few people it holds", () => {
-    const out = reconcile({
+    const out = run({
       rows: [],
       entries: [entry(ann, "Active"), entry(bob, "Active")],
       members: [member({ userId: "u1", email: "ann@gym.com" }), member({ userId: "u2", email: "bob@gym.com" })],
@@ -395,7 +433,7 @@ describe("reconcile: what an upload would do to the list", () => {
   it("a family sharing ONE address: everybody is kept, and the member among them is on the list", () => {
     const dadEntry = entry(person({ fullName: "Dad Fox", email: "fox@gym.com" }), "Active");
     const kidEntry = entry(person({ fullName: "Kid Fox", email: "fox@gym.com" }), "Active");
-    const out = reconcile({
+    const out = run({
       rows: [row(2, person({ fullName: "Dad Fox", email: "fox@gym.com" }), "Active")],
       entries: [dadEntry, kidEntry],
       members: [member({ userId: "u1", email: "fox@gym.com" })],
@@ -421,7 +459,7 @@ describe("reconcile: what an upload would do to the list", () => {
     // word this gym never wrote at the top of its own list (§9.5: "in the case it
     // was first written in"). Neither spelling is on any entry, so the stored list
     // cannot cover for the file here.
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, "Active"), row(3, bob, "ACTIVE")],
       entries: [entry(ann, "Frozen"), entry(cal, "Suspended")],
       members: [],
@@ -440,7 +478,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("no status at all is its own group, with an empty label", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(2, ann, null)],
       entries: [],
       members: [],
@@ -475,7 +513,7 @@ describe("reconcile: what an upload would do to the list", () => {
     const keep = (n: number) => all.slice(0, n).map((who, i) => row(i + 2, who, "Active"));
     const entries = all.map((who) => entry(who, "Active"));
 
-    const ten = reconcile({ rows: keep(90), entries, members: [], mode: "whole_list", hasList: true });
+    const ten = run({ rows: keep(90), entries, members: [], mode: "whole_list", hasList: true });
     expect(ten.guard).toEqual({
       entriesGoing: 10,
       listSize: 100,
@@ -485,7 +523,7 @@ describe("reconcile: what an upload would do to the list", () => {
       mostOfListWouldGo: false,
     });
 
-    const eleven = reconcile({ rows: keep(89), entries, members: [], mode: "whole_list", hasList: true });
+    const eleven = run({ rows: keep(89), entries, members: [], mode: "whole_list", hasList: true });
     expect(eleven.guard.entriesGoing).toBe(11);
     expect(eleven.guard.needsTick).toBe(true);
   });
@@ -503,7 +541,7 @@ describe("reconcile: what an upload would do to the list", () => {
     // The file keeps 189 of the 200; the 11 it drops are the gym's only app members.
     const kept = listed.slice(0, 189);
     const dropped = listed.slice(189);
-    const out = reconcile({
+    const out = run({
       rows: kept.map((who, i) => row(i + 2, who, "Active")),
       entries,
       members: dropped.map((who, i) => member({ userId: `u${String(i)}`, email: who.email })),
@@ -523,7 +561,7 @@ describe("reconcile: what an upload would do to the list", () => {
   it("more than half the list coming off says so, and only for a whole list", () => {
     const all = Array.from({ length: 4 }, (_, i) => person({ fullName: `H${String(i)}`, email: `h${String(i)}@gym.com` }));
     const entries = all.map((who) => entry(who, "Active"));
-    const half = reconcile({
+    const half = run({
       rows: [row(2, all[0] ?? ann, "Active"), row(3, all[1] ?? bob, "Active")],
       entries,
       members: [],
@@ -534,7 +572,7 @@ describe("reconcile: what an upload would do to the list", () => {
     expect(half.guard.entriesGoing).toBe(2);
     expect(half.guard.mostOfListWouldGo).toBe(false);
 
-    const most = reconcile({
+    const most = run({
       rows: [row(2, all[0] ?? ann, "Active")],
       entries,
       members: [],
@@ -550,7 +588,7 @@ describe("reconcile: what an upload would do to the list", () => {
   // -------------------------------------------------------------------------
 
   it("with no file at all, in ADD mode, it answers what the stored list says now", () => {
-    const out = reconcile({
+    const out = run({
       rows: [],
       entries: [entry(ann, "Active")],
       members: [
@@ -561,7 +599,7 @@ describe("reconcile: what an upload would do to the list", () => {
       mode: "add",
       hasList: true,
     });
-    expect(out.counts).toEqual({ new: 0, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 0, noEmail: 0 });
+    expect(out.counts).toEqual({ new: 0, returning: 0, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 0, noEmail: 0 });
     expect(out.marks).toEqual([
       { userId: "on", mark: "on_list", leaving: false },
       { userId: "off", mark: "no_longer_listed", leaving: false },
@@ -581,7 +619,7 @@ describe("reconcile: what an upload would do to the list", () => {
   // is told it never had a member it has just removed.
 
   it("stamps the people the new list reaches and the people the old one held, and nobody else", () => {
-    const out = reconcile({
+    const out = run({
       // Ann stays on, Cal arrives, Bob comes off.
       rows: [row(1, ann, "Active"), row(2, cal, "Active")],
       entries: [entry(ann, "Active"), entry(bob, "Active")],
@@ -606,7 +644,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("a gym's FIRST confirm stamps everybody the file reaches, though it prints no marks at all", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(1, ann, "Active"), row(2, cal, "Active")],
       entries: [],
       members: [
@@ -627,7 +665,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("in ADD mode nobody the list already held falls out of the stamp, because an add takes nobody off", () => {
-    const out = reconcile({
+    const out = run({
       rows: [row(1, cal, "Active")],
       entries: [entry(ann, "Active")],
       members: [member({ userId: "held", email: "ann@gym.com" }), member({ userId: "added", statedPhone: "+447911123456" })],
@@ -639,7 +677,7 @@ describe("reconcile: what an upload would do to the list", () => {
   });
 
   it("asked what the list says today — no rows, ADD mode — it stamps exactly the members the list holds", () => {
-    const out = reconcile({
+    const out = run({
       rows: [],
       entries: [entry(ann, "Active")],
       members: [

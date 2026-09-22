@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   isLargeMemberListChange,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
+  MEMBER_LIST_FIELD_WORDS,
+  MEMBER_LIST_MAX_EDITED_FIELDS,
+  MEMBER_LIST_MAX_EXTRA_CHARS,
+  MEMBER_LIST_MAX_EXTRA_FIELDS,
+  MEMBER_LIST_MAX_FIELD_KEY_CHARS,
+  MEMBER_LIST_STATUS_CHIPS_MAX,
+  memberListChangeCountsSchema,
+  memberListEditedFieldSchema,
+  memberListExtraChangeSchema,
+  memberListExtraDocumentSchema,
+  memberListFieldChangeSchema,
+  memberListFieldSchema,
+  memberListHandEditsSchema,
+  memberListRecordsSchema,
   memberListConfirmRequestSchema,
   memberListConfirmedSchema,
   memberListViewSchema,
@@ -274,6 +288,7 @@ describe("the words a warning is shown with", () => {
     { code: "dates_not_read", rows: 5 },
     { code: "card_cells_dropped", rows: 2 },
     { code: "extra_columns_left_out", columns: 7 },
+    { code: "gym_fields_full", columns: 2 },
   ];
 
   it("cover every warning the server can send, each its own and each a sentence", () => {
@@ -296,6 +311,22 @@ describe("the words a warning is shown with", () => {
     expect(memberListWarningWords({ code: "shortened_by_excel", rows: 12 })).toContain("12 rows have");
     expect(memberListWarningWords({ code: "placeholders", rows: 300, values: ["desk@example.com"] })).toContain("desk@example.com");
     expect(memberListWarningWords({ code: "other_sheets_ignored", sheets: ["Staff"] })).toContain("Staff");
+  });
+
+  it("the two warnings about the gym's own columns say DIFFERENT things to do", () => {
+    // `extra_columns_left_out` is about THIS FILE being wider than we read, and moving
+    // a column left fixes it. `gym_fields_full` is about the GYM's catalogue being
+    // full — every column already in it is kept, and moving anything left changes
+    // nothing. One sentence for both would send staff to rearrange a spreadsheet that
+    // was never the problem.
+    const wide = memberListWarningWords({ code: "extra_columns_left_out", columns: 3 });
+    const full = memberListWarningWords({ code: "gym_fields_full", columns: 3 });
+    expect(wide).not.toEqual(full);
+    expect(wide).toContain("further left");
+    expect(full).not.toContain("further left");
+    expect(full).toContain("Everything else in the file is kept");
+    expect(memberListWarningWords({ code: "gym_fields_full", columns: 1 })).toContain("1 column in this file is");
+    expect(memberListWarningWords({ code: "gym_fields_full", columns: 4 })).toContain("4 columns in this file are");
   });
 
   it("say what a skipped row was skipped for", () => {
@@ -415,7 +446,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       alreadyConfirmed: false,
       version: 3,
       confirmedAt: new Date().toISOString(),
-      applied: { new: 1, changed: 2, unchanged: 3, gone: 4, alreadyInApp: 1, canBeInvited: 0, noEmail: 0 },
+      applied: { new: 1, returning: 0, changed: 2, unchanged: 3, gone: 4, alreadyInApp: 1, canBeInvited: 0, noEmail: 0 },
       statuses: [{ label: "Active", count: 6, new: 1, changed: 2, unchanged: 3, gone: 0 }],
       members: { leaving: 1, listedNow: 5 },
     };
@@ -434,8 +465,12 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       hasList: true,
       version: 2,
       lastConfirmedAt: new Date().toISOString(),
-      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1 },
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 0 },
       statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
+      // 3a-v-b's three, each with a default so a view built before it still parses.
+      membershipTypes: [],
+      paymentStatuses: [],
+      fields: [],
     };
     expect(memberListViewSchema.parse(view)).toEqual(view);
     // A GYM WITH NO LIST IS A SCREEN, NOT A MISSING ONE: every field still has to
@@ -445,7 +480,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
         hasList: false,
         version: 0,
         lastConfirmedAt: null,
-        counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 },
+        counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 },
         statuses: [],
       }).hasList,
     ).toBe(false);
@@ -492,6 +527,15 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       phone: "+447911123456",
       memberNumber: "M-1",
       status: "Active",
+      // The five 3a-v-b added, and the day they came off the list (§11.1). Empty here:
+      // what this case is about is the page's own bounds and its cursor.
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      formerAt: null,
       source: "upload" as const,
       inApp: false,
     };
@@ -509,5 +553,219 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       memberListEntrySchema.parse({ ...entry, email: null, phone: null, memberNumber: null, status: null }).entryId,
     ).toBe(entry.entryId);
     expect(memberListEntrySchema.safeParse({ ...entry, source: "invented" }).success).toBe(false);
+  });
+});
+
+describe("the wider record, kept (3a-v-b's own shapes)", () => {
+  it("every kept field has plain-English words, because staff read field names rather than count them", () => {
+    for (const field of memberListFieldSchema.options) {
+      const said = MEMBER_LIST_FIELD_WORDS[field];
+      expect(said.length).toBeGreaterThan(3);
+      // A NAME AND NOT A SENTENCE: these are read inside "…would replace your staff's
+      // membership type", so a full stop or a capital would read as a fragment.
+      expect(said.endsWith(".")).toBe(false);
+      expect(said).toBe(said.toLowerCase());
+    }
+    // No two fields share a word, or a refusal naming two would look like one.
+    expect(new Set(Object.values(MEMBER_LIST_FIELD_WORDS)).size).toBe(memberListFieldSchema.options.length);
+  });
+
+  it("the two ticks are two questions, and neither can be sent as a word", () => {
+    expect(memberListConfirmRequestSchema.parse({})).toEqual({});
+    expect(memberListConfirmRequestSchema.parse({ acknowledgeHandEdits: true })).toEqual({ acknowledgeHandEdits: true });
+    expect(
+      memberListConfirmRequestSchema.parse({ acknowledgeLargeChange: true, acknowledgeHandEdits: true }),
+    ).toEqual({ acknowledgeLargeChange: true, acknowledgeHandEdits: true });
+    expect(memberListConfirmRequestSchema.safeParse({ acknowledgeHandEdits: "true" }).success).toBe(false);
+    // THE THREE REFUSALS THAT CARRY NUMBERS ARE THREE DIFFERENT SENTENCES.
+    const words = Object.values(MEMBER_LIST_CONFIRM_REFUSAL_WORDS);
+    expect(new Set(words).size).toBe(words.length);
+    expect(MEMBER_LIST_CONFIRM_REFUSAL_WORDS.hand_edits).toContain("your staff typed in");
+  });
+
+  it("the hand-edit refusal carries a count and field NAMES, and nothing that could be a person", () => {
+    expect(memberListHandEditsSchema.parse({ entries: 0, fields: [] })).toEqual({ entries: 0, fields: [] });
+    expect(memberListHandEditsSchema.parse({ entries: 3, fields: ["status", "membership type"] }).entries).toBe(3);
+    // Strict: nothing else may ride with it — least of all a person.
+    expect(memberListHandEditsSchema.safeParse({ entries: 1, fields: [], people: ["Ada"] }).success).toBe(false);
+    expect(memberListHandEditsSchema.safeParse({ entries: -1, fields: [] }).success).toBe(false);
+    // Bounded by how many fields there can be, so nothing unbounded reaches a reply.
+    expect(
+      memberListHandEditsSchema.safeParse({
+        entries: 1,
+        fields: Array.from({ length: MEMBER_LIST_MAX_EDITED_FIELDS + 1 }, () => "x"),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("a field a member of staff edited is a standard field's own name or one of the gym's columns, and nothing else", () => {
+    for (const field of memberListFieldSchema.options) {
+      expect(memberListEditedFieldSchema.safeParse(field).success).toBe(true);
+    }
+    expect(memberListEditedFieldSchema.safeParse("extra:locker_no").success).toBe(true);
+    expect(memberListEditedFieldSchema.safeParse(`extra:${"a".repeat(MEMBER_LIST_MAX_FIELD_KEY_CHARS)}`).success).toBe(true);
+    // A key is what an entry's document is written under, so it can only be the one
+    // shape a document key has.
+    expect(memberListEditedFieldSchema.safeParse("extra:Locker No").success).toBe(false);
+    expect(memberListEditedFieldSchema.safeParse("extra:").success).toBe(false);
+    expect(memberListEditedFieldSchema.safeParse(`extra:${"a".repeat(MEMBER_LIST_MAX_FIELD_KEY_CHARS + 1)}`).success).toBe(false);
+    // …AND NEVER A VALUE. The whole design is that a record remembers THAT a field was
+    // typed in, never what it was typed from (§11.4).
+    expect(memberListEditedFieldSchema.safeParse("Platinum").success).toBe(false);
+    expect(memberListEditedFieldSchema.safeParse("membership type").success).toBe(false);
+  });
+
+  it("the gym's own columns are a document of keys to cells, parsed like any other outside input", () => {
+    expect(memberListExtraDocumentSchema.parse({ locker_no: "L-1", gender: "F" })).toEqual({ locker_no: "L-1", gender: "F" });
+    expect(memberListExtraDocumentSchema.parse({})).toEqual({});
+    // A cell a person left blank is a cell, not a missing key.
+    expect(memberListExtraDocumentSchema.parse({ notes: "" }).notes).toBe("");
+    // A key outside the one shape, a cell longer than we keep, and a cell that is not
+    // text at all — each would come back from a document some later migration or
+    // hand-run statement left half-shaped, and each would read as "this whole column
+    // of this person is different" and be written over.
+    expect(memberListExtraDocumentSchema.safeParse({ "Locker No": "L-1" }).success).toBe(false);
+    expect(memberListExtraDocumentSchema.safeParse({ notes: "x".repeat(MEMBER_LIST_MAX_EXTRA_CHARS + 1) }).success).toBe(false);
+    expect(memberListExtraDocumentSchema.safeParse({ notes: 7 }).success).toBe(false);
+    expect(memberListExtraDocumentSchema.safeParse({ notes: null }).success).toBe(false);
+  });
+
+  it("what an upload would change is counted field by field, and the gym's own columns by their own heading", () => {
+    expect(memberListFieldChangeSchema.parse({ field: "endsOn", count: 3 })).toEqual({ field: "endsOn", count: 3 });
+    // A field nothing changes is not in the list at all, so a count of zero is not a
+    // row — that is what `positive` says.
+    expect(memberListFieldChangeSchema.safeParse({ field: "endsOn", count: 0 }).success).toBe(false);
+    expect(memberListFieldChangeSchema.safeParse({ field: "invented", count: 1 }).success).toBe(false);
+    expect(memberListExtraChangeSchema.parse({ key: "locker_no", label: "Locker No", count: 1 }).label).toBe("Locker No");
+    expect(memberListExtraChangeSchema.safeParse({ key: "locker_no", label: "Locker No", count: 1, value: "L-9" }).success).toBe(false);
+  });
+
+  it("the list a gym reads back carries its FORMER records as their own number, and three kinds of its own word", () => {
+    const view = {
+      hasList: true,
+      version: 2,
+      lastConfirmedAt: new Date().toISOString(),
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 4 },
+      statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
+      membershipTypes: [{ label: "Gold", count: 6, inApp: 2, canBeInvited: 4 }],
+      paymentStatuses: [{ label: "Overdue", count: 1, inApp: 0, canBeInvited: 1 }],
+      fields: [{ key: "locker_no", label: "Locker No" }],
+    };
+    expect(memberListViewSchema.parse(view)).toEqual(view);
+    // A GYM THAT HAS NEVER CONFIRMED ONE IS A SCREEN, not a missing route: every field
+    // still has to be answerable at zero, including the three added here.
+    const empty = memberListViewSchema.parse({
+      hasList: false,
+      version: 0,
+      lastConfirmedAt: null,
+      counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 },
+      statuses: [],
+    });
+    expect(empty.membershipTypes).toEqual([]);
+    expect(empty.paymentStatuses).toEqual([]);
+    expect(empty.fields).toEqual([]);
+    // A gym cannot keep more of its own columns than it may have, and the chips of each
+    // kind are capped on their own.
+    expect(
+      memberListViewSchema.safeParse({
+        ...view,
+        fields: Array.from({ length: MEMBER_LIST_MAX_EXTRA_FIELDS + 1 }, (_, i) => ({ key: `f${String(i)}`, label: "F" })),
+      }).success,
+    ).toBe(false);
+    expect(
+      memberListViewSchema.safeParse({
+        ...view,
+        membershipTypes: Array.from({ length: MEMBER_LIST_STATUS_CHIPS_MAX + 1 }, () => ({
+          label: "Gold",
+          count: 1,
+          inApp: 0,
+          canBeInvited: 1,
+        })),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("the three word filters and the records filter are what a screen may ask, and no more", () => {
+    expect(memberListEntriesQuerySchema.parse({ membershipType: "Gold" }).membershipType).toBe("Gold");
+    expect(memberListEntriesQuerySchema.parse({ paymentStatus: ["Paid", "Overdue"] }).paymentStatus).toEqual(["Paid", "Overdue"]);
+    // AN EMPTY WORD IS A REAL FILTER for all three kinds — "the people with none of
+    // that word" — which a gym whose export lacks the column is entirely made of.
+    expect(memberListEntriesQuerySchema.parse({ membershipType: "" }).membershipType).toBe("");
+    expect(memberListEntriesQuerySchema.parse({ paymentStatus: "" }).paymentStatus).toBe("");
+    // CURRENT BY DEFAULT, and the former records asked for BY NAME: a former record in
+    // a page nobody asked for is somebody the gym believes it has removed standing in a
+    // list of its members.
+    expect(memberListEntriesQuerySchema.parse({}).records).toBeUndefined();
+    for (const records of memberListRecordsSchema.options) {
+      expect(memberListEntriesQuerySchema.parse({ records }).records).toBe(records);
+    }
+    expect(memberListEntriesQuerySchema.safeParse({ records: "deleted" }).success).toBe(false);
+    // The same ceilings as the status filter, because they are the same kind of word.
+    expect(
+      memberListEntriesQuerySchema.safeParse({ membershipType: "x".repeat(MEMBER_LIST_MAX_STATUS_CHARS + 1) }).success,
+    ).toBe(false);
+    expect(
+      memberListEntriesQuerySchema.safeParse({
+        paymentStatus: Array.from({ length: MEMBER_LIST_STATUS_FILTERS_MAX + 1 }, () => "a"),
+      }).success,
+    ).toBe(false);
+    // The server's own spelling and nothing else: a screen sending snake_case would
+    // otherwise be quietly answered with everybody.
+    expect(memberListEntriesQuerySchema.safeParse({ membership_type: "Gold" }).success).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ record: "former" }).success).toBe(false);
+  });
+
+  it("one person on a page carries every kept field and NOT the gym's own columns", () => {
+    const entry = {
+      entryId: "11111111-2222-3333-4444-555555555555",
+      fullName: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "+447911123456",
+      memberNumber: "M-1",
+      status: "Active",
+      membershipType: "Gold",
+      joinedOn: "2024-04-03",
+      endsOn: "2027-04-02",
+      endsOnKind: "renews" as const,
+      paymentStatus: "Paid",
+      dateOfBirth: "1991-02-07",
+      formerAt: null,
+      source: "upload" as const,
+      inApp: false,
+    };
+    expect(memberListEntrySchema.parse(entry)).toEqual(entry);
+    // EVERY FIELD A GYM MAY LEAVE EMPTY IS NULLABLE — a gym whose export has four
+    // columns is not a gym with a broken record.
+    expect(
+      memberListEntrySchema.parse({
+        ...entry,
+        membershipType: null,
+        joinedOn: null,
+        endsOn: null,
+        endsOnKind: null,
+        paymentStatus: null,
+        dateOfBirth: null,
+      }).entryId,
+    ).toBe(entry.entryId);
+    // A DAY IS A DAY AND NOT AN INSTANT: a birthday is the same day in every country,
+    // so a timestamp here would be a zone waiting to be applied.
+    expect(memberListEntrySchema.safeParse({ ...entry, dateOfBirth: "1991-02-07T00:00:00.000Z" }).success).toBe(false);
+    expect(memberListEntrySchema.safeParse({ ...entry, joinedOn: "03/04/2024" }).success).toBe(false);
+    expect(memberListEntrySchema.safeParse({ ...entry, endsOnKind: "lapses" }).success).toBe(false);
+    // THE GYM'S OWN COLUMNS ARE NOT ON A PAGE, deliberately (§11.6): a hundred people
+    // times forty columns of five hundred characters is two megabytes of a screen that
+    // shows none of it. The schema is not strict, so this pins the intent.
+    expect("extra" in memberListEntrySchema.shape).toBe(false);
+  });
+
+  it("`returning` is a slice of `new`, and the four groups are still the four groups", () => {
+    const counts = { new: 5, returning: 2, changed: 1, unchanged: 3, gone: 0, alreadyInApp: 1, canBeInvited: 3, noEmail: 1 };
+    expect(memberListChangeCountsSchema.parse(counts)).toEqual(counts);
+    // A summary written before 3a-v-b still parses, which is what keeps a confirmed
+    // upload's record readable rather than out of date.
+    const older: Record<string, number> = { ...counts };
+    delete older["returning"];
+    expect(memberListChangeCountsSchema.parse(older).returning).toBe(0);
+    expect(memberListChangeCountsSchema.safeParse({ ...counts, returning: -1 }).success).toBe(false);
   });
 });

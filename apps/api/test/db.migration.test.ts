@@ -1991,4 +1991,139 @@ d("0001_init on a real database", () => {
     }
   });
 
+  /** `0035`'s WIDER, DURABLE RECORD (Part 3 §11.1, §11.4; ROADMAP 3a-v-b). Read off the
+   *  DEPLOYED database rather than the migration text, and the guarantees DRIVEN by
+   *  trying to produce the state they forbid — which is the only way a CHECK that did not
+   *  land shows up, since every writer above it is trying not to need it.
+   *
+   *  **THE ONE THAT MATTERS MOST IS `ends_on_kind_needs_day`.** "Renews" beside no date
+   *  is half a sentence on a member's own page, and nothing else in the system would
+   *  notice: the service pairs them, and this is what holds it for every later writer. */
+  it("0035's wider record: the new CHECKs bite at the database, and the gym's catalogue is one row per key", async () => {
+    const dayColumns = await sql<{ column_name: string; data_type: string; is_nullable: string }[]>`
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'gym_member_list_entries'
+        AND column_name IN ('joined_on', 'ends_on', 'date_of_birth')
+      ORDER BY column_name`;
+    // A PLAIN CALENDAR DAY AND NOT A TIMESTAMP. A birthday is the same day in every
+    // country; a timestamp would need a zone to be read back, and day maths through a
+    // zone that was never the gym's is what CLAUDE.md §4 forbids.
+    expect(dayColumns.map((c) => c.column_name)).toEqual(["date_of_birth", "ends_on", "joined_on"]);
+    expect(dayColumns.every((c) => c.data_type === "date")).toBe(true);
+    expect(dayColumns.every((c) => c.is_nullable === "YES")).toBe(true);
+
+    const defaults = await sql<{ column_name: string; column_default: string | null; is_nullable: string }[]>`
+      SELECT column_name, column_default, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'gym_member_list_entries'
+        AND column_name IN ('extra', 'hand_edited', 'former_at')
+      ORDER BY column_name`;
+    const by = new Map(defaults.map((c) => [c.column_name, c]));
+    // Every row that existed before this migration says what is true of it: no wider
+    // fields were ever read for it, it is ON the list, nobody has edited it by hand.
+    expect(by.get("extra")?.column_default ?? "").toContain("'{}'");
+    expect(by.get("extra")?.is_nullable).toBe("NO");
+    expect(by.get("hand_edited")?.column_default ?? "").toContain("'{}'");
+    expect(by.get("hand_edited")?.is_nullable).toBe("NO");
+    expect(by.get("former_at")?.is_nullable).toBe("YES");
+
+    const seeded = await sql<{ id: string }[]>`
+      INSERT INTO users (display_name) VALUES ('mlist-0035-check') RETURNING id`;
+    const owner = seeded[0]?.id;
+    if (owner === undefined) throw new Error("member-list fixture insert failed");
+    try {
+      const [gym] = await sql<{ id: string }[]>`
+        INSERT INTO gyms (slug, name, country, timezone, owner_user_id)
+        VALUES (${`mlist35-${owner.slice(0, 8)}`}, 'Migration Kept Gym', 'GB', 'Europe/London', ${owner})
+        RETURNING id`;
+      const gymId = gym?.id;
+      if (gymId === undefined) throw new Error("could not seed a gym");
+
+      /** One entry, carrying whatever the case is about. A fresh identity key and
+       *  address each time, so it is always the CHECK being driven and never the
+       *  uniqueness `0033` already has. */
+      let n = 0;
+      const put = (kind: string, values: Record<string, unknown>) => {
+        n += 1;
+        return sql`
+          INSERT INTO gym_member_list_entries ${sql({
+            gym_id: gymId,
+            full_name: `Kept ${kind}`,
+            email: `k35-${String(n)}-${owner.slice(0, 8)}@example.com`,
+            identity_key: String(n).padStart(64, "0"),
+            source: "upload",
+            ...values,
+          })}`;
+      };
+
+      // "RENEWS" BESIDE NO DATE IS HALF A SENTENCE.
+      await expect(put("kind alone", { ends_on_kind: "renews" })).rejects.toThrow(/ends_on_kind_needs_day/);
+      // …and with a day it is fine, so it is the PAIRING being refused and not the word.
+      await put("kind and day", { ends_on: "2027-04-02", ends_on_kind: "renews" });
+      // Only the gym's own two words for it.
+      await expect(put("a third word", { ends_on: "2027-04-02", ends_on_kind: "lapses" })).rejects.toThrow(
+        /ends_on_kind_check/,
+      );
+
+      // THE GYM'S OWN WORDS ARE CAPPED THE WAY ITS STATUS WORD IS.
+      await expect(put("long type", { membership_type: "g".repeat(41) })).rejects.toThrow(/membership_type_check/);
+      await expect(put("long payment", { payment_status: "p".repeat(41) })).rejects.toThrow(/payment_status_check/);
+      await put("at the cap", { membership_type: "g".repeat(40), payment_status: "p".repeat(40) });
+
+      // THE GYM'S OWN COLUMNS ARE AN OBJECT OF KEYS, never a list and never a bare
+      // value: the document is MERGED by key, and a jsonb array would merge into
+      // nonsense with nothing saying so.
+      await expect(put("an array", { extra: sql.json(["a", "b"]) })).rejects.toThrow(/extra_object_check/);
+      await expect(put("a string", { extra: sql.json("a string") })).rejects.toThrow(/extra_object_check/);
+      await put("an object", { extra: sql.json({ locker_no: "L-1" }) });
+
+      // FIELD NAMES, AND NEVER MORE OF THEM THAN THERE ARE FIELDS.
+      const names = Array.from({ length: 53 }, (_, i) => `f${String(i)}`);
+      await expect(put("too many names", { hand_edited: names })).rejects.toThrow(/hand_edited_check/);
+      await put("at the name cap", { hand_edited: names.slice(0, 52) });
+
+      // ── THE GYM'S CATALOGUE OF ITS OWN COLUMNS ───────────────────────────────
+      await sql`
+        INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+        VALUES (${gymId}, 'locker_no', 'Locker No', 0)`;
+      // ONE ROW PER KEY PER GYM, which is what makes "add the fields this file brings"
+      // safe to run twice.
+      await expect(
+        sql`INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+            VALUES (${gymId}, 'locker_no', 'LOCKER NO', 5)`,
+      ).rejects.toThrow(/gym_member_list_fields_key_uq/);
+      // A key is what an entry's document is written under, so it can only be the one
+      // shape a document key has.
+      await expect(
+        sql`INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+            VALUES (${gymId}, 'Locker No', 'Locker No', 1)`,
+      ).rejects.toThrow(/gym_member_list_fields_key_check/);
+      await expect(
+        sql`INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+            VALUES (${gymId}, 'ok', ${"L".repeat(81)}, 1)`,
+      ).rejects.toThrow(/gym_member_list_fields_label_check/);
+      // …and the same key in ANOTHER gym is that gym's own column, not a clash.
+      const [other] = await sql<{ id: string }[]>`
+        INSERT INTO gyms (slug, name, country, timezone, owner_user_id)
+        VALUES (${`mlist35b-${owner.slice(0, 8)}`}, 'Other Kept Gym', 'GB', 'Europe/London', ${owner})
+        RETURNING id`;
+      await sql`
+        INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+        VALUES (${other?.id ?? gymId}, 'locker_no', 'Locker', 0)`;
+
+      // THE CATALOGUE GOES WITH THE GYM — the cascade behind `archiveSweep.ts`'s own
+      // delete, declared AND driven. A catalogue outliving the gym it belongs to would
+      // be the one row of this feature the sweep left behind.
+      await sql`DELETE FROM gyms WHERE id = ${gymId}`;
+      const left = await sql<{ n: number }[]>`
+        SELECT (SELECT count(*)::int FROM gym_member_list_fields WHERE gym_id = ${gymId})
+             + (SELECT count(*)::int FROM gym_member_list_entries WHERE gym_id = ${gymId}) AS n`;
+      expect(left[0]?.n).toBe(0);
+    } finally {
+      await sql`DELETE FROM gyms WHERE owner_user_id = ${owner}`;
+      await sql`DELETE FROM users WHERE id = ${owner}`;
+    }
+  });
+
 });
