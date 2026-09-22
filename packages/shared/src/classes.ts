@@ -129,15 +129,22 @@ export const classPlacesSchema = z.number().int().min(1).max(500);
 
 /** WHAT A GYM RUNS — the thing itself, named and coloured.
  *
- *  **It owns `minutes`, `places` and the coach, and a REPEAT owns only WHEN.**
- *  That split is the card's one design decision and it is made to avoid two
- *  answers to one question: with a length on the type AND an override on the
- *  repeat, a screen showing "45 min" beside a calendar showing 60 is one edit
- *  away, and no test that reads its own code can see it. §13.3 allows a repeat
- *  to differ in places and coach; a gym that needs Wednesday's yoga under a
- *  different coach makes a second type, or changes that day once 17b-ii lands.
- *  Recorded rather than slipped in: this NARROWS §13.3, on purpose, and the
- *  column that would widen it is deliberately absent rather than unused. */
+ *  **IT OWNS `minutes`, `places` AND THE COACH ONLY UNTIL 17b-ii, AND THAT IS
+ *  KD'S REVERSAL OF THIS CARD'S ONE DESIGN DECISION** (RULINGS 2026-09-22).
+ *
+ *  17b-i put them here and left the repeat owning only WHEN, arguing that two
+ *  places to store one capacity is one edit away from a screen showing "45 min"
+ *  beside a calendar showing 60. Round one called it what it was: §13.3's
+ *  *"places and coach where they differ"*, dropped without a ruling. Asked for
+ *  the recommendation and the industry standard, Kd ruled **follow the
+ *  standard** — and the standard is unambiguous: TeamUp edits venue, class size
+ *  limit, start and end time and instructors PER TIME SLOT, Mindbody changes a
+ *  teacher for one day, a period or permanently.
+ *
+ *  **The two-answers worry is real and the products settle it differently from
+ *  dropping the field**: the REPEAT is the live answer and the class type is the
+ *  DEFAULT a new repeat starts from. 17b-ii moves them, and this comment is the
+ *  one that tells whoever does it why the fields are here in the first place. */
 export const gymClassTypeSchema = z
   .object({
     id: z.string().uuid(),
