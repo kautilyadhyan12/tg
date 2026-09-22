@@ -542,7 +542,7 @@ const BREAKS = [
   {
     name: "round one High-4, the gym's own words: a card inside a status or a payment word reaches the staged file",
     file: FIELDS,
-    from: "  return withoutCardNumbers(cut(text, MEMBER_LIST_MAX_STATUS_CHARS)).text;",
+    from: "  return cut(withoutCardNumbers(text).text, MEMBER_LIST_MAX_STATUS_CHARS);",
     to: "  return cut(text, MEMBER_LIST_MAX_STATUS_CHARS);",
     suite: WIDER_SUITE,
     pure: true,
@@ -550,9 +550,42 @@ const BREAKS = [
   {
     name: "round one High-4, a name: a card written beside a person's name is kept with it",
     file: FIELDS,
-    from: "  if (full !== \"\") return withoutCardNumbers(cut(full, MEMBER_LIST_MAX_NAME_CHARS)).text;",
+    from: "  if (full !== \"\") return cut(withoutCardNumbers(full).text, MEMBER_LIST_MAX_NAME_CHARS);",
     to: "  if (full !== \"\") return cut(full, MEMBER_LIST_MAX_NAME_CHARS);",
     suite: WIDER_SUITE,
+    pure: true,
+  },
+  // ── the re-check: the in-text card rule, and the length cap ─────────────────
+  {
+    name: "re-check Open-1: no issuer prefix, so any 13-19 digits that pass Luhn are a card",
+    file: NEVER_KEEP,
+    from: "const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksLikeAPaymentCard(digits);",
+    to: "const isCardNumber = (digits: string): boolean => looksLikeAPaymentCard(digits);",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check Open-1: any group may be short, so a list of small numbers becomes a card",
+    file: NEVER_KEEP,
+    from: "          if (next.digits.length !== 4 && next.digits.length !== 6) break;",
+    to: "",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check §3: a word is cut before its card is replaced, so the marker pushes it past the cap",
+    file: FIELDS,
+    from: "  return cut(withoutCardNumbers(text).text, MEMBER_LIST_MAX_STATUS_CHARS);",
+    to: "  return withoutCardNumbers(cut(text, MEMBER_LIST_MAX_STATUS_CHARS)).text;",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "re-check §3: the write boundary does not cut after replacing a card",
+    file: EXTRA_FIELDS,
+    from: "  return { value: cut(scrubbed.text, MEMBER_LIST_MAX_STATUS_CHARS), card: true };",
+    to: "  return { value: scrubbed.text, card: true };",
+    suite: KEEP_SUITE,
     pure: true,
   },
 ];

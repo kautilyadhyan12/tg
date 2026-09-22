@@ -23,7 +23,13 @@
 // theirs ("Zip/Postal Code", "Check-in Code", "Custom Field 1", "Emergency Contact
 // Name", "Gender", "Address 1"), including ones no list of ours has ever heard of.
 import { describe, expect, it } from "vitest";
-import { MEMBER_LIST_MAX_EXTRA_CHARS, MEMBER_LIST_MAX_EXTRA_FIELDS, type MemberListExtraField, type MemberListRow } from "@app/shared";
+import {
+  MEMBER_LIST_MAX_EXTRA_CHARS,
+  MEMBER_LIST_MAX_EXTRA_FIELDS,
+  MEMBER_LIST_MAX_STATUS_CHARS,
+  type MemberListExtraField,
+  type MemberListRow,
+} from "@app/shared";
 import { extraForWriting, growFields, keptFields, wordForWriting, type FieldSlot } from "../src/modules/orgs/memberList/extraFields.js";
 import { identityKey } from "../src/modules/orgs/memberList/fields.js";
 import {
@@ -183,10 +189,42 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     ["a sort code and an account number", "sort 20-00-00 acc 12345678"],
     ["years", "member since 2019, renewed 2024-2025"],
     ["a run far too long to be a card", "ref 998877665544332211009988"],
+    // Number lists, which the first version of this rule destroyed (re-check, Open-1):
+    // it tried every span of groups, and one in ten passes Luhn.
+    ["a visits log", "visits 9 12 15 11 8 14 10 13"],
+    ["a weight log", "72.5 73.1 73.4 72.9 72.6 72.2 71.8 71.9 71.5 71.2"],
+    ["a lifting log", "bench 60 62.5 65 67.5 70 72.5 75 kg"],
+    ["six years in a row", "renewed 2019 2020 2021 2022 2023 2024"],
+    ["a pack's sessions", "PT 10 pack: 1 2 3 4 5 6 7 8 9 10 used"],
+    ["a card-shaped number no issuer uses", "invoice 1234 5678 9012 3456"],
+    ["a dashed code", "108-64-91"],
+    // Each of these passes Luhn, so only the issuer prefix and the grouping rule keep
+    // them: four years a member renewed in (no issuer starts 2000–2220), and a dashed
+    // code grouped 4-2-2-2-3 as no card ever is.
+    ["membership years that pass Luhn", "renewed 2023 2024 2025 2026"],
+    ["a dashed code that passes Luhn", "kit 6955-17-19-43-102"],
   ])("…and an ordinary note is left exactly as the gym wrote it — %s", (_label, cell) => {
     const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
     expect(written.document["notes"]).toBe(cell);
     expect(written.cardsDropped).toBe(0);
+  });
+
+  it.each([
+    ["dots", "4111.1111.1111.1111"],
+    ["commas", "4111,1111,1111,1111"],
+    ["slashes", "4111/1111/1111/1111"],
+    ["Amex, 4-6-5", "3782 822463 10005"],
+    ["Diners, 4-6-4", "3622 720627 1667"],
+  ])("a card is found whatever it is written with — %s", (_label, card) => {
+    const written = extraForWriting([`on file ${card} thanks`], [kept("notes", "Notes", 0)]);
+    expect(written.document["notes"]).toBe("on file [card number removed] thanks");
+  });
+
+  it("only the card is replaced: the separators and numbers around it stay as written", () => {
+    // The first version rebuilt every digit run with single spaces, so "108-64-91"
+    // came back as "108 64 91" beside a card it had found.
+    const written = extraForWriting(["ref 108-64-91, card 4111-1111-1111-1111, locker 12"], [kept("notes", "Notes", 0)]);
+    expect(written.document["notes"]).toBe("ref 108-64-91, card [card number removed], locker 12");
   });
 
   it("a card inside one of the gym's own WORDS is taken out of it too", () => {
@@ -197,6 +235,17 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
       card: true,
     });
     expect(wordForWriting("Paid in full")).toEqual({ value: "Paid in full", card: false });
+  });
+
+  it("a word at its 40-character cap stays within it after the card is replaced", () => {
+    // The marker is longer than a card written without spaces, so a word on its cap
+    // came back at 42 and the table's CHECK refused the row (re-check, §3).
+    const word = "pay by card 4111 1111 1111 1111 on 2 Jan";
+    expect(word).toHaveLength(MEMBER_LIST_MAX_STATUS_CHARS);
+    const out = wordForWriting(word);
+    expect(out.card).toBe(true);
+    expect(out.value?.length ?? 0).toBeLessThanOrEqual(MEMBER_LIST_MAX_STATUS_CHARS);
+    expect(out.value).not.toMatch(/4111/);
   });
 
   it("THE KEY IS STILL WRITTEN, EMPTY — because the document is MERGED and a missing key would keep the old cell", () => {
@@ -228,6 +277,16 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     // Not a word at all is not a card either, and must not become one.
     expect(wordForWriting(null)).toEqual({ value: null, card: false });
     expect(wordForWriting("")).toEqual({ value: "", card: false });
+  });
+
+  it("a cut never splits a character in two, which the database would refuse", () => {
+    // An emoji is two UTF-16 units. Sliced between them, the lone half is JSON that
+    // Postgres's jsonb rejects, and the confirm would fail on the row.
+    const cell = `${"x".repeat(MEMBER_LIST_MAX_EXTRA_CHARS - 1)}\u{1F4AA}`;
+    const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
+    const note = written.document["notes"] ?? "";
+    expect(note.length).toBeLessThanOrEqual(MEMBER_LIST_MAX_EXTRA_CHARS);
+    expect(/[\uD800-\uDBFF]$/.test(note)).toBe(false);
   });
 
   it("a cell longer than we keep is cut, not dropped, and the cut is where the limit is", () => {

@@ -860,6 +860,23 @@ describe("the gym's own columns", () => {
     expect(everything).not.toContain("5555 5555");
   });
 
+  it("a word or a name ON its cap with a card in it is read, not refused: the result stays within the cap", () => {
+    // Cutting before scrubbing let the marker push a 40-character word to 42 and a
+    // 119-character name past 120, and the worker's answer then failed its own schema:
+    // the upload answered 500 instead of reading the file (re-check, §3).
+    const payment = "pay by card 4111 1111 1111 1111 on 2 Jan";
+    const name = `${"A".repeat(100)} 4111111111111111`;
+    expect(payment).toHaveLength(40);
+    expect(name.length).toBe(117);
+    const found = read([
+      ["Name", "Email", "Payment Status"],
+      [name, "ann@example.com", payment],
+    ]);
+    expect(found.rows[0]?.paymentStatus?.length ?? 0).toBeLessThanOrEqual(40);
+    expect(found.rows[0]?.fullName.length ?? 0).toBeLessThanOrEqual(120);
+    expect(JSON.stringify(found)).not.toContain("4111");
+  });
+
   it("…but a member NUMBER keeps its whole-cell rule, because its whole purpose is to be a long number", () => {
     // Redacting a run that happens to pass Luhn costs a gym its own member numbers, and
     // 3a-v-a measured how often that is: 7,269 of 100,000 made-up twelve-digit runs pass

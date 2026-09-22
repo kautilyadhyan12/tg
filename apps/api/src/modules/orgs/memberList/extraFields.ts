@@ -9,7 +9,8 @@
 // month's export with its columns in a different order lands in the same fields,
 // and a whole-list upload does not un-keep a column the report it came from
 // happens to leave out.
-import { MEMBER_LIST_MAX_EXTRA_CHARS, type MemberListExtraField } from "@app/shared";
+import { MEMBER_LIST_MAX_EXTRA_CHARS, MEMBER_LIST_MAX_STATUS_CHARS, type MemberListExtraField } from "@app/shared";
+import { cut } from "./fields.js";
 import { cardShapedCell, withoutCardNumbers } from "./neverKeep.js";
 import type { KeptField } from "./reconcile.js";
 
@@ -134,7 +135,7 @@ export function extraForWriting(cells: readonly string[], fields: readonly KeptF
     const scrubbed = withoutCardNumbers(cell);
     cardsDropped += scrubbed.removed;
     const text = scrubbed.text;
-    document[field.key] = text.length > MEMBER_LIST_MAX_EXTRA_CHARS ? text.slice(0, MEMBER_LIST_MAX_EXTRA_CHARS) : text;
+    document[field.key] = cut(text, MEMBER_LIST_MAX_EXTRA_CHARS);
   }
   return { document, cardsDropped };
 }
@@ -152,5 +153,7 @@ export function wordForWriting(word: string | null): { value: string | null; car
   // 4111 1111 1111 1111" is a note somebody put in the wrong column, and what must not
   // survive is the number (round one, High-4).
   const scrubbed = withoutCardNumbers(word);
-  return scrubbed.removed === 0 ? { value: word, card: false } : { value: scrubbed.text, card: true };
+  if (scrubbed.removed === 0) return { value: word, card: false };
+  // The marker is longer than some card numbers, so cut again: the column's CHECK is 40.
+  return { value: cut(scrubbed.text, MEMBER_LIST_MAX_STATUS_CHARS), card: true };
 }

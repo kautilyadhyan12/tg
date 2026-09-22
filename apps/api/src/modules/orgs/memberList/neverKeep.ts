@@ -82,62 +82,85 @@ export function cardShapedCell(text: string): boolean {
   return looksLikeAPaymentCard(text.replace(/[^0-9]/g, ""));
 }
 
-/** WHAT A CARD NUMBER LEAVES BEHIND when one is found inside other text. A marker and
- *  not an empty string, so a gym reading its own note can see that something was taken
- *  out rather than wondering what it once said. */
+/** What replaces a card number found inside other text, so the gym can see something
+ *  was taken out. */
 export const CARD_REDACTED = "[card number removed]";
 
-/** A RUN OF DIGITS WITH THE SEPARATORS A PERSON WRITES BETWEEN THEM — spaces and the
- *  several kinds of dash — anywhere in a cell. A run may not begin or end on one. */
-const CARD_RUN = /[0-9](?:[0-9 \u2010-\u2015-]*[0-9])?/g;
-/** The separators, for splitting a run into the GROUPS a card is written in. */
-const CARD_SEPARATORS = /[ \u2010-\u2015-]+/;
+/** Runs of digits joined by single separator characters: space, hyphen, the dashes,
+ *  dot, comma, slash. */
+const DIGIT_RUN = /\d+(?:[ ‐-―\-.,/]\d+)*/g;
+const DIGIT_GROUP = /\d+/g;
 
-/** A CELL WITH THE PAYMENT CARD NUMBERS INSIDE IT TAKEN OUT, and how many went (§11.2).
+/** Whether a number starts the way an issued card number does (the IIN ranges of Visa,
+ *  Mastercard, Amex, Discover, Diners, JCB, UnionPay, Maestro and RuPay). A Luhn check
+ *  alone passes one number in ten; the prefix is what keeps years, phone numbers and
+ *  measurements out. */
+function issuerPrefix(digits: string): boolean {
+  switch (digits[0]) {
+    case "4":
+    case "5":
+    case "6":
+      return true;
+    case "3":
+      return digits[1] !== "1" && digits[1] !== "2" && digits[1] !== "3";
+    case "2": {
+      const first4 = Number(digits.slice(0, 4));
+      return first4 >= 2221 && first4 <= 2720;
+    }
+    case "8":
+      return digits[1] === "1" || digits[1] === "2";
+    default:
+      return false;
+  }
+}
+
+const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksLikeAPaymentCard(digits);
+
+/** A cell with any payment card number written inside it replaced by `CARD_REDACTED`
+ *  (§11.2). `cardShapedCell` asks whether a cell IS a card; this finds one inside free
+ *  text such as "Card on file 4111 1111 1111 1111 (Visa)".
  *
- *  **`cardShapedCell` ASKS WHETHER A CELL *IS* A CARD; THIS ASKS WHETHER ONE IS IN IT**,
- *  which is how a gym actually writes one down (round one, High-4). A free-text "Notes"
- *  column reading `Card on file 4111 1111 1111 1111 (Visa)` is not a column of card
- *  numbers, so the column rule leaves it; it is not a card-shaped cell, so the cell rule
- *  left it too — and a live Visa number sat in the database under a member's name.
- *  §11.2's sentence is "13 to 19 digits … that pass the card check digit — in ANY
- *  column", and a cell that CONTAINS one is the common shape.
- *
- *  **JUST THE RUN IS TAKEN OUT, NEVER THE WHOLE CELL**, and that is what makes this
- *  affordable. The recorded objection to widening the rule was that Luhn passes about
- *  one made-up digit run in ten, so a gym's long invoice number would blank a note it
- *  had written. Redacting the run alone leaves the note; what is lost in the rare false
- *  positive is a number, and what is gained in the true one is a card number never
- *  reaching our database. A lost invoice number is the smaller harm.
- *
- *  **THE SPANS TRIED ARE ALIGNED TO THE GROUPS A CARD IS WRITTEN IN**, which is what
- *  keeps this from being either too narrow or too greedy. Checking each whole run and
- *  nothing else misses `4111 1111 1111 1111 2024` — a card with a year after it is one
- *  run of twenty digits, and twenty is not a card. Checking EVERY window of 13 to 19
- *  digits instead would run about a hundred Luhn checks over a thirty-digit run and, at
- *  one in ten, shred almost any long number a gym keeps. A card is written in groups, so
- *  only spans of WHOLE groups are tried: `[4111][1111][1111][1111]` is found beside the
- *  year, while `07911 100001` offers spans of 5, 6 and 11 digits and none is a card. */
+ *  A card is recognised by how cards are written, not by trying every span of digits:
+ *  either one unbroken group of 13–19 digits, or a group of 4 followed by groups of 4 or
+ *  6 and a last group of 1–6, with the same separator throughout and 13–19 digits in all
+ *  (4-4-4-4, 4-6-5, 4-6-4, 4-4-4-1, 4-4-4-4-3). The candidate must also carry an issuer
+ *  prefix and pass Luhn. Linear in the length of the cell; the rest of the text,
+ *  separators included, is left exactly as written. */
 export function withoutCardNumbers(text: string): { text: string; removed: number } {
   if (text.length < 13) return { text, removed: 0 };
   let removed = 0;
-  const out = text.replace(CARD_RUN, (run) => {
-    const groups = run.split(CARD_SEPARATORS).filter((group) => group !== "");
-    // Longest span first, so a card is taken out whole rather than a shorter span
-    // inside it being redacted and the rest of its digits left in the cell.
-    for (let width = groups.length; width >= 1; width--) {
-      for (let at = 0; at + width <= groups.length; at++) {
-        const digits = groups.slice(at, at + width).join("");
-        if (digits.length < 13 || digits.length > 19) continue;
-        if (!looksLikeAPaymentCard(digits)) continue;
-        removed += 1;
-        // What is around the span is the gym's own note and stays.
-        const before = groups.slice(0, at).join(" ");
-        const after = groups.slice(at + width).join(" ");
-        return [before, CARD_REDACTED, after].filter((part) => part !== "").join(" ");
+  const out = text.replace(DIGIT_RUN, (run) => {
+    const groups = [...run.matchAll(DIGIT_GROUP)].map((m) => ({ at: m.index, digits: m[0] }));
+    let result = "";
+    let copied = 0;
+    for (let i = 0; i < groups.length; i++) {
+      const first = groups[i];
+      if (first === undefined) break;
+      let end = -1;
+      if (first.digits.length >= 13 && first.digits.length <= 19) {
+        if (isCardNumber(first.digits)) end = i;
+      } else if (first.digits.length === 4) {
+        const separator = run[first.at + 4];
+        let digits = first.digits;
+        for (let j = i + 1; j < groups.length && j <= i + 4; j++) {
+          const next = groups[j];
+          if (next === undefined || next.digits.length > 6 || run[next.at - 1] !== separator) break;
+          digits += next.digits;
+          if (digits.length > 19) break;
+          if (digits.length >= 13 && isCardNumber(digits)) end = j;
+          // Only a card's last group is anything but four or six digits long.
+          if (next.digits.length !== 4 && next.digits.length !== 6) break;
+        }
       }
+      if (end < 0) continue;
+      const last = groups[end];
+      if (last === undefined) continue;
+      result += run.slice(copied, first.at) + CARD_REDACTED;
+      copied = last.at + last.digits.length;
+      removed += 1;
+      i = end;
     }
-    return run;
+    return copied === 0 ? run : result + run.slice(copied);
   });
   return { text: out, removed };
 }
