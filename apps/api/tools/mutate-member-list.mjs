@@ -365,6 +365,25 @@ const BREAKS = [
     suite: WIDER_SUITE,
     pure: true,
   },
+  {
+    // Re-check of PR #90. The fix for round one's Critical 3 opened this: a
+    // heading that QUALIFIES the word ("Member PIN", "Gym PIN", "Check-in
+    // PIN") fell through both rules and was kept on every sheet.
+    name: "\u00a711.2: a qualified PIN is not a key, so a gym's keypad code is kept on every member",
+    file: NEVER_KEEP,
+    from: "    return \"password_or_pin\";\n  }",
+    to: "    return null;\n  }",
+    suite: NEVER_KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "\u00a711.2: the abbreviations match their plural again, so Fins is a Singapore ID and GPS Watch a doctor",
+    file: NEVER_KEEP,
+    from: "  word.length <= LONGEST_ABBREVIATION ? holdsWordExactly(header, word) : holdsWord(header, word);",
+    to: "  holdsWord(header, word);",
+    suite: NEVER_KEEP_SUITE,
+    pure: true,
+  },
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");

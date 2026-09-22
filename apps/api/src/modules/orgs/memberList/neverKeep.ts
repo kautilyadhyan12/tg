@@ -25,7 +25,21 @@ import {
   type MemberListNeverKeptReason,
 } from "@app/shared";
 import { digitCount } from "./cells.js";
-import { holdsWord, isWord, normaliseHeader } from "./headerWords.js";
+import { holdsWord, holdsWordExactly, isWord, normaliseHeader } from "./headerWords.js";
+
+/** The longest word below that is an ABBREVIATION rather than a word: PAN, TIN,
+ *  FIN, SSN, SIN, GST, TFN, IRD, PPS, SSS, BIC, ABA, BSB, ACH, UPI, VPA, OTP,
+ *  CVV, ZIP, GP. */
+const LONGEST_ABBREVIATION = 3;
+
+/** Whether a heading holds a never-keep word, counting the plural — except for
+ *  the abbreviations, where a trailing "s" makes a different word entirely
+ *  (re-check of PR #90): "Fins" is not Singapore's FIN, "GPS Watch" is not a
+ *  doctor, "Pans" is not India's PAN and "Tins" is not a tax number. The plural
+ *  still counts for every real word ("Passports", "Bank Accounts", "Medical
+ *  Conditions"), which is what Critical 2 was about. */
+const holdsTerm = (header: string, word: string): boolean =>
+  word.length <= LONGEST_ABBREVIATION ? holdsWordExactly(header, word) : holdsWord(header, word);
 
 // ---------------------------------------------------------------------------
 // Numbers that check themselves
@@ -229,6 +243,7 @@ const ADDRESS_WORDS = [
   "county",
   "country",
   "district",
+  "area",
   "locality",
   "landmark",
   "road",
@@ -523,11 +538,11 @@ export function sheetHints(headers: readonly (string | null)[]): SheetHints {
     // PIN does not count as already having one — which is what lets an Indian
     // gym's "Address / City / PIN" keep its PIN while a US gym's
     // "Address / City / Zip Code / PIN" drops one.
-    if (POSTCODE_WORDS.some((word) => holdsWord(header, word))) {
+    if (POSTCODE_WORDS.some((word) => holdsTerm(header, word))) {
       hasPostcode = true;
       hasAddress = true;
-    } else if (ADDRESS_WORDS.some((word) => holdsWord(header, word))) hasAddress = true;
-    if (BANK_WORDS.some((word) => holdsWord(header, word))) hasBank = true;
+    } else if (ADDRESS_WORDS.some((word) => holdsTerm(header, word))) hasAddress = true;
+    if (BANK_WORDS.some((word) => holdsTerm(header, word))) hasBank = true;
   }
   return { hasAddress, hasPostcode, hasBank };
 }
@@ -540,18 +555,30 @@ export function neverKeptByHeader(raw: string | null, hints: SheetHints): Member
   const header = normaliseHeader(raw);
   // An address, in any of the words the English-speaking world uses for one.
   // Nothing below may take it (Kd, 2026-09-22).
-  if (POSTCODE_WORDS.some((word) => holdsWord(header, word))) return null;
-  if (BANK_WORDS.some((word) => holdsWord(header, word))) return "bank_details";
-  if (hints.hasBank && BARE_ACCOUNT_WORDS.some((word) => holdsWord(header, word))) return "bank_details";
-  if (GOVERNMENT_WORDS.some((word) => holdsWord(header, word))) return "government_id";
-  if (PASSWORD_WORDS.some((word) => holdsWord(header, word))) return "password_or_pin";
-  // The one heading a word list cannot settle: the sheet does. It must BE a
-  // bare PIN word and not merely hold one (review of PR #90, Critical 3) —
-  // "Locker PIN" and "Access Card PIN" say in their own heading that they are a
-  // key, and were being kept on any sheet with an address — and the sheet must
-  // not already carry a column that says it is the postcode.
-  if (BARE_PIN_WORDS.some((word) => isWord(header, word))) return hints.hasAddress && !hints.hasPostcode ? null : "password_or_pin";
-  if (MEDICAL_WORDS.some((word) => holdsWord(header, word)) && !NOT_MEDICAL_WORDS.some((word) => holdsWord(header, word))) return "medical";
+  if (POSTCODE_WORDS.some((word) => holdsTerm(header, word))) return null;
+  if (BANK_WORDS.some((word) => holdsTerm(header, word))) return "bank_details";
+  if (hints.hasBank && BARE_ACCOUNT_WORDS.some((word) => holdsTerm(header, word))) return "bank_details";
+  if (GOVERNMENT_WORDS.some((word) => holdsTerm(header, word))) return "government_id";
+  if (PASSWORD_WORDS.some((word) => holdsTerm(header, word))) return "password_or_pin";
+  // THE ONE HEADING A WORD LIST CANNOT SETTLE, and the only rule here with
+  // three branches. Round one found "Locker PIN" kept because the rule asked
+  // whether the heading HELD the word; the fix asked whether it IS the word,
+  // and the re-check found that "Member PIN", "Gym PIN" and "Check-in PIN" then
+  // fell through both rules and were kept on every sheet — the same door-code
+  // hole on different headings. So the qualifier itself decides, and a list of
+  // key words is not what holds:
+  //
+  //   1. a qualifier that is part of an ADDRESS — "Address PIN", "City PIN" —
+  //      is a postcode, wherever the sheet stands;
+  //   2. the bare word, and only the bare word, is settled by the SHEET;
+  //   3. ANY other qualifier — "Member PIN", "Gym PIN", "Check-in PIN", "App
+  //      PIN", and whatever wording no list here has heard of — is a key.
+  if (BARE_PIN_WORDS.some((word) => holdsTerm(header, word))) {
+    if (ADDRESS_WORDS.some((word) => holdsTerm(header, word))) return null;
+    if (BARE_PIN_WORDS.some((word) => isWord(header, word))) return hints.hasAddress && !hints.hasPostcode ? null : "password_or_pin";
+    return "password_or_pin";
+  }
+  if (MEDICAL_WORDS.some((word) => holdsTerm(header, word)) && !NOT_MEDICAL_WORDS.some((word) => holdsTerm(header, word))) return "medical";
   return null;
 }
 

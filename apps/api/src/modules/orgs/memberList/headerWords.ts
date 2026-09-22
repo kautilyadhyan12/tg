@@ -67,6 +67,9 @@ const holdsOrPlural = (header: string, word: string): boolean => holds(header, w
 /** For the never-keep rules next door, which read the same headings in the same
  *  shape and need the same plural: one reading of a heading, not two (§11.2). */
 export const holdsWord = holdsOrPlural;
+/** …and the same WITHOUT the plural, for the abbreviations next door where a
+ *  trailing "s" makes another word altogether (re-check of PR #90). */
+export const holdsWordExactly = holds;
 /** …and the strict form, where a heading must BE the word and not merely hold
  *  it (the bare-PIN rule). */
 export const isWord = (header: string, word: string): boolean => header === word;

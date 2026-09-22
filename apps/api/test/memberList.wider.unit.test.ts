@@ -263,6 +263,21 @@ describe("the worst thing — the round-one Criticals, driven end to end", () =>
     expect(everythingSaid(found)).not.toContain("4821");
   });
 
+  it("drops a gym's keypad codes whatever they are called, on a sheet with no address at all", () => {
+    // Re-check of PR #90: round one's own fix left these kept on every sheet.
+    // A file with no address column, which is what a small gym's export is.
+    const found = read([
+      ["Full Name", "Email", "Mobile", "Member PIN", "Check-in PIN", "Gym PIN"],
+      ["Ann Lee", "ann@example.com", "9876543210", "4821", "9134", "2277"],
+      ["Bo Chen", "bo@example.com", "9876543211", "1234", "5678", "9012"],
+    ]);
+    for (const at of [3, 4, 5]) expect(columnAt(found, at).neverKept).toBe("password_or_pin");
+    for (const code of ["4821", "9134", "2277", "1234", "5678", "9012"]) expect(everythingSaid(found)).not.toContain(code);
+    expect(found.extraFields).toEqual([]);
+    // …and the people are untouched.
+    expect(found.rows.map((row) => row.fullName)).toEqual(["Ann Lee", "Bo Chen"]);
+  });
+
   it("still keeps an Indian gym's PIN, where the bare PIN IS the postcode", () => {
     const found = read(
       [

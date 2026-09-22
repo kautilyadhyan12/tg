@@ -235,6 +235,38 @@ describe("a postcode is an address, in every word the English-speaking world wri
     }
   });
 
+  it.each([
+    // Re-check of PR #90: round one's fix made the bare-PIN rule fire only on a
+    // heading that IS "PIN", and these then fell through both rules and were
+    // kept on every sheet. "Member PIN" is the ordinary wording for a gym's
+    // keypad code and "Check-in PIN" is the re-plan's own check-in wording.
+    ["Member PIN"],
+    ["Gym PIN"],
+    ["Check-in PIN"],
+    ["App PIN"],
+    ["Staff PIN"],
+    ["Class PIN"],
+    // …and a wording no list here has heard of, which is the point of the rule:
+    // ANY qualifier that is not part of an address makes it a key.
+    ["Turnstile PIN"],
+    ["Sauna PIN No"],
+  ])("drops %s — a qualified PIN is a key, whatever the sheet carries", (header) => {
+    for (const sheet of [NO_HINTS, WITH_ADDRESS, WITH_POSTCODE]) {
+      expect(neverKeptByHeader(header, sheet)).toBe("password_or_pin");
+    }
+  });
+
+  it.each([
+    // …unless the qualifier is part of an ADDRESS, which is how an Indian gym
+    // writes its postcode when it does not write it plainly.
+    ["Address PIN"],
+    ["City PIN"],
+    ["Area PIN"],
+    ["Postal PIN"],
+  ])("keeps %s, where the qualifier itself says it is an address", (header) => {
+    for (const sheet of [NO_HINTS, WITH_ADDRESS]) expect(neverKeptByHeader(header, sheet)).toBe(null);
+  });
+
   it("keeps a locker NUMBER, which is not a key", () => {
     for (const sheet of [NO_HINTS, WITH_ADDRESS]) expect(neverKeptByHeader("Locker No", sheet)).toBe(null);
   });
@@ -317,7 +349,25 @@ describe("every market the app is for, not one country's", () => {
     ["Bank Accounts"],
     ["Medical Conditions"],
     ["Sort Codes"],
+    ["Tax File Numbers"],
+    ["Emirates IDs"],
   ])("drops %s, the plural of a word it holds", (header) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).not.toBe(null);
+  });
+
+  it.each([
+    // Re-check of PR #90: matching the plural threw these away with a reason
+    // that was false of each. An abbreviation plus an "s" is another word.
+    ["Fins", "Singapore's FIN"],
+    ["GPS Watch", "a doctor"],
+    ["Pans", "India's PAN"],
+    ["Tins", "a tax number"],
+    ["Zips", "a postcode"],
+  ])("keeps %s, which is not %s", (header) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).toBe(null);
+  });
+
+  it.each([["FIN"], ["GP"], ["PAN"], ["TIN"]])("still drops the abbreviation itself, %s", (header) => {
     expect(neverKeptByHeader(header, NO_HINTS)).not.toBe(null);
   });
 
