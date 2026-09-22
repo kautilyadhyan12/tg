@@ -494,7 +494,12 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(formerPage.total).toBe(1);
       expect(formerPage.entries[0]?.memberNumber).toBe("K-1");
       expect(formerPage.entries[0]?.formerAt).not.toBeNull();
-      expect(formerPage.entries[0]?.inApp).toBe(false);
+      // THEY REALLY ARE IN THE APP, and the page that shows them says so (round one,
+      // Low-2). This line asserted `false` until the reviewer found it: the match that
+      // every count and chip reads excludes former records on purpose, so the page
+      // inherited that and said something FALSE about a named person on the one page
+      // whose job is to show them. The counts below are the ones that must stay 0.
+      expect(formerPage.entries[0]?.inApp).toBe(true);
 
       const both = pageOf(await get(`${listUrl(org.org.id)}/entries?records=all`, owner.cookies));
       expect(both.total).toBe(2);
@@ -606,6 +611,85 @@ d("member list: the wider record, kept (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "THE SAME WIDE FILE TWICE CHANGES NOTHING AND DOES NOT MOVE THE VERSION — including for somebody whose end-or-renewal cell is empty",
+    async () => {
+      // Round one, High-2. The write only ever stores an end-or-renewal KIND where there
+      // is a day for it, so comparing the file's "renews" against the record's NULL made
+      // every person with an EMPTY end cell read as `changed` on every upload for ever:
+      // a false number on the one field the breakdown exists to watch, a version bump
+      // for a confirm that moved nothing, and a hand-edit mark cleared for a field
+      // nothing overwrote. The old case for this used the narrow fixture, which has no
+      // end column at all, so it could not see it.
+      const owner = await makeUser("twice-owner");
+      const org = await makeOrg(owner.cookies, "Twice Kept Gym");
+      const people = [person(1), person(2, { ends: "" }), person(3, { ends: "" })];
+      const bytes = file(people);
+
+      const first = await apply(org.org.id, owner.cookies, bytes);
+      expect(first.applied).toMatchObject({ new: 3, changed: 0 });
+      const version = first.version;
+      // Two of the three really do have no end date, so the case is reached.
+      expect((await recordOf(org.org.id, "K-2")).ends_on).toBeNull();
+      expect((await recordOf(org.org.id, "K-2")).ends_on_kind).toBeNull();
+      expect((await recordOf(org.org.id, "K-1")).ends_on_kind).toBe("ends");
+
+      // THE SAME BYTES AGAIN. The preview must say nothing moved…
+      const preview = await stage(org.org.id, owner.cookies, bytes);
+      expect(preview.sameAsLastUpload).toBe(true);
+      expect(preview.list).toMatchObject({ new: 0, changed: 0, unchanged: 3, gone: 0 });
+      expect(preview.fieldChanges).toEqual([]);
+      expect(preview.extraChanges).toEqual([]);
+
+      // …and confirming it must move neither a value nor the version.
+      const again = await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies);
+      expect(again.statusCode).toBe(200);
+      const done = (JSON.parse(again.body) as { confirmed: MemberListConfirmed }).confirmed;
+      expect(done.applied).toMatchObject({ new: 0, changed: 0, unchanged: 3, gone: 0 });
+      expect(done.version).toBe(version);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a former record says truthfully whether its person is in the app, while no count or chip of the LIST does",
+    async () => {
+      // Round one, Low-2. `membersAgainstList` excludes former records in both of its
+      // channels, which is what stops one admitting anybody — and it made the page that
+      // shows them say `inApp: false` about every one, including people who really are
+      // in the app. Something false about a named person, on the one page whose job is
+      // to show them.
+      const owner = await makeUser("formerapp-owner");
+      const leaver = await makeUser("formerapp-leaver");
+      const org = await makeOrg(owner.cookies, "Former In App Gym");
+      await verify(leaver.email);
+      await joinAsMember(leaver.cookies, org, owner.cookies);
+
+      await apply(org.org.id, owner.cookies, file([{ ...person(1), email: leaver.email }, person(2)]));
+      const onList = pageOf(await get(`${listUrl(org.org.id)}/entries`, owner.cookies));
+      expect(onList.entries.find((e) => e.memberNumber === "K-1")?.inApp).toBe(true);
+
+      // Now they come off the list.
+      await apply(org.org.id, owner.cookies, file([person(2)]));
+      const formerPage = pageOf(await get(`${listUrl(org.org.id)}/entries?records=former`, owner.cookies));
+      expect(formerPage.entries.map((e) => e.memberNumber)).toEqual(["K-1"]);
+      expect(formerPage.entries[0]?.inApp).toBe(true);
+      // …and on an `all` page too.
+      const all = pageOf(await get(`${listUrl(org.org.id)}/entries?records=all`, owner.cookies));
+      expect(all.entries.find((e) => e.memberNumber === "K-1")?.inApp).toBe(true);
+
+      // BUT NOTHING ABOUT THE LIST COUNTS THEM. `inApp` here is the list as it stands,
+      // and `canBeInvited` is the number 3b's Invite button acts on.
+      const list = listOf(await get(listUrl(org.org.id), owner.cookies));
+      expect(list.counts).toMatchObject({ entries: 1, former: 1, inApp: 0 });
+      expect(list.statuses).toEqual([{ label: "Active", count: 1, inApp: 0, canBeInvited: 1 }]);
+      // …and the default page is unaffected.
+      const current = pageOf(await get(`${listUrl(org.org.id)}/entries?filter=in_app`, owner.cookies));
+      expect(current.total).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // STAFF'S OWN CORRECTIONS (§11.4)
   // =========================================================================
@@ -626,8 +710,11 @@ d("member list: the wider record, kept (real Postgres)", () => {
         WHERE gym_id = ${org.org.id} AND member_number = 'K-1'`;
 
       // Next month's file disagrees about the membership type and agrees about the
-      // locker.
-      const next = file([person(1, { type: "Gold" }), person(2)]);
+      // locker — and brings a column the gym has never had, so that a refusal can be
+      // checked against the catalogue as well as the entries.
+      const wider = [...HEADER, "Trainer Name"];
+      const next = csv([wider, ...[person(1, { type: "Gold" }), person(2)].map((p) => [...row(p), "Ola"])]);
+      const fieldsBefore = (await fieldsOf(org.org.id)).map((f) => f.key);
       const preview = await stage(org.org.id, owner.cookies, next);
       expect(preview.handEdits).toEqual({ entries: 1, fields: ["membership type"] });
 
@@ -641,10 +728,18 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(refused.body).not.toContain("Kept 0001");
       // AND NOTHING WAS WRITTEN — the correction is still there.
       expect((await recordOf(org.org.id, "K-1")).membership_type).toBe("Platinum");
+      // …INCLUDING THE GYM'S CATALOGUE, which is the one this test did not check and
+      // round one's High-1 was (a gate `return`s out of `sql.begin`, which COMMITS, so
+      // the file's new headings were written by a confirm that said it wrote nothing).
+      // The file carries a column the gym has never had, so a leak would show here.
+      expect(fieldsBefore).not.toContain("trainer_name");
+      expect((await fieldsOf(org.org.id)).map((f) => f.key)).toEqual(fieldsBefore);
 
       // THE TICK BELONGS TO THE REQUEST. The same upload, pressed again with it.
       const applied = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeHandEdits: true }, owner.cookies);
       expect(applied.statusCode).toBe(200);
+      // …and NOW the catalogue grows, because the confirm went through.
+      expect((await fieldsOf(org.org.id)).map((f) => f.key)).toContain("trainer_name");
       const after = await recordOf(org.org.id, "K-1");
       expect(after.membership_type).toBe("Gold");
       // ONLY THE MARK THIS FILE ANSWERED IS GONE. The locker's mark stays, because
@@ -675,8 +770,15 @@ d("member list: the wider record, kept (real Postgres)", () => {
         WHERE gym_id = ${org.org.id} AND member_number = 'K-1'`;
 
       // A file that both takes eleven people off a list of twenty AND overwrites the
-      // correction. The guard is asked first, and one tick does not answer both.
-      const next = file(many.slice(0, 9).map((p) => (p.number === "K-1" ? { ...p, type: "Gold" } : p)));
+      // correction — and brings a column the gym has never had, so each refusal can be
+      // checked against the CATALOGUE as well as the entries (round one, High-1).
+      const wider = [...HEADER, "Trainer Name"];
+      const next = csv([
+        wider,
+        ...many.slice(0, 9).map((p) => [...row(p.number === "K-1" ? { ...p, type: "Gold" } : p), "Ola"]),
+      ]);
+      const fieldsBefore = (await fieldsOf(org.org.id)).map((f) => f.key);
+      expect(fieldsBefore).not.toContain("trainer_name");
       const preview = await stage(org.org.id, owner.cookies, next);
       expect(preview.guard.needsTick).toBe(true);
       expect(preview.handEdits.entries).toBe(1);
@@ -685,11 +787,18 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(one.statusCode).toBe(409);
       expect((JSON.parse(one.body) as { error: string }).error).toBe("hand_edits");
       expect(await countsOf(org.org.id)).toEqual({ current: 20, former: 0 });
+      expect((await fieldsOf(org.org.id)).map((f) => f.key)).toEqual(fieldsBefore);
 
       const other = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeHandEdits: true }, owner.cookies);
       expect(other.statusCode).toBe(409);
       expect((JSON.parse(other.body) as { error: string }).error).toBe("large_change");
       expect(await countsOf(org.org.id)).toEqual({ current: 20, former: 0 });
+      // A REFUSED CONFIRM WRITES NOTHING AT ALL, and the catalogue is a bounded
+      // per-gym resource nothing ever prunes: staff could otherwise fill a gym's forty
+      // slots with headings from files it never applied, by uploading wide files the
+      // wrong-file guard refuses — which is the guard's ORDINARY case (round one,
+      // High-1).
+      expect((await fieldsOf(org.org.id)).map((f) => f.key)).toEqual(fieldsBefore);
 
       const both = await post(
         confirmUrl(org.org.id, preview.uploadId),
@@ -698,6 +807,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       );
       expect(both.statusCode).toBe(200);
       expect(await countsOf(org.org.id)).toEqual({ current: 9, former: 11 });
+      expect((await fieldsOf(org.org.id)).map((f) => f.key)).toContain("trainer_name");
     },
     TEST_TIMEOUT_MS,
   );

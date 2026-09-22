@@ -487,10 +487,16 @@ export type MemberListExtraField = z.infer<typeof memberListExtraFieldSchema>;
  *  to decide what CHANGED, so a document left half-shaped by a later migration or a
  *  hand-run statement would read as "every column of this person is different" and the
  *  upload would write over the lot. */
-export const memberListExtraDocumentSchema = z.record(
-  z.string().regex(/^[a-z0-9_]+$/).max(MEMBER_LIST_MAX_FIELD_KEY_CHARS),
-  z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS),
-);
+export const memberListExtraDocumentSchema = z
+  .record(z.string().regex(/^[a-z0-9_]+$/).max(MEMBER_LIST_MAX_FIELD_KEY_CHARS), z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS))
+  // AND HOW MANY KEYS — the bound that could not be a CHECK on the table, because
+  // counting a jsonb object's keys needs a set-returning function and a CHECK may hold
+  // no subquery. The migration's note says the ceiling "holds by construction" since a
+  // document is only ever written from the catalogue; this is the one place that can
+  // actually check it, and it did not (round one, Low-3).
+  .refine((document) => Object.keys(document).length <= MEMBER_LIST_MAX_EXTRA_FIELDS, {
+    message: `a member record may hold at most ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} of the gym's own columns`,
+  });
 export type MemberListExtraDocument = z.infer<typeof memberListExtraDocumentSchema>;
 
 /** How one date column was read, said back to staff so they can flip it

@@ -796,12 +796,53 @@ describe("the gym's own columns", () => {
     expect(found.rows[0]?.extra).toEqual(["Blue", "Morning 6am", "L-14", "Bo Chen", "Kashyap"]);
   });
 
-  it("gives a column with no heading a key of its own place, and one repeated heading a number", () => {
+  it("numbers a column with no heading among the UNNAMED ones, and gives one repeated heading a number", () => {
     const found = read([
       ["Name", "Email", "", "Belt", "Belt"],
       ["Ann Lee", "ann@example.com", "x", "Blue", "Brown"],
     ]);
-    expect(found.extraFields.map((field) => field.key)).toEqual(["column_3", "belt", "belt_2"]);
+    expect(found.extraFields.map((field) => field.key)).toEqual(["unnamed_1", "belt", "belt_2"]);
+    // …and it is SHOWN by its place, because a screen needs something to print over
+    // it and §11.1 keeps an extra field "under the gym's own heading". The key is
+    // never the place; the label is (see `extraKey`).
+    expect(found.extraFields.map((field) => field.label)).toEqual(["Column 3", "Belt", "Belt"]);
+  });
+
+  it("AN UNNAMED COLUMN KEEPS ITS KEY WHEN A NAMED COLUMN IS INSERTED BEFORE IT (round one, High-3)", () => {
+    // Keyed `column_<place>`, one unnamed column became a SECOND field the moment any
+    // column was inserted to its left — and 3a-v-b makes that key DURABLE, so the same
+    // cell was then stored twice in one record under two keys, both with an empty
+    // label, with nothing ever clearing the stale one (a whole-list upload MERGES the
+    // document). A gym whose export shifts month to month burnt a slot of its forty on
+    // every shift. Numbered among the unnamed columns, the key survives the insertion.
+    const before = read([
+      ["Name", "Email", "", "Notes"],
+      ["Ann Lee", "ann@example.com", "blue", "n1"],
+    ]);
+    const after = read([
+      ["Name", "Email", "Town", "", "Notes"],
+      ["Ann Lee", "ann@example.com", "Leeds", "blue", "n1"],
+    ]);
+    const keyOf = (found: typeof before, label: string): string | undefined =>
+      found.extraFields.find((field) => field.label === label)?.key;
+    // The unnamed column is the one whose label moved with its place; its KEY did not.
+    expect(keyOf(before, "Column 3")).toBe("unnamed_1");
+    expect(keyOf(after, "Column 4")).toBe("unnamed_1");
+    // …and the named ones are keyed by their headings either way, as they always were.
+    expect(after.extraFields.map((field) => field.key)).toEqual(["town", "unnamed_1", "notes"]);
+  });
+
+  it("…and two unnamed columns are told apart, and stay told apart", () => {
+    const found = read([
+      ["Name", "Email", "", "Belt", ""],
+      ["Ann Lee", "ann@example.com", "blue", "Blue", "x"],
+    ]);
+    expect(found.extraFields.map((field) => field.key)).toEqual(["unnamed_1", "belt", "unnamed_2"]);
+    const moved = read([
+      ["Name", "Email", "Town", "", "Belt", ""],
+      ["Ann Lee", "ann@example.com", "Leeds", "blue", "Blue", "x"],
+    ]);
+    expect(moved.extraFields.map((field) => field.key)).toEqual(["town", "unnamed_1", "belt", "unnamed_2"]);
   });
 
   it("leaves out a column that is empty on every row", () => {

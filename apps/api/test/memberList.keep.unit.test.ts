@@ -148,19 +148,55 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     expect(written.cardsDropped).toBe(1);
   });
 
-  it("THE LIMIT, PINNED RATHER THAN DISCOVERED: a card number inside a SENTENCE is not dropped by the cell rule", () => {
-    // This is 3a-v-a's shipped rule and `cardShapedCell`'s own note says so: the cell
-    // must BE a card number, written with digits, spaces and dashes and nothing else,
-    // which is §11.2's words ("13 to 19 digits, spaces and dashes allowed"). A column
-    // of such cells is dropped whole by the column rule; prose with a number in it is
-    // not. It is asserted here so the limit is a decision somebody made and not a hole
-    // somebody finds, and it is written into §11.2's notes for the feature's hostile
-    // security pass. Widening it would mean scanning every cell of ten thousand rows
-    // for digit runs, and Luhn passes one made-up run in ten — so a gym's Notes cell
-    // would be blanked for holding a long invoice number.
-    const written = extraForWriting(["Card on file 4111111111111111 (Visa)"], [kept("notes", "Notes", 0)]);
-    expect(written.document).toEqual({ notes: "Card on file 4111111111111111 (Visa)" });
+  // ── A CARD INSIDE A SENTENCE (round one, High-4) ─────────────────────────────
+  //
+  // This block replaces one that PINNED the opposite as a deliberate limit. The
+  // reviewer raised it anyway, and was right to: a free-text "Notes" column is mostly
+  // ordinary notes, so the COLUMN rule does not drop it, and a cell that merely
+  // contains a card is not a card-shaped CELL either — so a live Visa number sat in
+  // the database under a member's name. §11.2's own sentence is "13 to 19 digits …
+  // that pass the card check digit — in ANY column".
+  //
+  // The note is kept and only the card's own digits go, which is what makes it
+  // affordable: the recorded objection was that Luhn passes about one made-up run in
+  // ten, and that objection is about BLANKING a cell, not about redacting a run.
+  it.each([
+    ["the way a gym writes it", "Card on file 4111 1111 1111 1111 (Visa)", "Card on file [card number removed] (Visa)"],
+    ["mid-sentence, with a date after it", "paid by card 5555 5555 5555 4444 on 2 Jan", "paid by card [card number removed] on 2 Jan"],
+    ["with dashes", "card 4111-1111-1111-1111, exp 03/27", "card [card number removed], exp 03/27"],
+    // A CARD WITH MORE DIGITS BESIDE IT, separated only by a space: the whole run is
+    // twenty digits and twenty is not a card, so a rule that checked the run whole
+    // would miss it. The spans tried are aligned to the groups a card is written in.
+    ["with a year after it", "4111 1111 1111 1111 2024", "[card number removed] 2024"],
+    ["with a year before it", "2024 4111 1111 1111 1111", "2024 [card number removed]"],
+    ["two of them in one note", "cards 4111111111111111 and 4242424242424242", "cards [card number removed] and [card number removed]"],
+  ])("a card written inside a note is taken out of it and the note kept — %s", (_label, cell, expected) => {
+    const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
+    expect(written.document["notes"]).toBe(expected);
+    expect(written.cardsDropped).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["a note with no number in it", "prefers mornings"],
+    ["a 13-digit invoice number that fails the check digit", "invoice 1234567890123"],
+    ["a phone number", "phone 07911 100001"],
+    ["a sort code and an account number", "sort 20-00-00 acc 12345678"],
+    ["years", "member since 2019, renewed 2024-2025"],
+    ["a run far too long to be a card", "ref 998877665544332211009988"],
+  ])("…and an ordinary note is left exactly as the gym wrote it — %s", (_label, cell) => {
+    const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
+    expect(written.document["notes"]).toBe(cell);
     expect(written.cardsDropped).toBe(0);
+  });
+
+  it("a card inside one of the gym's own WORDS is taken out of it too", () => {
+    // A status of "paid by card 4111 1111 1111 1111" is a note somebody put in the
+    // wrong column. What must not survive is the number.
+    expect(wordForWriting("paid by card 4111 1111 1111 1111")).toEqual({
+      value: "paid by card [card number removed]",
+      card: true,
+    });
+    expect(wordForWriting("Paid in full")).toEqual({ value: "Paid in full", card: false });
   });
 
   it("THE KEY IS STILL WRITTEN, EMPTY — because the document is MERGED and a missing key would keep the old cell", () => {
@@ -413,6 +449,39 @@ describe("changed, field by field", () => {
     expect(out.counts).toMatchObject({ changed: 1, unchanged: 0 });
     expect(out.fieldChanges.map((change) => change.field)).toEqual(fields);
     expect(out.fieldChanges.every((change) => change.count === 1)).toBe(true);
+  });
+
+  it("THE KIND WITHOUT A DAY IS NOT A CHANGE, so the same file twice does not say so for ever", () => {
+    // Round one, High-2. The write only ever stores a kind where there is a day for it
+    // (both statements null it with the day, and the table's own CHECK forbids anything
+    // else), so comparing the file's "renews" against the record's NULL called every
+    // person with an EMPTY end cell `changed` — on every upload, for ever. Three things
+    // at once: a number staff read that is false, on the one field the breakdown exists
+    // to watch; a version bump for a confirm that moved nothing; and a hand-edit mark
+    // cleared for a field nothing overwrote.
+    const out = run({
+      rows: [row(WHO, { endsOn: null })],
+      entries: [entry(WHO, { endsOn: null, endsOnKind: null })],
+      members: [],
+      mode: "whole_list",
+      hasList: true,
+      endsOnKind: "renews",
+    });
+    expect(out.counts).toMatchObject({ changed: 0, unchanged: 1 });
+    expect(out.fieldChanges).toEqual([]);
+    expect(out.unchanged[0]?.moved).toEqual([]);
+  });
+
+  it("…and a day arriving where there was none IS a change, kind and all", () => {
+    const out = run({
+      rows: [row(WHO, { endsOn: "2027-04-02" })],
+      entries: [entry(WHO, { endsOn: null, endsOnKind: null })],
+      members: [],
+      mode: "whole_list",
+      hasList: true,
+      endsOnKind: "renews",
+    });
+    expect(out.fieldChanges).toEqual([{ field: "endsOn", count: 1 }]);
   });
 
   it("the end-or-renewal KIND moving is an `endsOn` change, though the day itself did not move", () => {
@@ -757,6 +826,31 @@ describe("the gym's catalogue of its own columns", () => {
     const have: FieldSlot[] = [{ key: "gender", label: "Gender", ord: 7 }];
     const { fresh } = growFields(have, [{ key: "batch", label: "Batch" }], MEMBER_LIST_MAX_EXTRA_FIELDS);
     expect(fresh).toEqual([{ key: "batch", label: "Batch", ord: 8 }]);
+  });
+
+  it("AN UNNAMED COLUMN KEEPS ITS KEY WHEN A NAMED ONE IS INSERTED BESIDE IT (round one, High-3)", () => {
+    // Keyed by its place in the sheet, one unnamed column became a SECOND catalogue
+    // field the moment any column was inserted to its left — the same cell stored
+    // twice under two keys, both with an empty label, and nothing clearing the stale
+    // one because a whole-list upload MERGES the document. Numbered among the unnamed
+    // columns instead, it is stable under every insertion of a named one.
+    const before: MemberListExtraField[] = [
+      { key: "unnamed_1", label: "Column 6", column: 5 },
+      { key: "notes", label: "Notes", column: 6 },
+    ];
+    const after: MemberListExtraField[] = [
+      { key: "notes", label: "Notes", column: 6 },
+      { key: "town", label: "Town", column: 5 },
+      { key: "unnamed_1", label: "Column 7", column: 7 },
+    ];
+    const grown = growFields([], before, MEMBER_LIST_MAX_EXTRA_FIELDS);
+    const grownAgain = growFields(grown.catalogue, after, MEMBER_LIST_MAX_EXTRA_FIELDS);
+    // One slot for the unnamed column, not two, and the gym's FIRST label for it.
+    expect(grownAgain.catalogue.map((f) => f.key)).toEqual(["unnamed_1", "notes", "town"]);
+    expect(grownAgain.catalogue[0]?.label).toBe("Column 6");
+    // …and the cell lands under the one key, read at the column's new place.
+    const { kept: mine } = keptFields(grownAgain.catalogue, after);
+    expect(mine.map((f) => `${f.key}@${String(f.at)}`)).toEqual(["notes@0", "town@1", "unnamed_1@2"]);
   });
 
   it("what the gym keeps is matched to the file BY POSITION, and what it does not keep is counted", () => {

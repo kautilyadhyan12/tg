@@ -628,6 +628,13 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     expect(memberListExtraDocumentSchema.safeParse({ notes: "x".repeat(MEMBER_LIST_MAX_EXTRA_CHARS + 1) }).success).toBe(false);
     expect(memberListExtraDocumentSchema.safeParse({ notes: 7 }).success).toBe(false);
     expect(memberListExtraDocumentSchema.safeParse({ notes: null }).success).toBe(false);
+    // AND HOW MANY KEYS (round one, Low-3). The migration's note says the 40-field
+    // ceiling "holds by construction" because a document is only written from the
+    // catalogue — and this is the one place that can actually CHECK it, which it did
+    // not: a CHECK on the table cannot count a jsonb object's keys.
+    const atTheCap = Object.fromEntries(Array.from({ length: MEMBER_LIST_MAX_EXTRA_FIELDS }, (_, i) => [`f${String(i)}`, "x"]));
+    expect(memberListExtraDocumentSchema.safeParse(atTheCap).success).toBe(true);
+    expect(memberListExtraDocumentSchema.safeParse({ ...atTheCap, one_too_many: "x" }).success).toBe(false);
   });
 
   it("what an upload would change is counted field by field, and the gym's own columns by their own heading", () => {

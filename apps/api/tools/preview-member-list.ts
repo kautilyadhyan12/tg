@@ -166,11 +166,6 @@ try {
     }
   }
 
-  if (preview.warnings.length > 0) {
-    console.log("\nWorth knowing");
-    for (const warning of preview.warnings) console.log(`  ${memberListWarningWords(warning)}`);
-  }
-
   console.log("\nSeats");
   console.log(`  cap ${preview.seat.cap === null ? "none" : String(preview.seat.cap)} · members now ${String(preview.seat.liveMembers)} · the list would hold ${String(preview.seat.listSize)}`);
 

@@ -468,6 +468,64 @@ const BREAKS = [
     suite: KEPT_SUITE,
     note: "expected GREEN on its own: marking an already-former row again is what this refuses, and no route can produce one",
   },
+
+  // ── ROUND ONE'S OWN FOUR, each driven by the reviewer against the real service ─
+  {
+    name: "round one High-1: the gym's catalogue is written BEFORE the tick gates, so a refused confirm keeps it",
+    file: SERVICE,
+    from: "    await repo.addFields(tx, gymId, grown.fresh);",
+    to: "",
+    extra: {
+      from: "    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);",
+      to:
+        "    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);\n" +
+        "    await repo.addFields(tx, gymId, grown.fresh);",
+    },
+    suite: KEPT_SUITE,
+  },
+  {
+    name: "round one High-2: the end-or-renewal KIND is compared without its day, so an empty cell is changed for ever",
+    file: RECONCILE,
+    from: "  const rowKind = row.endsOn === null ? null : endsOnKind;",
+    to: "  const rowKind = endsOnKind;",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-3: an unnamed column is keyed by its place again, so inserting a column beside it makes a second field",
+    file: UNDERSTAND,
+    from: "    unnamed.n += 1;\n    key = `unnamed_${String(unnamed.n)}`;",
+    to: "    key = `unnamed_${String(taken.size + 1)}`;",
+    // THE READER'S suite, not the pure one: the key is made in `understand.ts`, and
+    // the first version of this row pointed at a table test that builds its fields BY
+    // HAND and never reaches the rule at all — so the mutant ran GREEN and read exactly
+    // like a rule that holds. Found by running it.
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4: a card written inside a note is written to the database with the note",
+    file: EXTRA_FIELDS,
+    from: "    const scrubbed = withoutCardNumbers(cell);",
+    to: "    const scrubbed = { text: cell, removed: 0 };",
+    suite: KEEP_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one High-4, the reader's half: a note reaches the staged file with its card still in it",
+    file: UNDERSTAND,
+    from: "    const scrubbed = withoutCardNumbers(raw);",
+    to: "    const scrubbed = { text: raw, removed: 0 };",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "round one Low-2: a former record cannot say that its person is in the app",
+    file: SERVICE,
+    from: "    inAppEntryIds: records === \"current\" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),",
+    to: "    inAppEntryIds: inAppEntryIds(members),",
+    suite: KEPT_SUITE,
+  },
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
