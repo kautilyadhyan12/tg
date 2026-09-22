@@ -38,7 +38,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
-import { safeErrorSerializer, scrubbedForSentry } from "./logSafety.js";
+import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
 import { sentryOptions } from "./sentry.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -108,7 +108,13 @@ export async function buildApp(
       // error carries the whole failing row in `detail` — a member's name, address
       // and phone number (spec Part 3 §9.9). This is an allowlist; `logSafety.ts`
       // says why that rather than a list of fields to strip.
-      serializers: { err: safeErrorSerializer },
+      // …AND A REQUEST LINE SAYS WHICH ROUTE, NEVER WHAT WAS ASKED OF IT. pino's own
+      // `req` serializer writes the url as it arrived, query string and all, so a
+      // member's address typed into a search box and a gym's own words for what a
+      // person bought were written on every request that carried them (found by the
+      // member list's own log capture, 2026-09-22). `logSafety.ts` says why it is
+      // global rather than route by route.
+      serializers: { err: safeErrorSerializer, req: safeRequestSerializer },
     },
     disableRequestLogging: config.NODE_ENV === "test",
   });
