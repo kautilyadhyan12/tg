@@ -239,6 +239,13 @@
       "when": 1788220800017,
       "tag": "0034_member_list_order",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788220800018,
+      "tag": "0035_member_record_kept",
+      "breakpoints": true
     }
   ]
 }
