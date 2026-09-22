@@ -202,18 +202,60 @@ export function minutesLine(minutes) {
   return `${String(minutes)} min`;
 }
 
-/** THE FORM'S OWN STATE. Strings, because that is what inputs hold: turning
- *  `places` into a number at the keystroke makes a half-typed `1` into a saved
- *  value and an emptied box into `0`. The conversion happens once, in
- *  `classRequest`, where the emptiness has a meaning to give it. */
+/** THE COACH, IN WORDS — and it says something when the name is missing but a
+ *  coach was picked.
+ *
+ *  The server answers `coachName` only while that person is still this gym's
+ *  ACTIVE staff, so `coachUserId` set with no name means the gym named somebody
+ *  who has since gone. Printing nothing there (17b-i's behaviour, on the class)
+ *  leaves a repeat looking as though nobody was ever picked, and the gym cannot
+ *  act on what it cannot see. ONE function for the class and the repeat: the
+ *  same fact in two places must not have two spellings. */
+export function coachLine(holder) {
+  const name = holder?.coachName;
+  if (typeof name === 'string' && name !== '') return name;
+  return typeof holder?.coachUserId === 'string' && holder.coachUserId !== ''
+    ? "Coach not on this gym's staff"
+    : '';
+}
+
+/** HOW LONG, HOW MANY, WHO — the three a repeat owns and a class holds as the
+ *  values a new repeat starts from. One line, one function, both callers, so
+ *  the screen cannot say "45 min" about a repeat and "45 min · 20 places" about
+ *  its class. */
+export function runLine(holder) {
+  const length = minutesLine(holder?.minutes);
+  // NO LENGTH, NO LINE. `placesLine` answers "No limit" for a missing `places`
+  // because null IS no limit on a real row — so a holder that is not a real row
+  // would otherwise render as the bare words "No limit", which says something
+  // about a class nobody described. Every class and every repeat the server
+  // sends has a length.
+  if (length === '') return '';
+  return [length, placesLine(holder?.places), coachLine(holder)]
+    .filter((part) => part !== '')
+    .join(' · ');
+}
+
+/** WHAT THE CLASS'S OWN THREE NUMBERS ARE FOR, said on the card that shows them.
+ *
+ *  **Without these words the line is something a gym can SEE that is FALSE**
+ *  (Kd, RULINGS 2026-09-22). Since the repeat became the live answer, "60 min ·
+ *  20 places · Dana" under a class name is not what that class runs as — it is
+ *  what the next repeat will be filled in from, and a gym whose Monday runs 45
+ *  minutes would read the card and believe otherwise. The wording is the
+ *  ruling's own. */
+export function classDefaultsLine(type) {
+  const line = runLine(type);
+  return line === '' ? '' : `A new repeat starts from: ${line}`;
+}
+
+/** THE CLASS FORM'S OWN STATE — its name, its words and its colour, plus the
+ *  three that `runFieldsDraft` owns for every form on this screen. */
 export function emptyClassDraft() {
   return {
     name: '',
     description: '',
-    minutes: '60',
-    unlimited: false,
-    places: '20',
-    coachUserId: '',
+    ...runFieldsDraft(null),
     colour: CLASS_COLOURS[0],
     openGym: false,
   };
@@ -224,12 +266,7 @@ export function classDraft(type) {
   return {
     name: type.name ?? '',
     description: type.description ?? '',
-    minutes: Number.isInteger(type.minutes) ? String(type.minutes) : '',
-    // THE TICK AND THE BOX ARE SEPARATE STATE, and that is what lets a gym
-    // switch "no limit" off and find its old number still typed in.
-    unlimited: type.places === null || type.places === undefined,
-    places: Number.isInteger(type.places) ? String(type.places) : '20',
-    coachUserId: type.coachUserId ?? '',
+    ...runFieldsDraft(type),
     colour: CLASS_COLOURS.includes(type.colour) ? type.colour : CLASS_COLOURS[0],
     openGym: type.openGym === true,
   };
@@ -248,16 +285,8 @@ export function classProblem(draft) {
   if ((draft?.description ?? '').trim().length > 500) {
     return 'That description is too long — 500 letters at most.';
   }
-  const minutes = Number(draft?.minutes);
-  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) {
-    return 'How long is it? Anything from 5 minutes to 10 hours.';
-  }
-  if (draft?.unlimited !== true) {
-    const places = Number(draft?.places);
-    if (!Number.isInteger(places) || places < 1 || places > 500) {
-      return 'How many people fit? A whole number from 1 to 500, or tick "no limit".';
-    }
-  }
+  const fields = runFieldsProblem(draft);
+  if (fields !== null) return fields;
   if (!CLASS_COLOURS.includes(draft?.colour)) return 'Pick a colour.';
   return null;
 }
@@ -272,19 +301,131 @@ export function classRequest(draft) {
     name: draft.name.trim(),
     // An emptied box means "no description", and the server stores null for it.
     description,
-    minutes: Number(draft.minutes),
-    // `null` IS THE VALUE, not an omission: "no limit" has to be sendable, and
-    // the route replaces rather than merges, so leaving the key out would be
-    // indistinguishable from it only by luck.
-    places: draft.unlimited === true ? null : Number(draft.places),
-    coachUserId: draft.coachUserId === '' ? null : draft.coachUserId,
+    ...runFieldsRequest(draft),
     colour: draft.colour,
     openGym: draft.openGym === true,
   };
 }
 
-export function emptyRepeatDraft(today) {
-  return { weekdays: [], time: '18:00', startsOn: today ?? '', endsOn: '' };
+/** THE THREE A CLASS AND A REPEAT BOTH HOLD, as form state.
+ *
+ *  Strings, because that is what inputs hold: turning `places` into a number at
+ *  the keystroke makes a half-typed `1` into a saved value and an emptied box
+ *  into `0`. The conversion happens once, in `runFieldsRequest`, where the
+ *  emptiness has a meaning to give it.
+ *
+ *  **ONE SHAPE, THREE FORMS** — a new class, a new repeat, and changing a
+ *  repeat. The "no limit" tick is the reason it is a function rather than three
+ *  spellings: it is wired to the box in one place, and this screen's whole risk
+ *  is a number on a calendar that nobody typed. */
+export function runFieldsDraft(source) {
+  if (source === null || source === undefined) {
+    return { minutes: '60', unlimited: false, places: '20', coachUserId: '', coachName: null };
+  }
+  return {
+    minutes: Number.isInteger(source.minutes) ? String(source.minutes) : '',
+    // THE TICK AND THE BOX ARE SEPARATE STATE, and that is what lets a gym
+    // switch "no limit" off and find its old number still typed in.
+    unlimited: source.places === null || source.places === undefined,
+    places: Number.isInteger(source.places) ? String(source.places) : '20',
+    coachUserId: source.coachUserId ?? '',
+    /** THE NAME RIDES IN THE DRAFT AND NEVER GOES BACK ON THE WIRE
+     *  (`runFieldsRequest` does not carry it). It is here so the coach box can
+     *  offer the person who is ALREADY set even when the staff list does not
+     *  hold them — see `coachChoices`. */
+    coachName: source.coachName ?? null,
+  };
+}
+
+/** WHAT THE COACH BOX MAY OFFER — the gym's staff, and whoever is already set.
+ *
+ *  **A `<select>` WHOSE VALUE IS NOT AMONG ITS OPTIONS RENDERS AS BLANK, AND
+ *  THE NEXT SAVE SENDS null.** So without this the form would silently take the
+ *  coach off a class or a repeat, with nobody touching that box, in two ordinary
+ *  cases: the staff list is a SEPARATE and optional read that 403s for somebody
+ *  who may set the timetable but not manage staff, and a coach who has left is
+ *  answered by the server as an id with no name.
+ *
+ *  Both are now visible instead. Where the name is known the option carries it,
+ *  so the value round-trips and the save is a no-op on that field. Where it is
+ *  not — the coach really has gone — the option SAYS so, and the server refuses
+ *  a save that keeps them with a sentence the gym can act on ("Pick a coach who
+ *  is on this gym's staff, or leave it blank"). An honest refusal beats a quiet
+ *  change nobody asked for. */
+export function coachChoices(staff, draft) {
+  const list = Array.isArray(staff) ? staff : [];
+  const set = draft?.coachUserId ?? '';
+  if (set === '' || list.some((person) => person?.userId === set)) return list;
+  return [
+    { userId: set, displayName: draft?.coachName ?? 'No longer on your staff' },
+    ...list,
+  ];
+}
+
+/** What is wrong with those three, in one sentence — or null. Mirrors the
+ *  server's bounds and does not replace them (R3.3); the numbers come from
+ *  `@app/shared`'s schema rather than being typed again. */
+export function runFieldsProblem(draft) {
+  const minutes = Number(draft?.minutes);
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) {
+    return 'How long is it? Anything from 5 minutes to 10 hours.';
+  }
+  if (draft?.unlimited !== true) {
+    const places = Number(draft?.places);
+    if (!Number.isInteger(places) || places < 1 || places > 500) {
+      return 'How many people fit? A whole number from 1 to 500, or tick "no limit".';
+    }
+  }
+  return null;
+}
+
+/** The three, as the wire wants them. `null` IS THE VALUE for "no limit" and
+ *  for "nobody named", never an omission: the routes replace rather than merge,
+ *  so leaving a key out would be indistinguishable from it only by luck. */
+export function runFieldsRequest(draft) {
+  return {
+    minutes: Number(draft.minutes),
+    places: draft.unlimited === true ? null : Number(draft.places),
+    coachUserId: draft.coachUserId === '' ? null : draft.coachUserId,
+  };
+}
+
+/** A NEW REPEAT, FILLED IN FROM ITS CLASS — the other half of Kd's ruling
+ *  (2026-09-22). The class type is the default a new repeat starts from, and
+ *  THIS is where that happens: once, in the form, so the server has one answer
+ *  and never has to guess a missing field. A gym that changes nothing gets
+ *  exactly what 17b-i would have given it. */
+export function repeatDraft(type, today) {
+  const fields = runFieldsDraft(type ?? null);
+  // **A COACH THE SERVER NO LONGER NAMES IS NOT FILLED IN.**
+  // The server answers `coachName` only while that person is still this gym's
+  // active staff, so an id with no name is somebody who has gone, and the save
+  // would be refused with `coach_not_staff` — for a field the gym never typed,
+  // on the first Save of an unrelated new Tuesday. The EDIT forms keep the value
+  // as they have it (`coachChoices` shows it as "No longer on your staff" and
+  // the server's sentence says what to do): there the gym is changing something
+  // that already names them. A NEW repeat starts with nobody instead.
+  const gone = fields.coachUserId !== '' && (fields.coachName === null || fields.coachName === '');
+  return {
+    weekdays: [],
+    time: '18:00',
+    startsOn: today ?? '',
+    endsOn: '',
+    ...fields,
+    ...(gone ? { coachUserId: '', coachName: null } : {}),
+  };
+}
+
+/** Changing a repeat: its three fields and nothing else. Its days, its time and
+ *  its window are "this day and later" (17b-ii-b) and are deliberately not
+ *  editable here — see `updateGymClassScheduleRequestSchema`. */
+export function repeatEditDraft(schedule) {
+  return runFieldsDraft(schedule ?? null);
+}
+
+export function repeatEditRequest(draft) {
+  if (runFieldsProblem(draft) !== null) return null;
+  return runFieldsRequest(draft);
 }
 
 /** Tick a day on or off, keeping the set sorted. Returned as a NEW draft: the
@@ -301,6 +442,8 @@ export function toggleWeekday(draft, iso) {
 export function repeatProblem(draft) {
   const days = Array.isArray(draft?.weekdays) ? draft.weekdays : [];
   if (days.length === 0) return 'Pick at least one day of the week.';
+  const fields = runFieldsProblem(draft);
+  if (fields !== null) return fields;
   const minute = clockToMinutes(draft?.time ?? '');
   // 1440 is midnight at the END of a day: a legal CLOSING time for the gym's
   // hours and never a time a class can start, which is why this is checked here
@@ -325,6 +468,7 @@ export function repeatRequest(draft) {
     weekdays: [...draft.weekdays].sort((a, b) => a - b),
     startMinute: clockToMinutes(draft.time),
     startsOn: draft.startsOn,
+    ...runFieldsRequest(draft),
   };
   // ABSENT, NOT NULL, when the gym left it blank — the schema takes either, and
   // absent is what "we have not said" looks like on a wire.

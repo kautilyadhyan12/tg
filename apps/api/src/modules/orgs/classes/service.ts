@@ -8,6 +8,15 @@
 // second is this file's, and it is the whole reason every function below starts
 // on the same gate.
 //
+// **17b-ii-a ADDS THE OTHER DIRECTION OF THAT SECOND ONE**, and it is this
+// card's own worst thing: a repeat now names its own coach, so a request can
+// hand the server any uuid on earth and a gym's timetable could say a person
+// teaches Tuesday's class who is not that gym's staff at all — another gym's
+// trainer, or one who has left. The FK behind the column points at `users` and
+// would take it; `coachIsStaff`, asked inside every write under the gym's lock,
+// is what refuses it, and the read names a coach only while they are still this
+// gym's active staff.
+//
 // **EVERY ROUTE HERE — THE READ INCLUDED — IS `schedule.manage`.** §13.3 grants
 // it to owner and manager, and grants a trainer a look at "the lists of their
 // own classes", which is a SCOPE and not a tick: `gym_staff` has no group
@@ -32,6 +41,7 @@ import {
   type GymClassesResponse,
   type GymClassSchedule,
   type GymClassType,
+  type UpdateGymClassScheduleRequest,
   type UpdateGymClassTypeRequest,
 } from "@app/shared";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -46,10 +56,13 @@ export interface ClassesDeps {
   now: () => Date;
 }
 
-/** The module's standing 404. Identical in wording to the orgs module's, and
- *  deliberately so: a class type that does not exist and a class type belonging
- *  to somebody else's gym must be indistinguishable, and a second sentence here
- *  would be the difference a stranger could read. */
+/** The module's standing 404, for a class type AND for a repeat. Identical in
+ *  wording to the orgs module's, and deliberately so: a class that does not
+ *  exist and a class belonging to somebody else's gym must be
+ *  indistinguishable, and a second sentence here would be the difference a
+ *  stranger could read. One sentence covers both for the same reason — "that
+ *  repeat was not found" beside "that class was not found" would tell a caller
+ *  which of the two ids it guessed right. */
 const NOT_FOUND_MESSAGE = "That class was not found.";
 
 /** A date the user typed, made real before it reaches Postgres.
@@ -109,6 +122,10 @@ function toSchedule(row: repo.ClassScheduleRow): GymClassSchedule {
     startMinute: row.startMinute,
     startsOn: row.startsOn,
     endsOn: row.endsOn,
+    minutes: row.minutes,
+    places: row.places,
+    coachUserId: row.coachUserId,
+    coachName: row.coachName,
     nextDates: row.nextDates,
     sessionsAhead: row.sessionsAhead,
     datesComplete: row.datesComplete,
@@ -322,6 +339,34 @@ export async function createSchedule(
         req.endsOn === undefined || req.endsOn === null
           ? null
           : requireCalendarDate(req.endsOn, "endsOn"),
+      minutes: req.minutes,
+      places: req.places,
+      coachUserId: req.coachUserId,
+      actorUserId: userId,
+      now: deps.now(),
+    }),
+  );
+  return await readOr404(deps, gymId);
+}
+
+/** CHANGE A REPEAT'S LENGTH, PLACES OR COACH — the card's own route
+ *  (RULINGS 2026-09-22). Not its days or its time: that is "this day and
+ *  later", 17b-ii-b, and `updateGymClassScheduleRequestSchema` says why. */
+export async function updateSchedule(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  scheduleId: string,
+  req: UpdateGymClassScheduleRequest,
+): Promise<GymClassesResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  throwOnFailure(
+    await repo.updateSchedule(deps.sql, {
+      gymId,
+      scheduleId,
+      minutes: req.minutes,
+      places: req.places,
+      coachUserId: req.coachUserId,
       actorUserId: userId,
       now: deps.now(),
     }),

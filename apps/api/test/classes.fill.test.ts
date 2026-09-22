@@ -93,6 +93,17 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
     return row.id;
   };
 
+  /** A REPEAT, AND SINCE 17b-ii-a IT CARRIES ITS OWN LENGTH, PLACES AND COACH.
+   *
+   *  Left unsaid, they are COPIED FROM THE CLASS TYPE — which is exactly what
+   *  the console does when a gym adds a repeat (the class is the default a new
+   *  repeat starts from, RULINGS 2026-09-22), so every case written before this
+   *  card goes on meaning what it meant. `own` is how a case says the repeat
+   *  differs, which is the state this card exists to make possible.
+   *
+   *  `"places" in own` and NOT `own.places ?? …`, for the class-type helper's
+   *  measured reason one function up: null is a MEANING here (no limit) and
+   *  `??` swallows it. */
   const repeat = async (
     gymId: string,
     classTypeId: string,
@@ -100,12 +111,23 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
     startMinute: number,
     startsOn: string,
     endsOn: string | null = null,
+    own: { minutes?: number; places?: number | null; coachUserId?: string | null } = {},
   ) => {
+    const placesGiven = "places" in own;
+    const coachGiven = "coachUserId" in own;
     const [row] = await sql<{ id: string }[]>`
       INSERT INTO gym_class_schedules
-        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on)
-      VALUES (${gymId}, ${classTypeId}, ${sql.array(weekdays)}::int[], ${startMinute},
-              ${startsOn}::date, ${endsOn}::date)
+        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
+         minutes, places, coach_user_id)
+      SELECT ${gymId}, ${classTypeId}, ${sql.array(weekdays)}::int[], ${startMinute},
+             ${startsOn}::date, ${endsOn}::date,
+             coalesce(${own.minutes ?? null}::int, t.minutes),
+             CASE WHEN ${placesGiven} THEN ${placesGiven ? (own.places ?? null) : null}::int
+                  ELSE t.places END,
+             CASE WHEN ${coachGiven} THEN ${coachGiven ? (own.coachUserId ?? null) : null}::uuid
+                  ELSE t.coach_user_id END
+      FROM gym_class_types t
+      WHERE t.id = ${classTypeId} AND t.gym_id = ${gymId}
       RETURNING id`;
     if (row === undefined) throw new Error("no schedule");
     return row.id;
@@ -459,23 +481,51 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
     TEST_TIMEOUT_MS,
   );
 
+  // **THE REPEAT'S NUMBERS, NOT THE CLASS'S** (17b-ii-a; RULINGS 2026-09-22) —
+  // and the repeat DIFFERS from its class in all three, which is the only way
+  // this case can tell which of the two rows the fill read. A repeat that
+  // carried its class's own numbers would leave this whole file green with the
+  // fill put back to `t.minutes` — measured, so it is not left to chance.
   it(
-    "a session copies the class's numbers at the moment it is written",
+    "a session copies the REPEAT's numbers at the moment it is written, never its class's",
     async () => {
       const gymId = await gymIn("Europe/London", "copy");
+      const [gym] = await sql<{ owner_user_id: string }[]>`
+        SELECT owner_user_id FROM gyms WHERE id = ${gymId}`;
+      const coach = gym?.owner_user_id ?? null;
+      // The CLASS says 45 minutes, no limit, nobody named.
       const typeId = await classIn(gymId, { minutes: 45, places: null });
-      await repeat(gymId, typeId, [WED], at(9), "2026-06-01", "2026-06-17");
+      // Its WEDNESDAY says 90 minutes, 12 places, a coach — every field changed.
+      const wed = await repeat(gymId, typeId, [WED], at(9), "2026-06-01", "2026-06-17", {
+        minutes: 90,
+        places: 12,
+        coachUserId: coach,
+      });
+      // And a FRIDAY under a capped class that says NO LIMIT: `places` NULL is a
+      // meaning and must survive as null — a fill that coalesced it to the
+      // class's number would invent a cap for an open-gym slot.
+      const cappedType = await classIn(gymId, { minutes: 60, places: 20 });
+      const fri = await repeat(gymId, cappedType, [5], at(17), "2026-06-01", "2026-06-19", {
+        places: null,
+      });
 
       await fillClassSessions(sql, {
         gymIds: [gymId],
         now: new Date("2026-06-10T08:00:00Z"),
       });
-      const rows = await sql<{ minutes: number; places: number | null }[]>`
-        SELECT minutes, places FROM gym_class_sessions WHERE gym_id = ${gymId}`;
-      expect(rows).toHaveLength(2);
-      // `places` NULL is NO LIMIT and survives as null — a fill that coalesced it
-      // to a number would invent a cap for an open-gym slot.
-      for (const r of rows) expect(r).toEqual({ minutes: 45, places: null });
+      const rows = await sql<
+        { schedule_id: string; minutes: number; places: number | null; coach: string | null }[]
+      >`
+        SELECT schedule_id, minutes, places, coach_user_id AS coach
+        FROM gym_class_sessions WHERE gym_id = ${gymId}`;
+      const wedRows = rows.filter((r) => r.schedule_id === wed);
+      const friRows = rows.filter((r) => r.schedule_id === fri);
+      expect(wedRows).toHaveLength(2);
+      expect(friRows).toHaveLength(2);
+      for (const r of wedRows) {
+        expect(r).toMatchObject({ minutes: 90, places: 12, coach });
+      }
+      for (const r of friRows) expect(r).toMatchObject({ minutes: 60, places: null, coach: null });
     },
     TEST_TIMEOUT_MS,
   );

@@ -3,7 +3,7 @@
 // authorisation. Registered from `registerOrgRoutes` — the same console behind
 // the same gates, sharing its deps.
 //
-// **ONE RATE LIMIT COVERS ALL SIX, AND ITS `ipMax` IS EXPLICIT.** A gym's front
+// **ONE RATE LIMIT COVERS ALL SEVEN, AND ITS `ipMax` IS EXPLICIT.** A gym's front
 // desk is ONE address with several staff signed in on it (the shared-address
 // class this repo has been bitten by more than once), so a per-address ceiling
 // equal to the per-person one would throttle the second person to touch the
@@ -23,6 +23,7 @@ import type { z } from "zod";
 import {
   createGymClassScheduleRequestSchema,
   createGymClassTypeRequestSchema,
+  updateGymClassScheduleRequestSchema,
   updateGymClassTypeRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
@@ -171,6 +172,30 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
       body,
     );
     return reply.status(201).send(timetable);
+  });
+
+  /** CHANGE A REPEAT — its length, its places, its coach (RULINGS 2026-09-22:
+   *  the repeat is the live answer, the class type is the default it started
+   *  from). Its days, its time and its window are NOT here: that is "this day
+   *  and later", 17b-ii-b.
+   *
+   *  PUT and not PATCH, and every field every time —
+   *  `updateGymClassScheduleRequestSchema` carries the reasoning: `places: null`
+   *  means "no limit", and under a merge it would be indistinguishable from
+   *  "leave it alone". */
+  app.put("/v1/orgs/:gymId/class-repeats/:scheduleId", guarded, async (req, reply) => {
+    const params = parseOr400(classScheduleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(updateGymClassScheduleRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const timetable = await service.updateSchedule(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.scheduleId,
+      body,
+    );
+    return reply.status(200).send(timetable);
   });
 
   /** STOP A REPEAT. The repeat id is addressed under its GYM, never alone — the
