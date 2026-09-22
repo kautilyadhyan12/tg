@@ -28,6 +28,8 @@ import { readFile } from "node:fs/promises";
 import postgres from "postgres";
 import {
   memberListWarningWords,
+  MEMBER_LIST_FIELD_WORDS,
+  MEMBER_LIST_NEVER_KEPT_WORDS,
   MEMBER_LIST_SKIP_WORDS,
   type MemberListMode,
   type MemberListRowGroup,
@@ -109,15 +111,25 @@ try {
   console.log("\nColumns");
   for (const column of preview.columns) {
     const said =
-      column.guess !== null
-        ? ` → ${column.guess} (${column.confidence ?? "?"})`
-        : column.headerSays !== null
-          ? ` → named ${column.headerSays}, NOT used`
-          : "";
+      column.neverKept !== null
+        ? ` → NOT KEPT (${column.neverKept})`
+        : column.guess !== null
+          ? ` → ${column.guess} (${column.confidence ?? "?"})`
+          : column.headerSays !== null
+            ? ` → named ${column.headerSays}, NOT used`
+            : " → the gym's own column";
     console.log(
       `  ${String(column.index).padStart(3)} ${(column.header ?? "").slice(0, 28).padEnd(30)}${said.padEnd(28)}` +
         column.samples.map((s) => s.slice(0, 20)).join(" | "),
     );
+  }
+
+  const dropped = preview.columns.filter((column) => column.neverKept !== null);
+  if (dropped.length > 0) {
+    console.log("\nNot kept, whatever the gym or its staff want (§11.2)");
+    for (const column of dropped) {
+      console.log(`  ${(column.header ?? "(no heading)").slice(0, 28).padEnd(30)}${MEMBER_LIST_NEVER_KEPT_WORDS[column.neverKept ?? "medical"]}`);
+    }
   }
 
   console.log("\nIn the file");
@@ -127,6 +139,23 @@ try {
   for (const [what, howMany] of Object.entries(preview.list)) console.log(`  ${what.padEnd(18)} ${String(howMany)}`);
   console.log(`  ${"members leaving".padEnd(18)} ${String(preview.members.leaving)} of ${String(preview.members.listedNow)} on the list now`);
 
+  if (preview.fieldChanges.length > 0 || preview.extraChanges.length > 0) {
+    console.log("\nWhat would change, field by field");
+    for (const change of preview.fieldChanges) {
+      console.log(`  ${MEMBER_LIST_FIELD_WORDS[change.field].padEnd(24)} ${String(change.count)}`);
+    }
+    for (const change of preview.extraChanges) {
+      console.log(`  ${change.label.slice(0, 22).padEnd(24)} ${String(change.count)}`);
+    }
+  }
+
+  if (preview.handEdits.entries > 0) {
+    console.log(
+      `\nWOULD REPLACE WHAT STAFF TYPED IN on ${String(preview.handEdits.entries)} record(s): ${preview.handEdits.fields.join(", ")}` +
+        "\n  Confirming needs --acknowledge-hand-edits.",
+    );
+  }
+
   if (preview.statuses.length > 0) {
     console.log("\nThe gym's own words");
     for (const s of preview.statuses) {
@@ -135,6 +164,11 @@ try {
           `   new ${String(s.new)} · changed ${String(s.changed)} · same ${String(s.unchanged)} · off ${String(s.gone)}`,
       );
     }
+  }
+
+  if (preview.warnings.length > 0) {
+    console.log("\nWorth knowing");
+    for (const warning of preview.warnings) console.log(`  ${memberListWarningWords(warning)}`);
   }
 
   console.log("\nSeats");
