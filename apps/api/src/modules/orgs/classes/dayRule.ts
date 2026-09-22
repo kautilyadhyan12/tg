@@ -19,6 +19,15 @@ export interface DayFacts {
   /** Change only: the new start time, on that date, is at or before now. False
    *  for cancel and restore. */
   newStartPassed: boolean;
+  /** Change only: the new start time does not exist on that date in the gym's
+   *  zone — the clocks go forward over it (round one, L-3). False when the time
+   *  is not being changed, so a date the fill already put at such a time can
+   *  still have its places or coach changed. */
+  newTimeMissing: boolean;
+  /** Its repeat has been stopped, or its class removed (round one, H-2). Such a
+   *  date is only ever a cancelled one — the running ones are deleted — and it
+   *  cannot be put back: nothing runs there any more. */
+  repeatStopped: boolean;
 }
 
 export type DayVerdict =
@@ -27,7 +36,9 @@ export type DayVerdict =
   | "started"
   /** A change asked of a cancelled date: put it back first. */
   | "cancelled"
-  | "time_passed";
+  | "time_passed"
+  | "time_missing"
+  | "repeat_stopped";
 
 export function dayVerdict(action: DayAction, facts: DayFacts): DayVerdict {
   if (facts.started) return "started";
@@ -35,11 +46,13 @@ export function dayVerdict(action: DayAction, facts: DayFacts): DayVerdict {
     case "cancel":
       return facts.status === "cancelled" ? "nothing" : "write";
     case "restore":
-      return facts.status === "scheduled" ? "nothing" : "write";
+      if (facts.status === "scheduled") return "nothing";
+      return facts.repeatStopped ? "repeat_stopped" : "write";
     case "change":
       if (facts.status === "cancelled") return "cancelled";
       if (facts.unchanged) return "nothing";
       if (facts.newStartPassed) return "time_passed";
+      if (facts.newTimeMissing) return "time_missing";
       return "write";
     default: {
       const never: never = action;

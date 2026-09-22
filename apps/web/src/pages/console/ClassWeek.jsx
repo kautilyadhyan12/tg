@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
 import { RunFields } from './ClassFields';
@@ -123,6 +123,10 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
       {session.started ? (
         <p className="text-sm mt-3" style={labelStyle}>
           This class has already started, so it can&apos;t be changed.
+        </p>
+      ) : cancelled && session.repeatStopped ? (
+        <p className="text-sm mt-3" style={labelStyle}>
+          Its repeat has been stopped, so this day stays off.
         </p>
       ) : locked ? null : cancelled ? (
         <div className="mt-3">
@@ -252,6 +256,17 @@ export default function ClassWeek({ gymId, staff, locked }) {
       return true;
     } catch (err) {
       setActionError(errorText(err, "We couldn't save that."));
+      // A refusal means the week on screen is out of date — the class started,
+      // or another date now holds that time — so read it again, keeping the
+      // sentence and the open day (round one, L-2).
+      if (errorStatus(err) === 409) {
+        try {
+          const fresh = await orgService.getClassWeek(gymId, lists.weekStart);
+          setWeek(fresh.data);
+        } catch {
+          // The sentence above already says the save failed.
+        }
+      }
       return false;
     } finally {
       setBusy(false);

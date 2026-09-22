@@ -410,6 +410,7 @@ async function readWeekOr404(
       status: classSessionStatusSchema.parse(s.status),
       changedAlone: s.changedAlone,
       started: s.started,
+      repeatStopped: s.repeatStopped,
     })),
   });
 }
@@ -473,6 +474,18 @@ async function writeDay(
         409,
         "class_time_passed",
         "That time has already passed on this day. Pick a later one.",
+      );
+    case "time_missing":
+      throw new OrgsError(
+        409,
+        "class_time_missing",
+        "The clocks go forward on this day, so that time doesn't exist. Pick another time.",
+      );
+    case "repeat_stopped":
+      throw new OrgsError(
+        409,
+        "class_repeat_stopped",
+        "This class no longer repeats on this day, so it can't be put back.",
       );
     case "clashes":
       throw new OrgsError(

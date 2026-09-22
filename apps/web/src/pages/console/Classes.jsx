@@ -421,7 +421,10 @@ export default function Classes() {
     return () => {
       live = false;
     };
-  }, [gymId, reloadKey]);
+    // `view` is here so the list is read again every time it is shown — by the
+    // tab or by the browser's Back — since a day changed in the week moves its
+    // repeat's coming dates (round one, H-3).
+  }, [gymId, reloadKey, view]);
 
   // THE COACH LIST IS A SEPARATE, OPTIONAL READ, and its failure is not this
   // screen's failure: somebody who may set the timetable does not necessarily
@@ -532,22 +535,15 @@ export default function Classes() {
     }
   };
 
-  // Back on the list, read it again: a day changed in the week moves its
-  // repeat's coming dates.
   const showView = (next) => {
     if (next === view) return;
-    if (next === 'week') {
-      setSearchParams({ view: 'week' });
-      return;
-    }
-    setSearchParams({});
-    retry();
+    setSearchParams(next === 'week' ? { view: 'week' } : {});
   };
   const weekShown = view === 'week' && allowed;
 
   return (
     <div
-      className={` mx-auto px-4 md:px-8 py-8 flex flex-col gap-4`}
+      className={`${weekShown ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 md:px-8 py-8 flex flex-col gap-4`}
     >
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
@@ -705,7 +701,7 @@ export default function Classes() {
                 {confirming === `archive:${type.id}` ? (
                   <div className="mt-3">
                     <ConfirmInline
-                      question={`Take ${type.name} off the timetable? Its repeats stop and the dates it had coming up are cleared. The days it already ran are kept, and you can bring it back from "No longer running" below.`}
+                      question={`Take ${type.name} off the timetable? Its repeats stop and the dates it had coming up are cleared, except days you cancelled, which stay cancelled. The days it already ran are kept, and you can bring it back from "No longer running" below.`}
                       confirmLabel="Remove it"
                       cancelLabel="Keep it"
                       busy={busy !== null}
@@ -821,7 +817,7 @@ export default function Classes() {
                           Two buttons on this screen destroy dates; both ask. */}
                       {confirming === `stop:${schedule.id}` ? (
                         <ConfirmInline
-                          question={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}? Its coming dates are cleared and ${type.name} stays on your timetable — you can add a repeat again whenever you like.`}
+                          question={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}? Its coming dates are cleared, except days you cancelled, which stay cancelled, and ${type.name} stays on your timetable — you can add a repeat again whenever you like.`}
                           confirmLabel="Stop it"
                           cancelLabel="Leave it running"
                           busy={busy !== null}

@@ -443,11 +443,14 @@ export async function archiveClassType(
       WHERE class_type_id = ${input.classTypeId}
         AND gym_id = ${input.gymId}
         AND ended_at IS NULL`;
+    // Running dates only: a date the gym CANCELLED stays, so a repeat added
+    // later does not run over it (round one, H-2; fill.ts says how).
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE class_type_id = ${input.classTypeId}
         AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}`;
+        AND starts_at > ${input.now}
+        AND status = 'scheduled'`;
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -766,11 +769,13 @@ export async function endSchedule(
     await tx`
       UPDATE gym_class_schedules SET ended_at = ${input.now}
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId}`;
+    // Running dates only, as in archiveClassType: a cancelled date stays.
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE schedule_id = ${input.scheduleId}
         AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}`;
+        AND starts_at > ${input.now}
+        AND status = 'scheduled'`;
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -803,6 +808,7 @@ export interface ClassSessionRow {
   status: string;
   changedAlone: boolean;
   started: boolean;
+  repeatStopped: boolean;
 }
 
 export interface ClassWeekRow {
@@ -871,6 +877,7 @@ export async function readWeek(
       status: string;
       changed_alone: boolean;
       started: boolean;
+      repeat_stopped: boolean;
     }[]
   >`
     SELECT x.id, x.class_type_id, x.schedule_id, t.name, t.colour, t.open_gym,
@@ -879,9 +886,11 @@ export async function readWeek(
            -- Named only while still this gym's active staff, as on the timetable.
            cu.display_name AS coach_name,
            x.status, x.changed_alone,
-           x.starts_at <= ${opts.now} AS started
+           x.starts_at <= ${opts.now} AS started,
+           (sc.ended_at IS NOT NULL OR t.archived_at IS NOT NULL) AS repeat_stopped
     FROM gym_class_sessions x
     JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
+    LEFT JOIN gym_class_schedules sc ON sc.id = x.schedule_id AND sc.gym_id = x.gym_id
     LEFT JOIN gym_staff cs ON cs.gym_id = x.gym_id AND cs.user_id = x.coach_user_id
     LEFT JOIN users cu ON cu.id = cs.user_id AND cu.status = 'active'
     WHERE x.gym_id = ${gymId}
@@ -915,6 +924,7 @@ export async function readWeek(
       status: r.status,
       changedAlone: r.changed_alone,
       started: r.started,
+      repeatStopped: r.repeat_stopped,
     })),
   };
 }
@@ -926,6 +936,8 @@ export type ClassDayOutcome =
   | { kind: "started" }
   | { kind: "cancelled" }
   | { kind: "time_passed" }
+  | { kind: "time_missing" }
+  | { kind: "repeat_stopped" }
   | { kind: "clashes" };
 
 /** A change to one date: `change` carries the new values, the other two none. */
@@ -939,11 +951,12 @@ export type ClassDayInput =
  *  edit re-stamping the same rows.
  *
  *  **Only a CHANGE sets `changed_alone`.** A cancel is a status, and nothing
- *  that writes the calendar touches status: the fill never updates a row
- *  (`ON CONFLICT DO NOTHING`) and a repeat edit re-stamps only length, places
- *  and coach. So a cancelled date stays cancelled whatever happens to its
- *  repeat, and when it is put back it runs as the repeat now does — rather than
- *  as it did the day it was cancelled.
+ *  that writes the calendar touches status: the fill never updates a row, and
+ *  holds back from a slot the class has cancelled (`fill.ts`); a repeat edit
+ *  re-stamps only length, places and coach; Stop and Remove delete running dates
+ *  only. So a cancelled date stays cancelled whatever happens to its repeat, and
+ *  when it is put back it runs as the repeat now does. A cancelled date whose
+ *  repeat was stopped, or whose class was removed, cannot be put back.
  *
  *  **One class, one time, one date.** A date moved to a time, or put back at a
  *  time, where the same class already runs that day is refused; `fill.ts`
@@ -968,15 +981,26 @@ export async function changeSession(
         started: boolean;
         new_starts_at: Date;
         new_start_passed: boolean;
+        new_time_missing: boolean;
+        repeat_stopped: boolean;
       }[]
     >`
       SELECT x.class_type_id, x.local_date::text AS local_date, x.local_start_minute,
              x.minutes, x.places, x.coach_user_id, x.status,
              x.starts_at <= ${input.now} AS started,
              n.at AS new_starts_at,
-             n.at <= ${input.now} AS new_start_passed
+             n.at <= ${input.now} AS new_start_passed,
+             -- The clock time read back from the instant: on the night the clocks
+             -- go forward a skipped time comes back an hour later (round one, L-3).
+             NOT ((n.at AT TIME ZONE g.timezone)::date = x.local_date
+                  AND EXTRACT(HOUR FROM n.at AT TIME ZONE g.timezone)::int * 60
+                      + EXTRACT(MINUTE FROM n.at AT TIME ZONE g.timezone)::int
+                      = coalesce(${newMinute}::int, x.local_start_minute)) AS new_time_missing,
+             (sc.ended_at IS NOT NULL OR t.archived_at IS NOT NULL) AS repeat_stopped
       FROM gym_class_sessions x
       JOIN gyms g ON g.id = x.gym_id
+      JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
+      LEFT JOIN gym_class_schedules sc ON sc.id = x.schedule_id AND sc.gym_id = x.gym_id
       CROSS JOIN LATERAL (
         SELECT ((x.local_date + make_interval(
                   mins => coalesce(${newMinute}::int, x.local_start_minute)))
@@ -996,6 +1020,11 @@ export async function changeSession(
       started: row.started,
       unchanged,
       newStartPassed: input.action === "change" && row.new_start_passed,
+      newTimeMissing:
+        input.action === "change" &&
+        input.startMinute !== row.local_start_minute &&
+        row.new_time_missing,
+      repeatStopped: row.repeat_stopped,
     });
     switch (verdict) {
       case "nothing":
@@ -1003,6 +1032,8 @@ export async function changeSession(
       case "started":
       case "cancelled":
       case "time_passed":
+      case "time_missing":
+      case "repeat_stopped":
         return { kind: verdict };
       case "write":
         break;

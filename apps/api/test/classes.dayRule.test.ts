@@ -1,6 +1,10 @@
 // THE ONE-DAY RULE, every combination (CLAUDE.md §4: a rule that picks ships
 // with a table test). Pure — no database. The wiring is proved through the
 // routes in `classes.days.routes.test.ts`.
+//
+// Each row fixes the facts that decide it and SWEEPS the rest over both values,
+// so a row also proves the facts it leaves out do not matter. The first test
+// checks the rows cover every combination exactly once.
 import { describe, expect, it } from "vitest";
 import {
   dayVerdict,
@@ -9,72 +13,113 @@ import {
   type DayVerdict,
 } from "../src/modules/orgs/classes/dayRule.js";
 
+type Flag = "started" | "unchanged" | "newStartPassed" | "newTimeMissing" | "repeatStopped";
+const FLAGS: Flag[] = ["started", "unchanged", "newStartPassed", "newTimeMissing", "repeatStopped"];
 const ACTIONS: DayAction[] = ["change", "cancel", "restore"];
 const STATUSES: DayFacts["status"][] = ["scheduled", "cancelled"];
-const BOOLS = [false, true];
 
-// Every combination of a date that has NOT started, written out by hand.
-// Columns: action, status, unchanged, newStartPassed → verdict.
-const NOT_STARTED: [DayAction, DayFacts["status"], boolean, boolean, DayVerdict][] = [
-  // change a running day
-  ["change", "scheduled", false, false, "write"],
-  ["change", "scheduled", false, true, "time_passed"],
-  ["change", "scheduled", true, false, "nothing"],
-  // Asking for the time it already has is not a move into the past.
-  ["change", "scheduled", true, true, "nothing"],
-  // change a cancelled day: put it back first, whatever was asked
-  ["change", "cancelled", false, false, "cancelled"],
-  ["change", "cancelled", false, true, "cancelled"],
-  ["change", "cancelled", true, false, "cancelled"],
-  ["change", "cancelled", true, true, "cancelled"],
-  // cancel: the two change-only facts never matter
-  ["cancel", "scheduled", false, false, "write"],
-  ["cancel", "scheduled", false, true, "write"],
-  ["cancel", "scheduled", true, false, "write"],
-  ["cancel", "scheduled", true, true, "write"],
-  ["cancel", "cancelled", false, false, "nothing"],
-  ["cancel", "cancelled", false, true, "nothing"],
-  ["cancel", "cancelled", true, false, "nothing"],
-  ["cancel", "cancelled", true, true, "nothing"],
-  // restore: likewise
-  ["restore", "scheduled", false, false, "nothing"],
-  ["restore", "scheduled", false, true, "nothing"],
-  ["restore", "scheduled", true, false, "nothing"],
-  ["restore", "scheduled", true, true, "nothing"],
-  ["restore", "cancelled", false, false, "write"],
-  ["restore", "cancelled", false, true, "write"],
-  ["restore", "cancelled", true, false, "write"],
-  ["restore", "cancelled", true, true, "write"],
+interface Row {
+  action: DayAction;
+  status: DayFacts["status"];
+  /** The facts this row decides on; every other flag is swept. */
+  fixed: Partial<Record<Flag, boolean>>;
+  verdict: DayVerdict;
+}
+
+// Written by hand, in words a gym would use.
+const ROWS: Row[] = [
+  // A date that has started takes nothing, whatever is asked.
+  ...ACTIONS.flatMap((action) =>
+    STATUSES.map((status): Row => ({ action, status, fixed: { started: true }, verdict: "started" })),
+  ),
+  // Changing a running date.
+  { action: "change", status: "scheduled", fixed: { started: false, unchanged: true }, verdict: "nothing" },
+  {
+    action: "change",
+    status: "scheduled",
+    fixed: { started: false, unchanged: false, newStartPassed: true },
+    verdict: "time_passed",
+  },
+  {
+    action: "change",
+    status: "scheduled",
+    fixed: { started: false, unchanged: false, newStartPassed: false, newTimeMissing: true },
+    verdict: "time_missing",
+  },
+  {
+    action: "change",
+    status: "scheduled",
+    fixed: { started: false, unchanged: false, newStartPassed: false, newTimeMissing: false },
+    verdict: "write",
+  },
+  // Changing a cancelled date: put it back first.
+  { action: "change", status: "cancelled", fixed: { started: false }, verdict: "cancelled" },
+  // Cancelling.
+  { action: "cancel", status: "scheduled", fixed: { started: false }, verdict: "write" },
+  { action: "cancel", status: "cancelled", fixed: { started: false }, verdict: "nothing" },
+  // Putting back.
+  { action: "restore", status: "scheduled", fixed: { started: false }, verdict: "nothing" },
+  {
+    action: "restore",
+    status: "cancelled",
+    fixed: { started: false, repeatStopped: false },
+    verdict: "write",
+  },
+  {
+    action: "restore",
+    status: "cancelled",
+    fixed: { started: false, repeatStopped: true },
+    verdict: "repeat_stopped",
+  },
 ];
 
+/** Every combination of the swept flags for one row. */
+function expand(row: Row): DayFacts[] {
+  const free = FLAGS.filter((f) => row.fixed[f] === undefined);
+  const out: DayFacts[] = [];
+  for (let mask = 0; mask < 1 << free.length; mask += 1) {
+    const facts: DayFacts = {
+      status: row.status,
+      started: false,
+      unchanged: false,
+      newStartPassed: false,
+      newTimeMissing: false,
+      repeatStopped: false,
+    };
+    for (const f of FLAGS) {
+      const fixed = row.fixed[f];
+      if (fixed !== undefined) facts[f] = fixed;
+    }
+    free.forEach((f, i) => {
+      facts[f] = (mask & (1 << i)) !== 0;
+    });
+    out.push(facts);
+  }
+  return out;
+}
+
+const key = (action: DayAction, f: DayFacts) =>
+  [action, f.status, ...FLAGS.map((flag) => String(f[flag]))].join("|");
+
 describe("what one date on the calendar may take", () => {
-  it("the hand-written table covers every combination of a date that has not started, once", () => {
-    const seen = new Set(NOT_STARTED.map((r) => r.slice(0, 4).join("|")));
-    expect(seen.size).toBe(NOT_STARTED.length);
-    expect(seen.size).toBe(ACTIONS.length * STATUSES.length * BOOLS.length * BOOLS.length);
-  });
-
-  it.each(NOT_STARTED)(
-    "%s on a %s day (unchanged %s, new time passed %s) → %s",
-    (action, status, unchanged, newStartPassed, verdict) => {
-      expect(dayVerdict(action, { status, started: false, unchanged, newStartPassed })).toBe(
-        verdict,
-      );
-    },
-  );
-
-  it("a day that has started takes nothing, whatever is asked of it", () => {
-    for (const action of ACTIONS) {
-      for (const status of STATUSES) {
-        for (const unchanged of BOOLS) {
-          for (const newStartPassed of BOOLS) {
-            expect(
-              dayVerdict(action, { status, started: true, unchanged, newStartPassed }),
-              `${action} ${status} ${String(unchanged)} ${String(newStartPassed)}`,
-            ).toBe("started");
-          }
-        }
+  it("the rows cover every combination of action, status and facts exactly once", () => {
+    const seen = new Map<string, number>();
+    for (const row of ROWS) {
+      for (const facts of expand(row)) {
+        const k = key(row.action, facts);
+        seen.set(k, (seen.get(k) ?? 0) + 1);
       }
     }
+    expect([...seen.values()].every((n) => n === 1)).toBe(true);
+    expect(seen.size).toBe(ACTIONS.length * STATUSES.length * 2 ** FLAGS.length);
   });
+
+  it.each(ROWS.map((row) => [row.action, row.status, JSON.stringify(row.fixed), row.verdict, row] as const))(
+    "%s on a %s day %s → %s",
+    (_action, _status, _fixed, verdict, row) => {
+      for (const facts of expand(row)) {
+        expect(dayVerdict(row.action, facts), key(row.action, facts)).toBe(verdict);
+      }
+    },
+  );
 });

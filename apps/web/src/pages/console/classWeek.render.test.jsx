@@ -5,7 +5,7 @@
 // button was pressed.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 
 const api = {
   getMine: vi.fn(),
@@ -18,7 +18,8 @@ const api = {
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: api, errorText: (_err, fallback) => fallback };
+  // The real `errorText`: the server's own sentence must reach the screen.
+  return { ...actual, orgService: api };
 });
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
@@ -56,6 +57,7 @@ const day = (over) => ({
   status: 'scheduled',
   changedAlone: false,
   started: false,
+  repeatStopped: false,
   ...over,
 });
 
@@ -120,12 +122,17 @@ afterEach(() => {
 let lastSearch = '';
 function Where() {
   lastSearch = useLocation().search;
-  return null;
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      browser back
+    </button>
+  );
 }
 
-const draw = (path = '/console/iron-house/classes?view=week') =>
+const draw = (path = '/console/iron-house/classes?view=week', history = [path]) =>
   render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={history} initialIndex={history.length - 1}>
       <Routes>
         <Route
           path="/console/:orgSlug/classes"
@@ -280,14 +287,47 @@ describe('this day only', () => {
     expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
   });
 
-  it('a refusal is said, and the day stays open as it was', async () => {
-    api.cancelClassDay.mockRejectedValue(new Error('409'));
+  it('a refusal says the server s own sentence, and the week is read again', async () => {
+    const sentence = "This class has already started, so it can't be changed now.";
+    api.cancelClassDay.mockRejectedValue({
+      response: { status: 409, data: { error: 'class_started', message: sentence, requestId: 'r' } },
+    });
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    // The fresh week says it has started; the open day follows it.
+    api.getClassWeek.mockResolvedValueOnce(
+      week({ sessions: [SPIN_MON, { ...SPIN_TUE, started: true }, YOGA_WED, SPIN_FRI] }),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
-    expect(await screen.findByText("We couldn't save that.")).toBeTruthy();
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    await waitFor(() => expect(api.getClassWeek).toHaveBeenLastCalledWith('g1', '2026-09-21'));
+    expect(
+      await screen.findByText("This class has already started, so it can't be changed."),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
+  });
+
+  it('a cancelled day whose repeat was stopped says so, and offers nothing to put back', async () => {
+    api.getClassWeek.mockResolvedValue(
+      week({ sessions: [{ ...SPIN_TUE, status: 'cancelled', repeatStopped: true }] }),
+    );
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00, cancelled');
+    expect(screen.getByText('Its repeat has been stopped, so this day stays off.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Put it back on' })).toBeNull();
+  });
+
+  it('coming back to the list with the browser s Back reads the timetable again', async () => {
+    draw('/console/iron-house/classes?view=week', [
+      '/console/iron-house/classes',
+      '/console/iron-house/classes?view=week',
+    ]);
+    await screen.findByText('21 – 27 Sep 2026');
+    const before = api.getClasses.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }));
+    await waitFor(() => expect(api.getClasses.mock.calls.length).toBe(before + 1));
+    expect(lastSearch).toBe('');
   });
 
   it('going back to the Classes list reads the timetable again', async () => {

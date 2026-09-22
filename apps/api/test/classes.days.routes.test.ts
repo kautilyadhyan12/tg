@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { fillClassSessions, fillClassSessionsJob } from "../src/modules/orgs/classes/fill.js";
+import { readWeek } from "../src/modules/orgs/classes/repo.js";
 import type { GymClassSession, GymClassWeekResponse, GymClassesResponse } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -386,6 +387,173 @@ d("the week view and this day only (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  /** Every Spin on `day`, as the calendar holds it: "HH:MM status". */
+  const spinsOn = async (typeId: string, day: string) =>
+    (
+      await sql<{ m: number; status: string }[]>`
+        SELECT local_start_minute AS m, status FROM gym_class_sessions
+        WHERE class_type_id = ${typeId} AND local_date = ${day}::date
+        ORDER BY local_start_minute, status`
+    ).map((r) => `${String(Math.floor(r.m / 60)).padStart(2, "0")}:${String(r.m % 60).padStart(2, "0")} ${r.status}`);
+
+  // Round one, H-1: another repeat's date filled in where the gym had cancelled.
+  it(
+    "a cancelled date that was moved onto another repeat's time is not filled in again by that repeat",
+    async () => {
+      const owner = await makeUser("h1-owner");
+      const org = await makeOrg(owner.cookies, "H1 Days Gym");
+      const { typeId } = await dailyClass(org.org.id, owner.cookies, "Spin", at(18));
+      const wed = sessionIn(await nextWeek(org.org.id, owner.cookies), typeId, 2);
+
+      expect(
+        (await put(dayUrl(org.org.id, wed.id), { ...RUN, startMinute: at(19) }, owner.cookies)).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await post(
+            `/v1/orgs/${org.org.id}/classes/${typeId}/repeats`,
+            { ...RUN, weekdays: EVERY_DAY, startMinute: at(19), startsOn: new Date().toISOString().slice(0, 10) },
+            owner.cookies,
+          )
+        ).statusCode,
+      ).toBe(201);
+      expect(await spinsOn(typeId, wed.localDate)).toEqual(["19:00 scheduled"]);
+
+      expect((await post(cancelUrl(org.org.id, wed.id), {}, owner.cookies)).statusCode).toBe(200);
+      await fillClassSessionsJob({ sql, log: silent }, { gymIds: [org.org.id] });
+      await fillClassSessions(sql, { gymIds: [org.org.id] });
+
+      expect(await spinsOn(typeId, wed.localDate)).toEqual(["19:00 cancelled"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, H-2: Stop and Remove took the gym's cancellations with them, and
+  // a new repeat then wrote those dates fresh.
+  it(
+    "a cancelled date outlives its repeat being stopped or its class removed, and no new repeat of that class runs on that day",
+    async () => {
+      const owner = await makeUser("h2-owner");
+      const org = await makeOrg(owner.cookies, "H2 Days Gym");
+      const { typeId, repeatId } = await dailyClass(org.org.id, owner.cookies, "Spin", at(18));
+      const week = await nextWeek(org.org.id, owner.cookies);
+      const tue = sessionIn(week, typeId, 1);
+      const wed = sessionIn(week, typeId, 2);
+      expect((await post(cancelUrl(org.org.id, tue.id), {}, owner.cookies)).statusCode).toBe(200);
+
+      // Stop: the running dates go, the cancelled one stays, and says its repeat stopped.
+      const stopped = await api().inject({
+        method: "DELETE",
+        url: repeatUrl(org.org.id, repeatId),
+        remoteAddress: nextIp(),
+        cookies: owner.cookies,
+      });
+      expect(stopped.statusCode).toBe(200);
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["18:00 cancelled"]);
+      expect(await spinsOn(typeId, wed.localDate)).toEqual([]);
+      const shown = weekOf(await get(weekUrl(org.org.id, tue.localDate), owner.cookies)).sessions;
+      expect(shown.find((s) => s.id === tue.id)).toMatchObject({ status: "cancelled", repeatStopped: true });
+
+      // It cannot be put back: its repeat no longer runs.
+      const back = await post(restoreUrl(org.org.id, tue.id), {}, owner.cookies);
+      expect(back.statusCode).toBe(409);
+      expect(JSON.parse(back.body)).toMatchObject({ error: "class_repeat_stopped" });
+      expect((await rowOf(tue.id)).status).toBe("cancelled");
+
+      // A new repeat at the same time, and one at a new time: neither runs that Tuesday.
+      for (const minute of [at(18), at(18, 30)]) {
+        expect(
+          (
+            await post(
+              `/v1/orgs/${org.org.id}/classes/${typeId}/repeats`,
+              { ...RUN, weekdays: EVERY_DAY, startMinute: minute, startsOn: new Date().toISOString().slice(0, 10) },
+              owner.cookies,
+            )
+          ).statusCode,
+        ).toBe(201);
+      }
+      await fillClassSessionsJob({ sql, log: silent }, { gymIds: [org.org.id] });
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["18:00 cancelled"]);
+      expect(await spinsOn(typeId, wed.localDate)).toEqual(["18:00 scheduled", "18:30 scheduled"]);
+
+      // Remove the class and bring it back: the cancellation is still there, and
+      // a repeat added afterwards still leaves that Tuesday off.
+      expect(
+        (
+          await api().inject({
+            method: "DELETE",
+            url: `/v1/orgs/${org.org.id}/classes/${typeId}`,
+            remoteAddress: nextIp(),
+            cookies: owner.cookies,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["18:00 cancelled"]);
+      expect(await spinsOn(typeId, wed.localDate)).toEqual([]);
+      expect((await post(`/v1/orgs/${org.org.id}/classes/${typeId}/restore`, {}, owner.cookies)).statusCode).toBe(200);
+      expect(
+        (
+          await post(
+            `/v1/orgs/${org.org.id}/classes/${typeId}/repeats`,
+            { ...RUN, weekdays: EVERY_DAY, startMinute: at(7), startsOn: new Date().toISOString().slice(0, 10) },
+            owner.cookies,
+          )
+        ).statusCode,
+      ).toBe(201);
+      expect(await spinsOn(typeId, tue.localDate)).toEqual(["18:00 cancelled"]);
+      expect(await spinsOn(typeId, wed.localDate)).toEqual(["07:00 scheduled"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, L-3: a time the gym's clock skips on that date.
+  it(
+    "a day cannot be moved to a time the clocks skip on that date, and a day already at one can still change its places",
+    async () => {
+      const owner = await makeUser("gap-owner");
+      const org = await makeOrg(owner.cookies, "Gap Days Gym");
+      const made = await post(
+        `/v1/orgs/${org.org.id}/classes`,
+        { name: "Early", minutes: 60, places: 10, colour: "blue" },
+        owner.cookies,
+      );
+      const typeId = (JSON.parse(made.body) as GymClassesResponse).entries[0]?.type.id;
+      if (typeId === undefined) throw new Error("no class");
+      // London's clocks go forward at 01:00 on Sunday 28 March 2027: 01:30 does not exist.
+      const [a, b] = await sql<{ id: string }[]>`
+        INSERT INTO gym_class_schedules
+          (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on, minutes)
+        VALUES (${org.org.id}, ${typeId}, ARRAY[7]::int[], ${at(9)}, '2027-03-28', '2027-03-28', 60),
+               (${org.org.id}, ${typeId}, ARRAY[7]::int[], ${at(1, 30)}, '2027-03-28', '2027-03-28', 60)
+        RETURNING id`;
+      if (a === undefined || b === undefined) throw new Error("no repeats");
+      await fillClassSessions(sql, { gymIds: [org.org.id], now: new Date("2027-03-22T12:00:00Z") });
+      const days = weekOf(await get(weekUrl(org.org.id, "2027-03-28"), owner.cookies)).sessions;
+      const nine = days.find((s) => s.startMinute === at(9));
+      const gap = days.find((s) => s.startMinute === at(1, 30));
+      if (nine === undefined || gap === undefined) throw new Error("fill wrote nothing");
+
+      const refused = await put(dayUrl(org.org.id, nine.id), { ...RUN, startMinute: at(1, 45) }, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect(JSON.parse(refused.body)).toMatchObject({ error: "class_time_missing" });
+      expect((await rowOf(nine.id)).local_start_minute).toBe(at(9));
+      // 00:30 and 02:30 exist that night.
+      expect(
+        (await put(dayUrl(org.org.id, nine.id), { ...RUN, startMinute: at(2, 30) }, owner.cookies)).statusCode,
+      ).toBe(200);
+
+      // The fill already put a repeat at 01:30 there; changing only its places is allowed.
+      const places = await put(
+        dayUrl(org.org.id, gap.id),
+        { ...RUN, startMinute: at(1, 30), places: 5 },
+        owner.cookies,
+      );
+      expect(places.statusCode).toBe(200);
+      expect((await rowOf(gap.id)).places).toBe(5);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // A DAY CHANGED ON ITS OWN
   // =========================================================================
@@ -672,6 +840,118 @@ d("the week view and this day only (real Postgres)", () => {
 
       for (const bad of ["2026-02-31", "yesterday", "2026-9-1"]) {
         expect((await get(weekUrl(org.org.id, bad), owner.cookies)).statusCode).toBe(400);
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, test 2: the last written week, by a fixed clock on every weekday
+  // and near midnight far from UTC, against literal dates worked out by hand.
+  it(
+    "the last whole written week is the same literal date whichever day of the week it is asked",
+    async () => {
+      const owner = await makeUser("edge-owner");
+      const org = await makeOrg(owner.cookies, "Edge Days Gym");
+      const at12 = (day: string) => new Date(`${day}T12:00:00Z`);
+      const cases: [Date, string, string, string][] = [
+        // now (London)             today         weekStart     lastWeekStart
+        [at12("2026-09-21"), "2026-09-21", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-22"), "2026-09-22", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-23"), "2026-09-23", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-24"), "2026-09-24", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-25"), "2026-09-25", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-26"), "2026-09-26", "2026-09-21", "2026-11-09"],
+        // Sunday: today + 56 would be a Sunday and move the answer a week on.
+        [at12("2026-09-27"), "2026-09-27", "2026-09-21", "2026-11-09"],
+        [at12("2026-09-28"), "2026-09-28", "2026-09-28", "2026-11-16"],
+      ];
+      for (const [now, today, weekStart, lastWeekStart] of cases) {
+        const row = await readWeek(sql, org.org.id, { week: null, now });
+        expect(row, now.toISOString()).toMatchObject({ today, weekStart, lastWeekStart });
+      }
+
+      await sql`UPDATE gyms SET timezone = 'Pacific/Auckland' WHERE id = ${org.org.id}`;
+      expect(
+        await readWeek(sql, org.org.id, { week: null, now: new Date("2026-09-27T10:59:00Z") }),
+      ).toMatchObject({ today: "2026-09-27", weekStart: "2026-09-21", lastWeekStart: "2026-11-09" });
+      expect(
+        await readWeek(sql, org.org.id, { week: null, now: new Date("2026-09-27T11:00:00Z") }),
+      ).toMatchObject({ today: "2026-09-28", weekStart: "2026-09-28", lastWeekStart: "2026-11-16" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, test 3: the gym's row lock is what keeps one class at one time.
+  // Two app instances (one database connection each) at one desk address: every
+  // date gets "move the 18:00 onto 19:00" from one and "put the cancelled 19:00
+  // back" from the other, at the same moment. Exactly one may win each date.
+  it(
+    "two staff at two app servers cannot both put the same class at the same time on one date",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const org = await makeOrg(owner.cookies, "Race Days Gym");
+      const { typeId } = await dailyClass(org.org.id, owner.cookies, "Box", at(18));
+      expect(
+        (
+          await post(
+            `/v1/orgs/${org.org.id}/classes/${typeId}/repeats`,
+            { ...RUN, weekdays: EVERY_DAY, startMinute: at(19), startsOn: new Date().toISOString().slice(0, 10) },
+            owner.cookies,
+          )
+        ).statusCode,
+      ).toBe(201);
+      const now = weekOf(await get(weekUrl(org.org.id), owner.cookies));
+      const pairs: { six: string; seven: string; day: string }[] = [];
+      for (const offset of [7, 14]) {
+        const week = weekOf(await get(weekUrl(org.org.id, addDays(now.weekStart, offset)), owner.cookies));
+        for (const s of week.sessions.filter((x) => x.startMinute === at(18))) {
+          const seven = week.sessions.find((x) => x.localDate === s.localDate && x.startMinute === at(19));
+          if (seven === undefined) throw new Error("no 19:00 that day");
+          expect((await post(cancelUrl(org.org.id, seven.id), {}, owner.cookies)).statusCode).toBe(200);
+          pairs.push({ six: s.id, seven: seven.id, day: s.localDate });
+        }
+      }
+      expect(pairs.length).toBe(14);
+
+      const second = await buildApp(loadConfig(baseEnv), {
+        emailSender: {
+          sendVerificationEmail: () => Promise.resolve(),
+          sendPasswordResetEmail: () => Promise.resolve(),
+          sendSignInCodeEmail: () => Promise.resolve(),
+        },
+      });
+      await second.ready();
+      try {
+        const desk = "10.62.250.1";
+        const answers = await Promise.all(
+          pairs.flatMap((p) => [
+            api().inject({
+              method: "PUT",
+              url: dayUrl(org.org.id, p.six),
+              remoteAddress: desk,
+              cookies: owner.cookies,
+              headers: { "content-type": "application/json" },
+              payload: JSON.stringify({ ...RUN, startMinute: at(19) }),
+            }),
+            second.inject({
+              method: "POST",
+              url: restoreUrl(org.org.id, p.seven),
+              remoteAddress: desk,
+              cookies: owner.cookies,
+              headers: { "content-type": "application/json" },
+              payload: "{}",
+            }),
+          ]),
+        );
+        const codes = answers.map((a) => a.statusCode);
+        expect(codes.filter((c) => c === 200).length).toBe(14);
+        expect(codes.filter((c) => c === 409).length).toBe(14);
+        for (const p of pairs) {
+          expect(await spinsOn(typeId, p.day), p.day).toContain("19:00 scheduled");
+          expect((await spinsOn(typeId, p.day)).filter((x) => x === "19:00 scheduled"), p.day).toHaveLength(1);
+        }
+      } finally {
+        await second.close();
       }
     },
     TEST_TIMEOUT_MS,
