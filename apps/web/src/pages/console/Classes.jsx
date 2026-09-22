@@ -15,6 +15,7 @@ import { viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
 import {
+  archivedPageNote,
   CLASS_COLOUR_CHOICES,
   canManageSchedule,
   classDraft,
@@ -804,9 +805,16 @@ export default function Classes() {
             <ConsoleSection
               title="No longer running"
               summary="Classes you have taken off the timetable. Their past dates are kept, and you can bring one back."
-              aside={`${String(lists.archived.length)} kept`}
+              /* THE GYM'S REAL NUMBER, not the length of the page — round one's
+                 C/H-2 printed "117 kept" over 130. */
+              aside={`${String(lists.archivedTotal)} kept`}
             >
               <div className="flex flex-col gap-2">
+                {archivedPageNote(lists.archived.length, lists.archivedTotal) === null ? null : (
+                  <p className="text-xs" style={labelStyle}>
+                    {archivedPageNote(lists.archived.length, lists.archivedTotal)}
+                  </p>
+                )}
                 {lists.archived.map((type) => (
                   <div
                     key={type.id}

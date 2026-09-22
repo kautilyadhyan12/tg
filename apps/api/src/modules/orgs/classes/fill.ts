@@ -37,6 +37,26 @@
 // instead. Nothing here tries to be cleverer than that, because there is no
 // cleverer answer — the gym's own clock did not have that minute.
 //
+// ── SAFE TO RUN TWICE IS NOT SAFE TO RUN BESIDE A CONSOLE WRITE ─────────────
+//
+// **ROUND ONE'S C/H-1, AND IT IS THE REASON `fillClassSessionsJob` BELOW IS A
+// LOOP RATHER THAN ONE STATEMENT.** Every write in `classes/repo.ts` takes
+// `lockOrgRow` first; this statement used to take nothing. Postgres reads it
+// under one snapshot taken when the statement starts, so a Stop, a Remove or an
+// Edit that commits DURING it is invisible to it — and the rows it then writes
+// are invisible to that write's own DELETE or UPDATE. Driven by the reviewer on
+// ten gyms:
+//
+//     Stop answered 200 ... its coming dates left on the calendar: 56
+//     Remove answered 200 ... its coming dates left on the calendar: 560
+//     Edit to 90 min / 4 places ... the calendar holds 560 rows of 45 min / 10
+//
+// All three screens told the gym the opposite of what the calendar held, for
+// ever — nothing re-stamps those rows later, and 17c would book places against
+// them. **The statement is still lock-free on purpose** (the save path calls it
+// INSIDE `createSchedule`, which already holds the lock); what changed is that
+// the JOB now takes the same lock, one gym at a time.
+//
 // ── SAFE TO RUN TWICE, AND THE DATABASE IS WHAT SAYS SO ──────────────────────
 //
 // One `INSERT … SELECT … ON CONFLICT DO NOTHING` against
@@ -57,6 +77,7 @@ import type { Sql, TransactionSql } from "postgres";
  *  transaction says so in its type rather than being handed a cast. */
 type SqlOrTx = Sql | TransactionSql;
 import { CLASS_FILL_HORIZON_DAYS } from "@app/shared";
+import { lockOrgRow } from "../repo.js";
 
 export interface ClassFillResult {
   /** Rows actually written. A run that finds everything already there is 0 and
@@ -97,6 +118,11 @@ export interface ClassFillOptions {
 }
 
 /** Write out every date every live repeat runs on, inside the window.
+ *
+ *  **IT TAKES NO LOCK, AND EVERY CALLER MUST BE HOLDING ONE.** The save path
+ *  calls it inside `createSchedule`, which holds `lockOrgRow`; the nightly job
+ *  calls it through `fillGymUnderLock` below. A third caller that does neither
+ *  re-opens round one's C/H-1 — see this file's header.
  *
  *  Takes `SqlOrTx` so it is callable INSIDE a transaction, which is what the save
  *  path needs: a repeat and the dates it produces are one write, so a gym never
@@ -171,6 +197,26 @@ export async function fillClassSessions(
   return { sessions: written.count };
 }
 
+/** ONE GYM'S CALENDAR, UNDER THAT GYM'S ROW LOCK — the shape every console write
+ *  in this module already has, and the fix for round one's C/H-1.
+ *
+ *  **PER GYM AND NOT PER RUN.** Locking every gym at once would serialise the
+ *  whole product behind a nightly job; locking one gym at a time serialises only
+ *  that gym's console writes, for the length of one gym's insert. It also fixes
+ *  Low-5 by construction: the old single statement held a lock on every gym row
+ *  it wrote under for the whole run (a rename measured at 2,726 ms against a
+ *  quiet-server 122 ms), and a gym now waits only for its own share. */
+export async function fillGymUnderLock(
+  sql: Sql,
+  gymId: string,
+  opts: Omit<ClassFillOptions, "gymIds"> = {},
+): Promise<ClassFillResult> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    return await fillClassSessions(tx, { ...opts, gymIds: [gymId] });
+  });
+}
+
 export interface ClassFillJobDeps {
   sql: Sql;
   log: { info: (obj: Record<string, unknown>, msg?: string) => void };
@@ -197,9 +243,35 @@ export async function fillClassSessionsJob(
   deps: ClassFillJobDeps,
   opts: ClassFillOptions = {},
 ): Promise<ClassFillResult> {
-  const result = await fillClassSessions(deps.sql, opts);
+  const scope = opts.gymIds ?? null;
+  // ONLY THE GYMS THAT COULD HAVE A DATE TO WRITE. A gym with no live repeat is
+  // not locked, not read and not counted — which on a product where most gyms
+  // have not typed a timetable yet is most of them.
+  const gyms = await deps.sql<{ gym_id: string }[]>`
+    SELECT DISTINCT s.gym_id
+    FROM gym_class_schedules s
+    JOIN gym_class_types t ON t.id = s.class_type_id
+    WHERE s.ended_at IS NULL
+      AND t.archived_at IS NULL
+      AND (${scope}::uuid[] IS NULL OR s.gym_id = ANY(${scope}::uuid[]))
+    ORDER BY s.gym_id`;
+
+  // The per-gym options, with `gymIds` deliberately NOT carried through: the
+  // loop below decides the gym, one at a time, and a scope left in here would be
+  // a second answer to "which gym is this".
+  const perGym: Omit<ClassFillOptions, "gymIds"> = {};
+  if (opts.now !== undefined) perGym.now = opts.now;
+  if (opts.horizonDays !== undefined) perGym.horizonDays = opts.horizonDays;
+
+  let sessions = 0;
+  for (const gym of gyms) {
+    const written = await fillGymUnderLock(deps.sql, gym.gym_id, perGym);
+    sessions += written.sessions;
+  }
+
+  const result: ClassFillResult = { sessions };
   deps.log.info(
-    { ...result, event: "orgs.class_fill.finished" },
+    { ...result, gyms: gyms.length, event: "orgs.class_fill.finished" },
     "gym class calendar fill finished",
   );
   return result;

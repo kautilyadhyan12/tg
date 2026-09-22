@@ -18,6 +18,8 @@
 // interleave with a fill writing new ones.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  CLASS_ARCHIVED_PAGE,
+  CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULES_PER_TYPE_MAX,
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_TYPES_MAX,
@@ -47,28 +49,37 @@ export interface ClassScheduleRow {
   endsOn: string | null;
   nextDates: string[];
   sessionsAhead: number;
+  datesComplete: boolean;
+  finished: boolean;
 }
 
 export interface TimetableRow {
   timezone: string;
   clockFormat: string;
   types: ClassTypeRow[];
+  archived: ClassTypeRow[];
+  archivedTotal: number;
   schedules: ClassScheduleRow[];
 }
 
 /** The read the console's Classes screen is made of.
  *
- *  **TWO STATEMENTS AND NOT ONE, deliberately.** A single query joining types to
- *  repeats to sessions fans a type out once per repeat per preview date, and the
- *  shaping code would then have to un-fan it — which is where a count comes out
- *  multiplied. The two are independent reads over small per-gym sets, and the
- *  screen needs both whole.
+ *  **THREE STATEMENTS AND NOT ONE, deliberately.** A single query joining types
+ *  to repeats to sessions fans a type out once per repeat per preview date, and
+ *  the shaping code would then have to un-fan it — which is where a count comes
+ *  out multiplied. They are independent reads over small per-gym sets.
  *
- *  **NEITHER IS PAGED, and the CAPS are what makes that honest**: a gym holds at
- *  most `CLASS_TYPES_MAX` live types and `CLASS_SCHEDULES_PER_TYPE_MAX` repeats
- *  on each. A gym's own timetable is a thing you look at whole; paging it would
- *  be answering a question nobody asked. The archived list is bounded by the
- *  same cap because archiving is the only way out of it. */
+ *  **THE LIVE LIST AND THE ARCHIVED LIST ARE READ SEPARATELY, AND ROUND ONE IS
+ *  WHY (C/H-2).** They shared one statement and one `LIMIT` of 120, with live
+ *  rows sorted first — so a gym with 130 removed classes was shown 117 of them,
+ *  told "117 kept", and **could not bring back the other 13**, because Bring
+ *  back is only addressable from that list. The comment here claimed the archive
+ *  was bounded by the live cap; archiving is precisely how a gym gets past it.
+ *
+ *  Now: the live list is bounded by `CLASS_TYPES_MAX`, which is a real cap the
+ *  writes enforce; the archived list is its own page of `CLASS_ARCHIVED_PAGE`,
+ *  newest first, and `archivedTotal` is the gym's real number so the screen can
+ *  say when it is showing a page of a longer list rather than all of it. */
 export async function readTimetable(
   sql: Sql,
   gymId: string,
@@ -76,51 +87,66 @@ export async function readTimetable(
 ): Promise<TimetableRow | null> {
   const now = opts.now ?? new Date();
 
-  const typeRows = await sql<
-    {
-      id: string;
-      name: string;
-      description: string | null;
-      minutes: number;
-      places: number | null;
-      coach_user_id: string | null;
-      coach_name: string | null;
-      colour: string;
-      open_gym: boolean;
-      archived_at: Date | null;
-      timezone: string;
-      clock_format: string;
-    }[]
-  >`
-    SELECT t.id, t.name, t.description, t.minutes, t.places,
-           t.coach_user_id, t.colour, t.open_gym, t.archived_at,
-           g.timezone, g.clock_format,
-           -- THE COACH'S NAME IS ONLY ANSWERED WHILE THEY ARE STILL THIS GYM'S
-           -- STAFF. The join is through gym_staff and not straight to users,
-           -- which is the tenancy rule applied to a NAME: a coach who has left
-           -- (or a row that outlived a staff change) must read back as "nobody
-           -- named" rather than as a person this gym can no longer vouch for.
-           cu.display_name AS coach_name
-    FROM gym_class_types t
-    JOIN gyms g ON g.id = t.gym_id
-    LEFT JOIN gym_staff cs ON cs.gym_id = t.gym_id AND cs.user_id = t.coach_user_id
-    LEFT JOIN users cu ON cu.id = cs.user_id AND cu.status = 'active'
-    WHERE t.gym_id = ${gymId}
-    -- Live first, then archived; inside each, the gym's own alphabet. lower()
-    -- so "abs blast" and "Abs Blast" do not sit a screen apart, and id last so
-    -- two classes with one name never swap places between two reads (:0034's
-    -- lesson — an unstable ORDER BY is a list that reorders itself).
-    ORDER BY (t.archived_at IS NOT NULL), lower(t.name), t.id
-    LIMIT ${CLASS_TYPES_MAX * 2}`;
+  // ONE SHAPE, TWO QUERIES. `archived` decides which half; everything else about
+  // the two statements is identical, so a change to the coach join cannot reach
+  // one list and miss the other.
+  const readTypes = (archived: boolean, limit: number) =>
+    sql<
+      {
+        id: string;
+        name: string;
+        description: string | null;
+        minutes: number;
+        places: number | null;
+        coach_user_id: string | null;
+        coach_name: string | null;
+        colour: string;
+        open_gym: boolean;
+        archived_at: Date | null;
+        timezone: string;
+        clock_format: string;
+      }[]
+    >`
+      SELECT t.id, t.name, t.description, t.minutes, t.places,
+             t.coach_user_id, t.colour, t.open_gym, t.archived_at,
+             g.timezone, g.clock_format,
+             -- THE COACH'S NAME IS ONLY ANSWERED WHILE THEY ARE STILL THIS GYM'S
+             -- STAFF. The join is through gym_staff and not straight to users,
+             -- which is the tenancy rule applied to a NAME: a coach who has left
+             -- (or a row that outlived a staff change) must read back as "nobody
+             -- named" rather than as a person this gym can no longer vouch for.
+             cu.display_name AS coach_name
+      FROM gym_class_types t
+      JOIN gyms g ON g.id = t.gym_id
+      LEFT JOIN gym_staff cs ON cs.gym_id = t.gym_id AND cs.user_id = t.coach_user_id
+      LEFT JOIN users cu ON cu.id = cs.user_id AND cu.status = 'active'
+      WHERE t.gym_id = ${gymId}
+        AND (t.archived_at IS NOT NULL) = ${archived}
+      -- The LIVE list is the gym's own alphabet: lower() so "abs blast" and
+      -- "Abs Blast" do not sit a screen apart, and id last so two classes with
+      -- one name never swap places between two reads (:0034's lesson — an
+      -- unstable ORDER BY is a list that reorders itself).
+      -- The ARCHIVED list is NEWEST FIRST, because what a gym comes to it for is
+      -- the class it removed by mistake a minute ago.
+      ORDER BY
+        CASE WHEN ${archived} THEN t.archived_at END DESC NULLS LAST,
+        lower(t.name), t.id
+      LIMIT ${limit}`;
+
+  const typeRows = await readTypes(false, CLASS_TYPES_MAX);
+  const archivedRows = await readTypes(true, CLASS_ARCHIVED_PAGE);
 
   // The gym's own row rides on the type rows, so a gym with no classes still
-  // needs asking. One statement either way; this is the empty-list branch.
-  const gymRow =
-    typeRows[0] ??
-    (
-      await sql<{ timezone: string; clock_format: string }[]>`
-        SELECT timezone, clock_format FROM gyms WHERE id = ${gymId}`
-    )[0];
+  // needs asking. This is the empty-list branch, and it also answers the
+  // archived TOTAL — which is not `archivedRows.length` once a gym passes the
+  // page, and is the number the screen prints.
+  const [gymRow] = await sql<
+    { timezone: string; clock_format: string; archived_total: number }[]
+  >`
+    SELECT g.timezone, g.clock_format,
+           (SELECT count(*)::int FROM gym_class_types a
+             WHERE a.gym_id = g.id AND a.archived_at IS NOT NULL) AS archived_total
+    FROM gyms g WHERE g.id = ${gymId}`;
   if (gymRow === undefined) return null;
 
   const scheduleRows = await sql<
@@ -133,11 +159,27 @@ export async function readTimetable(
       ends_on: string | null;
       next_dates: string[] | null;
       sessions_ahead: number;
+      dates_complete: boolean;
+      finished: boolean;
     }[]
   >`
     SELECT s.id, s.class_type_id, s.weekdays, s.local_start_minute,
            s.starts_on::text AS starts_on, s.ends_on::text AS ends_on,
-           n.next_dates, coalesce(n.sessions_ahead, 0) AS sessions_ahead
+           n.next_dates, coalesce(n.sessions_ahead, 0) AS sessions_ahead,
+           -- IS sessions_ahead THE WHOLE TRUTH? Only when the repeat ENDS
+           -- inside the window, so every date it will ever run on is written.
+           -- Round one C/H-3: a repeat ending a year out holds 52 Mondays and
+           -- the window holds 8, and the screen printed "8 dates on the
+           -- calendar". The SERVER answers it because the server owns both
+           -- numbers — the horizon and the gym's own today.
+           (s.ends_on IS NOT NULL
+            AND s.ends_on <= ((${now}::timestamptz AT TIME ZONE g.timezone)::date
+                              + ${CLASS_FILL_HORIZON_DAYS}::int)) AS dates_complete,
+           -- HAS IT ALREADY RUN ITS COURSE? Nothing ends a repeat whose end date
+           -- passes, so without this the screen said "nothing on the calendar
+           -- YET" about something finished months ago (round one, Low-1).
+           (s.ends_on IS NOT NULL
+            AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date) AS finished
     FROM gym_class_schedules s
     JOIN gyms g ON g.id = s.gym_id
     -- WHAT THE GYM WILL ACTUALLY SEE, READ BACK FROM THE CALENDAR — never
@@ -158,9 +200,35 @@ export async function readTimetable(
     ORDER BY s.local_start_minute, s.id
     LIMIT ${CLASS_TYPES_MAX * CLASS_SCHEDULES_PER_TYPE_MAX}`;
 
+  const toType = (r: {
+    id: string;
+    name: string;
+    description: string | null;
+    minutes: number;
+    places: number | null;
+    coach_user_id: string | null;
+    coach_name: string | null;
+    colour: string;
+    open_gym: boolean;
+    archived_at: Date | null;
+  }): ClassTypeRow => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    minutes: r.minutes,
+    places: r.places,
+    coachUserId: r.coach_user_id,
+    coachName: r.coach_name,
+    colour: r.colour,
+    openGym: r.open_gym,
+    archivedAt: r.archived_at,
+  });
+
   return {
     timezone: gymRow.timezone,
     clockFormat: gymRow.clock_format,
+    archivedTotal: gymRow.archived_total,
+    archived: archivedRows.map(toType),
     types: typeRows.map((r) => ({
       id: r.id,
       name: r.name,
@@ -182,6 +250,8 @@ export async function readTimetable(
       endsOn: r.ends_on,
       nextDates: r.next_dates ?? [],
       sessionsAhead: r.sessions_ahead,
+      datesComplete: r.dates_complete,
+      finished: r.finished,
     })),
   };
 }
@@ -200,6 +270,7 @@ export type ClassWriteOutcome =
   | { kind: "ok" }
   | { kind: "not_found" }
   | { kind: "coach_not_staff" }
+  | { kind: "clashes" }
   | { kind: "too_many"; cap: number };
 
 /** IS THIS PERSON THIS GYM'S STAFF — asked INSIDE the write's transaction, under
@@ -459,6 +530,34 @@ export async function createSchedule(
     if ((live?.n ?? 0) >= CLASS_SCHEDULES_PER_TYPE_MAX) {
       return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
     }
+
+    // THE SAME CLASS CANNOT RUN TWICE AT THE SAME MINUTE ON THE SAME DAY —
+    // round one, Low-4. Two presses of Save, or two staff, made two repeats and
+    // the calendar then held the class twice at 18:30, which 17c would offer as
+    // two bookable places in one room. The unique index cannot see it: it is
+    // keyed on `schedule_id`, and these are two different repeats.
+    //
+    // **THE TEST IS AN OVERLAP, NOT AN EQUALITY.** Identical rows are the case
+    // that was driven, but "Mon 18:30 from January" and "Mon 18:30 from March,
+    // no end" are the same defect with different dates. Weekdays overlap
+    // (`&&`), the minute is equal, and the windows overlap — with
+    // `'infinity'::date` standing in for an open end, the same way the fill
+    // bounds one. 17b-ii's "this day and later" ENDS the old repeat before
+    // beginning the new one, so it does not meet this.
+    //
+    // Asked under the gym's lock beside the cap, which is the one place where
+    // two staff pressing Save at the same instant cannot both pass.
+    const [clash] = await tx<{ id: string }[]>`
+      SELECT id FROM gym_class_schedules
+      WHERE class_type_id = ${input.classTypeId}
+        AND gym_id = ${input.gymId}
+        AND ended_at IS NULL
+        AND local_start_minute = ${input.startMinute}
+        AND weekdays && ${tx.array([...input.weekdays])}::int[]
+        AND starts_on <= coalesce(${input.endsOn}::date, 'infinity'::date)
+        AND coalesce(ends_on, 'infinity'::date) >= ${input.startsOn}::date
+      LIMIT 1`;
+    if (clash !== undefined) return { kind: "clashes" };
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_class_schedules

@@ -6,8 +6,9 @@
 // `repeatRequest`'s of a blank end date — and both are checked by their EFFECT
 // (what the body contains) rather than by calling them and eyeballing.
 import { describe, expect, it } from 'vitest';
-import { CLASS_COLOURS, CLASS_FILL_HORIZON_DAYS } from '@app/shared';
+import { CLASS_ARCHIVED_PAGE, CLASS_COLOURS, CLASS_FILL_HORIZON_DAYS } from '@app/shared';
 import {
+  archivedPageNote,
   CLASS_COLOUR_CHOICES,
   canManageSchedule,
   classDraft,
@@ -80,32 +81,73 @@ describe('reading a repeat', () => {
     expect(repeatLine({ weekdays: [1], startMinute: null }, '24h')).toBe('');
   });
 
-  // **THE ASYMMETRY IS THE RULE, AND KD IS THE ONE WHO FOUND THE DEFECT.** The
-  // line used to read "From Tue 22 Sep · 16 dates on the calendar" for a repeat
-  // with NO end date, and 16 is the size of the eight-week window rather than
-  // the number of times the class runs — so a gym would read its ongoing class
-  // as stopping after sixteen. An open-ended repeat says **ongoing**; one the
-  // gym gave an end date keeps the count, because there the count is true.
-  it('never counts the dates of an open-ended repeat, and always counts a bounded one', () => {
-    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: null, sessionsAhead: 16 })).toBe(
+  // **THE COUNT IS PRINTED ONLY WHEN THE SERVER SAYS IT IS THE WHOLE TRUTH.**
+  //
+  // This block replaces one that asserted the DEFECT as correct. The old rule
+  // was "an open-ended repeat gets no count, a bounded one does, because there
+  // the window closes before the horizon" — true only while the end date is
+  // inside 56 days. Round one drove the case it misses: a repeat from 22 Sep
+  // 2026 to 22 Sep 2027 runs on 52 Mondays, `sessionsAhead` is the window's 8,
+  // and the line read "9 dates on the calendar". **The test asserted such a case
+  // as correct**, which is the shape a table built from the code's own
+  // assumption always has.
+  //
+  // So the page no longer decides: `datesComplete` is the server's answer,
+  // against the horizon and the gym's own today.
+  it('prints the count ONLY when the server says every date is written', () => {
+    const base = { startsOn: '2026-09-21', sessionsAhead: 16, finished: false };
+
+    // Open-ended: no count, and the word for it.
+    expect(repeatFactsLine({ ...base, endsOn: null, datesComplete: false })).toBe(
       'From Mon 21 Sep 2026 · ongoing',
     );
-    expect(repeatFactsLine({ startsOn: '2026-09-21', sessionsAhead: 16 })).toBe(
+    expect(repeatFactsLine({ ...base, datesComplete: false })).toBe(
       'From Mon 21 Sep 2026 · ongoing',
     );
-    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: '', sessionsAhead: 16 })).toBe(
-      'From Mon 21 Sep 2026 · ongoing',
-    );
+
+    // **THE CASE ROUND ONE FOUND**: it ends, but past the window. Dates shown,
+    // NO number — saying nothing beats saying something false.
     expect(
-      repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-12-25', sessionsAhead: 16 }),
-    ).toBe('Mon 21 Sep 2026 to Fri 25 Dec 2026 · 16 dates on the calendar.');
+      repeatFactsLine({ ...base, endsOn: '2027-09-21', datesComplete: false }),
+    ).toBe('Mon 21 Sep 2026 to Tue 21 Sep 2027');
+    // The exact shape the old test asserted as correct, now asserted as silent.
     expect(
-      repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-09-21', sessionsAhead: 1 }),
+      repeatFactsLine({ ...base, endsOn: '2026-12-25', datesComplete: false }),
+    ).toBe('Mon 21 Sep 2026 to Fri 25 Dec 2026');
+
+    // Ends inside the window: the count IS the whole truth, so it is printed.
+    expect(
+      repeatFactsLine({ ...base, endsOn: '2026-10-14', sessionsAhead: 7, datesComplete: true }),
+    ).toBe('Mon 21 Sep 2026 to Wed 14 Oct 2026 · 7 dates on the calendar.');
+    expect(
+      repeatFactsLine({ ...base, endsOn: '2026-09-21', sessionsAhead: 1, datesComplete: true }),
     ).toBe('Mon 21 Sep 2026 to Mon 21 Sep 2026 · 1 date on the calendar.');
+
+    // A server that sends no answer at all is treated as "not the whole truth",
+    // which is the safe direction: silence, never a false number.
+    expect(repeatFactsLine({ ...base, endsOn: '2026-10-14' })).toBe(
+      'Mon 21 Sep 2026 to Wed 14 Oct 2026',
+    );
   });
 
-  // Zero is said in BOTH cases and is never silent: it means the window has
-  // passed, has not started, or the calendar was not written.
+  // Round one, Low-1: nothing ends a repeat whose end date passes, so it stayed
+  // on screen reading "nothing on the calendar YET" about something finished
+  // months ago. "Today" is the gym's, so the server answers it.
+  it('says finished, not "yet", about a repeat that has run its course', () => {
+    expect(
+      repeatFactsLine({
+        startsOn: '2026-07-24', endsOn: '2026-08-23', sessionsAhead: 0, finished: true,
+      }),
+    ).toBe('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
+    // Finished wins over every other branch, including a stale count.
+    expect(
+      repeatFactsLine({
+        startsOn: '2026-07-24', endsOn: '2026-08-23', sessionsAhead: 4,
+        datesComplete: true, finished: true,
+      }),
+    ).toBe('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
+  });
+
   it('says when a repeat has no dates at all, ended or not', () => {
     expect(repeatFactsLine({ startsOn: '2026-09-21', sessionsAhead: 0 })).toBe(
       'From Mon 21 Sep 2026 · nothing on the calendar yet.',
@@ -266,6 +308,21 @@ describe('the repeat form', () => {
   });
 });
 
+// Round one, C/H-2: the archived list is a PAGE of an unbounded set, and a gym
+// past it was shown a short list that looked complete.
+describe('the archived page', () => {
+  it('says nothing while the whole list is on screen, and says so when it is not', () => {
+    expect(archivedPageNote(3, 3)).toBeNull();
+    expect(archivedPageNote(0, 0)).toBeNull();
+    // A sentence about paging over a list with nothing hidden is noise.
+    expect(archivedPageNote(CLASS_ARCHIVED_PAGE, CLASS_ARCHIVED_PAGE)).toBeNull();
+    expect(archivedPageNote(CLASS_ARCHIVED_PAGE, 341)).toBe(
+      `Showing the ${String(CLASS_ARCHIVED_PAGE)} most recently removed, of 341.`,
+    );
+    expect(archivedPageNote(undefined, 341)).toBeNull();
+  });
+});
+
 describe('the timetable as a whole', () => {
   // A BODY THAT ARRIVED HALF-SHAPED MUST NOT CRASH THE SCREEN, and must not
   // quietly become an empty gym either — the lists are defaulted, the clock and
@@ -275,10 +332,15 @@ describe('the timetable as a whole', () => {
     expect(timetableLists(null)).toEqual({
       entries: [],
       archived: [],
+      archivedTotal: 0,
       timezone: '',
       clockFormat: '24h',
       horizonDays: CLASS_FILL_HORIZON_DAYS,
     });
+    // An older server that does not send the total still prints a TRUE number
+    // for the list it did send, rather than 0 over a list of three.
+    expect(timetableLists({ archived: [{ id: 'a' }, { id: 'b' }] }).archivedTotal).toBe(2);
+    expect(timetableLists({ archived: [{ id: 'a' }], archivedTotal: 130 }).archivedTotal).toBe(130);
     expect(
       timetableLists({
         entries: [{ type: { id: 't1' }, schedules: [] }],

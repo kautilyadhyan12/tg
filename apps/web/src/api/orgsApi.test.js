@@ -64,6 +64,12 @@ const STAFF_BODY = {
  *  endpoint on whichever call it guessed wrong. */
 const okBody = (url, method = 'get') => {
   if (url === '/v1/orgs/mine') return { orgs: [] };
+  // THE TIMETABLE (17b-i). Every one of its seven doors answers the same shape,
+  // so one branch covers them all — and it is FIRST, above `/staff` and the
+  // rest, because `/classes/:id/restore` would otherwise fall through to the
+  // create-a-gym fallback and the contract parse would fail for the wrong
+  // reason.
+  if (url.includes('/classes') || url.includes('/class-repeats')) return CLASSES_BODY;
   if (url.includes('/staff/')) {
     return method === 'delete' ? { status: 'removed' } : { staff: STAFF_BODY };
   }
@@ -97,6 +103,48 @@ const okBody = (url, method = 'get') => {
     },
     joinCode: { code: 'K7QM2X', label: 'Front Desk' },
   };
+};
+
+/** What the timetable answers, in the shape `gymClassesResponseSchema` demands.
+ *  Deliberately NOT empty everywhere: the parse is part of what these cases
+ *  check, so a field dropped from the contract fails here rather than passing
+ *  against `{}`. */
+const CLASSES_BODY = {
+  timezone: 'Europe/London',
+  clockFormat: '24h',
+  horizonDays: 56,
+  entries: [
+    {
+      type: {
+        id: '22222222-2222-2222-2222-222222222222',
+        name: 'Sunrise Yoga',
+        description: null,
+        minutes: 45,
+        places: 16,
+        coachUserId: null,
+        coachName: null,
+        colour: 'blue',
+        openGym: false,
+        archivedAt: null,
+      },
+      schedules: [
+        {
+          id: '33333333-3333-3333-3333-333333333333',
+          classTypeId: '22222222-2222-2222-2222-222222222222',
+          weekdays: [1, 3],
+          startMinute: 1110,
+          startsOn: '2026-09-21',
+          endsOn: null,
+          nextDates: ['2026-09-21'],
+          sessionsAhead: 16,
+          datesComplete: false,
+          finished: false,
+        },
+      ],
+    },
+  ],
+  archived: [],
+  archivedTotal: 0,
 };
 
 function recordRequests(api) {
@@ -149,6 +197,58 @@ describe('orgService endpoints', () => {
       params: { limit: 50 },
     });
     expect(seen[3]).toMatchObject({ url: '/v1/orgs/gym-1/codes', method: 'get' });
+  });
+
+  /** **THE SEVEN TIMETABLE DOORS, BY ADDRESS AND BY VERB** — round one's Low-3,
+   *  and the gap is worth naming: `classes.render.test.jsx` replaces
+   *  `orgService` wholesale, so a misspelt `/restore` or a `DELETE` where the
+   *  server has a `POST` left all 43 web tests green. This file is where every
+   *  other endpoint's path is pinned; the timetable belongs in the same table.
+   *
+   *  The verbs are not decoration: `PUT` on a class is a REPLACE (so `places:
+   *  null` means "no limit" rather than "leave it alone"), `DELETE` archives and
+   *  `POST .../restore` brings back — three different meanings that a wrong verb
+   *  turns into each other. */
+  it('hits the timetable surface at the right address and with the right verb', async () => {
+    const seen = recordRequests(authApi);
+    const body = {
+      name: 'Spin', description: '', minutes: 45, places: 12,
+      coachUserId: null, colour: 'red', openGym: false,
+    };
+    await orgService.getClasses('gym-1');
+    await orgService.createClass('gym-1', body);
+    await orgService.updateClass('gym-1', 't1', body);
+    await orgService.archiveClass('gym-1', 't1');
+    await orgService.restoreClass('gym-1', 't1');
+    await orgService.addClassRepeat('gym-1', 't1', {
+      weekdays: [1, 3], startMinute: 1110, startsOn: '2026-09-21',
+    });
+    await orgService.stopClassRepeat('gym-1', 's1');
+
+    expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual([
+      'get /v1/orgs/gym-1/classes',
+      'post /v1/orgs/gym-1/classes',
+      'put /v1/orgs/gym-1/classes/t1',
+      'delete /v1/orgs/gym-1/classes/t1',
+      'post /v1/orgs/gym-1/classes/t1/restore',
+      'post /v1/orgs/gym-1/classes/t1/repeats',
+      'delete /v1/orgs/gym-1/class-repeats/s1',
+    ]);
+    // THE WHOLE CLASS GOES ON A PUT, `places: null` included — a merge would
+    // make "no limit" indistinguishable from "leave it alone".
+    expect(JSON.parse(seen[2].data)).toEqual(body);
+    const unlimited = { ...body, places: null };
+    await orgService.updateClass('gym-1', 't1', unlimited);
+    expect(JSON.parse(seen[7].data)).toEqual(unlimited);
+  });
+
+  /** A body the screen cannot read is a FAILURE, never an empty timetable — the
+   *  rule `readThrough` exists for, applied to the newest surface. */
+  it('treats a timetable that does not match its contract as a failure', async () => {
+    answerWith(authApi, { entries: [], archived: [] });
+    await expect(orgService.getClasses('gym-1')).rejects.toMatchObject({
+      isContractError: true,
+    });
   });
 
   it('sends only the wizard fields — a client-declared currency would be a 400', async () => {

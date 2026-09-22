@@ -1,4 +1,5 @@
 import {
+  CLASS_ARCHIVED_PAGE,
   CLASS_COLOURS,
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULE_PREVIEW_DATES,
@@ -89,28 +90,38 @@ export function repeatLine(schedule, clockFormat) {
 /** WHEN IT RUNS BETWEEN, AND HOW MANY DATES — one line, because the two halves
  *  cannot be written independently without saying something false.
  *
- *  **A REPEAT WITH NO END DATE GETS NO COUNT, and that is the whole point of
- *  this function** (Kd, 2026-09-22). It used to read "From Tue 22 Sep · 16 dates
- *  on the calendar", and 16 is the size of the eight-week window, not the number
- *  of times the class runs — so a gym reading it would think its ongoing class
- *  stops after sixteen. It says **ongoing**, which is what it is.
+ *  **THE COUNT IS PRINTED ONLY WHEN THE SERVER SAYS IT IS THE WHOLE TRUTH**
+ *  (`datesComplete`), and that is the fix for the SECOND time this sentence lied.
  *
- *  **A repeat the gym gave an end date DOES get the count**, because there it is
- *  true: the window closes before the horizon does, so the number IS how many
- *  times it runs. That asymmetry is the rule, not an oversight.
+ *  Kd struck it on the open-ended branch: "16 dates on the calendar" is the size
+ *  of the eight-week window, not how many times the class runs, so a gym read
+ *  its ongoing class as stopping after sixteen. The bounded branch kept the
+ *  count on the argument that "there it is true: the window closes before the
+ *  horizon does" — **which holds only while the end date is inside 56 days.**
+ *  Round one drove it: a repeat from 22 Sep 2026 to 22 Sep 2027 runs on 52
+ *  Mondays and rendered as "9 dates on the calendar", and the test at this
+ *  file's own line 100 asserted such a case as CORRECT. A table built from the
+ *  code's own assumption proves only that the code matches itself.
  *
- *  **Zero dates is said in both cases and is never silent.** It means the
- *  repeat's window has already passed, has not started, or the calendar was not
- *  written — all of which look like a bug until somebody says otherwise. */
+ *  **So the page no longer works it out at all.** `datesComplete` is the
+ *  server's answer, computed against the horizon and the gym's own today, which
+ *  are both the server's to know. A repeat that ends beyond the window shows its
+ *  dates and no number — saying nothing beats saying something false.
+ *
+ *  **`finished` is the same division of labour** (round one, Low-1): nothing
+ *  ends a repeat whose end date passes, so it stayed on screen reading "nothing
+ *  on the calendar **yet**" about something that finished months ago. "Today" is
+ *  the gym's, so the server answers that too. */
 export function repeatFactsLine(schedule) {
   const from = closureDateLabel(schedule?.startsOn ?? '');
   if (from === '') return '';
   const until = schedule?.endsOn;
   const openEnded = typeof until !== 'string' || until === '';
   const window = openEnded ? `From ${from}` : `${from} to ${closureDateLabel(until)}`;
+  if (schedule?.finished === true) return `${window} · finished`;
   const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : 0;
   if (ahead === 0) return `${window} · nothing on the calendar yet.`;
-  if (openEnded) return `${window} · ongoing`;
+  if (schedule?.datesComplete !== true) return openEnded ? `${window} · ongoing` : window;
   return `${window} · ${ahead === 1 ? '1 date' : `${String(ahead)} dates`} on the calendar.`;
 }
 
@@ -303,9 +314,17 @@ export function repeatTimeValue(startMinute) {
  *  archived. `entries` and `archived` are two different questions and the server
  *  answers them separately — see the service's own note. */
 export function timetableLists(timetable) {
+  const archived = Array.isArray(timetable?.archived) ? timetable.archived : [];
   return {
     entries: Array.isArray(timetable?.entries) ? timetable.entries : [],
-    archived: Array.isArray(timetable?.archived) ? timetable.archived : [],
+    archived,
+    /** THE GYM'S REAL NUMBER, which is not `archived.length` once it passes the
+     *  page — round one's C/H-2, where "117 kept" was printed over 130. Falls
+     *  back to what arrived rather than to 0, so an older server that does not
+     *  send it still prints a true number for the list it did send. */
+    archivedTotal: Number.isInteger(timetable?.archivedTotal)
+      ? timetable.archivedTotal
+      : archived.length,
     timezone: typeof timetable?.timezone === 'string' ? timetable.timezone : '',
     clockFormat: timetable?.clockFormat === '12h' ? '12h' : '24h',
     horizonDays: Number.isInteger(timetable?.horizonDays)
@@ -314,4 +333,16 @@ export function timetableLists(timetable) {
   };
 }
 
-export { CLASS_SCHEDULE_PREVIEW_DATES };
+/** WHAT THE ARCHIVED SECTION SAYS ABOVE ITS LIST.
+ *
+ *  **It only says something when the list is a PAGE of a longer one**, which is
+ *  the honest half of C/H-2's fix: a gym past `CLASS_ARCHIVED_PAGE` removed
+ *  classes is told it is looking at the most recent, rather than being shown a
+ *  short list that looks complete. Null when everything is on screen — a
+ *  sentence about paging over a list with nothing hidden is noise. */
+export function archivedPageNote(shown, total) {
+  if (!Number.isInteger(shown) || !Number.isInteger(total) || total <= shown) return null;
+  return `Showing the ${String(shown)} most recently removed, of ${String(total)}.`;
+}
+
+export { CLASS_ARCHIVED_PAGE, CLASS_SCHEDULE_PREVIEW_DATES };

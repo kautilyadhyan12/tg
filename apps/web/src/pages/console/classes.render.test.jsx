@@ -76,6 +76,11 @@ const REPEAT = {
   endsOn: null,
   nextDates: ['2026-09-21', '2026-09-23', '2026-09-28', '2026-09-30'],
   sessionsAhead: 16,
+  // THE SERVER'S TWO ANSWERS (round one, C/H-3 and Low-1). This repeat is
+  // open-ended, so the count is NOT the whole truth and the screen must not
+  // print it.
+  datesComplete: false,
+  finished: false,
 };
 
 const timetable = (over = {}) => ({
@@ -85,6 +90,7 @@ const timetable = (over = {}) => ({
     horizonDays: 56,
     entries: [{ type: YOGA, schedules: [REPEAT] }],
     archived: [],
+    archivedTotal: 0,
     ...over,
   },
 });
@@ -95,7 +101,9 @@ beforeEach(() => {
   api.getClasses.mockReset().mockResolvedValue(timetable());
   api.createClass.mockReset().mockResolvedValue(timetable());
   api.updateClass.mockReset().mockResolvedValue(timetable());
-  api.archiveClass.mockReset().mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
+  api.archiveClass
+    .mockReset()
+    .mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
   api.restoreClass.mockReset().mockResolvedValue(timetable());
@@ -186,22 +194,28 @@ describe('reading the timetable', () => {
     ).toBeTruthy();
   });
 
-  // **KD'S SECOND CATCH, 2026-09-22.** The fixture repeat has NO end date, and
-  // the line used to print "16 dates on the calendar" — the size of the
-  // eight-week window, read by a gym as "it only runs sixteen times". It says
-  // ongoing now, and a repeat the gym DID give an end date still shows a count,
-  // because there the count is what the gym asked for.
-  it('says ongoing for a repeat with no end date, and counts one that ends', async () => {
+  // **KD'S SECOND CATCH, 2026-09-22, AND ROUND ONE'S C/H-3 ON TOP OF IT.** The
+  // fixture repeat has no end date, so the count is not the whole truth and the
+  // line says ongoing. The case round one found is the THIRD one below: a repeat
+  // that ends, but past the eight-week window, where the count is equally false
+  // and the screen must simply not print it.
+  it('says ongoing, counts, or says nothing — whichever the server says is true', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     expect(screen.getByText('From Mon 21 Sep 2026 · ongoing')).toBeTruthy();
     expect(screen.queryByText(/16 dates on the calendar/)).toBeNull();
     cleanup();
 
+    // Ends INSIDE the window: the count is the whole truth, so it is shown.
     api.getClasses.mockResolvedValue(
       timetable({
         entries: [
-          { type: YOGA, schedules: [{ ...REPEAT, endsOn: '2026-10-14', sessionsAhead: 7 }] },
+          {
+            type: YOGA,
+            schedules: [
+              { ...REPEAT, endsOn: '2026-10-14', sessionsAhead: 7, datesComplete: true },
+            ],
+          },
         ],
       }),
     );
@@ -210,15 +224,52 @@ describe('reading the timetable', () => {
     expect(
       screen.getByText('Mon 21 Sep 2026 to Wed 14 Oct 2026 · 7 dates on the calendar.'),
     ).toBeTruthy();
-  });
+    cleanup();
 
-  // A gym reading on a 12-hour clock reads ITS OWN clock, not the browser's
-  // locale and not the other gym's.
-  it('reads the time on the gym s own clock', async () => {
-    api.getClasses.mockResolvedValue(timetable({ clockFormat: '12h' }));
+    // **ENDS A YEAR OUT.** 52 Mondays, a window of 16 — the screen shows the
+    // window and NO number, because saying nothing beats saying something false.
+    api.getClasses.mockResolvedValue(
+      timetable({
+        entries: [
+          {
+            type: YOGA,
+            schedules: [
+              { ...REPEAT, endsOn: '2027-09-20', sessionsAhead: 16, datesComplete: false },
+            ],
+          },
+        ],
+      }),
+    );
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('Mon & Wed at 6:30 PM')).toBeTruthy();
+    expect(screen.getByText('Mon 21 Sep 2026 to Mon 20 Sep 2027')).toBeTruthy();
+    expect(screen.queryByText(/dates on the calendar/)).toBeNull();
+  });
+
+  // Round one, Low-1.
+  it('says a repeat has finished rather than "nothing on the calendar yet"', async () => {
+    api.getClasses.mockResolvedValue(
+      timetable({
+        entries: [
+          {
+            type: YOGA,
+            schedules: [
+              {
+                ...REPEAT,
+                startsOn: '2026-07-24',
+                endsOn: '2026-08-23',
+                nextDates: [],
+                sessionsAhead: 0,
+                finished: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    drawScreen();
+    await screen.findByText('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
+    expect(screen.queryByText(/nothing on the calendar yet/)).toBeNull();
   });
 
   // THE EMPTY ARM AND THE FAILED ARM ARE DIFFERENT SCREENS. An unreadable page
@@ -458,8 +509,32 @@ describe('changing and removing a class', () => {
   // **KD'S THIRD CALL THAT DAY**, taking Mindbody's behaviour over TeamUp's,
   // which cannot reinstate an archived Class Type at all. No question in front
   // of it: bringing a class back ADDS to the timetable and takes nothing away.
+  // Round one, C/H-2: the archived list is a PAGE, so the heading must print the
+  // gym's REAL total and say when the list is not all of it. The old screen said
+  // "117 kept" over 130 and the other 13 could not be brought back at all.
+  it('prints the real archived total, and says when it is showing a page of it', async () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ ...YOGA, id: `t${String(i)}`, name: `Old ${String(i)}` }));
+    api.getClasses.mockResolvedValue(
+      timetable({ entries: [], archived: many, archivedTotal: 341 }),
+    );
+    drawScreen();
+    await screen.findByText('341 kept');
+    fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
+    expect(screen.getByText('Showing the 200 most recently removed, of 341.')).toBeTruthy();
+    cleanup();
+
+    // Nothing hidden: the total is the length and there is no sentence about it.
+    api.getClasses.mockResolvedValue(
+      timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }),
+    );
+    drawScreen();
+    await screen.findByText('1 kept');
+    fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
+    expect(screen.queryByText(/most recently removed/)).toBeNull();
+  });
+
   it('brings a removed class back to the timetable', async () => {
-    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
     drawScreen();
     fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
     fireEvent.click(screen.getByRole('button', { name: /Bring Sunrise Yoga back to the timetable/ }));
@@ -498,7 +573,7 @@ describe('who may change it', () => {
   });
 
   it('a lapsed gym is not offered Bring back either', async () => {
-    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
     });

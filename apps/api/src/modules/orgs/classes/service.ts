@@ -111,18 +111,21 @@ function toSchedule(row: repo.ClassScheduleRow): GymClassSchedule {
     endsOn: row.endsOn,
     nextDates: row.nextDates,
     sessionsAhead: row.sessionsAhead,
+    datesComplete: row.datesComplete,
+    finished: row.finished,
   };
 }
 
 /** ONE PLACE TURNS THE ROWS INTO THE ANSWER, so the six routes that all reply
  *  with the whole timetable cannot each shape it slightly differently.
  *
- *  **ARCHIVED TYPES ARE A SEPARATE LIST AND NOT A FLAG ON ONE**, because they
- *  are a different question: the live list is what the gym runs, and the
- *  archived list is what it used to. A screen filtering one list on a flag
- *  renders an archived class in the middle of the timetable on the one release
- *  somebody forgets the filter. Their repeats are stopped by construction (the
- *  archive does it in the same transaction), so they carry none. */
+ *  **ARCHIVED TYPES ARE A SEPARATE LIST ALL THE WAY DOWN TO THE STATEMENT THAT
+ *  READS THEM**, because they are a different question and a different bound:
+ *  the live list is what the gym runs and is capped, the archived list is what
+ *  it used to run and is a PAGE of an unbounded set. Round one's C/H-2 is what
+ *  moved the split from here into the repo. Their repeats are stopped by
+ *  construction (the archive does it in the same transaction), so they carry
+ *  none. */
 function toResponse(row: repo.TimetableRow): GymClassesResponse {
   const schedulesByType = new Map<string, GymClassSchedule[]>();
   for (const s of row.schedules) {
@@ -134,10 +137,15 @@ function toResponse(row: repo.TimetableRow): GymClassesResponse {
     timezone: row.timezone,
     clockFormat: row.clockFormat,
     horizonDays: CLASS_FILL_HORIZON_DAYS,
-    entries: row.types
-      .filter((t) => t.archivedAt === null)
-      .map((t) => ({ type: toClassType(t), schedules: schedulesByType.get(t.id) ?? [] })),
-    archived: row.types.filter((t) => t.archivedAt !== null).map(toClassType),
+    // THE TWO LISTS ARE THE REPO'S, NOT A FILTER OVER ONE. They were one array
+    // split by `archivedAt` here, which is what let round one's C/H-2 hide: a
+    // truncated read looks exactly like a gym with fewer archived classes.
+    entries: row.types.map((t) => ({
+      type: toClassType(t),
+      schedules: schedulesByType.get(t.id) ?? [],
+    })),
+    archived: row.archived.map(toClassType),
+    archivedTotal: row.archivedTotal,
   });
 }
 
@@ -177,6 +185,15 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
         400,
         "coach_not_staff",
         "Pick a coach who is on this gym's staff, or leave it blank.",
+      );
+    case "clashes":
+      // 409 and not 400: the request is well formed and would have been fine a
+      // moment ago or with a different time. It names what to do about it,
+      // because "already exists" without that is a dead end.
+      throw new OrgsError(
+        409,
+        "repeat_clashes",
+        "That class already repeats at this time on one of those days. Stop the old repeat first, or pick another time.",
       );
     case "too_many":
       throw new OrgsError(

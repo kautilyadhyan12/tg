@@ -37,6 +37,24 @@ export const CLASS_FILL_HORIZON_DAYS = 56;
  *  small enough that a gym with sixty repeats is not sent a thousand rows. */
 export const CLASS_SCHEDULE_PREVIEW_DATES = 4;
 
+/** HOW MANY REMOVED CLASSES THE SCREEN CAN REACH.
+ *
+ *  **IT IS ITS OWN NUMBER BECAUSE THE ARCHIVED LIST IS THE ONE THING HERE THAT
+ *  GROWS WITHOUT A CAP** — round one, C/H-2. `CLASS_TYPES_MAX` bounds the LIVE
+ *  list, and archiving is exactly how a gym gets past it: two rounds of
+ *  create-and-archive is 120 rows. The first version read both lists under one
+ *  `LIMIT` of 120, live rows sorted first, so a gym with 130 removed classes was
+ *  shown 117 and **could not bring back the other 13** — Kd's "nothing leaves
+ *  for good" stopping at a number nobody had chosen.
+ *
+ *  200 is a recovery list, not an archive: what a gym actually comes here for is
+ *  the class it removed by mistake, and `archived_at DESC` puts that first.
+ *  **A gym past 200 is told so** (`archivedTotal` below is the real number, and
+ *  the screen says it is showing the most recent), which is the part that makes
+ *  the bound honest rather than silent. Paging it properly belongs with 17b-ii's
+ *  calendar, where there is a second screen to page from. */
+export const CLASS_ARCHIVED_PAGE = 200;
+
 /** The most class types one gym may hold, archived ones excluded.
  *
  *  A ceiling rather than no ceiling because this list is read whole by the
@@ -169,8 +187,30 @@ export const gymClassScheduleSchema = z
      *  would be shown is the one nothing books against. */
     nextDates: z.array(classDaySchema).max(CLASS_SCHEDULE_PREVIEW_DATES),
     /** How many dates this repeat holds inside the eight-week window. Says the
-     *  fill ran, and says a repeat that has finished holds none. */
+     *  fill ran, and says a repeat that has finished holds none.
+     *
+     *  **IT IS NOT "how many times this class runs" AND A SCREEN MUST NOT PRINT
+     *  IT AS ONE** — round one, C/H-3, which is Kd's own catch arriving a second
+     *  time. Read `datesComplete` first. */
     sessionsAhead: z.number().int().min(0),
+    /** **IS `sessionsAhead` THE WHOLE TRUTH?** True only when the repeat ends
+     *  INSIDE the eight-week window, so every date it will ever run on is
+     *  already written. False for an open-ended repeat and — the case that got
+     *  through round one — for one that ends beyond the horizon: a gym putting
+     *  its timetable in until next September holds 52 Mondays and the window
+     *  holds 8, and the screen said "8 dates on the calendar".
+     *
+     *  **THE SERVER ANSWERS IT BECAUSE THE SERVER OWNS BOTH NUMBERS** — the
+     *  horizon and the gym's own today. A screen working it out from
+     *  `horizonDays` would be a second derivation of the one thing that has
+     *  already been wrong twice. */
+    datesComplete: z.boolean(),
+    /** Has this repeat's own end date already passed? A repeat that has run its
+     *  course stays on the timetable (nothing ends it), and without this the
+     *  screen said "nothing on the calendar **yet**" about something that had
+     *  finished months ago — round one, Low-1. Again the SERVER's answer,
+     *  because "today" is the gym's, not the reader's. */
+    finished: z.boolean(),
   })
   .strict();
 export type GymClassSchedule = z.infer<typeof gymClassScheduleSchema>;
@@ -192,7 +232,14 @@ export const gymClassesResponseSchema = z
     clockFormat: z.enum(["12h", "24h"]),
     horizonDays: z.number().int().min(1),
     entries: z.array(gymClassTimetableEntrySchema),
+    /** The most recently removed classes, newest first, at most
+     *  `CLASS_ARCHIVED_PAGE` of them. */
     archived: z.array(gymClassTypeSchema),
+    /** **HOW MANY THERE REALLY ARE**, which is not `archived.length` once a gym
+     *  passes the page (round one, C/H-2: the screen said "117 kept" of 130).
+     *  The count is the gym's, the list is a page of it, and the screen says so
+     *  when the two differ. */
+    archivedTotal: z.number().int().min(0),
   })
   .strict();
 export type GymClassesResponse = z.infer<typeof gymClassesResponseSchema>;

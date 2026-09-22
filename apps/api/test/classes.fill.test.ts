@@ -24,7 +24,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { CLASS_FILL_HORIZON_DAYS } from "@app/shared";
-import { fillClassSessions } from "../src/modules/orgs/classes/fill.js";
+import { fillClassSessions, fillClassSessionsJob } from "../src/modules/orgs/classes/fill.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -39,6 +39,14 @@ const WED = 3;
 const SUN = 7;
 
 const at = (h: number, m = 0) => h * 60 + m;
+
+/** The job reports what it did (R8.3); nothing here asserts on it. */
+const silent = {
+  info: () => {
+    /* deliberately empty */
+  },
+};
+
 
 d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
@@ -468,6 +476,56 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
       // `places` NULL is NO LIMIT and survives as null — a fill that coalesced it
       // to a number would invent a cap for an open-gym slot.
       for (const r of rows) expect(r).toEqual({ minutes: 45, places: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, C/H-1: the JOB is what takes the lock now, one gym at a time, so
+  // it is a different code path from the statement every other case here drives.
+  it(
+    "the nightly job fills every gym that has a live repeat, and no others",
+    async () => {
+      const withRepeat = await gymIn("Europe/London", "job-a");
+      const alsoWith = await gymIn("Europe/London", "job-b");
+      const stoppedOnly = await gymIn("Europe/London", "job-c");
+      const archivedOnly = await gymIn("Europe/London", "job-d");
+      const emptyGym = await gymIn("Europe/London", "job-e");
+
+      for (const [gymId, kind] of [
+        [withRepeat, "live"],
+        [alsoWith, "live"],
+        [stoppedOnly, "stopped"],
+        [archivedOnly, "archived"],
+      ] as const) {
+        const typeId = await classIn(gymId);
+        const scheduleId = await repeat(gymId, typeId, [WED], at(9), "2026-06-01", "2026-06-30");
+        if (kind === "stopped") {
+          await sql`UPDATE gym_class_schedules SET ended_at = now() WHERE id = ${scheduleId}`;
+        }
+        if (kind === "archived") {
+          await sql`UPDATE gym_class_types SET archived_at = now() WHERE id = ${typeId}`;
+        }
+      }
+
+      const now = new Date("2026-06-10T08:00:00Z");
+      const filled = await fillClassSessionsJob({ sql, log: silent }, { now });
+      // Two gyms of three Wednesdays each. A gym with nothing live is never
+      // locked, never read and never counted.
+      expect(filled.sessions).toBe(6);
+
+      const counts = await sql<{ gym_id: string; n: number }[]>`
+        SELECT gym_id, count(*)::int AS n FROM gym_class_sessions
+        WHERE gym_id = ANY(${sql.array([withRepeat, alsoWith, stoppedOnly, archivedOnly, emptyGym])}::uuid[])
+        GROUP BY gym_id`;
+      const byGym = new Map(counts.map((r) => [r.gym_id, r.n]));
+      expect(byGym.get(withRepeat)).toBe(3);
+      expect(byGym.get(alsoWith)).toBe(3);
+      for (const none of [stoppedOnly, archivedOnly, emptyGym]) {
+        expect(byGym.get(none)).toBeUndefined();
+      }
+
+      // Still safe to run twice, through the job as well as the statement.
+      expect((await fillClassSessionsJob({ sql, log: silent }, { now })).sessions).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );

@@ -22,12 +22,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { fillClassSessions } from "../src/modules/orgs/classes/fill.js";
+import { fillClassSessions, fillClassSessionsJob } from "../src/modules/orgs/classes/fill.js";
+import { randomUUID } from "node:crypto";
 import {
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULES_PER_TYPE_MAX,
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_TYPES_MAX,
+  CLASS_ARCHIVED_PAGE,
   ROLE_PRIVILEGES,
 } from "@app/shared";
 import type { GymClassesResponse } from "@app/shared";
@@ -69,6 +71,14 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 const MON = 1;
 const WED = 3;
 const at = (h: number, m = 0) => h * 60 + m;
+
+/** The job reports what it did (R8.3); nothing here asserts on it. */
+const silent = {
+  info: () => {
+    /* deliberately empty */
+  },
+};
+
 
 const aClass = (over: Record<string, unknown> = {}) => ({
   name: "Yoga",
@@ -410,6 +420,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         horizonDays: CLASS_FILL_HORIZON_DAYS,
         entries: [],
         archived: [],
+        archivedTotal: 0,
       });
 
       const made = await post(
@@ -446,7 +457,14 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(schedule.endsOn).toBeNull();
       // THE DATES ARE THERE BEFORE THE NIGHTLY JOB EVER RUNS — two a week over
       // eight weeks, and the screen shows the first few.
-      expect(schedule.sessionsAhead).toBeGreaterThanOrEqual(15);
+      // EXACT, not `>= 15` — round one's third weak test. A fill that ignored
+      // `weekdays` altogether writes 57 dates and passed the old assertion; the
+      // number this case was written for is two a week over eight weeks.
+      expect(schedule.sessionsAhead).toBe(16);
+      // And the server says the count is NOT the whole truth, because the
+      // repeat has no end date (C/H-3).
+      expect(schedule.datesComplete).toBe(false);
+      expect(schedule.finished).toBe(false);
       expect(schedule.nextDates).toHaveLength(CLASS_SCHEDULE_PREVIEW_DATES);
       expect([...schedule.nextDates].sort()).toEqual(schedule.nextDates);
 
@@ -573,7 +591,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(after.entries[0]?.schedules).toEqual([]);
       expect(await stateOf(org.org.id)).toMatchObject({ types: 1, repeats: 0 });
 
-      // THE NIGHTLY JOB MUST NOT PUT THEM BACK EITHER \u2014 driven, not assumed,
+      // THE NIGHTLY JOB MUST NOT PUT THEM BACK EITHER — driven, not assumed,
       // because this is the one way a stopped repeat could come back to life.
       await fillClassSessions(sql, { gymIds: [org.org.id] });
       const [left] = await sql<{ future: number }[]>`
@@ -585,7 +603,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // acting on a list that has moved under them.
       expect((await post(restoreUrl(org.org.id, type.id), {}, owner.cookies)).statusCode).toBe(404);
 
-      // And the gym can simply add a repeat again \u2014 two taps, and the dates
+      // And the gym can simply add a repeat again — two taps, and the dates
       // are written as they always are.
       const again = await post(
         repeatsUrl(org.org.id, type.id),
@@ -636,6 +654,203 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
     TEST_TIMEOUT_MS,
   );
 
+  // =========================================================================
+  // ROUND ONE'S THREE CRITICAL/HIGH, EACH WITH THE CASE THAT FOUND IT
+  // =========================================================================
+
+  it(
+    "the nightly job cannot undo a Stop that commits while it is in flight",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const org = await makeOrg(owner.cookies, "Race Classes Gym");
+      const made = await post(classesUrl(org.org.id), aClass({ name: "Race" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+      const withRepeat = await post(
+        repeatsUrl(org.org.id, type.id),
+        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      const scheduleId = timetable(withRepeat).entries[0]?.schedules[0]?.id;
+      if (scheduleId === undefined) throw new Error("no repeat");
+
+      // **THE INTERLEAVING IS DRIVEN, NOT HOPED FOR, and the first version of
+      // this case is why.** It started the job and the route together with
+      // `Promise.all` and passed with the lock REMOVED — a test that could not
+      // see the defect it was written for. The losing order is a specific one:
+      // the fill's statement takes its READ COMMITTED snapshot, the console
+      // write commits, and the fill then writes rows for a repeat that no longer
+      // exists. So the console write is held open here until the job is in
+      // flight, which is the only way to put those three events in that order
+      // every time.
+      //
+      // The statements below are `repo.endSchedule`'s, by hand, because the
+      // route commits and there would be nothing to hold open. The ROUTE's own
+      // Stop is proved two cases down.
+      let release = (): void => {
+        throw new Error("the gate was never armed");
+      };
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const stopping = sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${org.org.id} FOR UPDATE`;
+        await tx`UPDATE gym_class_schedules SET ended_at = now() WHERE id = ${scheduleId}`;
+        await tx`DELETE FROM gym_class_sessions
+                 WHERE schedule_id = ${scheduleId} AND starts_at > now()`;
+        await gate;
+      });
+      await new Promise((r) => setTimeout(r, 250));
+
+      // The job starts while the Stop is still open. Under the fix it blocks on
+      // the gym's row lock and takes its snapshot AFTER the Stop commits, so it
+      // sees a stopped repeat and writes nothing. Without the lock its snapshot
+      // is already taken and it writes 57 dates back onto a calendar the gym was
+      // told had been cleared.
+      const job = fillClassSessionsJob({ sql, log: silent }, { gymIds: [org.org.id] });
+      await new Promise((r) => setTimeout(r, 750));
+      release();
+      await stopping;
+      await job;
+
+      const [left] = await sql<{ future: number }[]>`
+        SELECT count(*) FILTER (WHERE starts_at > now())::int AS future
+        FROM gym_class_sessions WHERE schedule_id = ${scheduleId}`;
+      expect(left?.future).toBe(0);
+
+      // AND THE SCREEN AGREES WITH THE TABLE, which is the sentence the gym was
+      // shown: "its coming dates are cleared".
+      const after = timetable(await get(classesUrl(org.org.id), owner.cookies));
+      expect(after.entries[0]?.schedules).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "every removed class is reachable, and the gym is told when it is seeing a page",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const org = await makeOrg(owner.cookies, "Archive Page Classes Gym");
+      // Past the page, straight into the table: what is under test is the READ,
+      // and pressing Remove 210 times through the route proves nothing extra.
+      const over = CLASS_ARCHIVED_PAGE + 10;
+      await sql`
+        INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, archived_at)
+        SELECT ${org.org.id}, 'Old ' || lpad(n::text, 4, '0'), 60, 20, 'slate',
+               now() - (n || ' minutes')::interval
+        FROM generate_series(1, ${over}) AS n`;
+      await post(classesUrl(org.org.id), aClass({ name: "Live one" }), owner.cookies);
+
+      const seen = timetable(await get(classesUrl(org.org.id), owner.cookies));
+      // THE LIVE LIST IS NOT EATEN BY THE ARCHIVE. Before C/H-1's sibling fix
+      // one LIMIT covered both and live rows sorted first; the failure mode ran
+      // the other way once a gym had enough archived rows.
+      expect(seen.entries).toHaveLength(1);
+      expect(seen.entries[0]?.type.name).toBe("Live one");
+      // THE TOTAL IS THE GYM'S REAL NUMBER, not the length of the page.
+      expect(seen.archivedTotal).toBe(over);
+      expect(seen.archived).toHaveLength(CLASS_ARCHIVED_PAGE);
+      // NEWEST FIRST, because what a gym comes here for is what it just removed.
+      expect(seen.archived[0]?.name).toBe("Old 0001");
+
+      // AND EVERY ONE ON THE PAGE CAN ACTUALLY BE BROUGHT BACK — the part of
+      // C/H-2 that made it Critical rather than cosmetic.
+      const first = seen.archived[0];
+      if (first === undefined) throw new Error("no archived class");
+      const back = await post(restoreUrl(org.org.id, first.id), {}, owner.cookies);
+      expect(back.statusCode).toBe(200);
+      expect(timetable(back).entries.some((e) => e.type.id === first.id)).toBe(true);
+      expect(timetable(back).archivedTotal).toBe(over - 1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the count is the whole truth only while the repeat ends inside the window",
+    async () => {
+      const owner = await makeUser("count-owner");
+      const org = await makeOrg(owner.cookies, "Count Classes Gym");
+      const made = await post(classesUrl(org.org.id), aClass({ name: "Count" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+
+      // Ends inside the eight weeks: every date it will ever run on is written.
+      const inside = await post(
+        repeatsUrl(org.org.id, type.id),
+        { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0), endsOn: dayFromToday(20) },
+        owner.cookies,
+      );
+      expect(timetable(inside).entries[0]?.schedules[0]?.datesComplete).toBe(true);
+
+      // **ROUND ONE'S C/H-3**: a year out. The window holds a handful of
+      // Mondays and the repeat runs on fifty-two, so the server says the count
+      // is NOT the whole truth and the screen prints no number.
+      const year = await post(
+        repeatsUrl(org.org.id, type.id),
+        {
+          weekdays: [WED],
+          startMinute: at(8),
+          startsOn: dayFromToday(0),
+          endsOn: dayFromToday(365),
+        },
+        owner.cookies,
+      );
+      const long = timetable(year).entries[0]?.schedules.find((x) => x.startMinute === at(8));
+      expect(long?.datesComplete).toBe(false);
+      expect(long?.sessionsAhead).toBeLessThan(20);
+      expect(long?.finished).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the same class cannot repeat twice at the same minute on the same day",
+    async () => {
+      const owner = await makeUser("clash-owner");
+      const org = await makeOrg(owner.cookies, "Clash Classes Gym");
+      const made = await post(classesUrl(org.org.id), aClass({ name: "Clash" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+      const body = {
+        weekdays: [MON, WED],
+        startMinute: at(18, 30),
+        startsOn: dayFromToday(0),
+      };
+      expect((await post(repeatsUrl(org.org.id, type.id), body, owner.cookies)).statusCode).toBe(201);
+
+      // Round one, Low-4: two presses of Save put the same class on the calendar
+      // twice at the same minute, which 17c would offer as two bookable places.
+      const again = await post(repeatsUrl(org.org.id, type.id), body, owner.cookies);
+      expect(again.statusCode).toBe(409);
+      expect(JSON.parse(again.body)).toMatchObject({ error: "repeat_clashes" });
+
+      // ONE OVERLAPPING WEEKDAY IS ENOUGH, and so is an overlapping window.
+      expect(
+        (await post(
+          repeatsUrl(org.org.id, type.id),
+          { ...body, weekdays: [WED], startsOn: dayFromToday(10) },
+          owner.cookies,
+        )).statusCode,
+      ).toBe(409);
+
+      // A DIFFERENT MINUTE, A DIFFERENT DAY, OR A WINDOW THAT DOES NOT TOUCH IT
+      // ARE ALL FINE — the rule is a clash, not "one repeat a class".
+      for (const ok of [
+        { ...body, startMinute: at(19, 30) },
+        { ...body, weekdays: [2] },
+      ]) {
+        expect((await post(repeatsUrl(org.org.id, type.id), ok, owner.cookies)).statusCode).toBe(201);
+      }
+      const [dates] = await sql<{ doubled: number }[]>`
+        SELECT count(*)::int AS doubled FROM (
+          SELECT starts_at FROM gym_class_sessions
+          WHERE gym_id = ${org.org.id} AND class_type_id = ${type.id}
+          GROUP BY starts_at HAVING count(*) > 1) AS d`;
+      expect(dates?.doubled).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "a coach must be this gym's own staff, and their name is dropped the moment they are not",
     async () => {
@@ -653,7 +868,13 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // SOMEBODY ELSE'S STAFF IS REFUSED, and so is a stranger — naming an
       // arbitrary user id as "the coach" would put a person who has nothing to
       // do with this gym on its calendar, and their display name on its screen.
-      for (const outsider of [rival.userId, owner.userId.replace(/.$/, "0")]) {
+      // `randomUUID()` and NOT `owner.userId.replace(/.$/, "0")` — round one,
+      // Low-2. One uuid in sixteen already ends in `0`, so that expression
+      // handed back the OWNER's own id, who IS this gym's staff, and the case
+      // expected a 400 from a request that correctly answers 201. A test that
+      // is right fifteen times out of sixteen is a test nobody can read a red
+      // from.
+      for (const outsider of [rival.userId, randomUUID()]) {
         const refused = await post(
           classesUrl(org.org.id),
           aClass({ name: "Theirs", coachUserId: outsider }),
@@ -876,7 +1097,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(JSON.parse(tooMany.body)).toMatchObject({ error: "too_many_classes" });
 
       // **BRINGING ONE BACK COUNTS AGAINST THE CAP**, because a restored class
-      // is a live class \u2014 otherwise the archive would be a way round the limit.
+      // is a live class — otherwise the archive would be a way round the limit.
       expect((await post(restoreUrl(org.org.id, oldest.id), {}, owner.cookies)).statusCode)
         .toBe(409);
       // Archive one and there is room for it again.
