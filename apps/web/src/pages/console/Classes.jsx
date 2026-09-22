@@ -18,19 +18,25 @@ import {
   archivedPageNote,
   CLASS_COLOUR_CHOICES,
   canManageSchedule,
+  classDefaultsLine,
   classDraft,
   classProblem,
   classRequest,
   classSwatch,
+  coachChoices,
   emptyClassDraft,
-  emptyRepeatDraft,
   minutesLine,
   nextDatesLine,
   placesLine,
+  repeatDraft,
+  repeatEditDraft,
+  repeatEditRequest,
   repeatFactsLine,
   repeatLine,
   repeatProblem,
   repeatRequest,
+  runFieldsProblem,
+  runLine,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -62,10 +68,19 @@ import {
 // tab only for somebody holding `schedule.manage`, and every route refuses on
 // its own; this screen prints the server's sentence if one arrives.
 //
+// **A REPEAT IS THE LIVE ANSWER AND A CLASS IS THE DEFAULT IT STARTS FROM**
+// (Kd, RULINGS 2026-09-22, on the industry standard; 17b-ii-a). Each repeat
+// carries its own length, places and coach, shown beside it — TeamUp's own
+// shape, where "the class size limit and the current instructor are displayed
+// beside each time slot". The class's three numbers fill a NEW repeat in and
+// are labelled as that, because since the ruling they are not what the class
+// runs as.
+//
 // **WHAT THIS HALF DOES NOT DO, said so nobody looks for it**: there is no week
-// calendar and no way to change or cancel a single day. Both are 17b-ii. What a
-// gym can do here is say what it runs and when it repeats, and see the dates
-// that produced.
+// calendar, no way to change or cancel a single day, and no way to move a
+// repeat's day or time. All three are 17b-ii-b — moving a repeat is "this day
+// and later", which ends the old one and begins a new one so the dates already
+// written keep the time they were written at.
 //
 // **NOTHING ON THIS SCREEN DESTROYS DATES WITHOUT ASKING** (Kd, 2026-09-22).
 // Remove and Stop both clear every date a class or a repeat had ahead of it, and
@@ -97,6 +112,96 @@ function Field({ label, children }) {
   );
 }
 
+/** HOW LONG, HOW MANY, WHO — the three fields a class and a repeat BOTH hold,
+ *  drawn once and used by all three forms on this screen.
+ *
+ *  **ONE COMPONENT BECAUSE THERE IS ONE "no limit" TICK TO GET WRONG.** The
+ *  class form's own note said it of two forms; there are three now (a new class,
+ *  a new repeat, changing a repeat), and the tick's whole subtlety — the box
+ *  keeps its number while the tick is on, so a gym that ticks it by mistake
+ *  finds its 20 still there — would otherwise be written out three times.
+ *
+ *  `forClass` changes only the words. On a CLASS these three are the values a
+ *  new repeat is filled in from (Kd, RULINGS 2026-09-22) and the note above them
+ *  says so; on a REPEAT they are what that repeat actually runs as. */
+function RunFields({ draft, set, staff, disabled, forClass }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {forClass ? (
+        <p className="text-xs" style={labelStyle}>
+          These fill in a new repeat. Each repeat can then have its own.
+        </p>
+      ) : null}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="How long (minutes)">
+          <input
+            value={draft.minutes}
+            onChange={(e) => set({ minutes: e.target.value })}
+            disabled={disabled}
+            inputMode="numeric"
+            className="rounded-lg px-3 py-2 text-sm"
+            style={inputStyle}
+          />
+        </Field>
+        <Field label={forClass ? 'Usual coach (optional)' : 'Coach (optional)'}>
+          <select
+            value={draft.coachUserId}
+            onChange={(e) => set({ coachUserId: e.target.value })}
+            disabled={disabled}
+            className="rounded-lg px-3 py-2 text-sm"
+            style={inputStyle}
+          >
+            <option value="">Nobody yet</option>
+            {/* WHOEVER IS ALREADY SET IS ALWAYS AN OPTION — `coachChoices`
+                carries the argument: a select whose value is not among its
+                options renders blank and the next Save sends null, which would
+                take a coach off with nobody touching the box. */}
+            {coachChoices(staff, draft).map((person) => (
+              <option key={person.userId} value={person.userId}>
+                {person.displayName}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      {/* NOT a `Field`, and the reason is a real one rather than layout: a
+          `<label>` wrapping TWO controls labels NEITHER of them, so the box
+          and the tick both need their own name. A screen reader lands on
+          "How many people fit" and then on "No limit"; the render test can
+          reach both by those names, which is what a person can do. */}
+      <div className="flex flex-col gap-1.5 text-sm">
+        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
+          How many people fit
+        </span>
+        <div className="flex items-center gap-3">
+          <input
+            value={draft.places}
+            onChange={(e) => set({ places: e.target.value })}
+            aria-label="How many people fit"
+            /* THE BOX KEEPS ITS NUMBER WHILE "no limit" IS TICKED, so a gym
+               that ticks it by mistake finds its 20 still there. Disabled, not
+               emptied. */
+            disabled={disabled || draft.unlimited}
+            inputMode="numeric"
+            className="rounded-lg px-3 py-2 text-sm w-24"
+            style={{ ...inputStyle, opacity: draft.unlimited ? 0.5 : 1 }}
+          />
+          <label className="flex items-center gap-2 text-sm" style={labelStyle}>
+            <input
+              type="checkbox"
+              checked={draft.unlimited}
+              onChange={(e) => set({ unlimited: e.target.checked })}
+              disabled={disabled}
+            />
+            No limit
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** THE ONE FORM, for adding a class and for editing one.
  *
  *  Two forms would be two places for the "no limit" tick to be wired up, and
@@ -108,29 +213,17 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onCancel, saving,
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Name">
-          <input
-            value={draft.name}
-            onChange={(e) => set({ name: e.target.value })}
-            disabled={disabled}
-            maxLength={80}
-            placeholder="Sunrise Yoga"
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="How long (minutes)">
-          <input
-            value={draft.minutes}
-            onChange={(e) => set({ minutes: e.target.value })}
-            disabled={disabled}
-            inputMode="numeric"
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          />
-        </Field>
-      </div>
+      <Field label="Name">
+        <input
+          value={draft.name}
+          onChange={(e) => set({ name: e.target.value })}
+          disabled={disabled}
+          maxLength={80}
+          placeholder="Sunrise Yoga"
+          className="rounded-lg px-3 py-2 text-sm"
+          style={inputStyle}
+        />
+      </Field>
 
       <Field label="What to say about it (optional)">
         <textarea
@@ -144,57 +237,7 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onCancel, saving,
         />
       </Field>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* NOT a `Field`, and the reason is a real one rather than layout: a
-            `<label>` wrapping TWO controls labels NEITHER of them, so the box
-            and the tick both need their own name. A screen reader lands on
-            "How many people fit" and then on "No limit"; the render test can
-            reach both by those names, which is what a person can do. */}
-        <div className="flex flex-col gap-1.5 text-sm">
-          <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-            How many people fit
-          </span>
-          <div className="flex items-center gap-3">
-            <input
-              value={draft.places}
-              onChange={(e) => set({ places: e.target.value })}
-              aria-label="How many people fit"
-              /* THE BOX KEEPS ITS NUMBER WHILE "no limit" IS TICKED, so a gym
-                 that ticks it by mistake finds its 20 still there. Disabled, not
-                 emptied. */
-              disabled={disabled || draft.unlimited}
-              inputMode="numeric"
-              className="rounded-lg px-3 py-2 text-sm w-24"
-              style={{ ...inputStyle, opacity: draft.unlimited ? 0.5 : 1 }}
-            />
-            <label className="flex items-center gap-2 text-sm" style={labelStyle}>
-              <input
-                type="checkbox"
-                checked={draft.unlimited}
-                onChange={(e) => set({ unlimited: e.target.checked })}
-                disabled={disabled}
-              />
-              No limit
-            </label>
-          </div>
-        </div>
-        <Field label="Usual coach (optional)">
-          <select
-            value={draft.coachUserId}
-            onChange={(e) => set({ coachUserId: e.target.value })}
-            disabled={disabled}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          >
-            <option value="">Nobody yet</option>
-            {staff.map((person) => (
-              <option key={person.userId} value={person.userId}>
-                {person.displayName}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+      <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass />
 
       <div className="flex flex-col gap-2">
         <span className="text-xs uppercase tracking-wider" style={labelStyle}>
@@ -261,9 +304,13 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onCancel, saving,
   );
 }
 
-/** WHEN IT RUNS — the weekday ticks, the gym's clock time, and the window. */
-function RepeatForm({ draft, setDraft, clockFormat, today, disabled, saving, onSave, onCancel }) {
+/** WHEN IT RUNS — the weekday ticks, the gym's clock time, the window, AND ITS
+ *  OWN LENGTH, PLACES AND COACH, already filled in from the class (Kd, RULINGS
+ *  2026-09-22: the repeat is the live answer, the class is the default it starts
+ *  from). A gym that changes nothing here gets exactly what it got before. */
+function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, saving, onSave, onCancel }) {
   const problem = repeatProblem(draft);
+  const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -334,6 +381,61 @@ function RepeatForm({ draft, setDraft, clockFormat, today, disabled, saving, onS
         </Field>
       </div>
 
+      <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
+
+      {problem === null ? null : (
+        <p className="text-sm" style={{ color: '#FBBF24' }}>
+          {problem}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={disabled || saving || problem !== null}
+          className="rounded-xl px-4 py-2 text-sm font-medium inline-flex items-center gap-2"
+          style={{
+            background: 'rgba(255,138,31,0.15)',
+            color: '#FF8A1F',
+            opacity: disabled || saving || problem !== null ? 0.5 : 1,
+          }}
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Save this repeat
+        </button>
+        <button type="button" onClick={onCancel} className="text-sm" style={labelStyle}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** CHANGING A REPEAT — its length, its places, its coach, and NOT when it runs.
+ *
+ *  **The days and the time are deliberately absent** and the form says so rather
+ *  than leaving a gym hunting for them: moving a repeat is §13.3's "this day and
+ *  later", which ends the old repeat and begins a new one so that the dates
+ *  already on the calendar keep the time they were written at. That is
+ *  17b-ii-b's, with the week view it needs.
+ *
+ *  What this DOES change reaches every coming date of this repeat, and the
+ *  sentence under the buttons says so before the gym presses Save — a re-stamp
+ *  the gym did not expect is the same surprise as a lost date. */
+function RepeatEditForm({ draft, setDraft, staff, disabled, saving, onSave, onCancel }) {
+  const problem = runFieldsProblem(draft);
+  const set = (patch) => setDraft({ ...draft, ...patch });
+  return (
+    <div className="flex flex-col gap-4">
+      <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
+
+      <p className="text-xs" style={labelStyle}>
+        This changes every date this repeat still has coming up. The days it has
+        already run keep what they ran as. To move the day or the time, stop this
+        repeat and add a new one.
+      </p>
+
       {problem === null ? null : (
         <p className="text-sm" style={{ color: '#FBBF24' }}>
           {problem}
@@ -383,7 +485,12 @@ export default function Classes() {
   // the wrong one is the defect the question exists to prevent.
   const [confirming, setConfirming] = useState(null);
   const [repeatFor, setRepeatFor] = useState(null);
-  const [repeatDraftState, setRepeatDraftState] = useState(emptyRepeatDraft(''));
+  const [repeatDraftState, setRepeatDraftState] = useState(() => repeatDraft(null, ''));
+  // WHICH REPEAT IS OPEN FOR EDITING — an id, never a boolean, for `confirming`'s
+  // reason one state over: two rows sharing one flag would open both forms and a
+  // gym would type its Thursday numbers into its Monday.
+  const [editingRepeat, setEditingRepeat] = useState(null);
+  const [repeatEditState, setRepeatEditState] = useState(() => repeatEditDraft(null));
 
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -519,6 +626,18 @@ export default function Classes() {
     }
   };
 
+  const saveRepeatEdit = async (scheduleId) => {
+    const body = repeatEditRequest(repeatEditState);
+    if (body === null) return;
+    if (
+      await run(`repeatEdit:${scheduleId}`, () =>
+        orgService.updateClassRepeat(gymId, scheduleId, body),
+      )
+    ) {
+      setEditingRepeat(null);
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
       <div>
@@ -593,9 +712,15 @@ export default function Classes() {
                           </span>
                         ) : null}
                       </div>
+                      {/* WHAT THESE THREE NUMBERS ARE FOR, said on the card
+                          that shows them. Since Kd's ruling of 2026-09-22 the
+                          REPEAT is the live answer, so "60 min · 20 places ·
+                          Dana" under a class name is not what that class runs
+                          as — it is what the next repeat is filled in from, and
+                          a gym whose Monday runs 45 minutes would read it and
+                          believe otherwise. */}
                       <div className="text-sm mt-0.5" style={labelStyle}>
-                        {minutesLine(type.minutes)} · {placesLine(type.places)}
-                        {type.coachName === null ? '' : ` · ${type.coachName}`}
+                        {classDefaultsLine(type)}
                       </div>
                       {type.description === null || type.description === '' ? null : (
                         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
@@ -693,6 +818,14 @@ export default function Classes() {
                           <div className="text-sm" style={{ color: '#fff' }}>
                             {repeatLine(schedule, lists.clockFormat)}
                           </div>
+                          {/* THE REPEAT'S OWN THREE, BESIDE THE REPEAT — which
+                              is the shape the products in this market use:
+                              TeamUp's help centre, read 2026-09-22, says "the
+                              class size limit and the current instructor are
+                              displayed beside each time slot". */}
+                          <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                            {runLine(schedule)}
+                          </div>
                           <div className="text-xs mt-0.5" style={labelStyle}>
                             {repeatFactsLine(schedule)}
                           </div>
@@ -701,18 +834,49 @@ export default function Classes() {
                           </div>
                         </div>
                         {locked ? null : (
-                          <button
-                            type="button"
-                            onClick={() => setConfirming(`stop:${schedule.id}`)}
-                            disabled={busy !== null}
-                            aria-label={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}`}
-                            className="text-sm flex-shrink-0"
-                            style={{ color: 'rgba(255,255,255,0.45)' }}
-                          >
-                            {busy === `stop:${schedule.id}` ? 'Stopping…' : 'Stop'}
-                          </button>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const open = editingRepeat === schedule.id;
+                                setEditingRepeat(open ? null : schedule.id);
+                                setRepeatEditState(repeatEditDraft(schedule));
+                              }}
+                              aria-label={`Change the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}`}
+                              className="text-sm"
+                              style={{ color: '#FF8A1F' }}
+                            >
+                              {editingRepeat === schedule.id ? 'Close' : 'Edit'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirming(`stop:${schedule.id}`)}
+                              disabled={busy !== null}
+                              aria-label={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}`}
+                              className="text-sm"
+                              style={{ color: 'rgba(255,255,255,0.45)' }}
+                            >
+                              {busy === `stop:${schedule.id}` ? 'Stopping…' : 'Stop'}
+                            </button>
+                          </div>
                         )}
                       </div>
+
+                      {editingRepeat === schedule.id ? (
+                        <RepeatEditForm
+                          /* Keyed on the repeat, so a draft can never be carried
+                             from one repeat to another — `Settings.jsx`'s
+                             round-3 Critical, and the same fix one screen up. */
+                          key={schedule.id}
+                          draft={repeatEditState}
+                          setDraft={setRepeatEditState}
+                          staff={staff}
+                          disabled={locked}
+                          saving={busy === `repeatEdit:${schedule.id}`}
+                          onSave={() => void saveRepeatEdit(schedule.id)}
+                          onCancel={() => setEditingRepeat(null)}
+                        />
+                      ) : null}
                       {/* STOP ASKS TOO, and that is the CLASS of the change
                           rather than the one button Kd named: stopping a repeat
                           clears every date it had ahead of it, exactly as
@@ -742,6 +906,7 @@ export default function Classes() {
                         key={type.id}
                         draft={repeatDraftState}
                         setDraft={setRepeatDraftState}
+                        staff={staff}
                         clockFormat={lists.clockFormat}
                         today={today}
                         disabled={locked}
@@ -755,7 +920,10 @@ export default function Classes() {
                       type="button"
                       onClick={() => {
                         setRepeatFor(type.id);
-                        setRepeatDraftState(emptyRepeatDraft(today));
+                        // FILLED IN FROM THE CLASS — Kd's ruling of 2026-09-22
+                        // happens HERE and nowhere else, so the server has one
+                        // answer and never has to guess a field.
+                        setRepeatDraftState(repeatDraft(type, today));
                       }}
                       className="self-start text-sm inline-flex items-center gap-1"
                       style={{ color: '#FF8A1F' }}

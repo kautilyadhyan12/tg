@@ -26,6 +26,7 @@ const api = {
   updateClass: vi.fn(),
   archiveClass: vi.fn(),
   addClassRepeat: vi.fn(),
+  updateClassRepeat: vi.fn(),
   stopClassRepeat: vi.fn(),
   restoreClass: vi.fn(),
   getStaff: vi.fn(),
@@ -74,6 +75,13 @@ const REPEAT = {
   startMinute: 1110,
   startsOn: '2026-09-21',
   endsOn: null,
+  // **THE REPEAT'S OWN THREE** (17b-ii-a). Deliberately DIFFERENT from the
+  // class's 60/20/Priya: a screen still reading the class would render the
+  // class's numbers here and this fixture is what catches it.
+  minutes: 45,
+  places: 12,
+  coachUserId: 'u8',
+  coachName: 'Dana Okafor',
   nextDates: ['2026-09-21', '2026-09-23', '2026-09-28', '2026-09-30'],
   sessionsAhead: 16,
   // THE SERVER'S TWO ANSWERS (round one, C/H-3 and Low-1). This repeat is
@@ -105,6 +113,7 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
+  api.updateClassRepeat.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
   api.restoreClass.mockReset().mockResolvedValue(timetable());
   api.getStaff.mockReset().mockResolvedValue({
@@ -175,11 +184,43 @@ describe('reading the timetable', () => {
     expect(screen.queryByText(/move forward every night/)).toBeNull();
   });
 
-  it('draws the class, its numbers and its coach', async () => {
+  // **WHAT A CLASS'S OWN NUMBERS ARE FOR IS SAID ON THE CARD THAT SHOWS THEM**
+  // (Kd, RULINGS 2026-09-22). Since the repeat became the live answer, a bare
+  // "60 min · 20 places · Priya Sharma" under a class name is not what that
+  // class runs as — this gym's Monday runs 45 minutes with Dana — and a gym
+  // reading the card would believe otherwise.
+  it('draws the class, and says its numbers are what a NEW repeat starts from', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('60 min · 20 places · Priya Sharma')).toBeTruthy();
+    expect(
+      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
+    ).toBeTruthy();
+    expect(screen.queryByText('60 min · 20 places · Priya Sharma')).toBeNull();
     expect(screen.getByText('Bring a mat.')).toBeTruthy();
+  });
+
+  // TeamUp's own shape, read 2026-09-22: "the class size limit and the current
+  // instructor are displayed beside each time slot".
+  it('draws the REPEAT s own length, places and coach beside it', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByText('45 min · 12 places · Dana Okafor')).toBeTruthy();
+  });
+
+  // The server answers `coachName` only while that person is still this gym's
+  // active staff, so an id with no name is a coach who has gone. Printing
+  // nothing would leave the gym reading it as "nobody was ever picked".
+  it('says when the coach a repeat names is no longer this gym s staff', async () => {
+    api.getClasses.mockResolvedValue(
+      timetable({
+        entries: [
+          { type: YOGA, schedules: [{ ...REPEAT, coachUserId: 'u8', coachName: null }] },
+        ],
+      }),
+    );
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByText(/45 min · 12 places · Coach not on this gym's staff/)).toBeTruthy();
   });
 
   // **THE DATES ARE THE SERVER'S.** This is the case that would go green on a
@@ -410,8 +451,39 @@ describe('saying when it repeats', () => {
     await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
     const [, typeId, body] = api.addClassRepeat.mock.calls[0];
     expect(typeId).toBe('t1');
-    expect(body).toEqual({ weekdays: [2, 4], startMinute: 435, startsOn: '2026-10-01' });
+    // **FILLED IN FROM THE CLASS AND SENT OUTRIGHT** (Kd, RULINGS 2026-09-22).
+    // The gym touched none of the three, so they are the CLASS's 60/20/Priya —
+    // not the fixture repeat's 45/12/Dana, and not a key left off for the
+    // server to guess, which it never does.
+    expect(body).toEqual({
+      weekdays: [2, 4],
+      startMinute: 435,
+      startsOn: '2026-10-01',
+      minutes: 60,
+      places: 20,
+      coachUserId: 'u9',
+    });
     expect('endsOn' in body).toBe(false);
+  });
+
+  it('lets the new repeat differ from its class, and sends what was typed', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tue' }));
+    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-10-01' } });
+    // The three start from the class and are then changed, which is the whole
+    // card: 17b-i could not express a Tuesday that differs from its Monday.
+    expect(screen.getByLabelText('How many people fit').value).toBe('20');
+    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '90' } });
+    fireEvent.click(screen.getByLabelText('No limit'));
+    fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+
+    await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
+    const [, , body] = api.addClassRepeat.mock.calls[0];
+    expect(body).toMatchObject({ minutes: 90, places: null, coachUserId: null });
   });
 
   it('will not send a repeat that runs on no day', async () => {
@@ -446,6 +518,65 @@ describe('saying when it repeats', () => {
     await waitFor(() => expect(api.stopClassRepeat).toHaveBeenCalledWith('g1', 's1'));
     await screen.findByText(/isn't on the calendar yet/);
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
+  });
+});
+
+// **THE REPEAT IS THE LIVE ANSWER** (Kd, RULINGS 2026-09-22). These cases pin
+// what goes on the wire, not that a button exists: a form that opened from the
+// CLASS would look identical and would send a gym's Monday the wrong numbers.
+describe('changing a repeat', () => {
+  it('opens filled in from the REPEAT, not from its class, and sends the three fields back', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(
+      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
+    );
+
+    // 45/12/Dana — the repeat's own. The class says 60/20/Priya.
+    expect((await screen.findByLabelText('How long (minutes)')).value).toBe('45');
+    expect(screen.getByLabelText('How many people fit').value).toBe('12');
+    expect(screen.getByLabelText('Coach (optional)').value).toBe('u8');
+
+    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: 'u9' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+
+    await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(1));
+    const [gymId, scheduleId, body] = api.updateClassRepeat.mock.calls[0];
+    expect(gymId).toBe('g1');
+    expect(scheduleId).toBe('s1');
+    // EXACTLY THREE KEYS. The route's schema is `.strict()`, so a `startMinute`
+    // smuggled in here is a 400 the gym would read as "we could not save that"
+    // — and moving a repeat is "this day and later", 17b-ii-b.
+    expect(body).toEqual({ minutes: 30, places: 12, coachUserId: 'u9' });
+  });
+
+  it('tells the gym what a change reaches, and offers no way to move the day or the time', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(
+      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
+    );
+    await screen.findByLabelText('How long (minutes)');
+    expect(screen.getByText(/changes every date this repeat still has coming up/)).toBeTruthy();
+    expect(screen.getByText(/already run keep what they ran as/)).toBeTruthy();
+    // The controls that would move it are not on this form at all.
+    expect(screen.queryByLabelText('First date')).toBeNull();
+    expect(screen.queryByLabelText('Class start hour')).toBeNull();
+  });
+
+  it('sends nothing when the numbers are out of bounds', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(
+      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
+    );
+    fireEvent.change(await screen.findByLabelText('How many people fit'), {
+      target: { value: '0' },
+    });
+    expect(screen.getByText(/1 to 500/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    expect(api.updateClassRepeat).not.toHaveBeenCalled();
   });
 });
 

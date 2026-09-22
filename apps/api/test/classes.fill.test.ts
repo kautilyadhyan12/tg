@@ -93,6 +93,17 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
     return row.id;
   };
 
+  /** A REPEAT, AND SINCE 17b-ii-a IT CARRIES ITS OWN LENGTH, PLACES AND COACH.
+   *
+   *  Left unsaid, they are COPIED FROM THE CLASS TYPE — which is exactly what
+   *  the console does when a gym adds a repeat (the class is the default a new
+   *  repeat starts from, RULINGS 2026-09-22), so every case written before this
+   *  card goes on meaning what it meant. `own` is how a case says the repeat
+   *  differs, which is the state this card exists to make possible.
+   *
+   *  `"places" in own` and NOT `own.places ?? …`, for the class-type helper's
+   *  measured reason one function up: null is a MEANING here (no limit) and
+   *  `??` swallows it. */
   const repeat = async (
     gymId: string,
     classTypeId: string,
@@ -100,12 +111,21 @@ d("the repeat rule: eight weeks of dates, in the gym's own clock (real Postgres)
     startMinute: number,
     startsOn: string,
     endsOn: string | null = null,
+    own: { minutes?: number; places?: number | null } = {},
   ) => {
+    const placesGiven = "places" in own;
     const [row] = await sql<{ id: string }[]>`
       INSERT INTO gym_class_schedules
-        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on)
-      VALUES (${gymId}, ${classTypeId}, ${sql.array(weekdays)}::int[], ${startMinute},
-              ${startsOn}::date, ${endsOn}::date)
+        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
+         minutes, places, coach_user_id)
+      SELECT ${gymId}, ${classTypeId}, ${sql.array(weekdays)}::int[], ${startMinute},
+             ${startsOn}::date, ${endsOn}::date,
+             coalesce(${own.minutes ?? null}::int, t.minutes),
+             CASE WHEN ${placesGiven} THEN ${placesGiven ? (own.places ?? null) : null}::int
+                  ELSE t.places END,
+             t.coach_user_id
+      FROM gym_class_types t
+      WHERE t.id = ${classTypeId} AND t.gym_id = ${gymId}
       RETURNING id`;
     if (row === undefined) throw new Error("no schedule");
     return row.id;

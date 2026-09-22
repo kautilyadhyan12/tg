@@ -15,16 +15,23 @@ import {
   classProblem,
   classRequest,
   classSwatch,
+  classDefaultsLine,
+  coachChoices,
+  coachLine,
   emptyClassDraft,
-  emptyRepeatDraft,
   minutesLine,
   nextDatesLine,
   placesLine,
   repeatFactsLine,
   repeatLine,
+  repeatDraft,
+  repeatEditDraft,
+  repeatEditRequest,
   repeatProblem,
   repeatRequest,
   repeatTimeValue,
+  runFieldsProblem,
+  runLine,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -231,6 +238,41 @@ describe('reading a class', () => {
     expect(minutesLine(45)).toBe('45 min');
     expect(minutesLine(null)).toBe('');
   });
+
+  // THE SERVER ANSWERS `coachName` ONLY WHILE THAT PERSON IS STILL THIS GYM'S
+  // ACTIVE STAFF. So an id with no name is a coach who has gone, and printing
+  // nothing there leaves the gym reading a repeat as though nobody was ever
+  // picked — something it cannot act on because it cannot see it.
+  it('names the coach, and says so when the one who was picked is gone', () => {
+    expect(coachLine({ coachUserId: 'x', coachName: 'Dana' })).toBe('Dana');
+    expect(coachLine({ coachUserId: 'x', coachName: null })).toBe("Coach not on this gym's staff");
+    expect(coachLine({ coachUserId: null, coachName: null })).toBe('');
+    expect(coachLine(undefined)).toBe('');
+  });
+
+  it('puts the length, the places and the coach in one line, for a class and a repeat alike', () => {
+    expect(runLine({ minutes: 45, places: 12, coachUserId: 'x', coachName: 'Dana' })).toBe(
+      '45 min · 12 places · Dana',
+    );
+    expect(runLine({ minutes: 600, places: null, coachUserId: null, coachName: null })).toBe(
+      '600 min · No limit',
+    );
+  });
+
+  // **WITHOUT THESE WORDS THE LINE IS SOMETHING A GYM CAN SEE THAT IS FALSE.**
+  // Since Kd's ruling of 2026-09-22 a class's three numbers are not what it
+  // runs as — the repeat is — so a gym whose Monday runs 45 minutes would read
+  // "60 min" under the class name and believe it.
+  it('says what a class s own numbers are FOR', () => {
+    expect(classDefaultsLine({ minutes: 60, places: 20, coachUserId: 'x', coachName: 'Dana' })).toBe(
+      'A new repeat starts from: 60 min · 20 places · Dana',
+    );
+    expect(classDefaultsLine({ minutes: 60, places: null })).toBe(
+      'A new repeat starts from: 60 min · No limit',
+    );
+    // Nothing to say is said as nothing, not as a dangling heading.
+    expect(classDefaultsLine({})).toBe('');
+  });
 });
 
 describe('the class form', () => {
@@ -307,7 +349,7 @@ describe('the class form', () => {
 
 describe('the repeat form', () => {
   it('ticks a day on and off, keeping the set sorted and the draft new', () => {
-    const draft = emptyRepeatDraft('2026-09-21');
+    const draft = repeatDraft(null, '2026-09-21');
     const withWed = toggleWeekday(draft, 3);
     const withBoth = toggleWeekday(withWed, 1);
     expect(withBoth.weekdays).toEqual([1, 3]);
@@ -317,7 +359,16 @@ describe('the repeat form', () => {
   });
 
   it('refuses a repeat that would run on no day, at no time, or backwards', () => {
-    const base = { weekdays: [1], time: '18:00', startsOn: '2026-09-21', endsOn: '' };
+    const base = {
+      weekdays: [1],
+      time: '18:00',
+      startsOn: '2026-09-21',
+      endsOn: '',
+      minutes: '60',
+      unlimited: false,
+      places: '20',
+      coachUserId: '',
+    };
     expect(repeatProblem(base)).toBeNull();
     expect(repeatProblem({ ...base, weekdays: [] })).toMatch(/at least one day/);
     expect(repeatProblem({ ...base, time: '' })).toMatch(/What time/);
@@ -334,9 +385,25 @@ describe('the repeat form', () => {
   });
 
   it('sends the clock time as minutes, and leaves a blank end date OFF the body', () => {
-    const base = { weekdays: [3, 1], time: '18:30', startsOn: '2026-09-21', endsOn: '' };
+    const base = {
+      weekdays: [3, 1],
+      time: '18:30',
+      startsOn: '2026-09-21',
+      endsOn: '',
+      minutes: '60',
+      unlimited: false,
+      places: '20',
+      coachUserId: '',
+    };
     const body = repeatRequest(base);
-    expect(body).toEqual({ weekdays: [1, 3], startMinute: 1110, startsOn: '2026-09-21' });
+    expect(body).toEqual({
+      weekdays: [1, 3],
+      startMinute: 1110,
+      startsOn: '2026-09-21',
+      minutes: 60,
+      places: 20,
+      coachUserId: null,
+    });
     expect('endsOn' in body).toBe(false);
     expect(repeatRequest({ ...base, endsOn: '2026-12-25' }).endsOn).toBe('2026-12-25');
     expect(repeatRequest({ ...base, weekdays: [] })).toBeNull();
@@ -346,6 +413,130 @@ describe('the repeat form', () => {
     expect(repeatTimeValue(1110)).toBe('18:30');
     expect(repeatTimeValue(0)).toBe('00:00');
     expect(repeatTimeValue(null)).toBe('');
+  });
+
+  // KD'S RULING, 2026-09-22: the class type is the DEFAULT a new repeat starts
+  // from, and THIS FUNCTION is the only place that defaulting happens. The
+  // server takes all three outright and never guesses, so a form that stopped
+  // copying them would send a gym's Monday whatever the constants say.
+  it('fills a new repeat in from its class, and from the constants when there is none', () => {
+    const type = { minutes: 45, places: 12, coachUserId: 'dana-id', name: 'Spin' };
+    expect(repeatDraft(type, '2026-09-21')).toEqual({
+      weekdays: [],
+      time: '18:00',
+      startsOn: '2026-09-21',
+      endsOn: '',
+      minutes: '45',
+      unlimited: false,
+      places: '12',
+      coachUserId: 'dana-id',
+      // Carried so the coach box can offer whoever is already set even when
+      // the staff list does not hold them — `coachChoices`. It never goes back
+      // on the wire.
+      coachName: null,
+    });
+    // NO LIMIT SURVIVES THE COPY as the tick, not as a blank box — and the box
+    // keeps a number behind it, so switching the tick off leaves something
+    // sensible typed in.
+    const openGym = repeatDraft({ minutes: 600, places: null, coachUserId: null }, '2026-09-21');
+    expect(openGym).toMatchObject({ minutes: '600', unlimited: true, places: '20', coachUserId: '' });
+    expect(repeatDraft(null, '2026-09-21')).toMatchObject({
+      minutes: '60',
+      unlimited: false,
+      places: '20',
+      coachUserId: '',
+    });
+  });
+
+  it('refuses a repeat whose own length or places are out of bounds, in the form as on the server', () => {
+    const base = {
+      weekdays: [1],
+      time: '18:00',
+      startsOn: '2026-09-21',
+      endsOn: '',
+      minutes: '60',
+      unlimited: false,
+      places: '20',
+      coachUserId: '',
+    };
+    expect(repeatProblem(base)).toBeNull();
+    expect(repeatProblem({ ...base, minutes: '4' })).toMatch(/5 minutes to 10 hours/);
+    expect(repeatProblem({ ...base, minutes: '601' })).toMatch(/5 minutes to 10 hours/);
+    expect(repeatProblem({ ...base, minutes: '' })).toMatch(/5 minutes to 10 hours/);
+    expect(repeatProblem({ ...base, places: '0' })).toMatch(/1 to 500/);
+    expect(repeatProblem({ ...base, places: '501' })).toMatch(/1 to 500/);
+    expect(repeatProblem({ ...base, places: '' })).toMatch(/1 to 500/);
+    // TICKED "no limit", THE BOX STOPS MATTERING — including when it is empty.
+    expect(repeatProblem({ ...base, unlimited: true, places: '' })).toBeNull();
+  });
+});
+
+// CHANGING A REPEAT — its three fields and nothing else, which is the rule the
+// server's `.strict()` schema enforces and this side must not break.
+describe('changing a repeat', () => {
+  it('fills the form from the saved repeat, never from its class', () => {
+    expect(
+      repeatEditDraft({
+        minutes: 90,
+        places: null,
+        coachUserId: 'sam-id',
+        coachName: 'Sam Reid',
+        startMinute: 1110,
+      }),
+    ).toEqual({
+      minutes: '90',
+      unlimited: true,
+      places: '20',
+      coachUserId: 'sam-id',
+      coachName: 'Sam Reid',
+    });
+  });
+
+  it('sends the three fields and NOT when it runs, and never the coach s NAME', () => {
+    const draft = {
+      minutes: '45',
+      unlimited: false,
+      places: '8',
+      coachUserId: 'dana-id',
+      coachName: 'Dana Okafor',
+    };
+    expect(repeatEditRequest(draft)).toEqual({
+      minutes: 45,
+      places: 8,
+      coachUserId: 'dana-id',
+    });
+    // `null` IS THE VALUE for both, never an omission: the route replaces
+    // rather than merges.
+    expect(repeatEditRequest({ ...draft, unlimited: true, coachUserId: '' })).toEqual({
+      minutes: 45,
+      places: null,
+      coachUserId: null,
+    });
+    expect(repeatEditRequest({ ...draft, minutes: '0' })).toBeNull();
+    expect(runFieldsProblem({ ...draft, places: 'twenty' })).toMatch(/1 to 500/);
+  });
+
+  // **A `<select>` WHOSE VALUE IS NOT AMONG ITS OPTIONS RENDERS BLANK, AND THE
+  // NEXT SAVE SENDS null.** Two ordinary cases reach it — the staff list is a
+  // separate optional read that 403s for somebody who may set the timetable but
+  // not manage staff, and a coach who has left is answered as an id with no
+  // name — and in both the gym would lose its coach without touching that box.
+  it('always offers whoever is already set, named where the server still names them', () => {
+    const staff = [{ userId: 'u9', displayName: 'Priya Sharma' }];
+    // Already in the list: nothing is added.
+    expect(coachChoices(staff, { coachUserId: 'u9', coachName: 'Priya Sharma' })).toEqual(staff);
+    expect(coachChoices(staff, { coachUserId: '', coachName: null })).toEqual(staff);
+    // Not in the list but still named — the staff read failed. The value
+    // round-trips, so a Save touching only the places leaves the coach alone.
+    expect(coachChoices([], { coachUserId: 'u8', coachName: 'Dana Okafor' })).toEqual([
+      { userId: 'u8', displayName: 'Dana Okafor' },
+    ]);
+    // Not named at all — they have left. It SAYS so rather than showing blank.
+    expect(coachChoices(staff, { coachUserId: 'u8', coachName: null })).toEqual([
+      { userId: 'u8', displayName: 'No longer on your staff' },
+      ...staff,
+    ]);
+    expect(coachChoices(undefined, undefined)).toEqual([]);
   });
 });
 

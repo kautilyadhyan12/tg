@@ -14,8 +14,14 @@
 // optional: the per-gym CAPS are check-then-act and two staff can pass them
 // together; the CALENDAR FILL runs in the same transaction as the repeat that
 // produced it, so a gym never sees a repeat with no dates behind it; and an
-// edit RE-STAMPS the future sessions the type still owns, which must not
-// interleave with a fill writing new ones.
+// edit RE-STAMPS the future sessions the REPEAT still owns (`0036` moved that
+// from the class type, RULINGS 2026-09-22), which must not interleave with a
+// fill writing new ones.
+//
+// **AND THE COACH CHECK IS ASKED INSIDE EVERY WRITE THAT CAN NAME ONE** — three
+// of them now, since a repeat carries its own. `coach_user_id` is a FK to
+// `users`, so nothing structural stops one gym naming another gym's trainer on
+// its timetable; `coachIsStaff` under the lock is what does.
 import type { Sql, TransactionSql } from "postgres";
 import {
   CLASS_ARCHIVED_PAGE,
@@ -47,6 +53,13 @@ export interface ClassScheduleRow {
   startMinute: number;
   startsOn: string;
   endsOn: string | null;
+  /** THE REPEAT'S OWN THREE, and the live answer for every reader (RULINGS
+   *  2026-09-22). The class type's twins are only what these were filled in
+   *  from at the moment the repeat was created. */
+  minutes: number;
+  places: number | null;
+  coachUserId: string | null;
+  coachName: string | null;
   nextDates: string[];
   sessionsAhead: number;
   datesComplete: boolean;
@@ -157,6 +170,10 @@ export async function readTimetable(
       local_start_minute: number;
       starts_on: string;
       ends_on: string | null;
+      minutes: number;
+      places: number | null;
+      coach_user_id: string | null;
+      coach_name: string | null;
       next_dates: string[] | null;
       sessions_ahead: number;
       dates_complete: boolean;
@@ -165,6 +182,13 @@ export async function readTimetable(
   >`
     SELECT s.id, s.class_type_id, s.weekdays, s.local_start_minute,
            s.starts_on::text AS starts_on, s.ends_on::text AS ends_on,
+           s.minutes, s.places, s.coach_user_id,
+           -- THE COACH'S NAME, ANSWERED ONLY WHILE THEY ARE STILL THIS GYM'S
+           -- STAFF — the class type read's join, word for word and for the same
+           -- reason: a timetable must not print a name the gym cannot vouch for,
+           -- and joining straight to users would print one for a coach who
+           -- left, or for a person another gym's id happened to name.
+           scu.display_name AS coach_name,
            n.next_dates, coalesce(n.sessions_ahead, 0) AS sessions_ahead,
            -- IS sessions_ahead THE WHOLE TRUTH? Only when the repeat ENDS
            -- inside the window, so every date it will ever run on is written.
@@ -182,6 +206,8 @@ export async function readTimetable(
             AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date) AS finished
     FROM gym_class_schedules s
     JOIN gyms g ON g.id = s.gym_id
+    LEFT JOIN gym_staff scs ON scs.gym_id = s.gym_id AND scs.user_id = s.coach_user_id
+    LEFT JOIN users scu ON scu.id = scs.user_id AND scu.status = 'active'
     -- WHAT THE GYM WILL ACTUALLY SEE, READ BACK FROM THE CALENDAR — never
     -- recomputed from the repeat for the screen. A second derivation is a second
     -- answer, and the one shown would be the one nothing books against: if the
@@ -248,6 +274,10 @@ export async function readTimetable(
       startMinute: r.local_start_minute,
       startsOn: r.starts_on,
       endsOn: r.ends_on,
+      minutes: r.minutes,
+      places: r.places,
+      coachUserId: r.coach_user_id,
+      coachName: r.coach_name,
       nextDates: r.next_dates ?? [],
       sessionsAhead: r.sessions_ahead,
       datesComplete: r.dates_complete,
@@ -355,24 +385,16 @@ export async function updateClassType(
           open_gym = ${input.openGym}, updated_at = ${input.now}
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId}`;
 
-    // THE CALENDAR FOLLOWS THE EDIT — and this statement is the reason the
-    // sessions copy their numbers at all.
+    // **NO CALENDAR STATEMENT HERE, AND ITS ABSENCE IS THE CARD** (RULINGS
+    // 2026-09-22). 17b-i re-stamped every future session with the type's new
+    // numbers, because the type was the only place they lived. Since `0036` the
+    // REPEAT is the live answer and this row holds the values a NEW repeat is
+    // filled in from — so changing a class must leave every repeat and every
+    // date already on the calendar exactly as they are, which is TeamUp's split
+    // (a Class Type edits its name, description and visibility; a time slot
+    // edits instructor, times and class size limits).
     //
-    // **FUTURE ONLY.** A session that has already happened is history: changing
-    // a class from 45 minutes to 60 must not rewrite last Tuesday.
-    //
-    // **AND NEVER A DAY THE GYM CHANGED ON PURPOSE** (`changed_alone`, 17b-ii).
-    // Nothing sets that flag yet; the condition ships here because this is the
-    // statement it exists to restrain, and a condition added later means this
-    // one shipped able to undo a deliberate change.
-    await tx`
-      UPDATE gym_class_sessions
-      SET minutes = ${input.minutes}, places = ${input.places},
-          coach_user_id = ${input.coachUserId}
-      WHERE class_type_id = ${input.classTypeId}
-        AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}
-        AND changed_alone = false`;
+    // The re-stamp moved to `updateSchedule` below, where the numbers now live.
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -499,6 +521,15 @@ export interface ClassScheduleInput {
   endsOn: string | null;
 }
 
+/** A repeat's OWN length, places and coach — the live answer for every reader
+ *  since `0036`. One shape for the create and the edit, so the two cannot
+ *  disagree about what a repeat is allowed to hold. */
+export interface ClassScheduleFields {
+  minutes: number;
+  places: number | null;
+  coachUserId: string | null;
+}
+
 /** ADD A REPEAT — **and write its dates in the same transaction.**
  *
  *  That is the one thing this function does that a naive version would not, and
@@ -508,12 +539,13 @@ export interface ClassScheduleInput {
  *  waits on every other gym's calendar. */
 export async function createSchedule(
   sql: Sql,
-  input: ClassScheduleInput & {
-    gymId: string;
-    classTypeId: string;
-    actorUserId: string;
-    now: Date;
-  },
+  input: ClassScheduleInput &
+    ClassScheduleFields & {
+      gymId: string;
+      classTypeId: string;
+      actorUserId: string;
+      now: Date;
+    },
 ): Promise<ClassWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
@@ -521,6 +553,16 @@ export async function createSchedule(
       SELECT id, name FROM gym_class_types
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (type === undefined) return { kind: "not_found" };
+
+    // **THE WORST THING THIS CARD COULD DO, REFUSED HERE.** A repeat now names
+    // its own coach, so a request can hand this route any uuid on earth — and
+    // the column's FK points at `users`, which would take another gym's trainer
+    // without a murmur and print their name on this gym's timetable. Asked
+    // INSIDE the transaction, under the gym's lock, so it cannot be answered
+    // against a roster that changes between the check and the insert.
+    if (!(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
+      return { kind: "coach_not_staff" };
+    }
 
     const [live] = await tx<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_class_schedules
@@ -561,13 +603,21 @@ export async function createSchedule(
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_class_schedules
-        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on)
+        (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
+         minutes, places, coach_user_id)
       -- ::int[] IS NOT DECORATION. postgres.js sends a JS array as text[], and
       -- Postgres refuses it against an integer[] column outright - measured, not
       -- assumed: without this cast every save answers
       -- "column weekdays is of type integer[] but expression is of type text[]".
+      --
+      -- THE THREE NUMBERS COME FROM THE REQUEST AND NEVER FROM the class type
+      -- row above: the console fills the form in from the class type and then
+      -- states all three outright, so there is ONE place the default is
+      -- decided. A server that reached for t.minutes when a key was missing
+      -- would be a second.
       VALUES (${input.gymId}, ${input.classTypeId}, ${tx.array([...input.weekdays])}::int[],
-              ${input.startMinute}, ${input.startsOn}::date, ${input.endsOn}::date)
+              ${input.startMinute}, ${input.startsOn}::date, ${input.endsOn}::date,
+              ${input.minutes}, ${input.places}, ${input.coachUserId})
       RETURNING id`;
     if (created === undefined) throw new Error("class schedule insert returned no row");
 
@@ -592,7 +642,94 @@ export async function createSchedule(
         classType: type.name,
         weekdays: input.weekdays.map((d) => String(d)),
         startMinute: String(input.startMinute),
+        minutes: String(input.minutes),
+        places: input.places === null ? "none" : String(input.places),
         sessions: String(filled.sessions),
+      },
+    });
+    return { kind: "ok" };
+  });
+}
+
+/** CHANGE A REPEAT'S LENGTH, PLACES OR COACH — **and re-stamp its coming dates
+ *  in the same transaction.**
+ *
+ *  This is where 17b-i's re-stamp moved to, and moving it is the whole point of
+ *  `0036`: the numbers now live on the repeat, so the repeat is what re-stamps.
+ *
+ *  **FUTURE ONLY.** A session that has already happened is history: changing a
+ *  repeat from 45 minutes to 60 must not rewrite last Tuesday, and the gym's
+ *  attendance for that day was taken against the length it actually ran.
+ *
+ *  **AND NEVER A DAY THE GYM CHANGED ON PURPOSE** (`changed_alone`, 17b-ii-b).
+ *  Nothing sets that flag yet; the condition is here because this is the
+ *  statement it exists to restrain, and a condition added later would mean this
+ *  one shipped able to undo a deliberate change.
+ *
+ *  **WHAT IT DELIBERATELY CANNOT CHANGE IS WHEN.** Days, time and window are
+ *  §13.3's *"this day and later"* — the old repeat ends and a new one begins, so
+ *  the dates already written keep the time they were written at — and that is
+ *  17b-ii-b's, with the week view it needs. Re-timing every coming date behind a
+ *  PUT would be the same change with none of the care, and the clash rule
+ *  `createSchedule` carries would have to be asked again here to do it safely.
+ *
+ *  **A STOPPED REPEAT IS NOT EDITABLE** (`ended_at IS NULL` in the key, as
+ *  `endSchedule`'s own read has): it has no coming dates to re-stamp and it is
+ *  not on the screen the caller is acting from, so this is a 404 rather than a
+ *  silent write nobody can see. */
+export async function updateSchedule(
+  sql: Sql,
+  input: ClassScheduleFields & {
+    gymId: string;
+    scheduleId: string;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<ClassWriteOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    // THE PAIR IS THE KEY. `id` alone would let one gym re-coach another gym's
+    // repeat with a uuid it came by — the worst-thing test's second half.
+    const [before] = await tx<{ id: string; minutes: number; places: number | null }[]>`
+      SELECT id, minutes, places FROM gym_class_schedules
+      WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL`;
+    if (before === undefined) return { kind: "not_found" };
+
+    // The worst thing, refused: `createSchedule`'s check, in the second place a
+    // coach can reach the database. One rule, asked at every door.
+    if (!(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
+      return { kind: "coach_not_staff" };
+    }
+
+    await tx`
+      UPDATE gym_class_schedules
+      SET minutes = ${input.minutes}, places = ${input.places},
+          coach_user_id = ${input.coachUserId}
+      WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId}`;
+
+    const restamped = await tx`
+      UPDATE gym_class_sessions
+      SET minutes = ${input.minutes}, places = ${input.places},
+          coach_user_id = ${input.coachUserId}
+      WHERE schedule_id = ${input.scheduleId}
+        AND gym_id = ${input.gymId}
+        AND starts_at > ${input.now}
+        AND changed_alone = false`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.class_schedule_updated",
+      targetType: "gym_class_schedule",
+      targetId: input.scheduleId,
+      // What changed and how far it reached — never the coach's name, which is
+      // a person's own and is one join away for anybody entitled to it.
+      meta: {
+        minutes: `${String(before.minutes)} -> ${String(input.minutes)}`,
+        places: `${before.places === null ? "none" : String(before.places)} -> ${
+          input.places === null ? "none" : String(input.places)
+        }`,
+        sessionsRestamped: String(restamped.count),
       },
     });
     return { kind: "ok" };

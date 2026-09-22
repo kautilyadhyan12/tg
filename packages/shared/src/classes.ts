@@ -129,22 +129,25 @@ export const classPlacesSchema = z.number().int().min(1).max(500);
 
 /** WHAT A GYM RUNS — the thing itself, named and coloured.
  *
- *  **IT OWNS `minutes`, `places` AND THE COACH ONLY UNTIL 17b-ii, AND THAT IS
- *  KD'S REVERSAL OF THIS CARD'S ONE DESIGN DECISION** (RULINGS 2026-09-22).
+ *  **`minutes`, `places` AND THE COACH ARE THE VALUES A NEW REPEAT STARTS FROM,
+ *  AND NOTHING ELSE READS THEM** (Kd, RULINGS 2026-09-22; 17b-ii-a).
  *
  *  17b-i put them here and left the repeat owning only WHEN, arguing that two
  *  places to store one capacity is one edit away from a screen showing "45 min"
  *  beside a calendar showing 60. Round one called it what it was: §13.3's
  *  *"places and coach where they differ"*, dropped without a ruling. Asked for
  *  the recommendation and the industry standard, Kd ruled **follow the
- *  standard** — and the standard is unambiguous: TeamUp edits venue, class size
- *  limit, start and end time and instructors PER TIME SLOT, Mindbody changes a
- *  teacher for one day, a period or permanently.
+ *  standard** — and the standard is unambiguous. Read 2026-09-22, TeamUp's own
+ *  help centre splits the two levels by name: a Class Type edits *"the class
+ *  name, description, and visibility"*, while a time slot edits *"the Venue,
+ *  Instructor, Times, and Class Size Limits"*. Mindbody changes a teacher for
+ *  one day, a period or permanently.
  *
- *  **The two-answers worry is real and the products settle it differently from
- *  dropping the field**: the REPEAT is the live answer and the class type is the
- *  DEFAULT a new repeat starts from. 17b-ii moves them, and this comment is the
- *  one that tells whoever does it why the fields are here in the first place. */
+ *  **So the two-answers worry is settled by direction, not by deletion:** the
+ *  REPEAT is the live answer, the class type is the default it was filled in
+ *  from, and the arrow only ever points one way. Changing a class here changes
+ *  NO repeat and NO date already on the calendar — the server does not even
+ *  read these three when it writes one (`fill.ts` takes the repeat's). */
 export const gymClassTypeSchema = z
   .object({
     id: z.string().uuid(),
@@ -169,7 +172,14 @@ export const gymClassTypeSchema = z
   .strict();
 export type GymClassType = z.infer<typeof gymClassTypeSchema>;
 
-/** WHEN IT REPEATS — the gym's clock time, its weekdays, and the window.
+/** WHEN IT REPEATS — the gym's clock time, its weekdays, the window, AND ITS
+ *  OWN LENGTH, PLACES AND COACH.
+ *
+ *  **THIS IS THE LIVE ANSWER.** The three numbers below are what the calendar is
+ *  written from and what 17c will count places against; the class type's twins
+ *  are only what they were filled in from. They carry the same meanings as
+ *  there, deliberately — `places` null is NO LIMIT, `coachUserId` null is nobody
+ *  named — so a reader never has to know which of the two rows it is holding.
  *
  *  `endsOn` null is "until we say otherwise", which is what a gym's normal
  *  timetable is.
@@ -188,6 +198,16 @@ export const gymClassScheduleSchema = z
     startMinute: classStartMinuteSchema,
     startsOn: classDaySchema,
     endsOn: classDaySchema.nullable(),
+    /** How long THIS repeat runs for. */
+    minutes: classMinutesSchema,
+    /** How many fit in THIS repeat; null is no limit. */
+    places: classPlacesSchema.nullable(),
+    /** Who teaches THIS repeat: a member of this gym's staff, by user id. */
+    coachUserId: z.string().uuid().nullable(),
+    /** Their name as the console draws it — answered only while they are still
+     *  this gym's active staff, the class type's rule verbatim and for the same
+     *  reason: a timetable must never print a name the gym cannot vouch for. */
+    coachName: z.string().max(200).nullable(),
     /** The next few dates this repeat will actually run on, from the sessions
      *  that were written — **read back from the table, never recomputed for the
      *  screen.** A second derivation is a second answer, and the one the gym
@@ -277,6 +297,21 @@ export type CreateGymClassTypeRequest = z.infer<typeof createGymClassTypeRequest
 export const updateGymClassTypeRequestSchema = createGymClassTypeRequestSchema;
 export type UpdateGymClassTypeRequest = z.infer<typeof updateGymClassTypeRequestSchema>;
 
+/** WHAT A REPEAT'S OWN THREE FIELDS LOOK LIKE ON THE WIRE — one shape, so
+ *  adding one and changing one cannot drift apart.
+ *
+ *  **EVERY KEY IS REQUIRED, and the DEFAULTING HAPPENS IN THE FORM.** The screen
+ *  opens the repeat form already filled in from the class type; the request then
+ *  states all three outright. A server that filled a missing key in from the
+ *  type would be a second place the default is decided, and the two would drift
+ *  apart the day the form changed. Nullable where null is an ANSWER — no limit, nobody
+ *  named — and never where it would mean "not said". */
+const classScheduleFieldsShape = {
+  minutes: classMinutesSchema,
+  places: classPlacesSchema.nullable(),
+  coachUserId: z.string().uuid().nullable(),
+};
+
 /** A repeat, as a gym types it.
  *
  *  **`weekdays` is de-duplicated and sorted HERE**, so the column, the fill's
@@ -294,6 +329,7 @@ export const createGymClassScheduleRequestSchema = z
     startMinute: classStartMinuteSchema,
     startsOn: classDaySchema,
     endsOn: classDaySchema.nullable().optional(),
+    ...classScheduleFieldsShape,
   })
   .strict()
   // AN INVERTED WINDOW IS A 400, NOT A REPEAT THAT SILENTLY RUNS ON NO DAY.
@@ -307,6 +343,22 @@ export const createGymClassScheduleRequestSchema = z
     path: ["endsOn"],
   });
 export type CreateGymClassScheduleRequest = z.infer<typeof createGymClassScheduleRequestSchema>;
+
+/** CHANGING A REPEAT — its length, its places and its coach, and nothing else.
+ *
+ *  **WHEN IT RUNS IS DELIBERATELY NOT HERE.** Moving a repeat's day or time is
+ *  §13.3's *"this day and later"* — the old repeat ends and a new one begins, so
+ *  that the dates already on the calendar keep the time they were booked at —
+ *  and that is 17b-ii-b's, with the week view it needs. A PUT that quietly
+ *  re-timed every coming date would be the same change with none of the care.
+ *
+ *  A replace and not a merge, `updateGymClassTypeRequestSchema`'s reasoning:
+ *  `places: null` has to mean "no limit" and can never be allowed to also mean
+ *  "leave it alone". */
+export const updateGymClassScheduleRequestSchema = z
+  .object({ ...classScheduleFieldsShape })
+  .strict();
+export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
 
 /** Every mutation answers with the WHOLE timetable, deliberately.
  *

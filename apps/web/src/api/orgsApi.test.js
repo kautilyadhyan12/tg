@@ -135,6 +135,12 @@ const CLASSES_BODY = {
           startMinute: 1110,
           startsOn: '2026-09-21',
           endsOn: null,
+          // A repeat's OWN three (17b-ii-a), and deliberately not the class's
+          // 45/16: the repeat is the live answer.
+          minutes: 60,
+          places: 12,
+          coachUserId: null,
+          coachName: null,
           nextDates: ['2026-09-21'],
           sessionsAhead: 16,
           datesComplete: false,
@@ -199,7 +205,7 @@ describe('orgService endpoints', () => {
     expect(seen[3]).toMatchObject({ url: '/v1/orgs/gym-1/codes', method: 'get' });
   });
 
-  /** **THE SEVEN TIMETABLE DOORS, BY ADDRESS AND BY VERB** — round one's Low-3,
+  /** **THE EIGHT TIMETABLE DOORS, BY ADDRESS AND BY VERB** — round one's Low-3,
    *  and the gap is worth naming: `classes.render.test.jsx` replaces
    *  `orgService` wholesale, so a misspelt `/restore` or a `DELETE` where the
    *  server has a `POST` left all 43 web tests green. This file is where every
@@ -220,9 +226,17 @@ describe('orgService endpoints', () => {
     await orgService.updateClass('gym-1', 't1', body);
     await orgService.archiveClass('gym-1', 't1');
     await orgService.restoreClass('gym-1', 't1');
-    await orgService.addClassRepeat('gym-1', 't1', {
+    const repeatBody = {
       weekdays: [1, 3], startMinute: 1110, startsOn: '2026-09-21',
-    });
+      minutes: 60, places: 12, coachUserId: null,
+    };
+    await orgService.addClassRepeat('gym-1', 't1', repeatBody);
+    // THE EIGHTH DOOR (17b-ii-a). It shares an ADDRESS with Stop and differs
+    // only in its verb, which is exactly the pair a wrong verb turns into each
+    // other: a PUT that went out as a DELETE would clear a gym's dates instead
+    // of changing them.
+    const editBody = { minutes: 30, places: null, coachUserId: null };
+    await orgService.updateClassRepeat('gym-1', 's1', editBody);
     await orgService.stopClassRepeat('gym-1', 's1');
 
     expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual([
@@ -232,14 +246,20 @@ describe('orgService endpoints', () => {
       'delete /v1/orgs/gym-1/classes/t1',
       'post /v1/orgs/gym-1/classes/t1/restore',
       'post /v1/orgs/gym-1/classes/t1/repeats',
+      'put /v1/orgs/gym-1/class-repeats/s1',
       'delete /v1/orgs/gym-1/class-repeats/s1',
     ]);
     // THE WHOLE CLASS GOES ON A PUT, `places: null` included — a merge would
     // make "no limit" indistinguishable from "leave it alone".
     expect(JSON.parse(seen[2].data)).toEqual(body);
+    // And the same for a repeat, which is the shape that now reaches a
+    // calendar: the three fields, `places: null` meaning no limit, and nothing
+    // about WHEN it runs (that is "this day and later", 17b-ii-b).
+    expect(JSON.parse(seen[5].data)).toEqual(repeatBody);
+    expect(JSON.parse(seen[6].data)).toEqual(editBody);
     const unlimited = { ...body, places: null };
     await orgService.updateClass('gym-1', 't1', unlimited);
-    expect(JSON.parse(seen[7].data)).toEqual(unlimited);
+    expect(JSON.parse(seen[8].data)).toEqual(unlimited);
   });
 
   /** A body the screen cannot read is a FAILURE, never an empty timetable — the

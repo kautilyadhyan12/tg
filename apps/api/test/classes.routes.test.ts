@@ -88,6 +88,13 @@ const aClass = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** A REPEAT'S OWN THREE, as every repeat payload below must now carry them
+ *  (17b-ii-a). They are REQUIRED on the wire and the console fills them in from
+ *  the class type, so there is one place the default is decided — see
+ *  `updateGymClassScheduleRequestSchema`. Spread FIRST in every literal, so a
+ *  case that means to override one still does. */
+const RUN = { minutes: 60, places: 20, coachUserId: null };
+
 d("the gym's timetable: who may set it, and what it answers (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const tokens = new Map<string, string>();
@@ -277,7 +284,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (typeId === undefined) throw new Error("create answered no class");
       const repeatMade = await post(
         repeatsUrl(org.org.id, typeId),
-        { weekdays: [MON, WED], startMinute: at(18), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [MON, WED], startMinute: at(18), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(repeatMade.statusCode).toBe(201);
@@ -316,13 +323,17 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
           await del(typeUrl(org.org.id, typeId), outsider.cookies),
           await post(
             repeatsUrl(org.org.id, typeId),
-            { weekdays: [MON], startMinute: at(6), startsOn: dayFromToday(0) },
+            { ...RUN, weekdays: [MON], startMinute: at(6), startsOn: dayFromToday(0) },
             outsider.cookies,
           ),
           await del(repeatUrl(org.org.id, repeatId), outsider.cookies),
           // The seventh door, added with Bring back: a class somebody else
           // archived is not a class a stranger may put back on their timetable.
           await post(restoreUrl(org.org.id, typeId), {}, outsider.cookies),
+          // The EIGHTH, added by 17b-ii-a: changing a repeat's length, places
+          // or coach. A door added without a line here is a door nothing
+          // guards.
+          await put(repeatUrl(org.org.id, repeatId), { ...RUN }, outsider.cookies),
         ];
         for (const res of tried) {
           expect(
@@ -346,13 +357,17 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         (
           await post(
             repeatsUrl(rivalOrg.org.id, typeId),
-            { weekdays: [MON], startMinute: at(6), startsOn: dayFromToday(0) },
+            { ...RUN, weekdays: [MON], startMinute: at(6), startsOn: dayFromToday(0) },
             rival.cookies,
           )
         ).statusCode,
       ).toBe(404);
       expect((await del(repeatUrl(rivalOrg.org.id, repeatId), rival.cookies)).statusCode).toBe(404);
       expect((await post(restoreUrl(rivalOrg.org.id, typeId), {}, rival.cookies)).statusCode).toBe(404);
+      expect(
+        (await put(repeatUrl(rivalOrg.org.id, repeatId), { ...RUN, minutes: 5 }, rival.cookies))
+          .statusCode,
+      ).toBe(404);
       expect(await stateOf(org.org.id)).toEqual(before);
       expect(await stateOf(rivalOrg.org.id)).toEqual({ types: 0, repeats: 0, sessions: 0 });
 
@@ -360,6 +375,124 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const rivalSees = timetable(await get(classesUrl(rivalOrg.org.id), rival.cookies));
       expect(rivalSees.entries).toEqual([]);
       expect(rivalSees.archived).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // 17b-ii-a's OWN WORST THING: A NAME ON A TIMETABLE THAT DOES NOT BELONG
+  // THERE
+  // =========================================================================
+  //
+  // A repeat carries its own coach now, so a request can hand the server any
+  // uuid on earth — and `gym_class_schedules.coach_user_id` is a foreign key to
+  // `users`, which would take another gym's trainer without a murmur. The gym's
+  // timetable would then say a person teaches Tuesday's class who is not that
+  // gym's staff at all, and from 17d every member would read it.
+  //
+  // **EVERY DOOR A COACH CAN REACH THE DATABASE THROUGH IS ASKED HERE** — the
+  // class, the new repeat, and changing a repeat — because one door left
+  // unasked is the whole defect. Each refusal is checked by reading the ROW, not
+  // the reply.
+
+  it(
+    "a coach can only ever be this gym's own active staff — on a class, on a new repeat and on a repeat being changed",
+    async () => {
+      const owner = await makeUser("cw-owner");
+      const rival = await makeUser("cw-rival");
+      const theirCoach = await makeUser("cw-theirs");
+      const ourCoach = await makeUser("cw-ours");
+      const justAMember = await makeUser("cw-member");
+      const org = await makeOrg(owner.cookies, "Coach Repeat Gym");
+      const rivalOrg = await makeOrg(rival.cookies, "Coach Repeat Rival Gym");
+
+      // THEIR trainer — real staff, of the wrong gym.
+      await joinAsMember(theirCoach.cookies, rivalOrg, rival.cookies);
+      expect(
+        (await post(`/v1/orgs/${rivalOrg.org.id}/staff`, { email: theirCoach.email, role: "trainer" }, rival.cookies))
+          .statusCode,
+      ).toBe(201);
+      // OUR trainer, and one of our members who is not staff.
+      await joinAsMember(ourCoach.cookies, org, owner.cookies);
+      expect(
+        (await post(`/v1/orgs/${org.org.id}/staff`, { email: ourCoach.email, role: "trainer" }, owner.cookies))
+          .statusCode,
+      ).toBe(201);
+      await joinAsMember(justAMember.cookies, org, owner.cookies);
+
+      const made = await post(classesUrl(org.org.id), aClass({ name: "Barre" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+      const good = await post(
+        repeatsUrl(org.org.id, type.id),
+        { ...RUN, weekdays: [MON], startMinute: at(9), startsOn: dayFromToday(0), coachUserId: ourCoach.userId },
+        owner.cookies,
+      );
+      expect(good.statusCode).toBe(201);
+      const repeat = timetable(good).entries[0]?.schedules[0];
+      if (repeat === undefined) throw new Error("repeat answered nothing");
+      // THE POSITIVE CONTROL. Without it "everything is 400" would pass against
+      // a route that refuses every coach, which is not the rule.
+      expect(repeat.coachUserId).toBe(ourCoach.userId);
+      expect(repeat.coachName).toBe("Cls cw-ours");
+
+      // NOBODY WHO IS NOT THIS GYM'S STAFF, THROUGH ANY DOOR.
+      const strangers: [string, string][] = [
+        ["another gym's trainer", theirCoach.userId],
+        ["another gym's owner", rival.userId],
+        ["our own member who is not staff", justAMember.userId],
+        ["a uuid that is nobody", randomUUID()],
+      ];
+      for (const [who, coachUserId] of strangers) {
+        const onAClass = await post(
+          classesUrl(org.org.id),
+          aClass({ name: `Class for ${who}`, coachUserId }),
+          owner.cookies,
+        );
+        const onANewRepeat = await post(
+          repeatsUrl(org.org.id, type.id),
+          { ...RUN, weekdays: [WED], startMinute: at(11), startsOn: dayFromToday(0), coachUserId },
+          owner.cookies,
+        );
+        const onThisRepeat = await put(
+          repeatUrl(org.org.id, repeat.id),
+          { ...RUN, coachUserId },
+          owner.cookies,
+        );
+        for (const res of [onAClass, onANewRepeat, onThisRepeat]) {
+          expect(res.statusCode, `${who} was accepted by ${String(res.raw.req.url)}`).toBe(400);
+          expect(JSON.parse(res.body)).toMatchObject({ error: "coach_not_staff" });
+        }
+      }
+
+      // AND NOT ONE OF THEM REACHED A ROW. The replies could all have been right
+      // while the writes went through.
+      const [named] = await sql<{ types: number; repeats: number; sessions: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM gym_class_types
+            WHERE gym_id = ${org.org.id}
+              AND coach_user_id IS NOT NULL AND coach_user_id <> ${ourCoach.userId}) AS types,
+          (SELECT count(*)::int FROM gym_class_schedules
+            WHERE gym_id = ${org.org.id}
+              AND coach_user_id IS NOT NULL AND coach_user_id <> ${ourCoach.userId}) AS repeats,
+          (SELECT count(*)::int FROM gym_class_sessions
+            WHERE gym_id = ${org.org.id}
+              AND coach_user_id IS NOT NULL AND coach_user_id <> ${ourCoach.userId}) AS sessions`;
+      expect(named).toEqual({ types: 0, repeats: 0, sessions: 0 });
+      // The gym's timetable is still one class with one repeat: nothing was
+      // half-written on the way to the refusal.
+      expect(await stateOf(org.org.id)).toMatchObject({ types: 1, repeats: 1 });
+
+      // **AND THE NAME STOPS BEING ANSWERED THE MOMENT THEY STOP BEING STAFF.**
+      // The row keeps the id — the coach may come back — but the READ says
+      // nothing rather than printing a person this gym can no longer vouch for.
+      expect(
+        (await del(`/v1/orgs/${org.org.id}/staff/${ourCoach.userId}`, owner.cookies)).statusCode,
+      ).toBe(200);
+      const afterLeaving = timetable(await get(classesUrl(org.org.id), owner.cookies));
+      const orphan = afterLeaving.entries[0]?.schedules[0];
+      expect(orphan?.coachUserId).toBe(ourCoach.userId);
+      expect(orphan?.coachName).toBeNull();
     },
     TEST_TIMEOUT_MS,
   );
@@ -445,7 +578,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
 
       const withRepeat = await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [WED, MON], startMinute: at(18, 30), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [WED, MON], startMinute: at(18, 30), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(withRepeat.statusCode).toBe(201);
@@ -482,7 +615,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
   );
 
   it(
-    "editing a class follows through to its future dates and leaves the past alone; archiving takes the future away and keeps the past",
+    "editing a CLASS changes what a new repeat starts from and NOTHING already on the calendar; archiving takes the future away and keeps the past",
     async () => {
       const owner = await makeUser("edit-owner");
       const org = await makeOrg(owner.cookies, "Edit Classes Gym");
@@ -491,22 +624,17 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (type === undefined) throw new Error("create answered no class");
       await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
 
-      // A session in the PAST and a session the gym has deliberately changed —
-      // built here because nothing in this card can produce either yet, and both
-      // are what the edit must not touch.
+      // A session in the PAST, built here because nothing in this card can
+      // produce one yet.
       await sql`
         INSERT INTO gym_class_sessions
           (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places)
         VALUES (${org.org.id}, ${type.id}, (now() - interval '3 days')::date, ${at(7)},
                 now() - interval '3 days', 60, 20)`;
-      await sql`
-        UPDATE gym_class_sessions SET changed_alone = true
-        WHERE gym_id = ${org.org.id}
-          AND local_date = (SELECT max(local_date) FROM gym_class_sessions WHERE gym_id = ${org.org.id})`;
 
       const edited = await put(
         typeUrl(org.org.id, type.id),
@@ -520,21 +648,22 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         places: 8,
       });
 
-      const shape = await sql<{ bucket: string; minutes: number; places: number; n: number }[]>`
-        SELECT CASE
-                 WHEN changed_alone THEN 'changed'
-                 WHEN starts_at <= now() THEN 'past'
-                 ELSE 'future'
-               END AS bucket,
-               minutes, places, count(*)::int AS n
+      // **THE REVERSAL 17b-ii-a IS, AND THE ASSERTION THIS TEST EXISTS FOR.**
+      // Until Kd's ruling of 2026-09-22 this edit re-stamped every future
+      // session with 45/8. It must not any more: the REPEAT is the live answer
+      // and the class is only the value a NEW repeat is filled in from, which is
+      // TeamUp's split (a Class Type edits its name, description and
+      // visibility; a time slot edits instructor, times and class size limits).
+      // The repeat still says 60/20 —
+      const stillRunning = timetable(edited).entries[0]?.schedules[0];
+      expect(stillRunning).toMatchObject({ minutes: 60, places: 20 });
+      // — and so does every date it has written, past and future alike.
+      const afterClassEdit = await sql<{ minutes: number; places: number; n: number }[]>`
+        SELECT minutes, places, count(*)::int AS n
         FROM gym_class_sessions WHERE gym_id = ${org.org.id}
-        GROUP BY 1, 2, 3 ORDER BY 1`;
-      const byBucket = new Map(shape.map((r) => [r.bucket, r]));
-      expect(byBucket.get("future")).toMatchObject({ minutes: 45, places: 8 });
-      // The past keeps what it was: changing a class must not rewrite history.
-      expect(byBucket.get("past")).toMatchObject({ minutes: 60, places: 20 });
-      // And so does the day the gym changed on purpose.
-      expect(byBucket.get("changed")).toMatchObject({ minutes: 60, places: 20 });
+        GROUP BY 1, 2`;
+      expect(afterClassEdit).toHaveLength(1);
+      expect(afterClassEdit[0]).toMatchObject({ minutes: 60, places: 20 });
 
       // ARCHIVE. The class leaves the live list, keeps its name in the archived
       // one, its repeats stop, its FUTURE dates go and its past dates stay.
@@ -562,6 +691,219 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
   );
 
   it(
+    "a new repeat starts from its class and then goes its own way — two repeats of one class, two lengths, two sizes, two coaches",
+    async () => {
+      const owner = await makeUser("own-owner");
+      const dana = await makeUser("own-dana");
+      const sam = await makeUser("own-sam");
+      const org = await makeOrg(owner.cookies, "Own Classes Gym");
+      for (const person of [dana, sam]) {
+        await joinAsMember(person.cookies, org, owner.cookies);
+        expect(
+          (await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role: "trainer" }, owner.cookies))
+            .statusCode,
+        ).toBe(201);
+      }
+
+      const made = await post(
+        classesUrl(org.org.id),
+        aClass({ name: "Spin", minutes: 45, places: 12, coachUserId: dana.userId }),
+        owner.cookies,
+      );
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+
+      // THE MONDAY, AS THE CONSOLE WOULD SEND IT: the form was filled in from
+      // the class, so the request states the class's own numbers outright.
+      const monday = await post(
+        repeatsUrl(org.org.id, type.id),
+        {
+          weekdays: [MON],
+          startMinute: at(18),
+          startsOn: dayFromToday(0),
+          minutes: type.minutes,
+          places: type.places,
+          coachUserId: type.coachUserId,
+        },
+        owner.cookies,
+      );
+      expect(monday.statusCode).toBe(201);
+
+      // THE THURSDAY IS A DIFFERENT CLASS IN EVERY WAY THAT MATTERS TO A PERSON
+      // TURNING UP — and this is the whole card: 17b-i could not express it.
+      const thursday = await post(
+        repeatsUrl(org.org.id, type.id),
+        {
+          weekdays: [4],
+          startMinute: at(19),
+          startsOn: dayFromToday(0),
+          minutes: 90,
+          places: null,
+          coachUserId: sam.userId,
+        },
+        owner.cookies,
+      );
+      expect(thursday.statusCode).toBe(201);
+
+      const both = timetable(thursday).entries[0]?.schedules ?? [];
+      expect(both).toHaveLength(2);
+      const mon = both.find((x) => x.startMinute === at(18));
+      const thu = both.find((x) => x.startMinute === at(19));
+      expect(mon).toMatchObject({
+        minutes: 45,
+        places: 12,
+        coachUserId: dana.userId,
+        coachName: "Cls own-dana",
+      });
+      expect(thu).toMatchObject({
+        minutes: 90,
+        places: null,
+        coachUserId: sam.userId,
+        coachName: "Cls own-sam",
+      });
+
+      // AND THE CALENDAR AGREES WITH EACH OF THEM, which is the assertion that
+      // matters: the wire could be right while the fill still copied the class's
+      // numbers onto every date. Read per repeat, from the sessions table.
+      const dates = await sql<
+        { schedule_id: string; minutes: number; places: number | null; coach: string | null; n: number }[]
+      >`
+        SELECT schedule_id, minutes, places, coach_user_id AS coach, count(*)::int AS n
+        FROM gym_class_sessions WHERE gym_id = ${org.org.id}
+        GROUP BY 1, 2, 3, 4`;
+      expect(dates).toHaveLength(2);
+      const byRepeat = new Map(dates.map((r) => [r.schedule_id, r]));
+      expect(byRepeat.get(mon?.id ?? "")).toMatchObject({
+        minutes: 45,
+        places: 12,
+        coach: dana.userId,
+      });
+      expect(byRepeat.get(thu?.id ?? "")).toMatchObject({
+        minutes: 90,
+        places: null,
+        coach: sam.userId,
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "changing a REPEAT follows through to its coming dates and leaves the past, a changed day and its sister repeat alone",
+    async () => {
+      const owner = await makeUser("rep-owner");
+      const coach = await makeUser("rep-coach");
+      const org = await makeOrg(owner.cookies, "Repeat Edit Gym");
+      await joinAsMember(coach.cookies, org, owner.cookies);
+      expect(
+        (await post(`/v1/orgs/${org.org.id}/staff`, { email: coach.email, role: "trainer" }, owner.cookies))
+          .statusCode,
+      ).toBe(201);
+
+      const made = await post(classesUrl(org.org.id), aClass({ name: "HIIT" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+      const everyDay = await post(
+        repeatsUrl(org.org.id, type.id),
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect(everyDay.statusCode).toBe(201);
+      const mine = timetable(everyDay).entries[0]?.schedules[0];
+      if (mine === undefined) throw new Error("repeat answered nothing");
+      // A SECOND REPEAT OF THE SAME CLASS — the sister an over-broad UPDATE
+      // would sweep up. `class_type_id` is what the old re-stamp keyed on, so a
+      // fix that kept that key would pass every other assertion here.
+      const sister = await post(
+        repeatsUrl(org.org.id, type.id),
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(20), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect(sister.statusCode).toBe(201);
+      const other = timetable(sister).entries[0]?.schedules.find((x) => x.startMinute === at(20));
+      if (other === undefined) throw new Error("second repeat answered nothing");
+
+      // A date in the PAST that belongs to this repeat, and a date the gym has
+      // deliberately changed — neither producible by this card, both things the
+      // edit must not touch.
+      await sql`
+        INSERT INTO gym_class_sessions
+          (gym_id, class_type_id, schedule_id, local_date, local_start_minute, starts_at,
+           minutes, places)
+        VALUES (${org.org.id}, ${type.id}, ${mine.id}, (now() - interval '3 days')::date,
+                ${at(7)}, now() - interval '3 days', 60, 20)`;
+      await sql`
+        UPDATE gym_class_sessions SET changed_alone = true, minutes = 30, places = 5
+        WHERE schedule_id = ${mine.id}
+          AND local_date = (SELECT max(local_date) FROM gym_class_sessions
+                             WHERE schedule_id = ${mine.id})`;
+
+      const changed = await put(
+        repeatUrl(org.org.id, mine.id),
+        { minutes: 45, places: 8, coachUserId: coach.userId },
+        owner.cookies,
+      );
+      expect(changed.statusCode).toBe(200);
+      const now = timetable(changed).entries[0]?.schedules.find((x) => x.id === mine.id);
+      expect(now).toMatchObject({
+        minutes: 45,
+        places: 8,
+        coachUserId: coach.userId,
+        coachName: "Cls rep-coach",
+      });
+      // The class it came from is untouched: the arrow points one way and only
+      // when a repeat is made.
+      expect(timetable(changed).entries[0]?.type).toMatchObject({
+        minutes: 60,
+        places: 20,
+        coachUserId: null,
+      });
+      // The repeat's DAYS AND TIME are not this route's to change, and did not.
+      expect(now?.weekdays).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      expect(now?.startMinute).toBe(at(7));
+
+      const shape = await sql<
+        { bucket: string; minutes: number; places: number | null; coach: string | null }[]
+      >`
+        SELECT CASE
+                 WHEN schedule_id <> ${mine.id} THEN 'sister'
+                 WHEN changed_alone THEN 'changed'
+                 WHEN starts_at <= now() THEN 'past'
+                 ELSE 'future'
+               END AS bucket,
+               minutes, places, coach_user_id AS coach
+        FROM gym_class_sessions WHERE gym_id = ${org.org.id}
+        GROUP BY 1, 2, 3, 4 ORDER BY 1`;
+      const byBucket = new Map(shape.map((r) => [r.bucket, r]));
+      expect(shape).toHaveLength(4);
+      expect(byBucket.get("future")).toMatchObject({
+        minutes: 45,
+        places: 8,
+        coach: coach.userId,
+      });
+      // The past keeps what it ran as: the gym's attendance was taken against it.
+      expect(byBucket.get("past")).toMatchObject({ minutes: 60, places: 20, coach: null });
+      // So does the day the gym changed on purpose.
+      expect(byBucket.get("changed")).toMatchObject({ minutes: 30, places: 5, coach: null });
+      // And so does the other repeat of the same class, every date of it.
+      expect(byBucket.get("sister")).toMatchObject({ minutes: 60, places: 20, coach: null });
+
+      // A STOPPED REPEAT IS A 404, not a silent write nobody can see: it has no
+      // coming dates to re-stamp and it is not on the screen the caller acted
+      // from.
+      expect((await del(repeatUrl(org.org.id, other.id), owner.cookies)).statusCode).toBe(200);
+      expect(
+        (await put(repeatUrl(org.org.id, other.id), { ...RUN, minutes: 30 }, owner.cookies))
+          .statusCode,
+      ).toBe(404);
+      const [untouched] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE id = ${other.id} AND minutes = 60`;
+      expect(untouched?.n).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "brings an archived class back, without bringing its old dates back",
     async () => {
       const owner = await makeUser("back-owner");
@@ -571,7 +913,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (type === undefined) throw new Error("create answered no class");
       await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect((await stateOf(org.org.id)).sessions).toBe(CLASS_FILL_HORIZON_DAYS + 1);
@@ -607,7 +949,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // are written as they always are.
       const again = await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(again.statusCode).toBe(201);
@@ -626,7 +968,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (type === undefined) throw new Error("create answered no class");
       const withRepeat = await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       const schedule = timetable(withRepeat).entries[0]?.schedules[0];
@@ -668,7 +1010,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (type === undefined) throw new Error("create answered no class");
       const withRepeat = await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       const scheduleId = timetable(withRepeat).entries[0]?.schedules[0]?.id;
@@ -777,7 +1119,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // Ends inside the eight weeks: every date it will ever run on is written.
       const inside = await post(
         repeatsUrl(org.org.id, type.id),
-        { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0), endsOn: dayFromToday(20) },
+        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0), endsOn: dayFromToday(20) },
         owner.cookies,
       );
       expect(timetable(inside).entries[0]?.schedules[0]?.datesComplete).toBe(true);
@@ -788,6 +1130,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const year = await post(
         repeatsUrl(org.org.id, type.id),
         {
+          ...RUN,
           weekdays: [WED],
           startMinute: at(8),
           startsOn: dayFromToday(0),
@@ -812,6 +1155,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const type = timetable(made).entries[0]?.type;
       if (type === undefined) throw new Error("create answered no class");
       const body = {
+        ...RUN,
         weekdays: [MON, WED],
         startMinute: at(18, 30),
         startsOn: dayFromToday(0),
@@ -966,18 +1310,46 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       }
 
       const badRepeats: [string, Record<string, unknown>][] = [
-        ["no weekdays", { weekdays: [], startMinute: at(7), startsOn: dayFromToday(0) }],
-        ["an eighth weekday", { weekdays: [8], startMinute: at(7), startsOn: dayFromToday(0) }],
-        ["weekday nought", { weekdays: [0], startMinute: at(7), startsOn: dayFromToday(0) }],
-        ["midnight at the end of the day", { weekdays: [MON], startMinute: 1440, startsOn: dayFromToday(0) }],
-        ["a minute before midnight", { weekdays: [MON], startMinute: -1, startsOn: dayFromToday(0) }],
-        ["a date that is not one", { weekdays: [MON], startMinute: at(7), startsOn: "07/06/2026" }],
+        ["no weekdays", { ...RUN, weekdays: [], startMinute: at(7), startsOn: dayFromToday(0) }],
+        ["an eighth weekday", { ...RUN, weekdays: [8], startMinute: at(7), startsOn: dayFromToday(0) }],
+        ["weekday nought", { ...RUN, weekdays: [0], startMinute: at(7), startsOn: dayFromToday(0) }],
+        ["midnight at the end of the day", { ...RUN, weekdays: [MON], startMinute: 1440, startsOn: dayFromToday(0) }],
+        ["a minute before midnight", { ...RUN, weekdays: [MON], startMinute: -1, startsOn: dayFromToday(0) }],
+        ["a date that is not one", { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: "07/06/2026" }],
         // 31 February matches the wire pattern and is not a day. It is the
         // SERVICE that catches it; Postgres refusing the cast would be a 500.
-        ["the 31st of February", { weekdays: [MON], startMinute: at(7), startsOn: "2026-02-31" }],
+        ["the 31st of February", { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: "2026-02-31" }],
         [
           "an end before its start",
-          { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(7), endsOn: dayFromToday(1) },
+          { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(7), endsOn: dayFromToday(1) },
+        ],
+        // 17b-ii-a's own three. **They are REQUIRED and a missing one is a 400
+        // rather than a quiet copy of the class's** — that is the whole of "one
+        // place decides the default": the form fills them in, the server never
+        // guesses, and a client that forgets is told so rather than shipping a
+        // gym a length nobody typed.
+        [
+          "no length",
+          { places: 20, coachUserId: null, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        ],
+        [
+          "no places key at all",
+          { minutes: 60, coachUserId: null, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        ],
+        [
+          "no coach key at all",
+          { minutes: 60, places: 20, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        ],
+        ["four minutes", { ...RUN, minutes: 4, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) }],
+        ["eleven hours", { ...RUN, minutes: 601, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) }],
+        ["nought places", { ...RUN, places: 0, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) }],
+        [
+          "five hundred and one places",
+          { ...RUN, places: 501, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        ],
+        [
+          "a coach that is not a uuid",
+          { ...RUN, coachUserId: "coach-bob", weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
         ],
       ];
       for (const [what, body] of badRepeats) {
@@ -986,11 +1358,49 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         expect(JSON.parse(res.body)).toMatchObject({ error: "validation_error" });
       }
 
+      // CHANGING A REPEAT IS PARSED AT THE SAME BOUNDARY, and it refuses the
+      // fields it does NOT own outright rather than ignoring them: a client
+      // sending `startMinute` here believes it moved the class, and a `.strict()`
+      // schema is what tells it otherwise. (Moving a repeat is "this day and
+      // later", 17b-ii-b.)
+      const live = await post(
+        repeatsUrl(org.org.id, type.id),
+        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect(live.statusCode).toBe(201);
+      const liveId = timetable(live).entries[0]?.schedules[0]?.id;
+      if (liveId === undefined) throw new Error("repeat answered no id");
+      const badEdits: [string, Record<string, unknown>][] = [
+        ["nothing at all", {}],
+        ["no length", { places: 20, coachUserId: null }],
+        ["four minutes", { ...RUN, minutes: 4 }],
+        ["nought places", { ...RUN, places: 0 }],
+        ["a coach that is not a uuid", { ...RUN, coachUserId: "coach-bob" }],
+        ["a new time", { ...RUN, startMinute: at(9) }],
+        ["new weekdays", { ...RUN, weekdays: [MON, WED] }],
+        ["a field we never named", { ...RUN, room: "Studio 2" }],
+      ];
+      for (const [what, body] of badEdits) {
+        const res = await put(repeatUrl(org.org.id, liveId), body, owner.cookies);
+        expect(res.statusCode, `changed a repeat with ${what}`).toBe(400);
+        expect(JSON.parse(res.body)).toMatchObject({ error: "validation_error" });
+      }
+      const [unmoved] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE id = ${liveId} AND minutes = 60 AND places = 20
+          AND local_start_minute = ${at(7)} AND weekdays = ARRAY[${MON}]::int[]`;
+      expect(unmoved?.n).toBe(1);
+      expect((await del(repeatUrl(org.org.id, liveId), owner.cookies)).statusCode).toBe(200);
+
       // A NON-UUID IN THE PATH IS A 400 AT THE BOUNDARY, never a 500 from
       // Postgres refusing to cast it.
       expect((await put(typeUrl(org.org.id, "not-a-uuid"), aClass(), owner.cookies)).statusCode)
         .toBe(400);
       expect((await del(repeatUrl(org.org.id, "not-a-uuid"), owner.cookies)).statusCode).toBe(400);
+      expect(
+        (await put(repeatUrl(org.org.id, "not-a-uuid"), { ...RUN }, owner.cookies)).statusCode,
+      ).toBe(400);
 
       expect(await stateOf(org.org.id)).toEqual(before);
 
@@ -1000,6 +1410,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const oneDay = await post(
         repeatsUrl(org.org.id, type.id),
         {
+          ...RUN,
           weekdays: [1, 2, 3, 4, 5, 6, 7],
           startMinute: at(7),
           startsOn: dayFromToday(3),
@@ -1021,6 +1432,16 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const made = await post(classesUrl(org.org.id), aClass({ name: "Yoga" }), owner.cookies);
       const type = timetable(made).entries[0]?.type;
       if (type === undefined) throw new Error("create answered no class");
+      // A repeat made WHILE the plan is live, so the write that changes one has
+      // something real to be refused against.
+      const repeated = await post(
+        repeatsUrl(org.org.id, type.id),
+        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect(repeated.statusCode).toBe(201);
+      const repeatId = timetable(repeated).entries[0]?.schedules[0]?.id;
+      if (repeatId === undefined) throw new Error("repeat answered no id");
 
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
 
@@ -1035,15 +1456,21 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         await del(typeUrl(org.org.id, type.id), owner.cookies),
         await post(
           repeatsUrl(org.org.id, type.id),
-          { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+          { ...RUN, weekdays: [WED], startMinute: at(9), startsOn: dayFromToday(0) },
           owner.cookies,
         ),
+        await put(repeatUrl(org.org.id, repeatId), { ...RUN, minutes: 30 }, owner.cookies),
+        await del(repeatUrl(org.org.id, repeatId), owner.cookies),
         await post(restoreUrl(org.org.id, type.id), {}, owner.cookies),
       ]) {
         expect(res.statusCode).toBe(409);
         expect(JSON.parse(res.body)).toMatchObject({ error: "gym_not_on_plan" });
       }
-      expect(await stateOf(org.org.id)).toMatchObject({ types: 1, repeats: 0 });
+      expect(await stateOf(org.org.id)).toMatchObject({ types: 1, repeats: 1 });
+      const [stillSixty] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE id = ${repeatId} AND minutes = 60`;
+      expect(stillSixty?.n).toBe(1);
     },
     TEST_TIMEOUT_MS,
   );
@@ -1085,12 +1512,16 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       if (mine === undefined) throw new Error("no class");
       await sql`
         INSERT INTO gym_class_schedules
-          (gym_id, class_type_id, weekdays, local_start_minute, starts_on)
-        SELECT ${org.org.id}, ${mine.id}, ARRAY[1]::int[], n, current_date
-        FROM generate_series(1, ${CLASS_SCHEDULES_PER_TYPE_MAX}) AS n`;
+          (gym_id, class_type_id, weekdays, local_start_minute, starts_on,
+           minutes, places, coach_user_id)
+        SELECT ${org.org.id}, ${mine.id}, ARRAY[1]::int[], n, current_date,
+               t.minutes, t.places, t.coach_user_id
+        FROM generate_series(1, ${CLASS_SCHEDULES_PER_TYPE_MAX}) AS n
+        CROSS JOIN gym_class_types t
+        WHERE t.id = ${mine.id} AND t.gym_id = ${org.org.id}`;
       const tooMany = await post(
         repeatsUrl(org.org.id, mine.id),
-        { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(tooMany.statusCode).toBe(409);

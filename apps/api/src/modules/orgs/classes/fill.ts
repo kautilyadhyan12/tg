@@ -69,6 +69,14 @@
 // `DO UPDATE`: a day the gym has deliberately changed (`changed_alone`, 17b-ii)
 // or cancelled must survive every later run of this job. That is the condition
 // this card ships with rather than the one 17b-ii would have had to add.
+//
+// ── WHOSE NUMBERS A NEW DATE IS STAMPED WITH ────────────────────────────────
+//
+// **THE REPEAT'S**, since `0036` (RULINGS 2026-09-22: the repeat is the live
+// answer, the class type is the default a new repeat is filled in from). Until
+// then it was the type's, and a gym could not run Monday with twelve places and
+// Thursday with twenty. Nothing in this statement reads the type's length,
+// places or coach any more — it is joined for `archived_at` alone.
 import type { Sql, TransactionSql } from "postgres";
 
 /** The house alias (`orgs/repo.ts`, `memberList/repo.ts`, three more): postgres.js's
@@ -167,9 +175,14 @@ export async function fillClassSessions(
            -- THE RULE. The gym's clock time, turned into an instant by the
            -- gym's own zone, one date at a time.
            ((d::date + make_interval(mins => s.local_start_minute)) AT TIME ZONE g.timezone),
-           t.minutes,
-           t.places,
-           t.coach_user_id
+           -- **THE REPEAT'S NUMBERS, NOT THE CLASS TYPE'S** (0036, RULINGS
+           -- 2026-09-22). The repeat is the live answer; the type holds only
+           -- what a new repeat was filled in from. gym_class_types is still
+           -- joined, for t.archived_at alone - a removed class writes no more
+           -- dates however live its repeats look.
+           s.minutes,
+           s.places,
+           s.coach_user_id
     FROM gym_class_schedules s
     JOIN gyms g ON g.id = s.gym_id
     JOIN gym_class_types t ON t.id = s.class_type_id
