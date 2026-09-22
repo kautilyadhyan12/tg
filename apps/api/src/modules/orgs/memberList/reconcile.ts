@@ -19,16 +19,30 @@
 // the marks are here and not in a second query.
 import {
   isLargeMemberListChange,
+  MEMBER_LIST_EXTRA_FIELD_PREFIX,
+  MEMBER_LIST_FIELD_WORDS,
   MEMBER_LIST_MOST_OF_LIST_SHARE,
   type MemberListChangeCounts,
+  type MemberListExtraChange,
+  type MemberListField,
+  type MemberListFieldChange,
   type MemberListGuard,
+  type MemberListHandEdits,
   type MemberListMembers,
   type MemberListMode,
   type MemberListRow,
   type MemberListStatusChange,
 } from "@app/shared";
 
-/** One person already on the gym's list. */
+/** One person the gym's list holds — on it, or FORMER (§11.1).
+ *
+ *  **THE WIDER FIELDS ARE HERE BECAUSE "CHANGED" IS NOW ABOUT ALL OF THEM** (§11.4).
+ *  Until 3a-v-b the only thing that could differ between a file's row and a stored
+ *  entry was the status word; a record now holds the gym's membership and payment
+ *  words, three dates and every one of the gym's own columns, and any of them
+ *  differing is a change. The four that make up the identity key — name, address,
+ *  phone and member number — are NOT here as comparable values, because two entries
+ *  sharing a key cannot differ in them (`fields.ts`, `identityKey`). */
 export interface ListEntry {
   identityKey: string;
   fullName: string;
@@ -36,6 +50,25 @@ export interface ListEntry {
   phone: string | null;
   memberNumber: string | null;
   status: string | null;
+  membershipType: string | null;
+  /** A plain calendar day as text, never a `Date`: the rule is pure and a `Date` is
+   *  a zone waiting to be applied. The repo casts the column to text for this. */
+  joinedOn: string | null;
+  endsOn: string | null;
+  endsOnKind: "ends" | "renews" | null;
+  paymentStatus: string | null;
+  dateOfBirth: string | null;
+  /** The gym's own columns as this record holds them, by catalogue key (§11.1). */
+  extra: Readonly<Record<string, string>>;
+  /** WHICH FIELDS STAFF EDITED BY HAND SINCE THE LAST UPLOAD — names only (§11.4).
+   *  A standard field by its own name, one of the gym's own columns as
+   *  `extra:<key>`. */
+  handEdited: readonly string[];
+  /** This person has been taken off the list and is kept as a FORMER record
+   *  (§11.1). A former record is not on the list: it is in no group's `gone`, in no
+   *  count of the list's size, invited by nothing, and it makes no member read "on
+   *  your list". A file that holds them again REVIVES this same record. */
+  former: boolean;
 }
 
 /** One of the gym's own app members: LIVE, and that is the only condition the
@@ -73,14 +106,59 @@ export interface ListMember {
   seatCounted: boolean;
 }
 
+/** ONE OF THE GYM'S OWN COLUMNS AS THIS FILE BRINGS IT (§11.1): the catalogue key an
+ *  entry's document is written under, the heading the gym wrote, and WHERE the cell
+ *  sits in each row's `extra` list.
+ *
+ *  `at` is carried rather than recomputed because the list handed in is the file's
+ *  fields FILTERED to the ones this gym keeps — a heading the gym has never had, when
+ *  its catalogue is already full, is not kept and not compared — and filtering a list
+ *  whose positions are its meaning is how a gym's "Locker" column ends up read out of
+ *  its "Notes" cell. */
+export interface KeptField {
+  key: string;
+  label: string;
+  at: number;
+}
+
+/** WHICH STANDARD FIELDS THIS FILE ACTUALLY CARRIES, which decides both what can
+ *  change and what is written.
+ *
+ *  **A FIELD THE FILE HAS NO COLUMN FOR IS LEFT ALONE, NOT BLANKED**, and that is the
+ *  one rule here that reverses what 3a-iii-b did with the status word. A whole-list
+ *  upload is the gym's list of PEOPLE as of today; it is not a statement that every
+ *  column the gym has ever kept is now empty. A gym exporting a narrower report — no
+ *  membership type, no dates — would otherwise wipe those columns off every one of its
+ *  people, and the columns a file most often leaves out are exactly the ones §11.2
+ *  refuses to keep in the first place. So a file with no status column now leaves the
+ *  gym's status words where they are, where before 3a-v-b it emptied them. */
+export interface CarriedFields {
+  status: boolean;
+  membershipType: boolean;
+  joinedOn: boolean;
+  endsOn: boolean;
+  paymentStatus: boolean;
+  dateOfBirth: boolean;
+}
+
 export interface ReconcileInput {
   /** The people read out of the uploaded file, cleaned (§9.5). Empty asks what
    *  the stored list says today. */
   rows: readonly MemberListRow[];
-  /** The gym's list as it stands. */
+  /** The gym's list as it stands, FORMER records included. */
   entries: readonly ListEntry[];
   /** The gym's own app members. */
   members: readonly ListMember[];
+  /** Which of the file's own columns this gym keeps, and where each sits in a row's
+   *  `extra` list. Empty where the file brought none. */
+  keptFields: readonly KeptField[];
+  /** Which standard fields the file carries at all. */
+  carries: CarriedFields;
+  /** Whether the end-or-renewal column's heading said "ends" or "renews" — one answer
+   *  for the whole file (§11.1), stored per entry because the gym's next export can
+   *  say the other thing and a typed-in person has no column at all. It moves with
+   *  `endsOn` and never on its own. */
+  endsOnKind: "ends" | "renews" | null;
   mode: MemberListMode;
   /** Whether this gym has ever confirmed a list. A gym that has not shows NO
    *  marks at all (§9.7): with nothing to be missing from, "never listed" beside
@@ -125,6 +203,18 @@ export interface ReconciledPerson {
   /** The status this person carries on the list TODAY, where they are on it. */
   wasStatus: string | null;
   inApp: boolean;
+  /** THE STORAGE NAMES OF THE CARRIED FIELDS THIS FILE WOULD REALLY CHANGE for this one
+   *  person — a standard field by its own name, one of the gym's own columns as
+   *  `extra:<key>`. Empty for anybody the file does not change, which is everybody in
+   *  `new`, `unchanged` and `gone`.
+   *
+   *  **IT IS HERE FOR ONE JOB: CLEARING THE RIGHT HAND-EDIT MARKS** (§11.4). A record
+   *  remembers which fields staff typed in; once an upload has written over one, that
+   *  mark has done its work and goes, or the gym would be asked to tick the same lost
+   *  correction every month for ever. The marks that stay are the ones this file left
+   *  alone — including a field it carries and AGREES with, because next month's file
+   *  may not, and staff are owed the question then too. */
+  moved: readonly string[];
 }
 
 export interface Reconciled {
@@ -132,15 +222,48 @@ export interface Reconciled {
    *  counts into. Stored beside the groups, so an index can never point at a row
    *  that was never kept. */
   rows: MemberListRow[];
-  /** In the file and not on the list. */
+  /** IN THE FILE AND NOT ON THE LIST AS IT STANDS — in the file's own row order, and
+   *  the group staff read as "these people are being added". Since 3a-v-b it holds two
+   *  kinds, `added` and `returning` below, because one of them is an INSERT and the
+   *  other is a former record coming back to life. */
   new: ReconciledPerson[];
-  /** On the list under the same identity, carrying a different status word. */
+  /** The subset of `new` the gym has never had: the rows to INSERT. */
+  added: ReconciledPerson[];
+  /** THE SUBSET OF `new` THE GYM HAS HAD BEFORE — a FORMER record the file holds
+   *  again (§11.1). Not an insert: the same row is revived, keeping its id and
+   *  everything that hangs off it, which is the whole reason nobody is deleted any
+   *  more. Inserting instead would raise on the identity key's UNIQUE, which covers
+   *  former rows — and if it did not, the gym would have two records of one person. */
+  returning: ReconciledPerson[];
+  /** On the list under the same identity, with at least one carried field different
+   *  (§11.4). Before 3a-v-b that could only be the status word. */
   changed: ReconciledPerson[];
   unchanged: ReconciledPerson[];
-  /** On the list and not in the file. Always empty in `add` mode, which takes
-   *  nobody off — that falls out of the rule rather than being written as an
-   *  exception, so no later edit can reintroduce it. */
+  /** On the list and not in the file — marked FORMER, never deleted (§11.1). Always
+   *  empty in `add` mode, which takes nobody off — that falls out of the rule rather
+   *  than being written as an exception, so no later edit can reintroduce it.
+   *
+   *  **A RECORD THAT IS ALREADY FORMER IS NOT IN HERE.** They came off some earlier
+   *  upload; marking them former again would write a fresh date over the day they
+   *  really left and would put them in the wrong-file guard's numbers for every upload
+   *  for ever — the same mistake `leaving` avoids on the members' side. */
   gone: ReconciledPerson[];
+  /** FIELD BY FIELD, WHAT THE `changed` PEOPLE'S RECORDS WOULD MOVE (§11.4), and the
+   *  same for the gym's own columns. Only fields something would really change appear,
+   *  and the order is the fields' own.
+   *
+   *  **The `returning` are not counted here**, and that is on purpose: a former record
+   *  coming back has every carried field written from the file, so counting it would
+   *  put every field on the list for somebody staff are already being told is being
+   *  added. What this answers is "you said 412 records change — change HOW", which is
+   *  a question about people who are already on the list. */
+  fieldChanges: MemberListFieldChange[];
+  extraChanges: MemberListExtraChange[];
+  /** WHICH OF STAFF'S OWN CORRECTIONS THIS FILE WOULD WRITE OVER (§11.4) — how many
+   *  records, and the field names in plain English. Counted over the `changed` AND the
+   *  `returning`, because losing a correction on a record coming back is the same
+   *  loss. `entries: 0` is the ordinary case and needs no tick. */
+  handEdits: MemberListHandEdits;
   /** The gym's own app members who would be marked as having dropped off. */
   membersLeaving: ReconciledPerson[];
   counts: MemberListChangeCounts;
@@ -159,6 +282,55 @@ export interface Reconciled {
  *  only for the comparison. A null status and an empty one are both "no status".
  */
 const foldStatus = (status: string | null): string => (status ?? "").trim().toLowerCase();
+
+/** THE SAME FOLD, FOR ALL THREE OF THE GYM'S OWN WORDS (§11.1). A status, a membership
+ *  type and a payment word are three lists of words the app attaches no meaning to,
+ *  compared the one way everywhere: case and spaces folded, a null and an empty one
+ *  the same. A second rule for the two new ones would be two answers to "did this
+ *  change". */
+const foldWord = foldStatus;
+
+/** A plain calendar day as text, or nothing. Both sides come from `MEMBER_LIST_DAY` —
+ *  the file's through `dates.ts` and the record's cast to text by the repo — so there
+ *  is one shape and no zone in the comparison at all. */
+const foldDay = (day: string | null): string => (day ?? "").trim();
+
+/** One of the gym's own cells. A key the record has never held and a cell the person
+ *  left blank are the same thing to this comparison, which is what stops a gym's first
+ *  upload of a new column reading as a change for everybody who left it empty. */
+const foldCell = (cell: string | undefined): string => cell ?? "";
+
+/** WHICH CARRIED FIELDS DIFFER BETWEEN A FILE'S ROW AND THE RECORD IT MATCHED.
+ *
+ *  **ONLY WHAT THE FILE CARRIES IS EVEN LOOKED AT** (`CarriedFields`), so a file with
+ *  no membership-type column can neither change one nor blank one. The four fields
+ *  behind the identity key are not looked at either: two entries sharing a key cannot
+ *  differ in them.
+ *
+ *  `endsOnKind` rides with `endsOn` and is never a change of its own. A gym whose
+ *  heading went from "Expiry" to "Renewal date" IS a change worth writing — the screen
+ *  prints a different sentence — and calling it an `endsOn` change is what keeps the
+ *  breakdown a list of things staff recognise instead of growing a field name that is
+ *  really a property of a column. */
+function changedFields(row: MemberListRow, entry: ListEntry, carries: CarriedFields, endsOnKind: "ends" | "renews" | null): MemberListField[] {
+  const moved: MemberListField[] = [];
+  if (carries.status && foldWord(row.status) !== foldWord(entry.status)) moved.push("status");
+  if (carries.membershipType && foldWord(row.membershipType) !== foldWord(entry.membershipType)) moved.push("membershipType");
+  if (carries.joinedOn && foldDay(row.joinedOn) !== foldDay(entry.joinedOn)) moved.push("joinedOn");
+  if (carries.endsOn && (foldDay(row.endsOn) !== foldDay(entry.endsOn) || endsOnKind !== entry.endsOnKind)) moved.push("endsOn");
+  if (carries.paymentStatus && foldWord(row.paymentStatus) !== foldWord(entry.paymentStatus)) moved.push("paymentStatus");
+  if (carries.dateOfBirth && foldDay(row.dateOfBirth) !== foldDay(entry.dateOfBirth)) moved.push("dateOfBirth");
+  return moved;
+}
+
+/** The same, for the gym's own columns: the keys whose cell would change. */
+function changedExtra(row: MemberListRow, entry: ListEntry, keptFields: readonly KeptField[]): KeptField[] {
+  const moved: KeptField[] = [];
+  for (const field of keptFields) {
+    if (foldCell(row.extra[field.at]) !== foldCell(entry.extra[field.key])) moved.push(field);
+  }
+  return moved;
+}
 
 /** An address folded for comparison. Both sides are folded, always: a list's
  *  emails arrive through sign-in's own rule (already lower case) and a member's
@@ -339,6 +511,7 @@ export function membersAgainstNewList(
       status: null,
       wasStatus: member.entryStatus,
       inApp: true,
+      moved: [],
     });
   }
   return { marks, membersLeaving, listedNow, onEitherList };
@@ -383,7 +556,14 @@ export function inviteCounts(
  *  unchanged, then who comes off, then what that means for the gym's own members,
  *  then the guard's numbers. */
 export function reconcile(input: ReconcileInput): Reconciled {
-  const { entries, members, mode, hasList } = input;
+  const { entries, members, mode, hasList, keptFields, carries, endsOnKind } = input;
+
+  // THE LIST AS IT STANDS IS THE CURRENT RECORDS, and every count, every match and
+  // every "who comes off" below is about those alone. The FORMER records are still
+  // needed — a file that holds one of those people revives that very row — so they
+  // arrive in the same array and are told apart here, once, rather than by each
+  // reader remembering to ask (§11.1).
+  const current = entries.filter((entry) => !entry.former);
 
   // One person per identity key. Understanding a file already skips a row whose
   // person is on an earlier row (§9.5), so this is defence: two rows of one key
@@ -414,14 +594,47 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const newEmails = new Set<string>();
   const newPhones = new Set<string>();
   for (const row of rows) addContact(row, newEmails, newPhones);
-  if (mode === "add") for (const entry of entries) addContact(entry, newEmails, newPhones);
+  if (mode === "add") for (const entry of current) addContact(entry, newEmails, newPhones);
 
   const fresh: ReconciledPerson[] = [];
+  const added: ReconciledPerson[] = [];
+  const returning: ReconciledPerson[] = [];
   const changed: ReconciledPerson[] = [];
   const unchanged: ReconciledPerson[] = [];
   const kept = new Set<string>();
+  // The breakdown's counters. A Map keyed by the field, so the ORDER a field first
+  // moved in is the order staff read — the fields' own order in the record, because
+  // `changedFields` walks them in it.
+  const fieldCounts = new Map<MemberListField, number>();
+  const extraCounts = new Map<string, { label: string; count: number }>();
+  const editedFields = new Set<string>();
+  let editedEntries = 0;
+
+  /** What this file would write over that a member of staff typed in (§11.4), counted
+   *  for one record. NAMES ONLY: the entry says WHICH fields were edited and this asks
+   *  only whether the file disagrees with one of them. */
+  const countHandEdits = (entry: ListEntry, moved: readonly MemberListField[], movedExtra: readonly KeptField[]): void => {
+    if (entry.handEdited.length === 0) return;
+    const edited = new Set(entry.handEdited);
+    let any = false;
+    for (const field of moved) {
+      if (!edited.has(field)) continue;
+      editedFields.add(MEMBER_LIST_FIELD_WORDS[field]);
+      any = true;
+    }
+    for (const field of movedExtra) {
+      if (!edited.has(`${MEMBER_LIST_EXTRA_FIELD_PREFIX}${field.key}`)) continue;
+      // The gym's own heading, as the gym wrote it: the only name staff would know it by.
+      editedFields.add(field.label);
+      any = true;
+    }
+    if (any) editedEntries += 1;
+  };
+
   for (const [at, row] of rows.entries()) {
     const entry = entriesByKey.get(row.identityKey);
+    const moved = entry === undefined ? [] : changedFields(row, entry, carries, endsOnKind);
+    const movedExtra = entry === undefined ? [] : changedExtra(row, entry, keptFields);
     const person: ReconciledPerson = {
       identityKey: row.identityKey,
       at,
@@ -433,14 +646,36 @@ export function reconcile(input: ReconcileInput): Reconciled {
       status: row.status,
       wasStatus: entry?.status ?? null,
       inApp: inApp(row),
+      moved: [...moved, ...movedExtra.map((field) => `${MEMBER_LIST_EXTRA_FIELD_PREFIX}${field.key}`)],
     };
     if (entry === undefined) {
       fresh.push(person);
+      added.push(person);
+      continue;
+    }
+    // A FORMER RECORD THE FILE HOLDS AGAIN IS THE SAME PERSON COMING BACK (§11.1).
+    // They are `new` to the list as it stands — which is what staff are deciding
+    // about — and they are not an INSERT, because the row is already there with
+    // everything that hangs off it.
+    if (entry.former) {
+      fresh.push(person);
+      returning.push(person);
+      countHandEdits(entry, moved, movedExtra);
       continue;
     }
     kept.add(row.identityKey);
-    if (foldStatus(entry.status) === foldStatus(row.status)) unchanged.push(person);
-    else changed.push(person);
+    if (moved.length === 0 && movedExtra.length === 0) {
+      unchanged.push(person);
+      continue;
+    }
+    changed.push(person);
+    for (const field of moved) fieldCounts.set(field, (fieldCounts.get(field) ?? 0) + 1);
+    for (const field of movedExtra) {
+      const seen = extraCounts.get(field.key);
+      if (seen === undefined) extraCounts.set(field.key, { label: field.label, count: 1 });
+      else seen.count += 1;
+    }
+    countHandEdits(entry, moved, movedExtra);
   }
 
   // WHO COMES OFF. An add takes nobody off, and the condition is the mode rather
@@ -450,7 +685,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const gone: ReconciledPerson[] =
     mode === "add"
       ? []
-      : entries
+      : current
           .filter((entry) => !kept.has(entry.identityKey))
           .map((entry) => ({
             identityKey: entry.identityKey,
@@ -463,6 +698,9 @@ export function reconcile(input: ReconcileInput): Reconciled {
             status: null,
             wasStatus: entry.status,
             inApp: inApp(entry),
+            // Nothing of theirs is written: they come OFF the list, and what happens
+            // to them is a date on their own record (§11.1).
+            moved: [],
           }));
 
   // THE GYM'S OWN MEMBERS. `listedNow` is how many of them the list being
@@ -472,9 +710,13 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // has several entries against it; the first is the one shown, because the list
   // itself offers nothing to choose between them and the point on the screen is
   // the status, not which relative it came from.
+  // CURRENT RECORDS ONLY, and this is the line that keeps a former record from
+  // admitting anybody (§11.1, §10.2). A member matched to somebody the gym took off
+  // its list would read "on your list", hold a seat's worth of the gym's trust, and
+  // be counted where an invite is decided.
   const entryByEmail = new Map<string, ListEntry>();
   const entryByPhone = new Map<string, ListEntry>();
-  for (const entry of entries) {
+  for (const entry of current) {
     const email = foldEmail(entry.email);
     if (email !== null && !entryByEmail.has(email)) entryByEmail.set(email, entry);
     const phone = foldPhone(entry.phone);
@@ -510,13 +752,14 @@ export function reconcile(input: ReconcileInput): Reconciled {
 
   const counts: MemberListChangeCounts = {
     new: fresh.length,
+    returning: returning.length,
     changed: changed.length,
     unchanged: unchanged.length,
     gone: gone.length,
     ...inviteCounts(fresh),
   };
 
-  const listSize = entries.length;
+  const listSize = current.length;
   const guard: MemberListGuard = {
     entriesGoing: gone.length,
     listSize,
@@ -529,15 +772,24 @@ export function reconcile(input: ReconcileInput): Reconciled {
     mostOfListWouldGo: mode === "whole_list" && listSize > 0 && gone.length > MEMBER_LIST_MOST_OF_LIST_SHARE * listSize,
   };
 
+  const fieldChanges: MemberListFieldChange[] = [...fieldCounts].map(([field, count]) => ({ field, count }));
+  const extraChanges: MemberListExtraChange[] = [...extraCounts].map(([key, seen]) => ({ key, label: seen.label, count: seen.count }));
+  const handEdits: MemberListHandEdits = { entries: editedEntries, fields: [...editedFields] };
+
   return {
     rows,
     new: fresh,
+    added,
+    returning,
     changed,
     unchanged,
     gone,
+    fieldChanges,
+    extraChanges,
+    handEdits,
     membersLeaving,
     counts,
-    statuses: statusBreakdown({ rows, entries }, { new: fresh, changed, unchanged, gone }),
+    statuses: statusBreakdown({ rows, entries: current }, { new: fresh, changed, unchanged, gone }),
     members: { leaving: membersLeaving.length, listedNow },
     guard,
     marks,
