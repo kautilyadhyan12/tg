@@ -32,15 +32,25 @@ const person = (over: Partial<Person> & { fullName: string }): Person => ({
   ...over,
 });
 
-/** A row of the file, at a row number, with the gym's own status word. */
-const row = (at: number, who: Person, status: string | null): MemberListRow => ({
+/** A row of the file, at a row number, with the gym's own status word. The
+ *  wider fields Part 2 added (§11.1) are carried through this rule untouched —
+ *  who is the same person is the same question it always was — so they are
+ *  empty here and `reconcile.wider` covers them on their own. */
+const row = (at: number, who: Person, status: string | null, wider: Partial<MemberListRow> = {}): MemberListRow => ({
   row: at,
   fullName: who.fullName,
   email: who.email,
   phone: who.phone,
   memberNumber: who.memberNumber,
   status,
+  membershipType: null,
+  joinedOn: null,
+  endsOn: null,
+  paymentStatus: null,
+  dateOfBirth: null,
+  extra: [],
   identityKey: identityKey(who),
+  ...wider,
 });
 
 /** The same person, already on the list. */

@@ -39,10 +39,19 @@ const REPO = `${ROOT}/apps/api/src/modules/orgs/memberList/repo.ts`;
 const RECONCILE = `${ROOT}/apps/api/src/modules/orgs/memberList/reconcile.ts`;
 const CURSOR = `${ROOT}/apps/api/src/modules/orgs/memberList/cursor.ts`;
 
+const NEVER_KEEP = `${ROOT}/apps/api/src/modules/orgs/memberList/neverKeep.ts`;
+const COLUMNS = `${ROOT}/apps/api/src/modules/orgs/memberList/columns.ts`;
+const UNDERSTAND = `${ROOT}/apps/api/src/modules/orgs/memberList/understand.ts`;
+
 const CONFIRM_SUITE = "memberList.confirm.routes.test.ts";
 const RULE_SUITE = "memberList.reconcile.unit.test.ts";
+/** 3a-v-a's suites. They touch no database, so their mutants say `pure: true`
+ *  and run vitest straight rather than booting Postgres for each one. */
+const WIDER_SUITE = "memberList.wider.unit.test.ts";
+const NEVER_KEEP_SUITE = "memberList.neverKeep.unit.test.ts";
 
-/** file, what it breaks, the anchor, the replacement, which suite must go red. */
+/** file, what it breaks, the anchor, the replacement, which suite must go red.
+ *  `pure: true` runs the suite without a database. */
 const BREAKS = [
   {
     name: "tenancy: the upload is fetched by its id alone",
@@ -261,6 +270,70 @@ const BREAKS = [
     to: "      LIMIT 100000",
     suite: CONFIRM_SUITE,
   },
+  // ---------------------------------------------------------------------
+  // 3a-v-a: WHAT IS NEVER KEPT (spec §11.2). These are the ONE core rule of
+  // that card — the rule behind its worst-thing line: a member's bank card
+  // number or medical note left in our database, or an emergency contact's
+  // details shown as the member's own. Every one of them was RED when the card
+  // was built, and two of them are faults this harness's own suites caught
+  // while it was being written, not hypotheticals.
+  // ---------------------------------------------------------------------
+  {
+    name: "§11.2: a payment card number is not recognised at all",
+    file: NEVER_KEEP,
+    from: '  return looksLikeAPaymentCard(text.replace(/[^0-9]/g, ""));',
+    to: "  return false;",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: one card-shaped cell drops its whole column (a gym's member numbers are thrown away)",
+    file: NEVER_KEEP,
+    from: "  const mostly = (count: number): boolean => shapes.written > 0 && count / shapes.written >= MEMBER_LIST_NEVER_KEEP_SHARE;",
+    to: "  const mostly = (count: number): boolean => count > 0;",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: a dropped column is taken back on its CELLS and read as the member's phone",
+    file: COLUMNS,
+    from: "  const unheaded = stats.filter((stat) => stat.neverKept === null && !taken.has(stat.index) && (stat.reading === null || stat.reading.field === null));",
+    to: "  const unheaded = stats.filter((stat) => !taken.has(stat.index) && (stat.reading === null || stat.reading.field === null));",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: a dropped column shows three of its own cells to staff",
+    file: COLUMNS,
+    from: "      samples: stat.neverKept === null ? stat.samples : [],",
+    to: "      samples: stat.samples,",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: a card-shaped cell is still shown as one of its column's samples",
+    file: COLUMNS,
+    from: "      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    to: "      if (stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: staff can map a dropped column onto a field after all",
+    file: UNDERSTAND,
+    from: "  const kept = (index: number): boolean => index < width && !dropped.has(index);",
+    to: "  const kept = (index: number): boolean => index < width;",
+    suite: WIDER_SUITE,
+    pure: true,
+  },
+  {
+    name: "§11.2: a bare PIN is read without asking the sheet, so a door code is kept as a postcode",
+    file: NEVER_KEEP,
+    from: '  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return hints.hasAddress ? null : "password_or_pin";',
+    to: "  if (BARE_PIN_WORDS.some((word) => holdsWord(header, word))) return null;",
+    suite: NEVER_KEEP_SUITE,
+    pure: true,
+  },
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
@@ -308,7 +381,9 @@ for (const [i, brk] of BREAKS.entries()) {
   let red = false;
   let note = "";
   try {
-    execFileSync("corepack", ["pnpm", "--filter", "api", "test:local", brk.suite], {
+    const args =
+      brk.pure === true ? ["pnpm", "--filter", "api", "exec", "vitest", "run", `test/${brk.suite}`] : ["pnpm", "--filter", "api", "test:local", brk.suite];
+    execFileSync("corepack", args, {
       cwd: ROOT,
       stdio: "pipe",
       shell: true,

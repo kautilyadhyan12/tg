@@ -255,9 +255,75 @@ export const MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS = 64;
 /** The longest status word kept; a longer one is cut. */
 export const MEMBER_LIST_MAX_STATUS_CHARS = 40;
 
-/** The five things the list keeps, and the two ways a name is written. */
-export const memberListFieldSchema = z.enum(["fullName", "firstName", "lastName", "email", "phone", "memberNumber", "status"]);
+/** How many of a gym's OWN columns are kept beside the standard fields, as that
+ *  gym's extra fields (§11.1). Past this, the columns furthest to the right are
+ *  left out and the preview says how many. */
+export const MEMBER_LIST_MAX_EXTRA_FIELDS = 40;
+/** The longest an extra field's cell is kept; a longer one is cut and counted
+ *  (§11.1). A gym's own column may hold a paragraph of notes; ten thousand
+ *  paragraphs are what this keeps out of one staged upload. */
+export const MEMBER_LIST_MAX_EXTRA_CHARS = 500;
+/** The longest extra field key and label kept. The key is what an entry's JSON
+ *  document is written under; the label is the heading as the gym wrote it. */
+export const MEMBER_LIST_MAX_FIELD_KEY_CHARS = 64;
+export const MEMBER_LIST_MAX_FIELD_LABEL_CHARS = 80;
+/** More different words than this in a column and it is not a membership type
+ *  (§11.3) — it is a note or a date. Higher than the status cap: a gym may
+ *  genuinely sell forty plans, and none of them is a state of membership. */
+export const MEMBER_LIST_MAX_TYPE_WORDS = 60;
+/** What share of a column's looked-at cells must carry a shape before the whole
+ *  column is dropped for it (§11.2: "a column that is mostly such cells"). */
+export const MEMBER_LIST_NEVER_KEEP_SHARE = 0.6;
+/** What share of a column's looked-at cells must read as dates before it is
+ *  believed to be a date column, once its heading has said it is one. */
+export const MEMBER_LIST_DATE_SHARE = 0.6;
+
+/** A plain calendar day, as every date on a member record is kept: no time and
+ *  no time zone. A birthday is the same day in every country. */
+export const MEMBER_LIST_DAY = /^\d{4}-\d{2}-\d{2}$/;
+export const memberListDaySchema = z.string().regex(MEMBER_LIST_DAY);
+
+/** The things the list keeps, and the two ways a name is written. The five
+ *  after `status` were added 2026-09-21 by Part 2 of the re-plan (§11.1): a
+ *  management app's record holds what the gym's own software held. */
+export const memberListFieldSchema = z.enum([
+  "fullName",
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "memberNumber",
+  "status",
+  "membershipType",
+  "joinedOn",
+  "endsOn",
+  "paymentStatus",
+  "dateOfBirth",
+]);
 export type MemberListField = z.infer<typeof memberListFieldSchema>;
+
+/** The three fields read as a calendar day rather than kept as the gym's word. */
+export const MEMBER_LIST_DATE_FIELDS = ["joinedOn", "endsOn", "dateOfBirth"] as const;
+export type MemberListDateField = (typeof MEMBER_LIST_DATE_FIELDS)[number];
+
+/** Which way round a column's two-number dates are read. `dayFirst` is
+ *  03/04/2026 → 3 April; `monthFirst` is 3 April → March 4. */
+export const memberListDateOrderSchema = z.enum(["dayFirst", "monthFirst"]);
+export type MemberListDateOrder = z.infer<typeof memberListDateOrderSchema>;
+
+/** Why a column is never kept, whatever the gym or its staff want (§11.2). */
+export const memberListNeverKeptReasonSchema = z.enum(["payment_card", "bank_details", "government_id", "password_or_pin", "medical"]);
+export type MemberListNeverKeptReason = z.infer<typeof memberListNeverKeptReasonSchema>;
+
+/** The sentence a dropped column is named with. It says what was seen and never
+ *  what any cell held: the cells are gone before this is written. */
+export const MEMBER_LIST_NEVER_KEPT_WORDS: Readonly<Record<MemberListNeverKeptReason, string>> = {
+  payment_card: "Not kept: this looks like payment card numbers. We never store card details.",
+  bank_details: "Not kept: this looks like bank account details. We never store them.",
+  government_id: "Not kept: this looks like government ID numbers. We never store them.",
+  password_or_pin: "Not kept: this looks like passwords, PINs or door codes. We never store them.",
+  medical: "Not kept: this looks like medical or health notes. We never store health details.",
+};
 
 /** Why a column is believed to hold what it does:
  *  - `chosen`: staff said so, by sending their own mapping;
@@ -285,6 +351,22 @@ export const memberListMappingSchema = z
     phone: z.array(columnIndexSchema).max(MEMBER_LIST_MOST_COLUMNS_PER_FIELD).default([]),
     memberNumber: columnIndexSchema.nullable().default(null),
     status: columnIndexSchema.nullable().default(null),
+    membershipType: columnIndexSchema.nullable().default(null),
+    joinedOn: columnIndexSchema.nullable().default(null),
+    endsOn: columnIndexSchema.nullable().default(null),
+    paymentStatus: columnIndexSchema.nullable().default(null),
+    dateOfBirth: columnIndexSchema.nullable().default(null),
+    /** Columns staff chose not to keep at all (§11.3). Everything else that is
+     *  not a standard field above becomes one of the gym's extra fields, so
+     *  this is the only way to say "leave that column out". A column the server
+     *  never keeps is not here — it cannot be switched either way. */
+    dontKeep: z.array(columnIndexSchema).max(MEMBER_FILE_MAX_COLUMNS).default([]),
+    /** Staff flipping a date column's reading (§11.3). A column not named here
+     *  is read the way the file's own evidence, else the gym's country, says. */
+    dateOrder: z
+      .array(z.object({ column: columnIndexSchema, order: memberListDateOrderSchema }).strict())
+      .max(MEMBER_FILE_MAX_COLUMNS)
+      .default([]),
   })
   .strict();
 export type MemberListMapping = z.infer<typeof memberListMappingSchema>;
@@ -302,6 +384,10 @@ export const memberListColumnSchema = z.object({
    *  its cells disagreed with its heading, or it names somebody who is not the
    *  member — which is the one thing staff can act on (review of PR #86). */
   headerSays: memberListFieldSchema.nullable(),
+  /** Why nothing of this column is kept (§11.2), or null where it is kept. Its
+   *  `samples` are empty when this is set: the cells were dropped in the file
+   *  reader and never crossed to the API at all. It cannot be switched back on. */
+  neverKept: memberListNeverKeptReasonSchema.nullable(),
 });
 export type MemberListColumn = z.infer<typeof memberListColumnSchema>;
 
@@ -318,9 +404,62 @@ export const memberListRowSchema = z.object({
   phone: z.string().regex(MEMBER_LIST_PHONE_E164).nullable(),
   memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
   status: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable(),
+  /** The gym's own word for what this person bought ("Gold"), never read as a
+   *  state of membership and never worked out from a date (§11.1). */
+  membershipType: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable(),
+  joinedOn: memberListDaySchema.nullable(),
+  /** The day the membership ends or renews; WHICH of the two its heading said
+   *  is `endsOnKind` on the file, because it is one answer for the column. */
+  endsOn: memberListDaySchema.nullable(),
+  paymentStatus: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable(),
+  dateOfBirth: memberListDaySchema.nullable(),
+  /** This person's cells under the gym's OWN headings, IN THE ORDER of the
+   *  file's `extraFields` — a list and not an object, so a heading is written
+   *  once for the file instead of once for each of ten thousand people. An
+   *  empty string is a cell the person left blank. */
+  extra: z.array(z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS)).max(MEMBER_LIST_MAX_EXTRA_FIELDS),
   identityKey: sha256Schema,
 });
 export type MemberListRow = z.infer<typeof memberListRowSchema>;
+
+/** One of the gym's own columns, kept under the gym's own heading (§11.1). The
+ *  `key` is what an entry's document is written under and never changes for a
+ *  heading; the `label` is the heading as the gym wrote it. */
+export const memberListExtraFieldSchema = z
+  .object({
+    key: z
+      .string()
+      .min(1)
+      .max(MEMBER_LIST_MAX_FIELD_KEY_CHARS)
+      .regex(/^[a-z0-9_]+$/),
+    label: z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS),
+    column: columnIndexSchema,
+  })
+  .strict();
+export type MemberListExtraField = z.infer<typeof memberListExtraFieldSchema>;
+
+/** How one date column was read, said back to staff so they can flip it
+ *  (§11.3): "We read 03/04/2026 as 3 April 2026". */
+export const memberListDateColumnSchema = z
+  .object({
+    column: columnIndexSchema,
+    field: z.enum(MEMBER_LIST_DATE_FIELDS),
+    order: memberListDateOrderSchema,
+    /** Where the order came from: the file's own evidence (a cell whose first
+     *  or second part is over 12), the gym's country, or staff's own switch.
+     *  `none` is a column every cell of which said its own order — an ISO date
+     *  or a written-out month — where nothing was decided at all. */
+    from: z.enum(["file", "country", "chosen", "none"]),
+    /** One cell of the column and what it was read as, so the reading can be
+     *  checked by eye. Null where the column held no two-number date. */
+    example: z.object({ raw: z.string().max(MEMBER_FILE_MAX_CELL_CHARS), read: memberListDaySchema }).strict().nullable(),
+    /** Cells of the column that are no date at all. They are left empty and
+     *  counted, never guessed (§11.3). */
+    notRead: z.number().int().min(0),
+  })
+  .strict();
+export type MemberListDateColumn = z.infer<typeof memberListDateColumnSchema>;
+
 
 /** Why a row of the file is not a person on the list. */
 export const memberListSkipReasonSchema = z.enum(["no_contact", "duplicate"]);
@@ -345,6 +484,13 @@ const COUNTED_WARNINGS = [
   "phones_need_country",
   "phones_unusual",
   "shared_emails",
+  /** Cells of the gym's own columns that were longer than we keep (§11.1). */
+  "cells_cut",
+  /** Cells in a date column that are no date, left empty rather than guessed. */
+  "dates_not_read",
+  /** Cells dropped on their own because they are shaped like a payment card,
+   *  wherever they sat (§11.2). The column around them is kept. */
+  "card_cells_dropped",
 ] as const;
 const PLAIN_WARNINGS = ["hidden_rows_or_columns", "encoding_guessed", "no_header_row"] as const;
 
@@ -355,6 +501,9 @@ export const memberListWarningSchema = z.discriminatedUnion("code", [
   z.object({ code: z.enum(COUNTED_WARNINGS), rows: z.number().int().positive() }),
   z.object({ code: z.literal("other_sheets_ignored"), sheets: z.array(z.string()) }),
   z.object({ code: z.literal("placeholders"), rows: z.number().int().positive(), values: z.array(z.string()) }),
+  /** A file wider than the extra fields a gym may hold (§11.1). The columns
+   *  furthest to the right are left out, and this says how many. */
+  z.object({ code: z.literal("extra_columns_left_out"), columns: z.number().int().positive() }),
 ]);
 export type MemberListWarning = z.infer<typeof memberListWarningSchema>;
 export type MemberListWarningCode = MemberListWarning["code"];
@@ -375,6 +524,14 @@ export const memberListUnderstandingSchema = z.object({
   mapping: memberListMappingSchema,
   needsMapping: z.boolean(),
   rows: z.array(memberListRowSchema),
+  /** The gym's own columns, in the order the rows' `extra` lists carry them. */
+  extraFields: z.array(memberListExtraFieldSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS),
+  /** How each date column was read, and whether anything was left empty. */
+  dateColumns: z.array(memberListDateColumnSchema),
+  /** Whether the end-or-renewal column's own heading said "ends" or "renews",
+   *  so a screen says "Renews 3 Oct" rather than guessing (§11.1). Null where
+   *  there is no such column, or its heading said neither. */
+  endsOnKind: z.enum(["ends", "renews"]).nullable(),
   counts: z.object({
     dataRows: z.number().int().min(0),
     kept: z.number().int().min(0),
@@ -384,10 +541,19 @@ export const memberListUnderstandingSchema = z.object({
     withPhone: z.number().int().min(0),
     withMemberNumber: z.number().int().min(0),
     withStatus: z.number().int().min(0),
+    withMembershipType: z.number().int().min(0),
+    withJoinedOn: z.number().int().min(0),
+    withEndsOn: z.number().int().min(0),
+    withPaymentStatus: z.number().int().min(0),
+    withDateOfBirth: z.number().int().min(0),
   }),
   /** Every status word in the file, in the case it was first written in, with
    *  how many people carry it. The app attaches no meaning to any of them. */
   statuses: z.array(z.object({ label: z.string(), count: z.number().int().positive() })),
+  /** The same, for the gym's own membership types and payment words (§11.1):
+   *  each is a filter chip with its count, in the gym's own spelling. */
+  membershipTypes: z.array(z.object({ label: z.string(), count: z.number().int().positive() })),
+  paymentStatuses: z.array(z.object({ label: z.string(), count: z.number().int().positive() })),
   skipped: z.array(memberListSkippedSchema).max(MEMBER_LIST_SKIPPED_SHOWN),
   warnings: z.array(memberListWarningSchema),
 });
@@ -425,6 +591,14 @@ export function memberListWarningWords(warning: MemberListWarning): string {
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
       return `This file has more than one sheet. Only the one with the members was read; these were ignored: ${warning.sheets.join(", ")}.`;
+    case "cells_cut":
+      return `${numberWords(warning.rows, "cell was", "cells were")} longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters and were cut to fit. The rest of each one is not kept.`;
+    case "dates_not_read":
+      return `${numberWords(warning.rows, "cell in a date column is", "cells in date columns are")} not a date, so they were left empty rather than guessed. Check the date columns below.`;
+    case "card_cells_dropped":
+      return `${numberWords(warning.rows, "cell was", "cells were")} dropped because it is shaped like a payment card number. We never store card details, wherever they sit in a file.`;
+    case "extra_columns_left_out":
+      return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
   }
 }
 

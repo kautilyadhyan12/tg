@@ -3,7 +3,8 @@
 // Written as one table over every class of case, before review.
 import { describe, expect, it } from "vitest";
 import { MEMBER_LIST_MAX_EMAIL_CHARS, MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS, MEMBER_LIST_MAX_NAME_CHARS, MEMBER_LIST_MAX_STATUS_CHARS, authEmailSchema } from "@app/shared";
-import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord, looksLikeAPaymentCard } from "../src/modules/orgs/memberList/fields.js";
+import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "../src/modules/orgs/memberList/fields.js";
+import { looksLikeAPaymentCard } from "../src/modules/orgs/memberList/neverKeep.js";
 
 const ch = (code: number): string => String.fromCodePoint(code);
 

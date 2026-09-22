@@ -90,10 +90,12 @@ describe("what a heading names", () => {
     expect(readHeader(header).field).toBe(null);
   });
 
+  // "Date of Birth" WAS here until 3a-v-a: Part 2 of the re-plan keeps the
+  // gym's whole row, so a birthday is now one of the fields the app reads
+  // (spec §11.1). An address and a note are still nobody's field: they are
+  // kept, under the gym's own heading, as that gym's extra fields.
   it.each([
-    ["a heading of its own", "Joined"],
     ["an address", "Address Line 1"],
-    ["a date", "Date of Birth"],
     ["a note", "Notes"],
     ["nothing", ""],
   ])("%s names no field", (_label, header) => {
@@ -278,9 +280,11 @@ describe("which row holds the headings", () => {
     expect(findHeaderRow([["Name", "Email"], ["Name", "Email"], ["Ann Lee", "ann@example.com"]])).toBe(0);
   });
 
-  it("needs two points: one heading word alone is not a heading row", () => {
+  it("needs two points: a row with no heading word in it is not a heading row", () => {
     expect(findHeaderRow([["Name"], ["Ann Lee"]])).toBe(0);
-    expect(findHeaderRow([["Joined"], ["2024-01-05"]])).toBe(null);
+    // "Joined" stood here until 3a-v-a, when it became the join date (§11.1).
+    // "Belt" is a heading a real gym writes and no list of ours holds.
+    expect(findHeaderRow([["Belt"], ["Blue"]])).toBe(null);
   });
 
   it("is not looked for past the twentieth row that holds anything", () => {
@@ -303,7 +307,24 @@ describe("which column is which", () => {
       ["Member No", "Full Name", "Email", "Mobile", "Status"],
       ["000123", "Ann Lee", "ann@example.com", "9876543210", "Active"],
     ]);
-    expect(mapping).toEqual({ sheet: null, headerRow: 0, fullName: 1, firstName: null, lastName: null, email: [2], phone: [3], memberNumber: 0, status: 4 });
+    expect(mapping).toEqual({
+      sheet: null,
+      headerRow: 0,
+      fullName: 1,
+      firstName: null,
+      lastName: null,
+      email: [2],
+      phone: [3],
+      memberNumber: 0,
+      status: 4,
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      dontKeep: [],
+      dateOrder: [],
+    });
     expect(confidence.get(2)).toBe("header");
   });
 

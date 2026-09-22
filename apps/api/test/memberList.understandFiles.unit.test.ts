@@ -71,10 +71,20 @@ describe("the Excel workbook", () => {
     expect(found.warnings).toContainEqual({ code: "hidden_rows_or_columns" });
   });
 
-  it("never reads the joining date as a phone number, nor the paid column as a status", async () => {
+  it("never reads the joining date as a phone number, nor the paid column as the membership status", async () => {
     const found = await understand("excel/book.xlsx");
-    expect(found.columns[4]).toMatchObject({ header: "Joined", guess: null });
-    expect(found.columns[6]).toMatchObject({ header: "Paid", guess: null });
+    // Both columns were kept from nothing before 3a-v-a. Part 2 of the re-plan
+    // keeps the gym's whole row (§11.1), so they are the join date and the
+    // gym's own payment word — and what this test is for still holds: a date
+    // is never a phone number, and having PAID is not a state of MEMBERSHIP.
+    expect(found.columns[4]).toMatchObject({ header: "Joined", guess: "joinedOn" });
+    expect(found.columns[6]).toMatchObject({ header: "Paid", guess: "paymentStatus" });
+    expect(found.mapping.phone).not.toContain(4);
+    expect(found.mapping.status).toBe(5);
+    // The fixture's Paid column is TRUE, FALSE and then five empty cells, and
+    // an empty cell is not a No: nobody is said to be unpaid who was not.
+    expect(found.rows.map((row) => row.paymentStatus)).toEqual(["Paid", "Not paid", null, null, null, null, null]);
+    expect(found.counts.withPaymentStatus).toBe(2);
   });
 });
 
@@ -121,11 +131,15 @@ describe("Google Sheets, as Kd downloaded it", () => {
     expect(found.rows[4]?.memberNumber).toBe("1234567890123456");
   });
 
-  it("the CSV: the joining dates are not read as anybody's phone number", async () => {
+  it("the CSV: the joining dates are read as the joining date and never as anybody's phone number", async () => {
     const found = await understand("google/google-sheets.csv");
     expect(found.mapping.phone).toEqual([3]);
-    expect(found.columns[4]).toMatchObject({ header: "Joined", guess: null });
+    // Until 3a-v-a this column was kept from nothing at all; Part 2 of the
+    // re-plan keeps the gym's whole row (§11.1), so it is the join date now.
+    // A date is still never a phone number, which is what this test is for.
+    expect(found.columns[4]).toMatchObject({ header: "Joined", guess: "joinedOn" });
     expect(found.rows.map((row) => row.phone)).not.toContain(null);
+    expect(found.rows.map((row) => row.joinedOn)).not.toContain(null);
   });
 
   it("the CSV: the member number Google shortened is said to be shortened", async () => {
@@ -163,9 +177,13 @@ describe("through the real worker, which is how the route reads a file", () => {
     const asText = JSON.stringify(posted);
     // A cell from the sheet that was NOT read never crosses at all.
     expect(asText).not.toContain("Sam Coach");
-    // The joining date is on all seven rows of the grid and in no row a list
-    // keeps: at most the three samples of its column may cross.
-    expect(asText.match(/2024-\d\d-\d\d/g) ?? []).toHaveLength(MEMBER_LIST_COLUMN_SAMPLES);
+    // The joining date crosses exactly as many times as the ANSWER holds it —
+    // once for each person kept, plus the three sample cells of its column —
+    // and never once for each of the grid's seven rows times seven columns.
+    // (Before 3a-v-a it crossed three times, because a join date was kept from
+    // nobody; Part 2 of the re-plan keeps it, §11.1.)
+    const here = await understand("excel/book.xlsx");
+    expect(asText.match(/2024-\d\d-\d\d/g) ?? []).toHaveLength(here.counts.withJoinedOn + MEMBER_LIST_COLUMN_SAMPLES);
     expect(asText).toContain("+447911123456");
   });
 
