@@ -241,6 +241,10 @@ describe('this day only', () => {
     draw();
     await openDay('Spin on Fri 25 Sep 2026 at 19:30, changed for this day');
     fireEvent.click(screen.getByRole('button', { name: 'Change this day' }));
+    // Kd, at the click-through: "there is no hour" — the boxes now say which is which.
+    expect(screen.getByLabelText('Class start hour').value).toBe('19');
+    expect(screen.getByText('Hour')).toBeTruthy();
+    expect(screen.getByText('Minute')).toBeTruthy();
     expect(screen.getByLabelText('How long (minutes)').value).toBe('90');
     expect(screen.getByLabelText('How many people fit').value).toBe('8');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('u8');

@@ -24,6 +24,17 @@ const inputStyle = {
   color: '#fff',
 };
 
+/** The word under a box. Kd, at 17b-ii-b-i's click-through: *"there is no hour"* —
+ *  the two boxes showed `18` and `00` and nothing said which was which. Hidden
+ *  from screen readers, which already hear each box's own label. */
+function Caption({ children }) {
+  return (
+    <span aria-hidden="true" className="text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+      {children}
+    </span>
+  );
+}
+
 /** `_ _ : _ _` — HOUR, MINUTE, and AM/PM when the gym reads on a 12-hour clock.
  *
  *  Kd, 2026-09-01: *"in the time select this is what i meant _ _ : _ _ here when
@@ -89,47 +100,53 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
     // never break across lines. Kd's screen wrapped them one per line — nine
     // stacked fragments reading `--`, `:`, `--` — because the row had eight
     // shrinkable children and no widths.
-    <span className="inline-flex flex-nowrap shrink-0 items-center gap-1">
-      <select
-        value={parts.hour === null ? '' : String(parts.hour)}
-        onChange={(e) => {
-          const hour = e.target.value === '' ? null : Number(e.target.value);
-          // The end-of-day entry has no minutes to choose, and picking it must
-          // not leave a stale `:45` behind it.
-          emit(hour === 24 ? { hour, minute: 0 } : { hour });
-        }}
-        disabled={disabled}
-        aria-label={`${label} hour`}
-        className="w-16 rounded-lg px-2 py-1.5 text-sm"
-        style={boxStyle}
-      >
-        <option value="">--</option>
-        {hours.map((h) => (
-          <option key={h.value} value={h.value}>
-            {h.label}
-          </option>
-        ))}
-      </select>
+    <span className="inline-flex flex-nowrap shrink-0 items-start gap-1">
+      <span className="inline-flex flex-col items-center gap-0.5">
+        <select
+          value={parts.hour === null ? '' : String(parts.hour)}
+          onChange={(e) => {
+            const hour = e.target.value === '' ? null : Number(e.target.value);
+            // The end-of-day entry has no minutes to choose, and picking it must
+            // not leave a stale `:45` behind it.
+            emit(hour === 24 ? { hour, minute: 0 } : { hour });
+          }}
+          disabled={disabled}
+          aria-label={`${label} hour`}
+          className="w-16 rounded-lg px-2 py-1.5 text-sm"
+          style={boxStyle}
+        >
+          <option value="">--</option>
+          {hours.map((h) => (
+            <option key={h.value} value={h.value}>
+              {h.label}
+            </option>
+          ))}
+        </select>
+        <Caption>Hour</Caption>
+      </span>
 
-      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+      <span className="text-sm py-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
         :
       </span>
 
-      <select
-        value={parts.minute === null ? '' : String(parts.minute)}
-        onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
-        disabled={disabled || endOfDay}
-        aria-label={`${label} minute`}
-        className="w-16 rounded-lg px-2 py-1.5 text-sm"
-        style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
-      >
-        <option value="">--</option>
-        {minutes.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.label}
-          </option>
-        ))}
-      </select>
+      <span className="inline-flex flex-col items-center gap-0.5">
+        <select
+          value={parts.minute === null ? '' : String(parts.minute)}
+          onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
+          disabled={disabled || endOfDay}
+          aria-label={`${label} minute`}
+          className="w-16 rounded-lg px-2 py-1.5 text-sm"
+          style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
+        >
+          <option value="">--</option>
+          {minutes.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <Caption>Minute</Caption>
+      </span>
 
       {/* AM/PM ONLY ON THE 12-HOUR CLOCK — it is meaningless on the other one,
           and the end-of-day entry already says "midnight" in its own label. */}
