@@ -198,7 +198,10 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         requireUserId(req),
         params.gymId,
         params.uploadId,
-        { acknowledgeLargeChange: body.acknowledgeLargeChange ?? false },
+        {
+          acknowledgeLargeChange: body.acknowledgeLargeChange ?? false,
+          acknowledgeHandEdits: body.acknowledgeHandEdits ?? false,
+        },
         confirmGate(req, reply),
       );
       switch (answer.kind) {
@@ -223,6 +226,16 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
             error: "large_change",
             message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.large_change,
             guard: answer.guard,
+            requestId: req.id,
+          });
+        case "hand_edits":
+          // 409 WITH THE FIELD NAMES (§11.4): "your edits would be replaced" tells
+          // nobody whether it matters, and a screen cannot ask staff to tick without
+          // saying what would go. Names and a count — never a value, never a person.
+          return reply.status(409).send({
+            error: "hand_edits",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.hand_edits,
+            handEdits: answer.handEdits,
             requestId: req.id,
           });
       }
